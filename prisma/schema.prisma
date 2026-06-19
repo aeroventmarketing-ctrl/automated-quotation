@@ -1,0 +1,260 @@
+// AeroQuote — Prisma schema
+// All proprietary data (catalogue, pricelist, rating curves) lives in the DB,
+// never hard-coded, so it can be edited in admin screens or bulk re-imported.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SALES
+  ENGINEER
+  ADMIN
+}
+
+enum Family {
+  AXIAL
+  CENTRIFUGAL
+  PROPELLER
+  TUBULAR_INLINE
+  CABINET
+  ACCESSORY
+  SERVICE
+  OTHER
+}
+
+enum InquirySource {
+  EMAIL
+  PHONE
+  WALK_IN
+  PHOTO
+  OTHER
+}
+
+enum InquiryStatus {
+  NEW
+  DRAFTING
+  QUOTED
+  SENT
+  WON
+  LOST
+}
+
+enum InquiryItemStatus {
+  PENDING
+  MATCHED
+  SELECTED
+  REJECTED
+}
+
+enum QuotationStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+}
+
+enum AttachmentKind {
+  PHOTO
+  SPEC_SHEET
+  DRAWING
+  OTHER
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(SALES)
+  createdAt DateTime @default(now())
+
+  inquiriesCreated   Inquiry[]   @relation("InquiryCreatedBy")
+  quotationsPrepared Quotation[] @relation("QuotationPreparedBy")
+  quotationsApproved Quotation[] @relation("QuotationApprovedBy")
+}
+
+model Customer {
+  id          String  @id @default(cuid())
+  company     String
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  notes       String?
+
+  inquiries Inquiry[]
+}
+
+model CatalogueItem {
+  id          String  @id @default(cuid())
+  family      Family
+  modelCode   String  @unique
+  name        String
+  description String?
+  sizeLabel   String?
+  // specs: airflow range, static-pressure range, motor HP options, drive type, material, etc.
+  specs       Json    @default("{}")
+  uom         String  @default("unit")
+  active      Boolean @default(true)
+
+  priceList       PriceListEntry[]
+  ratingPoints    FanRatingPoint[]
+  quotationItems  QuotationItem[]
+
+  @@index([family])
+}
+
+model PriceListEntry {
+  id              String   @id @default(cuid())
+  catalogueItemId String
+  // size / variant this price applies to (e.g. "0.5HP-Single", matches sizeLabel)
+  variantKey      String   @default("default")
+  currency        String   @default("PHP")
+  basePrice       Decimal  @db.Decimal(14, 2)
+  // optionsJson: priced add-ons keyed by option name -> price (motor, coating, flange...)
+  optionsJson     Json     @default("{}")
+  effectiveDate   DateTime @default(now())
+  active          Boolean  @default(true)
+
+  catalogueItem CatalogueItem @relation(fields: [catalogueItemId], references: [id], onDelete: Cascade)
+
+  @@index([catalogueItemId])
+}
+
+// Fan selection / sizing data. Each model has several rating points along a curve.
+model FanRatingPoint {
+  id                String  @id @default(cuid())
+  catalogueItemId   String
+  rpm               Int
+  airflow_m3hr      Float
+  staticPressure_pa Float
+  power_kw          Float
+  efficiency        Float? // 0..1
+
+  catalogueItem CatalogueItem @relation(fields: [catalogueItemId], references: [id], onDelete: Cascade)
+
+  @@index([catalogueItemId])
+}
+
+model Inquiry {
+  id          String        @id @default(cuid())
+  customerId  String
+  source      InquirySource @default(OTHER)
+  status      InquiryStatus @default(NEW)
+  createdById String
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  customer    Customer       @relation(fields: [customerId], references: [id])
+  createdBy   User           @relation("InquiryCreatedBy", fields: [createdById], references: [id])
+  items       InquiryItem[]
+  attachments Attachment[]
+  quotations  Quotation[]
+
+  @@index([status])
+  @@index([customerId])
+}
+
+model InquiryItem {
+  id        String            @id @default(cuid())
+  inquiryId String
+  rawText   String // verbatim of what the client asked for
+  // parsedJson: AI-extracted { airflow, airflowUnit, pressure, pressureUnit, qty, application, modelText, ... }
+  parsedJson Json             @default("{}")
+  qty        Int              @default(1)
+  status     InquiryItemStatus @default(PENDING)
+
+  inquiry Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+
+  @@index([inquiryId])
+}
+
+model Quotation {
+  id           String          @id @default(cuid())
+  inquiryId    String
+  quoteNumber  String          @unique // e.g. AQ-2026-0001
+  templateId   String
+  status       QuotationStatus @default(DRAFT)
+  subtotal     Decimal         @db.Decimal(14, 2) @default(0)
+  vat          Decimal         @db.Decimal(14, 2) @default(0)
+  total        Decimal         @db.Decimal(14, 2) @default(0)
+  currency     String          @default("PHP")
+  validUntil   DateTime?
+  preparedById String
+  approvedById String?
+  notes        String?
+  terms        String?
+  createdAt    DateTime        @default(now())
+
+  inquiry    Inquiry           @relation(fields: [inquiryId], references: [id])
+  template   QuotationTemplate @relation(fields: [templateId], references: [id])
+  preparedBy User              @relation("QuotationPreparedBy", fields: [preparedById], references: [id])
+  approvedBy User?             @relation("QuotationApprovedBy", fields: [approvedById], references: [id])
+  items      QuotationItem[]
+
+  @@index([status])
+  @@index([inquiryId])
+}
+
+model QuotationItem {
+  id                  String   @id @default(cuid())
+  quotationId         String
+  catalogueItemId     String?
+  descriptionSnapshot String
+  // specsSnapshot: frozen specs so the quote never changes when the catalogue does
+  specsSnapshot       Json     @default("{}")
+  qty                 Int      @default(1)
+  unitPrice           Decimal  @db.Decimal(14, 2)
+  lineTotal           Decimal  @db.Decimal(14, 2)
+  selectionNote       String? // why this model/size was chosen
+  sortOrder           Int      @default(0)
+
+  quotation     Quotation      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  catalogueItem CatalogueItem? @relation(fields: [catalogueItemId], references: [id])
+
+  @@index([quotationId])
+}
+
+model QuotationTemplate {
+  id         String  @id @default(cuid())
+  name       String
+  layoutKey  String  @unique // e.g. "standard", "government", "detailed", "budgetary", "export"
+  headerHtml String?
+  footerHtml String?
+  config     Json    @default("{}")
+  active     Boolean @default(true)
+
+  quotations Quotation[]
+}
+
+model Attachment {
+  id          String         @id @default(cuid())
+  inquiryId   String
+  storagePath String
+  kind        AttachmentKind @default(OTHER)
+  createdAt   DateTime       @default(now())
+
+  inquiry Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+
+  @@index([inquiryId])
+}
+
+// Sequence helper for per-year quote numbering (AQ-YYYY-NNNN).
+model QuoteCounter {
+  year      Int @id
+  lastValue Int @default(0)
+}

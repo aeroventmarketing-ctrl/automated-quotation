@@ -1,0 +1,149 @@
+import { describe, it, expect } from "vitest";
+import {
+  selectFan,
+  selectFans,
+  densityFromTemperature,
+  STANDARD_MOTOR_KW,
+  type FanModelInput,
+} from "./index";
+
+// A synthetic fan model with a decreasing pressure curve at 1000 rpm.
+const model: FanModelInput = {
+  id: "m1",
+  modelCode: "TEST-100",
+  name: "Test Fan 100",
+  sizeLabel: '24"',
+  ratingPoints: [
+    { rpm: 1000, airflow_m3hr: 0, staticPressure_pa: 500, power_kw: 0.5, efficiency: 0 },
+    { rpm: 1000, airflow_m3hr: 1000, staticPressure_pa: 450, power_kw: 0.8, efficiency: 0.6 },
+    { rpm: 1000, airflow_m3hr: 2000, staticPressure_pa: 350, power_kw: 1.0, efficiency: 0.72 },
+    { rpm: 1000, airflow_m3hr: 3000, staticPressure_pa: 200, power_kw: 1.1, efficiency: 0.65 },
+    { rpm: 1000, airflow_m3hr: 4000, staticPressure_pa: 0, power_kw: 1.2, efficiency: 0.3 },
+  ],
+};
+
+describe("selectFan — on-curve duty", () => {
+  it("hits a point exactly on the rated curve at ~rated speed", () => {
+    const r = selectFan(model, { airflow_m3hr: 2000, staticPressure_pa: 350 })!;
+    expect(r).not.toBeNull();
+    expect(r.rpm).toBeGreaterThan(980);
+    expect(r.rpm).toBeLessThan(1020);
+    expect(r.speedRatio).toBeCloseTo(1, 1);
+    expect(r.confidence).toBe("HIGH");
+    expect(r.withinEnvelope).toBe(true);
+    expect(r.requiresEngineerConfirmation).toBe(false);
+  });
+
+  it("sizes a standard motor above absorbed power with service factor", () => {
+    const r = selectFan(model, { airflow_m3hr: 2000, staticPressure_pa: 350 })!;
+    expect(STANDARD_MOTOR_KW).toContain(r.motorKw);
+    expect(r.motorKw).toBeGreaterThanOrEqual(r.power_kw * r.serviceFactor - 1e-9);
+    expect(r.motorHp).toBeGreaterThan(0);
+  });
+});
+
+describe("selectFan — fan laws", () => {
+  it("requires higher speed for higher pressure at same airflow", () => {
+    const r = selectFan(model, { airflow_m3hr: 2000, staticPressure_pa: 700 })!;
+    expect(r.rpm).toBeGreaterThan(1000);
+    expect(r.speedRatio).toBeGreaterThan(1);
+    // Power scales with speed^3, so it should exceed the rated-speed power.
+    expect(r.power_kw).toBeGreaterThan(1.0);
+  });
+
+  it("requires lower speed for a gentle duty", () => {
+    const r = selectFan(model, { airflow_m3hr: 1500, staticPressure_pa: 150 })!;
+    expect(r.speedRatio).toBeLessThan(1);
+    expect(r.rpm).toBeLessThan(1000);
+  });
+});
+
+describe("selectFan — envelope guarding", () => {
+  it("flags an extreme out-of-envelope duty as LOW confidence requiring confirmation", () => {
+    const r = selectFan(model, { airflow_m3hr: 2000, staticPressure_pa: 5000 })!;
+    expect(r.confidence).toBe("LOW");
+    expect(r.requiresEngineerConfirmation).toBe(true);
+    expect(r.withinEnvelope).toBe(false);
+    expect(r.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("never returns withinEnvelope=true for a duty far above the curve", () => {
+    const r = selectFan(model, { airflow_m3hr: 6000, staticPressure_pa: 800 })!;
+    expect(r.withinEnvelope).toBe(false);
+  });
+});
+
+describe("selectFan — density correction", () => {
+  it("requires more pressure capability for hot (less dense) air", () => {
+    const cold = selectFan(model, { airflow_m3hr: 2000, staticPressure_pa: 300 })!;
+    const hot = selectFan(model, {
+      airflow_m3hr: 2000,
+      staticPressure_pa: 300,
+      temperatureC: 200,
+    })!;
+    // Hot air -> higher equivalent standard-density pressure -> higher speed.
+    expect(hot.selectionStaticPressure_pa).toBeGreaterThan(
+      cold.selectionStaticPressure_pa,
+    );
+    expect(hot.rpm).toBeGreaterThan(cold.rpm);
+  });
+
+  it("densityFromTemperature decreases with temperature", () => {
+    expect(densityFromTemperature(20)).toBeCloseTo(1.2, 2);
+    expect(densityFromTemperature(200)).toBeLessThan(1.2);
+  });
+});
+
+describe("selectFan — normalization from mixed RPM data", () => {
+  it("collapses points at different RPMs onto one curve via fan laws", () => {
+    const mixed: FanModelInput = {
+      id: "m2",
+      modelCode: "MIX-1",
+      name: "Mixed",
+      ratingPoints: [
+        // Same physical fan, half the data taken at 500 rpm.
+        { rpm: 500, airflow_m3hr: 500, staticPressure_pa: 112.5, power_kw: 0.1 },
+        { rpm: 1000, airflow_m3hr: 2000, staticPressure_pa: 350, power_kw: 1.0 },
+        { rpm: 1000, airflow_m3hr: 3000, staticPressure_pa: 200, power_kw: 1.1 },
+      ],
+    };
+    const r = selectFan(mixed, { airflow_m3hr: 2000, staticPressure_pa: 350 });
+    expect(r).not.toBeNull();
+    expect(r!.referenceRpm).toBe(1000);
+  });
+});
+
+describe("selectFan — insufficient data", () => {
+  it("returns null when fewer than 2 rating points", () => {
+    const thin: FanModelInput = {
+      id: "m3",
+      modelCode: "THIN",
+      name: "Thin",
+      ratingPoints: [{ rpm: 1000, airflow_m3hr: 1000, staticPressure_pa: 200, power_kw: 0.5 }],
+    };
+    expect(selectFan(thin, { airflow_m3hr: 1000, staticPressure_pa: 200 })).toBeNull();
+  });
+});
+
+describe("selectFans — ranking", () => {
+  it("ranks HIGH-confidence candidates before LOW-confidence ones", () => {
+    const big: FanModelInput = {
+      ...model,
+      id: "big",
+      modelCode: "BIG-200",
+      ratingPoints: model.ratingPoints.map((p) => ({
+        ...p,
+        airflow_m3hr: p.airflow_m3hr * 2,
+        staticPressure_pa: p.staticPressure_pa * 2,
+      })),
+    };
+    const ranked = selectFans([model, big], {
+      airflow_m3hr: 2000,
+      staticPressure_pa: 350,
+    });
+    expect(ranked.length).toBe(2);
+    expect(ranked[0].confidence).toBe("HIGH");
+    // The well-matched small fan should rank first.
+    expect(ranked[0].modelCode).toBe("TEST-100");
+  });
+});
