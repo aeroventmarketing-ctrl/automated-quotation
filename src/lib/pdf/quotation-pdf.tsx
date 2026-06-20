@@ -4,9 +4,11 @@ import {
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
 } from "@react-pdf/renderer";
 import { COMPANY } from "@/lib/config";
+import { AEROVENT_LOGO } from "./logo";
 
 export interface QuotationPdfLine {
   itemLabel: string;
@@ -28,11 +30,7 @@ export interface QuotationPdfData {
   validUntil: string | null;
   vatMode: "INCLUSIVE" | "EXCLUSIVE";
   projectName?: string | null;
-  customer: {
-    company: string;
-    contactName?: string | null;
-    address?: string | null;
-  };
+  customer: { company: string; contactName?: string | null; address?: string | null };
   preparedBy: string;
   approvedBy?: string | null;
   status: string;
@@ -46,176 +44,195 @@ export interface QuotationPdfData {
 }
 
 function money(value: number) {
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-const dash = (v: number | null | undefined) =>
-  v == null || v === 0 ? "--" : String(v);
+const dash = (v: number | null | undefined) => (v == null || v === 0 ? "--" : String(v));
 
-const styles = StyleSheet.create({
-  page: { paddingTop: 28, paddingBottom: 70, paddingHorizontal: 28, fontSize: 8, fontFamily: "Helvetica", color: "#111827" },
-  // Letterhead
-  letterhead: { textAlign: "center", borderBottom: "1.5 solid #0f766e", paddingBottom: 6, marginBottom: 10 },
-  company: { fontSize: 13, fontWeight: 700, color: "#0f766e", letterSpacing: 0.5 },
-  tagline: { fontSize: 8, fontStyle: "italic", marginTop: 1 },
-  addr: { fontSize: 6.5, color: "#374151", marginTop: 1 },
-  // Meta
-  metaRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 2 },
-  quoteNo: { fontSize: 10, fontWeight: 700 },
-  metaLabel: { fontWeight: 700 },
-  intro: { marginTop: 6, marginBottom: 6 },
-  // Table
-  thead: { flexDirection: "row", backgroundColor: "#0f766e", color: "#fff", fontSize: 6.5, fontWeight: 700 },
-  row: { flexDirection: "row", borderBottom: "0.5 solid #d1d5db", fontSize: 7 },
-  cItem: { width: "5%", padding: 3, textAlign: "center" },
-  cQty: { width: "5%", padding: 3, textAlign: "center" },
-  cDesc: { width: "33%", padding: 3 },
-  cCfm: { width: "8%", padding: 3, textAlign: "right" },
-  cPa: { width: "7%", padding: 3, textAlign: "right" },
-  cIn: { width: "7%", padding: 3, textAlign: "right" },
-  cHp: { width: "5%", padding: 3, textAlign: "right" },
-  cPh: { width: "5%", padding: 3, textAlign: "right" },
-  cV: { width: "6%", padding: 3, textAlign: "right" },
-  cUnit: { width: "7%", padding: 3, textAlign: "right" },
-  cTotal: { width: "12%", padding: 3, textAlign: "right" },
-  netRow: { flexDirection: "row", justifyContent: "flex-end", marginTop: 4 },
-  netLabel: { fontWeight: 700, fontSize: 8.5, textAlign: "right", paddingRight: 8 },
-  netVal: { fontWeight: 700, fontSize: 8.5, width: "12%", textAlign: "right", borderTop: "1 solid #0f766e", paddingTop: 2 },
-  note: { fontSize: 7, color: "#374151", marginTop: 10, lineHeight: 1.3 },
-  // Footer letterhead (fixed on each page)
-  footer: { position: "absolute", bottom: 18, left: 28, right: 28, textAlign: "center", fontSize: 6, color: "#6b7280", borderTop: "0.5 solid #d1d5db", paddingTop: 4 },
-  watermark: { position: "absolute", top: 250, left: 130, fontSize: 70, color: "#f1f5f9", transform: "rotate(-32deg)" },
-  // Terms page
-  termsTitle: { fontWeight: 700, marginBottom: 6 },
-  termsBody: { fontSize: 7.5, lineHeight: 1.4 },
-  closing: { marginTop: 16, fontSize: 8 },
+// Column widths in points (A4 content width ≈ 539pt @ 28pt margins).
+const W = { item: 26, qty: 24, desc: 150, cfm: 42, pa: 42, inch: 38, hp: 28, ph: 26, volts: 34, unit: 60, total: 69 };
+const BORDER = "0.7 solid #000";
+
+const s = StyleSheet.create({
+  page: { paddingTop: 22, paddingBottom: 40, paddingHorizontal: 28, fontSize: 8, fontFamily: "Helvetica", color: "#000" },
+  logo: { width: 300, height: 50, alignSelf: "center", objectFit: "contain" },
+  head2: { textAlign: "center", fontSize: 10, fontWeight: 700, marginTop: 2 },
+  head3: { textAlign: "center", fontSize: 7.5, fontWeight: 700, letterSpacing: 0.3 },
+  addr: { textAlign: "center", fontSize: 6.5, marginTop: 0.5 },
+  hr: { borderBottom: "1 solid #000", marginTop: 4, marginBottom: 6 },
+
+  metaRow: { flexDirection: "row", justifyContent: "space-between" },
+  quoteNo: { fontSize: 9, fontWeight: 700 },
+  bold: { fontWeight: 700 },
+  intro: { marginTop: 4, marginBottom: 5 },
+
+  // table
+  table: { borderTop: BORDER, borderLeft: BORDER },
+  row: { flexDirection: "row" },
+  hCellFull: { borderRight: BORDER, borderBottom: BORDER, height: 30, justifyContent: "center", alignItems: "center", textAlign: "center", fontSize: 6.8, fontWeight: 700, paddingHorizontal: 1 },
+  hGroup: { borderRight: BORDER, height: 30 },
+  hGroupLabel: { borderBottom: BORDER, flexGrow: 1, justifyContent: "center", alignItems: "center", textAlign: "center", fontSize: 6.5, fontWeight: 700, paddingHorizontal: 1 },
+  hGroupUnit: { height: 12, justifyContent: "center", alignItems: "center", textAlign: "center", fontSize: 6.5, fontWeight: 700 },
+  hMotorTop: { borderBottom: BORDER, height: 15, justifyContent: "center", alignItems: "center", fontSize: 6.8, fontWeight: 700 },
+  hMotorSub: { flexDirection: "row", height: 15 },
+  hMotorCell: { justifyContent: "center", alignItems: "center", textAlign: "center", fontSize: 6.8, fontWeight: 700 },
+
+  cell: { borderRight: BORDER, borderBottom: BORDER, justifyContent: "center", paddingVertical: 2, paddingHorizontal: 2, fontSize: 7 },
+  cCenter: { alignItems: "center", textAlign: "center" },
+  cLeft: { alignItems: "flex-start", textAlign: "left", justifyContent: "flex-start" },
+  cRight: { alignItems: "flex-end", textAlign: "right" },
+
+  totalRow: { flexDirection: "row" },
+  totalLabel: { borderRight: BORDER, borderBottom: BORDER, textAlign: "right", fontWeight: 700, fontSize: 8, justifyContent: "center", paddingRight: 6, paddingVertical: 3 },
+  totalVal: { borderRight: BORDER, borderBottom: BORDER, textAlign: "right", fontWeight: 700, fontSize: 8, justifyContent: "center", alignItems: "flex-end", paddingRight: 2, paddingVertical: 3 },
+
+  note: { fontSize: 6.8, marginTop: 8, lineHeight: 1.3 },
+  footer: { position: "absolute", bottom: 14, left: 28, right: 28, textAlign: "center", fontSize: 6, color: "#555", borderTop: "0.5 solid #aaa", paddingTop: 3 },
+  watermark: { position: "absolute", top: 280, left: 150, fontSize: 64, color: "#f2f2f2", transform: "rotate(-30deg)" },
+  termsTitle: { fontWeight: 700, marginBottom: 6, marginTop: 4 },
+  termsBody: { fontSize: 7.5, lineHeight: 1.45 },
 });
 
 function Letterhead() {
   return (
-    <View style={styles.letterhead}>
-      <Text style={styles.company}>{COMPANY.name}</Text>
-      <Text style={styles.tagline}>{COMPANY.tagline}</Text>
-      <Text style={styles.addr}>{COMPANY.manilaOffice}</Text>
-      <Text style={styles.addr}>{COMPANY.landline}</Text>
-      <Text style={styles.addr}>{COMPANY.mobile}</Text>
-      <Text style={styles.addr}>{COMPANY.plantAddress}</Text>
-      <Text style={styles.addr}>Email: {COMPANY.email}  ·  Website: {COMPANY.website}</Text>
+    <View>
+      <Image style={s.logo} src={AEROVENT_LOGO} />
+      <Text style={s.head2}>FANS AND BLOWERS MANUFACTURING</Text>
+      <Text style={s.head3}>VENTILATION, AIR MOVING &amp; ENGINEERING SPECIALISTS</Text>
+      <Text style={s.addr}>{COMPANY.manilaOffice}</Text>
+      <Text style={s.addr}>{COMPANY.landline}</Text>
+      <Text style={s.addr}>{COMPANY.mobile}</Text>
+      <Text style={s.addr}>{COMPANY.plantAddress}</Text>
+      <Text style={s.addr}>Email: {COMPANY.email}   /   Website: {COMPANY.website}</Text>
+      <View style={s.hr} />
+    </View>
+  );
+}
+
+function TableHeader() {
+  return (
+    <View style={s.row} fixed>
+      <View style={[s.hCellFull, { width: W.item }]}><Text>Item</Text></View>
+      <View style={[s.hCellFull, { width: W.qty }]}><Text>Qty</Text></View>
+      <View style={[s.hCellFull, { width: W.desc }]}><Text>Description</Text></View>
+      <View style={[s.hGroup, { width: W.cfm }]}>
+        <View style={s.hGroupLabel}><Text>Capacity</Text></View>
+        <View style={s.hGroupUnit}><Text>(cfm)</Text></View>
+      </View>
+      <View style={[s.hGroup, { width: W.pa }]}>
+        <View style={s.hGroupLabel}><Text>Static{"\n"}Pressure</Text></View>
+        <View style={s.hGroupUnit}><Text>(Pa)</Text></View>
+      </View>
+      <View style={[s.hGroup, { width: W.inch }]}>
+        <View style={s.hGroupLabel}><Text>Size</Text></View>
+        <View style={s.hGroupUnit}><Text>Inches</Text></View>
+      </View>
+      <View style={[s.hGroup, { width: W.hp + W.ph + W.volts }]}>
+        <View style={s.hMotorTop}><Text>MOTOR</Text></View>
+        <View style={s.hMotorSub}>
+          <View style={[s.hMotorCell, { width: W.hp, borderRight: BORDER }]}><Text>Hp</Text></View>
+          <View style={[s.hMotorCell, { width: W.ph, borderRight: BORDER }]}><Text>Ph</Text></View>
+          <View style={[s.hMotorCell, { width: W.volts }]}><Text>Volts</Text></View>
+        </View>
+      </View>
+      <View style={[s.hCellFull, { width: W.unit }]}><Text>Unit{"\n"}Price</Text></View>
+      <View style={[s.hCellFull, { width: W.total }]}><Text>Total{"\n"}Price</Text></View>
     </View>
   );
 }
 
 export function QuotationPdf({ data }: { data: QuotationPdfData }) {
   const exclusive = data.vatMode === "EXCLUSIVE";
-  const f = exclusive ? 1 / (1 + data.vatRate) : 1; // factor to strip VAT for display
+  const f = exclusive ? 1 / (1 + data.vatRate) : 1;
+  const leftSpan = W.item + W.qty + W.desc + W.cfm + W.pa + W.inch + W.hp + W.ph + W.volts + W.unit;
 
   return (
     <Document>
       {/* Page 1 — quotation */}
-      <Page size="A4" style={styles.page}>
-        {data.status !== "SENT" && <Text style={styles.watermark} fixed>{data.status}</Text>}
+      <Page size="A4" style={s.page}>
+        {data.status !== "SENT" && <Text style={s.watermark} fixed>{data.status}</Text>}
         <Letterhead />
 
-        <View style={styles.metaRow}>
-          <Text style={styles.quoteNo}>QUOT NO. {data.quoteNumber}</Text>
+        <View style={s.metaRow}>
+          <Text style={s.quoteNo}>QUOT NO. {data.quoteNumber}</Text>
           <Text>{data.createdAt}</Text>
         </View>
         {data.projectName ? (
-          <Text><Text style={styles.metaLabel}>PROJECT : </Text>{data.projectName}</Text>
+          <Text style={{ marginTop: 2 }}><Text style={s.bold}>PROJECT : </Text>{data.projectName}</Text>
         ) : null}
-        <Text>
-          <Text style={styles.metaLabel}>TO: </Text>
-          {data.customer.contactName || data.customer.company}
+        <Text style={{ marginTop: 1 }}>
+          <Text style={s.bold}>TO: </Text>{data.customer.contactName || data.customer.company}
         </Text>
-        {data.customer.contactName && data.customer.company ? (
-          <Text>{data.customer.company}</Text>
-        ) : null}
-
-        <View style={styles.intro}>
+        <View style={s.intro}>
           <Text>Dear Sir/Ma&apos;am:</Text>
           <Text>We are pleased to quote the price for your ventilation requirements.</Text>
         </View>
 
-        {/* Items table */}
-        <View style={styles.thead}>
-          <Text style={styles.cItem}>Item</Text>
-          <Text style={styles.cQty}>Qty</Text>
-          <Text style={styles.cDesc}>Description</Text>
-          <Text style={styles.cCfm}>Capacity{"\n"}(CFM)</Text>
-          <Text style={styles.cPa}>S.P.{"\n"}(Pa)</Text>
-          <Text style={styles.cIn}>Size{"\n"}(in)</Text>
-          <Text style={styles.cHp}>HP</Text>
-          <Text style={styles.cPh}>Ph</Text>
-          <Text style={styles.cV}>Volts</Text>
-          <Text style={styles.cUnit}>Unit{"\n"}Price</Text>
-          <Text style={styles.cTotal}>Amount</Text>
+        {/* Table */}
+        <View style={s.table}>
+          <TableHeader />
+          {data.items.map((it, i) => (
+            <View key={i} style={s.row} wrap={false}>
+              <View style={[s.cell, s.cCenter, { width: W.item }]}><Text>{it.itemLabel || String(i + 1)}</Text></View>
+              <View style={[s.cell, s.cCenter, { width: W.qty }]}><Text>{it.qty}</Text></View>
+              <View style={[s.cell, s.cLeft, { width: W.desc }]}><Text>{it.descriptionSnapshot}</Text></View>
+              <View style={[s.cell, s.cCenter, { width: W.cfm }]}><Text>{dash(it.capacity_cfm)}</Text></View>
+              <View style={[s.cell, s.cCenter, { width: W.pa }]}><Text>{dash(it.staticPressure_pa)}</Text></View>
+              <View style={[s.cell, s.cCenter, { width: W.inch }]}><Text>{dash(it.inches)}</Text></View>
+              <View style={[s.cell, s.cCenter, { width: W.hp }]}><Text>{dash(it.motorHp)}</Text></View>
+              <View style={[s.cell, s.cCenter, { width: W.ph }]}><Text>{dash(it.motorPh)}</Text></View>
+              <View style={[s.cell, s.cCenter, { width: W.volts }]}><Text>{dash(it.motorVolts)}</Text></View>
+              <View style={[s.cell, s.cRight, { width: W.unit }]}><Text>{money(it.unitPrice * f)}</Text></View>
+              <View style={[s.cell, s.cRight, { width: W.total }]}><Text>{money(it.lineTotal * f)}</Text></View>
+            </View>
+          ))}
+
+          {/* Totals */}
+          {exclusive ? (
+            <>
+              <View style={s.totalRow}>
+                <View style={[s.totalLabel, { width: leftSpan }]}><Text>VATable Sales =&gt;</Text></View>
+                <View style={[s.totalVal, { width: W.total }]}><Text>{money(data.subtotal)}</Text></View>
+              </View>
+              <View style={s.totalRow}>
+                <View style={[s.totalLabel, { width: leftSpan }]}><Text>VAT ({Math.round(data.vatRate * 100)}%) =&gt;</Text></View>
+                <View style={[s.totalVal, { width: W.total }]}><Text>{money(data.vat)}</Text></View>
+              </View>
+              <View style={s.totalRow}>
+                <View style={[s.totalLabel, { width: leftSpan }]}><Text>TOTAL AMOUNT DUE (VAT inclusive) =&gt;</Text></View>
+                <View style={[s.totalVal, { width: W.total }]}><Text>{money(data.total)}</Text></View>
+              </View>
+            </>
+          ) : (
+            <View style={s.totalRow}>
+              <View style={[s.totalLabel, { width: leftSpan }]}><Text>NET AMOUNT (VAT inclusive price) =&gt;</Text></View>
+              <View style={[s.totalVal, { width: W.total }]}><Text>{money(data.total)}</Text></View>
+            </View>
+          )}
         </View>
-        {data.items.map((it, i) => (
-          <View key={i} style={styles.row} wrap={false}>
-            <Text style={styles.cItem}>{it.itemLabel || String(i + 1)}</Text>
-            <Text style={styles.cQty}>{it.qty}</Text>
-            <Text style={styles.cDesc}>{it.descriptionSnapshot}</Text>
-            <Text style={styles.cCfm}>{dash(it.capacity_cfm)}</Text>
-            <Text style={styles.cPa}>{dash(it.staticPressure_pa)}</Text>
-            <Text style={styles.cIn}>{dash(it.inches)}</Text>
-            <Text style={styles.cHp}>{dash(it.motorHp)}</Text>
-            <Text style={styles.cPh}>{dash(it.motorPh)}</Text>
-            <Text style={styles.cV}>{dash(it.motorVolts)}</Text>
-            <Text style={styles.cUnit}>{money(it.unitPrice * f)}</Text>
-            <Text style={styles.cTotal}>{money(it.lineTotal * f)}</Text>
-          </View>
-        ))}
 
-        {/* Totals */}
-        {exclusive ? (
-          <>
-            <View style={styles.netRow}>
-              <Text style={styles.netLabel}>VATable Sales =&gt;</Text>
-              <Text style={styles.netVal}>{money(data.subtotal)}</Text>
-            </View>
-            <View style={styles.netRow}>
-              <Text style={styles.netLabel}>VAT ({Math.round(data.vatRate * 100)}%) =&gt;</Text>
-              <Text style={styles.netVal}>{money(data.vat)}</Text>
-            </View>
-            <View style={styles.netRow}>
-              <Text style={styles.netLabel}>TOTAL AMOUNT DUE (VAT inclusive) =&gt;</Text>
-              <Text style={styles.netVal}>{money(data.total)}</Text>
-            </View>
-          </>
-        ) : (
-          <View style={styles.netRow}>
-            <Text style={styles.netLabel}>NET AMOUNT (VAT inclusive price) =&gt;</Text>
-            <Text style={styles.netVal}>{money(data.total)}</Text>
-          </View>
-        )}
+        {data.specNote ? (
+          <Text style={s.note}><Text style={s.bold}>Note: </Text>{data.specNote}</Text>
+        ) : null}
 
-        {data.specNote ? <Text style={styles.note}>{data.specNote}</Text> : null}
-
-        <Text style={styles.footer} fixed>
-          {COMPANY.name} — {COMPANY.tagline} · {COMPANY.email} · {COMPANY.website}
+        <Text style={s.footer} fixed>
+          {COMPANY.manilaOffice} · {COMPANY.email} · {COMPANY.website}
         </Text>
       </Page>
 
       {/* Page 2 — terms & conditions */}
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={s.page}>
         <Letterhead />
-        <Text style={styles.termsTitle}>
-          The above quotation is subject to the following terms and conditions:
-        </Text>
-        <Text style={styles.termsBody}>{data.terms || "—"}</Text>
-
-        <View style={styles.closing}>
+        <Text style={s.termsTitle}>The above quotation is subject to the following terms and conditions:</Text>
+        <Text style={s.termsBody}>{data.terms || "—"}</Text>
+        <View style={{ marginTop: 16, fontSize: 8 }}>
           <Text>{COMPANY.closing}</Text>
-          <Text style={{ marginTop: 12 }}>{COMPANY.signoff}</Text>
-          <Text style={{ fontWeight: 700, marginTop: 2 }}>{COMPANY.name}</Text>
-          <Text style={{ marginTop: 16 }}>{data.preparedBy}</Text>
+          <Text style={{ marginTop: 14 }}>{COMPANY.signoff}</Text>
+          <Text style={s.bold}>{COMPANY.name}</Text>
+          <Text style={{ marginTop: 18 }}>{data.preparedBy}</Text>
           <Text>{COMPANY.signatory}</Text>
         </View>
-
-        <Text style={styles.footer} fixed>
-          {COMPANY.name} — {COMPANY.tagline} · {COMPANY.email} · {COMPANY.website}
+        <Text style={s.footer} fixed>
+          {COMPANY.manilaOffice} · {COMPANY.email} · {COMPANY.website}
         </Text>
       </Page>
     </Document>
