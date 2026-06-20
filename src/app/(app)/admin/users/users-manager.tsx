@@ -13,13 +13,14 @@ import { upsertUser, deleteUser } from "../actions";
 
 const ROLES = ["SALES", "ENGINEER", "ADMIN"];
 
-interface U { id: string; email: string; name: string; role: string }
+interface U { id: string; email: string; name: string; role: string; salesCode: string }
 
 export function UsersManager({ users }: { users: U[] }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("SALES");
+  const [salesCode, setSalesCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,8 +28,8 @@ export function UsersManager({ users }: { users: U[] }) {
     setBusy(true);
     setError(null);
     try {
-      await upsertUser({ email, name, role: role as never });
-      setEmail(""); setName(""); setRole("SALES");
+      await upsertUser({ email, name, role: role as never, salesCode });
+      setEmail(""); setName(""); setRole("SALES"); setSalesCode("");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -47,7 +48,7 @@ export function UsersManager({ users }: { users: U[] }) {
     <div className="space-y-4">
       <Card>
         <CardHeader><CardTitle>Add / update user</CardTitle></CardHeader>
-        <CardContent className="grid items-end gap-3 md:grid-cols-4">
+        <CardContent className="grid items-end gap-3 md:grid-cols-5">
           <div className="space-y-1">
             <Label>Email</Label>
             <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@aerovent.example" />
@@ -62,9 +63,13 @@ export function UsersManager({ users }: { users: U[] }) {
               {ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}
             </Select>
           </div>
+          <div className="space-y-1">
+            <Label>Quote letter</Label>
+            <Input value={salesCode} maxLength={1} onChange={(e) => setSalesCode(e.target.value.toUpperCase())} placeholder="J" />
+          </div>
           <Button onClick={save} disabled={busy || !email || !name}>{busy ? "Saving…" : "Save"}</Button>
-          {error && <p className="text-sm text-destructive md:col-span-4">{error}</p>}
-          <p className="text-xs text-muted-foreground md:col-span-4">
+          {error && <p className="text-sm text-destructive md:col-span-5">{error}</p>}
+          <p className="text-xs text-muted-foreground md:col-span-5">
             Note: this manages the app role record (matched by email). Create the matching login in
             Supabase Authentication.
           </p>
@@ -75,7 +80,7 @@ export function UsersManager({ users }: { users: U[] }) {
         <CardContent className="pt-6">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead></TableHead></TableRow>
+              <TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Letter</TableHead><TableHead></TableHead></TableRow>
             </TableHeader>
             <TableBody>
               {users.map((u) => (
@@ -83,6 +88,7 @@ export function UsersManager({ users }: { users: U[] }) {
                   <TableCell className="font-medium">{u.name}</TableCell>
                   <TableCell>{u.email}</TableCell>
                   <TableCell><Badge variant="secondary">{u.role}</Badge></TableCell>
+                  <TableCell>{u.salesCode || "—"}</TableCell>
                   <TableCell><Button size="sm" variant="ghost" onClick={() => remove(u.id)}>Delete</Button></TableCell>
                 </TableRow>
               ))}

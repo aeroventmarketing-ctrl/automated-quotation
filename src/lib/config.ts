@@ -9,9 +9,20 @@ export const config = {
 };
 
 export const COMPANY = {
-  name: "Aerovent Fans and Blowers Manufacturing",
-  tagline: "Industrial Fans · Blowers · Ventilation Solutions",
-  address: "Philippines",
-  email: "sales@aerovent.example",
-  phone: "+63 (0)2 0000 0000",
+  name: "AEROVENT FANS AND BLOWERS MANUFACTURING",
+  tagline: "Ventilation, air moving & engineering specialists",
+  manilaOffice:
+    "Manila Office: 1933-C Augusto Francisco Street, Sta. Ana, Manila, Philippines",
+  plantAddress:
+    "Plant Address: #7635 Narra Road, Bayan-bayanan San Vicente, San Pedro, Laguna, Philippines",
+  landline: "(02)85619413 – (02)87740234 – (02)87740245 (LANDLINE)",
+  mobile: "09289480600 / 09996649997 (SMART) – 09273258887 / 09544298999 (GLOBE)",
+  email: "aeroventblower@gmail.com",
+  website: "www.aeroventfbm.com",
+  // Short code used as the AFBM quote-number prefix.
+  quotePrefix: "AFBM",
+  closing:
+    "Thank you for giving us the opportunity to quote in your requirement, we shall await your valued order with much interest.",
+  signoff: "Very Truly Yours,",
+  signatory: "AFBM Sales",
 };
