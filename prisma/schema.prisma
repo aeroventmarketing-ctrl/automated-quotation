@@ -80,6 +80,8 @@ model User {
   email     String   @unique
   name      String
   role      Role     @default(SALES)
+  // Single letter appended to quote numbers for this sales person (e.g. "J").
+  salesCode String?
   createdAt DateTime @default(now())
 
   inquiriesCreated   Inquiry[]   @relation("InquiryCreatedBy")
@@ -186,9 +188,12 @@ model InquiryItem {
 model Quotation {
   id           String          @id @default(cuid())
   inquiryId    String
-  quoteNumber  String          @unique // e.g. AQ-2026-0001
+  quoteNumber  String          @unique // e.g. 2026 - AFBM00000041J
   templateId   String
   status       QuotationStatus @default(DRAFT)
+  // VAT presentation: INCLUSIVE (prices already include 12% VAT) or EXCLUSIVE.
+  vatMode      String          @default("INCLUSIVE")
+  projectName  String?
   subtotal     Decimal         @db.Decimal(14, 2) @default(0)
   vat          Decimal         @db.Decimal(14, 2) @default(0)
   total        Decimal         @db.Decimal(14, 2) @default(0)

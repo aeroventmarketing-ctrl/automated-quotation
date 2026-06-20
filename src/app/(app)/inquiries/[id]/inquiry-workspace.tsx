@@ -164,7 +164,7 @@ export function InquiryWorkspace({
 
     setCreating(true);
     try {
-      await createQuotationFromInquiry({ inquiryId, templateId: templateId || undefined, lines });
+      await createQuotationFromInquiry({ inquiryId, templateId: templateId || undefined, vatMode: "INCLUSIVE", lines });
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : "Failed to create quotation");
       setCreating(false);

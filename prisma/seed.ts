@@ -17,17 +17,17 @@ async function main() {
     prisma.user.upsert({
       where: { email: "sales@aerovent.example" },
       update: {},
-      create: { email: "sales@aerovent.example", name: "Sofia Sales", role: Role.SALES },
+      create: { email: "sales@aerovent.example", name: "Sofia Sales", role: Role.SALES, salesCode: "S" },
     }),
     prisma.user.upsert({
       where: { email: "engineer@aerovent.example" },
       update: {},
-      create: { email: "engineer@aerovent.example", name: "Eduardo Engineer", role: Role.ENGINEER },
+      create: { email: "engineer@aerovent.example", name: "Eduardo Engineer", role: Role.ENGINEER, salesCode: "E" },
     }),
     prisma.user.upsert({
       where: { email: "admin@aerovent.example" },
       update: {},
-      create: { email: "admin@aerovent.example", name: "Andrea Admin", role: Role.ADMIN },
+      create: { email: "admin@aerovent.example", name: "Andrea Admin", role: Role.ADMIN, salesCode: "A" },
     }),
   ]);
 

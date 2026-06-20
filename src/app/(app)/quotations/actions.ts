@@ -20,6 +20,8 @@ const lineSchema = z.object({
 const createSchema = z.object({
   inquiryId: z.string(),
   templateId: z.string().optional(),
+  projectName: z.string().optional(),
+  vatMode: z.enum(["INCLUSIVE", "EXCLUSIVE"]).default("INCLUSIVE"),
   lines: z.array(lineSchema).min(1),
 });
 
@@ -29,13 +31,11 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
   if (!user) throw new Error("Unauthorized");
   const data = createSchema.parse(input);
 
-  // Resolve a default template if none provided.
   const template = data.templateId
     ? await prisma.quotationTemplate.findUnique({ where: { id: data.templateId } })
     : await prisma.quotationTemplate.findFirst({ where: { active: true }, orderBy: { name: "asc" } });
   if (!template) throw new Error("No quotation template available — seed templates first.");
 
-  // Resolve unit prices from the pricelist where not explicitly provided.
   const resolvedLines = await Promise.all(
     data.lines.map(async (l) => {
       let unitPrice = l.unitPrice;
@@ -53,22 +53,30 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
 
   const totals = computeTotals(resolvedLines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })));
 
+  // Default validity: 1 week (matches AFBM standard terms).
   const validUntil = new Date();
-  validUntil.setDate(validUntil.getDate() + 30);
+  validUntil.setDate(validUntil.getDate() + 7);
+
+  // Pull this quote's default terms from the chosen template.
+  const tplConfig = (template.config as Record<string, unknown>) ?? {};
+  const terms = typeof tplConfig.terms === "string" ? tplConfig.terms : null;
 
   const quotation = await prisma.$transaction(async (tx) => {
-    const quoteNumber = await nextQuoteNumber(tx);
+    const quoteNumber = await nextQuoteNumber(tx, user.salesCode ?? "");
     return tx.quotation.create({
       data: {
         inquiryId: data.inquiryId,
         quoteNumber,
         templateId: template.id,
         status: "DRAFT",
+        vatMode: data.vatMode,
+        projectName: data.projectName,
         subtotal: totals.subtotal,
         vat: totals.vat,
         total: totals.total,
         currency: config.defaultCurrency,
         validUntil,
+        terms,
         preparedById: user.id,
         items: {
           create: resolvedLines.map((l, i) => ({
@@ -99,13 +107,21 @@ const editLineSchema = z.object({
   qty: z.number().int().positive(),
   unitPrice: z.number().min(0),
   selectionNote: z.string().nullable().optional(),
+  specsSnapshot: z.record(z.unknown()).optional(),
 });
 
 /** Edit line items + recompute totals (only while DRAFT). */
 export async function updateQuotationLines(
   quotationId: string,
   lines: z.infer<typeof editLineSchema>[],
-  meta?: { templateId?: string; notes?: string; terms?: string; validUntil?: string },
+  meta?: {
+    templateId?: string;
+    notes?: string;
+    terms?: string;
+    validUntil?: string;
+    projectName?: string;
+    vatMode?: "INCLUSIVE" | "EXCLUSIVE";
+  },
 ) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -127,6 +143,7 @@ export async function updateQuotationLines(
           unitPrice: round2(l.unitPrice),
           lineTotal: round2(l.unitPrice * l.qty),
           selectionNote: l.selectionNote ?? null,
+          ...(l.specsSnapshot ? { specsSnapshot: l.specsSnapshot as object } : {}),
         },
       }),
     ),
@@ -139,6 +156,8 @@ export async function updateQuotationLines(
         templateId: meta?.templateId,
         notes: meta?.notes,
         terms: meta?.terms,
+        projectName: meta?.projectName,
+        vatMode: meta?.vatMode,
         validUntil: meta?.validUntil ? new Date(meta.validUntil) : undefined,
       },
     }),
@@ -165,7 +184,6 @@ export async function transitionQuotation(quotationId: string, to: string) {
     throw new Error(`Illegal transition ${quote.status} -> ${to}`);
   }
 
-  // Approval requires Engineer/Admin (engineer-in-the-loop).
   if (to === "APPROVED" && !canApprove(user)) {
     throw new Error("Only an Engineer or Admin can approve a quotation.");
   }

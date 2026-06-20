@@ -4,10 +4,45 @@ import React from "react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { config } from "@/lib/config";
-import { QuotationPdf, type QuotationPdfData } from "@/lib/pdf/quotation-pdf";
+import { convertAirflow } from "@/lib/units";
+import {
+  QuotationPdf,
+  type QuotationPdfData,
+  type QuotationPdfLine,
+} from "@/lib/pdf/quotation-pdf";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+const n = (v: unknown): number | null =>
+  typeof v === "number" && !Number.isNaN(v) ? v : null;
+
+/** Pull the per-line engineering specs from specsSnapshot (flat or nested). */
+function lineSpecs(specs: Record<string, unknown>, index: number) {
+  const sel = (specs.selection ?? {}) as Record<string, unknown>;
+  const req = (specs.requirement ?? {}) as Record<string, unknown>;
+
+  // Capacity in CFM: prefer explicit flat value, else derive from the selection
+  // duty (m³/hr -> CFM) or a client CFM requirement.
+  let cfm = n(specs.capacity_cfm);
+  if (cfm == null && typeof sel.dutyAirflow_m3hr === "number") {
+    cfm = Math.round(convertAirflow(sel.dutyAirflow_m3hr, "m3hr", "cfm"));
+  } else if (cfm == null && req.airflowUnit === "CFM" && typeof req.airflow === "number") {
+    cfm = req.airflow;
+  }
+
+  return {
+    itemLabel: typeof specs.itemLabel === "string" ? specs.itemLabel : String(index + 1),
+    capacity_cfm: cfm,
+    staticPressure_pa:
+      n(specs.staticPressure_pa) ??
+      (typeof sel.dutyStaticPressure_pa === "number" ? Math.round(sel.dutyStaticPressure_pa) : null),
+    inches: n(specs.inches),
+    motorHp: n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null),
+    motorPh: n(specs.motorPh),
+    motorVolts: n(specs.motorVolts),
+  };
+}
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -26,40 +61,45 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   });
   if (!quotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const tplConfig = (quotation.template.config as Record<string, unknown>) ?? {};
+
+  const items: QuotationPdfLine[] = quotation.items.map((it, i) => {
+    const specs = (it.specsSnapshot as Record<string, unknown>) ?? {};
+    const s = lineSpecs(specs, i);
+    return {
+      ...s,
+      descriptionSnapshot: it.descriptionSnapshot,
+      qty: it.qty,
+      unitPrice: Number(it.unitPrice),
+      lineTotal: Number(it.lineTotal),
+    };
+  });
+
   const data: QuotationPdfData = {
     quoteNumber: quotation.quoteNumber,
-    createdAt: quotation.createdAt.toISOString().slice(0, 10),
+    createdAt: quotation.createdAt.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }),
     validUntil: quotation.validUntil ? quotation.validUntil.toISOString().slice(0, 10) : null,
-    currency: quotation.currency,
+    vatMode: quotation.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE",
+    projectName: quotation.projectName,
     customer: {
       company: quotation.inquiry.customer.company,
       contactName: quotation.inquiry.customer.contactName,
-      email: quotation.inquiry.customer.email,
-      phone: quotation.inquiry.customer.phone,
       address: quotation.inquiry.customer.address,
     },
     preparedBy: quotation.preparedBy.name,
     approvedBy: quotation.approvedBy?.name ?? null,
     status: quotation.status,
-    notes: quotation.notes,
-    terms: quotation.terms,
-    items: quotation.items.map((it) => ({
-      descriptionSnapshot: it.descriptionSnapshot,
-      specsSnapshot: it.specsSnapshot as Record<string, unknown>,
-      qty: it.qty,
-      unitPrice: Number(it.unitPrice),
-      lineTotal: Number(it.lineTotal),
-      selectionNote: it.selectionNote,
-    })),
+    specNote: quotation.notes ?? (typeof tplConfig.specNote === "string" ? tplConfig.specNote : null),
+    terms: quotation.terms ?? (typeof tplConfig.terms === "string" ? tplConfig.terms : null),
+    items,
     subtotal: Number(quotation.subtotal),
     vat: Number(quotation.vat),
-    vatRate: config.vatRate,
     total: Number(quotation.total),
-    template: {
-      name: quotation.template.name,
-      layoutKey: quotation.template.layoutKey,
-      config: (quotation.template.config as Record<string, unknown>) ?? {},
-    },
+    vatRate: config.vatRate,
   };
 
   const element = React.createElement(QuotationPdf, { data }) as React.ReactElement<DocumentProps>;
@@ -68,7 +108,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${quotation.quoteNumber}.pdf"`,
+      "Content-Disposition": `inline; filename="${quotation.quoteNumber.replace(/[^a-zA-Z0-9-]/g, "_")}.pdf"`,
     },
   });
 }

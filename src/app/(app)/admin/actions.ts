@@ -79,15 +79,18 @@ const userSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
   role: z.enum(["SALES", "ENGINEER", "ADMIN"]),
+  // Single letter appended to quote numbers (e.g. "J").
+  salesCode: z.string().trim().max(1).optional(),
 });
 
 export async function upsertUser(input: z.infer<typeof userSchema>) {
   await assertAdmin();
   const d = userSchema.parse(input);
+  const salesCode = d.salesCode ? d.salesCode.toUpperCase() : null;
   await prisma.user.upsert({
     where: { email: d.email.toLowerCase() },
-    update: { name: d.name, role: d.role },
-    create: { email: d.email.toLowerCase(), name: d.name, role: d.role },
+    update: { name: d.name, role: d.role, salesCode },
+    create: { email: d.email.toLowerCase(), name: d.name, role: d.role, salesCode },
   });
   revalidatePath("/admin/users");
 }
