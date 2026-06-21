@@ -39,6 +39,8 @@ interface Quote {
   status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "SENT";
   currency: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE";
+  discountPct: number;
+  headerUnits: { capacity: string; pressure: string; motor: string };
   projectName: string;
   subtotal: number;
   vat: number;
@@ -72,6 +74,8 @@ export function QuotationBuilder({
   const [templateId, setTemplateId] = useState(quotation.templateId);
   const [projectName, setProjectName] = useState(quotation.projectName);
   const [vatMode, setVatMode] = useState(quotation.vatMode);
+  const [discountPct, setDiscountPct] = useState(quotation.discountPct);
+  const [units, setUnits] = useState(quotation.headerUnits);
   const [notes, setNotes] = useState(quotation.notes ?? "");
   const [terms, setTerms] = useState(quotation.terms ?? "");
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
@@ -82,8 +86,10 @@ export function QuotationBuilder({
   const totals = useMemo(() => {
     const gross = lines.reduce((a, l) => a + l.qty * l.unitPrice, 0); // VAT-inclusive
     const net = gross / (1 + vatRate);
-    return { net, vat: gross - net, gross };
-  }, [lines, vatRate]);
+    const displayedNet = vatMode === "EXCLUSIVE" ? net : gross;
+    const discountAmt = displayedNet * (discountPct / 100);
+    return { net, vat: gross - net, gross, displayedNet, discountAmt, finalNet: displayedNet - discountAmt };
+  }, [lines, vatRate, vatMode, discountPct]);
 
   function updateLine(id: string, patch: Partial<Line>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -107,7 +113,7 @@ export function QuotationBuilder({
           // merge edited flat specs back over anything nested (selection/requirement)
           specsSnapshot: { ...l.rawSpecs, ...l.specs },
         })),
-        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode },
+        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode, discountPct, headerUnits: units },
       );
       setMsg("Saved.");
       router.refresh();
@@ -169,9 +175,14 @@ export function QuotationBuilder({
             </Button>
           )}
           <div className="ml-auto flex gap-2">
+            <Button asChild>
+              <a href={`/api/quotations/${quotation.id}/excel`}>
+                <Download className="h-4 w-4" /> Download Excel
+              </a>
+            </Button>
             <Button variant="outline" asChild>
               <a href={`/api/quotations/${quotation.id}/pdf`} target="_blank" rel="noopener noreferrer">
-                <Download className="h-4 w-4" /> Download PDF
+                <Download className="h-4 w-4" /> PDF
               </a>
             </Button>
           </div>
@@ -191,9 +202,26 @@ export function QuotationBuilder({
           <div className="space-y-1">
             <Label>VAT presentation</Label>
             <Select value={vatMode} onChange={(e) => setVatMode(e.target.value as never)} disabled={!editable}>
-              <option value="INCLUSIVE">VAT inclusive (NET AMOUNT)</option>
-              <option value="EXCLUSIVE">VAT exclusive (VATable + VAT)</option>
+              <option value="INCLUSIVE">VAT inclusive</option>
+              <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
             </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Discount %</Label>
+            <Input type="number" step="0.01" min={0} max={100} value={discountPct} disabled={!editable}
+              onChange={(e) => setDiscountPct(Number(e.target.value) || 0)} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <Label>Table unit labels (red, editable per client)</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <Input value={units.capacity} disabled={!editable} placeholder="cfm"
+                onChange={(e) => setUnits({ ...units, capacity: e.target.value })} />
+              <Input value={units.pressure} disabled={!editable} placeholder="in-w.g."
+                onChange={(e) => setUnits({ ...units, pressure: e.target.value })} />
+              <Input value={units.motor} disabled={!editable} placeholder="Hp"
+                onChange={(e) => setUnits({ ...units, motor: e.target.value })} />
+            </div>
+            <p className="text-xs text-muted-foreground">Capacity · Static Pressure · Motor power units (e.g. cfm / in-w.g. / Hp, or m³/hr / Pa / kW).</p>
           </div>
           <div className="space-y-1">
             <Label>Template (pattern)</Label>
@@ -245,7 +273,7 @@ export function QuotationBuilder({
               <div className="mt-2 grid grid-cols-3 gap-2 md:grid-cols-7">
                 {([
                   ["capacity_cfm", "Capacity (CFM)"],
-                  ["staticPressure_pa", "S.P. (Pa)"],
+                  ["staticPressure_pa", "S.P. (in-w.g.)"],
                   ["inches", "Size (in)"],
                   ["motorHp", "Motor HP"],
                   ["motorPh", "Phase"],
@@ -270,17 +298,16 @@ export function QuotationBuilder({
 
           {/* Totals */}
           <div className="flex justify-end">
-            <div className="w-72 space-y-1 text-sm">
-              {vatMode === "EXCLUSIVE" ? (
+            <div className="w-80 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span>NET AMOUNT (VAT {vatMode === "EXCLUSIVE" ? "exclusive" : "inclusive"})</span>
+                <span>{formatCurrency(totals.displayedNet, quotation.currency)}</span>
+              </div>
+              {discountPct > 0 && (
                 <>
-                  <div className="flex justify-between"><span>VATable sales</span><span>{formatCurrency(totals.net, quotation.currency)}</span></div>
-                  <div className="flex justify-between"><span>VAT ({Math.round(vatRate * 100)}%)</span><span>{formatCurrency(totals.vat, quotation.currency)}</span></div>
-                  <div className="flex justify-between border-t pt-1 text-base font-bold"><span>Total (VAT incl.)</span><span>{formatCurrency(totals.gross, quotation.currency)}</span></div>
+                  <div className="flex justify-between"><span>LESS {discountPct}% DISCOUNT</span><span>{formatCurrency(totals.discountAmt, quotation.currency)}</span></div>
+                  <div className="flex justify-between border-t pt-1 text-base font-bold"><span>NET AMOUNT</span><span>{formatCurrency(totals.finalNet, quotation.currency)}</span></div>
                 </>
-              ) : (
-                <div className="flex justify-between border-t pt-1 text-base font-bold">
-                  <span>NET AMOUNT (VAT incl.)</span><span>{formatCurrency(totals.gross, quotation.currency)}</span>
-                </div>
               )}
             </div>
           </div>

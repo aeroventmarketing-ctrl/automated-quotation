@@ -9,14 +9,14 @@ export const config = {
 };
 
 export const COMPANY = {
-  name: "AEROVENT FANS AND BLOWERS MANUFACTURING",
-  tagline: "Ventilation, air moving & engineering specialists",
+  name: "AEROVENT FANS & BLOWERS MANUFACTURING",
+  tagline: "VENTILATION, AIR MOVING EQUIPMENT & ENGINEERING SPECIALISTS",
   manilaOffice:
     "Manila Office: 1933-C Augusto Francisco Street, Sta. Ana, Manila, Philippines",
   plantAddress:
-    "Plant Address: #7635 Narra Road, Bayan-bayanan San Vicente, San Pedro, Laguna, Philippines",
-  landline: "(02)85619413 – (02)87740234 – (02)87740245 (LANDLINE)",
-  mobile: "09289480600 / 09996649997 (SMART) – 09273258887 / 09544298999 (GLOBE)",
+    "Plant Address : #7635 Narra Road Bayan-bayanan San Vicente, San Pedro Laguna, Philippines",
+  landline: "(02) 85619416  (LANDLINE)",
+  mobile: "(SMART) - 09289480600 / 09996649997 / (GLOBE) – 09273258887 / 09544298999",
   email: "aeroventblower@gmail.com",
   website: "www.aeroventfbm.com",
   // Short code used as the AFBM quote-number prefix.
@@ -24,5 +24,5 @@ export const COMPANY = {
   closing:
     "Thank you for giving us the opportunity to quote in your requirement, we shall await your valued order with much interest.",
   signoff: "Very Truly Yours,",
-  signatory: "AFBM Sales",
+  signatory: "AEROVENT FBM",
 };
