@@ -150,6 +150,14 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   hset(`I${H1}`, "Capacity");
   hset(`J${H1}`, "Static Pressure");
   hset(`K${H1}`, "Size");
+  // Wrap the grouped headers so long labels fit their narrow columns.
+  ["I", "J", "K"].forEach((c) => {
+    ws.getCell(`${c}${H1}`).alignment = {
+      horizontal: "center",
+      vertical: "middle",
+      wrapText: true,
+    };
+  });
   hset(`L${H1}`, "MOTOR", 10);
   hset(`O${H1}`, "Unit Price", 9);
   hset(`P${H1}`, "Total Price", 9);
