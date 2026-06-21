@@ -90,6 +90,7 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
 
       <InquiryWorkspace
         inquiryId={inquiry.id}
+        projectName={inquiry.projectName ?? ""}
         items={inquiry.items.map((it) => ({
           id: it.id,
           rawText: it.rawText,
