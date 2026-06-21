@@ -310,9 +310,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       tc.value = body;
       tc.font = { name: FONT, size: 10, color: BLACK };
       tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-      let wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
-      // Manual tweak: these clauses wrap to 3 lines in Excel.
-      if (label === "11. Cancellation" || label === "12. Ownership") wlines = 3;
+      const wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
       ws.getRow(r).height = wlines * 16; // 1 line = 16, 2 lines = 32, …
       r++;
       i++;
