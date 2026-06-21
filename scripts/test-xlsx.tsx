@@ -7,7 +7,7 @@ const data: XlsxData = {
   projectName: "LUCKY GRILLE",
   customerName: "Edu Manzano",
   vatMode: "EXCLUSIVE",
-  discountPct: 3,
+  discountPct: 0,
   vatRate: 0.12,
   preparedBy: "Reyjellan Gil",
   specNote:
