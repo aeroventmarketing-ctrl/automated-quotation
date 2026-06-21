@@ -105,11 +105,24 @@ export default function ImportPage() {
       .join("\n");
   }
 
+  // Count CSV records (newlines outside quotes), excluding the header row.
+  function countRecords(text: string): number {
+    const t = text.trim();
+    if (!t) return 0;
+    let inQ = false;
+    let lines = 1;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (c === '"') inQ = !inQ;
+      else if (c === "\n" && !inQ) lines++;
+    }
+    return Math.max(0, lines - 1);
+  }
+
   function markLoaded(name: string, text: string) {
     setCsv(text);
     setResult(null);
-    const n = text.trim() ? text.trim().split(/\r?\n/).length - 1 : 0;
-    setLoaded({ name, rows: Math.max(0, n) });
+    setLoaded({ name, rows: countRecords(text) });
   }
 
   async function onFile(file: File) {
