@@ -12,6 +12,7 @@ import { Sparkles, Cog, AlertTriangle } from "lucide-react";
 import type { SelectionResult } from "@/lib/selection";
 import type { MatchCandidate } from "@/lib/ai/schemas";
 import { isNextControlFlowError } from "@/lib/utils";
+import { lookupMotor, computeUnitPrice } from "@/lib/pricing/motors";
 import { createQuotationFromInquiry } from "../../quotations/actions";
 
 interface CatLite {
@@ -295,7 +296,13 @@ export function InquiryWorkspace({
                   {st.selectionResults?.length === 0 && (
                     <p className="text-xs text-muted-foreground">No rated models match this duty.</p>
                   )}
-                  {st.selectionResults?.slice(0, 4).map((sel) => (
+                  {st.selectionResults?.slice(0, 6).map((sel) => {
+                    // Estimated net price for performance-vs-price comparison
+                    // (body + suggested motor at 3-phase / 4-pole, +10% if applicable).
+                    const body = catById[sel.modelId]?.basePrice ?? 0;
+                    const motor = lookupMotor(sel.motorHp, 3, 4);
+                    const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
+                    return (
                     <button
                       key={sel.modelId}
                       onClick={() => chooseSelection(item, sel)}
@@ -305,7 +312,10 @@ export function InquiryWorkspace({
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium">{sel.modelCode}</span>
-                        <ConfidenceBadge confidence={sel.confidence} />
+                        <span className="flex items-center gap-2">
+                          {estNet > 0 && <span className="font-medium text-foreground">≈ {formatCurrency(estNet)}</span>}
+                          <ConfidenceBadge confidence={sel.confidence} />
+                        </span>
                       </div>
                       <p className="text-muted-foreground">
                         {sel.rpm} rpm · {sel.bhp} BHP → {sel.motorHp} HP motor
@@ -320,7 +330,8 @@ export function InquiryWorkspace({
                         </p>
                       )}
                     </button>
-                  ))}
+                    );
+                  })}
 
                   {st.chosen?.requiresEngineerConfirmation && (
                     <label className="flex items-start gap-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800">
