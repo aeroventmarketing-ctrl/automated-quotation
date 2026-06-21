@@ -324,19 +324,26 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   cl.value = COMPANY.closing;
   cl.font = { name: FONT, size: 10, color: BLACK };
   cl.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-  ws.getRow(r).height = 28;
+  ws.getRow(r).height = 14.5;
   r += 2;
   ws.getCell(`B${r}`).value = "Very Truly Yours,";
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
   r += 4; // extra signature space before the name
+  // Signature lines centred across B:E (name varies by sales representative).
+  ws.mergeCells(`B${r}:E${r}`);
   ws.getCell(`B${r}`).value = data.preparedBy;
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: true, color: BLACK };
+  ws.getCell(`B${r}`).alignment = { horizontal: "center", vertical: "middle" };
   r += 1;
+  ws.mergeCells(`B${r}:E${r}`);
   ws.getCell(`B${r}`).value = data.preparedByTitle || "Marketing Representative";
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
+  ws.getCell(`B${r}`).alignment = { horizontal: "center", vertical: "middle" };
   r += 1;
+  ws.mergeCells(`B${r}:E${r}`);
   ws.getCell(`B${r}`).value = COMPANY.signatory;
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
+  ws.getCell(`B${r}`).alignment = { horizontal: "center", vertical: "middle" };
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
