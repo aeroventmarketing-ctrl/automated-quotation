@@ -84,7 +84,45 @@ export default function ImportPage() {
     }
   }
 
+  // Minimal, correctly-escaped CSV from a 2-D array of strings.
+  function toCsv(rows: string[][]): string {
+    return rows
+      .map((r) =>
+        r
+          .map((v) => {
+            const s = v ?? "";
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+          })
+          .join(","),
+      )
+      .join("\n");
+  }
+
   async function onFile(file: File) {
+    setError(null);
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith(".xlsx") || lower.endsWith(".xlsm")) {
+      try {
+        // Lazy-load the Excel lib so it isn't in the page's main bundle.
+        const ExcelJS = (await import("exceljs")).default;
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(await file.arrayBuffer());
+        const ws = wb.worksheets[0];
+        if (!ws) throw new Error("No sheet found in the Excel file");
+        const cols = ws.columnCount;
+        const rows: string[][] = [];
+        ws.eachRow((row) => {
+          const cells: string[] = [];
+          for (let c = 1; c <= cols; c++) cells.push(row.getCell(c).text ?? "");
+          if (cells.some((v) => v.trim() !== "")) rows.push(cells);
+        });
+        if (rows.length === 0) throw new Error("The first sheet is empty");
+        setCsv(toCsv(rows));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not read the Excel file");
+      }
+      return;
+    }
     setCsv(await file.text());
   }
 
@@ -119,10 +157,10 @@ export default function ImportPage() {
               </Select>
             </div>
             <label className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent">
-              Upload .csv
+              Upload .csv / .xlsx
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -131,6 +169,11 @@ export default function ImportPage() {
               />
             </label>
           </div>
+
+          <p className="text-xs text-muted-foreground">
+            Excel files are converted automatically — the first sheet&apos;s first row must be the
+            column headers shown below. You can review/edit the result in the box before importing.
+          </p>
 
           <div className="rounded-md bg-muted/50 p-3 text-xs">
             <div className="font-medium">Columns:</div>
