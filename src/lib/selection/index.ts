@@ -14,10 +14,34 @@
  * Self-contained: real rating data can be loaded later without touching the UI.
  */
 
-import { kwToHp } from "../units";
+import { kwToHp, hpToKw } from "../units";
 
 // Standard air at 20°C, sea level.
 export const STANDARD_AIR_DENSITY = 1.2; // kg/m³
+
+// 1 ft³/min = 1.6990108 m³/h.
+const CFM_PER_M3HR = 1 / 1.6990108;
+
+// AFBM induction-motor sizes (HP). The suggested motor is BHP/0.75 rounded UP
+// to the next size in this list.
+export const MOTOR_HP_LIST = [
+  0.5, 1, 1.5, 2, 3, 5, 7.5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100,
+];
+
+/** Suggested motor HP = BHP / 0.75, rounded UP to the next size in the list. */
+export function suggestMotorHp(bhp: number): number {
+  const target = bhp / 0.75;
+  for (const hp of MOTOR_HP_LIST) if (hp >= target - 1e-9) return hp;
+  return Math.ceil(target);
+}
+
+/** AFBM outlet-velocity limit (fpm) by wheel diameter (inches). */
+export function outletVelocityLimit(wheelDia_in: number | null): number {
+  if (wheelDia_in == null) return 1800;
+  if (wheelDia_in <= 27) return 1800;
+  if (wheelDia_in <= 36.5) return 2000;
+  return 3000;
+}
 
 // Standard induction-motor sizes (kW) used for motor sizing after service factor.
 export const STANDARD_MOTOR_KW = [
@@ -75,10 +99,18 @@ export interface SelectionResult {
   /** Static pressure used internally for selection (density-corrected to standard air). */
   selectionStaticPressure_pa: number;
   power_kw: number; // absorbed power at duty (density-corrected)
-  motorKw: number; // sized standard motor after service factor
-  motorHp: number;
+  bhp: number; // absorbed power in HP
+  motorKw: number; // sized standard motor
+  motorHp: number; // suggested motor (BHP/0.75 rounded up to the motor list)
   efficiency: number | null;
   serviceFactor: number;
+  // Outlet-velocity check (AFBM "good selection" rule).
+  outletVelocity_fpm: number | null;
+  ovLimit_fpm: number | null;
+  ovWithinLimit: boolean | null; // null = no outlet-area data
+  // Speed check against the fan's maximum rated RPM.
+  maxRpm: number | null;
+  rpmWithinMax: boolean;
   withinEnvelope: boolean;
   confidence: Confidence;
   requiresEngineerConfirmation: boolean;
@@ -94,14 +126,6 @@ export interface SelectionResult {
 export function densityFromTemperature(temperatureC: number): number {
   const tK = 273.15 + temperatureC;
   return STANDARD_AIR_DENSITY * (293.15 / tK);
-}
-
-function pickStandardMotor(requiredKw: number): number {
-  for (const kw of STANDARD_MOTOR_KW) {
-    if (kw >= requiredKw - 1e-9) return kw;
-  }
-  // Beyond the largest standard size — return required, rounded up.
-  return Math.ceil(requiredKw);
 }
 
 /**
@@ -187,6 +211,85 @@ function findCurveIntersection(curve: RatingPoint[], k: number): number | null {
   return null;
 }
 
+const KW_PER_HP = 0.745699872;
+
+interface GridResult {
+  rpm: number;
+  bhp: number; // absorbed power in HP, at standard density
+  withinEnvelope: boolean;
+}
+
+/**
+ * Interpolate the operating point on a full CFM×SP rating grid (each cell gives
+ * the RPM and BHP for that airflow + static pressure). Returns null when the
+ * data is a single fan curve rather than a grid (≥2 distinct SP levels each
+ * with ≥2 airflow points) — callers then fall back to the fan-law method.
+ */
+function interpolateGrid(
+  points: RatingPoint[],
+  q: number,
+  p: number,
+): GridResult | null {
+  const bySp = new Map<number, { q: number; rpm: number; bhp: number }[]>();
+  for (const pt of points) {
+    if (pt.rpm <= 0) continue;
+    const arr = bySp.get(pt.staticPressure_pa) ?? [];
+    arr.push({ q: pt.airflow_m3hr, rpm: pt.rpm, bhp: pt.power_kw / KW_PER_HP });
+    bySp.set(pt.staticPressure_pa, arr);
+  }
+  const spLevels = [...bySp.keys()]
+    .filter((sp) => (bySp.get(sp)?.length ?? 0) >= 2)
+    .sort((a, b) => a - b);
+  if (spLevels.length < 2) return null; // single curve, not a grid
+  for (const sp of spLevels) bySp.get(sp)!.sort((a, b) => a.q - b.q);
+
+  const atQ = (series: { q: number; rpm: number; bhp: number }[], qq: number) => {
+    const first = series[0];
+    const last = series[series.length - 1];
+    if (qq <= first.q) return { rpm: first.rpm, bhp: first.bhp, inRange: qq >= first.q - 1 };
+    if (qq >= last.q) return { rpm: last.rpm, bhp: last.bhp, inRange: qq <= last.q + 1 };
+    for (let i = 0; i < series.length - 1; i++) {
+      const a = series[i];
+      const b = series[i + 1];
+      if (qq >= a.q && qq <= b.q) {
+        const t = (qq - a.q) / (b.q - a.q);
+        return { rpm: a.rpm + (b.rpm - a.rpm) * t, bhp: a.bhp + (b.bhp - a.bhp) * t, inRange: true };
+      }
+    }
+    return { rpm: last.rpm, bhp: last.bhp, inRange: false };
+  };
+
+  const minSp = spLevels[0];
+  const maxSp = spLevels[spLevels.length - 1];
+  const pInRange = p >= minSp - 1 && p <= maxSp + 1;
+  let lo = minSp;
+  let hi = maxSp;
+  if (p <= minSp) lo = hi = minSp;
+  else if (p >= maxSp) lo = hi = maxSp;
+  else
+    for (let i = 0; i < spLevels.length - 1; i++) {
+      if (p >= spLevels[i] && p <= spLevels[i + 1]) {
+        lo = spLevels[i];
+        hi = spLevels[i + 1];
+        break;
+      }
+    }
+
+  const aLo = atQ(bySp.get(lo)!, q);
+  const aHi = atQ(bySp.get(hi)!, q);
+  let rpm: number;
+  let bhp: number;
+  if (lo === hi) {
+    rpm = aLo.rpm;
+    bhp = aLo.bhp;
+  } else {
+    const t = (p - lo) / (hi - lo);
+    rpm = aLo.rpm + (aHi.rpm - aLo.rpm) * t;
+    bhp = aLo.bhp + (aHi.bhp - aLo.bhp) * t;
+  }
+  return { rpm: Math.round(rpm), bhp, withinEnvelope: pInRange && aLo.inRange && aHi.inRange };
+}
+
 // ---------------------------------------------------------------------------
 // Core selection
 // ---------------------------------------------------------------------------
@@ -225,77 +328,125 @@ export function selectFan(
 
   if (duty.airflow_m3hr <= 0 || selectionPressure < 0) return null;
 
-  // --- Fan-law parabola through the duty point ----------------------------
-  const k = selectionPressure / (duty.airflow_m3hr * duty.airflow_m3hr);
-
-  const qMin = curve[0].airflow_m3hr;
-  const qMax = curve[curve.length - 1].airflow_m3hr;
-
-  let qRef = findCurveIntersection(curve, k);
   let withinEnvelope = true;
   let extrapolated = false;
+  let rpm: number;
+  let speedRatio: number;
+  let dutyPowerStd: number; // absorbed power (kW) at standard density
+  let efficiency: number | null = null;
 
-  if (qRef == null) {
-    // No clean crossing within the curve — extrapolate from the nearest end
-    // point along the fan-law parabola. Always flagged for engineer review.
-    extrapolated = true;
-    withinEnvelope = false;
-    // Choose the curve endpoint whose own parabola constant is closest to k.
-    const endpoints = [curve[0], curve[curve.length - 1]];
-    let best = endpoints[0];
-    let bestErr = Infinity;
-    for (const ep of endpoints) {
-      const kEp = ep.staticPressure_pa / (ep.airflow_m3hr * ep.airflow_m3hr || 1);
-      const err = Math.abs(kEp - k);
-      if (err < bestErr) {
-        bestErr = err;
-        best = ep;
-      }
+  // --- Preferred path: direct interpolation on the CFM×SP rating grid ------
+  const grid = interpolateGrid(model.ratingPoints, duty.airflow_m3hr, selectionPressure);
+  if (grid) {
+    rpm = grid.rpm;
+    dutyPowerStd = hpToKw(grid.bhp);
+    withinEnvelope = grid.withinEnvelope;
+    extrapolated = !grid.withinEnvelope;
+    speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
+    if (!withinEnvelope) {
+      warnings.push(
+        "Duty point is outside the rated grid; result is extrapolated and must be confirmed by an engineer.",
+      );
     }
-    qRef = best.airflow_m3hr;
-    warnings.push(
-      "Duty point falls outside the rated curve; result is extrapolated and must be confirmed by an engineer.",
-    );
-  } else if (qRef < qMin * 1.001 || qRef > qMax * 0.999) {
-    withinEnvelope = false;
-    warnings.push("Operating point is at the edge of the rated envelope.");
+  } else {
+    // --- Fallback: fan-law parabola through a single rated curve -----------
+    const k = selectionPressure / (duty.airflow_m3hr * duty.airflow_m3hr);
+    const qMin = curve[0].airflow_m3hr;
+    const qMax = curve[curve.length - 1].airflow_m3hr;
+    let qRef = findCurveIntersection(curve, k);
+    if (qRef == null) {
+      extrapolated = true;
+      withinEnvelope = false;
+      const endpoints = [curve[0], curve[curve.length - 1]];
+      let best = endpoints[0];
+      let bestErr = Infinity;
+      for (const ep of endpoints) {
+        const kEp = ep.staticPressure_pa / (ep.airflow_m3hr * ep.airflow_m3hr || 1);
+        const err = Math.abs(kEp - k);
+        if (err < bestErr) {
+          bestErr = err;
+          best = ep;
+        }
+      }
+      qRef = best.airflow_m3hr;
+      warnings.push(
+        "Duty point falls outside the rated curve; result is extrapolated and must be confirmed by an engineer.",
+      );
+    } else if (qRef < qMin * 1.001 || qRef > qMax * 0.999) {
+      withinEnvelope = false;
+      warnings.push("Operating point is at the edge of the rated envelope.");
+    }
+    speedRatio = duty.airflow_m3hr / qRef;
+    rpm = Math.round(referenceRpm * speedRatio);
+    if (speedRatio > maxSpeedRatio || speedRatio < minSpeedRatio) {
+      withinEnvelope = false;
+      warnings.push(
+        `Required speed (${rpm} rpm, ratio ${speedRatio.toFixed(2)}×) is outside the recommended ${minSpeedRatio}–${maxSpeedRatio}× band.`,
+      );
+    }
+    const refPowerAtQ =
+      interpAtAirflow(curve, qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
+    dutyPowerStd = refPowerAtQ * Math.pow(speedRatio, 3);
+    efficiency = interpAtAirflow(curve, qRef, "efficiency");
   }
 
-  // --- Speed ratio via fan laws -------------------------------------------
-  const speedRatio = duty.airflow_m3hr / qRef; // = N_duty / N_ref
-  const rpm = Math.round(referenceRpm * speedRatio);
-
-  if (speedRatio > maxSpeedRatio || speedRatio < minSpeedRatio) {
-    withinEnvelope = false;
-    warnings.push(
-      `Required speed (${rpm} rpm, ratio ${speedRatio.toFixed(2)}×) is outside the recommended ${minSpeedRatio}–${maxSpeedRatio}× band.`,
-    );
-  }
-
-  // --- Power & efficiency at the operating point --------------------------
-  const refPowerAtQ =
-    interpAtAirflow(curve, qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
-  // Scale power by speed³, then correct for actual gas density.
-  const dutyPowerStd = refPowerAtQ * Math.pow(speedRatio, 3);
+  // Correct absorbed power for actual gas density.
   const dutyPower = dutyPowerStd * (density / STANDARD_AIR_DENSITY);
 
-  const efficiency = interpAtAirflow(curve, qRef, "efficiency");
+  // --- Motor sizing (AFBM rule: BHP / 0.75, rounded up to the motor list) --
+  const bhp = kwToHp(dutyPower);
+  const motorHp = suggestMotorHp(bhp);
+  const motorKw = Math.round(hpToKw(motorHp) * 100) / 100;
+  void serviceFactor; // retained in the result for display only
 
-  const requiredMotorKw = dutyPower * serviceFactor;
-  const motorKw = pickStandardMotor(requiredMotorKw);
-  const motorHp = Math.round(kwToHp(motorKw) * 100) / 100;
+  // --- Outlet-velocity check ("good selection" rule) ----------------------
+  const num = (v: unknown): number | null =>
+    typeof v === "number" && !Number.isNaN(v) ? v : null;
+  const outletArea = num(model.specs?.outletArea_ft2);
+  const wheelDia =
+    num(model.specs?.bladeDia_in) ?? num(model.specs?.wheelDia_in);
+  const dutyCfm = duty.airflow_m3hr * CFM_PER_M3HR;
+  let outletVelocity_fpm: number | null = null;
+  let ovLimit_fpm: number | null = null;
+  let ovWithinLimit: boolean | null = null;
+  if (outletArea && outletArea > 0) {
+    outletVelocity_fpm = Math.round(dutyCfm / outletArea);
+    ovLimit_fpm = outletVelocityLimit(wheelDia);
+    ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
+    if (!ovWithinLimit) {
+      warnings.push(
+        `Outlet velocity ${outletVelocity_fpm} fpm exceeds the ${ovLimit_fpm} fpm limit — fan is undersized for this airflow.`,
+      );
+    }
+  }
+
+  // --- Maximum-RPM check --------------------------------------------------
+  const maxRpm = num(model.specs?.maxRpm) ?? num(model.specs?.maxRpmClassI);
+  const rpmWithinMax = maxRpm == null ? true : rpm <= maxRpm;
+  if (!rpmWithinMax) {
+    warnings.push(`Required speed ${rpm} rpm exceeds the rated max ${maxRpm} rpm.`);
+  } else if (rpm > 1200) {
+    warnings.push(`Speed ${rpm} rpm is above the recommended ~1200 rpm.`);
+  }
 
   // --- Confidence scoring -------------------------------------------------
   let confidence: Confidence;
   if (extrapolated || !withinEnvelope) {
     confidence = "LOW";
+  } else if (grid) {
+    confidence = "HIGH"; // direct grid interpolation is accurate within the envelope
   } else if (speedRatio >= 0.85 && speedRatio <= 1.08) {
     confidence = "HIGH";
   } else {
     confidence = "MEDIUM";
   }
+  // AFBM constraints: undersized (OV over limit) or over-speed is never a good pick;
+  // above the recommended ~1200 rpm drops a HIGH pick to MEDIUM.
+  if (ovWithinLimit === false || !rpmWithinMax) confidence = "LOW";
+  else if (confidence === "HIGH" && rpm > 1200) confidence = "MEDIUM";
 
-  const requiresEngineerConfirmation = confidence === "LOW" || !withinEnvelope;
+  const requiresEngineerConfirmation =
+    confidence === "LOW" || !withinEnvelope || ovWithinLimit === false || !rpmWithinMax;
 
   const note = buildSelectionNote({
     modelCode: model.modelCode,
@@ -303,9 +454,10 @@ export function selectFan(
     speedRatio,
     dutyAirflow: duty.airflow_m3hr,
     dutyPressure: duty.staticPressure_pa,
-    motorKw,
+    bhp,
     motorHp,
-    serviceFactor,
+    outletVelocity_fpm,
+    ovLimit_fpm,
     efficiency,
     confidence,
   });
@@ -322,10 +474,16 @@ export function selectFan(
     dutyStaticPressure_pa: duty.staticPressure_pa,
     selectionStaticPressure_pa: Math.round(selectionPressure * 100) / 100,
     power_kw: Math.round(dutyPower * 1000) / 1000,
+    bhp: Math.round(bhp * 100) / 100,
     motorKw,
     motorHp,
     efficiency: efficiency != null ? Math.round(efficiency * 1000) / 1000 : null,
     serviceFactor,
+    outletVelocity_fpm,
+    ovLimit_fpm,
+    ovWithinLimit,
+    maxRpm,
+    rpmWithinMax,
     withinEnvelope,
     confidence,
     requiresEngineerConfirmation,
@@ -340,20 +498,21 @@ function buildSelectionNote(p: {
   speedRatio: number;
   dutyAirflow: number;
   dutyPressure: number;
-  motorKw: number;
+  bhp: number;
   motorHp: number;
-  serviceFactor: number;
+  outletVelocity_fpm: number | null;
+  ovLimit_fpm: number | null;
   efficiency: number | null;
   confidence: Confidence;
 }): string {
   const eff = p.efficiency != null ? `, ~${Math.round(p.efficiency * 100)}% eff` : "";
-  const speed =
-    Math.abs(p.speedRatio - 1) < 0.02
-      ? "at rated speed"
-      : `at ${p.rpm} rpm (${p.speedRatio.toFixed(2)}× reference via fan laws)`;
+  const ov =
+    p.outletVelocity_fpm != null
+      ? ` OV ${p.outletVelocity_fpm} fpm (limit ${p.ovLimit_fpm}).`
+      : "";
   return (
-    `${p.modelCode} selected for ${Math.round(p.dutyAirflow)} m³/hr @ ${Math.round(p.dutyPressure)} Pa ${speed}. ` +
-    `Motor ${p.motorKw} kW (${p.motorHp} HP) incl. ${p.serviceFactor}× service factor${eff}. ` +
+    `${p.modelCode} for ${Math.round(p.dutyAirflow)} m³/hr @ ${Math.round(p.dutyPressure)} Pa at ${p.rpm} rpm. ` +
+    `Absorbed ${p.bhp.toFixed(2)} BHP → motor ${p.motorHp} HP (BHP/0.75)${eff}.${ov} ` +
     `Confidence: ${p.confidence}.`
   );
 }
@@ -375,6 +534,10 @@ export function selectFans(
 
   const rank: Record<Confidence, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
   results.sort((a, b) => {
+    // Fans that exceed the outlet-velocity limit sink to the bottom.
+    const aOv = a.ovWithinLimit === false ? 1 : 0;
+    const bOv = b.ovWithinLimit === false ? 1 : 0;
+    if (aOv !== bOv) return aOv - bOv;
     if (rank[a.confidence] !== rank[b.confidence])
       return rank[a.confidence] - rank[b.confidence];
     const effA = a.efficiency ?? 0;

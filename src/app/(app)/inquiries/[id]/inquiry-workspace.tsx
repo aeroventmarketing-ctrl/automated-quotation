@@ -145,6 +145,8 @@ export function InquiryWorkspace({
             selection: st.chosen ?? null,
             blowerModel: cat.modelCode,
             bodyPrice: cat.basePrice,
+            // Pre-fill the engine's suggested motor HP (engineer picks phase/volts).
+            ...(st.chosen ? { motorHp: st.chosen.motorHp } : {}),
           } as Record<string, unknown>,
           qty: it.qty,
           selectionNote: st.chosen?.selectionNote ?? null,
@@ -306,8 +308,10 @@ export function InquiryWorkspace({
                         <ConfidenceBadge confidence={sel.confidence} />
                       </div>
                       <p className="text-muted-foreground">
-                        {sel.rpm} rpm · {sel.motorKw} kW ({sel.motorHp} HP)
-                        {sel.efficiency != null ? ` · ${Math.round(sel.efficiency * 100)}% eff` : ""}
+                        {sel.rpm} rpm · {sel.bhp} BHP → {sel.motorHp} HP motor
+                        {sel.outletVelocity_fpm != null
+                          ? ` · OV ${sel.outletVelocity_fpm}/${sel.ovLimit_fpm} fpm`
+                          : ""}
                       </p>
                       {sel.warnings.length > 0 && (
                         <p className="mt-1 flex items-start gap-1 text-amber-600">

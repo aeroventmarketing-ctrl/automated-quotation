@@ -3,7 +3,9 @@ import {
   selectFan,
   selectFans,
   densityFromTemperature,
-  STANDARD_MOTOR_KW,
+  suggestMotorHp,
+  outletVelocityLimit,
+  MOTOR_HP_LIST,
   type FanModelInput,
 } from "./index";
 
@@ -34,11 +36,36 @@ describe("selectFan — on-curve duty", () => {
     expect(r.requiresEngineerConfirmation).toBe(false);
   });
 
-  it("sizes a standard motor above absorbed power with service factor", () => {
+  it("sizes the motor as BHP/0.75 rounded up to the motor list", () => {
     const r = selectFan(model, { airflow_m3hr: 2000, staticPressure_pa: 350 })!;
-    expect(STANDARD_MOTOR_KW).toContain(r.motorKw);
-    expect(r.motorKw).toBeGreaterThanOrEqual(r.power_kw * r.serviceFactor - 1e-9);
-    expect(r.motorHp).toBeGreaterThan(0);
+    expect(MOTOR_HP_LIST).toContain(r.motorHp);
+    expect(r.motorHp).toBeGreaterThanOrEqual(r.bhp / 0.75 - 1e-9);
+    expect(r.motorKw).toBeGreaterThan(0);
+  });
+});
+
+describe("AFBM selection rules", () => {
+  it("rounds the motor up: BHP/0.75 then next size in the list", () => {
+    expect(suggestMotorHp(1.5)).toBe(2); // 1.5/0.75 = 2.0
+    expect(suggestMotorHp(2.1)).toBe(3); // 2.1/0.75 = 2.8 -> 3
+    expect(suggestMotorHp(6)).toBe(10); // 6/0.75 = 8 -> 10
+  });
+
+  it("applies outlet-velocity limits by wheel diameter", () => {
+    expect(outletVelocityLimit(24)).toBe(1800);
+    expect(outletVelocityLimit(33)).toBe(2000);
+    expect(outletVelocityLimit(44.5)).toBe(3000);
+  });
+
+  it("flags an undersized fan (outlet velocity over the limit) as LOW", () => {
+    const small: FanModelInput = {
+      ...model,
+      specs: { outletArea_ft2: 0.5, bladeDia_in: 12 }, // tiny outlet
+    };
+    const r = selectFan(small, { airflow_m3hr: 8000, staticPressure_pa: 250 })!;
+    expect(r.ovWithinLimit).toBe(false);
+    expect(r.confidence).toBe("LOW");
+    expect(r.requiresEngineerConfirmation).toBe(true);
   });
 });
 
