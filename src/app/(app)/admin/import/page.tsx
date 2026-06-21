@@ -41,6 +41,7 @@ export default function ImportPage() {
   const [error, setError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const [cleared, setCleared] = useState<number | null>(null);
+  const [loaded, setLoaded] = useState<{ name: string; rows: number } | null>(null);
 
   async function clearAll() {
     if (
@@ -73,8 +74,14 @@ export default function ImportPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, csv }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Import failed");
+      const text = await res.text();
+      let data: Result & { error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Server error (${res.status}). ${text.slice(0, 200)}`);
+      }
+      if (!res.ok) throw new Error(data.error || `Import failed (${res.status})`);
       setResult(data);
       router.refresh();
     } catch (e) {
@@ -98,6 +105,13 @@ export default function ImportPage() {
       .join("\n");
   }
 
+  function markLoaded(name: string, text: string) {
+    setCsv(text);
+    setResult(null);
+    const n = text.trim() ? text.trim().split(/\r?\n/).length - 1 : 0;
+    setLoaded({ name, rows: Math.max(0, n) });
+  }
+
   async function onFile(file: File) {
     setError(null);
     const lower = file.name.toLowerCase();
@@ -117,13 +131,13 @@ export default function ImportPage() {
           if (cells.some((v) => v.trim() !== "")) rows.push(cells);
         });
         if (rows.length === 0) throw new Error("The first sheet is empty");
-        setCsv(toCsv(rows));
+        markLoaded(file.name, toCsv(rows));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not read the Excel file");
       }
       return;
     }
-    setCsv(await file.text());
+    markLoaded(file.name, await file.text());
   }
 
   return (
@@ -175,6 +189,13 @@ export default function ImportPage() {
             column headers shown below. You can review/edit the result in the box before importing.
           </p>
 
+          {loaded && (
+            <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              ✓ Loaded <span className="font-medium">{loaded.name}</span> — {loaded.rows} data row
+              {loaded.rows === 1 ? "" : "s"} ready. Review below, then click <b>Run import</b>.
+            </p>
+          )}
+
           <div className="rounded-md bg-muted/50 p-3 text-xs">
             <div className="font-medium">Columns:</div>
             <code>{SPECS[type].cols}</code>
@@ -197,8 +218,17 @@ export default function ImportPage() {
             onChange={(e) => setCsv(e.target.value)}
             placeholder="Paste CSV here (first row = headers)…"
           />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button onClick={run} disabled={busy || !csv.trim()}>{busy ? "Importing…" : "Run import"}</Button>
+          {error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+              {error}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <Button onClick={run} disabled={busy || !csv.trim()}>{busy ? "Importing…" : "Run import"}</Button>
+            {!csv.trim() && (
+              <span className="text-xs text-muted-foreground">Upload a file or paste rows to enable import.</span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
