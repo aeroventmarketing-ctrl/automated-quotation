@@ -81,7 +81,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "png" });
   ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: logoW, height: logoH } });
   // Reserve rows for the logo height (≈19px per default row).
-  const logoRows = Math.ceil(logoH / 19);
+  const logoRows = Math.round(logoH / 19);
   for (let r = 1; r <= logoRows; r++) ws.getRow(r).height = 19;
 
   const center = (v: ExcelJS.CellValue, size: number, bold = false, italic = false) => ({
@@ -91,7 +91,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   });
   // The header image already contains the logo + all company text, so no
   // separate text rows are needed — meta starts just below the letterhead.
-  let row = logoRows + 2;
+  let row = logoRows + 1;
 
   // --- Meta -----------------------------------------------------------------
   ws.getCell(`A${row}`).value = `QUOT NO. ${data.quoteNumber}`;
@@ -102,7 +102,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     font: { name: FONT, size: 11, color: RED },
     alignment: { horizontal: "right" as const },
   });
-  row += 2;
+  row += 3; // extra row after QUOT NO
   if (data.projectName) {
     ws.getCell(`A${row}`).value = "PROJECT : ";
     ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
@@ -114,9 +114,11 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
   ws.getCell(`C${row}`).value = data.customerName;
   ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
-  row += 2;
+  row += 3; // extra row after TO
   ws.getCell(`A${row}`).value = "Dear Sir/Ma'am:";
   ws.getCell(`A${row}`).font = { name: FONT, size: 11, color: BLACK };
+  row++;
+  ws.getRow(row).height = 8; // thin 8px spacer after the salutation
   row++;
   ws.getCell(`A${row}`).value = "We are pleased to quote the price for your ventilation requirements.";
   ws.getCell(`A${row}`).font = { name: FONT, size: 11, color: BLACK };
@@ -237,7 +239,6 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   }
 
   // --- Note -----------------------------------------------------------------
-  r += 1;
   if (data.specNote) {
     ws.mergeCells(`A${r}:O${r + 2}`);
     const c = ws.getCell(`A${r}`);
