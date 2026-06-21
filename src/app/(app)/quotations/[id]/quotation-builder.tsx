@@ -124,6 +124,8 @@ export function QuotationBuilder({
       ls.map((l) => {
         if (l.id !== id) return l;
         const specs = { ...l.specs, ...patch };
+        // 1-phase motors are 220V only — snap voltage so the model code resolves.
+        if (specs.motorPh === 1) specs.motorVolts = 220;
         const body = specs.bodyPrice ?? 0;
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
@@ -369,11 +371,17 @@ export function QuotationBuilder({
                   <Label className="text-[10px]">Volts</Label>
                   <Select className="h-8" disabled={!editable} value={l.specs.motorVolts ?? ""}
                     onChange={(e) => applyMotor(l.id, { motorVolts: numOrNull(e.target.value) })}>
-                    <option value="">—</option>
-                    <option value="220">220</option>
-                    <option value="380">380</option>
-                    <option value="400">400</option>
-                    <option value="440">440</option>
+                    {l.specs.motorPh === 1 ? (
+                      <option value="220">220</option>
+                    ) : (
+                      <>
+                        <option value="">—</option>
+                        <option value="220">220</option>
+                        <option value="380">380</option>
+                        <option value="400">400</option>
+                        <option value="440">440</option>
+                      </>
+                    )}
                   </Select>
                 </div>
                 <div>
