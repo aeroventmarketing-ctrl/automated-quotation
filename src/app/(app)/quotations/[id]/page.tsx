@@ -37,6 +37,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         status: quotation.status,
         currency: quotation.currency,
         vatMode: quotation.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE",
+        discountPct: Number(quotation.discountPct ?? 0),
         projectName: quotation.projectName ?? "",
         subtotal: Number(quotation.subtotal),
         vat: Number(quotation.vat),

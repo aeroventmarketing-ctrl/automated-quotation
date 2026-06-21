@@ -22,6 +22,7 @@ const createSchema = z.object({
   templateId: z.string().optional(),
   projectName: z.string().optional(),
   vatMode: z.enum(["INCLUSIVE", "EXCLUSIVE"]).default("INCLUSIVE"),
+  discountPct: z.number().min(0).max(100).default(0),
   lines: z.array(lineSchema).min(1),
 });
 
@@ -70,6 +71,7 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
         templateId: template.id,
         status: "DRAFT",
         vatMode: data.vatMode,
+        discountPct: data.discountPct,
         projectName: data.projectName,
         subtotal: totals.subtotal,
         vat: totals.vat,
@@ -121,6 +123,7 @@ export async function updateQuotationLines(
     validUntil?: string;
     projectName?: string;
     vatMode?: "INCLUSIVE" | "EXCLUSIVE";
+    discountPct?: number;
   },
 ) {
   const user = await getCurrentUser();
@@ -158,6 +161,7 @@ export async function updateQuotationLines(
         terms: meta?.terms,
         projectName: meta?.projectName,
         vatMode: meta?.vatMode,
+        discountPct: meta?.discountPct,
         validUntil: meta?.validUntil ? new Date(meta.validUntil) : undefined,
       },
     }),

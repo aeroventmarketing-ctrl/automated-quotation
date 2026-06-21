@@ -193,6 +193,8 @@ model Quotation {
   status       QuotationStatus @default(DRAFT)
   // VAT presentation: INCLUSIVE (prices already include 12% VAT) or EXCLUSIVE.
   vatMode      String          @default("INCLUSIVE")
+  // Optional discount percentage shown as a "LESS x% DISCOUNT" line.
+  discountPct  Decimal         @db.Decimal(5, 2) @default(0)
   projectName  String?
   subtotal     Decimal         @db.Decimal(14, 2) @default(0)
   vat          Decimal         @db.Decimal(14, 2) @default(0)
