@@ -108,7 +108,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
     ws.getCell(`C${row}`).value = data.projectName;
     ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
-    row++;
+    row += 2; // blank row after PROJECT
   }
   ws.getCell(`A${row}`).value = "TO : ";
   ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
@@ -120,8 +120,8 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   row++;
   ws.getRow(row).height = 8; // thin 8px spacer after the salutation
   row++;
-  ws.getCell(`A${row}`).value = "We are pleased to quote the price for your ventilation requirements.";
-  ws.getCell(`A${row}`).font = { name: FONT, size: 11, color: BLACK };
+  ws.getCell(`B${row}`).value = "We are pleased to quote the price for your ventilation requirements.";
+  ws.getCell(`B${row}`).font = { name: FONT, size: 11, color: BLACK };
   row += 2;
 
   // --- Table header (3 rows) ------------------------------------------------
