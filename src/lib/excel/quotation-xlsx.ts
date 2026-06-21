@@ -78,7 +78,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const contentPx = Math.round(totalCharW * 7 + 12);
   const logoW = contentPx;
   const logoH = Math.round(logoW / HEADER_LOGO_RATIO);
-  const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "jpeg" });
+  const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "png" });
   ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: logoW, height: logoH } });
   // Reserve rows for the logo height (≈19px per default row).
   const logoRows = Math.ceil(logoH / 19);
@@ -89,19 +89,9 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     font: { name: FONT, size, bold, italic, color: BLACK },
     alignment: { horizontal: "center" as const, vertical: "middle" as const },
   });
-  let row = logoRows + 1;
-  function head(text: string, size: number, bold = false) {
-    ws.mergeCells(`A${row}:O${row}`);
-    Object.assign(ws.getCell(`A${row}`), center(text, size, bold));
-    row++;
-  }
-  head("FANS & BLOWERS MANUFACTURING", 12, true);
-  head(COMPANY.tagline, 8, true);
-  head(COMPANY.landline, 7.5);
-  head(COMPANY.mobile, 7.5);
-  head(COMPANY.plantAddress, 7.5);
-  head(`Email: ${COMPANY.email}   /   Website: ${COMPANY.website}`, 7.5);
-  row++; // spacer
+  // The header image already contains the logo + all company text, so no
+  // separate text rows are needed — meta starts just below the letterhead.
+  let row = logoRows + 2;
 
   // --- Meta -----------------------------------------------------------------
   ws.getCell(`A${row}`).value = `QUOT NO. ${data.quoteNumber}`;
