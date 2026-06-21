@@ -40,16 +40,20 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
 
   const resolvedLines = await Promise.all(
     data.lines.map(async (l) => {
-      let unitPrice = l.unitPrice;
-      if (unitPrice == null && l.catalogueItemId) {
+      let net = l.unitPrice;
+      if (net == null && l.catalogueItemId) {
         const price = await prisma.priceListEntry.findFirst({
           where: { catalogueItemId: l.catalogueItemId, active: true },
           orderBy: { effectiveDate: "desc" },
         });
-        unitPrice = price ? Number(price.basePrice) : 0;
+        net = price ? Number(price.basePrice) : 0;
       }
-      unitPrice = round2(unitPrice ?? 0);
-      return { ...l, unitPrice, lineTotal: round2(unitPrice * l.qty) };
+      // Catalogue prices are net (VAT-exclusive); the app stores unitPrice as
+      // VAT-inclusive. Keep the net body price in specs for the motor calculator.
+      const bodyNet = round2(net ?? 0);
+      const unitPrice = round2(bodyNet * (1 + config.vatRate));
+      const specsSnapshot = { ...(l.specsSnapshot ?? {}), bodyPrice: bodyNet };
+      return { ...l, unitPrice, lineTotal: round2(unitPrice * l.qty), specsSnapshot };
     }),
   );
 
