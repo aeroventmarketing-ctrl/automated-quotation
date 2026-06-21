@@ -271,7 +271,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: false, color: BLACK };
   r += 2;
 
-  const TERMS_CPL = 90; // approx chars per line in the merged G:P text area (Times New Roman 10)
+  const TERMS_CPL = 96; // approx chars per line in the merged G:P text area (Times New Roman 10)
   if (data.terms) {
     for (const raw of data.terms.split("\n")) {
       const line = raw.replace(/\r/g, "").trim();
