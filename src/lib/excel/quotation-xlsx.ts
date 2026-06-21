@@ -258,9 +258,13 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     r += 2;
   }
 
-  // --- Page break: Terms & Conditions start on page 2 -----------------------
+  // --- Page break + repeated letterhead on page 2 ---------------------------
   ws.getRow(r).addPageBreak();
   r += 1;
+  // Repeat the same header logo at the top of page 2.
+  ws.addImage(imgId, { tl: { col: 1, row: r - 1 }, ext: { width: logoW, height: logoH } });
+  for (let i = 0; i < logoRows; i++) ws.getRow(r + i).height = 19;
+  r += logoRows + 1;
 
   // --- Terms (structured: "Label  :  text" columns) -------------------------
   ws.getCell(`B${r}`).value = "The above quotation is subject to the following terms and conditions:";
