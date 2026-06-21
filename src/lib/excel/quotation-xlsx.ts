@@ -95,7 +95,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Meta -----------------------------------------------------------------
   ws.getCell(`A${row}`).value = `QUOT NO. ${data.quoteNumber}`;
-  ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
+  ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
   ws.mergeCells(`N${row}:O${row}`);
   Object.assign(ws.getCell(`N${row}`), {
     value: data.dateStr,
@@ -105,13 +105,13 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   row += 3; // extra row after QUOT NO
   if (data.projectName) {
     ws.getCell(`A${row}`).value = "PROJECT : ";
-    ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
+    ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
     ws.getCell(`C${row}`).value = data.projectName;
     ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
     row += 3; // two blank rows after PROJECT
   }
   ws.getCell(`A${row}`).value = "TO : ";
-  ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
+  ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
   ws.getCell(`C${row}`).value = data.customerName;
   ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
   row += 3; // extra row after TO
@@ -198,9 +198,14 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     cellCfg(`O${r}`, money(it.lineTotal * f), 9);
     ws.getCell(`O${r}`).numFmt = "#,##0.00";
 
-    // auto row height by description lines
-    const lines = String(it.descriptionSnapshot).split("\n").length;
-    ws.getRow(r).height = Math.max(28, lines * 12.5);
+    // Auto-fit row height to the (wrapped) description. Excel does NOT
+    // auto-grow merged cells, so estimate wrapped line count from the merged
+    // C:G width (~25 chars at Times New Roman 10).
+    const descCharsPerLine = 25;
+    const wrappedLines = String(it.descriptionSnapshot)
+      .split("\n")
+      .reduce((acc, seg) => acc + Math.max(1, Math.ceil(seg.length / descCharsPerLine)), 0);
+    ws.getRow(r).height = Math.max(28, wrappedLines * 13.5);
     r++;
   }
 
