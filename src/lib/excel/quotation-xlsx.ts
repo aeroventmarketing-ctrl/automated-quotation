@@ -33,6 +33,10 @@ export interface XlsxData {
   vatMode: "INCLUSIVE" | "EXCLUSIVE";
   discountPct: number; // e.g. 3 for 3%
   vatRate: number;
+  // Variable (red) unit labels for the table header.
+  capacityUnit?: string; // default "cfm"
+  pressureUnit?: string; // default "in-w.g."
+  motorUnit?: string; // default "Hp"
   preparedBy: string;
   specNote?: string | null;
   terms?: string | null;
@@ -139,11 +143,19 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   hset(`K${H1}`, "MOTOR", 10);
   hset(`N${H1}`, "Unit Price", 9);
   hset(`O${H1}`, "Total Price", 9);
-  // sub-units row 25
-  hset(`H${H3}`, "cfm");
-  hset(`I${H3}`, "in-w.g.");
+  // sub-units row 25. Variable units (capacity / pressure / motor) are RED and
+  // editable per client; Inches / Ph / Volts are fixed black.
+  const hsetRed = (addr: string, text: string) => {
+    const c = ws.getCell(addr);
+    c.value = text;
+    c.font = { name: FONT, size: 9, bold: true, color: RED };
+    c.alignment = { horizontal: "center", vertical: "middle" };
+    c.border = allBorders;
+  };
+  hsetRed(`H${H3}`, data.capacityUnit || "cfm");
+  hsetRed(`I${H3}`, data.pressureUnit || "in-w.g.");
   hset(`J${H3}`, "Inches");
-  hset(`K${H3}`, "Hp");
+  hsetRed(`K${H3}`, data.motorUnit || "Hp");
   hset(`L${H3}`, "Ph");
   hset(`M${H3}`, "Volts");
   [ws.getRow(H1), ws.getRow(24), ws.getRow(H3)].forEach((r) => (r.height = 13));

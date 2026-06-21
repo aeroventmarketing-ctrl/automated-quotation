@@ -38,6 +38,11 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         currency: quotation.currency,
         vatMode: quotation.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE",
         discountPct: Number(quotation.discountPct ?? 0),
+        headerUnits: {
+          capacity: (quotation.headerUnits as Record<string, string>)?.capacity ?? "cfm",
+          pressure: (quotation.headerUnits as Record<string, string>)?.pressure ?? "in-w.g.",
+          motor: (quotation.headerUnits as Record<string, string>)?.motor ?? "Hp",
+        },
         projectName: quotation.projectName ?? "",
         subtotal: Number(quotation.subtotal),
         vat: Number(quotation.vat),

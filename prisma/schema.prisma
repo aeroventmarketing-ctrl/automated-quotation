@@ -195,6 +195,8 @@ model Quotation {
   vatMode      String          @default("INCLUSIVE")
   // Optional discount percentage shown as a "LESS x% DISCOUNT" line.
   discountPct  Decimal         @db.Decimal(5, 2) @default(0)
+  // Variable (red) table unit labels: { capacity, pressure, motor }. Defaults cfm / in-w.g. / Hp.
+  headerUnits  Json            @default("{}")
   projectName  String?
   subtotal     Decimal         @db.Decimal(14, 2) @default(0)
   vat          Decimal         @db.Decimal(14, 2) @default(0)

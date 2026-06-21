@@ -40,6 +40,7 @@ interface Quote {
   currency: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE";
   discountPct: number;
+  headerUnits: { capacity: string; pressure: string; motor: string };
   projectName: string;
   subtotal: number;
   vat: number;
@@ -74,6 +75,7 @@ export function QuotationBuilder({
   const [projectName, setProjectName] = useState(quotation.projectName);
   const [vatMode, setVatMode] = useState(quotation.vatMode);
   const [discountPct, setDiscountPct] = useState(quotation.discountPct);
+  const [units, setUnits] = useState(quotation.headerUnits);
   const [notes, setNotes] = useState(quotation.notes ?? "");
   const [terms, setTerms] = useState(quotation.terms ?? "");
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
@@ -111,7 +113,7 @@ export function QuotationBuilder({
           // merge edited flat specs back over anything nested (selection/requirement)
           specsSnapshot: { ...l.rawSpecs, ...l.specs },
         })),
-        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode, discountPct },
+        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode, discountPct, headerUnits: units },
       );
       setMsg("Saved.");
       router.refresh();
@@ -208,6 +210,18 @@ export function QuotationBuilder({
             <Label>Discount %</Label>
             <Input type="number" step="0.01" min={0} max={100} value={discountPct} disabled={!editable}
               onChange={(e) => setDiscountPct(Number(e.target.value) || 0)} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <Label>Table unit labels (red, editable per client)</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <Input value={units.capacity} disabled={!editable} placeholder="cfm"
+                onChange={(e) => setUnits({ ...units, capacity: e.target.value })} />
+              <Input value={units.pressure} disabled={!editable} placeholder="in-w.g."
+                onChange={(e) => setUnits({ ...units, pressure: e.target.value })} />
+              <Input value={units.motor} disabled={!editable} placeholder="Hp"
+                onChange={(e) => setUnits({ ...units, motor: e.target.value })} />
+            </div>
+            <p className="text-xs text-muted-foreground">Capacity · Static Pressure · Motor power units (e.g. cfm / in-w.g. / Hp, or m³/hr / Pa / kW).</p>
           </div>
           <div className="space-y-1">
             <Label>Template (pattern)</Label>

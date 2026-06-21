@@ -23,6 +23,7 @@ const createSchema = z.object({
   projectName: z.string().optional(),
   vatMode: z.enum(["INCLUSIVE", "EXCLUSIVE"]).default("INCLUSIVE"),
   discountPct: z.number().min(0).max(100).default(0),
+  headerUnits: z.record(z.string()).optional(),
   lines: z.array(lineSchema).min(1),
 });
 
@@ -72,6 +73,7 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
         status: "DRAFT",
         vatMode: data.vatMode,
         discountPct: data.discountPct,
+        headerUnits: (data.headerUnits ?? { capacity: "cfm", pressure: "in-w.g.", motor: "Hp" }) as object,
         projectName: data.projectName,
         subtotal: totals.subtotal,
         vat: totals.vat,
@@ -124,6 +126,7 @@ export async function updateQuotationLines(
     projectName?: string;
     vatMode?: "INCLUSIVE" | "EXCLUSIVE";
     discountPct?: number;
+    headerUnits?: Record<string, string>;
   },
 ) {
   const user = await getCurrentUser();
@@ -162,6 +165,7 @@ export async function updateQuotationLines(
         projectName: meta?.projectName,
         vatMode: meta?.vatMode,
         discountPct: meta?.discountPct,
+        headerUnits: meta?.headerUnits as object | undefined,
         validUntil: meta?.validUntil ? new Date(meta.validUntil) : undefined,
       },
     }),
