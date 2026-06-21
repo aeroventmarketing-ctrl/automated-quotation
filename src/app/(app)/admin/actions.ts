@@ -73,6 +73,24 @@ export async function deleteCatalogueItem(id: string) {
   revalidatePath("/admin/catalogue");
 }
 
+/**
+ * Wipe the entire catalogue (items + their prices + rating points). Used to
+ * clear sample/practice data before importing the real catalog. Existing
+ * quotation line items keep their stored snapshots; we just detach the FK so
+ * the delete can't be blocked.
+ */
+export async function clearCatalogue() {
+  await assertAdmin();
+  await prisma.quotationItem.updateMany({
+    where: { catalogueItemId: { not: null } },
+    data: { catalogueItemId: null },
+  });
+  const { count } = await prisma.catalogueItem.deleteMany({});
+  revalidatePath("/admin/catalogue");
+  revalidatePath("/admin/import");
+  return count;
+}
+
 // --- Users ------------------------------------------------------------------
 const userSchema = z.object({
   id: z.string().optional(),

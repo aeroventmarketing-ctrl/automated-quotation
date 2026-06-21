@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { clearCatalogue } from "../actions";
 
 const SPECS: Record<string, { cols: string; sample: string }> = {
   catalogue: {
@@ -38,6 +39,29 @@ export default function ImportPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [cleared, setCleared] = useState<number | null>(null);
+
+  async function clearAll() {
+    if (
+      !confirm(
+        "Delete ALL catalogue items, their prices, and rating points?\n\nUse this to remove the sample/practice catalog before importing your own. Existing quotations keep their saved details. This cannot be undone.",
+      )
+    )
+      return;
+    setClearing(true);
+    setError(null);
+    setCleared(null);
+    try {
+      const count = await clearCatalogue();
+      setCleared(count);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Clear failed");
+    } finally {
+      setClearing(false);
+    }
+  }
 
   async function run() {
     setBusy(true);
@@ -66,6 +90,22 @@ export default function ImportPage() {
 
   return (
     <div className="space-y-4">
+      <Card className="border-destructive/40">
+        <CardHeader><CardTitle className="text-destructive">Clear sample catalog</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Remove all catalogue items, prices, and rating points to start from a clean slate
+            before importing your own catalog. Existing quotations are unaffected.
+          </p>
+          <Button variant="destructive" onClick={clearAll} disabled={clearing}>
+            {clearing ? "Clearing…" : "Clear all catalogue data"}
+          </Button>
+          {cleared != null && (
+            <p className="text-sm text-emerald-700">Cleared {cleared} catalogue item(s). Ready for import.</p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader><CardTitle>Bulk import (CSV)</CardTitle></CardHeader>
         <CardContent className="space-y-4">
