@@ -273,18 +273,31 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   const TERMS_CPL = 96; // approx chars per line in the merged G:P text area (Times New Roman 10)
   if (data.terms) {
-    for (const raw of data.terms.split("\n")) {
-      const line = raw.replace(/\r/g, "").trim();
+    const lines = data.terms.split("\n").map((l) => l.replace(/\r/g, "").trim());
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
       if (line === "") {
         r += 1;
+        i++;
         continue;
       }
       const m = line.match(/^(\d+\.\s*[^:]+?)\s*:\s*(.*)$/);
       let body = line;
+      let label: string | null = null;
       if (m) {
+        label = m[1].trim();
         body = m[2].trim();
+        // If a numbered term has no inline text (e.g. "5. Warranty :"), bring
+        // its first sub-item up onto the same row.
+        if (body === "" && i + 1 < lines.length && lines[i + 1] !== "") {
+          i++;
+          body = lines[i];
+        }
+      }
+      if (label !== null) {
         const lc = ws.getCell(`B${r}`);
-        lc.value = m[1].trim();
+        lc.value = label;
         lc.font = { name: FONT, size: 10, color: BLACK };
         lc.alignment = { vertical: "top" };
         const cc = ws.getCell(`E${r}`);
@@ -300,6 +313,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       const wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
       ws.getRow(r).height = Math.max(14, wlines * 13.5);
       r++;
+      i++;
     }
   }
 
