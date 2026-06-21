@@ -108,7 +108,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
     ws.getCell(`C${row}`).value = data.projectName;
     ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
-    row += 2; // blank row after PROJECT
+    row += 3; // two blank rows after PROJECT
   }
   ws.getCell(`A${row}`).value = "TO : ";
   ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
