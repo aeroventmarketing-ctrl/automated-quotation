@@ -9,7 +9,7 @@
  */
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
-import { AEROVENT_LOGO } from "@/lib/pdf/logo";
+import { HEADER_LOGO, HEADER_LOGO_RATIO } from "./header-logo";
 
 export interface XlsxLine {
   itemLabel: string;
@@ -63,7 +63,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 0,
-      margins: { left: 0.3, right: 0.3, top: 0.3, bottom: 0.3, header: 0.2, footer: 0.2 },
+      margins: { left: 0.3, right: 0.3, top: 0.1, bottom: 0.3, header: 0, footer: 0.2 },
     },
   });
 
@@ -72,62 +72,75 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
 
   // --- Logo + letterhead -----------------------------------------------------
-  const imgId = wb.addImage({ base64: AEROVENT_LOGO.split(",")[1], extension: "jpeg" });
-  ws.mergeCells("A1:O5");
-  ws.addImage(imgId, { tl: { col: 4.5, row: 0.3 }, ext: { width: 330, height: 56 } });
-  for (let r = 1; r <= 5; r++) ws.getRow(r).height = 12;
+  // Header logo spans the full content width at the very top (horizontally
+  // centred by filling edge-to-edge). Content width ≈ sum of column widths.
+  const totalCharW = widths.reduce((a, w) => a + w, 0);
+  const contentPx = Math.round(totalCharW * 7 + 12);
+  const logoW = contentPx;
+  const logoH = Math.round(logoW / HEADER_LOGO_RATIO);
+  const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "jpeg" });
+  ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: logoW, height: logoH } });
+  // Reserve rows for the logo height (≈19px per default row).
+  const logoRows = Math.ceil(logoH / 19);
+  for (let r = 1; r <= logoRows; r++) ws.getRow(r).height = 19;
 
   const center = (v: ExcelJS.CellValue, size: number, bold = false, italic = false) => ({
     value: v,
     font: { name: FONT, size, bold, italic, color: BLACK },
     alignment: { horizontal: "center" as const, vertical: "middle" as const },
   });
-  function head(row: number, text: string, size: number, bold = false, italic = false) {
+  let row = logoRows + 1;
+  function head(text: string, size: number, bold = false) {
     ws.mergeCells(`A${row}:O${row}`);
-    const c = ws.getCell(`A${row}`);
-    Object.assign(c, center(text, size, bold, italic));
+    Object.assign(ws.getCell(`A${row}`), center(text, size, bold));
+    row++;
   }
-  head(6, "FANS AND BLOWERS MANUFACTURING", 12, true);
-  head(7, "VENTILATION, AIR MOVING & ENGINEERING SPECIALISTS", 8, true);
-  head(8, COMPANY.manilaOffice.replace("Manila Office: ", "Manila Office : "), 7.5);
-  head(9, COMPANY.landline, 7.5);
-  head(10, COMPANY.mobile, 7.5);
-  head(11, COMPANY.plantAddress.replace("Plant Address: ", "Plant Address : "), 7.5);
-  head(12, `Email: ${COMPANY.email}   /   Website: ${COMPANY.website}`, 7.5);
+  head("FANS & BLOWERS MANUFACTURING", 12, true);
+  head(COMPANY.tagline, 8, true);
+  head(COMPANY.landline, 7.5);
+  head(COMPANY.mobile, 7.5);
+  head(COMPANY.plantAddress, 7.5);
+  head(`Email: ${COMPANY.email}   /   Website: ${COMPANY.website}`, 7.5);
+  row++; // spacer
 
   // --- Meta -----------------------------------------------------------------
-  ws.getCell("A14").value = `QUOT NO. ${data.quoteNumber}`;
-  ws.getCell("A14").font = { name: FONT, size: 11, bold: true, color: BLACK };
-  ws.mergeCells("N14:O14");
-  Object.assign(ws.getCell("N14"), {
+  ws.getCell(`A${row}`).value = `QUOT NO. ${data.quoteNumber}`;
+  ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
+  ws.mergeCells(`N${row}:O${row}`);
+  Object.assign(ws.getCell(`N${row}`), {
     value: data.dateStr,
     font: { name: FONT, size: 11, color: RED },
     alignment: { horizontal: "right" as const },
   });
+  row += 2;
   if (data.projectName) {
-    ws.getCell("A16").value = "PROJECT : ";
-    ws.getCell("A16").font = { name: FONT, size: 11, bold: true, color: BLACK };
-    ws.getCell("C16").value = data.projectName;
-    ws.getCell("C16").font = { name: FONT, size: 11, color: RED };
+    ws.getCell(`A${row}`).value = "PROJECT : ";
+    ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
+    ws.getCell(`C${row}`).value = data.projectName;
+    ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
+    row++;
   }
-  ws.getCell("A18").value = "TO : ";
-  ws.getCell("A18").font = { name: FONT, size: 11, bold: true, color: BLACK };
-  ws.getCell("C18").value = data.customerName;
-  ws.getCell("C18").font = { name: FONT, size: 11, color: RED };
-  ws.getCell("A20").value = "Dear Sir/Ma'am:";
-  ws.getCell("A20").font = { name: FONT, size: 11, color: BLACK };
-  ws.getCell("A21").value = "We are pleased to quote the price for your ventilation requirements.";
-  ws.getCell("A21").font = { name: FONT, size: 11, color: BLACK };
+  ws.getCell(`A${row}`).value = "TO : ";
+  ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: true, color: BLACK };
+  ws.getCell(`C${row}`).value = data.customerName;
+  ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
+  row += 2;
+  ws.getCell(`A${row}`).value = "Dear Sir/Ma'am:";
+  ws.getCell(`A${row}`).font = { name: FONT, size: 11, color: BLACK };
+  row++;
+  ws.getCell(`A${row}`).value = "We are pleased to quote the price for your ventilation requirements.";
+  ws.getCell(`A${row}`).font = { name: FONT, size: 11, color: BLACK };
+  row += 2;
 
-  // --- Table header (rows 23-25) --------------------------------------------
-  const H1 = 23, H3 = 25;
+  // --- Table header (3 rows) ------------------------------------------------
+  const H1 = row, HM = row + 1, H3 = row + 2;
   ws.mergeCells(`A${H1}:A${H3}`);
   ws.mergeCells(`B${H1}:B${H3}`);
   ws.mergeCells(`C${H1}:G${H3}`);
-  ws.mergeCells(`H${H1}:H24`);
-  ws.mergeCells(`I${H1}:I24`);
-  ws.mergeCells(`J${H1}:J24`);
-  ws.mergeCells(`K${H1}:M24`); // MOTOR
+  ws.mergeCells(`H${H1}:H${HM}`);
+  ws.mergeCells(`I${H1}:I${HM}`);
+  ws.mergeCells(`J${H1}:J${HM}`);
+  ws.mergeCells(`K${H1}:M${HM}`); // MOTOR
   ws.mergeCells(`N${H1}:N${H3}`);
   ws.mergeCells(`O${H1}:O${H3}`);
   const hset = (addr: string, text: string, size = 9) => {
@@ -158,7 +171,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   hsetRed(`K${H3}`, data.motorUnit || "Hp");
   hset(`L${H3}`, "Ph");
   hset(`M${H3}`, "Volts");
-  [ws.getRow(H1), ws.getRow(24), ws.getRow(H3)].forEach((r) => (r.height = 13));
+  [ws.getRow(H1), ws.getRow(HM), ws.getRow(H3)].forEach((r) => (r.height = 13));
   // border the motor sub-cells on row 25
   ["K", "L", "M"].forEach((c) => (ws.getCell(`${c}${H3}`).border = allBorders));
 
