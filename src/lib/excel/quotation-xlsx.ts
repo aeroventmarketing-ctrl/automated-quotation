@@ -311,7 +311,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       tc.font = { name: FONT, size: 10, color: BLACK };
       tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
       const wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
-      ws.getRow(r).height = Math.max(14, wlines * 13.5);
+      ws.getRow(r).height = wlines * 16; // 1 line = 16, 2 lines = 32, …
       r++;
       i++;
     }
@@ -334,16 +334,19 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.getCell(`B${r}`).value = data.preparedBy;
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: true, color: BLACK };
   ws.getCell(`B${r}`).alignment = { horizontal: "center", vertical: "middle" };
+  ws.getRow(r).height = 16;
   r += 1;
   ws.mergeCells(`B${r}:E${r}`);
   ws.getCell(`B${r}`).value = data.preparedByTitle || "Marketing Representative";
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
   ws.getCell(`B${r}`).alignment = { horizontal: "center", vertical: "middle" };
+  ws.getRow(r).height = 16;
   r += 1;
   ws.mergeCells(`B${r}:E${r}`);
   ws.getCell(`B${r}`).value = COMPANY.signatory;
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
   ws.getCell(`B${r}`).alignment = { horizontal: "center", vertical: "middle" };
+  ws.getRow(r).height = 16;
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
