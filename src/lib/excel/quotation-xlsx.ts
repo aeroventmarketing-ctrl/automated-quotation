@@ -72,14 +72,24 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
 
   // --- Logo + letterhead -----------------------------------------------------
-  // Header logo spans the full content width at the very top (horizontally
-  // centred by filling edge-to-edge). Content width ≈ sum of column widths.
-  const totalCharW = widths.reduce((a, w) => a + w, 0);
-  const contentPx = Math.round(totalCharW * 7 + 12);
-  const logoW = contentPx;
+  // Header logo at the very top, scaled to 90% of the content width and
+  // horizontally centred (left offset converted to a column-fraction anchor).
+  const colPx = widths.map((w) => Math.round(w * 7 + 5));
+  const totalPx = colPx.reduce((a, b) => a + b, 0);
+  const logoW = Math.round(totalPx * 0.9); // 10% smaller
   const logoH = Math.round(logoW / HEADER_LOGO_RATIO);
+  const leftPx = (totalPx - logoW) / 2;
+  let acc = 0;
+  let tlCol = 0;
+  for (let i = 0; i < colPx.length; i++) {
+    if (acc + colPx[i] > leftPx) {
+      tlCol = i + (leftPx - acc) / colPx[i];
+      break;
+    }
+    acc += colPx[i];
+  }
   const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "png" });
-  ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: logoW, height: logoH } });
+  ws.addImage(imgId, { tl: { col: tlCol, row: 0 }, ext: { width: logoW, height: logoH } });
   // Reserve rows for the logo height (≈19px per default row).
   const logoRows = Math.round(logoH / 19);
   for (let r = 1; r <= logoRows; r++) ws.getRow(r).height = 19;
@@ -91,7 +101,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   });
   // The header image already contains the logo + all company text, so no
   // separate text rows are needed — meta starts just below the letterhead.
-  let row = logoRows + 1;
+  let row = logoRows;
 
   // --- Meta -----------------------------------------------------------------
   ws.getCell(`A${row}`).value = `QUOT NO. ${data.quoteNumber}`;
