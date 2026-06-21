@@ -271,7 +271,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: false, color: BLACK };
   r += 2;
 
-  const TERMS_CPL = 96; // approx chars per line in the merged G:P text area (Times New Roman 10)
+  const TERMS_CPL = 100; // approx chars per line in the merged G:P text area (Times New Roman 10)
   if (data.terms) {
     const lines = data.terms.split("\n").map((l) => l.replace(/\r/g, "").trim());
     let i = 0;
@@ -318,7 +318,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   }
 
   // --- Closing + signature --------------------------------------------------
-  r += 2;
+  r += 1;
   ws.mergeCells(`B${r}:P${r + 1}`);
   const cl = ws.getCell(`B${r}`);
   cl.value = COMPANY.closing;
