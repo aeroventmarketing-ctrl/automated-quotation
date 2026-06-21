@@ -45,7 +45,10 @@ export interface XlsxData {
 }
 
 const FONT = "Times New Roman";
-const RED = { argb: "FFFF0000" };
+// Output text is all black. (In the source template, red marked client-editable
+// fields; in the app those are edited in the quotation maker, so the generated
+// file uses black throughout — only the logo/header image carries colour.)
+const RED = { argb: "FF000000" };
 const BLACK = { argb: "FF000000" };
 const thin = { style: "thin" as const, color: BLACK };
 const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
@@ -231,7 +234,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     const vc = ws.getCell(`O${r}`);
     vc.value = value;
     vc.numFmt = "#,##0.00";
-    vc.font = { name: FONT, size: 11, bold: true, color: { argb: valColor === "RED" ? "FFFF0000" : "FF000000" } };
+    vc.font = { name: FONT, size: 11, bold: true, color: BLACK };
     vc.alignment = { horizontal: "right", vertical: "middle" };
     vc.border = allBorders;
     ws.getRow(r).height = 16;
@@ -245,12 +248,12 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Note -----------------------------------------------------------------
   if (data.specNote) {
-    ws.mergeCells(`A${r}:O${r + 2}`);
+    ws.mergeCells(`A${r}:O${r + 1}`);
     const c = ws.getCell(`A${r}`);
     c.value = `Note: ${data.specNote}`;
     c.font = { name: FONT, size: 9, color: BLACK };
     c.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-    r += 3;
+    r += 2;
   }
 
   // --- Terms ----------------------------------------------------------------
