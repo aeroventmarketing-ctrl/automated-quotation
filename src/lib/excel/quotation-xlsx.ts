@@ -268,10 +268,10 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Terms (structured: "Label  :  text" columns) -------------------------
   ws.getCell(`B${r}`).value = "The above quotation is subject to the following terms and conditions:";
-  ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: true, color: BLACK };
+  ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: false, color: BLACK };
   r += 2;
 
-  const TERMS_CPL = 72; // approx chars per line in the merged G:P text area
+  const TERMS_CPL = 66; // approx chars per line in the merged G:P text area (size 10)
   if (data.terms) {
     for (const raw of data.terms.split("\n")) {
       const line = raw.replace(/\r/g, "").trim();
@@ -285,20 +285,20 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
         body = m[2].trim();
         const lc = ws.getCell(`B${r}`);
         lc.value = m[1].trim();
-        lc.font = { name: FONT, size: 9, color: BLACK };
+        lc.font = { name: FONT, size: 10, color: BLACK };
         lc.alignment = { vertical: "top" };
         const cc = ws.getCell(`E${r}`);
         cc.value = ":";
-        cc.font = { name: FONT, size: 9, color: BLACK };
+        cc.font = { name: FONT, size: 10, color: BLACK };
         cc.alignment = { vertical: "top" };
       }
       ws.mergeCells(`G${r}:P${r}`);
       const tc = ws.getCell(`G${r}`);
       tc.value = body;
-      tc.font = { name: FONT, size: 9, color: BLACK };
+      tc.font = { name: FONT, size: 10, color: BLACK };
       tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
       const wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
-      ws.getRow(r).height = Math.max(13, wlines * 12.5);
+      ws.getRow(r).height = Math.max(14, wlines * 13.5);
       r++;
     }
   }
@@ -308,7 +308,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.mergeCells(`B${r}:P${r + 1}`);
   const cl = ws.getCell(`B${r}`);
   cl.value = COMPANY.closing;
-  cl.font = { name: FONT, size: 9, color: BLACK };
+  cl.font = { name: FONT, size: 10, color: BLACK };
   cl.alignment = { horizontal: "left", vertical: "top", wrapText: true };
   r += 4;
   ws.getCell(`B${r}`).value = "Very Truly Yours,";
