@@ -70,8 +70,8 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     },
   });
 
-  // Exact column widths from the reference file (A..O).
-  const widths = [6.63, 8.43, 2.63, 1.91, 5.63, 6.91, 7.91, 8.0, 7.09, 5.54, 4.45, 3.63, 4.63, 9.63, 16.36];
+  // Column A is a width-6 left gutter; the table content lives in B..P.
+  const widths = [6, 6.63, 8.43, 2.63, 1.91, 5.63, 6.91, 7.91, 8.0, 7.09, 5.54, 4.45, 3.63, 4.63, 9.63, 16.36];
   widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
 
   // --- Logo + letterhead -----------------------------------------------------
@@ -79,10 +79,11 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   // centred; placing it edge-to-edge (full content width) keeps it centred
   // reliably across screen and print, with no fragile offset math.
   const colPx = widths.map((w) => Math.round(w * 7 + 5));
-  const logoW = colPx.reduce((a, b) => a + b, 0); // full content width
+  // Content area excludes the left gutter column (index 0); logo starts at B.
+  const logoW = colPx.slice(1).reduce((a, b) => a + b, 0);
   const logoH = Math.round(logoW / HEADER_LOGO_RATIO);
   const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "png" });
-  ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: logoW, height: logoH } });
+  ws.addImage(imgId, { tl: { col: 1, row: 0 }, ext: { width: logoW, height: logoH } });
   // Reserve rows for the logo height (≈19px per default row).
   const logoRows = Math.round(logoH / 19);
   for (let r = 1; r <= logoRows; r++) ws.getRow(r).height = 19;
@@ -97,60 +98,60 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   let row = logoRows;
 
   // --- Meta -----------------------------------------------------------------
-  ws.getCell(`A${row}`).value = `QUOT NO. ${data.quoteNumber}`;
-  ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
-  ws.mergeCells(`N${row}:O${row}`);
-  Object.assign(ws.getCell(`N${row}`), {
+  ws.getCell(`B${row}`).value = `QUOT NO. ${data.quoteNumber}`;
+  ws.getCell(`B${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
+  ws.mergeCells(`O${row}:P${row}`);
+  Object.assign(ws.getCell(`O${row}`), {
     value: data.dateStr,
     font: { name: FONT, size: 11, color: RED },
     alignment: { horizontal: "right" as const },
   });
   row += 3; // extra row after QUOT NO
   if (data.projectName) {
-    ws.getCell(`A${row}`).value = "PROJECT : ";
-    ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
-    ws.getCell(`C${row}`).value = data.projectName;
-    ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
+    ws.getCell(`B${row}`).value = "PROJECT : ";
+    ws.getCell(`B${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
+    ws.getCell(`D${row}`).value = data.projectName;
+    ws.getCell(`D${row}`).font = { name: FONT, size: 11, color: RED };
     row += 3; // two blank rows after PROJECT
   }
-  ws.getCell(`A${row}`).value = "TO : ";
-  ws.getCell(`A${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
-  ws.getCell(`C${row}`).value = data.customerName;
-  ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: RED };
+  ws.getCell(`B${row}`).value = "TO : ";
+  ws.getCell(`B${row}`).font = { name: FONT, size: 11, bold: false, color: BLACK };
+  ws.getCell(`D${row}`).value = data.customerName;
+  ws.getCell(`D${row}`).font = { name: FONT, size: 11, color: RED };
   row += 3; // extra row after TO
-  ws.getCell(`A${row}`).value = "Dear Sir/Ma'am:";
-  ws.getCell(`A${row}`).font = { name: FONT, size: 11, color: BLACK };
+  ws.getCell(`B${row}`).value = "Dear Sir/Ma'am:";
+  ws.getCell(`B${row}`).font = { name: FONT, size: 11, color: BLACK };
   row++;
   ws.getRow(row).height = 8; // thin 8px spacer after the salutation
   row++;
-  ws.getCell(`B${row}`).value = "We are pleased to quote the price for your ventilation requirements.";
-  ws.getCell(`B${row}`).font = { name: FONT, size: 11, color: BLACK };
+  ws.getCell(`C${row}`).value = "We are pleased to quote the price for your ventilation requirements.";
+  ws.getCell(`C${row}`).font = { name: FONT, size: 11, color: BLACK };
   row += 2;
 
   // --- Table header (3 rows) ------------------------------------------------
   const H1 = row, HM = row + 1, H3 = row + 2;
-  ws.mergeCells(`A${H1}:A${H3}`);
   ws.mergeCells(`B${H1}:B${H3}`);
-  ws.mergeCells(`C${H1}:G${H3}`);
-  ws.mergeCells(`H${H1}:H${HM}`);
+  ws.mergeCells(`C${H1}:C${H3}`);
+  ws.mergeCells(`D${H1}:H${H3}`);
   ws.mergeCells(`I${H1}:I${HM}`);
   ws.mergeCells(`J${H1}:J${HM}`);
-  ws.mergeCells(`K${H1}:M${HM}`); // MOTOR
-  ws.mergeCells(`N${H1}:N${H3}`);
+  ws.mergeCells(`K${H1}:K${HM}`);
+  ws.mergeCells(`L${H1}:N${HM}`); // MOTOR
   ws.mergeCells(`O${H1}:O${H3}`);
+  ws.mergeCells(`P${H1}:P${H3}`);
   const hset = (addr: string, text: string, size = 9) => {
     Object.assign(ws.getCell(addr), center(text, size, false));
     ws.getCell(addr).border = allBorders;
   };
-  hset(`A${H1}`, "Item", 10);
-  hset(`B${H1}`, "Qty", 10);
-  hset(`C${H1}`, "Description", 10);
-  hset(`H${H1}`, "Capacity");
-  hset(`I${H1}`, "Static Pressure");
-  hset(`J${H1}`, "Size");
-  hset(`K${H1}`, "MOTOR", 10);
-  hset(`N${H1}`, "Unit Price", 9);
-  hset(`O${H1}`, "Total Price", 9);
+  hset(`B${H1}`, "Item", 10);
+  hset(`C${H1}`, "Qty", 10);
+  hset(`D${H1}`, "Description", 10);
+  hset(`I${H1}`, "Capacity");
+  hset(`J${H1}`, "Static Pressure");
+  hset(`K${H1}`, "Size");
+  hset(`L${H1}`, "MOTOR", 10);
+  hset(`O${H1}`, "Unit Price", 9);
+  hset(`P${H1}`, "Total Price", 9);
   // sub-units row 25. Variable units (capacity / pressure / motor) are RED and
   // editable per client; Inches / Ph / Volts are fixed black.
   const hsetRed = (addr: string, text: string) => {
@@ -160,15 +161,15 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     c.alignment = { horizontal: "center", vertical: "middle" };
     c.border = allBorders;
   };
-  hsetRed(`H${H3}`, data.capacityUnit || "cfm");
-  hsetRed(`I${H3}`, data.pressureUnit || "in-w.g.");
-  hset(`J${H3}`, "Inches");
-  hsetRed(`K${H3}`, data.motorUnit || "Hp");
-  hset(`L${H3}`, "Ph");
-  hset(`M${H3}`, "Volts");
+  hsetRed(`I${H3}`, data.capacityUnit || "cfm");
+  hsetRed(`J${H3}`, data.pressureUnit || "in-w.g.");
+  hset(`K${H3}`, "Inches");
+  hsetRed(`L${H3}`, data.motorUnit || "Hp");
+  hset(`M${H3}`, "Ph");
+  hset(`N${H3}`, "Volts");
   [ws.getRow(H1), ws.getRow(HM), ws.getRow(H3)].forEach((r) => (r.height = 13));
   // border the motor sub-cells on row 25
-  ["K", "L", "M"].forEach((c) => (ws.getCell(`${c}${H3}`).border = allBorders));
+  ["L", "M", "N"].forEach((c) => (ws.getCell(`${c}${H3}`).border = allBorders));
 
   // --- Data rows ------------------------------------------------------------
   const f = data.vatMode === "EXCLUSIVE" ? 1 / (1 + data.vatRate) : 1;
@@ -177,7 +178,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     v === null || v === undefined || v === 0 || v === "" ? "--" : v;
 
   for (const it of data.items) {
-    ws.mergeCells(`C${r}:G${r}`);
+    ws.mergeCells(`D${r}:H${r}`);
     const cellCfg = (addr: string, v: ExcelJS.CellValue, size: number, wrap = false) => {
       const c = ws.getCell(addr);
       c.value = v;
@@ -185,21 +186,21 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       c.alignment = { horizontal: "center", vertical: "middle", wrapText: wrap };
       c.border = allBorders;
     };
-    cellCfg(`A${r}`, it.itemLabel, 9);
-    cellCfg(`B${r}`, it.qty, 11);
-    cellCfg(`C${r}`, it.descriptionSnapshot, 10, true);
+    cellCfg(`B${r}`, it.itemLabel, 9);
+    cellCfg(`C${r}`, it.qty, 11);
+    cellCfg(`D${r}`, it.descriptionSnapshot, 10, true);
     // ensure merged-away cells D..G carry borders
-    ["D", "E", "F", "G"].forEach((c) => (ws.getCell(`${c}${r}`).border = allBorders));
-    cellCfg(`H${r}`, dash(it.capacity_cfm), 9);
-    cellCfg(`I${r}`, dash(it.staticPressure_inwg), 9);
-    cellCfg(`J${r}`, dash(it.inches), 9);
-    cellCfg(`K${r}`, dash(it.motorHp ?? null), 9);
-    cellCfg(`L${r}`, dash(it.motorPh), 9);
-    cellCfg(`M${r}`, dash(it.motorVolts), 9);
-    cellCfg(`N${r}`, money(it.unitPrice * f), 9);
-    ws.getCell(`N${r}`).numFmt = "#,##0.00";
-    cellCfg(`O${r}`, money(it.lineTotal * f), 9);
+    ["E", "F", "G", "H"].forEach((c) => (ws.getCell(`${c}${r}`).border = allBorders));
+    cellCfg(`I${r}`, dash(it.capacity_cfm), 9);
+    cellCfg(`J${r}`, dash(it.staticPressure_inwg), 9);
+    cellCfg(`K${r}`, dash(it.inches), 9);
+    cellCfg(`L${r}`, dash(it.motorHp ?? null), 9);
+    cellCfg(`M${r}`, dash(it.motorPh), 9);
+    cellCfg(`N${r}`, dash(it.motorVolts), 9);
+    cellCfg(`O${r}`, money(it.unitPrice * f), 9);
     ws.getCell(`O${r}`).numFmt = "#,##0.00";
+    cellCfg(`P${r}`, money(it.lineTotal * f), 9);
+    ws.getCell(`P${r}`).numFmt = "#,##0.00";
 
     // Auto-fit row height to the (wrapped) description. Excel does NOT
     // auto-grow merged cells, so estimate wrapped line count from the merged
@@ -222,16 +223,16 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       : "NET AMOUNT (VAT inclusive price) =>";
 
   function totalRow(label: string, value: number, valColor: "RED" | "BLACK" = "RED") {
-    ws.mergeCells(`A${r}:N${r}`);
-    const lc = ws.getCell(`A${r}`);
+    ws.mergeCells(`B${r}:O${r}`);
+    const lc = ws.getCell(`B${r}`);
     lc.value = label;
     lc.font = { name: FONT, size: 11, bold: true, color: BLACK };
     lc.alignment = { horizontal: "right", vertical: "middle" };
     lc.border = allBorders;
-    ["B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"].forEach(
+    ["C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"].forEach(
       (c) => (ws.getCell(`${c}${r}`).border = allBorders),
     );
-    const vc = ws.getCell(`O${r}`);
+    const vc = ws.getCell(`P${r}`);
     vc.value = value;
     vc.numFmt = "#,##0.00";
     vc.font = { name: FONT, size: 11, bold: true, color: BLACK };
@@ -248,8 +249,8 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Note -----------------------------------------------------------------
   if (data.specNote) {
-    ws.mergeCells(`A${r}:O${r + 1}`);
-    const c = ws.getCell(`A${r}`);
+    ws.mergeCells(`B${r}:P${r + 1}`);
+    const c = ws.getCell(`B${r}`);
     c.value = `Note: ${data.specNote}`;
     c.font = { name: FONT, size: 9, color: BLACK };
     c.alignment = { horizontal: "left", vertical: "top", wrapText: true };
@@ -258,14 +259,14 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Terms ----------------------------------------------------------------
   r += 1;
-  ws.getCell(`A${r}`).value = "The above quotation is subject to the following terms and conditions:";
-  ws.getCell(`A${r}`).font = { name: FONT, size: 9, bold: true, color: BLACK };
+  ws.getCell(`B${r}`).value = "The above quotation is subject to the following terms and conditions:";
+  ws.getCell(`B${r}`).font = { name: FONT, size: 9, bold: true, color: BLACK };
   r += 1;
   if (data.terms) {
     const termLines = data.terms.split("\n");
     const span = Math.max(termLines.length, 1);
-    ws.mergeCells(`A${r}:O${r + span - 1}`);
-    const c = ws.getCell(`A${r}`);
+    ws.mergeCells(`B${r}:P${r + span - 1}`);
+    const c = ws.getCell(`B${r}`);
     c.value = data.terms;
     c.font = { name: FONT, size: 8.5, color: BLACK };
     c.alignment = { horizontal: "left", vertical: "top", wrapText: true };
@@ -274,18 +275,18 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Signature ------------------------------------------------------------
   r += 2;
-  ws.getCell(`A${r}`).value = COMPANY.closing;
-  ws.getCell(`A${r}`).font = { name: FONT, size: 9, color: BLACK };
-  ws.getCell(`A${r}`).alignment = { wrapText: true };
+  ws.getCell(`B${r}`).value = COMPANY.closing;
+  ws.getCell(`B${r}`).font = { name: FONT, size: 9, color: BLACK };
+  ws.getCell(`B${r}`).alignment = { wrapText: true };
   r += 3;
-  ws.getCell(`A${r}`).value = "Very Truly Yours,";
-  ws.getCell(`A${r}`).font = { name: FONT, size: 10, color: BLACK };
+  ws.getCell(`B${r}`).value = "Very Truly Yours,";
+  ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
   r += 3;
-  ws.getCell(`A${r}`).value = data.preparedBy;
-  ws.getCell(`A${r}`).font = { name: FONT, size: 10, bold: true, color: BLACK };
+  ws.getCell(`B${r}`).value = data.preparedBy;
+  ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: true, color: BLACK };
   r += 1;
-  ws.getCell(`A${r}`).value = COMPANY.signatory;
-  ws.getCell(`A${r}`).font = { name: FONT, size: 10, color: BLACK };
+  ws.getCell(`B${r}`).value = COMPANY.signatory;
+  ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
