@@ -319,8 +319,9 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       tc.font = { name: FONT, size: 10, color: BLACK };
       tc.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
       const wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
-      // Cancellation wraps to 3 lines in Excel; give it room so "manpower" shows.
-      ws.getRow(r).height = label === "11. Cancellation" ? 48 : wlines * 16;
+      // These clauses wrap to 3 lines in Excel; give them room so no text hides.
+      const threeLine = label === "11. Cancellation" || label === "1. Payment";
+      ws.getRow(r).height = threeLine ? 48 : wlines * 16;
       r++;
       i++;
     }
