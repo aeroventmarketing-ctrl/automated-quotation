@@ -21,6 +21,7 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState<(typeof SOURCES)[number]>("EMAIL");
+  const [projectName, setProjectName] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<DraftItem[]>([emptyDraft()]);
   const [saving, setSaving] = useState(false);
@@ -44,6 +45,7 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
         email: isNewCustomer ? email : undefined,
         phone: isNewCustomer ? phone : undefined,
         source,
+        projectName,
         notes,
         items: cleanItems.map((it) => ({
           rawText: it.rawText || it.parsedJson.description,
@@ -103,6 +105,14 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
                     <option key={s} value={s}>{s.replace("_", " ")}</option>
                   ))}
                 </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Project</Label>
+                <Input
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="e.g. Pagawaan ng Bata"
+                />
               </div>
             </div>
             <div className="space-y-1">

@@ -21,6 +21,7 @@ const createSchema = z.object({
   email: z.string().optional(),
   phone: z.string().optional(),
   source: z.enum(["EMAIL", "PHONE", "WALK_IN", "PHOTO", "OTHER"]).default("OTHER"),
+  projectName: z.string().optional(),
   notes: z.string().optional(),
   items: z.array(itemSchema).min(1),
 });
@@ -50,6 +51,7 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
       source: data.source as InquirySource,
       status: "DRAFTING",
       createdById: user.id,
+      projectName: data.projectName?.trim() || null,
       notes: data.notes,
       items: {
         create: data.items.map((it) => ({

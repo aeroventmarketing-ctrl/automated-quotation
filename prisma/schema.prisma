@@ -158,6 +158,7 @@ model Inquiry {
   source      InquirySource @default(OTHER)
   status      InquiryStatus @default(NEW)
   createdById String
+  projectName String?
   notes       String?
   createdAt   DateTime      @default(now())
 

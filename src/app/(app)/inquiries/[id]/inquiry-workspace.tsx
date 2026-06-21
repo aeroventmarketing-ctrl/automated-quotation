@@ -58,11 +58,13 @@ function initState(): ItemState {
 
 export function InquiryWorkspace({
   inquiryId,
+  projectName,
   items,
   catalogue,
   templates,
 }: {
   inquiryId: string;
+  projectName: string;
   items: ItemLite[];
   catalogue: CatLite[];
   templates: { id: string; name: string }[];
@@ -164,7 +166,7 @@ export function InquiryWorkspace({
 
     setCreating(true);
     try {
-      await createQuotationFromInquiry({ inquiryId, templateId: templateId || undefined, vatMode: "INCLUSIVE", discountPct: 0, lines });
+      await createQuotationFromInquiry({ inquiryId, templateId: templateId || undefined, projectName: projectName || undefined, vatMode: "INCLUSIVE", discountPct: 0, lines });
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : "Failed to create quotation");
       setCreating(false);

@@ -43,7 +43,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           pressure: (quotation.headerUnits as Record<string, string>)?.pressure ?? "in-w.g.",
           motor: (quotation.headerUnits as Record<string, string>)?.motor ?? "Hp",
         },
-        projectName: quotation.projectName ?? "",
+        projectName: quotation.projectName ?? quotation.inquiry.projectName ?? "",
         subtotal: Number(quotation.subtotal),
         vat: Number(quotation.vat),
         total: Number(quotation.total),
