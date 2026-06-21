@@ -70,8 +70,8 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     },
   });
 
-  // Column A is a width-6 left gutter; the table content lives in B..P.
-  const widths = [6, 6.63, 8.43, 2.63, 1.91, 5.63, 6.91, 7.91, 8.0, 7.09, 5.54, 4.45, 3.63, 4.63, 9.63, 16.36];
+  // Column A is a width-8 left gutter; the table content lives in B..P.
+  const widths = [8, 6.63, 8.43, 2.63, 1.91, 5.63, 6.91, 7.91, 8.0, 7.09, 5.54, 4.45, 3.63, 4.63, 9.63, 16.36];
   widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
 
   // --- Logo + letterhead -----------------------------------------------------
