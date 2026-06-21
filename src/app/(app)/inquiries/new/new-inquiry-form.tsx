@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ItemRows } from "@/components/intake/item-rows";
 import { AiExtractPanel } from "@/components/intake/ai-extract-panel";
 import { emptyDraft, type DraftItem } from "@/components/intake/types";
+import { isNextControlFlowError } from "@/lib/utils";
 import { createInquiry } from "../actions";
 
 const SOURCES = ["EMAIL", "PHONE", "WALK_IN", "PHOTO", "OTHER"] as const;
@@ -55,6 +56,7 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
       });
       // createInquiry redirects on success.
     } catch (e) {
+      if (isNextControlFlowError(e)) throw e; // let the redirect navigate
       setError(e instanceof Error ? e.message : "Failed to save inquiry");
       setSaving(false);
     }

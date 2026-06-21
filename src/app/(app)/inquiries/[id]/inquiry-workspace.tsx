@@ -11,6 +11,7 @@ import { toDutyPoint } from "@/lib/requirement";
 import { Sparkles, Cog, AlertTriangle } from "lucide-react";
 import type { SelectionResult } from "@/lib/selection";
 import type { MatchCandidate } from "@/lib/ai/schemas";
+import { isNextControlFlowError } from "@/lib/utils";
 import { createQuotationFromInquiry } from "../../quotations/actions";
 
 interface CatLite {
@@ -172,6 +173,7 @@ export function InquiryWorkspace({
     try {
       await createQuotationFromInquiry({ inquiryId, templateId: templateId || undefined, projectName: projectName || undefined, vatMode: "INCLUSIVE", discountPct: 0, lines });
     } catch (e) {
+      if (isNextControlFlowError(e)) throw e; // let the redirect navigate
       setCreateError(e instanceof Error ? e.message : "Failed to create quotation");
       setCreating(false);
     }

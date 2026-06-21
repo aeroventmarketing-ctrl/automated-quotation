@@ -17,6 +17,20 @@ export function formatCurrency(
   })}`;
 }
 
+/**
+ * A successful server action that calls redirect()/notFound() throws a special
+ * Next.js control-flow error (digest "NEXT_REDIRECT…" / "NEXT_NOT_FOUND").
+ * Client try/catch blocks must re-throw these so navigation actually happens.
+ */
+export function isNextControlFlowError(e: unknown): boolean {
+  if (!e || typeof e !== "object" || !("digest" in e)) return false;
+  const digest = (e as { digest?: unknown }).digest;
+  return (
+    typeof digest === "string" &&
+    (digest.startsWith("NEXT_REDIRECT") || digest === "NEXT_NOT_FOUND")
+  );
+}
+
 export function formatDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
