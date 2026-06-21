@@ -38,6 +38,7 @@ export interface XlsxData {
   pressureUnit?: string; // default "in-w.g."
   motorUnit?: string; // default "Hp"
   preparedBy: string;
+  preparedByTitle?: string; // default "Marketing Representative"
   specNote?: string | null;
   terms?: string | null;
   items: XlsxLine[];
@@ -257,33 +258,63 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     r += 2;
   }
 
-  // --- Terms ----------------------------------------------------------------
+  // --- Page break: Terms & Conditions start on page 2 -----------------------
+  ws.getRow(r).addPageBreak();
   r += 1;
+
+  // --- Terms (structured: "Label  :  text" columns) -------------------------
   ws.getCell(`B${r}`).value = "The above quotation is subject to the following terms and conditions:";
-  ws.getCell(`B${r}`).font = { name: FONT, size: 9, bold: true, color: BLACK };
-  r += 1;
+  ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: true, color: BLACK };
+  r += 2;
+
+  const TERMS_CPL = 72; // approx chars per line in the merged G:P text area
   if (data.terms) {
-    const termLines = data.terms.split("\n");
-    const span = Math.max(termLines.length, 1);
-    ws.mergeCells(`B${r}:P${r + span - 1}`);
-    const c = ws.getCell(`B${r}`);
-    c.value = data.terms;
-    c.font = { name: FONT, size: 8.5, color: BLACK };
-    c.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-    r += span;
+    for (const raw of data.terms.split("\n")) {
+      const line = raw.replace(/\r/g, "").trim();
+      if (line === "") {
+        r += 1;
+        continue;
+      }
+      const m = line.match(/^(\d+\.\s*[^:]+?)\s*:\s*(.*)$/);
+      let body = line;
+      if (m) {
+        body = m[2].trim();
+        const lc = ws.getCell(`B${r}`);
+        lc.value = m[1].trim();
+        lc.font = { name: FONT, size: 9, color: BLACK };
+        lc.alignment = { vertical: "top" };
+        const cc = ws.getCell(`E${r}`);
+        cc.value = ":";
+        cc.font = { name: FONT, size: 9, color: BLACK };
+        cc.alignment = { vertical: "top" };
+      }
+      ws.mergeCells(`G${r}:P${r}`);
+      const tc = ws.getCell(`G${r}`);
+      tc.value = body;
+      tc.font = { name: FONT, size: 9, color: BLACK };
+      tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
+      const wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
+      ws.getRow(r).height = Math.max(13, wlines * 12.5);
+      r++;
+    }
   }
 
-  // --- Signature ------------------------------------------------------------
+  // --- Closing + signature --------------------------------------------------
   r += 2;
-  ws.getCell(`B${r}`).value = COMPANY.closing;
-  ws.getCell(`B${r}`).font = { name: FONT, size: 9, color: BLACK };
-  ws.getCell(`B${r}`).alignment = { wrapText: true };
-  r += 3;
+  ws.mergeCells(`B${r}:P${r + 1}`);
+  const cl = ws.getCell(`B${r}`);
+  cl.value = COMPANY.closing;
+  cl.font = { name: FONT, size: 9, color: BLACK };
+  cl.alignment = { horizontal: "left", vertical: "top", wrapText: true };
+  r += 4;
   ws.getCell(`B${r}`).value = "Very Truly Yours,";
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
   r += 3;
   ws.getCell(`B${r}`).value = data.preparedBy;
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: true, color: BLACK };
+  r += 1;
+  ws.getCell(`B${r}`).value = data.preparedByTitle || "Marketing Representative";
+  ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
   r += 1;
   ws.getCell(`B${r}`).value = COMPANY.signatory;
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
