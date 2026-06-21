@@ -299,17 +299,17 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
         const lc = ws.getCell(`B${r}`);
         lc.value = label;
         lc.font = { name: FONT, size: 10, color: BLACK };
-        lc.alignment = { vertical: "top" };
+        lc.alignment = { vertical: "middle" };
         const cc = ws.getCell(`E${r}`);
         cc.value = ":";
         cc.font = { name: FONT, size: 10, color: BLACK };
-        cc.alignment = { vertical: "top" };
+        cc.alignment = { vertical: "middle" };
       }
       ws.mergeCells(`G${r}:P${r}`);
       const tc = ws.getCell(`G${r}`);
       tc.value = body;
       tc.font = { name: FONT, size: 10, color: BLACK };
-      tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
+      tc.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
       const wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
       // Cancellation wraps to 3 lines in Excel; give it room so "manpower" shows.
       ws.getRow(r).height = label === "11. Cancellation" ? 48 : wlines * 16;
