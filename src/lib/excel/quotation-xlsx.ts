@@ -319,15 +319,16 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Closing + signature --------------------------------------------------
   r += 1;
-  ws.mergeCells(`B${r}:P${r + 1}`);
+  ws.mergeCells(`B${r}:P${r}`); // closing on a single (unmerged) row, wrapped
   const cl = ws.getCell(`B${r}`);
   cl.value = COMPANY.closing;
   cl.font = { name: FONT, size: 10, color: BLACK };
   cl.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-  r += 4;
+  ws.getRow(r).height = 28;
+  r += 2;
   ws.getCell(`B${r}`).value = "Very Truly Yours,";
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
-  r += 3;
+  r += 4; // extra signature space before the name
   ws.getCell(`B${r}`).value = data.preparedBy;
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: true, color: BLACK };
   r += 1;
