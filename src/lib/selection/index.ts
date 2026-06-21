@@ -275,19 +275,21 @@ function interpolateGrid(
       }
     }
 
-  const aLo = atQ(bySp.get(lo)!, q);
-  const aHi = atQ(bySp.get(hi)!, q);
-  let rpm: number;
-  let bhp: number;
-  if (lo === hi) {
-    rpm = aLo.rpm;
-    bhp = aLo.bhp;
-  } else {
-    const t = (p - lo) / (hi - lo);
-    rpm = aLo.rpm + (aHi.rpm - aLo.rpm) * t;
-    bhp = aLo.bhp + (aHi.bhp - aLo.bhp) * t;
-  }
-  return { rpm: Math.round(rpm), bhp, withinEnvelope: pInRange && aLo.inRange && aHi.inRange };
+  const loS = bySp.get(lo)!;
+  const hiS = bySp.get(hi)!;
+  const aLo = atQ(loS, q);
+  const aHi = atQ(hiS, q);
+  const t = lo === hi ? 0 : (p - lo) / (hi - lo);
+  const rpm = aLo.rpm + (aHi.rpm - aLo.rpm) * t;
+  const bhp = aLo.bhp + (aHi.bhp - aLo.bhp) * t;
+
+  // Envelope = the airflow range interpolated between the two pressure levels
+  // (the rating grid is triangular, so each SP level has its own CFM span).
+  const minQ = loS[0].q + (hiS[0].q - loS[0].q) * t;
+  const maxQ = loS[loS.length - 1].q + (hiS[hiS.length - 1].q - loS[loS.length - 1].q) * t;
+  const qInRange = q >= minQ - 1 && q <= maxQ + 1;
+
+  return { rpm: Math.round(rpm), bhp, withinEnvelope: pInRange && qInRange };
 }
 
 // ---------------------------------------------------------------------------
