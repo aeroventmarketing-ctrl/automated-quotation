@@ -11,6 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency } from "@/lib/utils";
 import { config } from "@/lib/config";
+import {
+  lookupMotor,
+  motorModelCode,
+  computeUnitPrice,
+  combinedModel,
+  hpOptions,
+  dynamicBalancingApplies,
+  type Voltage,
+} from "@/lib/pricing/motors";
 import { Download, Send, Check, CornerUpLeft, Trash2 } from "lucide-react";
 import { updateQuotationLines, transitionQuotation } from "../actions";
 
@@ -22,6 +31,9 @@ interface LineSpecs {
   motorHp: number | null;
   motorPh: number | null;
   motorVolts: number | null;
+  motorPole: number | null;
+  bodyPrice: number | null; // net blower-body price (before motor / VAT)
+  blowerModel: string | null; // base catalogue model code, e.g. AV1225CEB
 }
 interface Line {
   id: string;
@@ -57,6 +69,13 @@ interface Quote {
 }
 
 const numOrNull = (v: string): number | null => (v === "" ? null : Number(v) || 0);
+const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
+const voltageKey = (v: number | null): Voltage => (v === 220 ? "220" : v === 440 ? "440" : "380");
+/** Replace the "Model:" value in a standard description (no-op if absent). */
+function rewriteModelLine(desc: string, combined: string): string {
+  if (!combined || !/Model:\s*/i.test(desc)) return desc;
+  return desc.replace(/(Model:\s*)([^\n]*)/i, `$1${combined}`);
+}
 
 export function QuotationBuilder({
   quotation,
@@ -96,6 +115,32 @@ export function QuotationBuilder({
   }
   function updateSpec(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
+  }
+
+  // Body + motor calculator: recompute the (VAT-inclusive) unit price and the
+  // combined blower+motor model in the description whenever a motor input changes.
+  function applyMotor(id: string, patch: Partial<LineSpecs>) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== id) return l;
+        const specs = { ...l.specs, ...patch };
+        const body = specs.bodyPrice ?? 0;
+        const hp = specs.motorHp ?? 0;
+        const phase = specs.motorPh ?? 0;
+        const pole = specs.motorPole ?? 4;
+        // Only auto-price true blower lines (those with a body price).
+        if (body <= 0) return { ...l, specs };
+        const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
+        const net = computeUnitPrice(body, motor?.price ?? 0, hp, phase);
+        const gross = round2(net * (1 + vatRate));
+        const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
+        const combined = combinedModel(specs.blowerModel ?? "", mModel);
+        const descriptionSnapshot = specs.blowerModel
+          ? rewriteModelLine(l.descriptionSnapshot, combined)
+          : l.descriptionSnapshot;
+        return { ...l, specs, unitPrice: gross, descriptionSnapshot };
+      }),
+    );
   }
 
   async function save() {
@@ -269,15 +314,12 @@ export function QuotationBuilder({
                 </div>
               </div>
 
-              {/* Engineering specs */}
-              <div className="mt-2 grid grid-cols-3 gap-2 md:grid-cols-7">
+              {/* Table specs (shown in the quote's Capacity / S.P. / Size columns) */}
+              <div className="mt-2 grid grid-cols-3 gap-2">
                 {([
                   ["capacity_cfm", "Capacity (CFM)"],
                   ["staticPressure_pa", "S.P. (in-w.g.)"],
                   ["inches", "Size (in)"],
-                  ["motorHp", "Motor HP"],
-                  ["motorPh", "Phase"],
-                  ["motorVolts", "Volts"],
                 ] as const).map(([key, label]) => (
                   <div key={key}>
                     <Label className="text-[10px]">{label}</Label>
@@ -286,13 +328,92 @@ export function QuotationBuilder({
                       onChange={(e) => updateSpec(l.id, { [key]: numOrNull(e.target.value) } as Partial<LineSpecs>)} />
                   </div>
                 ))}
-                <div className="flex items-end justify-end">
-                  <div className="text-right">
-                    <Label className="text-[10px]">Amount</Label>
-                    <div className="h-8 pt-1 text-sm font-medium">{formatCurrency(l.qty * l.unitPrice, quotation.currency)}</div>
-                  </div>
+              </div>
+
+              {/* Motor + price calculator */}
+              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-6">
+                <div>
+                  <Label className="text-[10px]">Body ₱ (net)</Label>
+                  <Input className="h-8 text-right" type="number" step="0.01" disabled={!editable}
+                    value={l.specs.bodyPrice ?? ""}
+                    onChange={(e) => applyMotor(l.id, { bodyPrice: numOrNull(e.target.value) })} />
+                </div>
+                <div>
+                  <Label className="text-[10px]">Phase</Label>
+                  <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
+                    onChange={(e) => applyMotor(l.id, { motorPh: numOrNull(e.target.value) })}>
+                    <option value="">—</option>
+                    <option value="1">1-phase</option>
+                    <option value="3">3-phase</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Pole</Label>
+                  <Select className="h-8" disabled={!editable} value={l.specs.motorPole ?? 4}
+                    onChange={(e) => applyMotor(l.id, { motorPole: numOrNull(e.target.value) })}>
+                    <option value="4">4-pole</option>
+                    <option value="2">2-pole</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Motor HP</Label>
+                  <Select className="h-8" disabled={!editable} value={l.specs.motorHp ?? ""}
+                    onChange={(e) => applyMotor(l.id, { motorHp: numOrNull(e.target.value) })}>
+                    <option value="">—</option>
+                    {hpOptions(l.specs.motorPh ?? 3, l.specs.motorPole ?? 4).map((hp) => (
+                      <option key={hp} value={hp}>{hp} HP</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Volts</Label>
+                  <Select className="h-8" disabled={!editable} value={l.specs.motorVolts ?? ""}
+                    onChange={(e) => applyMotor(l.id, { motorVolts: numOrNull(e.target.value) })}>
+                    <option value="">—</option>
+                    <option value="220">220</option>
+                    <option value="380">380</option>
+                    <option value="400">400</option>
+                    <option value="440">440</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Unit ₱ (incl. VAT)</Label>
+                  <Input className="h-8 text-right" type="number" step="0.01" value={l.unitPrice} disabled={!editable}
+                    onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                 </div>
               </div>
+
+              {/* Calculator readout */}
+              {(() => {
+                const hp = l.specs.motorHp ?? 0;
+                const ph = l.specs.motorPh ?? 0;
+                const pole = l.specs.motorPole ?? 4;
+                const motor = hp && ph ? lookupMotor(hp, ph, pole) : undefined;
+                const mModel = motor ? motorModelCode(motor, voltageKey(l.specs.motorVolts)) : null;
+                const db = dynamicBalancingApplies(hp, ph);
+                const isBlower = !!(l.specs.bodyPrice && l.specs.bodyPrice > 0);
+                return (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    {isBlower &&
+                      (hp && ph ? (
+                        motor ? (
+                          <>
+                            <span>Motor {mModel ?? "—"}: {formatCurrency(motor.price, quotation.currency)}</span>
+                            {db && <span className="text-amber-600">+10% dynamic balancing (3-ph &gt; 10 HP)</span>}
+                            {l.specs.blowerModel && <span>Model: <b>{combinedModel(l.specs.blowerModel, mModel)}</b></span>}
+                          </>
+                        ) : (
+                          <span className="text-destructive">No motor priced for {hp} HP / {ph}-ph / {pole}-pole</span>
+                        )
+                      ) : (
+                        <span>Body only — pick HP &amp; phase to add a motor</span>
+                      ))}
+                    <span className="ml-auto text-foreground">
+                      Amount: <b>{formatCurrency(l.qty * l.unitPrice, quotation.currency)}</b>
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           ))}
 

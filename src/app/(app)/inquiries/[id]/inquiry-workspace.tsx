@@ -22,6 +22,7 @@ interface CatLite {
   uom: string;
   basePrice: number;
   currency: string;
+  description: string | null;
 }
 interface ItemLite {
   id: string;
@@ -136,10 +137,13 @@ export function InquiryWorkspace({
         const sizeStr = cat.sizeLabel ? ` (${cat.sizeLabel})` : "";
         return {
           catalogueItemId: cat.id,
-          descriptionSnapshot: `${cat.modelCode} — ${cat.name}${sizeStr}`,
+          // Prefer the catalogue's full standard description (with its Model: line).
+          descriptionSnapshot: cat.description || `${cat.modelCode} — ${cat.name}${sizeStr}`,
           specsSnapshot: {
             requirement: it.parsedJson,
             selection: st.chosen ?? null,
+            blowerModel: cat.modelCode,
+            bodyPrice: cat.basePrice,
           } as Record<string, unknown>,
           qty: it.qty,
           selectionNote: st.chosen?.selectionNote ?? null,

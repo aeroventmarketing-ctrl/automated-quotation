@@ -30,6 +30,7 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
         family: true,
         sizeLabel: true,
         uom: true,
+        description: true,
         priceList: { where: { active: true }, orderBy: { effectiveDate: "desc" }, take: 1 },
       },
     }),
@@ -45,6 +46,7 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
     family: c.family,
     sizeLabel: c.sizeLabel,
     uom: c.uom,
+    description: c.description,
     basePrice: c.priceList[0] ? Number(c.priceList[0].basePrice) : 0,
     currency: c.priceList[0]?.currency ?? "PHP",
   }));

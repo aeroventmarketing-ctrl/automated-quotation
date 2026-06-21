@@ -72,6 +72,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               motorHp: num(s.motorHp),
               motorPh: num(s.motorPh),
               motorVolts: num(s.motorVolts),
+              motorPole: num(s.motorPole),
+              bodyPrice: num(s.bodyPrice),
+              blowerModel: typeof s.blowerModel === "string" ? s.blowerModel : null,
             },
             // keep any nested selection/requirement so it isn't lost on save
             rawSpecs: s,
