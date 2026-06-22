@@ -20,7 +20,7 @@ import {
   dynamicBalancingApplies,
   type Voltage,
 } from "@/lib/pricing/motors";
-import { Download, Send, Check, CornerUpLeft, Trash2, Gauge } from "lucide-react";
+import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus } from "lucide-react";
 import { PRODUCT_CATEGORIES, typesFor, entryFor } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
@@ -174,6 +174,35 @@ export function QuotationBuilder({
   }
   function updateSpec(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
+  }
+
+  // Add / remove line items (saved on "Save changes"; available while DRAFT).
+  function addLine() {
+    const id = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setLines((ls) => [
+      ...ls,
+      {
+        id,
+        descriptionSnapshot: "",
+        qty: 1,
+        unitPrice: 0,
+        lineTotal: 0,
+        selectionNote: null,
+        specs: {
+          itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
+          motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
+          bodyPrice: null, blowerModel: null,
+        },
+        rawSpecs: {},
+      },
+    ]);
+  }
+  function removeLine(id: string) {
+    setLines((ls) => ls.filter((l) => l.id !== id));
+    setSel((s) => {
+      const { [id]: _drop, ...rest } = s;
+      return rest;
+    });
   }
 
   // Body + motor calculator: recompute the (VAT-inclusive) unit price and the
@@ -521,6 +550,15 @@ export function QuotationBuilder({
           </div>
           {lines.map((l, idx) => (
             <div key={l.id} className="rounded-lg border p-3">
+              {editable && (
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Item {idx + 1}</span>
+                  <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive"
+                    onClick={() => removeLine(l.id)}>
+                    <Trash2 className="h-4 w-4" /> Remove
+                  </Button>
+                </div>
+              )}
               <div className="grid gap-2 md:grid-cols-12">
                 <div className="md:col-span-1">
                   <Label className="text-[10px]">Item</Label>
@@ -711,6 +749,12 @@ export function QuotationBuilder({
               })()}
             </div>
           ))}
+
+          {editable && (
+            <Button variant="outline" onClick={addLine}>
+              <Plus className="h-4 w-4" /> Add item
+            </Button>
+          )}
 
           {/* Totals */}
           <div className="flex justify-end">

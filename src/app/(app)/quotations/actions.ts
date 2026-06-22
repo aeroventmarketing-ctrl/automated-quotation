@@ -110,8 +110,9 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
 }
 
 const editLineSchema = z.object({
+  // Existing items carry a DB id; new items use a temp id (e.g. "new-…").
   id: z.string(),
-  descriptionSnapshot: z.string().min(1),
+  descriptionSnapshot: z.string().default(""),
   qty: z.number().int().positive(),
   unitPrice: z.number().min(0),
   selectionNote: z.string().nullable().optional(),
@@ -144,20 +145,44 @@ export async function updateQuotationLines(
 
   const totals = computeTotals(parsed.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })));
 
+  // Sync the submitted lines against the DB: update existing, create new, delete removed.
+  const existing = await prisma.quotationItem.findMany({
+    where: { quotationId },
+    select: { id: true },
+  });
+  const existingIds = new Set(existing.map((e) => e.id));
+  const keptIds = new Set(parsed.filter((l) => existingIds.has(l.id)).map((l) => l.id));
+  const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
+
   await prisma.$transaction([
-    ...parsed.map((l) =>
-      prisma.quotationItem.update({
-        where: { id: l.id },
-        data: {
-          descriptionSnapshot: l.descriptionSnapshot,
-          qty: l.qty,
-          unitPrice: round2(l.unitPrice),
-          lineTotal: round2(l.unitPrice * l.qty),
-          selectionNote: l.selectionNote ?? null,
-          ...(l.specsSnapshot ? { specsSnapshot: l.specsSnapshot as object } : {}),
-        },
-      }),
+    ...parsed.map((l, i) =>
+      existingIds.has(l.id)
+        ? prisma.quotationItem.update({
+            where: { id: l.id },
+            data: {
+              descriptionSnapshot: l.descriptionSnapshot,
+              qty: l.qty,
+              unitPrice: round2(l.unitPrice),
+              lineTotal: round2(l.unitPrice * l.qty),
+              selectionNote: l.selectionNote ?? null,
+              sortOrder: i,
+              ...(l.specsSnapshot ? { specsSnapshot: l.specsSnapshot as object } : {}),
+            },
+          })
+        : prisma.quotationItem.create({
+            data: {
+              quotationId,
+              descriptionSnapshot: l.descriptionSnapshot,
+              qty: l.qty,
+              unitPrice: round2(l.unitPrice),
+              lineTotal: round2(l.unitPrice * l.qty),
+              selectionNote: l.selectionNote ?? null,
+              sortOrder: i,
+              specsSnapshot: (l.specsSnapshot ?? {}) as object,
+            },
+          }),
     ),
+    ...(toDelete.length ? [prisma.quotationItem.deleteMany({ where: { id: { in: toDelete } } })] : []),
     prisma.quotation.update({
       where: { id: quotationId },
       data: {
