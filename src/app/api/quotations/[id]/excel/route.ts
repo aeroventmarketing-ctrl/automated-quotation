@@ -57,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     vatRate: config.vatRate,
     capacityUnit: typeof units.capacity === "string" ? units.capacity : "cfm",
     pressureUnit: typeof units.pressure === "string" ? units.pressure : "in-w.g.",
-    motorUnit: typeof units.motor === "string" ? units.motor : "Hp",
+    motorUnit: typeof units.motor === "string" ? units.motor : "HP",
     preparedBy: q.preparedBy.name,
     specNote: q.notes ?? (typeof tpl.specNote === "string" ? tpl.specNote : null),
     terms: q.terms ?? (typeof tpl.terms === "string" ? tpl.terms : null),
