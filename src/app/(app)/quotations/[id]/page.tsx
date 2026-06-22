@@ -64,7 +64,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         headerUnits: {
           capacity: (quotation.headerUnits as Record<string, string>)?.capacity ?? "",
           pressure: (quotation.headerUnits as Record<string, string>)?.pressure ?? "",
-          motor: (quotation.headerUnits as Record<string, string>)?.motor ?? "",
+          motor: ((m) => (m === "Hp" ? "HP" : m))((quotation.headerUnits as Record<string, string>)?.motor ?? ""),
         },
         classification: {
           category: (quotation.classification as Record<string, string>)?.category ?? "",
