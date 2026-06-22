@@ -95,6 +95,19 @@ function rewriteModelLine(desc: string, combined: string): string {
   if (!combined || !/Model:\s*/i.test(desc)) return desc;
   return desc.replace(/(Model:\s*)([^\n]*)/i, `$1${combined}`);
 }
+/** Material phrase for the description (drops a redundant trailing "material"). */
+function materialPhrase(material: string): string {
+  return material.replace(/\s+material$/i, "").trim();
+}
+/**
+ * Add/replace a "Made of ..." line in the description. The default Black Iron
+ * Sheet is the standard build, so no line is shown for it.
+ */
+function rewriteMaterialLine(desc: string, material: string): string {
+  const out = desc.replace(/\n?Made of [^\n]*/gi, "").replace(/\s+$/, "");
+  if (!material || material === "Black Iron Sheet") return out;
+  return `${out}\nMade of ${materialPhrase(material)}`;
+}
 
 /** Unit options for the quote table headers (from the English & Metric chart). */
 const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "l/s", "l/min"];
@@ -252,15 +265,18 @@ export function QuotationBuilder({
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
         // Only auto-price true blower lines (those with a body price).
-        if (body <= 0) return { ...l, specs };
+        if (body <= 0) {
+          return { ...l, specs, descriptionSnapshot: rewriteMaterialLine(l.descriptionSnapshot, specs.material) };
+        }
         const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
         const net = computeUnitPrice(body, motor?.price ?? 0, hp, phase);
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(specs.blowerModel ?? "", mModel);
-        const descriptionSnapshot = specs.blowerModel
+        const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
+        const descriptionSnapshot = rewriteMaterialLine(withModel, specs.material);
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
@@ -315,7 +331,8 @@ export function QuotationBuilder({
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(specs.blowerModel ?? "", mModel);
-        return { ...l, specs, unitPrice: gross, descriptionSnapshot: rewriteModelLine(baseDesc, combined) };
+        const descriptionSnapshot = rewriteMaterialLine(rewriteModelLine(baseDesc, combined), specs.material);
+        return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
     // Collapse the candidate list once a blower is chosen.
