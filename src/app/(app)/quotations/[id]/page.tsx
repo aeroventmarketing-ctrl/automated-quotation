@@ -62,9 +62,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         vatMode: quotation.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE",
         discountPct: Number(quotation.discountPct ?? 0),
         headerUnits: {
-          capacity: (quotation.headerUnits as Record<string, string>)?.capacity ?? "cfm",
-          pressure: (quotation.headerUnits as Record<string, string>)?.pressure ?? "in-w.g.",
-          motor: (quotation.headerUnits as Record<string, string>)?.motor ?? "HP",
+          capacity: (quotation.headerUnits as Record<string, string>)?.capacity ?? "",
+          pressure: (quotation.headerUnits as Record<string, string>)?.pressure ?? "",
+          motor: (quotation.headerUnits as Record<string, string>)?.motor ?? "",
         },
         classification: {
           category: (quotation.classification as Record<string, string>)?.category ?? "",
