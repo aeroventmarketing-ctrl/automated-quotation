@@ -367,13 +367,10 @@ export function QuotationBuilder({
           blowerModel: cat?.modelCode ?? l.specs.blowerModel,
           inches: cat?.bladeDia ?? l.specs.inches,
           motorHp: r.motorHp,
-          // Direct-drive selections also fix the motor pole (2- or 4-pole band)
-          // and may raise the delivered volume flow above the requested flow.
+          // Direct-drive selections also fix the motor pole (2- or 4-pole band).
+          // The client's requested CFM is kept on the quote; the selection list
+          // shows the higher delivered flow for reference.
           motorPole: r.motorPole ?? l.specs.motorPole,
-          capacity_cfm:
-            r.selectedAirflow_m3hr != null
-              ? Math.round(r.selectedAirflow_m3hr / 1.6990108)
-              : l.specs.capacity_cfm,
         };
         const baseDesc = cat?.description || l.descriptionSnapshot;
         const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
