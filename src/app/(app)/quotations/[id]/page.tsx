@@ -25,20 +25,34 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
     getCurrentUser(),
     prisma.catalogueItem.findMany({
       where: { active: true },
-      select: { id: true, priceList: { where: { variantKey: "default" }, take: 1, select: { basePrice: true } } },
+      select: {
+        id: true,
+        modelCode: true,
+        description: true,
+        specs: true,
+        priceList: { where: { variantKey: "default" }, take: 1, select: { basePrice: true } },
+      },
     }),
   ]);
 
   if (!quotation) notFound();
 
-  const priceMap = Object.fromEntries(
-    catItems.map((i) => [i.id, i.priceList[0] ? Number(i.priceList[0].basePrice) : 0]),
+  const catalog = Object.fromEntries(
+    catItems.map((i) => [
+      i.id,
+      {
+        modelCode: i.modelCode,
+        description: i.description ?? "",
+        basePrice: i.priceList[0] ? Number(i.priceList[0].basePrice) : 0,
+        bladeDia: num((i.specs as Record<string, unknown>)?.bladeDia_in),
+      },
+    ]),
   );
 
   return (
     <QuotationBuilder
       canApprove={canApprove(user)}
-      priceMap={priceMap}
+      catalog={catalog}
       templates={templates.map((t) => ({ id: t.id, name: t.name }))}
       quotation={{
         id: quotation.id,

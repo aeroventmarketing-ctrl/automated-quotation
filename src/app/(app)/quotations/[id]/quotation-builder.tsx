@@ -22,8 +22,16 @@ import {
 } from "@/lib/pricing/motors";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge } from "lucide-react";
 import { PRODUCT_CATEGORIES, typesFor, entryFor } from "@/lib/product-taxonomy";
-import { SelectionTool } from "../../selection/selection-tool";
+import { ConfidenceBadge } from "@/components/status-badge";
+import type { SelectionResult } from "@/lib/selection";
 import { updateQuotationLines, transitionQuotation } from "../actions";
+
+interface CatalogEntry {
+  modelCode: string;
+  description: string;
+  basePrice: number;
+  bladeDia: number | null;
+}
 
 interface LineSpecs {
   itemLabel: string;
@@ -80,16 +88,34 @@ function rewriteModelLine(desc: string, combined: string): string {
   return desc.replace(/(Model:\s*)([^\n]*)/i, `$1${combined}`);
 }
 
+function selSize(r: SelectionResult): number {
+  if (r.sizeLabel) {
+    const n = parseFloat(r.sizeLabel);
+    if (!Number.isNaN(n)) return n;
+  }
+  const m = r.modelCode.match(/(\d{3,5})/);
+  return m ? parseInt(m[1], 10) / 100 : 0;
+}
+
+/** 3 sizes smaller + the recommended (top HIGH) + 3 bigger, in size order. */
+function sizeWindow(results: SelectionResult[]): { rec: SelectionResult; list: SelectionResult[] } | null {
+  if (results.length === 0) return null;
+  const rec = results.find((r) => r.confidence === "HIGH") ?? results[0];
+  const bySize = [...results].sort((a, b) => selSize(a) - selSize(b));
+  const idx = bySize.findIndex((r) => r.modelId === rec.modelId);
+  return { rec, list: bySize.slice(Math.max(0, idx - 3), idx + 4) };
+}
+
 export function QuotationBuilder({
   quotation,
   templates,
   canApprove,
-  priceMap,
+  catalog,
 }: {
   quotation: Quote;
   templates: { id: string; name: string }[];
   canApprove: boolean;
-  priceMap: Record<string, number>;
+  catalog: Record<string, CatalogEntry>;
 }) {
   const router = useRouter();
   const editable = quotation.status === "DRAFT";
@@ -106,7 +132,8 @@ export function QuotationBuilder({
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [showSelector, setShowSelector] = useState(false);
+  // Per-line fan-selector state, keyed by line id.
+  const [sel, setSel] = useState<Record<string, { loading: boolean; error: string | null; results: SelectionResult[] | null }>>({});
 
   const vatRate = config.vatRate;
   const totals = useMemo(() => {
@@ -148,6 +175,60 @@ export function QuotationBuilder({
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
+      }),
+    );
+  }
+
+  // Run the fan selector for a line using its Capacity (CFM) + S.P. (in-w.g.).
+  async function runLineSelection(line: Line) {
+    const cfm = line.specs.capacity_cfm;
+    const sp = line.specs.staticPressure_pa; // stored value is in in-w.g.
+    if (!cfm || !sp) {
+      setSel((s) => ({ ...s, [line.id]: { loading: false, error: "Enter Capacity (CFM) and S.P. (in-w.g.) first.", results: null } }));
+      return;
+    }
+    setSel((s) => ({ ...s, [line.id]: { loading: true, error: null, results: null } }));
+    try {
+      const res = await fetch("/api/selection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requirement: { airflow: cfm, airflowUnit: "cfm", staticPressure: sp, pressureUnit: "inwg" },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Selection failed");
+      setSel((s) => ({ ...s, [line.id]: { loading: false, error: null, results: data.results ?? [] } }));
+    } catch (e) {
+      setSel((s) => ({ ...s, [line.id]: { loading: false, error: e instanceof Error ? e.message : "Selection failed", results: null } }));
+    }
+  }
+
+  // Apply a chosen candidate to a line: fill description, size, body price,
+  // base model and suggested motor HP, then recompute the price/model.
+  function applyCandidate(lineId: string, r: SelectionResult) {
+    const cat = catalog[r.modelId];
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== lineId) return l;
+        const specs: LineSpecs = {
+          ...l.specs,
+          bodyPrice: cat?.basePrice ?? l.specs.bodyPrice,
+          blowerModel: cat?.modelCode ?? l.specs.blowerModel,
+          inches: cat?.bladeDia ?? l.specs.inches,
+          motorHp: r.motorHp,
+        };
+        const baseDesc = cat?.description || l.descriptionSnapshot;
+        const body = specs.bodyPrice ?? 0;
+        const hp = specs.motorHp ?? 0;
+        const phase = specs.motorPh ?? 0;
+        const pole = specs.motorPole ?? 4;
+        const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
+        const net = computeUnitPrice(body, motor?.price ?? 0, hp, phase);
+        const gross = round2(net * (1 + vatRate));
+        const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
+        const combined = combinedModel(specs.blowerModel ?? "", mModel);
+        return { ...l, specs, unitPrice: gross, descriptionSnapshot: rewriteModelLine(baseDesc, combined) };
       }),
     );
   }
@@ -332,21 +413,6 @@ export function QuotationBuilder({
         </CardContent>
       </Card>
 
-      {/* Fan Selector (lookup helper) */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Fan Selector</CardTitle>
-          <Button variant="outline" size="sm" onClick={() => setShowSelector((v) => !v)}>
-            <Gauge className="h-4 w-4" /> {showSelector ? "Hide" : "Open fan selector"}
-          </Button>
-        </CardHeader>
-        {showSelector && (
-          <CardContent>
-            <SelectionTool priceMap={priceMap} />
-          </CardContent>
-        )}
-      </Card>
-
       {/* Line items */}
       <Card>
         <CardHeader><CardTitle>Line items</CardTitle></CardHeader>
@@ -395,6 +461,61 @@ export function QuotationBuilder({
                   </div>
                 ))}
               </div>
+
+              {/* Per-line fan selector — click a candidate to populate this item */}
+              {editable && (
+                <div className="mt-2 rounded-md border border-dashed p-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Fan selector — uses Capacity + S.P. above
+                    </span>
+                    <Button size="sm" variant="outline" onClick={() => runLineSelection(l)} disabled={sel[l.id]?.loading}>
+                      <Gauge className="h-3.5 w-3.5" /> {sel[l.id]?.loading ? "Selecting…" : "Run selection"}
+                    </Button>
+                  </div>
+                  {sel[l.id]?.error && <p className="mt-1 text-xs text-destructive">{sel[l.id]?.error}</p>}
+                  {sel[l.id]?.results?.length === 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">No matching fans for this duty.</p>
+                  )}
+                  {(() => {
+                    const w = sel[l.id]?.results ? sizeWindow(sel[l.id]!.results!) : null;
+                    if (!w) return null;
+                    return (
+                      <div className="mt-2 space-y-1">
+                        {w.list.map((r) => {
+                          const cat = catalog[r.modelId];
+                          const motor = lookupMotor(r.motorHp, 3, 4);
+                          const est = cat?.basePrice ? round2(computeUnitPrice(cat.basePrice, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate)) : 0;
+                          const isRec = r.modelId === w.rec.modelId;
+                          return (
+                            <button
+                              key={r.modelId}
+                              type="button"
+                              onClick={() => applyCandidate(l.id, r)}
+                              className={`w-full rounded-md border p-2 text-left text-xs hover:bg-accent ${isRec ? "border-primary ring-1 ring-primary" : ""}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">
+                                  {r.modelCode}
+                                  {isRec && <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">RECOMMENDED</span>}
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  {est > 0 && <span className="font-medium">≈ {formatCurrency(est, quotation.currency)}</span>}
+                                  <ConfidenceBadge confidence={r.confidence} />
+                                </span>
+                              </div>
+                              <p className="text-muted-foreground">
+                                {r.rpm} rpm · {r.bhp} BHP → {r.motorHp} HP
+                                {r.outletVelocity_fpm != null ? ` · OV ${r.outletVelocity_fpm}/${r.ovLimit_fpm} fpm` : ""}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* Motor + price calculator */}
               <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-6">
