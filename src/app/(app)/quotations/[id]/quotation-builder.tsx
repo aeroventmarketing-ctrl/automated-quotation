@@ -343,6 +343,85 @@ export function QuotationBuilder({
     }
   }
 
+  // Product selection workflow (rendered inside the first line item).
+  const productSelection = (
+    <div className="space-y-1">
+      <Label>Product selection</Label>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <Select
+          value={cls.category}
+          disabled={!editable}
+          onChange={(e) => setCls({ category: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+        >
+          <option value="">Category…</option>
+          {PRODUCT_CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
+        </Select>
+        <Select
+          value={cls.type}
+          disabled={!editable || !cls.category}
+          onChange={(e) => setCls({ ...cls, type: e.target.value, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+        >
+          <option value="">Type…</option>
+          {typesFor(cls.category).map((t) => (<option key={t} value={t}>{t}</option>))}
+        </Select>
+        {cls.category === "Ventilation Accessories" ? (
+          <>
+            <Select
+              value={cls.shape}
+              disabled={!editable || !cls.type}
+              onChange={(e) => setCls({ ...cls, shape: e.target.value })}
+            >
+              <option value="">{variantLabel(cls.type)}…</option>
+              {shapesFor(cls.type).map((s) => (<option key={s} value={s}>{s}</option>))}
+            </Select>
+            {sizeMode(cls.type, cls.shape) === "capacity" ? (
+              <Input className="h-9" type="number" step="any" placeholder="Capacity (kg)"
+                disabled={!editable || !cls.type} value={cls.sizeL}
+                onChange={(e) => setCls({ ...cls, sizeL: e.target.value, sizeW: "" })} />
+            ) : sizeMode(cls.type, cls.shape) === "diameter" ? (
+              <Input className="h-9" type="number" step="any" placeholder="Diameter Ø (mm)"
+                disabled={!editable || !cls.type} value={cls.sizeL}
+                onChange={(e) => setCls({ ...cls, sizeL: e.target.value, sizeW: "" })} />
+            ) : (
+              <>
+                <Input className="h-9" type="number" step="any" placeholder="L (mm)"
+                  disabled={!editable || !cls.type} value={cls.sizeL}
+                  onChange={(e) => setCls({ ...cls, sizeL: e.target.value })} />
+                <Input className="h-9" type="number" step="any" placeholder="W (mm)"
+                  disabled={!editable || !cls.type} value={cls.sizeW}
+                  onChange={(e) => setCls({ ...cls, sizeW: e.target.value })} />
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <Select
+              value={cls.bladeType}
+              disabled={!editable || !cls.type}
+              onChange={(e) => setCls({ ...cls, bladeType: e.target.value })}
+            >
+              <option value="">Blade type…</option>
+              {(entryFor(cls.category, cls.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
+            </Select>
+            <Select
+              value={cls.drive}
+              disabled={!editable || !cls.type}
+              onChange={(e) => setCls({ ...cls, drive: e.target.value })}
+            >
+              <option value="">Drive…</option>
+              {(entryFor(cls.category, cls.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
+            </Select>
+          </>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {cls.category === "Ventilation Accessories"
+          ? "Category · Type · Shape/Mounting · Size — Round = diameter, Square/Rectangle = L × W (mm), isolator = capacity (kg)."
+          : "Product Category · Type · Blade Type · Drive (more details to follow)."}
+      </p>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -463,108 +542,14 @@ export function QuotationBuilder({
       <Card>
         <CardHeader><CardTitle>Line items</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          {/* Product selection workflow: Category → Type → Blade Type → Drive */}
-          <div className="space-y-1 rounded-md border p-3">
-            <Label>Product selection</Label>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <Select
-                value={cls.category}
-                disabled={!editable}
-                onChange={(e) => setCls({ category: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
-              >
-                <option value="">Category…</option>
-                {PRODUCT_CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
-              </Select>
-              <Select
-                value={cls.type}
-                disabled={!editable || !cls.category}
-                onChange={(e) => setCls({ ...cls, type: e.target.value, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
-              >
-                <option value="">Type…</option>
-                {typesFor(cls.category).map((t) => (<option key={t} value={t}>{t}</option>))}
-              </Select>
-              {cls.category === "Ventilation Accessories" ? (
-                <>
-                  <Select
-                    value={cls.shape}
-                    disabled={!editable || !cls.type}
-                    onChange={(e) => setCls({ ...cls, shape: e.target.value })}
-                  >
-                    <option value="">{variantLabel(cls.type)}…</option>
-                    {shapesFor(cls.type).map((s) => (<option key={s} value={s}>{s}</option>))}
-                  </Select>
-                  {sizeMode(cls.type, cls.shape) === "capacity" ? (
-                    <Input
-                      className="h-9"
-                      type="number"
-                      step="any"
-                      placeholder="Capacity (kg)"
-                      disabled={!editable || !cls.type}
-                      value={cls.sizeL}
-                      onChange={(e) => setCls({ ...cls, sizeL: e.target.value, sizeW: "" })}
-                    />
-                  ) : sizeMode(cls.type, cls.shape) === "diameter" ? (
-                    <Input
-                      className="h-9"
-                      type="number"
-                      step="any"
-                      placeholder="Diameter Ø (mm)"
-                      disabled={!editable || !cls.type}
-                      value={cls.sizeL}
-                      onChange={(e) => setCls({ ...cls, sizeL: e.target.value, sizeW: "" })}
-                    />
-                  ) : (
-                    <>
-                      <Input
-                        className="h-9"
-                        type="number"
-                        step="any"
-                        placeholder="L (mm)"
-                        disabled={!editable || !cls.type}
-                        value={cls.sizeL}
-                        onChange={(e) => setCls({ ...cls, sizeL: e.target.value })}
-                      />
-                      <Input
-                        className="h-9"
-                        type="number"
-                        step="any"
-                        placeholder="W (mm)"
-                        disabled={!editable || !cls.type}
-                        value={cls.sizeW}
-                        onChange={(e) => setCls({ ...cls, sizeW: e.target.value })}
-                      />
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Select
-                    value={cls.bladeType}
-                    disabled={!editable || !cls.type}
-                    onChange={(e) => setCls({ ...cls, bladeType: e.target.value })}
-                  >
-                    <option value="">Blade type…</option>
-                    {(entryFor(cls.category, cls.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
-                  </Select>
-                  <Select
-                    value={cls.drive}
-                    disabled={!editable || !cls.type}
-                    onChange={(e) => setCls({ ...cls, drive: e.target.value })}
-                  >
-                    <option value="">Drive…</option>
-                    {(entryFor(cls.category, cls.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
-                  </Select>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {cls.category === "Ventilation Accessories"
-                ? "Category · Type · Shape/Mounting · Size — Round = diameter, Square/Rectangle = L × W (mm), isolator = capacity (kg)."
-                : "Product Category · Type · Blade Type · Drive (more details to follow)."}
-            </p>
-          </div>
           {lines.map((l, idx) => (
             <div key={l.id} className="rounded-lg border p-3">
+              {idx === 0 && (
+                <>
+                  {productSelection}
+                  <div className="my-3 border-t" />
+                </>
+              )}
               {editable && (
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">Item {idx + 1}</span>
