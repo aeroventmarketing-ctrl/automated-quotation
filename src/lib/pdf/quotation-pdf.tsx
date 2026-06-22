@@ -28,7 +28,7 @@ export interface QuotationPdfData {
   quoteNumber: string;
   createdAt: string;
   validUntil: string | null;
-  vatMode: "INCLUSIVE" | "EXCLUSIVE";
+  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
   projectName?: string | null;
   customer: { company: string; contactName?: string | null; address?: string | null };
   preparedBy: string;
@@ -141,7 +141,7 @@ function TableHeader() {
 }
 
 export function QuotationPdf({ data }: { data: QuotationPdfData }) {
-  const exclusive = data.vatMode === "EXCLUSIVE";
+  const exclusive = data.vatMode !== "INCLUSIVE";
   const f = exclusive ? 1 / (1 + data.vatRate) : 1;
   const leftSpan = W.item + W.qty + W.desc + W.cfm + W.pa + W.inch + W.hp + W.ph + W.volts + W.unit;
 

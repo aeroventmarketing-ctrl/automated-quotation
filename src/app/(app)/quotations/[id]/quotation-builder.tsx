@@ -68,7 +68,7 @@ interface Quote {
   quoteNumber: string;
   status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "SENT";
   currency: string;
-  vatMode: "INCLUSIVE" | "EXCLUSIVE";
+  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
   discountPct: number;
   headerUnits: { capacity: string; pressure: string; motor: string };
   projectName: string;
@@ -170,9 +170,14 @@ export function QuotationBuilder({
   const totals = useMemo(() => {
     const gross = lines.reduce((a, l) => a + l.qty * l.unitPrice, 0); // VAT-inclusive
     const net = gross / (1 + vatRate);
-    const displayedNet = vatMode === "EXCLUSIVE" ? net : gross;
+    const exclusive = vatMode !== "INCLUSIVE";
+    const displayedNet = exclusive ? net : gross;
     const discountAmt = displayedNet * (discountPct / 100);
-    return { net, vat: gross - net, gross, displayedNet, discountAmt, finalNet: displayedNet - discountAmt };
+    const finalNet = displayedNet - discountAmt;
+    const addVat = vatMode === "EXCLUSIVE_PLUS";
+    const vatAmt = addVat ? finalNet * vatRate : 0;
+    const grandTotal = finalNet + vatAmt;
+    return { net, vat: gross - net, gross, exclusive, displayedNet, discountAmt, finalNet, addVat, vatAmt, grandTotal };
   }, [lines, vatRate, vatMode, discountPct]);
 
   function updateLine(id: string, patch: Partial<Line>) {
@@ -518,6 +523,7 @@ export function QuotationBuilder({
               <Select value={vatMode} onChange={(e) => setVatMode(e.target.value as never)} disabled={!editable}>
                 <option value="INCLUSIVE">VAT inclusive</option>
                 <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
+                <option value="EXCLUSIVE_PLUS">VAT exclusive (+12%)</option>
               </Select>
             </div>
           </div>
@@ -751,13 +757,19 @@ export function QuotationBuilder({
           <div className="flex justify-end">
             <div className="w-80 space-y-1 text-sm">
               <div className="flex justify-between">
-                <span>NET AMOUNT (VAT {vatMode === "EXCLUSIVE" ? "exclusive" : "inclusive"})</span>
+                <span>NET AMOUNT (VAT {totals.exclusive ? "exclusive" : "inclusive"})</span>
                 <span>{formatCurrency(totals.displayedNet, quotation.currency)}</span>
               </div>
               {discountPct > 0 && (
                 <>
                   <div className="flex justify-between"><span>LESS {discountPct}% DISCOUNT</span><span>{formatCurrency(totals.discountAmt, quotation.currency)}</span></div>
-                  <div className="flex justify-between border-t pt-1 text-base font-bold"><span>NET AMOUNT</span><span>{formatCurrency(totals.finalNet, quotation.currency)}</span></div>
+                  <div className="flex justify-between"><span>NET AMOUNT</span><span>{formatCurrency(totals.finalNet, quotation.currency)}</span></div>
+                </>
+              )}
+              {totals.addVat && (
+                <>
+                  <div className="flex justify-between"><span>ADD 12% VAT</span><span>{formatCurrency(totals.vatAmt, quotation.currency)}</span></div>
+                  <div className="flex justify-between border-t pt-1 text-base font-bold"><span>TOTAL AMOUNT</span><span>{formatCurrency(totals.grandTotal, quotation.currency)}</span></div>
                 </>
               )}
             </div>

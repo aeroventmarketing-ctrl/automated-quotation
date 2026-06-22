@@ -83,7 +83,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       day: "numeric",
     }),
     validUntil: quotation.validUntil ? quotation.validUntil.toISOString().slice(0, 10) : null,
-    vatMode: quotation.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE",
+    vatMode:
+      quotation.vatMode === "EXCLUSIVE"
+        ? "EXCLUSIVE"
+        : quotation.vatMode === "EXCLUSIVE_PLUS"
+        ? "EXCLUSIVE_PLUS"
+        : "INCLUSIVE",
     projectName: quotation.projectName,
     customer: {
       company: quotation.inquiry.customer.company,

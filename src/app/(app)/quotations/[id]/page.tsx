@@ -59,7 +59,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         quoteNumber: quotation.quoteNumber,
         status: quotation.status,
         currency: quotation.currency,
-        vatMode: quotation.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE",
+        vatMode:
+          quotation.vatMode === "EXCLUSIVE"
+            ? "EXCLUSIVE"
+            : quotation.vatMode === "EXCLUSIVE_PLUS"
+            ? "EXCLUSIVE_PLUS"
+            : "INCLUSIVE",
         discountPct: Number(quotation.discountPct ?? 0),
         headerUnits: {
           capacity: (quotation.headerUnits as Record<string, string>)?.capacity ?? "",
