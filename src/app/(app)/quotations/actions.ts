@@ -77,7 +77,7 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
         status: "DRAFT",
         vatMode: data.vatMode,
         discountPct: data.discountPct,
-        headerUnits: (data.headerUnits ?? { capacity: "cfm", pressure: "in-w.g.", motor: "Hp" }) as object,
+        headerUnits: (data.headerUnits ?? { capacity: "cfm", pressure: "in-w.g.", motor: "HP" }) as object,
         projectName: data.projectName,
         subtotal: totals.subtotal,
         vat: totals.vat,

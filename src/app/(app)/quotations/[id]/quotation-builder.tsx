@@ -91,7 +91,7 @@ function rewriteModelLine(desc: string, combined: string): string {
 /** Unit options for the quote table headers (from the English & Metric chart). */
 const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "l/s", "l/min"];
 const PRESSURE_UNITS = ["in-w.g.", "mm-w.g.", "Pa", "in-Hg", "mm-Hg", "psi", "atm"];
-const POWER_UNITS = ["Hp", "kW", "W"];
+const POWER_UNITS = ["HP", "kW", "W"];
 
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {

@@ -36,7 +36,7 @@ export interface XlsxData {
   // Variable (red) unit labels for the table header.
   capacityUnit?: string; // default "cfm"
   pressureUnit?: string; // default "in-w.g."
-  motorUnit?: string; // default "Hp"
+  motorUnit?: string; // default "HP"
   preparedBy: string;
   preparedByTitle?: string; // default "Marketing Representative"
   specNote?: string | null;
@@ -173,7 +173,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   hsetRed(`I${H3}`, data.capacityUnit || "cfm");
   hsetRed(`J${H3}`, data.pressureUnit || "in-w.g.");
   hset(`K${H3}`, "Inches");
-  hsetRed(`L${H3}`, data.motorUnit || "Hp");
+  hsetRed(`L${H3}`, data.motorUnit || "HP");
   hset(`M${H3}`, "Ph");
   hset(`N${H3}`, "Volts");
   [ws.getRow(H1), ws.getRow(HM), ws.getRow(H3)].forEach((r) => (r.height = 13));
