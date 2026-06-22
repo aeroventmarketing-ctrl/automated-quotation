@@ -245,16 +245,9 @@ export function QuotationBuilder({
       <Card>
         <CardHeader><CardTitle>Quotation header</CardTitle></CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-1 md:col-span-2">
+          <div className="space-y-1 md:col-span-3">
             <Label>Project</Label>
             <Input value={projectName} onChange={(e) => setProjectName(e.target.value)} disabled={!editable} placeholder="e.g. DG Engineering & Construction Services" />
-          </div>
-          <div className="space-y-1">
-            <Label>VAT presentation</Label>
-            <Select value={vatMode} onChange={(e) => setVatMode(e.target.value as never)} disabled={!editable}>
-              <option value="INCLUSIVE">VAT inclusive</option>
-              <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
-            </Select>
           </div>
           {/* Product selection workflow: Category → Type → Blade Type → Drive */}
           <div className="space-y-1 md:col-span-3">
@@ -295,10 +288,20 @@ export function QuotationBuilder({
             </div>
             <p className="text-xs text-muted-foreground">Product Category · Type · Blade Type · Drive (more details to follow).</p>
           </div>
-          <div className="space-y-1">
-            <Label>Discount %</Label>
-            <Input type="number" step="0.01" min={0} max={100} value={discountPct} disabled={!editable}
-              onChange={(e) => setDiscountPct(Number(e.target.value) || 0)} />
+          {/* Discount (left) and VAT presentation (right), inline */}
+          <div className="grid gap-4 md:col-span-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label>Discount %</Label>
+              <Input type="number" step="0.01" min={0} max={100} value={discountPct} disabled={!editable}
+                onChange={(e) => setDiscountPct(Number(e.target.value) || 0)} />
+            </div>
+            <div className="space-y-1">
+              <Label>VAT presentation</Label>
+              <Select value={vatMode} onChange={(e) => setVatMode(e.target.value as never)} disabled={!editable}>
+                <option value="INCLUSIVE">VAT inclusive</option>
+                <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
+              </Select>
+            </div>
           </div>
           <div className="space-y-1 md:col-span-3">
             <Label>Table unit labels (red, editable per client)</Label>
