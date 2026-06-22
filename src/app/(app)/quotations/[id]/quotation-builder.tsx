@@ -104,13 +104,16 @@ function effectiveBlowerModel(model: string | null, drive: string): string {
   return /direct/i.test(drive) ? `${model}DD` : model;
 }
 /**
- * Reflect the drive in the description: the standard text reads "Belt Driven",
- * so a direct-drive selection flips it to "Direct Driven" (and back).
+ * Reflect the drive in the description as "Belt Drive" / "Direct Drive". When a
+ * drive is chosen the word is flipped to match; otherwise the existing Belt or
+ * Direct word is kept and only "Driven" is normalised to "Drive".
  */
 function rewriteDriveLine(desc: string, drive: string): string {
-  if (!drive) return desc;
-  const word = /direct/i.test(drive) ? "Direct" : "Belt";
-  return desc.replace(/\b(?:Belt|Direct) Driven\b/gi, `${word} Driven`);
+  if (drive) {
+    const word = /direct/i.test(drive) ? "Direct" : "Belt";
+    return desc.replace(/\b(?:Belt|Direct) Driven?\b/gi, `${word} Drive`);
+  }
+  return desc.replace(/\b(Belt|Direct) Driven?\b/gi, "$1 Drive");
 }
 /** Material phrase for the description (drops a redundant trailing "material"). */
 function materialPhrase(material: string): string {
