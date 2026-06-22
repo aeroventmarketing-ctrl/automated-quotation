@@ -44,13 +44,14 @@ export function outletVelocityLimit(wheelDia_in: number | null): number {
 }
 
 /**
- * Direct-drive (CEBDD) speed bands. A direct-drive fan turns at the motor speed,
- * so a valid selection must operate within one of these RPM windows; the motor
- * pole and the outlet-velocity limit follow from the band.
+ * Direct-drive (CEBDD) speed bands. A direct-drive fan turns at the motor speed;
+ * selection meets the static pressure at a band's nominal speed (4-pole first,
+ * then 2-pole) and raises the delivered flow as needed. Outlet velocity is
+ * disregarded for CEBDD.
  */
 export const DIRECT_DRIVE_BANDS = [
-  { pole: 4, minRpm: 1662, maxRpm: 1842, ovLimit: 3000 },
-  { pole: 2, minRpm: 3325, maxRpm: 3684, ovLimit: 4000 },
+  { pole: 4, minRpm: 1662, maxRpm: 1842 },
+  { pole: 2, minRpm: 3325, maxRpm: 3684 },
 ] as const;
 
 // Standard induction-motor sizes (kW) used for motor sizing after service factor.
@@ -111,6 +112,8 @@ export interface SelectionResult {
   referenceRpm: number;
   speedRatio: number;
   dutyAirflow_m3hr: number;
+  /** Direct-drive delivered flow (m³/hr) at the required SP; may exceed the requested flow. Null for belt. */
+  selectedAirflow_m3hr: number | null;
   dutyStaticPressure_pa: number;
   /** Static pressure used internally for selection (density-corrected to standard air). */
   selectionStaticPressure_pa: number;
@@ -313,6 +316,63 @@ function interpolateGrid(
 // Core selection
 // ---------------------------------------------------------------------------
 
+/**
+ * Reference-curve airflow where static pressure == target. The curve is sorted
+ * by airflow ascending (pressure descending). Returns null if the target
+ * pressure exceeds the curve's shutoff pressure (cannot be developed here).
+ */
+function airflowAtPressure(curve: RatingPoint[], targetSp: number): number | null {
+  if (targetSp > curve[0].staticPressure_pa) return null;
+  for (let i = 0; i < curve.length - 1; i++) {
+    const a = curve[i];
+    const b = curve[i + 1];
+    if (targetSp <= a.staticPressure_pa && targetSp >= b.staticPressure_pa) {
+      const span = a.staticPressure_pa - b.staticPressure_pa;
+      const t = span === 0 ? 0 : (a.staticPressure_pa - targetSp) / span;
+      return a.airflow_m3hr + (b.airflow_m3hr - a.airflow_m3hr) * t;
+    }
+  }
+  return curve[curve.length - 1].airflow_m3hr; // below curve's min SP -> max rated flow
+}
+
+interface DirectDriveResult {
+  rpm: number;
+  pole: number;
+  qRef: number; // airflow on the reference curve at the required SP
+  deliveredFlow_m3hr: number;
+  withinEnvelope: boolean;
+}
+
+/**
+ * Direct-drive (CEBDD) operating point. Prioritise static pressure and motor
+ * pole: try the 4-pole band first, then 2-pole; at the band's nominal speed find
+ * the flow that develops the required SP, accepting a delivered flow at or above
+ * the requested flow ("increase volume flow when needed"). Outlet velocity is
+ * disregarded. Returns null if no band can develop the SP at the required flow.
+ */
+function selectDirectDrive(
+  curve: RatingPoint[],
+  referenceRpm: number,
+  selectionPressure: number,
+  requestedFlow_m3hr: number,
+): DirectDriveResult | null {
+  for (const band of DIRECT_DRIVE_BANDS) {
+    const rpm = Math.round((band.minRpm + band.maxRpm) / 2);
+    const ratio = rpm / referenceRpm;
+    const refSp = selectionPressure / (ratio * ratio);
+    const qRef = airflowAtPressure(curve, refSp);
+    if (qRef == null) continue; // can't develop this SP at this speed -> higher pole
+    const deliveredFlow = qRef * ratio;
+    if (deliveredFlow < requestedFlow_m3hr - 1) continue; // would under-deliver -> higher pole
+    const within =
+      refSp <= curve[0].staticPressure_pa &&
+      refSp >= curve[curve.length - 1].staticPressure_pa &&
+      qRef <= curve[curve.length - 1].airflow_m3hr + 1;
+    return { rpm, pole: band.pole, qRef, deliveredFlow_m3hr: deliveredFlow, withinEnvelope: within };
+  }
+  return null;
+}
+
 export function selectFan(
   model: FanModelInput,
   duty: DutyPoint,
@@ -353,10 +413,37 @@ export function selectFan(
   let speedRatio: number;
   let dutyPowerStd: number; // absorbed power (kW) at standard density
   let efficiency: number | null = null;
+  let motorPole: number | null = null;
+  let selectedAirflow_m3hr: number | null = null;
+  let usedGrid = false;
+
+  if (options.directDrive) {
+    // --- Direct-drive (CEBDD): fix speed to a pole band, meet the static
+    // pressure, and let the delivered volume flow rise above the requested
+    // flow when needed. Outlet velocity is disregarded. ---------------------
+    const dd = selectDirectDrive(curve, referenceRpm, selectionPressure, duty.airflow_m3hr);
+    if (!dd) return null;
+    rpm = dd.rpm;
+    motorPole = dd.pole;
+    selectedAirflow_m3hr = Math.round(dd.deliveredFlow_m3hr);
+    speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
+    const refPowerAtQ =
+      interpAtAirflow(curve, dd.qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
+    dutyPowerStd = refPowerAtQ * Math.pow(rpm / referenceRpm, 3);
+    efficiency = interpAtAirflow(curve, dd.qRef, "efficiency");
+    withinEnvelope = dd.withinEnvelope;
+    extrapolated = !dd.withinEnvelope;
+    if (dd.deliveredFlow_m3hr > duty.airflow_m3hr * 1.001) {
+      warnings.push(
+        `Delivers ~${Math.round(dd.deliveredFlow_m3hr * CFM_PER_M3HR)} cfm at the required static pressure (above the requested flow) at ${rpm} rpm, ${dd.pole}-pole.`,
+      );
+    }
+  } else {
 
   // --- Preferred path: direct interpolation on the CFM×SP rating grid ------
   const grid = interpolateGrid(model.ratingPoints, duty.airflow_m3hr, selectionPressure);
   if (grid) {
+    usedGrid = true;
     rpm = grid.rpm;
     dutyPowerStd = hpToKw(grid.bhp);
     withinEnvelope = grid.withinEnvelope;
@@ -408,6 +495,7 @@ export function selectFan(
     dutyPowerStd = refPowerAtQ * Math.pow(speedRatio, 3);
     efficiency = interpAtAirflow(curve, qRef, "efficiency");
   }
+  } // end belt-drive path
 
   // Correct absorbed power for actual gas density.
   const dutyPower = dutyPowerStd * (density / STANDARD_AIR_DENSITY);
@@ -424,66 +512,57 @@ export function selectFan(
   const outletArea = num(model.specs?.outletArea_ft2);
   const wheelDia =
     num(model.specs?.bladeDia_in) ?? num(model.specs?.wheelDia_in);
-  const dutyCfm = duty.airflow_m3hr * CFM_PER_M3HR;
+  // Outlet velocity reflects the actual delivered flow (direct drive may raise it).
+  const flowCfm = (selectedAirflow_m3hr ?? duty.airflow_m3hr) * CFM_PER_M3HR;
   let outletVelocity_fpm: number | null = null;
   let ovLimit_fpm: number | null = null;
   let ovWithinLimit: boolean | null = null;
   if (outletArea && outletArea > 0) {
-    outletVelocity_fpm = Math.round(dutyCfm / outletArea);
-    ovLimit_fpm = outletVelocityLimit(wheelDia);
-    ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
-    if (!ovWithinLimit) {
-      warnings.push(
-        `Outlet velocity ${outletVelocity_fpm} fpm exceeds the ${ovLimit_fpm} fpm limit — fan is undersized for this airflow.`,
-      );
+    outletVelocity_fpm = Math.round(flowCfm / outletArea);
+    // CEBDD disregards the outlet-velocity limit — OV is reported for info only.
+    if (!options.directDrive) {
+      ovLimit_fpm = outletVelocityLimit(wheelDia);
+      ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
+      if (!ovWithinLimit) {
+        warnings.push(
+          `Outlet velocity ${outletVelocity_fpm} fpm exceeds the ${ovLimit_fpm} fpm limit — fan is undersized for this airflow.`,
+        );
+      }
     }
   }
 
   // --- Maximum-RPM check --------------------------------------------------
   const maxRpm = num(model.specs?.maxRpm) ?? num(model.specs?.maxRpmClassI);
   const rpmWithinMax = maxRpm == null ? true : rpm <= maxRpm;
+  // A direct-drive fan that cannot physically spin at the band speed is excluded.
+  if (options.directDrive && !rpmWithinMax) return null;
   if (!rpmWithinMax) {
     warnings.push(`Required speed ${rpm} rpm exceeds the rated max ${maxRpm} rpm.`);
-  } else if (rpm > 1200) {
+  } else if (rpm > 1200 && !options.directDrive) {
     warnings.push(`Speed ${rpm} rpm is above the recommended ~1200 rpm.`);
-  }
-
-  // --- Direct-drive band rule (CEBDD) -------------------------------------
-  // The fan turns at the motor speed, so the operating speed must fall in a
-  // 2- or 4-pole band, within the fan's max rpm and the band's outlet-velocity
-  // limit, and inside the rated envelope. Anything else is not a valid
-  // direct-drive selection and is excluded.
-  let motorPole: number | null = null;
-  if (options.directDrive) {
-    const band = DIRECT_DRIVE_BANDS.find((b) => rpm >= b.minRpm && rpm <= b.maxRpm);
-    if (!band || !rpmWithinMax || !withinEnvelope) return null;
-    motorPole = band.pole;
-    ovLimit_fpm = band.ovLimit;
-    if (outletVelocity_fpm != null) {
-      ovWithinLimit = outletVelocity_fpm <= band.ovLimit;
-      if (!ovWithinLimit) return null;
-    }
   }
 
   // --- Confidence scoring -------------------------------------------------
   let confidence: Confidence;
-  if (extrapolated || !withinEnvelope) {
+  if (options.directDrive) {
+    // Direct-drive picks run at a standard pole speed by design; confidence
+    // depends only on whether the operating point is inside the rated curve.
+    confidence = withinEnvelope ? "HIGH" : "LOW";
+  } else if (extrapolated || !withinEnvelope) {
     confidence = "LOW";
-  } else if (grid) {
+  } else if (usedGrid) {
     confidence = "HIGH"; // direct grid interpolation is accurate within the envelope
   } else if (speedRatio >= 0.85 && speedRatio <= 1.08) {
     confidence = "HIGH";
   } else {
     confidence = "MEDIUM";
   }
-  // AFBM constraints: undersized (OV over limit) or over-speed is never a good pick;
-  // above the recommended ~1200 rpm drops a HIGH pick to MEDIUM.
-  if (ovWithinLimit === false || !rpmWithinMax) confidence = "LOW";
-  else if (confidence === "HIGH" && rpm > 1200) confidence = "MEDIUM";
-  // A direct-drive pick that survived the band/OV/max-rpm filter runs at a
-  // standard motor speed by design, so it stays high-confidence despite the
-  // >1200 rpm note above.
-  if (options.directDrive && withinEnvelope) confidence = "HIGH";
+  // AFBM constraints (belt drive): undersized (OV over limit) or over-speed is
+  // never a good pick; above the recommended ~1200 rpm drops HIGH to MEDIUM.
+  if (!options.directDrive) {
+    if (ovWithinLimit === false || !rpmWithinMax) confidence = "LOW";
+    else if (confidence === "HIGH" && rpm > 1200) confidence = "MEDIUM";
+  }
 
   const requiresEngineerConfirmation =
     confidence === "LOW" || !withinEnvelope || ovWithinLimit === false || !rpmWithinMax;
@@ -511,6 +590,7 @@ export function selectFan(
     referenceRpm,
     speedRatio: Math.round(speedRatio * 1000) / 1000,
     dutyAirflow_m3hr: duty.airflow_m3hr,
+    selectedAirflow_m3hr,
     dutyStaticPressure_pa: duty.staticPressure_pa,
     selectionStaticPressure_pa: Math.round(selectionPressure * 100) / 100,
     power_kw: Math.round(dutyPower * 1000) / 1000,
@@ -581,6 +661,12 @@ export function selectFans(
     if (aOv !== bOv) return aOv - bOv;
     if (rank[a.confidence] !== rank[b.confidence])
       return rank[a.confidence] - rank[b.confidence];
+    // Direct drive: prefer the tightest delivered flow (least increase over the request).
+    if (a.selectedAirflow_m3hr != null && b.selectedAirflow_m3hr != null) {
+      const aInc = a.selectedAirflow_m3hr - a.dutyAirflow_m3hr;
+      const bInc = b.selectedAirflow_m3hr - b.dutyAirflow_m3hr;
+      if (Math.abs(aInc - bInc) > 1) return aInc - bInc;
+    }
     const effA = a.efficiency ?? 0;
     const effB = b.efficiency ?? 0;
     if (Math.abs(effA - effB) > 0.005) return effB - effA;
