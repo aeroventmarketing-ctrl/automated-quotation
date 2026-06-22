@@ -21,6 +21,8 @@ const bodySchema = z.object({
   // Optionally restrict to specific catalogue models or a family.
   catalogueItemIds: z.array(z.string()).optional(),
   family: z.string().optional(),
+  // Direct-drive (CEBDD) selection: constrain to standard 2-/4-pole speed bands.
+  directDrive: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -81,6 +83,6 @@ export async function POST(req: NextRequest) {
     })),
   }));
 
-  const results = selectFans(inputs, duty);
+  const results = selectFans(inputs, duty, { directDrive: body.directDrive });
   return NextResponse.json({ duty, sourceUnits, results });
 }

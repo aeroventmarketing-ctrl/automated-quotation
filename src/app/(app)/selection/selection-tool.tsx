@@ -27,6 +27,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
   const [airflowUnit, setAirflowUnit] = useState("cfm");
   const [pressure, setPressure] = useState("");
   const [pressureUnit, setPressureUnit] = useState("inwg");
+  const [drive, setDrive] = useState("belt");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<SelectionResult[] | null>(null);
@@ -51,6 +52,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
             staticPressure: Number(pressure),
             pressureUnit,
           },
+          directDrive: drive === "direct",
         }),
       });
       const data = await res.json();
@@ -90,6 +92,13 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               <option value="pa">Pa</option>
             </Select>
           </div>
+          <div className="space-y-1">
+            <Label>Drive</Label>
+            <Select className="w-32" value={drive} onChange={(e) => setDrive(e.target.value)}>
+              <option value="belt">Belt</option>
+              <option value="direct">Direct (CEBDD)</option>
+            </Select>
+          </div>
           <Button onClick={run} disabled={busy}>{busy ? "Selecting…" : "Run selection"}</Button>
         </CardContent>
       </Card>
@@ -103,7 +112,11 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
       )}
 
       {results && results.length === 0 && (
-        <p className="text-sm text-muted-foreground">No rated models match this duty.</p>
+        <p className="text-sm text-muted-foreground">
+          {drive === "direct"
+            ? "No model meets this duty at a standard 2- or 4-pole direct-drive speed."
+            : "No rated models match this duty."}
+        </p>
       )}
 
       {results && results.length > 0 && (() => {
@@ -120,7 +133,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
             </p>
             {windowed.map((sel) => {
               const body = priceMap[sel.modelId] ?? 0;
-              const motor = lookupMotor(sel.motorHp, 3, 4);
+              const motor = lookupMotor(sel.motorHp, 3, sel.motorPole ?? 4);
               const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
               const isRec = sel.modelId === recommended.modelId;
               return (
@@ -143,7 +156,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {sel.rpm} rpm · {sel.bhp} BHP → {sel.motorHp} HP motor
+                    {sel.rpm} rpm · {sel.bhp} BHP → {sel.motorHp} HP{sel.motorPole ? ` ${sel.motorPole}-pole` : ""} motor
                     {sel.outletVelocity_fpm != null ? ` · OV ${sel.outletVelocity_fpm}/${sel.ovLimit_fpm} fpm` : ""}
                   </p>
                   {sel.warnings.length > 0 && (

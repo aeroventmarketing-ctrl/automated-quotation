@@ -342,6 +342,8 @@ export function QuotationBuilder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requirement: { airflow: cfm, airflowUnit: "cfm", staticPressure: sp, pressureUnit: "inwg" },
+          // Direct-drive lines constrain selection to standard 2-/4-pole speed bands.
+          directDrive: /direct/i.test(line.specs.drive),
         }),
       });
       const data = await res.json();
@@ -365,6 +367,8 @@ export function QuotationBuilder({
           blowerModel: cat?.modelCode ?? l.specs.blowerModel,
           inches: cat?.bladeDia ?? l.specs.inches,
           motorHp: r.motorHp,
+          // Direct-drive selections also fix the motor pole (2- or 4-pole band).
+          motorPole: r.motorPole ?? l.specs.motorPole,
         };
         const baseDesc = cat?.description || l.descriptionSnapshot;
         const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
@@ -715,7 +719,7 @@ export function QuotationBuilder({
                       <div className="mt-2 space-y-1">
                         {w.list.map((r) => {
                           const cat = catalog[r.modelId];
-                          const motor = lookupMotor(r.motorHp, 3, 4);
+                          const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
                           const est = cat?.basePrice ? round2(computeUnitPrice(cat.basePrice, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate)) : 0;
                           const isRec = r.modelId === w.rec.modelId;
                           return (
@@ -736,7 +740,7 @@ export function QuotationBuilder({
                                 </span>
                               </div>
                               <p className="text-muted-foreground">
-                                {r.rpm} rpm · {r.bhp} BHP → {r.motorHp} HP
+                                {r.rpm} rpm · {r.bhp} BHP → {r.motorHp} HP{r.motorPole ? ` ${r.motorPole}-pole` : ""}
                                 {r.outletVelocity_fpm != null ? ` · OV ${r.outletVelocity_fpm}/${r.ovLimit_fpm} fpm` : ""}
                               </p>
                             </button>

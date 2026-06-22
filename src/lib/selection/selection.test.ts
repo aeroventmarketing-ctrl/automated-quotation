@@ -152,6 +152,40 @@ describe("selectFan — insufficient data", () => {
   });
 });
 
+describe("selectFan — direct drive (CEBDD) band rule", () => {
+  // A fan whose duty (2000 m³/hr @ 350 Pa) needs ~1750 rpm (4-pole band) when its
+  // reference curve is taken at 1750 rpm, with a generous outlet for OV.
+  const dd: FanModelInput = {
+    id: "dd",
+    modelCode: "AVDDCEB",
+    name: "Direct Drive",
+    specs: { outletArea_ft2: 5, bladeDia_in: 24, maxRpm: 4000 },
+    ratingPoints: model.ratingPoints.map((p) => ({ ...p, rpm: 1750 })),
+  };
+
+  it("selects a 4-pole motor when the operating speed lands in the 1662–1842 band", () => {
+    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 350 }, { directDrive: true })!;
+    expect(r).not.toBeNull();
+    expect(r.rpm).toBeGreaterThanOrEqual(1662);
+    expect(r.rpm).toBeLessThanOrEqual(1842);
+    expect(r.motorPole).toBe(4);
+    expect(r.ovLimit_fpm).toBe(3000);
+    expect(r.confidence).toBe("HIGH");
+  });
+
+  it("excludes a size whose speed falls between the bands", () => {
+    // Higher pressure pushes the required speed above the 4-pole band but below 2-pole.
+    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 620 }, { directDrive: true });
+    expect(r).toBeNull();
+  });
+
+  it("belt drive (no flag) keeps a null pole and is not band-constrained", () => {
+    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 620 })!;
+    expect(r).not.toBeNull();
+    expect(r.motorPole).toBeNull();
+  });
+});
+
 describe("selectFans — ranking", () => {
   it("ranks HIGH-confidence candidates before LOW-confidence ones", () => {
     const big: FanModelInput = {
