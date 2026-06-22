@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Inbox, FileText, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Inbox, FileText, Gauge, Settings, LogOut } from "lucide-react";
 import type { Role } from "@prisma/client";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/inquiries", label: "Inquiries", icon: Inbox, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/quotations", label: "Quotations", icon: FileText, roles: ["SALES", "ENGINEER", "ADMIN"] },
+  { href: "/selection", label: "Fan Selector", icon: Gauge, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/admin", label: "Admin", icon: Settings, roles: ["ADMIN"] },
 ] as const;
 
