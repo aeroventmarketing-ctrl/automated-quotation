@@ -30,7 +30,7 @@ export interface XlsxData {
   dateStr: string;
   projectName?: string | null;
   customerName: string;
-  vatMode: "INCLUSIVE" | "EXCLUSIVE";
+  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
   discountPct: number; // e.g. 3 for 3%
   vatRate: number;
   // Variable (red) unit labels for the table header.
@@ -181,7 +181,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ["L", "M", "N"].forEach((c) => (ws.getCell(`${c}${H3}`).border = allBorders));
 
   // --- Data rows ------------------------------------------------------------
-  const f = data.vatMode === "EXCLUSIVE" ? 1 / (1 + data.vatRate) : 1;
+  const f = data.vatMode !== "INCLUSIVE" ? 1 / (1 + data.vatRate) : 1;
   let r = H3 + 1;
   const dash = (v: number | string | null | undefined) =>
     v === null || v === undefined || v === 0 || v === "" ? "--" : v;
@@ -227,7 +227,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const discountAmt = money(displayedNet * (data.discountPct / 100));
   const finalNet = money(displayedNet - discountAmt);
   const netLabel =
-    data.vatMode === "EXCLUSIVE"
+    data.vatMode !== "INCLUSIVE"
       ? "NET AMOUNT (VAT exclusive price) =>"
       : "NET AMOUNT (VAT inclusive price) =>";
 
@@ -254,6 +254,11 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   if (data.discountPct > 0) {
     totalRow(`LESS ${data.discountPct}% DISCOUNT`, discountAmt, "BLACK");
     totalRow("NET AMOUNT", finalNet, "BLACK");
+  }
+  if (data.vatMode === "EXCLUSIVE_PLUS") {
+    const vat = money(finalNet * data.vatRate);
+    totalRow(`ADD ${Math.round(data.vatRate * 100)}% VAT`, vat, "BLACK");
+    totalRow("TOTAL AMOUNT", money(finalNet + vat), "BLACK");
   }
 
   // --- Note -----------------------------------------------------------------

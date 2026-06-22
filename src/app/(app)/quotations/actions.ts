@@ -21,7 +21,7 @@ const createSchema = z.object({
   inquiryId: z.string(),
   templateId: z.string().optional(),
   projectName: z.string().optional(),
-  vatMode: z.enum(["INCLUSIVE", "EXCLUSIVE"]).default("INCLUSIVE"),
+  vatMode: z.enum(["INCLUSIVE", "EXCLUSIVE", "EXCLUSIVE_PLUS"]).default("INCLUSIVE"),
   discountPct: z.number().min(0).max(100).default(0),
   headerUnits: z.record(z.string()).optional(),
   lines: z.array(lineSchema).min(1),
@@ -129,7 +129,7 @@ export async function updateQuotationLines(
     terms?: string;
     validUntil?: string;
     projectName?: string;
-    vatMode?: "INCLUSIVE" | "EXCLUSIVE";
+    vatMode?: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
     discountPct?: number;
     headerUnits?: Record<string, string>;
     classification?: Record<string, string>;

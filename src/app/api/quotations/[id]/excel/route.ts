@@ -52,7 +52,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     dateStr: q.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     projectName: q.projectName,
     customerName: q.inquiry.customer.contactName || q.inquiry.customer.company,
-    vatMode: q.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE",
+    vatMode:
+      q.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : q.vatMode === "EXCLUSIVE_PLUS" ? "EXCLUSIVE_PLUS" : "INCLUSIVE",
     discountPct: Number(q.discountPct ?? 0),
     vatRate: config.vatRate,
     capacityUnit: typeof units.capacity === "string" ? units.capacity : "cfm",
