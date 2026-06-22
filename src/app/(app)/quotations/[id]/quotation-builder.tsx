@@ -88,11 +88,24 @@ function rewriteModelLine(desc: string, combined: string): string {
   return desc.replace(/(Model:\s*)([^\n]*)/i, `$1${combined}`);
 }
 
-/** Shape options for a Ventilation Accessory type. */
+/** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
-  if (type === "Jet Nozzle Diffuser") return ["Round"];
+  if (type === "Jet Nozzle Diffuser" || type === "Vent Cap" || type === "Wind Driven Roof Ventilator") return ["Round"];
+  if (type === "Spring Vibration Isolator") return ["Foot Mounted", "Ceiling Mounted"];
   return ["Round", "Square"];
+}
+
+/** Label for the variant dropdown (mounting for isolators, otherwise shape). */
+function variantLabel(type: string): string {
+  return type === "Spring Vibration Isolator" ? "Mounting" : "Shape";
+}
+
+/** What the size field(s) mean for this accessory. */
+function sizeMode(type: string, shape: string): "capacity" | "diameter" | "lw" {
+  if (type === "Spring Vibration Isolator") return "capacity";
+  if (shape === "Round") return "diameter";
+  return "lw";
 }
 
 function selSize(r: SelectionResult): number {
@@ -414,10 +427,20 @@ export function QuotationBuilder({
                     disabled={!editable || !cls.type}
                     onChange={(e) => setCls({ ...cls, shape: e.target.value })}
                   >
-                    <option value="">Shape…</option>
+                    <option value="">{variantLabel(cls.type)}…</option>
                     {shapesFor(cls.type).map((s) => (<option key={s} value={s}>{s}</option>))}
                   </Select>
-                  {cls.shape === "Round" ? (
+                  {sizeMode(cls.type, cls.shape) === "capacity" ? (
+                    <Input
+                      className="h-9"
+                      type="number"
+                      step="any"
+                      placeholder="Capacity (kg)"
+                      disabled={!editable || !cls.type}
+                      value={cls.sizeL}
+                      onChange={(e) => setCls({ ...cls, sizeL: e.target.value, sizeW: "" })}
+                    />
+                  ) : sizeMode(cls.type, cls.shape) === "diameter" ? (
                     <Input
                       className="h-9"
                       type="number"
@@ -473,7 +496,7 @@ export function QuotationBuilder({
             </div>
             <p className="text-xs text-muted-foreground">
               {cls.category === "Ventilation Accessories"
-                ? "Category · Type · Shape · Size in mm (Round = diameter, Square/Rectangle = L × W)."
+                ? "Category · Type · Shape/Mounting · Size — Round = diameter, Square/Rectangle = L × W (mm), isolator = capacity (kg)."
                 : "Product Category · Type · Blade Type · Drive (more details to follow)."}
             </p>
           </div>
