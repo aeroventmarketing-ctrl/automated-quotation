@@ -20,8 +20,9 @@ import {
   dynamicBalancingApplies,
   type Voltage,
 } from "@/lib/pricing/motors";
-import { Download, Send, Check, CornerUpLeft, Trash2 } from "lucide-react";
+import { Download, Send, Check, CornerUpLeft, Trash2, Gauge } from "lucide-react";
 import { PRODUCT_CATEGORIES, typesFor, entryFor } from "@/lib/product-taxonomy";
+import { SelectionTool } from "../../selection/selection-tool";
 import { updateQuotationLines, transitionQuotation } from "../actions";
 
 interface LineSpecs {
@@ -83,10 +84,12 @@ export function QuotationBuilder({
   quotation,
   templates,
   canApprove,
+  priceMap,
 }: {
   quotation: Quote;
   templates: { id: string; name: string }[];
   canApprove: boolean;
+  priceMap: Record<string, number>;
 }) {
   const router = useRouter();
   const editable = quotation.status === "DRAFT";
@@ -103,6 +106,7 @@ export function QuotationBuilder({
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [showSelector, setShowSelector] = useState(false);
 
   const vatRate = config.vatRate;
   const totals = useMemo(() => {
@@ -326,6 +330,21 @@ export function QuotationBuilder({
             <Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} disabled={!editable} />
           </div>
         </CardContent>
+      </Card>
+
+      {/* Fan Selector (lookup helper) */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle>Fan Selector</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => setShowSelector((v) => !v)}>
+            <Gauge className="h-4 w-4" /> {showSelector ? "Hide" : "Open fan selector"}
+          </Button>
+        </CardHeader>
+        {showSelector && (
+          <CardContent>
+            <SelectionTool priceMap={priceMap} />
+          </CardContent>
+        )}
       </Card>
 
       {/* Line items */}
