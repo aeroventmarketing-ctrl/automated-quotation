@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { InquiryStatusBadge } from "@/components/status-badge";
-import { formatDate } from "@/lib/utils";
+import { InquiryRow } from "./inquiry-row";
 import type { InquiryStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +29,7 @@ export default async function DashboardPage() {
     InquiryStatus,
     number
   >;
+  const admin = isAdmin(user);
 
   return (
     <div className="space-y-6">
@@ -73,19 +73,18 @@ export default async function DashboardPage() {
             <p className="text-sm text-muted-foreground">No inquiries yet. Create one to get started.</p>
           )}
           {recentInquiries.map((inq) => (
-            <Link
+            <InquiryRow
               key={inq.id}
-              href={`/inquiries/${inq.id}`}
-              className="flex items-center justify-between rounded-md border p-3 hover:bg-accent"
-            >
-              <div>
-                <div className="font-medium">{inq.customer.company}</div>
-                <div className="text-xs text-muted-foreground">
-                  {inq._count.items} item(s) · {inq.source} · {formatDate(inq.createdAt)}
-                </div>
-              </div>
-              <InquiryStatusBadge status={inq.status} />
-            </Link>
+              isAdmin={admin}
+              inq={{
+                id: inq.id,
+                company: inq.customer.company,
+                itemCount: inq._count.items,
+                source: inq.source,
+                createdAt: inq.createdAt.toISOString(),
+                status: inq.status,
+              }}
+            />
           ))}
         </CardContent>
       </Card>

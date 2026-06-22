@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import type { InquirySource } from "@prisma/client";
 
 const itemSchema = z.object({
@@ -120,4 +120,18 @@ export async function setInquiryStatus(inquiryId: string, status: string) {
   await prisma.inquiry.update({ where: { id: inquiryId }, data: { status: status as never } });
   revalidatePath(`/inquiries/${inquiryId}`);
   revalidatePath("/dashboard");
+}
+
+/** Admin-only: delete an inquiry and everything under it (quotations, items, attachments). */
+export async function deleteInquiry(inquiryId: string) {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Admin access required");
+  // Quotation→Inquiry is Restrict, so remove quotations first (their items
+  // cascade); the inquiry delete then cascades its items and attachments.
+  await prisma.$transaction([
+    prisma.quotation.deleteMany({ where: { inquiryId } }),
+    prisma.inquiry.delete({ where: { id: inquiryId } }),
+  ]);
+  revalidatePath("/dashboard");
+  revalidatePath("/inquiries");
 }
