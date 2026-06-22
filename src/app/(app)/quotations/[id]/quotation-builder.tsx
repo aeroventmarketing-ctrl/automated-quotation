@@ -176,26 +176,41 @@ export function QuotationBuilder({
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
   }
 
-  // Add / remove line items (saved on "Save changes"; available while DRAFT).
+  // Add a line item (saved on "Save changes"; available while DRAFT). Clones the
+  // last item with all its details so the new line has the full layout filled in.
   function addLine() {
     const id = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setLines((ls) => [
-      ...ls,
-      {
-        id,
-        descriptionSnapshot: "",
-        qty: 1,
-        unitPrice: 0,
-        lineTotal: 0,
-        selectionNote: null,
-        specs: {
-          itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
-          motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
-          bodyPrice: null, blowerModel: null,
+    setLines((ls) => {
+      const base = ls[ls.length - 1];
+      if (base) {
+        return [
+          ...ls,
+          {
+            ...base,
+            id,
+            selectionNote: base.selectionNote,
+            specs: { ...base.specs },
+            rawSpecs: { ...base.rawSpecs },
+          },
+        ];
+      }
+      return [
+        {
+          id,
+          descriptionSnapshot: "",
+          qty: 1,
+          unitPrice: 0,
+          lineTotal: 0,
+          selectionNote: null,
+          specs: {
+            itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
+            motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
+            bodyPrice: null, blowerModel: null,
+          },
+          rawSpecs: {},
         },
-        rawSpecs: {},
-      },
-    ]);
+      ];
+    });
   }
   function removeLine(id: string) {
     setLines((ls) => ls.filter((l) => l.id !== id));
