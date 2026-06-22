@@ -338,9 +338,77 @@ function airflowAtPressure(curve: RatingPoint[], targetSp: number): number | nul
 interface DirectDriveResult {
   rpm: number;
   pole: number;
-  qRef: number; // airflow on the reference curve at the required SP
   deliveredFlow_m3hr: number;
+  powerStd_kw: number; // absorbed power (kW) at standard density
+  efficiency: number | null;
   withinEnvelope: boolean;
+}
+
+/**
+ * Operating point on a CFM×SP rating grid at a FIXED speed: at the given rpm,
+ * find the airflow the fan delivers at the required static pressure (and the
+ * absorbed power). Each SP level is a series where airflow rises with rpm, so we
+ * invert rpm→airflow per level, then interpolate across the two SP levels.
+ * Returns null when the data is a single curve rather than a grid.
+ */
+function gridOperatingPoint(
+  points: RatingPoint[],
+  targetRpm: number,
+  targetSp: number,
+): { q: number; power_kw: number; inRange: boolean } | null {
+  const bySp = new Map<number, { q: number; rpm: number; kw: number }[]>();
+  for (const pt of points) {
+    if (pt.rpm <= 0) continue;
+    const arr = bySp.get(pt.staticPressure_pa) ?? [];
+    arr.push({ q: pt.airflow_m3hr, rpm: pt.rpm, kw: pt.power_kw });
+    bySp.set(pt.staticPressure_pa, arr);
+  }
+  const levels = [...bySp.keys()]
+    .filter((sp) => (bySp.get(sp)?.length ?? 0) >= 2)
+    .sort((a, b) => a - b);
+  if (levels.length < 2) return null; // single curve, not a grid
+  for (const sp of levels) bySp.get(sp)!.sort((a, b) => a.rpm - b.rpm);
+
+  const atRpm = (series: { q: number; rpm: number; kw: number }[], rpm: number) => {
+    const first = series[0];
+    const last = series[series.length - 1];
+    if (rpm <= first.rpm) return { q: first.q, kw: first.kw, inRange: rpm >= first.rpm - 1 };
+    if (rpm >= last.rpm) return { q: last.q, kw: last.kw, inRange: rpm <= last.rpm + 1 };
+    for (let i = 0; i < series.length - 1; i++) {
+      const a = series[i];
+      const b = series[i + 1];
+      if (rpm >= a.rpm && rpm <= b.rpm) {
+        const t = (rpm - a.rpm) / (b.rpm - a.rpm);
+        return { q: a.q + (b.q - a.q) * t, kw: a.kw + (b.kw - a.kw) * t, inRange: true };
+      }
+    }
+    return { q: last.q, kw: last.kw, inRange: false };
+  };
+
+  const minSp = levels[0];
+  const maxSp = levels[levels.length - 1];
+  const spInRange = targetSp >= minSp - 1 && targetSp <= maxSp + 1;
+  let lo = minSp;
+  let hi = maxSp;
+  if (targetSp <= minSp) lo = hi = minSp;
+  else if (targetSp >= maxSp) lo = hi = maxSp;
+  else
+    for (let i = 0; i < levels.length - 1; i++) {
+      if (targetSp >= levels[i] && targetSp <= levels[i + 1]) {
+        lo = levels[i];
+        hi = levels[i + 1];
+        break;
+      }
+    }
+
+  const aLo = atRpm(bySp.get(lo)!, targetRpm);
+  const aHi = atRpm(bySp.get(hi)!, targetRpm);
+  const t = lo === hi ? 0 : (targetSp - lo) / (hi - lo);
+  return {
+    q: aLo.q + (aHi.q - aLo.q) * t,
+    power_kw: aLo.kw + (aHi.kw - aLo.kw) * t,
+    inRange: spInRange && aLo.inRange && aHi.inRange,
+  };
 }
 
 /**
@@ -348,9 +416,12 @@ interface DirectDriveResult {
  * pole: try the 4-pole band first, then 2-pole; at the band's nominal speed find
  * the flow that develops the required SP, accepting a delivered flow at or above
  * the requested flow ("increase volume flow when needed"). Outlet velocity is
- * disregarded. Returns null if no band can develop the SP at the required flow.
+ * disregarded. Uses the rating grid directly; falls back to the fan-law curve
+ * for single-curve data. Returns null if no band can develop the SP at the
+ * required flow.
  */
 function selectDirectDrive(
+  points: RatingPoint[],
   curve: RatingPoint[],
   referenceRpm: number,
   selectionPressure: number,
@@ -358,17 +429,39 @@ function selectDirectDrive(
 ): DirectDriveResult | null {
   for (const band of DIRECT_DRIVE_BANDS) {
     const rpm = Math.round((band.minRpm + band.maxRpm) / 2);
+    const op = gridOperatingPoint(points, rpm, selectionPressure);
+    if (op) {
+      if (op.q < requestedFlow_m3hr - 1) continue; // under-delivers at this speed -> higher pole
+      return {
+        rpm,
+        pole: band.pole,
+        deliveredFlow_m3hr: op.q,
+        powerStd_kw: op.power_kw,
+        efficiency: null,
+        withinEnvelope: op.inRange,
+      };
+    }
+    // Fallback: single rated curve scaled by fan laws.
     const ratio = rpm / referenceRpm;
     const refSp = selectionPressure / (ratio * ratio);
     const qRef = airflowAtPressure(curve, refSp);
     if (qRef == null) continue; // can't develop this SP at this speed -> higher pole
     const deliveredFlow = qRef * ratio;
-    if (deliveredFlow < requestedFlow_m3hr - 1) continue; // would under-deliver -> higher pole
+    if (deliveredFlow < requestedFlow_m3hr - 1) continue;
+    const refPower =
+      interpAtAirflow(curve, qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
     const within =
       refSp <= curve[0].staticPressure_pa &&
       refSp >= curve[curve.length - 1].staticPressure_pa &&
       qRef <= curve[curve.length - 1].airflow_m3hr + 1;
-    return { rpm, pole: band.pole, qRef, deliveredFlow_m3hr: deliveredFlow, withinEnvelope: within };
+    return {
+      rpm,
+      pole: band.pole,
+      deliveredFlow_m3hr: deliveredFlow,
+      powerStd_kw: refPower * Math.pow(ratio, 3),
+      efficiency: interpAtAirflow(curve, qRef, "efficiency"),
+      withinEnvelope: within,
+    };
   }
   return null;
 }
@@ -421,16 +514,14 @@ export function selectFan(
     // --- Direct-drive (CEBDD): fix speed to a pole band, meet the static
     // pressure, and let the delivered volume flow rise above the requested
     // flow when needed. Outlet velocity is disregarded. ---------------------
-    const dd = selectDirectDrive(curve, referenceRpm, selectionPressure, duty.airflow_m3hr);
+    const dd = selectDirectDrive(model.ratingPoints, curve, referenceRpm, selectionPressure, duty.airflow_m3hr);
     if (!dd) return null;
     rpm = dd.rpm;
     motorPole = dd.pole;
     selectedAirflow_m3hr = Math.round(dd.deliveredFlow_m3hr);
     speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
-    const refPowerAtQ =
-      interpAtAirflow(curve, dd.qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
-    dutyPowerStd = refPowerAtQ * Math.pow(rpm / referenceRpm, 3);
-    efficiency = interpAtAirflow(curve, dd.qRef, "efficiency");
+    dutyPowerStd = dd.powerStd_kw;
+    efficiency = dd.efficiency;
     withinEnvelope = dd.withinEnvelope;
     extrapolated = !dd.withinEnvelope;
     if (dd.deliveredFlow_m3hr > duty.airflow_m3hr * 1.001) {
