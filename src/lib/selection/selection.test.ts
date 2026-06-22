@@ -152,9 +152,8 @@ describe("selectFan — insufficient data", () => {
   });
 });
 
-describe("selectFan — direct drive (CEBDD) band rule", () => {
-  // A fan whose duty (2000 m³/hr @ 350 Pa) needs ~1750 rpm (4-pole band) when its
-  // reference curve is taken at 1750 rpm, with a generous outlet for OV.
+describe("selectFan — direct drive (CEBDD): SP + pole priority", () => {
+  // Reference curve taken at 1750 rpm so the 4-pole nominal speed (~1752) ≈ ref.
   const dd: FanModelInput = {
     id: "dd",
     modelCode: "AVDDCEB",
@@ -163,26 +162,39 @@ describe("selectFan — direct drive (CEBDD) band rule", () => {
     ratingPoints: model.ratingPoints.map((p) => ({ ...p, rpm: 1750 })),
   };
 
-  it("selects a 4-pole motor when the operating speed lands in the 1662–1842 band", () => {
+  it("meets a modest SP on the 4-pole band at roughly the requested flow", () => {
     const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 350 }, { directDrive: true })!;
     expect(r).not.toBeNull();
+    expect(r.motorPole).toBe(4);
     expect(r.rpm).toBeGreaterThanOrEqual(1662);
     expect(r.rpm).toBeLessThanOrEqual(1842);
-    expect(r.motorPole).toBe(4);
-    expect(r.ovLimit_fpm).toBe(3000);
+    expect(r.selectedAirflow_m3hr).toBeGreaterThanOrEqual(2000);
     expect(r.confidence).toBe("HIGH");
+    // Outlet-velocity limit is disregarded for CEBDD.
+    expect(r.ovLimit_fpm).toBeNull();
+    expect(r.ovWithinLimit).toBeNull();
   });
 
-  it("excludes a size whose speed falls between the bands", () => {
-    // Higher pressure pushes the required speed above the 4-pole band but below 2-pole.
-    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 620 }, { directDrive: true });
+  it("escalates to 2-pole when the SP can't be made on the 4-pole band, raising the flow", () => {
+    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 620 }, { directDrive: true })!;
+    expect(r).not.toBeNull();
+    expect(r.motorPole).toBe(2);
+    expect(r.rpm).toBeGreaterThanOrEqual(3325);
+    expect(r.rpm).toBeLessThanOrEqual(3684);
+    // Volume flow is increased to land on the curve at the required SP.
+    expect(r.selectedAirflow_m3hr!).toBeGreaterThan(2000);
+  });
+
+  it("excludes a size that can't develop the SP even on the 2-pole band", () => {
+    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 2100 }, { directDrive: true });
     expect(r).toBeNull();
   });
 
-  it("belt drive (no flag) keeps a null pole and is not band-constrained", () => {
-    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 620 })!;
+  it("belt drive (no flag) keeps a null pole and no selected airflow", () => {
+    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 350 })!;
     expect(r).not.toBeNull();
     expect(r.motorPole).toBeNull();
+    expect(r.selectedAirflow_m3hr).toBeNull();
   });
 });
 

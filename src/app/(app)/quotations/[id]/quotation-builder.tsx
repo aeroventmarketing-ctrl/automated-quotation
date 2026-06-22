@@ -367,8 +367,13 @@ export function QuotationBuilder({
           blowerModel: cat?.modelCode ?? l.specs.blowerModel,
           inches: cat?.bladeDia ?? l.specs.inches,
           motorHp: r.motorHp,
-          // Direct-drive selections also fix the motor pole (2- or 4-pole band).
+          // Direct-drive selections also fix the motor pole (2- or 4-pole band)
+          // and may raise the delivered volume flow above the requested flow.
           motorPole: r.motorPole ?? l.specs.motorPole,
+          capacity_cfm:
+            r.selectedAirflow_m3hr != null
+              ? Math.round(r.selectedAirflow_m3hr / 1.6990108)
+              : l.specs.capacity_cfm,
         };
         const baseDesc = cat?.description || l.descriptionSnapshot;
         const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
@@ -741,7 +746,12 @@ export function QuotationBuilder({
                               </div>
                               <p className="text-muted-foreground">
                                 {r.rpm} rpm · {r.bhp} BHP → {r.motorHp} HP{r.motorPole ? ` ${r.motorPole}-pole` : ""}
-                                {r.outletVelocity_fpm != null ? ` · OV ${r.outletVelocity_fpm}/${r.ovLimit_fpm} fpm` : ""}
+                                {r.selectedAirflow_m3hr != null && r.selectedAirflow_m3hr > r.dutyAirflow_m3hr
+                                  ? ` · delivers ${Math.round(r.selectedAirflow_m3hr / 1.6990108)} cfm`
+                                  : ""}
+                                {r.outletVelocity_fpm != null
+                                  ? ` · OV ${r.outletVelocity_fpm}${r.ovLimit_fpm != null ? `/${r.ovLimit_fpm}` : ""} fpm`
+                                  : ""}
                               </p>
                             </button>
                           );

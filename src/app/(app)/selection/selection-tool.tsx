@@ -157,7 +157,12 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {sel.rpm} rpm · {sel.bhp} BHP → {sel.motorHp} HP{sel.motorPole ? ` ${sel.motorPole}-pole` : ""} motor
-                    {sel.outletVelocity_fpm != null ? ` · OV ${sel.outletVelocity_fpm}/${sel.ovLimit_fpm} fpm` : ""}
+                    {sel.selectedAirflow_m3hr != null && sel.selectedAirflow_m3hr > sel.dutyAirflow_m3hr
+                      ? ` · delivers ${Math.round(sel.selectedAirflow_m3hr / 1.6990108)} cfm`
+                      : ""}
+                    {sel.outletVelocity_fpm != null
+                      ? ` · OV ${sel.outletVelocity_fpm}${sel.ovLimit_fpm != null ? `/${sel.ovLimit_fpm}` : ""} fpm`
+                      : ""}
                   </p>
                   {sel.warnings.length > 0 && (
                     <p className="mt-1 flex items-start gap-1 text-xs text-amber-600">
