@@ -231,6 +231,8 @@ export function QuotationBuilder({
         return { ...l, specs, unitPrice: gross, descriptionSnapshot: rewriteModelLine(baseDesc, combined) };
       }),
     );
+    // Collapse the candidate list once a blower is chosen.
+    setSel((s) => ({ ...s, [lineId]: { loading: false, error: null, results: null } }));
   }
 
   async function save() {
