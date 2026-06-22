@@ -336,45 +336,6 @@ export function QuotationBuilder({
             <Label>Project</Label>
             <Input value={projectName} onChange={(e) => setProjectName(e.target.value)} disabled={!editable} placeholder="e.g. DG Engineering & Construction Services" />
           </div>
-          {/* Product selection workflow: Category → Type → Blade Type → Drive */}
-          <div className="space-y-1 md:col-span-3">
-            <Label>Product selection</Label>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <Select
-                value={cls.category}
-                disabled={!editable}
-                onChange={(e) => setCls({ category: e.target.value, type: "", bladeType: "", drive: "" })}
-              >
-                <option value="">Category…</option>
-                {PRODUCT_CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
-              </Select>
-              <Select
-                value={cls.type}
-                disabled={!editable || !cls.category}
-                onChange={(e) => setCls({ ...cls, type: e.target.value, bladeType: "", drive: "" })}
-              >
-                <option value="">Type…</option>
-                {typesFor(cls.category).map((t) => (<option key={t} value={t}>{t}</option>))}
-              </Select>
-              <Select
-                value={cls.bladeType}
-                disabled={!editable || !cls.type}
-                onChange={(e) => setCls({ ...cls, bladeType: e.target.value })}
-              >
-                <option value="">Blade type…</option>
-                {(entryFor(cls.category, cls.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
-              </Select>
-              <Select
-                value={cls.drive}
-                disabled={!editable || !cls.type}
-                onChange={(e) => setCls({ ...cls, drive: e.target.value })}
-              >
-                <option value="">Drive…</option>
-                {(entryFor(cls.category, cls.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
-              </Select>
-            </div>
-            <p className="text-xs text-muted-foreground">Product Category · Type · Blade Type · Drive (more details to follow).</p>
-          </div>
           <div className="space-y-1 md:col-span-3">
             <Label>Table unit labels (red, editable per client)</Label>
             <div className="grid grid-cols-3 gap-2">
@@ -419,6 +380,45 @@ export function QuotationBuilder({
       <Card>
         <CardHeader><CardTitle>Line items</CardTitle></CardHeader>
         <CardContent className="space-y-3">
+          {/* Product selection workflow: Category → Type → Blade Type → Drive */}
+          <div className="space-y-1 rounded-md border p-3">
+            <Label>Product selection</Label>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <Select
+                value={cls.category}
+                disabled={!editable}
+                onChange={(e) => setCls({ category: e.target.value, type: "", bladeType: "", drive: "" })}
+              >
+                <option value="">Category…</option>
+                {PRODUCT_CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
+              </Select>
+              <Select
+                value={cls.type}
+                disabled={!editable || !cls.category}
+                onChange={(e) => setCls({ ...cls, type: e.target.value, bladeType: "", drive: "" })}
+              >
+                <option value="">Type…</option>
+                {typesFor(cls.category).map((t) => (<option key={t} value={t}>{t}</option>))}
+              </Select>
+              <Select
+                value={cls.bladeType}
+                disabled={!editable || !cls.type}
+                onChange={(e) => setCls({ ...cls, bladeType: e.target.value })}
+              >
+                <option value="">Blade type…</option>
+                {(entryFor(cls.category, cls.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
+              </Select>
+              <Select
+                value={cls.drive}
+                disabled={!editable || !cls.type}
+                onChange={(e) => setCls({ ...cls, drive: e.target.value })}
+              >
+                <option value="">Drive…</option>
+                {(entryFor(cls.category, cls.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">Product Category · Type · Blade Type · Drive (more details to follow).</p>
+          </div>
           {lines.map((l, idx) => (
             <div key={l.id} className="rounded-lg border p-3">
               <div className="grid gap-2 md:grid-cols-12">
