@@ -100,7 +100,17 @@ function rewriteModelLine(desc: string, combined: string): string {
 const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "l/s", "l/min"];
 const PRESSURE_UNITS = ["in-w.g.", "mm-w.g.", "Pa", "in-Hg", "mm-Hg", "psi", "atm"];
 const POWER_UNITS = ["HP", "kW", "W"];
-const MATERIAL_OPTIONS = ["Black Iron Sheet", "Stainless Steel", "Fiberglass Coated Metal", "Boiler Plate"];
+/** Material -> body-price multiplier (applied to the catalogue body price). */
+const MATERIAL_FACTORS: Record<string, number> = {
+  "Black Iron Sheet": 1,
+  "Heavy gauge material": 1.25,
+  "Fiberglass reinforced metal": 5.5,
+  "Stainless 304 material": 4,
+  "Stainless 316 material": 5,
+  "Boiler Plate": 8,
+};
+const MATERIAL_OPTIONS = Object.keys(MATERIAL_FACTORS);
+const materialFactor = (m: string): number => MATERIAL_FACTORS[m] ?? 1;
 
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
@@ -228,7 +238,7 @@ export function QuotationBuilder({
         const specs = { ...l.specs, ...patch };
         // 1-phase motors are 220V only — snap voltage so the model code resolves.
         if (specs.motorPh === 1) specs.motorVolts = 220;
-        const body = specs.bodyPrice ?? 0;
+        const body = (specs.bodyPrice ?? 0) * materialFactor(specs.material);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
@@ -287,7 +297,7 @@ export function QuotationBuilder({
           motorHp: r.motorHp,
         };
         const baseDesc = cat?.description || l.descriptionSnapshot;
-        const body = specs.bodyPrice ?? 0;
+        const body = (specs.bodyPrice ?? 0) * materialFactor(specs.material);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
@@ -419,7 +429,7 @@ export function QuotationBuilder({
           <Select
             value={c.material || "Black Iron Sheet"}
             disabled={!editable}
-            onChange={(e) => set({ material: e.target.value })}
+            onChange={(e) => applyMotor(l.id, { material: e.target.value })}
           >
             {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
           </Select>
