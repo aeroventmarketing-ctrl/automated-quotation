@@ -88,6 +88,12 @@ function rewriteModelLine(desc: string, combined: string): string {
   return desc.replace(/(Model:\s*)([^\n]*)/i, `$1${combined}`);
 }
 
+/** Shape options for a Ventilation Accessory type (Bar Grille is Rectangle only). */
+function shapesFor(type: string): string[] {
+  if (type === "Bar Grille") return ["Rectangle"];
+  return ["Round", "Square"];
+}
+
 function selSize(r: SelectionResult): number {
   if (r.sizeLabel) {
     const n = parseFloat(r.sizeLabel);
@@ -408,8 +414,7 @@ export function QuotationBuilder({
                     onChange={(e) => setCls({ ...cls, shape: e.target.value })}
                   >
                     <option value="">Shape…</option>
-                    <option value="Round">Round</option>
-                    <option value="Square">Square</option>
+                    {shapesFor(cls.type).map((s) => (<option key={s} value={s}>{s}</option>))}
                   </Select>
                   <Input
                     className="h-9"
