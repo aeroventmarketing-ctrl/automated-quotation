@@ -342,6 +342,7 @@ interface DirectDriveResult {
   powerStd_kw: number; // absorbed power (kW) at standard density
   efficiency: number | null;
   withinEnvelope: boolean;
+  meetsFlow: boolean; // true if the delivered flow is at or above the requested flow
 }
 
 /**
@@ -411,14 +412,55 @@ function gridOperatingPoint(
   };
 }
 
+/** Operating point for one direct-drive band, or null if the SP can't be developed there. */
+function directDriveBand(
+  band: { pole: number; minRpm: number; maxRpm: number },
+  points: RatingPoint[],
+  curve: RatingPoint[],
+  referenceRpm: number,
+  selectionPressure: number,
+): Omit<DirectDriveResult, "meetsFlow"> | null {
+  const rpm = Math.round((band.minRpm + band.maxRpm) / 2);
+  const op = gridOperatingPoint(points, rpm, selectionPressure);
+  if (op) {
+    return {
+      rpm,
+      pole: band.pole,
+      deliveredFlow_m3hr: op.q,
+      powerStd_kw: op.power_kw,
+      efficiency: null,
+      withinEnvelope: op.inRange,
+    };
+  }
+  // Fallback: single rated curve scaled by fan laws.
+  const ratio = rpm / referenceRpm;
+  const refSp = selectionPressure / (ratio * ratio);
+  const qRef = airflowAtPressure(curve, refSp);
+  if (qRef == null) return null; // can't develop this SP at this speed
+  const refPower =
+    interpAtAirflow(curve, qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
+  const within =
+    refSp <= curve[0].staticPressure_pa &&
+    refSp >= curve[curve.length - 1].staticPressure_pa &&
+    qRef <= curve[curve.length - 1].airflow_m3hr + 1;
+  return {
+    rpm,
+    pole: band.pole,
+    deliveredFlow_m3hr: qRef * ratio,
+    powerStd_kw: refPower * Math.pow(ratio, 3),
+    efficiency: interpAtAirflow(curve, qRef, "efficiency"),
+    withinEnvelope: within,
+  };
+}
+
 /**
  * Direct-drive (CEBDD) operating point. Prioritise static pressure and motor
  * pole: try the 4-pole band first, then 2-pole; at the band's nominal speed find
  * the flow that develops the required SP, accepting a delivered flow at or above
  * the requested flow ("increase volume flow when needed"). Outlet velocity is
- * disregarded. Uses the rating grid directly; falls back to the fan-law curve
- * for single-curve data. Returns null if no band can develop the SP at the
- * required flow.
+ * disregarded. Returns the first band that meets the requested flow; if none
+ * does, returns the best-effort (highest-flow) band flagged meetsFlow=false, so
+ * undersized neighbours are still shown next to the recommended pick.
  */
 function selectDirectDrive(
   points: RatingPoint[],
@@ -427,43 +469,14 @@ function selectDirectDrive(
   selectionPressure: number,
   requestedFlow_m3hr: number,
 ): DirectDriveResult | null {
+  let best: Omit<DirectDriveResult, "meetsFlow"> | null = null;
   for (const band of DIRECT_DRIVE_BANDS) {
-    const rpm = Math.round((band.minRpm + band.maxRpm) / 2);
-    const op = gridOperatingPoint(points, rpm, selectionPressure);
-    if (op) {
-      if (op.q < requestedFlow_m3hr - 1) continue; // under-delivers at this speed -> higher pole
-      return {
-        rpm,
-        pole: band.pole,
-        deliveredFlow_m3hr: op.q,
-        powerStd_kw: op.power_kw,
-        efficiency: null,
-        withinEnvelope: op.inRange,
-      };
-    }
-    // Fallback: single rated curve scaled by fan laws.
-    const ratio = rpm / referenceRpm;
-    const refSp = selectionPressure / (ratio * ratio);
-    const qRef = airflowAtPressure(curve, refSp);
-    if (qRef == null) continue; // can't develop this SP at this speed -> higher pole
-    const deliveredFlow = qRef * ratio;
-    if (deliveredFlow < requestedFlow_m3hr - 1) continue;
-    const refPower =
-      interpAtAirflow(curve, qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
-    const within =
-      refSp <= curve[0].staticPressure_pa &&
-      refSp >= curve[curve.length - 1].staticPressure_pa &&
-      qRef <= curve[curve.length - 1].airflow_m3hr + 1;
-    return {
-      rpm,
-      pole: band.pole,
-      deliveredFlow_m3hr: deliveredFlow,
-      powerStd_kw: refPower * Math.pow(ratio, 3),
-      efficiency: interpAtAirflow(curve, qRef, "efficiency"),
-      withinEnvelope: within,
-    };
+    const r = directDriveBand(band, points, curve, referenceRpm, selectionPressure);
+    if (!r) continue;
+    if (r.deliveredFlow_m3hr >= requestedFlow_m3hr - 1) return { ...r, meetsFlow: true };
+    if (!best || r.deliveredFlow_m3hr > best.deliveredFlow_m3hr) best = r;
   }
-  return null;
+  return best ? { ...best, meetsFlow: false } : null;
 }
 
 export function selectFan(
@@ -510,21 +523,29 @@ export function selectFan(
   let selectedAirflow_m3hr: number | null = null;
   let usedGrid = false;
 
+  let directMeetsFlow = true;
   if (options.directDrive) {
     // --- Direct-drive (CEBDD): fix speed to a pole band, meet the static
     // pressure, and let the delivered volume flow rise above the requested
-    // flow when needed. Outlet velocity is disregarded. ---------------------
+    // flow when needed. Outlet velocity is disregarded. The valid pick is the
+    // tightest band that meets the flow; undersized/oversized neighbours are
+    // still returned (flagged) so they appear next to the recommendation. -----
     const dd = selectDirectDrive(model.ratingPoints, curve, referenceRpm, selectionPressure, duty.airflow_m3hr);
     if (!dd) return null;
     rpm = dd.rpm;
     motorPole = dd.pole;
+    directMeetsFlow = dd.meetsFlow;
     selectedAirflow_m3hr = Math.round(dd.deliveredFlow_m3hr);
     speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
     dutyPowerStd = dd.powerStd_kw;
     efficiency = dd.efficiency;
     withinEnvelope = dd.withinEnvelope;
     extrapolated = !dd.withinEnvelope;
-    if (dd.deliveredFlow_m3hr > duty.airflow_m3hr * 1.001) {
+    if (!dd.meetsFlow) {
+      warnings.push(
+        `Undersized for direct drive — delivers only ~${Math.round(dd.deliveredFlow_m3hr * CFM_PER_M3HR)} cfm at the required static pressure (below the requested flow).`,
+      );
+    } else if (dd.deliveredFlow_m3hr > duty.airflow_m3hr * 1.001) {
       warnings.push(
         `Delivers ~${Math.round(dd.deliveredFlow_m3hr * CFM_PER_M3HR)} cfm at the required static pressure (above the requested flow) at ${rpm} rpm, ${dd.pole}-pole.`,
       );
@@ -625,8 +646,6 @@ export function selectFan(
   // --- Maximum-RPM check --------------------------------------------------
   const maxRpm = num(model.specs?.maxRpm) ?? num(model.specs?.maxRpmClassI);
   const rpmWithinMax = maxRpm == null ? true : rpm <= maxRpm;
-  // A direct-drive fan that cannot physically spin at the band speed is excluded.
-  if (options.directDrive && !rpmWithinMax) return null;
   if (!rpmWithinMax) {
     warnings.push(`Required speed ${rpm} rpm exceeds the rated max ${maxRpm} rpm.`);
   } else if (rpm > 1200 && !options.directDrive) {
@@ -636,9 +655,13 @@ export function selectFan(
   // --- Confidence scoring -------------------------------------------------
   let confidence: Confidence;
   if (options.directDrive) {
-    // Direct-drive picks run at a standard pole speed by design; confidence
-    // depends only on whether the operating point is inside the rated curve.
-    confidence = withinEnvelope ? "HIGH" : "LOW";
+    // The recommended pick meets the requested flow within the rated curve at a
+    // valid band speed. Undersized (below requested flow), over-speed, or
+    // extrapolated neighbours stay in the list but at lower confidence so they
+    // appear next to the recommendation without being recommended themselves.
+    if (directMeetsFlow && withinEnvelope && rpmWithinMax) confidence = "HIGH";
+    else if (directMeetsFlow && rpmWithinMax) confidence = "MEDIUM";
+    else confidence = "LOW";
   } else if (extrapolated || !withinEnvelope) {
     confidence = "LOW";
   } else if (usedGrid) {
@@ -754,9 +777,9 @@ export function selectFans(
       return rank[a.confidence] - rank[b.confidence];
     // Direct drive: prefer the tightest delivered flow (least increase over the request).
     if (a.selectedAirflow_m3hr != null && b.selectedAirflow_m3hr != null) {
-      const aInc = a.selectedAirflow_m3hr - a.dutyAirflow_m3hr;
-      const bInc = b.selectedAirflow_m3hr - b.dutyAirflow_m3hr;
-      if (Math.abs(aInc - bInc) > 1) return aInc - bInc;
+      const aD = Math.abs(a.selectedAirflow_m3hr - a.dutyAirflow_m3hr);
+      const bD = Math.abs(b.selectedAirflow_m3hr - b.dutyAirflow_m3hr);
+      if (Math.abs(aD - bD) > 1) return aD - bD;
     }
     const effA = a.efficiency ?? 0;
     const effB = b.efficiency ?? 0;
