@@ -375,6 +375,18 @@ export function QuotationBuilder({
             </div>
             <p className="text-xs text-muted-foreground">Product Category · Type · Blade Type · Drive (more details to follow).</p>
           </div>
+          <div className="space-y-1 md:col-span-3">
+            <Label>Table unit labels (red, editable per client)</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <Input value={units.capacity} disabled={!editable} placeholder="cfm"
+                onChange={(e) => setUnits({ ...units, capacity: e.target.value })} />
+              <Input value={units.pressure} disabled={!editable} placeholder="in-w.g."
+                onChange={(e) => setUnits({ ...units, pressure: e.target.value })} />
+              <Input value={units.motor} disabled={!editable} placeholder="Hp"
+                onChange={(e) => setUnits({ ...units, motor: e.target.value })} />
+            </div>
+            <p className="text-xs text-muted-foreground">Capacity · Static Pressure · Motor power units (e.g. cfm / in-w.g. / Hp, or m³/hr / Pa / kW).</p>
+          </div>
           {/* Discount (left) and VAT presentation (right), inline */}
           <div className="grid gap-4 md:col-span-3 md:grid-cols-2">
             <div className="space-y-1">
@@ -389,18 +401,6 @@ export function QuotationBuilder({
                 <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
               </Select>
             </div>
-          </div>
-          <div className="space-y-1 md:col-span-3">
-            <Label>Table unit labels (red, editable per client)</Label>
-            <div className="grid grid-cols-3 gap-2">
-              <Input value={units.capacity} disabled={!editable} placeholder="cfm"
-                onChange={(e) => setUnits({ ...units, capacity: e.target.value })} />
-              <Input value={units.pressure} disabled={!editable} placeholder="in-w.g."
-                onChange={(e) => setUnits({ ...units, pressure: e.target.value })} />
-              <Input value={units.motor} disabled={!editable} placeholder="Hp"
-                onChange={(e) => setUnits({ ...units, motor: e.target.value })} />
-            </div>
-            <p className="text-xs text-muted-foreground">Capacity · Static Pressure · Motor power units (e.g. cfm / in-w.g. / Hp, or m³/hr / Pa / kW).</p>
           </div>
           <div className="space-y-1">
             <Label>Template (pattern)</Label>
