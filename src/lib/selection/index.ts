@@ -43,6 +43,16 @@ export function outletVelocityLimit(wheelDia_in: number | null): number {
   return 3000;
 }
 
+/**
+ * Direct-drive (CEBDD) speed bands. A direct-drive fan turns at the motor speed,
+ * so a valid selection must operate within one of these RPM windows; the motor
+ * pole and the outlet-velocity limit follow from the band.
+ */
+export const DIRECT_DRIVE_BANDS = [
+  { pole: 4, minRpm: 1662, maxRpm: 1842, ovLimit: 3000 },
+  { pole: 2, minRpm: 3325, maxRpm: 3684, ovLimit: 4000 },
+] as const;
+
 // Standard induction-motor sizes (kW) used for motor sizing after service factor.
 export const STANDARD_MOTOR_KW = [
   0.18, 0.25, 0.37, 0.55, 0.75, 1.1, 1.5, 2.2, 3.0, 3.7, 4.0, 5.5, 7.5, 9.3,
@@ -82,6 +92,12 @@ export interface SelectionOptions {
   maxSpeedRatio?: number;
   /** Min allowable speed ratio vs reference before flagging out-of-envelope (default 0.5). */
   minSpeedRatio?: number;
+  /**
+   * Direct-drive (CEBDD) selection: the fan runs at the motor speed, so the
+   * operating speed must land in a 2- or 4-pole band (with that band's outlet-
+   * velocity limit). Off-band sizes are excluded from the results.
+   */
+  directDrive?: boolean;
 }
 
 export type Confidence = "HIGH" | "MEDIUM" | "LOW";
@@ -102,6 +118,7 @@ export interface SelectionResult {
   bhp: number; // absorbed power in HP
   motorKw: number; // sized standard motor
   motorHp: number; // suggested motor (BHP/0.75 rounded up to the motor list)
+  motorPole: number | null; // motor pole from the direct-drive band (null for belt drive)
   efficiency: number | null;
   serviceFactor: number;
   // Outlet-velocity check (AFBM "good selection" rule).
@@ -431,6 +448,23 @@ export function selectFan(
     warnings.push(`Speed ${rpm} rpm is above the recommended ~1200 rpm.`);
   }
 
+  // --- Direct-drive band rule (CEBDD) -------------------------------------
+  // The fan turns at the motor speed, so the operating speed must fall in a
+  // 2- or 4-pole band, within the fan's max rpm and the band's outlet-velocity
+  // limit, and inside the rated envelope. Anything else is not a valid
+  // direct-drive selection and is excluded.
+  let motorPole: number | null = null;
+  if (options.directDrive) {
+    const band = DIRECT_DRIVE_BANDS.find((b) => rpm >= b.minRpm && rpm <= b.maxRpm);
+    if (!band || !rpmWithinMax || !withinEnvelope) return null;
+    motorPole = band.pole;
+    ovLimit_fpm = band.ovLimit;
+    if (outletVelocity_fpm != null) {
+      ovWithinLimit = outletVelocity_fpm <= band.ovLimit;
+      if (!ovWithinLimit) return null;
+    }
+  }
+
   // --- Confidence scoring -------------------------------------------------
   let confidence: Confidence;
   if (extrapolated || !withinEnvelope) {
@@ -446,6 +480,10 @@ export function selectFan(
   // above the recommended ~1200 rpm drops a HIGH pick to MEDIUM.
   if (ovWithinLimit === false || !rpmWithinMax) confidence = "LOW";
   else if (confidence === "HIGH" && rpm > 1200) confidence = "MEDIUM";
+  // A direct-drive pick that survived the band/OV/max-rpm filter runs at a
+  // standard motor speed by design, so it stays high-confidence despite the
+  // >1200 rpm note above.
+  if (options.directDrive && withinEnvelope) confidence = "HIGH";
 
   const requiresEngineerConfirmation =
     confidence === "LOW" || !withinEnvelope || ovWithinLimit === false || !rpmWithinMax;
@@ -479,6 +517,7 @@ export function selectFan(
     bhp: Math.round(bhp * 100) / 100,
     motorKw,
     motorHp,
+    motorPole,
     efficiency: efficiency != null ? Math.round(efficiency * 1000) / 1000 : null,
     serviceFactor,
     outletVelocity_fpm,
