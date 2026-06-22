@@ -115,9 +115,14 @@ function rewriteDriveLine(desc: string, drive: string): string {
   }
   return desc.replace(/\b(Belt|Direct) Driven?\b/gi, "$1 Drive");
 }
+/** Standard paint line, dropped for stainless builds. */
+const PAINT_PHRASE = "Painted with Epoxy Enamel Aqua Green";
 /** Material phrase for the description (drops a redundant trailing "material"). */
+const MATERIAL_PHRASES: Record<string, string> = {
+  "Heavy gauge material": "Heavy Gauge Material",
+};
 function materialPhrase(material: string): string {
-  return material.replace(/\s+material$/i, "").trim();
+  return MATERIAL_PHRASES[material] ?? material.replace(/\s+material$/i, "").trim();
 }
 /**
  * Reflect the chosen material in the description. The standard text already
@@ -129,6 +134,18 @@ function rewriteMaterialLine(desc: string, material: string): string {
   const phrase = `Made of ${materialPhrase(material)}`;
   if (/Made of [^\n]*/i.test(desc)) return desc.replace(/Made of [^\n]*/i, phrase);
   return material === "Black Iron Sheet" ? desc : `${desc.replace(/\s+$/, "")}\n${phrase}`;
+}
+/**
+ * Stainless 304/316 are unpainted, so drop the standard paint phrase (and its
+ * "/ " separator before "Model:"); restore it for any other material.
+ */
+function rewritePaintLine(desc: string, material: string): string {
+  const stainless = /stainless 3(?:04|16)/i.test(material);
+  let out = desc.replace(new RegExp(`${PAINT_PHRASE}\\s*/\\s*`, "gi"), "");
+  if (!stainless && /Model:/i.test(out) && !new RegExp(PAINT_PHRASE, "i").test(out)) {
+    out = out.replace(/Model:/i, `${PAINT_PHRASE} / Model:`);
+  }
+  return out;
 }
 
 /** Unit options for the quote table headers (from the English & Metric chart). */
@@ -299,7 +316,10 @@ export function QuotationBuilder({
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
-        const descriptionSnapshot = rewriteMaterialLine(rewriteDriveLine(withModel, specs.drive), specs.material);
+        const descriptionSnapshot = rewriteMaterialLine(
+          rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
+          specs.material,
+        );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
@@ -355,7 +375,7 @@ export function QuotationBuilder({
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
         const descriptionSnapshot = rewriteMaterialLine(
-          rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive),
+          rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
           specs.material,
         );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
