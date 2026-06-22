@@ -554,18 +554,17 @@ export function QuotationBuilder({
         <CardHeader><CardTitle>Line items</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {lines.map((l, idx) => (
-            <div key={l.id} className="rounded-lg border p-3">
+            <div key={l.id} className="relative rounded-lg border p-3">
+              {editable && (
+                <Button size="sm" variant="ghost"
+                  className="absolute right-2 top-2 z-10 text-destructive hover:text-destructive"
+                  onClick={() => removeLine(l.id)}>
+                  <Trash2 className="h-4 w-4" /> Remove
+                </Button>
+              )}
               {renderProductSelection(l)}
               <div className="my-3 border-t" />
-              {editable && (
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">Item {idx + 1}</span>
-                  <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive"
-                    onClick={() => removeLine(l.id)}>
-                    <Trash2 className="h-4 w-4" /> Remove
-                  </Button>
-                </div>
-              )}
+              <div className="mb-1 text-xs font-medium text-muted-foreground">Item {idx + 1}</div>
               <div className="grid gap-2 md:grid-cols-12">
                 <div className="md:col-span-1">
                   <Label className="text-[10px]">Item</Label>
