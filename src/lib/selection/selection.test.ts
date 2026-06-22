@@ -196,6 +196,31 @@ describe("selectFan — direct drive (CEBDD): SP + pole priority", () => {
     expect(r.motorPole).toBeNull();
     expect(r.selectedAirflow_m3hr).toBeNull();
   });
+
+  it("reads a CFM×SP rating grid at the fixed pole speed (not the fan-law curve)", () => {
+    // Grid data: each SP level is a series where airflow rises with rpm.
+    const grid: FanModelInput = {
+      id: "grid",
+      modelCode: "AVGRIDCEB",
+      name: "Grid Fan",
+      specs: { maxRpm: 4000 },
+      ratingPoints: [
+        { rpm: 800, airflow_m3hr: 1000, staticPressure_pa: 100, power_kw: 0.4 },
+        { rpm: 1200, airflow_m3hr: 2000, staticPressure_pa: 100, power_kw: 0.7 },
+        { rpm: 1700, airflow_m3hr: 3000, staticPressure_pa: 100, power_kw: 1.1 },
+        { rpm: 2200, airflow_m3hr: 4000, staticPressure_pa: 100, power_kw: 1.6 },
+        { rpm: 1300, airflow_m3hr: 1000, staticPressure_pa: 250, power_kw: 0.6 },
+        { rpm: 1600, airflow_m3hr: 2000, staticPressure_pa: 250, power_kw: 0.95 },
+        { rpm: 2000, airflow_m3hr: 3000, staticPressure_pa: 250, power_kw: 1.4 },
+        { rpm: 2500, airflow_m3hr: 4000, staticPressure_pa: 250, power_kw: 2.0 },
+      ],
+    };
+    const r = selectFan(grid, { airflow_m3hr: 2000, staticPressure_pa: 250 }, { directDrive: true })!;
+    expect(r).not.toBeNull();
+    expect(r.motorPole).toBe(4); // ~1752 rpm lands on the 4-pole band
+    expect(r.selectedAirflow_m3hr!).toBeGreaterThan(2000); // flow raised to land on the curve
+    expect(r.confidence).toBe("HIGH");
+  });
 });
 
 describe("selectFans — ranking", () => {
