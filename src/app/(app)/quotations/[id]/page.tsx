@@ -107,6 +107,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               type: typeof s.type === "string" ? s.type : "",
               bladeType: typeof s.bladeType === "string" ? s.bladeType : "",
               drive: typeof s.drive === "string" ? s.drive : "",
+              material: typeof s.material === "string" && s.material ? s.material : "Black Iron Sheet",
               shape: typeof s.shape === "string" ? s.shape : "",
               sizeL: typeof s.sizeL === "string" ? s.sizeL : "",
               sizeW: typeof s.sizeW === "string" ? s.sizeW : "",

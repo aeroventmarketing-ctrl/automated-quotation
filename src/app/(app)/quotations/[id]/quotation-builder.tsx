@@ -49,6 +49,7 @@ interface LineSpecs {
   type: string;
   bladeType: string;
   drive: string;
+  material: string;
   shape: string;
   sizeL: string;
   sizeW: string;
@@ -99,6 +100,7 @@ function rewriteModelLine(desc: string, combined: string): string {
 const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "l/s", "l/min"];
 const PRESSURE_UNITS = ["in-w.g.", "mm-w.g.", "Pa", "in-Hg", "mm-Hg", "psi", "atm"];
 const POWER_UNITS = ["HP", "kW", "W"];
+const MATERIAL_OPTIONS = ["Black Iron Sheet", "Stainless Steel", "Fiberglass Coated Metal", "Boiler Plate"];
 
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
@@ -203,7 +205,7 @@ export function QuotationBuilder({
           itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
           motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
           bodyPrice: null, blowerModel: null,
-          category: "", type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "",
+          category: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
         },
         rawSpecs: {},
       },
@@ -347,7 +349,7 @@ export function QuotationBuilder({
     return (
       <div className="space-y-1">
         <Label>Product selection</Label>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
           <Select
             value={c.category}
             disabled={!editable}
@@ -410,6 +412,13 @@ export function QuotationBuilder({
               >
                 <option value="">Drive…</option>
                 {(entryFor(c.category, c.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
+              </Select>
+              <Select
+                value={c.material || "Black Iron Sheet"}
+                disabled={!editable}
+                onChange={(e) => set({ material: e.target.value })}
+              >
+                {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
               </Select>
             </>
           )}
