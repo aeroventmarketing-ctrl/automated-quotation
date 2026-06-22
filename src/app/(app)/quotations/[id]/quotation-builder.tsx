@@ -63,7 +63,7 @@ interface Quote {
   vatMode: "INCLUSIVE" | "EXCLUSIVE";
   discountPct: number;
   headerUnits: { capacity: string; pressure: string; motor: string };
-  classification: { category: string; type: string; bladeType: string; drive: string };
+  classification: { category: string; type: string; bladeType: string; drive: string; shape: string; sizeL: string; sizeW: string };
   projectName: string;
   subtotal: number;
   vat: number;
@@ -387,7 +387,7 @@ export function QuotationBuilder({
               <Select
                 value={cls.category}
                 disabled={!editable}
-                onChange={(e) => setCls({ category: e.target.value, type: "", bladeType: "", drive: "" })}
+                onChange={(e) => setCls({ category: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
               >
                 <option value="">Category…</option>
                 {PRODUCT_CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
@@ -395,29 +395,67 @@ export function QuotationBuilder({
               <Select
                 value={cls.type}
                 disabled={!editable || !cls.category}
-                onChange={(e) => setCls({ ...cls, type: e.target.value, bladeType: "", drive: "" })}
+                onChange={(e) => setCls({ ...cls, type: e.target.value, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
               >
                 <option value="">Type…</option>
                 {typesFor(cls.category).map((t) => (<option key={t} value={t}>{t}</option>))}
               </Select>
-              <Select
-                value={cls.bladeType}
-                disabled={!editable || !cls.type}
-                onChange={(e) => setCls({ ...cls, bladeType: e.target.value })}
-              >
-                <option value="">Blade type…</option>
-                {(entryFor(cls.category, cls.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
-              </Select>
-              <Select
-                value={cls.drive}
-                disabled={!editable || !cls.type}
-                onChange={(e) => setCls({ ...cls, drive: e.target.value })}
-              >
-                <option value="">Drive…</option>
-                {(entryFor(cls.category, cls.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
-              </Select>
+              {cls.category === "Ventilation Accessories" ? (
+                <>
+                  <Select
+                    value={cls.shape}
+                    disabled={!editable || !cls.type}
+                    onChange={(e) => setCls({ ...cls, shape: e.target.value })}
+                  >
+                    <option value="">Shape…</option>
+                    <option value="Round">Round</option>
+                    <option value="Square">Square</option>
+                  </Select>
+                  <Input
+                    className="h-9"
+                    type="number"
+                    step="any"
+                    placeholder="L (mm)"
+                    disabled={!editable || !cls.type}
+                    value={cls.sizeL}
+                    onChange={(e) => setCls({ ...cls, sizeL: e.target.value })}
+                  />
+                  <Input
+                    className="h-9"
+                    type="number"
+                    step="any"
+                    placeholder="W (mm)"
+                    disabled={!editable || !cls.type}
+                    value={cls.sizeW}
+                    onChange={(e) => setCls({ ...cls, sizeW: e.target.value })}
+                  />
+                </>
+              ) : (
+                <>
+                  <Select
+                    value={cls.bladeType}
+                    disabled={!editable || !cls.type}
+                    onChange={(e) => setCls({ ...cls, bladeType: e.target.value })}
+                  >
+                    <option value="">Blade type…</option>
+                    {(entryFor(cls.category, cls.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
+                  </Select>
+                  <Select
+                    value={cls.drive}
+                    disabled={!editable || !cls.type}
+                    onChange={(e) => setCls({ ...cls, drive: e.target.value })}
+                  >
+                    <option value="">Drive…</option>
+                    {(entryFor(cls.category, cls.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
+                  </Select>
+                </>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">Product Category · Type · Blade Type · Drive (more details to follow).</p>
+            <p className="text-xs text-muted-foreground">
+              {cls.category === "Ventilation Accessories"
+                ? "Category · Type · Shape · Size L (mm) × W (mm)."
+                : "Product Category · Type · Blade Type · Drive (more details to follow)."}
+            </p>
           </div>
           {lines.map((l, idx) => (
             <div key={l.id} className="rounded-lg border p-3">
