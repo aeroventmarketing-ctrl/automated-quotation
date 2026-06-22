@@ -198,6 +198,8 @@ model Quotation {
   discountPct  Decimal         @db.Decimal(5, 2) @default(0)
   // Variable (red) table unit labels: { capacity, pressure, motor }. Defaults cfm / in-w.g. / Hp.
   headerUnits  Json            @default("{}")
+  // Product classification from the selection workflow: { category, type, bladeType, drive }.
+  classification Json          @default("{}")
   projectName  String?
   subtotal     Decimal         @db.Decimal(14, 2) @default(0)
   vat          Decimal         @db.Decimal(14, 2) @default(0)

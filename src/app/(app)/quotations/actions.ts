@@ -131,6 +131,7 @@ export async function updateQuotationLines(
     vatMode?: "INCLUSIVE" | "EXCLUSIVE";
     discountPct?: number;
     headerUnits?: Record<string, string>;
+    classification?: Record<string, string>;
   },
 ) {
   const user = await getCurrentUser();
@@ -170,6 +171,7 @@ export async function updateQuotationLines(
         vatMode: meta?.vatMode,
         discountPct: meta?.discountPct,
         headerUnits: meta?.headerUnits as object | undefined,
+        classification: meta?.classification as object | undefined,
         validUntil: meta?.validUntil ? new Date(meta.validUntil) : undefined,
       },
     }),
