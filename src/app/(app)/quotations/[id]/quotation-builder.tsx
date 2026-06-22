@@ -88,9 +88,10 @@ function rewriteModelLine(desc: string, combined: string): string {
   return desc.replace(/(Model:\s*)([^\n]*)/i, `$1${combined}`);
 }
 
-/** Shape options for a Ventilation Accessory type (Bar Grille is Rectangle only). */
+/** Shape options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
+  if (type === "Jet Nozzle Diffuser") return ["Round"];
   return ["Round", "Square"];
 }
 
@@ -416,24 +417,38 @@ export function QuotationBuilder({
                     <option value="">Shape…</option>
                     {shapesFor(cls.type).map((s) => (<option key={s} value={s}>{s}</option>))}
                   </Select>
-                  <Input
-                    className="h-9"
-                    type="number"
-                    step="any"
-                    placeholder="L (mm)"
-                    disabled={!editable || !cls.type}
-                    value={cls.sizeL}
-                    onChange={(e) => setCls({ ...cls, sizeL: e.target.value })}
-                  />
-                  <Input
-                    className="h-9"
-                    type="number"
-                    step="any"
-                    placeholder="W (mm)"
-                    disabled={!editable || !cls.type}
-                    value={cls.sizeW}
-                    onChange={(e) => setCls({ ...cls, sizeW: e.target.value })}
-                  />
+                  {cls.shape === "Round" ? (
+                    <Input
+                      className="h-9"
+                      type="number"
+                      step="any"
+                      placeholder="Diameter Ø (mm)"
+                      disabled={!editable || !cls.type}
+                      value={cls.sizeL}
+                      onChange={(e) => setCls({ ...cls, sizeL: e.target.value, sizeW: "" })}
+                    />
+                  ) : (
+                    <>
+                      <Input
+                        className="h-9"
+                        type="number"
+                        step="any"
+                        placeholder="L (mm)"
+                        disabled={!editable || !cls.type}
+                        value={cls.sizeL}
+                        onChange={(e) => setCls({ ...cls, sizeL: e.target.value })}
+                      />
+                      <Input
+                        className="h-9"
+                        type="number"
+                        step="any"
+                        placeholder="W (mm)"
+                        disabled={!editable || !cls.type}
+                        value={cls.sizeW}
+                        onChange={(e) => setCls({ ...cls, sizeW: e.target.value })}
+                      />
+                    </>
+                  )}
                 </>
               ) : (
                 <>
@@ -458,7 +473,7 @@ export function QuotationBuilder({
             </div>
             <p className="text-xs text-muted-foreground">
               {cls.category === "Ventilation Accessories"
-                ? "Category · Type · Shape · Size L (mm) × W (mm)."
+                ? "Category · Type · Shape · Size in mm (Round = diameter, Square/Rectangle = L × W)."
                 : "Product Category · Type · Blade Type · Drive (more details to follow)."}
             </p>
           </div>
