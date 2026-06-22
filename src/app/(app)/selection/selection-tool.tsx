@@ -12,6 +12,16 @@ import { lookupMotor, computeUnitPrice } from "@/lib/pricing/motors";
 import { AlertTriangle } from "lucide-react";
 import type { SelectionResult } from "@/lib/selection";
 
+/** Physical size (inches) from the size label, falling back to the model code. */
+function sizeOf(sel: SelectionResult): number {
+  if (sel.sizeLabel) {
+    const n = parseFloat(sel.sizeLabel);
+    if (!Number.isNaN(n)) return n;
+  }
+  const m = sel.modelCode.match(/(\d{3,5})/);
+  return m ? parseInt(m[1], 10) / 100 : 0;
+}
+
 export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }) {
   const [airflow, setAirflow] = useState("");
   const [airflowUnit, setAirflowUnit] = useState("cfm");
@@ -96,36 +106,58 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
         <p className="text-sm text-muted-foreground">No rated models match this duty.</p>
       )}
 
-      {results && results.length > 0 && (
-        <div className="space-y-2">
-          {results.slice(0, 8).map((sel) => {
-            const body = priceMap[sel.modelId] ?? 0;
-            const motor = lookupMotor(sel.motorHp, 3, 4);
-            const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
-            return (
-              <div key={sel.modelId} className="rounded-md border p-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{sel.modelCode}</span>
-                  <span className="flex items-center gap-2">
-                    {estNet > 0 && <span className="font-medium">≈ {formatCurrency(estNet)}</span>}
-                    <ConfidenceBadge confidence={sel.confidence} />
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {sel.rpm} rpm · {sel.bhp} BHP → {sel.motorHp} HP motor
-                  {sel.outletVelocity_fpm != null ? ` · OV ${sel.outletVelocity_fpm}/${sel.ovLimit_fpm} fpm` : ""}
-                </p>
-                {sel.warnings.length > 0 && (
-                  <p className="mt-1 flex items-start gap-1 text-xs text-amber-600">
-                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                    {sel.warnings[0]}
+      {results && results.length > 0 && (() => {
+        // Center the list on the recommended (top HIGH) pick and show 3 sizes
+        // smaller + the recommendation + 3 sizes bigger.
+        const recommended = results.find((r) => r.confidence === "HIGH") ?? results[0];
+        const bySize = [...results].sort((a, b) => sizeOf(a) - sizeOf(b));
+        const idx = bySize.findIndex((r) => r.modelId === recommended.modelId);
+        const windowed = bySize.slice(Math.max(0, idx - 3), idx + 4);
+        return (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Showing 3 sizes smaller and 3 sizes bigger around the recommended selection.
+            </p>
+            {windowed.map((sel) => {
+              const body = priceMap[sel.modelId] ?? 0;
+              const motor = lookupMotor(sel.motorHp, 3, 4);
+              const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
+              const isRec = sel.modelId === recommended.modelId;
+              return (
+                <div
+                  key={sel.modelId}
+                  className={`rounded-md border p-3 text-sm ${isRec ? "border-primary ring-1 ring-primary" : ""}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">
+                      {sel.modelCode}
+                      {isRec && (
+                        <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                          RECOMMENDED
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      {estNet > 0 && <span className="font-medium">≈ {formatCurrency(estNet)}</span>}
+                      <ConfidenceBadge confidence={sel.confidence} />
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {sel.rpm} rpm · {sel.bhp} BHP → {sel.motorHp} HP motor
+                    {sel.outletVelocity_fpm != null ? ` · OV ${sel.outletVelocity_fpm}/${sel.ovLimit_fpm} fpm` : ""}
                   </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  {sel.warnings.length > 0 && (
+                    <p className="mt-1 flex items-start gap-1 text-xs text-amber-600">
+                      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                      {sel.warnings[0]}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }
