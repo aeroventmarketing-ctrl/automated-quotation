@@ -349,7 +349,7 @@ export function QuotationBuilder({
     return (
       <div className="space-y-1">
         <Label>Product selection</Label>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
           <Select
             value={c.category}
             disabled={!editable}
@@ -413,15 +413,16 @@ export function QuotationBuilder({
                 <option value="">Drive…</option>
                 {(entryFor(c.category, c.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
               </Select>
-              <Select
-                value={c.material || "Black Iron Sheet"}
-                disabled={!editable}
-                onChange={(e) => set({ material: e.target.value })}
-              >
-                {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
-              </Select>
             </>
           )}
+          {/* Material applies to both blowers and accessories */}
+          <Select
+            value={c.material || "Black Iron Sheet"}
+            disabled={!editable}
+            onChange={(e) => set({ material: e.target.value })}
+          >
+            {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
+          </Select>
         </div>
         <p className="text-xs text-muted-foreground">
           {c.category === "Ventilation Accessories"
