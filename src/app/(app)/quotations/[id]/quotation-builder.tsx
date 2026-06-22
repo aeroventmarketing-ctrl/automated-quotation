@@ -21,6 +21,7 @@ import {
   type Voltage,
 } from "@/lib/pricing/motors";
 import { Download, Send, Check, CornerUpLeft, Trash2 } from "lucide-react";
+import { PRODUCT_CATEGORIES, typesFor, entryFor } from "@/lib/product-taxonomy";
 import { updateQuotationLines, transitionQuotation } from "../actions";
 
 interface LineSpecs {
@@ -53,6 +54,7 @@ interface Quote {
   vatMode: "INCLUSIVE" | "EXCLUSIVE";
   discountPct: number;
   headerUnits: { capacity: string; pressure: string; motor: string };
+  classification: { category: string; type: string; bladeType: string; drive: string };
   projectName: string;
   subtotal: number;
   vat: number;
@@ -95,6 +97,7 @@ export function QuotationBuilder({
   const [vatMode, setVatMode] = useState(quotation.vatMode);
   const [discountPct, setDiscountPct] = useState(quotation.discountPct);
   const [units, setUnits] = useState(quotation.headerUnits);
+  const [cls, setCls] = useState(quotation.classification);
   const [notes, setNotes] = useState(quotation.notes ?? "");
   const [terms, setTerms] = useState(quotation.terms ?? "");
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
@@ -160,7 +163,7 @@ export function QuotationBuilder({
           // merge edited flat specs back over anything nested (selection/requirement)
           specsSnapshot: { ...l.rawSpecs, ...l.specs },
         })),
-        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode, discountPct, headerUnits: units },
+        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode, discountPct, headerUnits: units, classification: cls },
       );
       setMsg("Saved.");
       router.refresh();
@@ -252,6 +255,45 @@ export function QuotationBuilder({
               <option value="INCLUSIVE">VAT inclusive</option>
               <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
             </Select>
+          </div>
+          {/* Product selection workflow: Category → Type → Blade Type → Drive */}
+          <div className="space-y-1 md:col-span-3">
+            <Label>Product selection</Label>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <Select
+                value={cls.category}
+                disabled={!editable}
+                onChange={(e) => setCls({ category: e.target.value, type: "", bladeType: "", drive: "" })}
+              >
+                <option value="">Category…</option>
+                {PRODUCT_CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
+              </Select>
+              <Select
+                value={cls.type}
+                disabled={!editable || !cls.category}
+                onChange={(e) => setCls({ ...cls, type: e.target.value, bladeType: "", drive: "" })}
+              >
+                <option value="">Type…</option>
+                {typesFor(cls.category).map((t) => (<option key={t} value={t}>{t}</option>))}
+              </Select>
+              <Select
+                value={cls.bladeType}
+                disabled={!editable || !cls.type}
+                onChange={(e) => setCls({ ...cls, bladeType: e.target.value })}
+              >
+                <option value="">Blade type…</option>
+                {(entryFor(cls.category, cls.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
+              </Select>
+              <Select
+                value={cls.drive}
+                disabled={!editable || !cls.type}
+                onChange={(e) => setCls({ ...cls, drive: e.target.value })}
+              >
+                <option value="">Drive…</option>
+                {(entryFor(cls.category, cls.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">Product Category · Type · Blade Type · Drive (more details to follow).</p>
           </div>
           <div className="space-y-1">
             <Label>Discount %</Label>
