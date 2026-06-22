@@ -366,24 +366,26 @@ export function QuotationBuilder({
             <div className="grid grid-cols-3 gap-2">
               <Select value={units.capacity} disabled={!editable}
                 onChange={(e) => setUnits({ ...units, capacity: e.target.value })}>
-                {(CAPACITY_UNITS.includes(units.capacity) ? CAPACITY_UNITS : [units.capacity, ...CAPACITY_UNITS]).map((u) => (
+                <option value="" disabled hidden>Volume Flow</option>
+                {(units.capacity && !CAPACITY_UNITS.includes(units.capacity) ? [units.capacity, ...CAPACITY_UNITS] : CAPACITY_UNITS).map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </Select>
               <Select value={units.pressure} disabled={!editable}
                 onChange={(e) => setUnits({ ...units, pressure: e.target.value })}>
-                {(PRESSURE_UNITS.includes(units.pressure) ? PRESSURE_UNITS : [units.pressure, ...PRESSURE_UNITS]).map((u) => (
+                <option value="" disabled hidden>Static Pressure</option>
+                {(units.pressure && !PRESSURE_UNITS.includes(units.pressure) ? [units.pressure, ...PRESSURE_UNITS] : PRESSURE_UNITS).map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </Select>
               <Select value={units.motor} disabled={!editable}
                 onChange={(e) => setUnits({ ...units, motor: e.target.value })}>
-                {(POWER_UNITS.includes(units.motor) ? POWER_UNITS : [units.motor, ...POWER_UNITS]).map((u) => (
+                <option value="" disabled hidden>Motor Power</option>
+                {(units.motor && !POWER_UNITS.includes(units.motor) ? [units.motor, ...POWER_UNITS] : POWER_UNITS).map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground">Capacity (Volume Flow) · Static Pressure · Motor Power.</p>
           </div>
           {/* Discount (left) and VAT presentation (right), inline */}
           <div className="grid gap-4 md:col-span-3 md:grid-cols-2">
