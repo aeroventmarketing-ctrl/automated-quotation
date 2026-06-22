@@ -44,6 +44,14 @@ interface LineSpecs {
   motorPole: number | null;
   bodyPrice: number | null; // net blower-body price (before motor / VAT)
   blowerModel: string | null; // base catalogue model code, e.g. AV1225CEB
+  // Per-item product selection (classification).
+  category: string;
+  type: string;
+  bladeType: string;
+  drive: string;
+  shape: string;
+  sizeL: string;
+  sizeW: string;
 }
 interface Line {
   id: string;
@@ -63,7 +71,6 @@ interface Quote {
   vatMode: "INCLUSIVE" | "EXCLUSIVE";
   discountPct: number;
   headerUnits: { capacity: string; pressure: string; motor: string };
-  classification: { category: string; type: string; bladeType: string; drive: string; shape: string; sizeL: string; sizeW: string };
   projectName: string;
   subtotal: number;
   vat: number;
@@ -151,7 +158,6 @@ export function QuotationBuilder({
   const [vatMode, setVatMode] = useState(quotation.vatMode);
   const [discountPct, setDiscountPct] = useState(quotation.discountPct);
   const [units, setUnits] = useState(quotation.headerUnits);
-  const [cls, setCls] = useState(quotation.classification);
   const [notes, setNotes] = useState(quotation.notes ?? "");
   const [terms, setTerms] = useState(quotation.terms ?? "");
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
@@ -206,6 +212,7 @@ export function QuotationBuilder({
             itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
             motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
             bodyPrice: null, blowerModel: null,
+            category: "", type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "",
           },
           rawSpecs: {},
         },
@@ -319,7 +326,7 @@ export function QuotationBuilder({
           // merge edited flat specs back over anything nested (selection/requirement)
           specsSnapshot: { ...l.rawSpecs, ...l.specs },
         })),
-        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode, discountPct, headerUnits: units, classification: cls },
+        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode, discountPct, headerUnits: units },
       );
       setMsg("Saved.");
       router.refresh();
@@ -343,84 +350,88 @@ export function QuotationBuilder({
     }
   }
 
-  // Product selection workflow (rendered inside the first line item).
-  const productSelection = (
-    <div className="space-y-1">
-      <Label>Product selection</Label>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Select
-          value={cls.category}
-          disabled={!editable}
-          onChange={(e) => setCls({ category: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
-        >
-          <option value="">Category…</option>
-          {PRODUCT_CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
-        </Select>
-        <Select
-          value={cls.type}
-          disabled={!editable || !cls.category}
-          onChange={(e) => setCls({ ...cls, type: e.target.value, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
-        >
-          <option value="">Type…</option>
-          {typesFor(cls.category).map((t) => (<option key={t} value={t}>{t}</option>))}
-        </Select>
-        {cls.category === "Ventilation Accessories" ? (
-          <>
-            <Select
-              value={cls.shape}
-              disabled={!editable || !cls.type}
-              onChange={(e) => setCls({ ...cls, shape: e.target.value })}
-            >
-              <option value="">{variantLabel(cls.type)}…</option>
-              {shapesFor(cls.type).map((s) => (<option key={s} value={s}>{s}</option>))}
-            </Select>
-            {sizeMode(cls.type, cls.shape) === "capacity" ? (
-              <Input className="h-9" type="number" step="any" placeholder="Capacity (kg)"
-                disabled={!editable || !cls.type} value={cls.sizeL}
-                onChange={(e) => setCls({ ...cls, sizeL: e.target.value, sizeW: "" })} />
-            ) : sizeMode(cls.type, cls.shape) === "diameter" ? (
-              <Input className="h-9" type="number" step="any" placeholder="Diameter Ø (mm)"
-                disabled={!editable || !cls.type} value={cls.sizeL}
-                onChange={(e) => setCls({ ...cls, sizeL: e.target.value, sizeW: "" })} />
-            ) : (
-              <>
-                <Input className="h-9" type="number" step="any" placeholder="L (mm)"
-                  disabled={!editable || !cls.type} value={cls.sizeL}
-                  onChange={(e) => setCls({ ...cls, sizeL: e.target.value })} />
-                <Input className="h-9" type="number" step="any" placeholder="W (mm)"
-                  disabled={!editable || !cls.type} value={cls.sizeW}
-                  onChange={(e) => setCls({ ...cls, sizeW: e.target.value })} />
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <Select
-              value={cls.bladeType}
-              disabled={!editable || !cls.type}
-              onChange={(e) => setCls({ ...cls, bladeType: e.target.value })}
-            >
-              <option value="">Blade type…</option>
-              {(entryFor(cls.category, cls.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
-            </Select>
-            <Select
-              value={cls.drive}
-              disabled={!editable || !cls.type}
-              onChange={(e) => setCls({ ...cls, drive: e.target.value })}
-            >
-              <option value="">Drive…</option>
-              {(entryFor(cls.category, cls.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
-            </Select>
-          </>
-        )}
+  // Product selection workflow, bound to one line item's specs.
+  function renderProductSelection(l: Line) {
+    const c = l.specs;
+    const set = (patch: Partial<LineSpecs>) => updateSpec(l.id, patch);
+    return (
+      <div className="space-y-1">
+        <Label>Product selection</Label>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <Select
+            value={c.category}
+            disabled={!editable}
+            onChange={(e) => set({ category: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+          >
+            <option value="">Category…</option>
+            {PRODUCT_CATEGORIES.map((x) => (<option key={x} value={x}>{x}</option>))}
+          </Select>
+          <Select
+            value={c.type}
+            disabled={!editable || !c.category}
+            onChange={(e) => set({ type: e.target.value, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+          >
+            <option value="">Type…</option>
+            {typesFor(c.category).map((t) => (<option key={t} value={t}>{t}</option>))}
+          </Select>
+          {c.category === "Ventilation Accessories" ? (
+            <>
+              <Select
+                value={c.shape}
+                disabled={!editable || !c.type}
+                onChange={(e) => set({ shape: e.target.value })}
+              >
+                <option value="">{variantLabel(c.type)}…</option>
+                {shapesFor(c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
+              </Select>
+              {sizeMode(c.type, c.shape) === "capacity" ? (
+                <Input className="h-9" type="number" step="any" placeholder="Capacity (kg)"
+                  disabled={!editable || !c.type} value={c.sizeL}
+                  onChange={(e) => set({ sizeL: e.target.value, sizeW: "" })} />
+              ) : sizeMode(c.type, c.shape) === "diameter" ? (
+                <Input className="h-9" type="number" step="any" placeholder="Diameter Ø (mm)"
+                  disabled={!editable || !c.type} value={c.sizeL}
+                  onChange={(e) => set({ sizeL: e.target.value, sizeW: "" })} />
+              ) : (
+                <>
+                  <Input className="h-9" type="number" step="any" placeholder="L (mm)"
+                    disabled={!editable || !c.type} value={c.sizeL}
+                    onChange={(e) => set({ sizeL: e.target.value })} />
+                  <Input className="h-9" type="number" step="any" placeholder="W (mm)"
+                    disabled={!editable || !c.type} value={c.sizeW}
+                    onChange={(e) => set({ sizeW: e.target.value })} />
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <Select
+                value={c.bladeType}
+                disabled={!editable || !c.type}
+                onChange={(e) => set({ bladeType: e.target.value })}
+              >
+                <option value="">Blade type…</option>
+                {(entryFor(c.category, c.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
+              </Select>
+              <Select
+                value={c.drive}
+                disabled={!editable || !c.type}
+                onChange={(e) => set({ drive: e.target.value })}
+              >
+                <option value="">Drive…</option>
+                {(entryFor(c.category, c.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
+              </Select>
+            </>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {c.category === "Ventilation Accessories"
+            ? "Category · Type · Shape/Mounting · Size — Round = diameter, Square/Rectangle = L × W (mm), isolator = capacity (kg)."
+            : "Product Category · Type · Blade Type · Drive (more details to follow)."}
+        </p>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {cls.category === "Ventilation Accessories"
-          ? "Category · Type · Shape/Mounting · Size — Round = diameter, Square/Rectangle = L × W (mm), isolator = capacity (kg)."
-          : "Product Category · Type · Blade Type · Drive (more details to follow)."}
-      </p>
-    </div>
-  );
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -544,12 +555,8 @@ export function QuotationBuilder({
         <CardContent className="space-y-3">
           {lines.map((l, idx) => (
             <div key={l.id} className="rounded-lg border p-3">
-              {idx === 0 && (
-                <>
-                  {productSelection}
-                  <div className="my-3 border-t" />
-                </>
-              )}
+              {renderProductSelection(l)}
+              <div className="my-3 border-t" />
               {editable && (
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">Item {idx + 1}</span>
