@@ -95,6 +95,14 @@ function rewriteModelLine(desc: string, combined: string): string {
   if (!combined || !/Model:\s*/i.test(desc)) return desc;
   return desc.replace(/(Model:\s*)([^\n]*)/i, `$1${combined}`);
 }
+/**
+ * Effective blower model code for a drive: catalogue models are belt-drive, so
+ * a direct-drive selection appends "DD" (e.g. AV2450CEB -> AV2450CEBDD).
+ */
+function effectiveBlowerModel(model: string | null, drive: string): string {
+  if (!model) return "";
+  return /direct/i.test(drive) ? `${model}DD` : model;
+}
 /** Material phrase for the description (drops a redundant trailing "material"). */
 function materialPhrase(material: string): string {
   return material.replace(/\s+material$/i, "").trim();
@@ -272,7 +280,7 @@ export function QuotationBuilder({
         const net = computeUnitPrice(body, motor?.price ?? 0, hp, phase);
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
-        const combined = combinedModel(specs.blowerModel ?? "", mModel);
+        const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
@@ -330,7 +338,7 @@ export function QuotationBuilder({
         const net = computeUnitPrice(body, motor?.price ?? 0, hp, phase);
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
-        const combined = combinedModel(specs.blowerModel ?? "", mModel);
+        const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
         const descriptionSnapshot = rewriteMaterialLine(rewriteModelLine(baseDesc, combined), specs.material);
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
@@ -444,7 +452,7 @@ export function QuotationBuilder({
               <Select
                 value={c.drive}
                 disabled={!editable || !c.type}
-                onChange={(e) => set({ drive: e.target.value })}
+                onChange={(e) => applyMotor(l.id, { drive: e.target.value })}
               >
                 <option value="">Drive…</option>
                 {(entryFor(c.category, c.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
@@ -776,7 +784,7 @@ export function QuotationBuilder({
                           <>
                             <span>Motor {mModel ?? "—"}: {formatCurrency(motor.price, quotation.currency)}</span>
                             {db && <span className="text-amber-600">+10% dynamic balancing (3-ph &gt; 10 HP)</span>}
-                            {l.specs.blowerModel && <span>Model: <b>{combinedModel(l.specs.blowerModel, mModel)}</b></span>}
+                            {l.specs.blowerModel && <span>Model: <b>{combinedModel(effectiveBlowerModel(l.specs.blowerModel, l.specs.drive), mModel)}</b></span>}
                           </>
                         ) : (
                           <span className="text-destructive">No motor priced for {hp} HP / {ph}-ph / {pole}-pole</span>
