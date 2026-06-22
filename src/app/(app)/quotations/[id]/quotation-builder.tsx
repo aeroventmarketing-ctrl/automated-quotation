@@ -88,6 +88,11 @@ function rewriteModelLine(desc: string, combined: string): string {
   return desc.replace(/(Model:\s*)([^\n]*)/i, `$1${combined}`);
 }
 
+/** Unit options for the quote table headers (from the English & Metric chart). */
+const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "l/s", "l/min"];
+const PRESSURE_UNITS = ["in-w.g.", "mm-w.g.", "Pa", "in-Hg", "mm-Hg", "psi", "atm"];
+const POWER_UNITS = ["Hp", "kW", "W"];
+
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
@@ -359,14 +364,26 @@ export function QuotationBuilder({
           <div className="space-y-1 md:col-span-3">
             <Label>Table unit labels (red, editable per client)</Label>
             <div className="grid grid-cols-3 gap-2">
-              <Input value={units.capacity} disabled={!editable} placeholder="cfm"
-                onChange={(e) => setUnits({ ...units, capacity: e.target.value })} />
-              <Input value={units.pressure} disabled={!editable} placeholder="in-w.g."
-                onChange={(e) => setUnits({ ...units, pressure: e.target.value })} />
-              <Input value={units.motor} disabled={!editable} placeholder="Hp"
-                onChange={(e) => setUnits({ ...units, motor: e.target.value })} />
+              <Select value={units.capacity} disabled={!editable}
+                onChange={(e) => setUnits({ ...units, capacity: e.target.value })}>
+                {(CAPACITY_UNITS.includes(units.capacity) ? CAPACITY_UNITS : [units.capacity, ...CAPACITY_UNITS]).map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </Select>
+              <Select value={units.pressure} disabled={!editable}
+                onChange={(e) => setUnits({ ...units, pressure: e.target.value })}>
+                {(PRESSURE_UNITS.includes(units.pressure) ? PRESSURE_UNITS : [units.pressure, ...PRESSURE_UNITS]).map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </Select>
+              <Select value={units.motor} disabled={!editable}
+                onChange={(e) => setUnits({ ...units, motor: e.target.value })}>
+                {(POWER_UNITS.includes(units.motor) ? POWER_UNITS : [units.motor, ...POWER_UNITS]).map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </Select>
             </div>
-            <p className="text-xs text-muted-foreground">Capacity · Static Pressure · Motor power units (e.g. cfm / in-w.g. / Hp, or m³/hr / Pa / kW).</p>
+            <p className="text-xs text-muted-foreground">Capacity (Volume Flow) · Static Pressure · Motor Power.</p>
           </div>
           {/* Discount (left) and VAT presentation (right), inline */}
           <div className="grid gap-4 md:col-span-3 md:grid-cols-2">
