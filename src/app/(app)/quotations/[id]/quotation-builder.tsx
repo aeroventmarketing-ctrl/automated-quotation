@@ -110,7 +110,16 @@ const MATERIAL_FACTORS: Record<string, number> = {
   "Boiler Plate": 8,
 };
 const MATERIAL_OPTIONS = Object.keys(MATERIAL_FACTORS);
-const materialFactor = (m: string): number => MATERIAL_FACTORS[m] ?? 1;
+/** Categories whose body price is scaled by the material multiplier. */
+const MATERIAL_CATEGORIES = new Set([
+  "Centrifugal Type",
+  "Axial Type",
+  "Propeller Type",
+  "Tubular Inline Type",
+  "Cabinet Type",
+]);
+const materialFactor = (specs: LineSpecs): number =>
+  MATERIAL_CATEGORIES.has(specs.category) ? MATERIAL_FACTORS[specs.material] ?? 1 : 1;
 
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
@@ -238,7 +247,7 @@ export function QuotationBuilder({
         const specs = { ...l.specs, ...patch };
         // 1-phase motors are 220V only — snap voltage so the model code resolves.
         if (specs.motorPh === 1) specs.motorVolts = 220;
-        const body = (specs.bodyPrice ?? 0) * materialFactor(specs.material);
+        const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
@@ -297,7 +306,7 @@ export function QuotationBuilder({
           motorHp: r.motorHp,
         };
         const baseDesc = cat?.description || l.descriptionSnapshot;
-        const body = (specs.bodyPrice ?? 0) * materialFactor(specs.material);
+        const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
