@@ -1,7 +1,8 @@
 /**
  * Product selection taxonomy (AFBM): Product Category -> Type -> Blade Type -> Drive.
- * Used by the cascading product classifier on the quotation header. Source:
- * "Workflow_request.xlsx". Some branches have no blade/drive options yet.
+ * Used by the cascading product classifier in the quotation. Source:
+ * "Workflow_request.xlsx" (rows merged per Category+Type). Some branches have no
+ * blade/drive options yet.
  */
 export interface TaxonomyEntry {
   category: string;
@@ -16,17 +17,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "type": "Centfrifugal Blower",
     "bladeTypes": [
       "Backwardly Inclined",
-      "Backward Curved"
-    ],
-    "drives": [
-      "Belt",
-      "Direct"
-    ]
-  },
-  {
-    "category": "Centrifugal Type",
-    "type": "Centfrifugal Blower",
-    "bladeTypes": [
+      "Backward Curved",
       "Forward Curved"
     ],
     "drives": [
@@ -154,17 +145,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "category": "Propeller Type",
     "type": "Panel Fan",
     "bladeTypes": [
-      "Propeller"
-    ],
-    "drives": [
-      "Belt",
-      "Direct"
-    ]
-  },
-  {
-    "category": "Propeller Type",
-    "type": "Panel Fan",
-    "bladeTypes": [
+      "Propeller",
       "Kidney"
     ],
     "drives": [
