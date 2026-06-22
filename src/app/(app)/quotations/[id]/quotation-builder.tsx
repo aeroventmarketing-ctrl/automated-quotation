@@ -103,18 +103,29 @@ function effectiveBlowerModel(model: string | null, drive: string): string {
   if (!model) return "";
   return /direct/i.test(drive) ? `${model}DD` : model;
 }
+/**
+ * Reflect the drive in the description: the standard text reads "Belt Driven",
+ * so a direct-drive selection flips it to "Direct Driven" (and back).
+ */
+function rewriteDriveLine(desc: string, drive: string): string {
+  if (!drive) return desc;
+  const word = /direct/i.test(drive) ? "Direct" : "Belt";
+  return desc.replace(/\b(?:Belt|Direct) Driven\b/gi, `${word} Driven`);
+}
 /** Material phrase for the description (drops a redundant trailing "material"). */
 function materialPhrase(material: string): string {
   return material.replace(/\s+material$/i, "").trim();
 }
 /**
- * Add/replace a "Made of ..." line in the description. The default Black Iron
- * Sheet is the standard build, so no line is shown for it.
+ * Reflect the chosen material in the description. The standard text already
+ * carries a "Made of ..." line, so replace it in place; otherwise append one
+ * for any non-standard material.
  */
 function rewriteMaterialLine(desc: string, material: string): string {
-  const out = desc.replace(/\n?Made of [^\n]*/gi, "").replace(/\s+$/, "");
-  if (!material || material === "Black Iron Sheet") return out;
-  return `${out}\nMade of ${materialPhrase(material)}`;
+  if (!material) return desc;
+  const phrase = `Made of ${materialPhrase(material)}`;
+  if (/Made of [^\n]*/i.test(desc)) return desc.replace(/Made of [^\n]*/i, phrase);
+  return material === "Black Iron Sheet" ? desc : `${desc.replace(/\s+$/, "")}\n${phrase}`;
 }
 
 /** Unit options for the quote table headers (from the English & Metric chart). */
@@ -274,7 +285,8 @@ export function QuotationBuilder({
         const pole = specs.motorPole ?? 4;
         // Only auto-price true blower lines (those with a body price).
         if (body <= 0) {
-          return { ...l, specs, descriptionSnapshot: rewriteMaterialLine(l.descriptionSnapshot, specs.material) };
+          const desc = rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material);
+          return { ...l, specs, descriptionSnapshot: desc };
         }
         const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
         const net = computeUnitPrice(body, motor?.price ?? 0, hp, phase);
@@ -284,7 +296,7 @@ export function QuotationBuilder({
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
-        const descriptionSnapshot = rewriteMaterialLine(withModel, specs.material);
+        const descriptionSnapshot = rewriteMaterialLine(rewriteDriveLine(withModel, specs.drive), specs.material);
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
@@ -339,7 +351,10 @@ export function QuotationBuilder({
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
-        const descriptionSnapshot = rewriteMaterialLine(rewriteModelLine(baseDesc, combined), specs.material);
+        const descriptionSnapshot = rewriteMaterialLine(
+          rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive),
+          specs.material,
+        );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
