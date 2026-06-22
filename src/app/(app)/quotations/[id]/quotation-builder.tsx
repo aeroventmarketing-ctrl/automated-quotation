@@ -120,6 +120,8 @@ const PAINT_PHRASE = "Painted with Epoxy Enamel Aqua Green";
 /** Material phrase for the description (drops a redundant trailing "material"). */
 const MATERIAL_PHRASES: Record<string, string> = {
   "Heavy gauge material": "Heavy Gauge Material",
+  "Stainless 304 material": "Stainless Steel 304",
+  "Stainless 316 material": "Stainless Steel 316",
 };
 function materialPhrase(material: string): string {
   return MATERIAL_PHRASES[material] ?? material.replace(/\s+material$/i, "").trim();
