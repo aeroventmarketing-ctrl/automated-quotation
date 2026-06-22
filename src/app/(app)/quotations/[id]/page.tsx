@@ -10,7 +10,7 @@ const num = (v: unknown): number | null =>
 
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [quotation, templates, user] = await Promise.all([
+  const [quotation, templates, user, catItems] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: {
@@ -23,13 +23,22 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
     }),
     prisma.quotationTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     getCurrentUser(),
+    prisma.catalogueItem.findMany({
+      where: { active: true },
+      select: { id: true, priceList: { where: { variantKey: "default" }, take: 1, select: { basePrice: true } } },
+    }),
   ]);
 
   if (!quotation) notFound();
 
+  const priceMap = Object.fromEntries(
+    catItems.map((i) => [i.id, i.priceList[0] ? Number(i.priceList[0].basePrice) : 0]),
+  );
+
   return (
     <QuotationBuilder
       canApprove={canApprove(user)}
+      priceMap={priceMap}
       templates={templates.map((t) => ({ id: t.id, name: t.name }))}
       quotation={{
         id: quotation.id,
