@@ -5,6 +5,7 @@ import {
   densityFromTemperature,
   suggestMotorHp,
   outletVelocityLimit,
+  forwardCurveOvLimit,
   MOTOR_HP_LIST,
   type FanModelInput,
 } from "./index";
@@ -55,6 +56,13 @@ describe("AFBM selection rules", () => {
     expect(outletVelocityLimit(24)).toBe(1800);
     expect(outletVelocityLimit(33)).toBe(2000);
     expect(outletVelocityLimit(44.5)).toBe(3000);
+  });
+
+  it("uses 2000 fpm for forward-curve, 2400 fpm for the largest sizes (27\"/30\")", () => {
+    expect(forwardCurveOvLimit(15)).toBe(2000);
+    expect(forwardCurveOvLimit(22)).toBe(2000);
+    expect(forwardCurveOvLimit(26)).toBe(2400); // FC-126 (~27")
+    expect(forwardCurveOvLimit(30.25)).toBe(2400); // FC-130 (~30")
   });
 
   it("flags an undersized fan (outlet velocity over the limit) as LOW", () => {
