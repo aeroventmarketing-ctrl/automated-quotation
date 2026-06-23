@@ -41,7 +41,6 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "DIDWCFAB") return { modelCode: { endsWith: "DIDWCFAB" } };
   if (t === "DIDWCEB") return { modelCode: { endsWith: "DIDWCEB" } };
   if (t === "CIEB") return { modelCode: { endsWith: "CIEB" } };
-  if (t === "SIEB") return { modelCode: { endsWith: "SIEB" } };
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {
