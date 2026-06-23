@@ -24,6 +24,12 @@ import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus } from "lucide
 import { PRODUCT_CATEGORIES, typesFor, entryFor } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
+import {
+  normalizeAirflowUnit,
+  normalizePressureUnit,
+  convertAirflow,
+  convertPressure,
+} from "@/lib/units";
 import { updateQuotationLines, transitionQuotation } from "../actions";
 
 interface CatalogEntry {
@@ -321,7 +327,11 @@ export function QuotationBuilder({
   const [projectName, setProjectName] = useState(quotation.projectName);
   const [vatMode, setVatMode] = useState(quotation.vatMode);
   const [discountPct, setDiscountPct] = useState(quotation.discountPct);
-  const [units, setUnits] = useState(quotation.headerUnits);
+  const [units, setUnits] = useState(() => ({
+    capacity: quotation.headerUnits.capacity || "cfm",
+    pressure: quotation.headerUnits.pressure || "in-w.g.",
+    motor: quotation.headerUnits.motor || "HP",
+  }));
   const [notes, setNotes] = useState(quotation.notes ?? "");
   const [terms, setTerms] = useState(quotation.terms ?? "");
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
@@ -426,14 +436,24 @@ export function QuotationBuilder({
     );
   }
 
-  // Run the fan selector for a line using its Capacity (CFM) + S.P. (in-w.g.).
+  // Run the fan selector for a line. The volume flow / static pressure are stored
+  // in the quotation-header units; convert them to CFM / in-w.g. (the catalog's
+  // units) before querying.
   async function runLineSelection(line: Line) {
-    const cfm = line.specs.capacity_cfm;
-    const sp = line.specs.staticPressure_pa; // stored value is in in-w.g.
-    if (!cfm || !sp) {
-      setSel((s) => ({ ...s, [line.id]: { loading: false, error: "Enter Capacity (CFM) and S.P. (in-w.g.) first.", results: null } }));
+    const flow = line.specs.capacity_cfm;
+    const spVal = line.specs.staticPressure_pa;
+    if (!flow || !spVal) {
+      setSel((s) => ({ ...s, [line.id]: { loading: false, error: "Enter volume flow and static pressure first.", results: null } }));
       return;
     }
+    const aUnit = normalizeAirflowUnit(units.capacity);
+    const pUnit = normalizePressureUnit(units.pressure);
+    if (!aUnit || !pUnit) {
+      setSel((s) => ({ ...s, [line.id]: { loading: false, error: `Unit "${aUnit ? units.pressure : units.capacity}" isn't supported for selection — use CFM/m³/hr and in-w.g./Pa.`, results: null } }));
+      return;
+    }
+    const cfm = convertAirflow(flow, aUnit, "cfm");
+    const sp = convertPressure(spVal, pUnit, "inwg");
     setSel((s) => ({ ...s, [line.id]: { loading: true, error: null, results: null } }));
     try {
       const res = await fetch("/api/selection", {
@@ -802,20 +822,45 @@ export function QuotationBuilder({
                 </div>
               </div>
 
-              {/* Table specs (shown in the quote's Capacity / S.P. / Size columns) */}
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {([
-                  ["capacity_cfm", "Capacity (CFM)"],
-                  ["staticPressure_pa", "S.P. (in-w.g.)"],
-                  ["inches", "Size (in)"],
-                ] as const).map(([key, label]) => (
-                  <div key={key}>
-                    <Label className="text-[10px]">{label}</Label>
-                    <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
-                      value={l.specs[key] ?? ""}
-                      onChange={(e) => updateSpec(l.id, { [key]: numOrNull(e.target.value) } as Partial<LineSpecs>)} />
-                  </div>
-                ))}
+              {/* Table specs (Capacity / S.P. / Size columns in the quote). The flow
+                  and pressure units mirror the quotation header; the value is stored
+                  and shown in that unit, and converted to CFM / in-w.g. only to read
+                  the catalog in the fan selector. */}
+              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
+                <div className="md:col-span-2">
+                  <Label className="text-[10px]">Volume flow</Label>
+                  <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
+                    value={l.specs.capacity_cfm ?? ""}
+                    onChange={(e) => updateSpec(l.id, { capacity_cfm: numOrNull(e.target.value) })} />
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="text-[10px]">Unit</Label>
+                  <Select className="h-8" value={units.capacity} disabled={!editable}
+                    onChange={(e) => setUnits({ ...units, capacity: e.target.value })}>
+                    {(units.capacity && !CAPACITY_UNITS.includes(units.capacity) ? [units.capacity, ...CAPACITY_UNITS] : CAPACITY_UNITS).map((u) => (
+                      <option key={u} value={u}>{u}</option>))}
+                  </Select>
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="text-[10px]">Static pressure</Label>
+                  <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
+                    value={l.specs.staticPressure_pa ?? ""}
+                    onChange={(e) => updateSpec(l.id, { staticPressure_pa: numOrNull(e.target.value) })} />
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="text-[10px]">Unit</Label>
+                  <Select className="h-8" value={units.pressure} disabled={!editable}
+                    onChange={(e) => setUnits({ ...units, pressure: e.target.value })}>
+                    {(units.pressure && !PRESSURE_UNITS.includes(units.pressure) ? [units.pressure, ...PRESSURE_UNITS] : PRESSURE_UNITS).map((u) => (
+                      <option key={u} value={u}>{u}</option>))}
+                  </Select>
+                </div>
+                <div className="md:col-span-1">
+                  <Label className="text-[10px]">Size (in)</Label>
+                  <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
+                    value={l.specs.inches ?? ""}
+                    onChange={(e) => updateSpec(l.id, { inches: numOrNull(e.target.value) })} />
+                </div>
               </div>
 
               {/* Per-line fan selector — click a candidate to populate this item */}

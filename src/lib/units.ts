@@ -140,6 +140,10 @@ const PRESSURE_ALIASES: Record<string, PressureUnit> = {
   "in wg": "inwg",
   "inch wg": "inwg",
   "in. w.g.": "inwg",
+  "in-w.g.": "inwg",
+  "in-wg": "inwg",
+  "mm-w.g.": "mmaq",
+  "mm-wg": "mmaq",
   kpa: "kpa",
 };
 
