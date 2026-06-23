@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 /**
  * Duct sizing calculator ("ductulator") for round and rectangular galvanized
@@ -104,14 +104,7 @@ export function Ductulator() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Ductulator</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Size round &amp; rectangular galvanized duct from an airflow and a target friction rate or
-          velocity (standard air).
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-6">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <Label>Airflow</Label>

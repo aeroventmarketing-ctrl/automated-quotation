@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
 import { SelectionTool } from "./selection-tool";
-import { Ductulator } from "./ductulator";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +21,6 @@ export default async function SelectionPage() {
         </p>
       </div>
       <SelectionTool priceMap={priceMap} />
-      <Ductulator />
     </div>
   );
 }
