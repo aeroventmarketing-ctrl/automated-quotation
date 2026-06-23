@@ -21,19 +21,32 @@ const bodySchema = z.object({
   // Optionally restrict to specific catalogue models or a family.
   catalogueItemIds: z.array(z.string()).optional(),
   family: z.string().optional(),
-  // Restrict to a blade type so forward-curve (CFAB) and backward-curve (CEB)
-  // models don't compete in one list. Matched on the model-code tag.
+  // Restrict to a single product catalogue by tag (CEB / CFAB / DIDWCEB) so the
+  // lists never mix. Preferred over `bladeType`; matched on the model-code suffix.
+  tag: z.string().optional(),
+  // Legacy: restrict to a blade type (forward-curve CFAB vs backward CEB).
   bladeType: z.string().optional(),
   // Direct-drive (CEBDD) selection: constrain to standard 2-/4-pole speed bands.
   directDrive: z.boolean().optional(),
 });
 
-/** Model-code filter for a blade type: forward-curve models carry the CFAB tag. */
-function bladeTypeWhere(bladeType: string | undefined) {
-  if (!bladeType) return {};
-  return /forward/i.test(bladeType)
-    ? { modelCode: { contains: "CFAB" } }
-    : { modelCode: { not: { contains: "CFAB" } } };
+/**
+ * Model-code filter for a product catalogue. Model codes are AV#### + tag, e.g.
+ * AV1225CEB, AV0900CFAB, AV1225DIDWCEB. We match on the exact tag suffix so the
+ * backward-curve pool (CEB) never leaks the DIDW models (which also end "CEB").
+ */
+function catalogueWhere(tag: string | undefined, bladeType: string | undefined) {
+  // Explicit tag from the quotation builder takes precedence.
+  const t = tag ?? (bladeType ? (/forward/i.test(bladeType) ? "CFAB" : "CEB") : undefined);
+  if (t === "CFAB") return { modelCode: { endsWith: "CFAB" } };
+  if (t === "DIDWCEB") return { modelCode: { endsWith: "DIDWCEB" } };
+  if (t === "CEB") {
+    // Backward-curve CEB: ends "CEB" but not the DIDW catalogue (…DIDWCEB).
+    return {
+      AND: [{ modelCode: { endsWith: "CEB" } }, { NOT: { modelCode: { contains: "DIDW" } } }],
+    };
+  }
+  return {};
 }
 
 export async function POST(req: NextRequest) {
@@ -75,7 +88,7 @@ export async function POST(req: NextRequest) {
       ratingPoints: { some: {} },
       ...(body.catalogueItemIds ? { id: { in: body.catalogueItemIds } } : {}),
       ...(body.family ? { family: body.family as never } : {}),
-      ...bladeTypeWhere(body.bladeType),
+      ...catalogueWhere(body.tag, body.bladeType),
     },
     include: { ratingPoints: true },
   });
