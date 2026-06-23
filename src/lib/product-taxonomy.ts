@@ -156,8 +156,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "category": "Propeller Type",
     "type": "Panel Fan",
     "bladeTypes": [
-      "Propeller",
-      "Kidney"
+      "Propeller"
     ],
     "drives": [
       "Belt",

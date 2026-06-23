@@ -485,15 +485,67 @@ function selectDirectDrive(
   referenceRpm: number,
   selectionPressure: number,
   requestedFlow_m3hr: number,
+  bands: readonly { pole: number; minRpm: number; maxRpm: number }[] = DIRECT_DRIVE_BANDS,
 ): DirectDriveResult | null {
   let best: Omit<DirectDriveResult, "meetsFlow"> | null = null;
-  for (const band of DIRECT_DRIVE_BANDS) {
+  for (const band of bands) {
     const r = directDriveBand(band, points, curve, referenceRpm, selectionPressure);
     if (!r) continue;
     if (r.deliveredFlow_m3hr >= requestedFlow_m3hr - 1) return { ...r, meetsFlow: true };
     if (!best || r.deliveredFlow_m3hr > best.deliveredFlow_m3hr) best = r;
   }
   return best ? { ...best, meetsFlow: false } : null;
+}
+
+/** Nominal induction-motor speeds (rpm) by pole count (60 Hz, loaded). */
+const POLE_RPM: ReadonlyArray<readonly [number, number]> = [
+  [2, 3600],
+  [4, 1750],
+  [6, 1200],
+  [8, 800],
+];
+/** Motor pole count whose nominal speed is closest to a rated rpm. */
+function polesForRpm(rpm: number): number {
+  let best = POLE_RPM[0];
+  for (const e of POLE_RPM) if (Math.abs(e[1] - rpm) < Math.abs(best[1] - rpm)) best = e;
+  return best[0];
+}
+
+/**
+ * Direct-drive "bands" for a natively-direct catalogue (propeller EWFDD): the
+ * fan turns at its own rated motor speed(s), not the centrifugal 2-/4-pole
+ * bands. Each distinct rated rpm becomes a fixed band. Ordered by ascending pole
+ * count (descending rpm) so selection prefers the lower-pole motor — EWFDD runs
+ * 4-pole or higher-pole, never 2-pole, and higher-pole motors are harder to find.
+ */
+function fixedSpeedBands(
+  points: RatingPoint[],
+): { pole: number; minRpm: number; maxRpm: number }[] {
+  const rpms = [...new Set(points.filter((p) => p.rpm > 0).map((p) => p.rpm))].sort(
+    (a, b) => b - a,
+  );
+  return rpms.map((r) => ({ pole: polesForRpm(r), minRpm: r, maxRpm: r }));
+}
+
+/**
+ * Catalog motor HP (from the MOTOR HP column) for the operating speed. Direct
+ * drive runs at an exact rated speed (nearest mapping); belt rounds the
+ * interpolated speed up to the next tabulated motor selection.
+ */
+function motorHpForRpm(
+  map: ReadonlyArray<readonly [number, number]>,
+  rpm: number,
+  direct: boolean,
+): number | null {
+  if (!map.length) return null;
+  const sorted = [...map].sort((a, b) => a[0] - b[0]);
+  if (direct) {
+    let best = sorted[0];
+    for (const e of sorted) if (Math.abs(e[0] - rpm) < Math.abs(best[0] - rpm)) best = e;
+    return best[1];
+  }
+  for (const e of sorted) if (e[0] >= rpm - 1) return e[1];
+  return sorted[sorted.length - 1][1];
 }
 
 export function selectFan(
@@ -547,7 +599,11 @@ export function selectFan(
     // flow when needed. Outlet velocity is disregarded. The valid pick is the
     // tightest band that meets the flow; undersized/oversized neighbours are
     // still returned (flagged) so they appear next to the recommendation. -----
-    const dd = selectDirectDrive(model.ratingPoints, curve, referenceRpm, selectionPressure, duty.airflow_m3hr);
+    const bands =
+      model.specs?.fixedSpeedDirect === true
+        ? fixedSpeedBands(model.ratingPoints)
+        : DIRECT_DRIVE_BANDS;
+    const dd = selectDirectDrive(model.ratingPoints, curve, referenceRpm, selectionPressure, duty.airflow_m3hr, bands);
     if (!dd) return null;
     rpm = dd.rpm;
     motorPole = dd.pole;
@@ -565,6 +621,11 @@ export function selectFan(
     } else if (dd.deliveredFlow_m3hr > duty.airflow_m3hr * 1.001) {
       warnings.push(
         `Delivers ~${Math.round(dd.deliveredFlow_m3hr * CFM_PER_M3HR)} cfm at the required static pressure (above the requested flow) at ${rpm} rpm, ${dd.pole}-pole.`,
+      );
+    }
+    if (model.specs?.fixedSpeedDirect === true && motorPole >= 6) {
+      warnings.push(
+        `Needs a ${motorPole}-pole motor (~${rpm} rpm) — higher-pole motors can be harder to source.`,
       );
     }
   } else {
@@ -629,9 +690,16 @@ export function selectFan(
   // Correct absorbed power for actual gas density.
   const dutyPower = dutyPowerStd * (density / STANDARD_AIR_DENSITY);
 
-  // --- Motor sizing (AFBM rule: BHP / 0.75, rounded up to the motor list) --
+  // --- Motor sizing -------------------------------------------------------
+  // Propeller catalogues (EWF/EWFDD) give the motor HP directly in their MOTOR
+  // HP column (per rated speed); use it. Otherwise apply the AFBM rule
+  // (BHP / 0.75, rounded up to the motor list).
   const bhp = kwToHp(dutyPower);
-  const motorHp = suggestMotorHp(bhp);
+  const motorMap = model.specs?.motorHpByRpm;
+  const catalogMotorHp = Array.isArray(motorMap)
+    ? motorHpForRpm(motorMap as Array<[number, number]>, rpm, options.directDrive === true)
+    : null;
+  const motorHp = catalogMotorHp ?? suggestMotorHp(bhp);
   const motorKw = Math.round(hpToKw(motorHp) * 100) / 100;
   void serviceFactor; // retained in the result for display only
 

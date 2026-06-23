@@ -41,6 +41,10 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "DIDWCFAB") return { modelCode: { endsWith: "DIDWCFAB" } };
   if (t === "DIDWCEB") return { modelCode: { endsWith: "DIDWCEB" } };
   if (t === "CIEB") return { modelCode: { endsWith: "CIEB" } };
+  // Propeller panel fans: EWF (belt) ends "EWF"; EWFDD (direct) ends "EWFDD".
+  // "…EWF" never matches "…EWFDD" (the latter ends "DD"), so the pools stay split.
+  if (t === "EWFDD") return { modelCode: { endsWith: "EWFDD" } };
+  if (t === "EWF") return { modelCode: { endsWith: "EWF" } };
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {
@@ -87,6 +91,12 @@ export async function POST(req: NextRequest) {
       { error: "Could not derive a duty point — airflow and static pressure are required." },
       { status: 422 },
     );
+  }
+
+  // Propeller panel fans (EWF/EWFDD): when no static pressure is given, select
+  // against the recommended 0.5" w.g. (≈124.5 Pa).
+  if ((body.tag === "EWF" || body.tag === "EWFDD") && duty.staticPressure_pa <= 0) {
+    duty = { ...duty, staticPressure_pa: 0.5 * 249.0889 };
   }
 
   const models = await prisma.catalogueItem.findMany({
