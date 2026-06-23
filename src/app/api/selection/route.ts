@@ -93,6 +93,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Propeller panel fans (EWF/EWFDD): when no static pressure is given, select
+  // against the recommended 0.5" w.g. (≈124.5 Pa).
+  if ((body.tag === "EWF" || body.tag === "EWFDD") && duty.staticPressure_pa <= 0) {
+    duty = { ...duty, staticPressure_pa: 0.5 * 249.0889 };
+  }
+
   const models = await prisma.catalogueItem.findMany({
     where: {
       active: true,

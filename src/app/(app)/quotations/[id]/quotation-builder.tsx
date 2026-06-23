@@ -482,8 +482,11 @@ export function QuotationBuilder({
   async function runLineSelection(line: Line) {
     const flow = line.specs.capacity_cfm;
     const spVal = line.specs.staticPressure_pa;
-    if (!flow || !spVal) {
-      setSel((s) => ({ ...s, [line.id]: { loading: false, error: "Enter volume flow and static pressure first.", results: null } }));
+    // Panel fans (EWF/EWFDD) may be selected on flow alone — static pressure
+    // defaults to the recommended 0.5" w.g. below when it isn't given.
+    const panel = line.specs.type === "Panel Fan";
+    if (!flow || (!spVal && !panel)) {
+      setSel((s) => ({ ...s, [line.id]: { loading: false, error: panel ? "Enter volume flow first." : "Enter volume flow and static pressure first.", results: null } }));
       return;
     }
     const aUnit = normalizeAirflowUnit(units.capacity);
@@ -493,7 +496,8 @@ export function QuotationBuilder({
       return;
     }
     const cfm = convertAirflow(flow, aUnit, "cfm");
-    const sp = convertPressure(spVal, pUnit, "inwg");
+    let sp = spVal ? convertPressure(spVal, pUnit, "inwg") : 0;
+    if (panel && sp <= 0) sp = 0.5; // Recommended 0.5" w.g. when not given.
     setSel((s) => ({ ...s, [line.id]: { loading: true, error: null, results: null } }));
     try {
       const res = await fetch("/api/selection", {

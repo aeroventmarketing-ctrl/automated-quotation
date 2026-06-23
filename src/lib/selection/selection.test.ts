@@ -284,8 +284,9 @@ describe("selectFan — fixed-speed direct (EWFDD propeller): own rated speed", 
     expect(r).toBeNull();
   });
 
-  it("picks the lowest of two rated speeds that meets the flow", () => {
-    // Two motor poles available: 860 and 1160 rpm.
+  it("prefers the lower-pole motor (1160/6-pole over 860/8-pole) when both meet the flow", () => {
+    // Two motor poles available: 860 (8-pole) and 1160 (6-pole). Higher-pole
+    // motors are harder to source, so the 6-pole speed is preferred.
     const twoSpeed: FanModelInput = {
       ...ewfdd,
       id: "ewfdd2",
@@ -299,9 +300,19 @@ describe("selectFan — fixed-speed direct (EWFDD propeller): own rated speed", 
         { rpm: 1160, airflow_m3hr: 6000, staticPressure_pa: 0, power_kw: 3.1 },
       ],
     };
-    // Low SP + modest flow is met at 860 rpm, so the lower speed wins.
     const r = selectFan(twoSpeed, { airflow_m3hr: 1500, staticPressure_pa: 150 }, { directDrive: true })!;
-    expect(r.rpm).toBe(860);
+    expect(r.rpm).toBe(1160);
+    expect(r.motorPole).toBe(6);
+  });
+
+  it("reports the motor HP from the catalog MOTOR HP column, not BHP/0.75", () => {
+    const withMotor: FanModelInput = {
+      ...ewfdd,
+      id: "ewfdd3",
+      specs: { maxRpm: 860, propeller: true, fixedSpeedDirect: true, motorHpByRpm: [[860, 3]] },
+    };
+    const r = selectFan(withMotor, { airflow_m3hr: 2000, staticPressure_pa: 150 }, { directDrive: true })!;
+    expect(r.motorHp).toBe(3); // the catalog value, regardless of the lower absorbed BHP
   });
 });
 

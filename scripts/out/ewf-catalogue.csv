@@ -2,47 +2,47 @@ modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
 AV2000EWF,PROPELLER,"Panel Fan 20"" Propeller (EWF)","Panel Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2000EWF",20,unit,13152,PHP,"{""bladeDia_in"":20,""bladeAngle_deg"":32,""maxRpm"":1278,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2000EWF",20,unit,13152,PHP,"{""bladeDia_in"":20,""bladeAngle_deg"":32,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF"",""motorHpByRpm"":[[886,0.25],[975,0.333],[1116,0.5],[1278,0.75]]}"
 AV2400EWF,PROPELLER,"Panel Fan 24"" Propeller (EWF)","Panel Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2400EWF",24,unit,15703,PHP,"{""bladeDia_in"":24,""bladeAngle_deg"":30,""maxRpm"":1448,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2400EWF",24,unit,15703,PHP,"{""bladeDia_in"":24,""bladeAngle_deg"":30,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF"",""motorHpByRpm"":[[1004,0.333],[1150,0.5],[1316,0.75],[1448,1]]}"
 AV3000EWF,PROPELLER,"Panel Fan 30"" Propeller (EWF)","Panel Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000EWF",30,unit,19629,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":35,""maxRpm"":1294,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000EWF",30,unit,19629,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":35,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF"",""motorHpByRpm"":[[815,0.5],[933,0.75],[1027,1],[1294,2]]}"
 AV3600EWF,PROPELLER,"Panel Fan 36"" Propeller (EWF)","Panel Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3600EWF",36,unit,23555,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":35,""maxRpm"":1092,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3600EWF",36,unit,23555,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":35,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF"",""motorHpByRpm"":[[688,0.75],[757,1],[954,2],[1092,3]]}"
 AV4200EWF,PROPELLER,"Panel Fan 42"" Propeller (EWF)","Panel Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4200EWF",42,unit,27481,PHP,"{""bladeDia_in"":42,""bladeAngle_deg"":40,""maxRpm"":850,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4200EWF",42,unit,27481,PHP,"{""bladeDia_in"":42,""bladeAngle_deg"":40,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF"",""motorHpByRpm"":[[850,5]]}"
 AV4800EWF,PROPELLER,"Panel Fan 48"" Propeller (EWF)","Panel Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4800EWF",48,unit,31376,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":35,""maxRpm"":802,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4800EWF",48,unit,31376,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":35,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF"",""motorHpByRpm"":[[591,2],[677,3],[802,5]]}"
 AV5400EWF,PROPELLER,"Panel Fan 54"" Propeller (EWF)","Panel Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV5400EWF",54,unit,52999,PHP,"{""bladeDia_in"":54,""bladeAngle_deg"":40,""maxRpm"":622,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV5400EWF",54,unit,52999,PHP,"{""bladeDia_in"":54,""bladeAngle_deg"":40,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
 AV6000EWF,PROPELLER,"Panel Fan 60"" Propeller (EWF)","Panel Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV6000EWF",60,unit,60065,PHP,"{""bladeDia_in"":60,""bladeAngle_deg"":40,""maxRpm"":608,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV6000EWF",60,unit,60065,PHP,"{""bladeDia_in"":60,""bladeAngle_deg"":40,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWF"",""motorHpByRpm"":[[608,10]]}"
 AV1400EWFDD,PROPELLER,"Panel Fan 14"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1400EWFDD",14,unit,9618,PHP,"{""bladeDia_in"":14,""bladeAngle_deg"":24,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1400EWFDD",14,unit,9618,PHP,"{""bladeDia_in"":14,""bladeAngle_deg"":24,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[1750,0.333]],""fixedSpeedDirect"":true}"
 AV1600EWFDD,PROPELLER,"Panel Fan 16"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1600EWFDD",16,unit,10992,PHP,"{""bladeDia_in"":16,""bladeAngle_deg"":24,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1600EWFDD",16,unit,10992,PHP,"{""bladeDia_in"":16,""bladeAngle_deg"":24,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[1750,0.5]],""fixedSpeedDirect"":true}"
 AV1800EWFDD,PROPELLER,"Panel Fan 18"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1800EWFDD",18,unit,12366,PHP,"{""bladeDia_in"":18,""bladeAngle_deg"":20,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1800EWFDD",18,unit,12366,PHP,"{""bladeDia_in"":18,""bladeAngle_deg"":20,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[1750,0.75]],""fixedSpeedDirect"":true}"
 AV2000EWFDD,PROPELLER,"Panel Fan 20"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
@@ -50,20 +50,20 @@ Painted with Epoxy Enamel Aqua Green / Model: AV2000EWFDD",20,unit,13152,PHP,"{"
 AV2400EWFDD,PROPELLER,"Panel Fan 24"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2400EWFDD",24,unit,15703,PHP,"{""bladeDia_in"":24,""bladeAngle_deg"":40,""maxRpm"":1160,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2400EWFDD",24,unit,15703,PHP,"{""bladeDia_in"":24,""bladeAngle_deg"":40,""maxRpm"":1160,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[860,0.5],[1160,1]],""fixedSpeedDirect"":true}"
 AV3000EWFDD,PROPELLER,"Panel Fan 30"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000EWFDD",30,unit,19629,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":40,""maxRpm"":1160,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000EWFDD",30,unit,19629,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":40,""maxRpm"":1160,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[860,1],[1160,2]],""fixedSpeedDirect"":true}"
 AV3600EWFDD,PROPELLER,"Panel Fan 36"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3600EWFDD",36,unit,23555,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":40,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3600EWFDD",36,unit,23555,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":40,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[860,2]],""fixedSpeedDirect"":true}"
 AV4200EWFDD,PROPELLER,"Panel Fan 42"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4200EWFDD",42,unit,27481,PHP,"{""bladeDia_in"":42,""bladeAngle_deg"":35,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4200EWFDD",42,unit,27481,PHP,"{""bladeDia_in"":42,""bladeAngle_deg"":35,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[860,5]],""fixedSpeedDirect"":true}"
 AV4800EWFDD,PROPELLER,"Panel Fan 48"" Propeller (EWFDD)","Panel Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4800EWFDD",48,unit,31376,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":30,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4800EWFDD",48,unit,31376,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":30,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Panel Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[860,7.5]],""fixedSpeedDirect"":true}"

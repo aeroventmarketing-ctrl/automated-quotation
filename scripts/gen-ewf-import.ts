@@ -79,12 +79,27 @@ function codeOf(raw: string): number | null {
   const m = raw.replace(/42000/, "4200").match(/(\d{3,4})/);
   return m ? Number(m[1]) : null;
 }
+/** Motor HP from the catalog cell: handles fractions ("1/4", "3/4") and numbers. */
+function parseHp(v: unknown): number | null {
+  if (isNum(v)) return v;
+  if (typeof v === "string") {
+    const t = v.trim();
+    const frac = t.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (frac) return Math.round((Number(frac[1]) / Number(frac[2])) * 1000) / 1000;
+    return toNum(t);
+  }
+  return null;
+}
+// EWF (belt) propeller fans are selected below 1200 rpm; the design ceiling is
+// fixed regardless of the (higher) tabulated motor-selection speeds.
+const EWF_BELT_MAX_RPM = 1200;
 
 interface RawRow {
   code: number;
   angle: number;
   rpm: number;
   bhp: number;
+  motorHp: number | null;
   cfm: Array<{ sp_in: number; cfm: number }>;
 }
 
@@ -114,6 +129,7 @@ function parseSheet(ws: ExcelJS.Worksheet): RawRow[] {
     if (!/EWF/i.test(raw)) continue;
     const code = codeOf(raw);
     const angle = toNum(cellVal(ws.getRow(r).getCell(3)));
+    const motorHp = parseHp(cellVal(ws.getRow(r).getCell(4)));
     const rpm = toNum(cellVal(ws.getRow(r).getCell(5)));
     const bhp = toNum(cellVal(ws.getRow(r).getCell(6)));
     if (code == null || angle == null || rpm == null || bhp == null || rpm <= 0) continue;
@@ -122,7 +138,7 @@ function parseSheet(ws: ExcelJS.Worksheet): RawRow[] {
       const v = toNum(cellVal(ws.getRow(r).getCell(sc.col)));
       if (v != null && v > 0) cfm.push({ sp_in: sc.sp_in, cfm: v });
     }
-    if (cfm.length) rows.push({ code, angle, rpm, bhp, cfm });
+    if (cfm.length) rows.push({ code, angle, rpm, bhp, motorHp, cfm });
   }
   return rows;
 }
@@ -136,6 +152,8 @@ interface Model {
   maxRpm: number;
   basePrice: number;
   direct: boolean;
+  /** Catalog MOTOR HP per rated speed: [rpm, hp] — selection reads the motor here. */
+  motorHpByRpm: Array<[number, number]>;
   points: Array<{ rpm: number; cfm: number; sp_in: number; bhp: number }>;
 }
 
@@ -157,10 +175,12 @@ function buildModels(
     const angle = pickAngle(angles);
     const kept = rs.filter((r) => r.angle === angle);
     const points: Model["points"] = [];
-    let maxRpm = 0;
+    let topRpm = 0;
+    const motorByRpm = new Map<number, number>();
     for (const r of kept) {
       for (const c of r.cfm) points.push({ rpm: r.rpm, cfm: c.cfm, sp_in: c.sp_in, bhp: r.bhp });
-      if (r.rpm > maxRpm) maxRpm = r.rpm;
+      if (r.rpm > topRpm) topRpm = r.rpm;
+      if (r.motorHp != null) motorByRpm.set(r.rpm, r.motorHp);
     }
     const price = prices[code];
     if (price == null) {
@@ -168,6 +188,8 @@ function buildModels(
       continue;
     }
     const tag = direct ? "EWFDD" : "EWF";
+    // Belt EWF is selected under 1200 rpm; direct EWFDD runs at its rated speed.
+    const maxRpm = direct ? topRpm : EWF_BELT_MAX_RPM;
     models.push({
       code,
       modelCode: `AV${code}${tag}`,
@@ -177,6 +199,7 @@ function buildModels(
       maxRpm,
       basePrice: price,
       direct,
+      motorHpByRpm: [...motorByRpm.entries()].sort((a, b) => a[0] - b[0]),
       points,
     });
   }
@@ -227,6 +250,9 @@ async function main() {
       type: "Panel Fan",
       tag,
     };
+    // Motor HP comes from the catalog's MOTOR HP column (per rated speed), not
+    // the BHP/0.75 rule. Omitted where the catalog leaves the cell blank.
+    if (m.motorHpByRpm.length) specs.motorHpByRpm = m.motorHpByRpm;
     if (m.direct) specs.fixedSpeedDirect = true;
     const name = `Panel Fan ${m.sizeLabel}" Propeller (${tag})`;
     return [
