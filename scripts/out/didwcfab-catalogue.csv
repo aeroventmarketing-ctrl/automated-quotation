@@ -1,0 +1,57 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+AV0900DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 9"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV0900DIDWCFAB",9,unit,17575,PHP,"{""bladeDia_in"":9,""outletArea_ft2"":0.893,""maxRpm"":2294,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV1050DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 10.5"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1050DIDWCFAB",10.5,unit,17575,PHP,"{""bladeDia_in"":10.5,""outletArea_ft2"":1.116,""maxRpm"":1913,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV1225DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 12.25"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1225DIDWCFAB",12.25,unit,19563,PHP,"{""bladeDia_in"":12.25,""outletArea_ft2"":1.403,""maxRpm"":2498,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV1350DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 13.5"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1350DIDWCFAB",13.5,unit,22738,PHP,"{""bladeDia_in"":13.5,""outletArea_ft2"":1.757,""maxRpm"":2175,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV1500DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 15"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1500DIDWCFAB",15,unit,24390,PHP,"{""bladeDia_in"":15,""outletArea_ft2"":2.209,""maxRpm"":1919,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV1650DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 16.5"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1650DIDWCFAB",16.5,unit,26451,PHP,"{""bladeDia_in"":16.5,""outletArea_ft2"":2.767,""maxRpm"":1703,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV1825DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 18.25"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1825DIDWCFAB",18.25,unit,29506,PHP,"{""bladeDia_in"":18.25,""outletArea_ft2"":3.485,""maxRpm"":1568,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV2000DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 20"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2000DIDWCFAB",20,unit,34977,PHP,"{""bladeDia_in"":20,""outletArea_ft2"":4.381,""maxRpm"":1297,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV2225DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 22.25"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2225DIDWCFAB",22.25,unit,36654,PHP,"{""bladeDia_in"":22.25,""outletArea_ft2"":5.504,""maxRpm"":1169,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV2450DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 24.5"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2450DIDWCFAB",24.5,unit,39349,PHP,"{""bladeDia_in"":24.5,""outletArea_ft2"":6.906,""maxRpm"":948,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV2700DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 27"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2700DIDWCFAB",27,unit,47634,PHP,"{""bladeDia_in"":27,""outletArea_ft2"":8.68,""maxRpm"":849,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV3000DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 30"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3000DIDWCFAB",30,unit,52823,PHP,"{""bladeDia_in"":30,""outletArea_ft2"":10.914,""maxRpm"":789,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV3300DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 33"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3300DIDWCFAB",33,unit,65433,PHP,"{""bladeDia_in"":33,""outletArea_ft2"":13.745,""maxRpm"":697,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"
+AV3650DIDWCFAB,CENTRIFUGAL,"Centrifugal Blower - DIDW 36.5"" Forward Curved (DIDWCFAB)","Centrifugal Blower - DIDW
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3650DIDWCFAB",36.5,unit,83827,PHP,"{""bladeDia_in"":36.5,""outletArea_ft2"":17.281,""maxRpm"":578,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Blower (DIDW)"",""tag"":""DIDWCFAB""}"

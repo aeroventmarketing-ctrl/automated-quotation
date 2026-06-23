@@ -38,8 +38,14 @@ const bodySchema = z.object({
 function catalogueWhere(tag: string | undefined, bladeType: string | undefined) {
   // Explicit tag from the quotation builder takes precedence.
   const t = tag ?? (bladeType ? (/forward/i.test(bladeType) ? "CFAB" : "CEB") : undefined);
-  if (t === "CFAB") return { modelCode: { endsWith: "CFAB" } };
+  if (t === "DIDWCFAB") return { modelCode: { endsWith: "DIDWCFAB" } };
   if (t === "DIDWCEB") return { modelCode: { endsWith: "DIDWCEB" } };
+  if (t === "CFAB") {
+    // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
+    return {
+      AND: [{ modelCode: { endsWith: "CFAB" } }, { NOT: { modelCode: { contains: "DIDW" } } }],
+    };
+  }
   if (t === "CEB") {
     // Backward-curve CEB: ends "CEB" but not the DIDW catalogue (…DIDWCEB).
     return {
