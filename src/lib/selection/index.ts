@@ -52,6 +52,15 @@ export function forwardCurveOvLimit(wheelDia_in: number | null): number {
 }
 
 /**
+ * DIDWCFAB (forward-curve, double-width) outlet-velocity limit (fpm): a good
+ * selection runs under 2200 fpm up to the 27" wheel, and under 2400 fpm for the
+ * 30"–36.5" wheels.
+ */
+export function didwCfabOvLimit(wheelDia_in: number | null): number {
+  return wheelDia_in != null && wheelDia_in >= 30 ? 2400 : 2200;
+}
+
+/**
  * Direct-drive (CEBDD) speed bands. A direct-drive fan turns at the motor speed;
  * selection meets the static pressure at a band's nominal speed (4-pole first,
  * then 2-pole) and raises the delivered flow as needed. Outlet velocity is
@@ -634,8 +643,10 @@ export function selectFan(
     num(model.specs?.bladeDia_in) ?? num(model.specs?.wheelDia_in);
   // Forward-curve fans (CFAB) follow the same selection rule as CEB, but their
   // outlet-velocity limit is a flat 2000 fpm (higher than the CEB diameter-based
-  // table). Direct drive (CEBDD/CFABDD) disregards the OV limit either way.
+  // table); DIDWCFAB (double-width forward) uses 2200/2400 fpm by size. Direct
+  // drive (CEBDD/CFABDD) disregards the OV limit either way.
   const isForwardCurve = /forward/i.test(String(model.specs?.bladeType ?? ""));
+  const isDidwCfab = /DIDWCFAB$/i.test(model.modelCode);
   // Outlet velocity reflects the actual delivered flow (direct drive may raise it).
   const flowCfm = (selectedAirflow_m3hr ?? duty.airflow_m3hr) * CFM_PER_M3HR;
   let outletVelocity_fpm: number | null = null;
@@ -645,7 +656,11 @@ export function selectFan(
     outletVelocity_fpm = Math.round(flowCfm / outletArea);
     // CEBDD/CFABDD disregard the OV limit — reported for info only.
     if (!options.directDrive) {
-      ovLimit_fpm = isForwardCurve ? forwardCurveOvLimit(wheelDia) : outletVelocityLimit(wheelDia);
+      ovLimit_fpm = isDidwCfab
+        ? didwCfabOvLimit(wheelDia)
+        : isForwardCurve
+          ? forwardCurveOvLimit(wheelDia)
+          : outletVelocityLimit(wheelDia);
       ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
       if (!ovWithinLimit) {
         warnings.push(
