@@ -175,6 +175,29 @@ const MATERIAL_CATEGORIES = new Set([
 const materialFactor = (specs: LineSpecs): number =>
   MATERIAL_CATEGORIES.has(specs.category) ? MATERIAL_FACTORS[specs.material] ?? 1 : 1;
 
+/**
+ * Blade-type -> body-price factor. Forward-curve (CFAB) bodies are the CEB base
+ * price ÷ 0.9. The factor is applied to the body only, then × material.
+ */
+const BLADE_FACTORS: Record<string, number> = {
+  "Forward Curved": 1 / 0.9,
+};
+const bladeFactor = (specs: LineSpecs): number => BLADE_FACTORS[specs.bladeType] ?? 1;
+/** Body-price factor implied by a model-code tag (CFAB = forward curve). */
+const bladeFactorForModel = (modelCode: string): number =>
+  /CFAB/i.test(modelCode) ? 1 / 0.9 : 1;
+/** Net body price after blade-type and material factors. */
+const bodyPriceOf = (specs: LineSpecs): number =>
+  (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
+/** Model-code tag for a blade type (forward curve = CFAB, otherwise CEB). */
+const BLADE_TAGS: Record<string, string> = { "Forward Curved": "CFAB" };
+/** Re-tag a blower model code (AV####CEB <-> AV####CFAB) for the blade type. */
+function retagBladeModel(model: string | null, bladeType: string): string | null {
+  if (!model) return model;
+  const tag = BLADE_TAGS[bladeType] ?? "CEB";
+  return model.replace(/(AV\d+)(?:CFAB|CEB)/i, `$1${tag}`);
+}
+
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
@@ -301,7 +324,9 @@ export function QuotationBuilder({
         const specs = { ...l.specs, ...patch };
         // 1-phase motors are 220V only — snap voltage so the model code resolves.
         if (specs.motorPh === 1) specs.motorVolts = 220;
-        const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
+        // Keep the blower model's blade tag (CEB/CFAB) in step with the blade type.
+        specs.blowerModel = retagBladeModel(specs.blowerModel, specs.bladeType);
+        const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
@@ -342,6 +367,8 @@ export function QuotationBuilder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requirement: { airflow: cfm, airflowUnit: "cfm", staticPressure: sp, pressureUnit: "inwg" },
+          // Keep forward-curve (CFAB) and backward-curve (CEB) models apart.
+          bladeType: line.specs.bladeType || undefined,
           // Direct-drive lines constrain selection to standard 2-/4-pole speed bands.
           directDrive: /direct/i.test(line.specs.drive),
         }),
@@ -361,19 +388,24 @@ export function QuotationBuilder({
     setLines((ls) =>
       ls.map((l) => {
         if (l.id !== lineId) return l;
+        const chosenModel = cat?.modelCode ?? l.specs.blowerModel;
         const specs: LineSpecs = {
           ...l.specs,
           bodyPrice: cat?.basePrice ?? l.specs.bodyPrice,
-          blowerModel: cat?.modelCode ?? l.specs.blowerModel,
+          blowerModel: chosenModel,
           inches: cat?.bladeDia ?? l.specs.inches,
           motorHp: r.motorHp,
+          // A forward-curve (CFAB) pick implies the Forward Curved blade type, so
+          // the ÷0.9 body factor and CFAB description follow the selection.
+          bladeType:
+            chosenModel && /CFAB/i.test(chosenModel) ? "Forward Curved" : l.specs.bladeType,
           // Direct-drive selections also fix the motor pole (2- or 4-pole band).
           // The client's requested CFM is kept on the quote; the selection list
           // shows the higher delivered flow for reference.
           motorPole: r.motorPole ?? l.specs.motorPole,
         };
         const baseDesc = cat?.description || l.descriptionSnapshot;
-        const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
+        const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
@@ -490,7 +522,7 @@ export function QuotationBuilder({
               <Select
                 value={c.bladeType}
                 disabled={!editable || !c.type}
-                onChange={(e) => set({ bladeType: e.target.value })}
+                onChange={(e) => applyMotor(l.id, { bladeType: e.target.value })}
               >
                 <option value="">Blade type…</option>
                 {(entryFor(c.category, c.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
@@ -722,7 +754,8 @@ export function QuotationBuilder({
                         {w.list.map((r) => {
                           const cat = catalog[r.modelId];
                           const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
-                          const est = cat?.basePrice ? round2(computeUnitPrice(cat.basePrice, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate)) : 0;
+                          const estBody = (cat?.basePrice ?? 0) * bladeFactorForModel(r.modelCode) * materialFactor(l.specs);
+                          const est = estBody > 0 ? round2(computeUnitPrice(estBody, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate)) : 0;
                           const isRec = r.modelId === w.rec.modelId;
                           return (
                             <button

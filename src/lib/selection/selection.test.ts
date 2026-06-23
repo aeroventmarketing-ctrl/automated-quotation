@@ -67,6 +67,22 @@ describe("AFBM selection rules", () => {
     expect(r.confidence).toBe("LOW");
     expect(r.requiresEngineerConfirmation).toBe(true);
   });
+
+  it("does not enforce the CEB outlet-velocity limit on forward-curve (CFAB) fans", () => {
+    const base: FanModelInput = { ...model, specs: { outletArea_ft2: 0.5, bladeDia_in: 12 } };
+    const fwd: FanModelInput = {
+      ...model,
+      specs: { ...base.specs, bladeType: "Forward Curved" },
+    };
+    const duty = { airflow_m3hr: 8000, staticPressure_pa: 250 };
+    // Same tiny outlet that fails for backward-curve...
+    expect(selectFan(base, duty)!.ovWithinLimit).toBe(false);
+    // ...but for forward curve the OV is reported for info only (limit not enforced).
+    const r = selectFan(fwd, duty)!;
+    expect(r.outletVelocity_fpm).toBeGreaterThan(0);
+    expect(r.ovLimit_fpm).toBeNull();
+    expect(r.ovWithinLimit).toBeNull();
+  });
 });
 
 describe("selectFan — fan laws", () => {
