@@ -260,9 +260,10 @@ const materialFactor = (specs: LineSpecs): number =>
  * backward / CFABCAB forward); forward curve is CFAB; otherwise CEB.
  */
 function resolveTag(type: string, bladeType: string): string {
-  // Propeller wall fans (Exhaust / Fresh Air) share the EWF (belt) / EWFDD
-  // (direct) catalogues. The belt tag carries the ×1 price factor; the drive
-  // picks EWF vs EWFDD in selectionTag and via the model code from selection.
+  // Propeller wall fans: Exhaust = EWF/EWFDD, Fresh Air = FAWF/FAWFDD. The belt
+  // tag carries the ×1 price factor; the drive picks the direct variant in
+  // selectionTag and via the model code from selection.
+  if (type === "Fresh Air Wall Fan") return "FAWF";
   if (PROPELLER_FAN_TYPES.has(type)) return "EWF";
   if (type === "Centrifugal Inline Blower") return "CIEB";
   if (type === "Square Inline Blower") return "SIEB";
@@ -280,7 +281,8 @@ function resolveTag(type: string, bladeType: string): string {
  * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
 function selectionTag(type: string, bladeType: string, drive = ""): string {
-  // Propeller wall fans query the belt (EWF) or direct (EWFDD) catalogue.
+  // Propeller wall fans query their own belt/direct catalogue by application.
+  if (type === "Fresh Air Wall Fan") return /direct/i.test(drive) ? "FAWFDD" : "FAWF";
   if (PROPELLER_FAN_TYPES.has(type)) return /direct/i.test(drive) ? "EWFDD" : "EWF";
   const tag = resolveTag(type, bladeType);
   if (tag === "CABSISW") return "CEB";
@@ -302,6 +304,8 @@ const TAG_FACTORS: Record<string, number> = {
   SIEB: 1,
   EWF: 1,
   EWFDD: 1,
+  FAWF: 1,
+  FAWFDD: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,

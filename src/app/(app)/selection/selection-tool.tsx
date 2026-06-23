@@ -103,8 +103,10 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               <option value="CIEB">Centrifugal Inline Blower (CIEB)</option>
               <option value="DIDWCEB">Centrifugal Blower (DIDW) — Backward</option>
               <option value="DIDWCFAB">Centrifugal Blower (DIDW) — Forward</option>
-              <option value="EWF">Wall Fan — Propeller (EWF, belt)</option>
-              <option value="EWFDD">Wall Fan — Propeller (EWFDD, direct)</option>
+              <option value="EWF">Exhaust Wall Fan (EWF, belt)</option>
+              <option value="EWFDD">Exhaust Wall Fan (EWFDD, direct)</option>
+              <option value="FAWF">Fresh Air Wall Fan (FAWF, belt)</option>
+              <option value="FAWFDD">Fresh Air Wall Fan (FAWFDD, direct)</option>
             </Select>
           </div>
           <div className="space-y-1">

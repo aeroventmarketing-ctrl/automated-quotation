@@ -41,9 +41,12 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "DIDWCFAB") return { modelCode: { endsWith: "DIDWCFAB" } };
   if (t === "DIDWCEB") return { modelCode: { endsWith: "DIDWCEB" } };
   if (t === "CIEB") return { modelCode: { endsWith: "CIEB" } };
-  // Propeller panel fans: EWF (belt) ends "EWF"; EWFDD (direct) ends "EWFDD".
-  // "…EWF" never matches "…EWFDD" (the latter ends "DD"), so the pools stay split.
+  // Propeller wall fans by application + drive. Each tag is the exact model-code
+  // suffix; "…EWF"/"…FAWF" never match the direct "…DD" codes, and "EWF" vs
+  // "FAWF" don't collide (suffixes "EWF" vs "AWF"), so the four pools stay split.
   if (t === "EWFDD") return { modelCode: { endsWith: "EWFDD" } };
+  if (t === "FAWFDD") return { modelCode: { endsWith: "FAWFDD" } };
+  if (t === "FAWF") return { modelCode: { endsWith: "FAWF" } };
   if (t === "EWF") return { modelCode: { endsWith: "EWF" } };
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
@@ -93,9 +96,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Propeller panel fans (EWF/EWFDD): when no static pressure is given, select
-  // against the recommended 0.5" w.g. (≈124.5 Pa).
-  if ((body.tag === "EWF" || body.tag === "EWFDD") && duty.staticPressure_pa <= 0) {
+  // Propeller wall fans (EWF/EWFDD/FAWF/FAWFDD): when no static pressure is
+  // given, select against the recommended 0.5" w.g. (≈124.5 Pa).
+  if (
+    (body.tag === "EWF" || body.tag === "EWFDD" || body.tag === "FAWF" || body.tag === "FAWFDD") &&
+    duty.staticPressure_pa <= 0
+  ) {
     duty = { ...duty, staticPressure_pa: 0.5 * 249.0889 };
   }
 
