@@ -115,6 +115,26 @@ function rewriteDriveLine(desc: string, drive: string): string {
   }
   return desc.replace(/\b(Belt|Direct) Driven?\b/gi, "$1 Drive");
 }
+/**
+ * Forward-curve (CFAB) units are "Centrifugal Fresh Air Blower" in the
+ * description; any other blade type is plain "Centrifugal Blower". Idempotent
+ * both ways so it can run on every recompute.
+ */
+function rewriteBladeName(desc: string, bladeType: string): string {
+  return /forward/i.test(bladeType)
+    ? desc.replace(/Centrifugal (?:Fresh Air )?Blower/i, "Centrifugal Fresh Air Blower")
+    : desc.replace(/Centrifugal Fresh Air Blower/i, "Centrifugal Blower");
+}
+
+/**
+ * Drive options for a blade type. Forward curve (CFAB) is belt-only — its
+ * performance ratings don't reach direct-drive speeds (e.g. 1750 rpm).
+ */
+function drivesFor(category: string, type: string, bladeType: string): string[] {
+  const drives = entryFor(category, type)?.drives ?? [];
+  return /forward/i.test(bladeType) ? drives.filter((d) => !/direct/i.test(d)) : drives;
+}
+
 /** Standard paint line, dropped for stainless builds. */
 const PAINT_PHRASE = "Painted with Epoxy Enamel Aqua Green";
 /** Material phrase for the description (drops a redundant trailing "material"). */
@@ -332,7 +352,10 @@ export function QuotationBuilder({
         const pole = specs.motorPole ?? 4;
         // Only auto-price true blower lines (those with a body price).
         if (body <= 0) {
-          const desc = rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material);
+          const desc = rewriteBladeName(
+            rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
+            specs.bladeType,
+          );
           return { ...l, specs, descriptionSnapshot: desc };
         }
         const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
@@ -343,9 +366,12 @@ export function QuotationBuilder({
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
-        const descriptionSnapshot = rewriteMaterialLine(
-          rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
-          specs.material,
+        const descriptionSnapshot = rewriteBladeName(
+          rewriteMaterialLine(
+            rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
+            specs.material,
+          ),
+          specs.bladeType,
         );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
@@ -414,9 +440,12 @@ export function QuotationBuilder({
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
-        const descriptionSnapshot = rewriteMaterialLine(
-          rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
-          specs.material,
+        const descriptionSnapshot = rewriteBladeName(
+          rewriteMaterialLine(
+            rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
+            specs.material,
+          ),
+          specs.bladeType,
         );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
@@ -522,7 +551,13 @@ export function QuotationBuilder({
               <Select
                 value={c.bladeType}
                 disabled={!editable || !c.type}
-                onChange={(e) => applyMotor(l.id, { bladeType: e.target.value })}
+                onChange={(e) => {
+                  const bladeType = e.target.value;
+                  // Forward curve is belt-only: drop an incompatible Direct drive.
+                  const patch: Partial<LineSpecs> = { bladeType };
+                  if (!drivesFor(c.category, c.type, bladeType).includes(c.drive)) patch.drive = "";
+                  applyMotor(l.id, patch);
+                }}
               >
                 <option value="">Blade type…</option>
                 {(entryFor(c.category, c.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
@@ -533,7 +568,7 @@ export function QuotationBuilder({
                 onChange={(e) => applyMotor(l.id, { drive: e.target.value })}
               >
                 <option value="">Drive…</option>
-                {(entryFor(c.category, c.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
+                {drivesFor(c.category, c.type, c.bladeType).map((d) => (<option key={d} value={d}>{d}</option>))}
               </Select>
             </>
           )}

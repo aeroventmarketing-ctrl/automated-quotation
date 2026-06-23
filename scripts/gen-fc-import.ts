@@ -157,7 +157,7 @@ async function main() {
     "modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson";
   const catRows = models.map((m) => {
     const description =
-      "Centrifugal Blower\n" +
+      "Centrifugal Fresh Air Blower\n" +
       "Impeller Type / Belt Driven\n" +
       "Made of Black Iron Sheet\n" +
       `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
@@ -171,7 +171,7 @@ async function main() {
       type: "Centfrifugal Blower",
       tag: "CFAB",
     };
-    const name = `Centrifugal Blower ${m.sizeLabel}\" Forward Curved (CFAB)`;
+    const name = `Centrifugal Fresh Air Blower ${m.sizeLabel}\" Forward Curved (CFAB)`;
     return [
       m.modelCode,
       "CENTRIFUGAL",
