@@ -142,8 +142,10 @@ const PROPELLER_FAN_TYPES = new Set(["Exhaust Wall Fan", "Fresh Air Wall Fan", "
  */
 function wallFanDescription(type: string, drive: string, model?: string | null): string {
   const driveWord = /direct/i.test(drive) ? "Direct Drive" : "Belt Drive";
-  const head = `${type}\nPropeller Type / ${driveWord}`;
-  return model ? `${head}\nModel: ${model}` : head;
+  const paint = model
+    ? `Painted with Epoxy Enamel Aqua Green / Model: ${model}`
+    : "Painted with Epoxy Enamel Aqua Green";
+  return `${type}\nPropeller Type / ${driveWord}\n${paint}`;
 }
 /**
  * Product noun for the first description line, by type and blade type:
@@ -328,9 +330,23 @@ const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.typ
 /** Net body price after the tag (blade/type) factor and material factor. */
 const bodyPriceOf = (specs: LineSpecs): number =>
   (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
-/** Re-tag a blower model code (AV#### + DIDWCFAB/DIDWCEB/CFABCAB/CEBCAB/CABSISW/CFAB/CEB). */
-function retagModel(model: string | null, type: string, bladeType: string): string | null {
+/**
+ * Re-tag a blower model code to match the current type/blade/drive.
+ *  - Centrifugal family (CEB/CFAB/DIDW…/CIEB/SIEB): swap the suffix in place.
+ *  - Wall fans: swap the application+drive suffix (EWF/EWFDD/FAWF/FAWFDD).
+ * Crossing between the centrifugal and wall-fan families returns null — the size
+ * systems differ, so the model must be re-selected.
+ */
+const WALL_FAN_SUFFIX = /(AV\d+)(?:FAWFDD|EWFDD|FAWF|EWF)$/i;
+function retagModel(model: string | null, type: string, bladeType: string, drive = ""): string | null {
   if (!model) return model;
+  if (PROPELLER_FAN_TYPES.has(type)) {
+    const app = type === "Fresh Air Wall Fan" ? "FAWF" : "EWF";
+    const suffix = app + (/direct/i.test(drive) ? "DD" : "");
+    if (WALL_FAN_SUFFIX.test(model)) return model.replace(WALL_FAN_SUFFIX, `$1${suffix}`);
+    return null; // came from another family — sizes differ, force re-selection
+  }
+  if (WALL_FAN_SUFFIX.test(model)) return null; // wall fan -> centrifugal, force re-selection
   return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CFABCAB|CEBCAB|CABSISW|CIEB|SIEB|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
 }
 
@@ -464,8 +480,11 @@ export function QuotationBuilder({
         const specs = { ...l.specs, ...patch };
         // 1-phase motors are 220V only — snap voltage so the model code resolves.
         if (specs.motorPh === 1) specs.motorVolts = 220;
-        // Keep the model tag (CEB/CFAB/CABSISW) in step with the type/blade.
-        specs.blowerModel = retagModel(specs.blowerModel, specs.type, specs.bladeType);
+        // Keep the model tag in step with the type/blade/drive. Crossing product
+        // families clears the model (and its stale price) — re-select to re-price.
+        const retagged = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive);
+        if (specs.blowerModel && retagged == null) specs.bodyPrice = null;
+        specs.blowerModel = retagged;
         const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
@@ -577,7 +596,7 @@ export function QuotationBuilder({
           motorPole: r.motorPole ?? l.specs.motorPole,
         };
         // Cabinet SISW reuses the CEB catalogue model, so re-tag it to CABSISW.
-        specs.blowerModel = retagModel(specs.blowerModel, specs.type, specs.bladeType);
+        specs.blowerModel = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive);
         const baseDesc = cat?.description || l.descriptionSnapshot;
         const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;
@@ -665,12 +684,12 @@ export function QuotationBuilder({
             disabled={!editable || !c.category}
             onChange={(e) => {
               const type = e.target.value;
-              const patch = { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" };
-              // Wall fans prefill a simple type/drive description on selection.
+              // Wall fans have a single blade (Propeller); route through applyMotor
+              // so the model re-tags to the type/drive and the description rebuilds.
               if (PROPELLER_FAN_TYPES.has(type)) {
-                updateLine(l.id, { specs: { ...l.specs, ...patch }, descriptionSnapshot: wallFanDescription(type, "") });
+                applyMotor(l.id, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
               } else {
-                set(patch);
+                set({ type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               }
             }}
           >
