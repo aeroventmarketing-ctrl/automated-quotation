@@ -135,30 +135,44 @@ function rewriteDriveLine(desc: string, drive: string): string {
  * so older saved quotes still resolve.
  */
 const PROPELLER_FAN_TYPES = new Set(["Exhaust Wall Fan", "Fresh Air Wall Fan", "Panel Fan"]);
+const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
+/** Wheel-construction label for line 2 of a blower/fan description. */
+function constructionLabel(type: string): string {
+  if (PROPELLER_FAN_TYPES.has(type)) return "Propeller Type";
+  if (AXIAL_FAN_TYPES.has(type)) return "Axial Type";
+  return "Impeller Type";
+}
 /**
- * Description for a propeller wall fan, rebuilt from the current selections so
- * each dropdown updates its own part:
- *   line 1  <type>                                 (Type)
- *   line 2  <blade> Type / <Belt|Direct> Drive     (Blade Type / Drive)
- *   line 3  Made of <material>                      (Material)
+ * Blower/fan description, rebuilt from the current selections so each dropdown
+ * updates its own part — used by every blower category:
+ *   line 1  <product noun>                                     (Type / Blade)
+ *   line 2  <Impeller|Propeller|Axial> Type / <Belt|Direct> Drive   (Blade / Drive)
+ *   line 3  Made of <material>                                  (Material)
  *   line 4  Painted with Epoxy Enamel Aqua Green[ / Model: <model>]
- * The paint phrase is constant; the model is filled once a size is picked via
- * Run selection (the export renders only the description, so it lives here).
+ * The paint phrase is constant (dropped only for unpainted stainless); the model
+ * is filled once a size is picked via Run selection (the export renders only the
+ * description, so it lives here).
  */
-function wallFanDescription(
+function buildBlowerDescription(
   type: string,
   bladeType: string,
   drive: string,
   material: string,
   model?: string | null,
 ): string {
-  const bladePart = `${bladeType || "Propeller"} Type`;
   const driveWord = /direct/i.test(drive) ? "Direct Drive" : "Belt Drive";
-  const made = `Made of ${materialPhrase(material || "Black Iron Sheet")}`;
-  const paint = model
-    ? `Painted with Epoxy Enamel Aqua Green / Model: ${model}`
-    : "Painted with Epoxy Enamel Aqua Green";
-  return `${type}\n${bladePart} / ${driveWord}\n${made}\n${paint}`;
+  const stainless = /stainless 3(?:04|16)/i.test(material);
+  const lines = [
+    productNoun(type, bladeType),
+    `${constructionLabel(type)} / ${driveWord}`,
+    `Made of ${materialPhrase(material || "Black Iron Sheet")}`,
+    stainless
+      ? model
+        ? `Model: ${model}`
+        : ""
+      : `Painted with Epoxy Enamel Aqua Green${model ? ` / Model: ${model}` : ""}`,
+  ];
+  return lines.filter((l) => l.length > 0).join("\n");
 }
 /**
  * Product noun for the first description line, by type and blade type:
@@ -175,7 +189,8 @@ function productNoun(type: string, bladeType: string): string {
   if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
     return "Centrifugal Blower - DIDW";
   if (/forward/i.test(bladeType)) return "Centrifugal Fresh Air Blower";
-  return "Centrifugal Blower";
+  if (type === "Centrifugal Blower (SISW)") return "Centrifugal Blower";
+  return type || "Centrifugal Blower"; // future types: fall back to the type name
 }
 // Known product nouns, longest/most-specific first so the swap is unambiguous
 // (e.g. "Centrifugal Blower - DIDW" before the bare "Centrifugal Blower").
@@ -502,11 +517,11 @@ export function QuotationBuilder({
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
-        const isWallFan = PROPELLER_FAN_TYPES.has(specs.type);
+        const isBlower = MATERIAL_CATEGORIES.has(specs.category);
         // Only auto-price true blower lines (those with a body price).
         if (body <= 0) {
-          const desc = isWallFan
-            ? wallFanDescription(
+          const desc = isBlower
+            ? buildBlowerDescription(
                 specs.type,
                 specs.bladeType,
                 specs.drive,
@@ -528,8 +543,8 @@ export function QuotationBuilder({
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
-        const descriptionSnapshot = isWallFan
-          ? wallFanDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null)
+        const descriptionSnapshot = isBlower
+          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null)
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
@@ -622,8 +637,8 @@ export function QuotationBuilder({
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
-        const descriptionSnapshot = PROPELLER_FAN_TYPES.has(specs.type)
-          ? wallFanDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined)
+        const descriptionSnapshot = MATERIAL_CATEGORIES.has(specs.category)
+          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined)
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
@@ -699,10 +714,13 @@ export function QuotationBuilder({
             disabled={!editable || !c.category}
             onChange={(e) => {
               const type = e.target.value;
-              // Wall fans have a single blade (Propeller); route through applyMotor
-              // so the model re-tags to the type/drive and the description rebuilds.
+              // Blower/fan categories route through applyMotor so the description
+              // rebuilds field-by-field (and the model re-tags). Wall fans have a
+              // single blade (Propeller), so pre-select it. Accessories keep set().
               if (PROPELLER_FAN_TYPES.has(type)) {
                 applyMotor(l.id, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
+              } else if (MATERIAL_CATEGORIES.has(c.category)) {
+                applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               } else {
                 set({ type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               }
