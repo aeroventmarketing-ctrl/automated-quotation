@@ -924,7 +924,14 @@ export function QuotationBuilder({
         <CardHeader><CardTitle>Line items</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {lines.map((l, idx) => (
-            <div key={l.id} className="relative rounded-lg border p-3">
+            <div
+              key={l.id}
+              className={`relative rounded-lg border p-3 ${
+                idx % 2 === 0
+                  ? "bg-sky-50 dark:bg-sky-950/20"
+                  : "bg-amber-50 dark:bg-amber-950/20"
+              }`}
+            >
               {editable && (
                 <Button size="sm" variant="ghost"
                   className="absolute right-2 top-2 z-10 text-destructive hover:text-destructive"
