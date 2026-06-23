@@ -234,8 +234,10 @@ async function main() {
   const catRows = models.map((m) => {
     const driveWord = m.direct ? "Direct Drive" : "Belt Drive";
     const tag = m.direct ? "EWFDD" : "EWF";
+    // EWF = Exhaust Wall Fan. The Fresh Air Wall Fan type reuses this catalogue;
+    // the quote rewrites the product noun to match the selected type.
     const description =
-      "Panel Fan\n" +
+      "Exhaust Wall Fan\n" +
       `Propeller Type / ${driveWord}\n` +
       "Made of Black Iron Sheet\n" +
       `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
@@ -247,14 +249,14 @@ async function main() {
       bladeType: "Propeller",
       drive: m.direct ? "direct" : "belt",
       category: "Propeller Type",
-      type: "Panel Fan",
+      type: "Exhaust Wall Fan",
       tag,
     };
     // Motor HP comes from the catalog's MOTOR HP column (per rated speed), not
     // the BHP/0.75 rule. Omitted where the catalog leaves the cell blank.
     if (m.motorHpByRpm.length) specs.motorHpByRpm = m.motorHpByRpm;
     if (m.direct) specs.fixedSpeedDirect = true;
-    const name = `Panel Fan ${m.sizeLabel}" Propeller (${tag})`;
+    const name = `Exhaust Wall Fan ${m.sizeLabel}" Propeller (${tag})`;
     return [
       m.modelCode,
       "PROPELLER",

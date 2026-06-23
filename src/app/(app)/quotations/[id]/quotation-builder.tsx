@@ -130,12 +130,19 @@ function rewriteDriveLine(desc: string, drive: string): string {
  * both ways so it can run on every recompute.
  */
 /**
+ * Propeller wall fans (Exhaust / Fresh Air) share one catalogue and selection
+ * path — EWF (belt) / EWFDD (direct). "Panel Fan" is the legacy type name, kept
+ * so older saved quotes still resolve.
+ */
+const PROPELLER_FAN_TYPES = new Set(["Exhaust Wall Fan", "Fresh Air Wall Fan", "Panel Fan"]);
+/**
  * Product noun for the first description line, by type and blade type:
  *  - Cabinet Blower (SISW) -> "Cabinet Blower-SISW"
  *  - Forward Curved        -> "Centrifugal Fresh Air Blower"
  *  - otherwise             -> "Centrifugal Blower"
  */
 function productNoun(type: string, bladeType: string): string {
+  if (PROPELLER_FAN_TYPES.has(type)) return type;
   if (type === "Cabinet Blower (SISW)") return "Cabinet Blower-SISW";
   if (type === "Cabinet Blower (DIDW)") return "Cabinet Blower-DIDW";
   if (type === "Centrifugal Inline Blower") return "Centrifugal Inline Blower";
@@ -148,6 +155,9 @@ function productNoun(type: string, bladeType: string): string {
 // Known product nouns, longest/most-specific first so the swap is unambiguous
 // (e.g. "Centrifugal Blower - DIDW" before the bare "Centrifugal Blower").
 const PRODUCT_NOUNS = [
+  "Exhaust Wall Fan",
+  "Fresh Air Wall Fan",
+  "Panel Fan",
   "Centrifugal Fresh Air Blower",
   "Centrifugal Inline Blower",
   "Square Inline Blower",
@@ -250,10 +260,10 @@ const materialFactor = (specs: LineSpecs): number =>
  * backward / CFABCAB forward); forward curve is CFAB; otherwise CEB.
  */
 function resolveTag(type: string, bladeType: string): string {
-  // Panel Fan (propeller) has its own catalogues: EWF (belt) / EWFDD (direct).
-  // The belt tag carries the ×1 price factor; the drive picks EWF vs EWFDD in
-  // selectionTag and via the model code from selection.
-  if (type === "Panel Fan") return "EWF";
+  // Propeller wall fans (Exhaust / Fresh Air) share the EWF (belt) / EWFDD
+  // (direct) catalogues. The belt tag carries the ×1 price factor; the drive
+  // picks EWF vs EWFDD in selectionTag and via the model code from selection.
+  if (PROPELLER_FAN_TYPES.has(type)) return "EWF";
   if (type === "Centrifugal Inline Blower") return "CIEB";
   if (type === "Square Inline Blower") return "SIEB";
   if (type === "Cabinet Blower (DIDW)")
@@ -270,8 +280,8 @@ function resolveTag(type: string, bladeType: string): string {
  * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
 function selectionTag(type: string, bladeType: string, drive = ""): string {
-  // Panel Fan queries the belt (EWF) or direct (EWFDD) propeller catalogue.
-  if (type === "Panel Fan") return /direct/i.test(drive) ? "EWFDD" : "EWF";
+  // Propeller wall fans query the belt (EWF) or direct (EWFDD) catalogue.
+  if (PROPELLER_FAN_TYPES.has(type)) return /direct/i.test(drive) ? "EWFDD" : "EWF";
   const tag = resolveTag(type, bladeType);
   if (tag === "CABSISW") return "CEB";
   if (tag === "CEBCAB") return "DIDWCEB";
@@ -482,9 +492,9 @@ export function QuotationBuilder({
   async function runLineSelection(line: Line) {
     const flow = line.specs.capacity_cfm;
     const spVal = line.specs.staticPressure_pa;
-    // Panel fans (EWF/EWFDD) may be selected on flow alone — static pressure
-    // defaults to the recommended 0.5" w.g. below when it isn't given.
-    const panel = line.specs.type === "Panel Fan";
+    // Propeller wall fans (EWF/EWFDD) may be selected on flow alone — static
+    // pressure defaults to the recommended 0.5" w.g. below when it isn't given.
+    const panel = PROPELLER_FAN_TYPES.has(line.specs.type);
     if (!flow || (!spVal && !panel)) {
       setSel((s) => ({ ...s, [line.id]: { loading: false, error: panel ? "Enter volume flow first." : "Enter volume flow and static pressure first.", results: null } }));
       return;
