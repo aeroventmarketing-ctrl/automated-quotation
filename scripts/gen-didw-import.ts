@@ -44,9 +44,10 @@ const OUT_DIR = join(process.cwd(), "scripts", "out");
 const EXCLUDE_CODES = new Set(["8900"]);
 
 // Correct mislabelled size codes to their true CEB-aligned nominal size (sheet
-// typos). The "4250" block is the 40.25" wheel (AV4025DIDWCEB) and "7200" is the
-// 73" wheel (AV7300DIDWCEB); each is then priced off its corrected CEB size.
-const CODE_REMAP: Record<string, string> = { "4250": "4025", "7200": "7300" };
+// typos). "4250" is the 40.25" wheel (AV4025DIDWCEB), "5425" the 54.5" wheel
+// (AV5450DIDWCEB), and "7200" the 73" wheel (AV7300DIDWCEB); each is then priced
+// off its corrected CEB size.
+const CODE_REMAP: Record<string, string> = { "4250": "4025", "5425": "5450", "7200": "7300" };
 
 // CEB catalogue (blade Ø in, price) from "Categories for Claude.xlsx" — the ×1
 // price base. Each DIDW size adopts the nearest CEB size's price; sizes with no
