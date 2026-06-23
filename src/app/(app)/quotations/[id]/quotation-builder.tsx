@@ -141,7 +141,7 @@ const PROPELLER_FAN_TYPES = new Set(["Exhaust Wall Fan", "Fresh Air Wall Fan", "
  * description, so the model code must live here when one is chosen.
  */
 function wallFanDescription(type: string, drive: string, model?: string | null): string {
-  const driveWord = /direct/i.test(drive) ? "Direct" : "Belt";
+  const driveWord = /direct/i.test(drive) ? "Direct Drive" : "Belt Drive";
   const head = `${type}\nPropeller Type / ${driveWord}`;
   return model ? `${head}\nModel: ${model}` : head;
 }
