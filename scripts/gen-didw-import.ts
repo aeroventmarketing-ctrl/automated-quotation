@@ -22,6 +22,9 @@
  * nearest CEB size's catalogue price; the ÷0.57 (DIDW) factor and material
  * factor are applied at quote time, not baked into the stored base price.
  *
+ * Sizes without a confirmed price are excluded for now (EXCLUDE_CODES) — e.g.
+ * the 89" (8900) wheel, whose price will be added later.
+ *
  * Run: npx tsx scripts/gen-didw-import.ts
  */
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -35,6 +38,14 @@ const KW_PER_HP = 0.745699872;
 const SRC = join(process.cwd(), "DIDWCEB catalog.xlsx");
 const SHEET = "Performance DWDI";
 const OUT_DIR = join(process.cwd(), "scripts", "out");
+
+// Size codes (Ø ×100) to skip until a confirmed price exists. The 89" (8900)
+// wheel has no CEB price yet; it will be added with its own price later.
+const EXCLUDE_CODES = new Set(["8900"]);
+
+// Correct mislabelled size codes to their CEB-aligned nominal size. The sheet's
+// "4250" block is the 40.25" wheel (AV4025DIDWCEB), priced off CEB 40.25".
+const CODE_REMAP: Record<string, string> = { "4250": "4025" };
 
 // CEB catalogue (blade Ø in, price) from "Categories for Claude.xlsx" — the ×1
 // price base. Each DIDW size adopts the nearest CEB size's price; sizes with no
@@ -115,8 +126,10 @@ async function main() {
 
   const models: Model[] = [];
   for (let i = 0; i < heads.length; i++) {
-    const { row: headRow, code } = heads[i];
+    const { row: headRow, code: srcCode } = heads[i];
     const endRow = i + 1 < heads.length ? heads[i + 1].row - 1 : ws.rowCount;
+    if (EXCLUDE_CODES.has(srcCode)) continue; // no confirmed price yet
+    const code = CODE_REMAP[srcCode] ?? srcCode;
     const dia = Number(code) / 100;
     const modelCode = `AV${code}DIDWCEB`;
 
@@ -185,7 +198,7 @@ async function main() {
     "modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson";
   const catRows = models.map((m) => {
     const description =
-      "Centrifugal Blower-DIDW\n" +
+      "Centrifugal Blower - DIDW\n" +
       "Impeller Type / Belt Driven\n" +
       "Made of Black Iron Sheet\n" +
       `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
@@ -199,7 +212,7 @@ async function main() {
       type: "Double Inlet Double Width (DIDW)",
       tag: "DIDWCEB",
     };
-    const name = `Centrifugal Blower-DIDW ${m.sizeLabel}\" Double Inlet Double Width (DIDWCEB)`;
+    const name = `Centrifugal Blower - DIDW ${m.sizeLabel}\" Double Inlet Double Width (DIDWCEB)`;
     return [
       m.modelCode,
       "CENTRIFUGAL",

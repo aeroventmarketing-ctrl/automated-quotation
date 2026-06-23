@@ -1,85 +1,81 @@
 modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
-AV1225DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 12.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV1225DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 12.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1225DIDWCEB",12.25,unit,19563,PHP,"{""bladeDia_in"":12.25,""outletArea_ft2"":1.55,""maxRpm"":5327,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV1350DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 13.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV1350DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 13.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1350DIDWCEB",13.5,unit,22738,PHP,"{""bladeDia_in"":13.5,""outletArea_ft2"":1.89,""maxRpm"":4840,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV1500DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 15"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV1500DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 15"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1500DIDWCEB",15,unit,24390,PHP,"{""bladeDia_in"":15,""outletArea_ft2"":2.33,""maxRpm"":4451,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV1650DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 16.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV1650DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 16.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1650DIDWCEB",16.5,unit,26451,PHP,"{""bladeDia_in"":16.5,""outletArea_ft2"":2.82,""maxRpm"":4047,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV1825DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 18.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV1825DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 18.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1825DIDWCEB",18.25,unit,29506,PHP,"{""bladeDia_in"":18.25,""outletArea_ft2"":3.45,""maxRpm"":3654,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV2000DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 20"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV2000DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 20"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV2000DIDWCEB",20,unit,34977,PHP,"{""bladeDia_in"":20,""outletArea_ft2"":4.14,""maxRpm"":3333,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV2225DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 22.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV2225DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 22.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV2225DIDWCEB",22.25,unit,36654,PHP,"{""bladeDia_in"":22.25,""outletArea_ft2"":5.12,""maxRpm"":2996,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV2450DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 24.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV2450DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 24.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV2450DIDWCEB",24.5,unit,39349,PHP,"{""bladeDia_in"":24.5,""outletArea_ft2"":6.21,""maxRpm"":2721,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV2700DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 27"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV2700DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 27"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV2700DIDWCEB",27,unit,47634,PHP,"{""bladeDia_in"":27,""outletArea_ft2"":7.54,""maxRpm"":2362,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV3000DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 30"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV3000DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 30"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV3000DIDWCEB",30,unit,52823,PHP,"{""bladeDia_in"":30,""outletArea_ft2"":9.31,""maxRpm"":2125,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV3300DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 33"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV3300DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 33"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV3300DIDWCEB",33,unit,65433,PHP,"{""bladeDia_in"":33,""outletArea_ft2"":11.27,""maxRpm"":1933,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV3650DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 36.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV3650DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 36.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV3650DIDWCEB",36.5,unit,83827,PHP,"{""bladeDia_in"":36.5,""outletArea_ft2"":13.79,""maxRpm"":1721,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV4250DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 42.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV4025DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 40.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4250DIDWCEB",42.5,unit,125775,PHP,"{""bladeDia_in"":42.5,""outletArea_ft2"":16.77,""maxRpm"":1560,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV4450DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 44.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+Painted with Epoxy Enamel Aqua Green / Model: AV4025DIDWCEB",40.25,unit,99281,PHP,"{""bladeDia_in"":40.25,""outletArea_ft2"":16.77,""maxRpm"":1560,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
+AV4450DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 44.5"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV4450DIDWCEB",44.5,unit,125775,PHP,"{""bladeDia_in"":44.5,""outletArea_ft2"":20.49,""maxRpm"":1411,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV4900DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 49"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV4900DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 49"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV4900DIDWCEB",49,unit,146672,PHP,"{""bladeDia_in"":49,""outletArea_ft2"":24.85,""maxRpm"":1282,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV5425DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 54.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV5425DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 54.25"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV5425DIDWCEB",54.25,unit,221496,PHP,"{""bladeDia_in"":54.25,""outletArea_ft2"":30.46,""maxRpm"":1158,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV6000DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 60"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV6000DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 60"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV6000DIDWCEB",60,unit,253731,PHP,"{""bladeDia_in"":60,""outletArea_ft2"":37.26,""maxRpm"":1047,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV6600DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 66"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV6600DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 66"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV6600DIDWCEB",66,unit,325385,PHP,"{""bladeDia_in"":66,""outletArea_ft2"":45.08,""maxRpm"":952,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV7200DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 72"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV7200DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 72"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV7200DIDWCEB",72,unit,359001,PHP,"{""bladeDia_in"":72,""outletArea_ft2"":55.15,""maxRpm"":860,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV8075DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 80.75"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
+AV8075DIDWCEB,CENTRIFUGAL,"Centrifugal Blower - DIDW 80.75"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower - DIDW
 Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV8075DIDWCEB",80.75,unit,660691,PHP,"{""bladeDia_in"":80.75,""outletArea_ft2"":67.48,""maxRpm"":778,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"
-AV8900DIDWCEB,CENTRIFUGAL,"Centrifugal Blower-DIDW 89"" Double Inlet Double Width (DIDWCEB)","Centrifugal Blower-DIDW
-Impeller Type / Belt Driven
-Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV8900DIDWCEB",89,unit,660691,PHP,"{""bladeDia_in"":89,""outletArea_ft2"":81.98,""maxRpm"":706,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Double Inlet Double Width (DIDW)"",""tag"":""DIDWCEB""}"

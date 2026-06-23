@@ -128,15 +128,15 @@ function rewriteDriveLine(desc: string, drive: string): string {
  */
 function productNoun(type: string, bladeType: string): string {
   if (type === "Cabinet Blower (SISW)") return "Cabinet Blower-SISW";
-  if (type === "Double Inlet Double Width (DIDW)") return "Centrifugal Blower-DIDW";
+  if (type === "Double Inlet Double Width (DIDW)") return "Centrifugal Blower - DIDW";
   if (/forward/i.test(bladeType)) return "Centrifugal Fresh Air Blower";
   return "Centrifugal Blower";
 }
 // Known product nouns, longest/most-specific first so the swap is unambiguous
-// (e.g. "Centrifugal Blower-DIDW" before the bare "Centrifugal Blower").
+// (e.g. "Centrifugal Blower - DIDW" before the bare "Centrifugal Blower").
 const PRODUCT_NOUNS = [
   "Centrifugal Fresh Air Blower",
-  "Centrifugal Blower-DIDW",
+  "Centrifugal Blower - DIDW",
   "Cabinet Blower-SISW",
   "Centrifugal Blower",
 ];
