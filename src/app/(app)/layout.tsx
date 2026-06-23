@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { AppNav } from "@/components/app-nav";
+import { GeofenceGate } from "@/components/geofence-gate";
+import { getGeofence } from "@/lib/geofence";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -9,7 +11,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/login");
   }
 
-  return (
+  // Location access: when enabled, non-admins are confined to the geofence.
+  const geofence = await getGeofence();
+  const gated =
+    geofence.enabled && !isAdmin(user) && geofence.latitude != null && geofence.longitude != null;
+
+  const layout = (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 border-r bg-background md:block">
         <AppNav role={user.role} name={user.name} />
@@ -26,4 +33,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </main>
     </div>
   );
+
+  if (gated) {
+    return (
+      <GeofenceGate
+        latitude={geofence.latitude!}
+        longitude={geofence.longitude!}
+        radiusMeters={geofence.radiusMeters}
+        label={geofence.label}
+      >
+        {layout}
+      </GeofenceGate>
+    );
+  }
+  return layout;
 }
