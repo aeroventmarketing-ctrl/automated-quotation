@@ -130,12 +130,29 @@ function rewriteDriveLine(desc: string, drive: string): string {
  * both ways so it can run on every recompute.
  */
 /**
+ * Propeller wall fans (Exhaust / Fresh Air) share one catalogue and selection
+ * path — EWF (belt) / EWFDD (direct). "Panel Fan" is the legacy type name, kept
+ * so older saved quotes still resolve.
+ */
+const PROPELLER_FAN_TYPES = new Set(["Exhaust Wall Fan", "Fresh Air Wall Fan", "Panel Fan"]);
+/**
+ * Description for a propeller wall fan: the type and drive on two lines, plus a
+ * Model line once a specific size is picked. The quote export renders only the
+ * description, so the model code must live here when one is chosen.
+ */
+function wallFanDescription(type: string, drive: string, model?: string | null): string {
+  const driveWord = /direct/i.test(drive) ? "Direct Drive" : "Belt Drive";
+  const head = `${type}\nPropeller Type / ${driveWord}`;
+  return model ? `${head}\nModel: ${model}` : head;
+}
+/**
  * Product noun for the first description line, by type and blade type:
  *  - Cabinet Blower (SISW) -> "Cabinet Blower-SISW"
  *  - Forward Curved        -> "Centrifugal Fresh Air Blower"
  *  - otherwise             -> "Centrifugal Blower"
  */
 function productNoun(type: string, bladeType: string): string {
+  if (PROPELLER_FAN_TYPES.has(type)) return type;
   if (type === "Cabinet Blower (SISW)") return "Cabinet Blower-SISW";
   if (type === "Cabinet Blower (DIDW)") return "Cabinet Blower-DIDW";
   if (type === "Centrifugal Inline Blower") return "Centrifugal Inline Blower";
@@ -148,6 +165,9 @@ function productNoun(type: string, bladeType: string): string {
 // Known product nouns, longest/most-specific first so the swap is unambiguous
 // (e.g. "Centrifugal Blower - DIDW" before the bare "Centrifugal Blower").
 const PRODUCT_NOUNS = [
+  "Exhaust Wall Fan",
+  "Fresh Air Wall Fan",
+  "Panel Fan",
   "Centrifugal Fresh Air Blower",
   "Centrifugal Inline Blower",
   "Square Inline Blower",
@@ -250,10 +270,11 @@ const materialFactor = (specs: LineSpecs): number =>
  * backward / CFABCAB forward); forward curve is CFAB; otherwise CEB.
  */
 function resolveTag(type: string, bladeType: string): string {
-  // Panel Fan (propeller) has its own catalogues: EWF (belt) / EWFDD (direct).
-  // The belt tag carries the ×1 price factor; the drive picks EWF vs EWFDD in
+  // Propeller wall fans: Exhaust = EWF/EWFDD, Fresh Air = FAWF/FAWFDD. The belt
+  // tag carries the ×1 price factor; the drive picks the direct variant in
   // selectionTag and via the model code from selection.
-  if (type === "Panel Fan") return "EWF";
+  if (type === "Fresh Air Wall Fan") return "FAWF";
+  if (PROPELLER_FAN_TYPES.has(type)) return "EWF";
   if (type === "Centrifugal Inline Blower") return "CIEB";
   if (type === "Square Inline Blower") return "SIEB";
   if (type === "Cabinet Blower (DIDW)")
@@ -270,8 +291,9 @@ function resolveTag(type: string, bladeType: string): string {
  * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
 function selectionTag(type: string, bladeType: string, drive = ""): string {
-  // Panel Fan queries the belt (EWF) or direct (EWFDD) propeller catalogue.
-  if (type === "Panel Fan") return /direct/i.test(drive) ? "EWFDD" : "EWF";
+  // Propeller wall fans query their own belt/direct catalogue by application.
+  if (type === "Fresh Air Wall Fan") return /direct/i.test(drive) ? "FAWFDD" : "FAWF";
+  if (PROPELLER_FAN_TYPES.has(type)) return /direct/i.test(drive) ? "EWFDD" : "EWF";
   const tag = resolveTag(type, bladeType);
   if (tag === "CABSISW") return "CEB";
   if (tag === "CEBCAB") return "DIDWCEB";
@@ -292,6 +314,8 @@ const TAG_FACTORS: Record<string, number> = {
   SIEB: 1,
   EWF: 1,
   EWFDD: 1,
+  FAWF: 1,
+  FAWFDD: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
@@ -446,13 +470,20 @@ export function QuotationBuilder({
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
+        const isWallFan = PROPELLER_FAN_TYPES.has(specs.type);
         // Only auto-price true blower lines (those with a body price).
         if (body <= 0) {
-          const desc = rewriteProductNoun(
-            rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
-            specs.type,
-            specs.bladeType,
-          );
+          const desc = isWallFan
+            ? wallFanDescription(
+                specs.type,
+                specs.drive,
+                specs.blowerModel ? effectiveBlowerModel(specs.blowerModel, specs.drive) : null,
+              )
+            : rewriteProductNoun(
+                rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
+                specs.type,
+                specs.bladeType,
+              );
           return { ...l, specs, descriptionSnapshot: desc };
         }
         const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
@@ -463,14 +494,16 @@ export function QuotationBuilder({
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
-        const descriptionSnapshot = rewriteProductNoun(
-          rewriteMaterialLine(
-            rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
-            specs.material,
-          ),
-          specs.type,
-          specs.bladeType,
-        );
+        const descriptionSnapshot = isWallFan
+          ? wallFanDescription(specs.type, specs.drive, specs.blowerModel ? combined : null)
+          : rewriteProductNoun(
+              rewriteMaterialLine(
+                rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
+                specs.material,
+              ),
+              specs.type,
+              specs.bladeType,
+            );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
@@ -482,9 +515,9 @@ export function QuotationBuilder({
   async function runLineSelection(line: Line) {
     const flow = line.specs.capacity_cfm;
     const spVal = line.specs.staticPressure_pa;
-    // Panel fans (EWF/EWFDD) may be selected on flow alone — static pressure
-    // defaults to the recommended 0.5" w.g. below when it isn't given.
-    const panel = line.specs.type === "Panel Fan";
+    // Propeller wall fans (EWF/EWFDD) may be selected on flow alone — static
+    // pressure defaults to the recommended 0.5" w.g. below when it isn't given.
+    const panel = PROPELLER_FAN_TYPES.has(line.specs.type);
     if (!flow || (!spVal && !panel)) {
       setSel((s) => ({ ...s, [line.id]: { loading: false, error: panel ? "Enter volume flow first." : "Enter volume flow and static pressure first.", results: null } }));
       return;
@@ -555,14 +588,16 @@ export function QuotationBuilder({
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
-        const descriptionSnapshot = rewriteProductNoun(
-          rewriteMaterialLine(
-            rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
-            specs.material,
-          ),
-          specs.type,
-          specs.bladeType,
-        );
+        const descriptionSnapshot = PROPELLER_FAN_TYPES.has(specs.type)
+          ? wallFanDescription(specs.type, specs.drive, combined)
+          : rewriteProductNoun(
+              rewriteMaterialLine(
+                rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
+                specs.material,
+              ),
+              specs.type,
+              specs.bladeType,
+            );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
@@ -628,7 +663,16 @@ export function QuotationBuilder({
           <Select
             value={c.type}
             disabled={!editable || !c.category}
-            onChange={(e) => set({ type: e.target.value, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+            onChange={(e) => {
+              const type = e.target.value;
+              const patch = { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" };
+              // Wall fans prefill a simple type/drive description on selection.
+              if (PROPELLER_FAN_TYPES.has(type)) {
+                updateLine(l.id, { specs: { ...l.specs, ...patch }, descriptionSnapshot: wallFanDescription(type, "") });
+              } else {
+                set(patch);
+              }
+            }}
           >
             <option value="">Type…</option>
             {typesFor(c.category).map((t) => (<option key={t} value={t}>{t}</option>))}

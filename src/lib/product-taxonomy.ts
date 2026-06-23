@@ -154,7 +154,18 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   },
   {
     "category": "Propeller Type",
-    "type": "Panel Fan",
+    "type": "Exhaust Wall Fan",
+    "bladeTypes": [
+      "Propeller"
+    ],
+    "drives": [
+      "Belt",
+      "Direct"
+    ]
+  },
+  {
+    "category": "Propeller Type",
+    "type": "Fresh Air Wall Fan",
     "bladeTypes": [
       "Propeller"
     ],

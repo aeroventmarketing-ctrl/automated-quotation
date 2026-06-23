@@ -228,78 +228,96 @@ async function main() {
   ];
   if (!models.length) throw new Error("No EWF/EWFDD models parsed");
 
+  // Both wall-fan applications share the same fan data, emitted under their own
+  // model codes / tags: Exhaust = EWF/EWFDD, Fresh Air = FAWF/FAWFDD.
+  const FAMILIES = [
+    { typeName: "Exhaust Wall Fan", belt: "EWF", direct: "EWFDD" },
+    { typeName: "Fresh Air Wall Fan", belt: "FAWF", direct: "FAWFDD" },
+  ] as const;
+  const tagOf = (fam: (typeof FAMILIES)[number], direct: boolean) => (direct ? fam.direct : fam.belt);
+
   // --- catalogue CSV --------------------------------------------------------
   const catHeader =
     "modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson";
-  const catRows = models.map((m) => {
-    const driveWord = m.direct ? "Direct Drive" : "Belt Drive";
-    const tag = m.direct ? "EWFDD" : "EWF";
-    const description =
-      "Panel Fan\n" +
-      `Propeller Type / ${driveWord}\n` +
-      "Made of Black Iron Sheet\n" +
-      `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
-    const specs: Record<string, unknown> = {
-      bladeDia_in: m.dia,
-      bladeAngle_deg: m.angle,
-      maxRpm: m.maxRpm,
-      propeller: true,
-      bladeType: "Propeller",
-      drive: m.direct ? "direct" : "belt",
-      category: "Propeller Type",
-      type: "Panel Fan",
-      tag,
-    };
-    // Motor HP comes from the catalog's MOTOR HP column (per rated speed), not
-    // the BHP/0.75 rule. Omitted where the catalog leaves the cell blank.
-    if (m.motorHpByRpm.length) specs.motorHpByRpm = m.motorHpByRpm;
-    if (m.direct) specs.fixedSpeedDirect = true;
-    const name = `Panel Fan ${m.sizeLabel}" Propeller (${tag})`;
-    return [
-      m.modelCode,
-      "PROPELLER",
-      csv(name),
-      csv(description),
-      m.sizeLabel,
-      "unit",
-      String(m.basePrice),
-      "PHP",
-      csv(JSON.stringify(specs)),
-    ].join(",");
-  });
+  const catRows: string[] = [];
+  for (const fam of FAMILIES) {
+    for (const m of models) {
+      const tag = tagOf(fam, m.direct);
+      const modelCode = `AV${m.code}${tag}`;
+      const driveWord = m.direct ? "Direct Drive" : "Belt Drive";
+      const description =
+        `${fam.typeName}\n` +
+        `Propeller Type / ${driveWord}\n` +
+        "Made of Black Iron Sheet\n" +
+        `Painted with Epoxy Enamel Aqua Green / Model: ${modelCode}`;
+      const specs: Record<string, unknown> = {
+        bladeDia_in: m.dia,
+        bladeAngle_deg: m.angle,
+        maxRpm: m.maxRpm,
+        propeller: true,
+        bladeType: "Propeller",
+        drive: m.direct ? "direct" : "belt",
+        category: "Propeller Type",
+        type: fam.typeName,
+        tag,
+      };
+      // Motor HP comes from the catalog's MOTOR HP column (per rated speed), not
+      // the BHP/0.75 rule. Omitted where the catalog leaves the cell blank.
+      if (m.motorHpByRpm.length) specs.motorHpByRpm = m.motorHpByRpm;
+      if (m.direct) specs.fixedSpeedDirect = true;
+      const name = `${fam.typeName} ${m.sizeLabel}" Propeller (${tag})`;
+      catRows.push(
+        [
+          modelCode,
+          "PROPELLER",
+          csv(name),
+          csv(description),
+          m.sizeLabel,
+          "unit",
+          String(m.basePrice),
+          "PHP",
+          csv(JSON.stringify(specs)),
+        ].join(","),
+      );
+    }
+  }
   writeFileSync(join(OUT_DIR, "ewf-catalogue.csv"), [catHeader, ...catRows].join("\n") + "\n");
 
   // --- ratings CSV ----------------------------------------------------------
   const ratHeader = "modelCode,rpm,airflow_m3hr,staticPressure_pa,power_kw,efficiency";
   const ratRows: string[] = [];
-  let total = 0;
-  for (const m of models) {
-    for (const p of m.points) {
-      ratRows.push(
-        [
-          m.modelCode,
-          String(Math.round(p.rpm)),
-          (p.cfm * CFM_TO_M3HR).toFixed(2),
-          (p.sp_in * INWG_TO_PA).toFixed(2),
-          (p.bhp * KW_PER_HP).toFixed(4),
-          "",
-        ].join(","),
-      );
-      total++;
+  for (const fam of FAMILIES) {
+    for (const m of models) {
+      const modelCode = `AV${m.code}${tagOf(fam, m.direct)}`;
+      for (const p of m.points) {
+        ratRows.push(
+          [
+            modelCode,
+            String(Math.round(p.rpm)),
+            (p.cfm * CFM_TO_M3HR).toFixed(2),
+            (p.sp_in * INWG_TO_PA).toFixed(2),
+            (p.bhp * KW_PER_HP).toFixed(4),
+            "",
+          ].join(","),
+        );
+      }
     }
   }
   writeFileSync(join(OUT_DIR, "ewf-ratings.csv"), [ratHeader, ...ratRows].join("\n") + "\n");
 
   // --- summary --------------------------------------------------------------
-  console.log("Models:");
+  console.log("Base models (mirrored across Exhaust + Fresh Air):");
   for (const m of models) {
     const rpms = [...new Set(m.points.map((p) => p.rpm))].sort((a, b) => a - b);
     console.log(
-      `  ${m.modelCode}  Ø${m.sizeLabel}"  angle ${m.angle}°  ` +
+      `  ${m.code}${m.direct ? " (direct)" : " (belt)  "}  Ø${m.sizeLabel}"  angle ${m.angle}°  ` +
         `rpm ${rpms.join("/")}  maxRPM ${m.maxRpm}  base ₱${m.basePrice}  ${m.points.length} pts`,
     );
   }
-  console.log(`\nTotal rating points: ${total}`);
+  console.log(
+    `\n${catRows.length} catalogue items, ${ratRows.length} rating points ` +
+      `(${models.length} base models × ${FAMILIES.length} applications).`,
+  );
   console.log("Wrote scripts/out/ewf-catalogue.csv and scripts/out/ewf-ratings.csv");
 }
 
