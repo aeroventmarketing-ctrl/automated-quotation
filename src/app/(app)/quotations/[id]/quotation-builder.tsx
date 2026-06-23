@@ -134,6 +134,7 @@ function rewriteDriveLine(desc: string, drive: string): string {
  */
 function productNoun(type: string, bladeType: string): string {
   if (type === "Cabinet Blower (SISW)") return "Cabinet Blower-SISW";
+  if (type === "Cabinet Blower (DIDW)") return "Cabinet Blower-DIDW";
   if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
     return "Centrifugal Blower - DIDW";
   if (/forward/i.test(bladeType)) return "Centrifugal Fresh Air Blower";
@@ -145,6 +146,7 @@ const PRODUCT_NOUNS = [
   "Centrifugal Fresh Air Blower",
   "Centrifugal Blower - DIDW",
   "Cabinet Blower-SISW",
+  "Cabinet Blower-DIDW",
   "Centrifugal Blower",
 ];
 /**
@@ -231,10 +233,12 @@ const materialFactor = (specs: LineSpecs): number =>
 
 /**
  * Model-code tag by product type and blade type. DIDW has its own catalogue
- * (DIDWCEB, backward-curve only); Cabinet SISW reuses the CEB catalogue/ratings
- * but is sold as CABSISW; forward curve is CFAB; otherwise CEB.
+ * (DIDWCEB backward / DIDWCFAB forward); Cabinet SISW reuses the CEB catalogue
+ * (sold as CABSISW) and Cabinet DIDW reuses the DIDWCEB catalogue (sold as
+ * CEBCAB); forward curve is CFAB; otherwise CEB.
  */
 function resolveTag(type: string, bladeType: string): string {
+  if (type === "Cabinet Blower (DIDW)") return "CEBCAB";
   if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
     return /forward/i.test(bladeType) ? "DIDWCFAB" : "DIDWCEB";
   if (type === "Cabinet Blower (SISW)") return "CABSISW";
@@ -243,16 +247,20 @@ function resolveTag(type: string, bladeType: string): string {
 }
 /**
  * Catalogue tag to query when selecting for a type/blade. CABSISW reuses the CEB
- * catalogue models, so it queries CEB; every other tag queries its own models.
+ * catalogue models and CEBCAB reuses the DIDWCEB catalogue models; every other
+ * tag queries its own models.
  */
 function selectionTag(type: string, bladeType: string): string {
   const tag = resolveTag(type, bladeType);
-  return tag === "CABSISW" ? "CEB" : tag;
+  if (tag === "CABSISW") return "CEB";
+  if (tag === "CEBCAB") return "DIDWCEB";
+  return tag;
 }
 /**
  * Body-price factor by tag, applied to the body only (then × material):
  *  CEB ×1 (base) · CFAB ÷0.9 · CABSISW ÷0.54 · DIDWCEB ÷0.57 ·
- *  DIDWCFAB ÷0.9 ÷0.57 (forward × double-width).
+ *  DIDWCFAB ÷0.9 ÷0.57 (forward × double-width) ·
+ *  CEBCAB ÷0.57 ÷0.54 (DIDWCEB cabinet).
  */
 const TAG_FACTORS: Record<string, number> = {
   CEB: 1,
@@ -260,16 +268,17 @@ const TAG_FACTORS: Record<string, number> = {
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
   DIDWCFAB: 1 / (0.9 * 0.57),
+  CEBCAB: 1 / (0.57 * 0.54),
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType));
 /** Net body price after the tag (blade/type) factor and material factor. */
 const bodyPriceOf = (specs: LineSpecs): number =>
   (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
-/** Re-tag a blower model code (AV#### + DIDWCFAB/DIDWCEB/CABSISW/CFAB/CEB) for the type/blade. */
+/** Re-tag a blower model code (AV#### + DIDWCFAB/DIDWCEB/CEBCAB/CABSISW/CFAB/CEB) for the type/blade. */
 function retagModel(model: string | null, type: string, bladeType: string): string | null {
   if (!model) return model;
-  return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CABSISW|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
+  return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CEBCAB|CABSISW|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
 }
 
 /** Shape / variant options for a Ventilation Accessory type. */
