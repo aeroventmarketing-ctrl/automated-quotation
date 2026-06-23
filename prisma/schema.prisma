@@ -270,3 +270,10 @@ model QuoteCounter {
   year      Int @id
   lastValue Int @default(0)
 }
+
+/** Generic key/value app settings (e.g. the geofence/location access config). */
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

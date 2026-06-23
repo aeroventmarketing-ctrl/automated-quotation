@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
 
 async function assertAdmin() {
   const user = await getCurrentUser();
@@ -159,4 +160,34 @@ export async function deleteRatingPoint(id: string) {
   const rp = await prisma.fanRatingPoint.delete({ where: { id } });
   revalidatePath("/admin/ratings");
   return rp;
+}
+
+// --- Location access (geofence) ---------------------------------------------
+const geofenceSchema = z.object({
+  enabled: z.boolean(),
+  latitude: z.number().min(-90).max(90).nullable(),
+  longitude: z.number().min(-180).max(180).nullable(),
+  radiusMeters: z.number().min(10).max(500000),
+  label: z.string().max(200).default(""),
+});
+
+export async function getGeofenceSetting() {
+  await assertAdmin();
+  return getGeofence();
+}
+
+export async function saveGeofenceSetting(input: z.infer<typeof geofenceSchema>) {
+  await assertAdmin();
+  const d = geofenceSchema.parse(input);
+  if (d.enabled && (d.latitude == null || d.longitude == null)) {
+    throw new Error("Set the allowed location (latitude & longitude) before enabling.");
+  }
+  await prisma.appSetting.upsert({
+    where: { key: GEOFENCE_KEY },
+    create: { key: GEOFENCE_KEY, value: d },
+    update: { value: d },
+  });
+  // The gate lives in the (app) layout — refresh everything.
+  revalidatePath("/", "layout");
+  return d;
 }
