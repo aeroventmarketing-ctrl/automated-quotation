@@ -27,7 +27,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
   const [airflowUnit, setAirflowUnit] = useState("cfm");
   const [pressure, setPressure] = useState("");
   const [pressureUnit, setPressureUnit] = useState("inwg");
-  const [bladeType, setBladeType] = useState("");
+  const [tag, setTag] = useState("");
   const [drive, setDrive] = useState("belt");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
             staticPressure: Number(pressure),
             pressureUnit,
           },
-          bladeType: bladeType || undefined,
+          tag: tag || undefined,
           directDrive: drive === "direct",
         }),
       });
@@ -95,11 +95,12 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
             </Select>
           </div>
           <div className="space-y-1">
-            <Label>Blade type</Label>
-            <Select className="w-44" value={bladeType} onChange={(e) => setBladeType(e.target.value)}>
+            <Label>Product</Label>
+            <Select className="w-56" value={tag} onChange={(e) => setTag(e.target.value)}>
               <option value="">All</option>
-              <option value="Forward Curved">Forward Curved (CFAB)</option>
-              <option value="Backward Curved">Backward / Inclined (CEB)</option>
+              <option value="CFAB">Forward Curved (CFAB)</option>
+              <option value="CEB">Backward / Inclined (CEB)</option>
+              <option value="DIDWCEB">Double Inlet Double Width (DIDW)</option>
             </Select>
           </div>
           <div className="space-y-1">
@@ -142,8 +143,13 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               Showing 3 sizes smaller and 3 sizes bigger around the recommended selection.
             </p>
             {windowed.map((sel) => {
-              // Forward-curve (CFAB) body price is the CEB base ÷ 0.9.
-              const body = (priceMap[sel.modelId] ?? 0) * (/CFAB/i.test(sel.modelCode) ? 1 / 0.9 : 1);
+              // Body-price factor on the CEB base: CFAB ÷0.9, DIDW ÷0.57.
+              const tagFactor = /DIDWCEB$/i.test(sel.modelCode)
+                ? 1 / 0.57
+                : /CFAB$/i.test(sel.modelCode)
+                  ? 1 / 0.9
+                  : 1;
+              const body = (priceMap[sel.modelId] ?? 0) * tagFactor;
               const motor = lookupMotor(sel.motorHp, 3, sel.motorPole ?? 4);
               const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
               const isRec = sel.modelId === recommended.modelId;

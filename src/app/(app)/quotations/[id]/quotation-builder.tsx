@@ -128,11 +128,18 @@ function rewriteDriveLine(desc: string, drive: string): string {
  */
 function productNoun(type: string, bladeType: string): string {
   if (type === "Cabinet Blower (SISW)") return "Cabinet Blower-SISW";
+  if (type === "Double Inlet Double Width (DIDW)") return "Centrifugal Blower-DIDW";
   if (/forward/i.test(bladeType)) return "Centrifugal Fresh Air Blower";
   return "Centrifugal Blower";
 }
-// Known product nouns, longest/most-specific first so the swap is unambiguous.
-const PRODUCT_NOUNS = ["Centrifugal Fresh Air Blower", "Cabinet Blower-SISW", "Centrifugal Blower"];
+// Known product nouns, longest/most-specific first so the swap is unambiguous
+// (e.g. "Centrifugal Blower-DIDW" before the bare "Centrifugal Blower").
+const PRODUCT_NOUNS = [
+  "Centrifugal Fresh Air Blower",
+  "Centrifugal Blower-DIDW",
+  "Cabinet Blower-SISW",
+  "Centrifugal Blower",
+];
 /**
  * Replace whichever known product noun appears in the description with the one
  * implied by the current type/blade. Idempotent, so it runs on every recompute.
@@ -216,32 +223,43 @@ const materialFactor = (specs: LineSpecs): number =>
   MATERIAL_CATEGORIES.has(specs.category) ? MATERIAL_FACTORS[specs.material] ?? 1 : 1;
 
 /**
- * Model-code tag by product type and blade type. Cabinet SISW reuses the CEB
- * catalogue/ratings but is sold as CABSISW; forward curve is CFAB; otherwise CEB.
+ * Model-code tag by product type and blade type. DIDW has its own catalogue
+ * (DIDWCEB, backward-curve only); Cabinet SISW reuses the CEB catalogue/ratings
+ * but is sold as CABSISW; forward curve is CFAB; otherwise CEB.
  */
 function resolveTag(type: string, bladeType: string): string {
+  if (type === "Double Inlet Double Width (DIDW)") return "DIDWCEB";
   if (type === "Cabinet Blower (SISW)") return "CABSISW";
   if (/forward/i.test(bladeType)) return "CFAB";
   return "CEB";
 }
 /**
+ * Catalogue tag to query when selecting for a type/blade. CABSISW reuses the CEB
+ * catalogue models, so it queries CEB; every other tag queries its own models.
+ */
+function selectionTag(type: string, bladeType: string): string {
+  const tag = resolveTag(type, bladeType);
+  return tag === "CABSISW" ? "CEB" : tag;
+}
+/**
  * Body-price factor by tag, applied to the body only (then × material):
- *  CEB ×1 (base) · CFAB ÷0.9 · CABSISW ÷0.54.
+ *  CEB ×1 (base) · CFAB ÷0.9 · CABSISW ÷0.54 · DIDWCEB ÷0.57.
  */
 const TAG_FACTORS: Record<string, number> = {
   CEB: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
+  DIDWCEB: 1 / 0.57,
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType));
 /** Net body price after the tag (blade/type) factor and material factor. */
 const bodyPriceOf = (specs: LineSpecs): number =>
   (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
-/** Re-tag a blower model code (AV#### + CEB/CFAB/CABSISW) for the type/blade. */
+/** Re-tag a blower model code (AV#### + DIDWCEB/CABSISW/CFAB/CEB) for the type/blade. */
 function retagModel(model: string | null, type: string, bladeType: string): string | null {
   if (!model) return model;
-  return model.replace(/(AV\d+)(?:CABSISW|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
+  return model.replace(/(AV\d+)(?:DIDWCEB|CABSISW|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
 }
 
 /** Shape / variant options for a Ventilation Accessory type. */
@@ -421,8 +439,9 @@ export function QuotationBuilder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requirement: { airflow: cfm, airflowUnit: "cfm", staticPressure: sp, pressureUnit: "inwg" },
-          // Keep forward-curve (CFAB) and backward-curve (CEB) models apart.
-          bladeType: line.specs.bladeType || undefined,
+          // Query only this product's catalogue (CEB / CFAB / DIDWCEB) so the
+          // lists never mix; CABSISW reuses the CEB models.
+          tag: selectionTag(line.specs.type, line.specs.bladeType),
           // Direct-drive lines constrain selection to standard 2-/4-pole speed bands.
           directDrive: /direct/i.test(line.specs.drive),
         }),
