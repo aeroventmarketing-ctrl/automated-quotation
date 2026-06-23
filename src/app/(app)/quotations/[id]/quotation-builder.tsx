@@ -120,10 +120,30 @@ function rewriteDriveLine(desc: string, drive: string): string {
  * description; any other blade type is plain "Centrifugal Blower". Idempotent
  * both ways so it can run on every recompute.
  */
-function rewriteBladeName(desc: string, bladeType: string): string {
-  return /forward/i.test(bladeType)
-    ? desc.replace(/Centrifugal (?:Fresh Air )?Blower/i, "Centrifugal Fresh Air Blower")
-    : desc.replace(/Centrifugal Fresh Air Blower/i, "Centrifugal Blower");
+/**
+ * Product noun for the first description line, by type and blade type:
+ *  - Cabinet Blower (SISW) -> "Cabinet Blower-SISW"
+ *  - Forward Curved        -> "Centrifugal Fresh Air Blower"
+ *  - otherwise             -> "Centrifugal Blower"
+ */
+function productNoun(type: string, bladeType: string): string {
+  if (type === "Cabinet Blower (SISW)") return "Cabinet Blower-SISW";
+  if (/forward/i.test(bladeType)) return "Centrifugal Fresh Air Blower";
+  return "Centrifugal Blower";
+}
+// Known product nouns, longest/most-specific first so the swap is unambiguous.
+const PRODUCT_NOUNS = ["Centrifugal Fresh Air Blower", "Cabinet Blower-SISW", "Centrifugal Blower"];
+/**
+ * Replace whichever known product noun appears in the description with the one
+ * implied by the current type/blade. Idempotent, so it runs on every recompute.
+ */
+function rewriteProductNoun(desc: string, type: string, bladeType: string): string {
+  const target = productNoun(type, bladeType);
+  for (const noun of PRODUCT_NOUNS) {
+    const re = new RegExp(noun, "i");
+    if (re.test(desc)) return desc.replace(re, target);
+  }
+  return desc;
 }
 
 /**
@@ -196,26 +216,32 @@ const materialFactor = (specs: LineSpecs): number =>
   MATERIAL_CATEGORIES.has(specs.category) ? MATERIAL_FACTORS[specs.material] ?? 1 : 1;
 
 /**
- * Blade-type -> body-price factor. Forward-curve (CFAB) bodies are the CEB base
- * price ÷ 0.9. The factor is applied to the body only, then × material.
+ * Model-code tag by product type and blade type. Cabinet SISW reuses the CEB
+ * catalogue/ratings but is sold as CABSISW; forward curve is CFAB; otherwise CEB.
  */
-const BLADE_FACTORS: Record<string, number> = {
-  "Forward Curved": 1 / 0.9,
+function resolveTag(type: string, bladeType: string): string {
+  if (type === "Cabinet Blower (SISW)") return "CABSISW";
+  if (/forward/i.test(bladeType)) return "CFAB";
+  return "CEB";
+}
+/**
+ * Body-price factor by tag, applied to the body only (then × material):
+ *  CEB ×1 (base) · CFAB ÷0.9 · CABSISW ÷0.54.
+ */
+const TAG_FACTORS: Record<string, number> = {
+  CEB: 1,
+  CFAB: 1 / 0.9,
+  CABSISW: 1 / 0.54,
 };
-const bladeFactor = (specs: LineSpecs): number => BLADE_FACTORS[specs.bladeType] ?? 1;
-/** Body-price factor implied by a model-code tag (CFAB = forward curve). */
-const bladeFactorForModel = (modelCode: string): number =>
-  /CFAB/i.test(modelCode) ? 1 / 0.9 : 1;
-/** Net body price after blade-type and material factors. */
+const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
+const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType));
+/** Net body price after the tag (blade/type) factor and material factor. */
 const bodyPriceOf = (specs: LineSpecs): number =>
   (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
-/** Model-code tag for a blade type (forward curve = CFAB, otherwise CEB). */
-const BLADE_TAGS: Record<string, string> = { "Forward Curved": "CFAB" };
-/** Re-tag a blower model code (AV####CEB <-> AV####CFAB) for the blade type. */
-function retagBladeModel(model: string | null, bladeType: string): string | null {
+/** Re-tag a blower model code (AV#### + CEB/CFAB/CABSISW) for the type/blade. */
+function retagModel(model: string | null, type: string, bladeType: string): string | null {
   if (!model) return model;
-  const tag = BLADE_TAGS[bladeType] ?? "CEB";
-  return model.replace(/(AV\d+)(?:CFAB|CEB)/i, `$1${tag}`);
+  return model.replace(/(AV\d+)(?:CABSISW|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
 }
 
 /** Shape / variant options for a Ventilation Accessory type. */
@@ -344,16 +370,17 @@ export function QuotationBuilder({
         const specs = { ...l.specs, ...patch };
         // 1-phase motors are 220V only — snap voltage so the model code resolves.
         if (specs.motorPh === 1) specs.motorVolts = 220;
-        // Keep the blower model's blade tag (CEB/CFAB) in step with the blade type.
-        specs.blowerModel = retagBladeModel(specs.blowerModel, specs.bladeType);
+        // Keep the model tag (CEB/CFAB/CABSISW) in step with the type/blade.
+        specs.blowerModel = retagModel(specs.blowerModel, specs.type, specs.bladeType);
         const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
         // Only auto-price true blower lines (those with a body price).
         if (body <= 0) {
-          const desc = rewriteBladeName(
+          const desc = rewriteProductNoun(
             rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
+            specs.type,
             specs.bladeType,
           );
           return { ...l, specs, descriptionSnapshot: desc };
@@ -366,11 +393,12 @@ export function QuotationBuilder({
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
-        const descriptionSnapshot = rewriteBladeName(
+        const descriptionSnapshot = rewriteProductNoun(
           rewriteMaterialLine(
             rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
             specs.material,
           ),
+          specs.type,
           specs.bladeType,
         );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
@@ -430,6 +458,8 @@ export function QuotationBuilder({
           // shows the higher delivered flow for reference.
           motorPole: r.motorPole ?? l.specs.motorPole,
         };
+        // Cabinet SISW reuses the CEB catalogue model, so re-tag it to CABSISW.
+        specs.blowerModel = retagModel(specs.blowerModel, specs.type, specs.bladeType);
         const baseDesc = cat?.description || l.descriptionSnapshot;
         const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;
@@ -440,11 +470,12 @@ export function QuotationBuilder({
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
-        const descriptionSnapshot = rewriteBladeName(
+        const descriptionSnapshot = rewriteProductNoun(
           rewriteMaterialLine(
             rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
             specs.material,
           ),
+          specs.type,
           specs.bladeType,
         );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
@@ -789,7 +820,7 @@ export function QuotationBuilder({
                         {w.list.map((r) => {
                           const cat = catalog[r.modelId];
                           const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
-                          const estBody = (cat?.basePrice ?? 0) * bladeFactorForModel(r.modelCode) * materialFactor(l.specs);
+                          const estBody = (cat?.basePrice ?? 0) * bladeFactor(l.specs) * materialFactor(l.specs);
                           const est = estBody > 0 ? round2(computeUnitPrice(estBody, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate)) : 0;
                           const isRec = r.modelId === w.rec.modelId;
                           return (

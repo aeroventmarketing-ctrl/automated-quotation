@@ -29,21 +29,20 @@ const OUT_DIR = join(process.cwd(), "scripts", "out");
 
 // CEB catalogue (blade Ø in, price) from "Categories for Claude.xlsx" — the ×1
 // price base. Each FC size adopts the nearest CEB size's price.
-const CEB_PRICES: Array<[number, number]> = [
-  [9, 17575], [10.5, 17575], [12.25, 19563], [13.5, 22738], [15, 24390],
-  [16.5, 26451], [18.25, 29506], [20, 34977], [22.25, 36654], [24.5, 39349],
-  [27, 47634], [30, 52823], [33, 65433], [36.5, 83827], [40.25, 99281],
-  [44.5, 125775], [49, 146672], [54.5, 221496], [60, 253731], [66, 325385],
-  [73, 359001], [80.75, 660691],
-];
-
-function nearestCebPrice(dia: number): { cebDia: number; price: number } {
-  let best = CEB_PRICES[0];
-  for (const row of CEB_PRICES) {
-    if (Math.abs(row[0] - dia) < Math.abs(best[0] - dia)) best = row;
-  }
-  return { cebDia: best[0], price: best[1] };
-}
+// CFAB models use the AFBM (CEB-aligned) nominal size, model code, and price —
+// not the raw FC wheel diameter from the catalog. Keyed by FC catalog tab.
+// (FC tabs cover 9 of the CFAB sizes; 13.5" and 16.5" have no FC rating tab.)
+const FC_SIZE_MAP: Record<string, { dia: number; modelCode: string; price: number }> = {
+  "FC-109": { dia: 9, modelCode: "AV0900CFAB", price: 17575 },
+  "FC-111": { dia: 10.5, modelCode: "AV1050CFAB", price: 17575 },
+  "FC-112": { dia: 12.25, modelCode: "AV1225CFAB", price: 19563 },
+  "FC-115": { dia: 15, modelCode: "AV1500CFAB", price: 24390 },
+  "FC-118": { dia: 18.25, modelCode: "AV1825CFAB", price: 29506 },
+  "FC-120": { dia: 20, modelCode: "AV2000CFAB", price: 34977 },
+  "FC-122": { dia: 22.25, modelCode: "AV2225CFAB", price: 36654 },
+  "FC-126": { dia: 27, modelCode: "AV2700CFAB", price: 47634 },
+  "FC-130": { dia: 30, modelCode: "AV3000CFAB", price: 52823 },
+};
 
 const isNum = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
 const cellVal = (c: ExcelJS.Cell): unknown => {
@@ -73,7 +72,6 @@ interface Model {
   outletArea_ft2: number;
   maxRpm: number;
   basePrice: number;
-  cebDia: number;
   points: Array<{ rpm: number; cfm: number; sp_in: number; bhp: number }>;
 }
 
@@ -86,11 +84,12 @@ async function main() {
   for (const ws of wb.worksheets) {
     if (!/^FC-\d+/.test(ws.name)) continue;
 
-    // Title row carries the wheel diameter, e.g. "FC-109 · 9 1/8 in. Wheel ...".
-    const title = String(cellVal(ws.getRow(1).getCell(1)) ?? "");
-    const diaMatch = title.match(/·\s*([\d\s/.-]+?)\s*in\.?\s*Wheel/i);
-    const dia = diaMatch ? parseMixed(diaMatch[1]) : null;
-    if (dia == null) throw new Error(`${ws.name}: could not parse wheel diameter from "${title}"`);
+    const info = FC_SIZE_MAP[ws.name];
+    if (!info) {
+      console.warn(`Skipping ${ws.name} — no CFAB size mapping`);
+      continue;
+    }
+    const dia = info.dia;
 
     // Locate the header row whose cells read RPM/BHP; the row above holds SP labels.
     let hdrRow = 0;
@@ -134,18 +133,14 @@ async function main() {
 
     areas.sort((a, b) => a - b);
     const outletArea = areas.length ? areas[Math.floor(areas.length / 2)] : 0;
-    const { cebDia, price } = nearestCebPrice(dia);
-    const sizeNum = Math.round(dia * 100);
-    const modelCode = `AV${String(sizeNum).padStart(4, "0")}CFAB`;
 
     models.push({
-      modelCode,
+      modelCode: info.modelCode,
       dia,
       sizeLabel: String(dia),
       outletArea_ft2: Math.round(outletArea * 1000) / 1000,
       maxRpm,
-      basePrice: price,
-      cebDia,
+      basePrice: info.price,
       points,
     });
   }
@@ -212,7 +207,7 @@ async function main() {
   for (const m of models) {
     console.log(
       `  ${m.modelCode}  Ø${m.sizeLabel}"  area ${m.outletArea_ft2} ft²  maxRPM ${m.maxRpm}  ` +
-        `base ₱${m.basePrice} (CEB Ø${m.cebDia})  ${m.points.length} pts`,
+        `base ₱${m.basePrice}  ${m.points.length} pts`,
     );
   }
   console.log(`\nTotal rating points: ${total}`);

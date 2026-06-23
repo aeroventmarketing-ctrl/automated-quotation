@@ -212,9 +212,8 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "category": "Cabinet Type",
     "type": "Cabinet Blower (SISW)",
     "bladeTypes": [
-      "Backwardly Inlined",
-      "Backward Curved",
-      "Forward Curved"
+      "Backwardly Inclined",
+      "Backward Curved"
     ],
     "drives": [
       "Belt",
