@@ -10,14 +10,16 @@
 // Airflow — canonical SI unit: m³/hr
 // ---------------------------------------------------------------------------
 
-export type AirflowUnit = "cfm" | "m3hr" | "m3s" | "ls";
+export type AirflowUnit = "cfm" | "m3hr" | "m3min" | "m3s" | "ls" | "lmin";
 
 // Multiplier to convert 1 unit -> m³/hr
 const AIRFLOW_TO_M3HR: Record<AirflowUnit, number> = {
   m3hr: 1,
   cfm: 1.69901082, // 1 ft³/min = 0.028316846592 m³ * 60 min
+  m3min: 60, // 1 m³/min = 60 m³/hr
   m3s: 3600,
   ls: 3.6, // 1 L/s = 0.001 m³/s * 3600
+  lmin: 0.06, // 1 L/min = 0.001 m³ * 60
 };
 
 export function airflowToM3hr(value: number, unit: AirflowUnit): number {
@@ -40,7 +42,15 @@ export function convertAirflow(
 // Pressure — canonical SI unit: Pa
 // ---------------------------------------------------------------------------
 
-export type PressureUnit = "pa" | "mmaq" | "inwg" | "kpa";
+export type PressureUnit =
+  | "pa"
+  | "mmaq"
+  | "inwg"
+  | "kpa"
+  | "inhg"
+  | "mmhg"
+  | "psi"
+  | "atm";
 
 // Multiplier to convert 1 unit -> Pa
 const PRESSURE_TO_PA: Record<PressureUnit, number> = {
@@ -48,6 +58,10 @@ const PRESSURE_TO_PA: Record<PressureUnit, number> = {
   mmaq: 9.80665, // 1 mm H2O (mmAq) at 4°C
   inwg: 249.0889, // 1 inch water gauge at 4°C
   kpa: 1000,
+  inhg: 3386.389, // 1 inch of mercury at 0°C
+  mmhg: 133.322387, // 1 mm of mercury (Torr)
+  psi: 6894.757, // 1 lbf/in²
+  atm: 101325, // standard atmosphere
 };
 
 export function pressureToPa(value: number, unit: PressureUnit): number {
@@ -120,12 +134,20 @@ const AIRFLOW_ALIASES: Record<string, AirflowUnit> = {
   m3hr: "m3hr",
   cmh: "m3hr",
   "m3/h": "m3hr",
+  "m3/min": "m3min",
+  "m³/min": "m3min",
+  cmm: "m3min",
   "m3/s": "m3s",
   "m³/s": "m3s",
+  "m3/sec": "m3s",
+  "m³/sec": "m3s",
   cms: "m3s",
   "l/s": "ls",
   lps: "ls",
   ls: "ls",
+  "l/min": "lmin",
+  lmin: "lmin",
+  lpm: "lmin",
 };
 
 const PRESSURE_ALIASES: Record<string, PressureUnit> = {
@@ -145,6 +167,16 @@ const PRESSURE_ALIASES: Record<string, PressureUnit> = {
   "mm-w.g.": "mmaq",
   "mm-wg": "mmaq",
   kpa: "kpa",
+  inhg: "inhg",
+  "in-hg": "inhg",
+  "in hg": "inhg",
+  '"hg': "inhg",
+  mmhg: "mmhg",
+  "mm-hg": "mmhg",
+  "mm hg": "mmhg",
+  torr: "mmhg",
+  psi: "psi",
+  atm: "atm",
 };
 
 export function normalizeAirflowUnit(raw: string | null | undefined): AirflowUnit | null {
@@ -162,8 +194,10 @@ export function normalizePressureUnit(raw: string | null | undefined): PressureU
 export const AIRFLOW_UNIT_LABELS: Record<AirflowUnit, string> = {
   cfm: "CFM",
   m3hr: "m³/hr",
+  m3min: "m³/min",
   m3s: "m³/s",
   ls: "L/s",
+  lmin: "L/min",
 };
 
 export const PRESSURE_UNIT_LABELS: Record<PressureUnit, string> = {
@@ -171,4 +205,8 @@ export const PRESSURE_UNIT_LABELS: Record<PressureUnit, string> = {
   mmaq: "mmAq",
   inwg: "inWG",
   kpa: "kPa",
+  inhg: "inHg",
+  mmhg: "mmHg",
+  psi: "psi",
+  atm: "atm",
 };
