@@ -100,7 +100,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               <option value="">All</option>
               <option value="CFAB">Forward Curved (CFAB)</option>
               <option value="CEB">Backward / Inclined (CEB)</option>
-              <option value="DIDWCEB">Double Inlet Double Width (DIDW)</option>
+              <option value="DIDWCEB">Centrifugal Blower (DIDW)</option>
             </Select>
           </div>
           <div className="space-y-1">

@@ -128,7 +128,8 @@ function rewriteDriveLine(desc: string, drive: string): string {
  */
 function productNoun(type: string, bladeType: string): string {
   if (type === "Cabinet Blower (SISW)") return "Cabinet Blower-SISW";
-  if (type === "Double Inlet Double Width (DIDW)") return "Centrifugal Blower - DIDW";
+  if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
+    return "Centrifugal Blower - DIDW";
   if (/forward/i.test(bladeType)) return "Centrifugal Fresh Air Blower";
   return "Centrifugal Blower";
 }
@@ -228,7 +229,8 @@ const materialFactor = (specs: LineSpecs): number =>
  * but is sold as CABSISW; forward curve is CFAB; otherwise CEB.
  */
 function resolveTag(type: string, bladeType: string): string {
-  if (type === "Double Inlet Double Width (DIDW)") return "DIDWCEB";
+  if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
+    return "DIDWCEB";
   if (type === "Cabinet Blower (SISW)") return "CABSISW";
   if (/forward/i.test(bladeType)) return "CFAB";
   return "CEB";

@@ -14,11 +14,23 @@ export interface TaxonomyEntry {
 export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   {
     "category": "Centrifugal Type",
-    "type": "Centfrifugal Blower",
+    "type": "Centrifugal Blower (SISW)",
     "bladeTypes": [
       "Backwardly Inclined",
       "Backward Curved",
       "Forward Curved"
+    ],
+    "drives": [
+      "Belt",
+      "Direct"
+    ]
+  },
+  {
+    "category": "Centrifugal Type",
+    "type": "Centrifugal Blower (DIDW)",
+    "bladeTypes": [
+      "Backwardly Inclined",
+      "Backward Curved"
     ],
     "drives": [
       "Belt",
@@ -100,19 +112,6 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "type": "Plug Fan",
     "bladeTypes": [
       "Backward Curved"
-    ],
-    "drives": [
-      "Belt",
-      "Direct"
-    ]
-  },
-  {
-    "category": "Centrifugal Type",
-    "type": "Double Inlet Double Width (DIDW)",
-    "bladeTypes": [
-      "Backwardly Inlined",
-      "Backward Curved",
-      "Forward Curved"
     ],
     "drives": [
       "Belt",

@@ -210,7 +210,7 @@ async function main() {
       bladeType: "Backward Curved",
       drive: "belt",
       category: "Centrifugal Type",
-      type: "Double Inlet Double Width (DIDW)",
+      type: "Centrifugal Blower (DIDW)",
       tag: "DIDWCEB",
     };
     const name = `Centrifugal Blower - DIDW ${m.sizeLabel}\" Double Inlet Double Width (DIDWCEB)`;
