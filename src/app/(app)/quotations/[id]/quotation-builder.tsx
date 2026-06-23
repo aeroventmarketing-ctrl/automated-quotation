@@ -255,13 +255,14 @@ function resolveTag(type: string, bladeType: string): string {
 /**
  * Catalogue tag to query when selecting for a type/blade. The cabinet tags reuse
  * the matching blower catalogue: CABSISW→CEB, CEBCAB→DIDWCEB, CFABCAB→DIDWCFAB;
- * every other tag queries its own models.
+ * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
 function selectionTag(type: string, bladeType: string): string {
   const tag = resolveTag(type, bladeType);
   if (tag === "CABSISW") return "CEB";
   if (tag === "CEBCAB") return "DIDWCEB";
   if (tag === "CFABCAB") return "DIDWCFAB";
+  if (tag === "SIEB") return "CIEB";
   return tag;
 }
 /**

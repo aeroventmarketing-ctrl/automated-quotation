@@ -101,7 +101,6 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               <option value="CFAB">Forward Curved (CFAB)</option>
               <option value="CEB">Backward / Inclined (CEB)</option>
               <option value="CIEB">Centrifugal Inline Blower (CIEB)</option>
-              <option value="SIEB">Square Inline Blower (SIEB)</option>
               <option value="DIDWCEB">Centrifugal Blower (DIDW) — Backward</option>
               <option value="DIDWCFAB">Centrifugal Blower (DIDW) — Forward</option>
             </Select>
