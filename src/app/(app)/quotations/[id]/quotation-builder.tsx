@@ -136,6 +136,16 @@ function rewriteDriveLine(desc: string, drive: string): string {
  */
 const PROPELLER_FAN_TYPES = new Set(["Exhaust Wall Fan", "Fresh Air Wall Fan", "Panel Fan"]);
 /**
+ * Description for a propeller wall fan: the type and drive on two lines, plus a
+ * Model line once a specific size is picked. The quote export renders only the
+ * description, so the model code must live here when one is chosen.
+ */
+function wallFanDescription(type: string, drive: string, model?: string | null): string {
+  const driveWord = /direct/i.test(drive) ? "Direct" : "Belt";
+  const head = `${type}\nPropeller Type / ${driveWord}`;
+  return model ? `${head}\nModel: ${model}` : head;
+}
+/**
  * Product noun for the first description line, by type and blade type:
  *  - Cabinet Blower (SISW) -> "Cabinet Blower-SISW"
  *  - Forward Curved        -> "Centrifugal Fresh Air Blower"
@@ -460,13 +470,20 @@ export function QuotationBuilder({
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
+        const isWallFan = PROPELLER_FAN_TYPES.has(specs.type);
         // Only auto-price true blower lines (those with a body price).
         if (body <= 0) {
-          const desc = rewriteProductNoun(
-            rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
-            specs.type,
-            specs.bladeType,
-          );
+          const desc = isWallFan
+            ? wallFanDescription(
+                specs.type,
+                specs.drive,
+                specs.blowerModel ? effectiveBlowerModel(specs.blowerModel, specs.drive) : null,
+              )
+            : rewriteProductNoun(
+                rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
+                specs.type,
+                specs.bladeType,
+              );
           return { ...l, specs, descriptionSnapshot: desc };
         }
         const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
@@ -477,14 +494,16 @@ export function QuotationBuilder({
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
-        const descriptionSnapshot = rewriteProductNoun(
-          rewriteMaterialLine(
-            rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
-            specs.material,
-          ),
-          specs.type,
-          specs.bladeType,
-        );
+        const descriptionSnapshot = isWallFan
+          ? wallFanDescription(specs.type, specs.drive, specs.blowerModel ? combined : null)
+          : rewriteProductNoun(
+              rewriteMaterialLine(
+                rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
+                specs.material,
+              ),
+              specs.type,
+              specs.bladeType,
+            );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
@@ -569,14 +588,16 @@ export function QuotationBuilder({
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
-        const descriptionSnapshot = rewriteProductNoun(
-          rewriteMaterialLine(
-            rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
-            specs.material,
-          ),
-          specs.type,
-          specs.bladeType,
-        );
+        const descriptionSnapshot = PROPELLER_FAN_TYPES.has(specs.type)
+          ? wallFanDescription(specs.type, specs.drive, combined)
+          : rewriteProductNoun(
+              rewriteMaterialLine(
+                rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
+                specs.material,
+              ),
+              specs.type,
+              specs.bladeType,
+            );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
     );
@@ -642,7 +663,16 @@ export function QuotationBuilder({
           <Select
             value={c.type}
             disabled={!editable || !c.category}
-            onChange={(e) => set({ type: e.target.value, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+            onChange={(e) => {
+              const type = e.target.value;
+              const patch = { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" };
+              // Wall fans prefill a simple type/drive description on selection.
+              if (PROPELLER_FAN_TYPES.has(type)) {
+                updateLine(l.id, { specs: { ...l.specs, ...patch }, descriptionSnapshot: wallFanDescription(type, "") });
+              } else {
+                set(patch);
+              }
+            }}
           >
             <option value="">Type…</option>
             {typesFor(c.category).map((t) => (<option key={t} value={t}>{t}</option>))}
