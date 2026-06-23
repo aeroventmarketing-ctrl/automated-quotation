@@ -169,7 +169,7 @@ async function main() {
   const catRows = models.map((m) => {
     const description =
       "Centrifugal Inline Blower\n" +
-      "Tubular Inline Type / Belt Driven\n" +
+      "Impeller Type / Belt Driven\n" +
       "Made of Black Iron Sheet\n" +
       `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
     const specs = {
