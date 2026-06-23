@@ -100,7 +100,8 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               <option value="">All</option>
               <option value="CFAB">Forward Curved (CFAB)</option>
               <option value="CEB">Backward / Inclined (CEB)</option>
-              <option value="DIDWCEB">Centrifugal Blower (DIDW)</option>
+              <option value="DIDWCEB">Centrifugal Blower (DIDW) — Backward</option>
+              <option value="DIDWCFAB">Centrifugal Blower (DIDW) — Forward</option>
             </Select>
           </div>
           <div className="space-y-1">
@@ -143,12 +144,15 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               Showing 3 sizes smaller and 3 sizes bigger around the recommended selection.
             </p>
             {windowed.map((sel) => {
-              // Body-price factor on the CEB base: CFAB ÷0.9, DIDW ÷0.57.
-              const tagFactor = /DIDWCEB$/i.test(sel.modelCode)
-                ? 1 / 0.57
-                : /CFAB$/i.test(sel.modelCode)
-                  ? 1 / 0.9
-                  : 1;
+              // Body-price factor on the CEB base: DIDWCFAB ÷0.9÷0.57, DIDWCEB
+              // ÷0.57, CFAB ÷0.9.
+              const tagFactor = /DIDWCFAB$/i.test(sel.modelCode)
+                ? 1 / (0.9 * 0.57)
+                : /DIDWCEB$/i.test(sel.modelCode)
+                  ? 1 / 0.57
+                  : /CFAB$/i.test(sel.modelCode)
+                    ? 1 / 0.9
+                    : 1;
               const body = (priceMap[sel.modelId] ?? 0) * tagFactor;
               const motor = lookupMotor(sel.motorHp, 3, sel.motorPole ?? 4);
               const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;

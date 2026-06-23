@@ -30,7 +30,8 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "type": "Centrifugal Blower (DIDW)",
     "bladeTypes": [
       "Backwardly Inclined",
-      "Backward Curved"
+      "Backward Curved",
+      "Forward Curved"
     ],
     "drives": [
       "Belt",

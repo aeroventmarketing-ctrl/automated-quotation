@@ -236,7 +236,7 @@ const materialFactor = (specs: LineSpecs): number =>
  */
 function resolveTag(type: string, bladeType: string): string {
   if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
-    return "DIDWCEB";
+    return /forward/i.test(bladeType) ? "DIDWCFAB" : "DIDWCEB";
   if (type === "Cabinet Blower (SISW)") return "CABSISW";
   if (/forward/i.test(bladeType)) return "CFAB";
   return "CEB";
@@ -251,23 +251,25 @@ function selectionTag(type: string, bladeType: string): string {
 }
 /**
  * Body-price factor by tag, applied to the body only (then × material):
- *  CEB ×1 (base) · CFAB ÷0.9 · CABSISW ÷0.54 · DIDWCEB ÷0.57.
+ *  CEB ×1 (base) · CFAB ÷0.9 · CABSISW ÷0.54 · DIDWCEB ÷0.57 ·
+ *  DIDWCFAB ÷0.9 ÷0.57 (forward × double-width).
  */
 const TAG_FACTORS: Record<string, number> = {
   CEB: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
+  DIDWCFAB: 1 / (0.9 * 0.57),
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType));
 /** Net body price after the tag (blade/type) factor and material factor. */
 const bodyPriceOf = (specs: LineSpecs): number =>
   (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
-/** Re-tag a blower model code (AV#### + DIDWCEB/CABSISW/CFAB/CEB) for the type/blade. */
+/** Re-tag a blower model code (AV#### + DIDWCFAB/DIDWCEB/CABSISW/CFAB/CEB) for the type/blade. */
 function retagModel(model: string | null, type: string, bladeType: string): string | null {
   if (!model) return model;
-  return model.replace(/(AV\d+)(?:DIDWCEB|CABSISW|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
+  return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CABSISW|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
 }
 
 /** Shape / variant options for a Ventilation Accessory type. */
