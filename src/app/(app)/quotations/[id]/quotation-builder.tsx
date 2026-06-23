@@ -136,16 +136,29 @@ function rewriteDriveLine(desc: string, drive: string): string {
  */
 const PROPELLER_FAN_TYPES = new Set(["Exhaust Wall Fan", "Fresh Air Wall Fan", "Panel Fan"]);
 /**
- * Description for a propeller wall fan: the type and drive on two lines, plus a
- * Model line once a specific size is picked. The quote export renders only the
- * description, so the model code must live here when one is chosen.
+ * Description for a propeller wall fan, rebuilt from the current selections so
+ * each dropdown updates its own part:
+ *   line 1  <type>                                 (Type)
+ *   line 2  <blade> Type / <Belt|Direct> Drive     (Blade Type / Drive)
+ *   line 3  Made of <material>                      (Material)
+ *   line 4  Painted with Epoxy Enamel Aqua Green[ / Model: <model>]
+ * The paint phrase is constant; the model is filled once a size is picked via
+ * Run selection (the export renders only the description, so it lives here).
  */
-function wallFanDescription(type: string, drive: string, model?: string | null): string {
+function wallFanDescription(
+  type: string,
+  bladeType: string,
+  drive: string,
+  material: string,
+  model?: string | null,
+): string {
+  const bladePart = `${bladeType || "Propeller"} Type`;
   const driveWord = /direct/i.test(drive) ? "Direct Drive" : "Belt Drive";
+  const made = `Made of ${materialPhrase(material || "Black Iron Sheet")}`;
   const paint = model
     ? `Painted with Epoxy Enamel Aqua Green / Model: ${model}`
     : "Painted with Epoxy Enamel Aqua Green";
-  return `${type}\nPropeller Type / ${driveWord}\n${paint}`;
+  return `${type}\n${bladePart} / ${driveWord}\n${made}\n${paint}`;
 }
 /**
  * Product noun for the first description line, by type and blade type:
@@ -495,7 +508,9 @@ export function QuotationBuilder({
           const desc = isWallFan
             ? wallFanDescription(
                 specs.type,
+                specs.bladeType,
                 specs.drive,
+                specs.material,
                 specs.blowerModel ? effectiveBlowerModel(specs.blowerModel, specs.drive) : null,
               )
             : rewriteProductNoun(
@@ -514,7 +529,7 @@ export function QuotationBuilder({
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
         const descriptionSnapshot = isWallFan
-          ? wallFanDescription(specs.type, specs.drive, specs.blowerModel ? combined : null)
+          ? wallFanDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null)
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
@@ -608,7 +623,7 @@ export function QuotationBuilder({
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
         const descriptionSnapshot = PROPELLER_FAN_TYPES.has(specs.type)
-          ? wallFanDescription(specs.type, specs.drive, combined)
+          ? wallFanDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined)
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
