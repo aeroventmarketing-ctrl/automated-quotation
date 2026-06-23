@@ -254,6 +254,57 @@ describe("selectFan — direct drive (CEBDD): SP + pole priority", () => {
   });
 });
 
+describe("selectFan — fixed-speed direct (EWFDD propeller): own rated speed", () => {
+  // A natively-direct propeller fan runs at its own rated speed (here 860 rpm,
+  // ~8-pole), not the centrifugal 2-/4-pole bands. Curve at 860 rpm.
+  const ewfdd: FanModelInput = {
+    id: "ewfdd",
+    modelCode: "AV3600EWFDD",
+    name: "Panel Fan 36 (EWFDD)",
+    specs: { maxRpm: 860, propeller: true, fixedSpeedDirect: true },
+    ratingPoints: [
+      { rpm: 860, airflow_m3hr: 0, staticPressure_pa: 300, power_kw: 1.0 },
+      { rpm: 860, airflow_m3hr: 1500, staticPressure_pa: 250, power_kw: 1.2 },
+      { rpm: 860, airflow_m3hr: 3000, staticPressure_pa: 150, power_kw: 1.5 },
+      { rpm: 860, airflow_m3hr: 4500, staticPressure_pa: 0, power_kw: 1.7 },
+    ],
+  };
+
+  it("selects at the fan's own rated rpm, not a 4-/2-pole band", () => {
+    const r = selectFan(ewfdd, { airflow_m3hr: 2000, staticPressure_pa: 150 }, { directDrive: true })!;
+    expect(r).not.toBeNull();
+    expect(r.rpm).toBe(860); // its own speed — never scaled up to ~1752
+    expect(r.rpmWithinMax).toBe(true);
+    expect(r.selectedAirflow_m3hr!).toBeGreaterThanOrEqual(2000);
+    expect(r.confidence).toBe("HIGH");
+  });
+
+  it("excludes the size when the required SP exceeds what its fixed speed develops", () => {
+    const r = selectFan(ewfdd, { airflow_m3hr: 2000, staticPressure_pa: 400 }, { directDrive: true });
+    expect(r).toBeNull();
+  });
+
+  it("picks the lowest of two rated speeds that meets the flow", () => {
+    // Two motor poles available: 860 and 1160 rpm.
+    const twoSpeed: FanModelInput = {
+      ...ewfdd,
+      id: "ewfdd2",
+      modelCode: "AV2400EWFDD",
+      specs: { maxRpm: 1160, propeller: true, fixedSpeedDirect: true },
+      ratingPoints: [
+        ...ewfdd.ratingPoints,
+        { rpm: 1160, airflow_m3hr: 0, staticPressure_pa: 540, power_kw: 1.8 },
+        { rpm: 1160, airflow_m3hr: 2000, staticPressure_pa: 450, power_kw: 2.2 },
+        { rpm: 1160, airflow_m3hr: 4000, staticPressure_pa: 270, power_kw: 2.7 },
+        { rpm: 1160, airflow_m3hr: 6000, staticPressure_pa: 0, power_kw: 3.1 },
+      ],
+    };
+    // Low SP + modest flow is met at 860 rpm, so the lower speed wins.
+    const r = selectFan(twoSpeed, { airflow_m3hr: 1500, staticPressure_pa: 150 }, { directDrive: true })!;
+    expect(r.rpm).toBe(860);
+  });
+});
+
 describe("selectFans — ranking", () => {
   it("ranks HIGH-confidence candidates before LOW-confidence ones", () => {
     const big: FanModelInput = {

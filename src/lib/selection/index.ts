@@ -485,15 +485,36 @@ function selectDirectDrive(
   referenceRpm: number,
   selectionPressure: number,
   requestedFlow_m3hr: number,
+  bands: readonly { pole: number; minRpm: number; maxRpm: number }[] = DIRECT_DRIVE_BANDS,
 ): DirectDriveResult | null {
   let best: Omit<DirectDriveResult, "meetsFlow"> | null = null;
-  for (const band of DIRECT_DRIVE_BANDS) {
+  for (const band of bands) {
     const r = directDriveBand(band, points, curve, referenceRpm, selectionPressure);
     if (!r) continue;
     if (r.deliveredFlow_m3hr >= requestedFlow_m3hr - 1) return { ...r, meetsFlow: true };
     if (!best || r.deliveredFlow_m3hr > best.deliveredFlow_m3hr) best = r;
   }
   return best ? { ...best, meetsFlow: false } : null;
+}
+
+/** Nearest even motor pole count for a synchronous speed (≈ 7200/rpm at 60 Hz). */
+function polesForRpm(rpm: number): number {
+  return Math.max(2, Math.round(7200 / rpm / 2) * 2);
+}
+
+/**
+ * Direct-drive "bands" for a natively-direct catalogue (propeller EWFDD): the
+ * fan turns at its own rated motor speed(s), not the centrifugal 2-/4-pole
+ * bands. Each distinct rated rpm becomes a fixed band so selection reads the
+ * curve at that speed and picks the lowest speed that meets the flow.
+ */
+function fixedSpeedBands(
+  points: RatingPoint[],
+): { pole: number; minRpm: number; maxRpm: number }[] {
+  const rpms = [...new Set(points.filter((p) => p.rpm > 0).map((p) => p.rpm))].sort(
+    (a, b) => a - b,
+  );
+  return rpms.map((r) => ({ pole: polesForRpm(r), minRpm: r, maxRpm: r }));
 }
 
 export function selectFan(
@@ -547,7 +568,11 @@ export function selectFan(
     // flow when needed. Outlet velocity is disregarded. The valid pick is the
     // tightest band that meets the flow; undersized/oversized neighbours are
     // still returned (flagged) so they appear next to the recommendation. -----
-    const dd = selectDirectDrive(model.ratingPoints, curve, referenceRpm, selectionPressure, duty.airflow_m3hr);
+    const bands =
+      model.specs?.fixedSpeedDirect === true
+        ? fixedSpeedBands(model.ratingPoints)
+        : DIRECT_DRIVE_BANDS;
+    const dd = selectDirectDrive(model.ratingPoints, curve, referenceRpm, selectionPressure, duty.airflow_m3hr, bands);
     if (!dd) return null;
     rpm = dd.rpm;
     motorPole = dd.pole;
@@ -678,7 +703,8 @@ export function selectFan(
   const rpmWithinMax = maxRpm == null ? true : rpm <= maxRpm;
   if (!rpmWithinMax) {
     warnings.push(`Required speed ${rpm} rpm exceeds the rated max ${maxRpm} rpm.`);
-  } else if (rpm > 1200 && !options.directDrive) {
+  } else if (rpm > 1200 && !options.directDrive && model.specs?.propeller !== true) {
+    // Propeller panel fans (EWF) routinely run above 1200 rpm at small sizes.
     warnings.push(`Speed ${rpm} rpm is above the recommended ~1200 rpm.`);
   }
 
@@ -705,7 +731,8 @@ export function selectFan(
   // never a good pick; above the recommended ~1200 rpm drops HIGH to MEDIUM.
   if (!options.directDrive) {
     if (ovWithinLimit === false || !rpmWithinMax) confidence = "LOW";
-    else if (confidence === "HIGH" && rpm > 1200) confidence = "MEDIUM";
+    else if (confidence === "HIGH" && rpm > 1200 && model.specs?.propeller !== true)
+      confidence = "MEDIUM";
   }
 
   const requiresEngineerConfirmation =

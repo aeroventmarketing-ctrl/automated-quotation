@@ -107,7 +107,10 @@ function rewriteModelLine(desc: string, combined: string): string {
  */
 function effectiveBlowerModel(model: string | null, drive: string): string {
   if (!model) return "";
-  return /direct/i.test(drive) ? `${model}DD` : model;
+  // Natively-direct catalogues already encode the drive in the code (…EWFDD),
+  // so only append "DD" for belt-catalogue models that don't already end in DD.
+  if (/direct/i.test(drive) && !/DD$/i.test(model)) return `${model}DD`;
+  return model;
 }
 /**
  * Reflect the drive in the description as "Belt Drive" / "Direct Drive". When a
@@ -247,6 +250,10 @@ const materialFactor = (specs: LineSpecs): number =>
  * backward / CFABCAB forward); forward curve is CFAB; otherwise CEB.
  */
 function resolveTag(type: string, bladeType: string): string {
+  // Panel Fan (propeller) has its own catalogues: EWF (belt) / EWFDD (direct).
+  // The belt tag carries the ×1 price factor; the drive picks EWF vs EWFDD in
+  // selectionTag and via the model code from selection.
+  if (type === "Panel Fan") return "EWF";
   if (type === "Centrifugal Inline Blower") return "CIEB";
   if (type === "Square Inline Blower") return "SIEB";
   if (type === "Cabinet Blower (DIDW)")
@@ -262,7 +269,9 @@ function resolveTag(type: string, bladeType: string): string {
  * the matching blower catalogue: CABSISW→CEB, CEBCAB→DIDWCEB, CFABCAB→DIDWCFAB;
  * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
-function selectionTag(type: string, bladeType: string): string {
+function selectionTag(type: string, bladeType: string, drive = ""): string {
+  // Panel Fan queries the belt (EWF) or direct (EWFDD) propeller catalogue.
+  if (type === "Panel Fan") return /direct/i.test(drive) ? "EWFDD" : "EWF";
   const tag = resolveTag(type, bladeType);
   if (tag === "CABSISW") return "CEB";
   if (tag === "CEBCAB") return "DIDWCEB";
@@ -281,6 +290,8 @@ const TAG_FACTORS: Record<string, number> = {
   CEB: 1,
   CIEB: 1,
   SIEB: 1,
+  EWF: 1,
+  EWFDD: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
@@ -492,7 +503,7 @@ export function QuotationBuilder({
           requirement: { airflow: cfm, airflowUnit: "cfm", staticPressure: sp, pressureUnit: "inwg" },
           // Query only this product's catalogue (CEB / CFAB / DIDWCEB) so the
           // lists never mix; CABSISW reuses the CEB models.
-          tag: selectionTag(line.specs.type, line.specs.bladeType),
+          tag: selectionTag(line.specs.type, line.specs.bladeType, line.specs.drive),
           // Direct-drive lines constrain selection to standard 2-/4-pole speed bands.
           directDrive: /direct/i.test(line.specs.drive),
         }),
