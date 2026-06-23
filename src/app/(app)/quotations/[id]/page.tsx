@@ -67,9 +67,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
             : "INCLUSIVE",
         discountPct: Number(quotation.discountPct ?? 0),
         headerUnits: {
-          capacity: (quotation.headerUnits as Record<string, string>)?.capacity ?? "",
-          pressure: (quotation.headerUnits as Record<string, string>)?.pressure ?? "",
-          motor: ((m) => (m === "Hp" ? "HP" : m))((quotation.headerUnits as Record<string, string>)?.motor ?? ""),
+          capacity: (quotation.headerUnits as Record<string, string>)?.capacity || "cfm",
+          pressure: (quotation.headerUnits as Record<string, string>)?.pressure || "in-w.g.",
+          motor: ((m) => (m === "Hp" ? "HP" : m))((quotation.headerUnits as Record<string, string>)?.motor || "HP"),
         },
         projectName: quotation.projectName ?? quotation.inquiry.projectName ?? "",
         subtotal: Number(quotation.subtotal),
