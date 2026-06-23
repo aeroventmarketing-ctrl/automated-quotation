@@ -68,20 +68,19 @@ describe("AFBM selection rules", () => {
     expect(r.requiresEngineerConfirmation).toBe(true);
   });
 
-  it("does not enforce the CEB outlet-velocity limit on forward-curve (CFAB) fans", () => {
-    const base: FanModelInput = { ...model, specs: { outletArea_ft2: 0.5, bladeDia_in: 12 } };
-    const fwd: FanModelInput = {
-      ...model,
-      specs: { ...base.specs, bladeType: "Forward Curved" },
-    };
-    const duty = { airflow_m3hr: 8000, staticPressure_pa: 250 };
-    // Same tiny outlet that fails for backward-curve...
-    expect(selectFan(base, duty)!.ovWithinLimit).toBe(false);
-    // ...but for forward curve the OV is reported for info only (limit not enforced).
-    const r = selectFan(fwd, duty)!;
-    expect(r.outletVelocity_fpm).toBeGreaterThan(0);
-    expect(r.ovLimit_fpm).toBeNull();
-    expect(r.ovWithinLimit).toBeNull();
+  it("uses a flat 2000 fpm outlet-velocity limit for forward-curve (CFAB) fans", () => {
+    // OV ≈ 1899 fpm at this duty: over the CEB 1800 limit (12" wheel) but within
+    // the higher forward-curve 2000 fpm limit.
+    const specs = { outletArea_ft2: 0.62, bladeDia_in: 12 };
+    const duty = { airflow_m3hr: 2000, staticPressure_pa: 350 };
+    const ceb = selectFan({ ...model, specs }, duty)!;
+    expect(ceb.ovLimit_fpm).toBe(1800);
+    expect(ceb.ovWithinLimit).toBe(false);
+    expect(ceb.confidence).toBe("LOW");
+    const fwd = selectFan({ ...model, specs: { ...specs, bladeType: "Forward Curved" } }, duty)!;
+    expect(fwd.ovLimit_fpm).toBe(2000);
+    expect(fwd.ovWithinLimit).toBe(true);
+    expect(fwd.confidence).toBe("HIGH");
   });
 });
 

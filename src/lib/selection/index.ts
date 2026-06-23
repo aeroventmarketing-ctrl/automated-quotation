@@ -43,6 +43,9 @@ export function outletVelocityLimit(wheelDia_in: number | null): number {
   return 3000;
 }
 
+/** Forward-curve (CFAB) outlet-velocity limit (fpm) — flat, higher than CEB. */
+export const FORWARD_CURVE_OV_LIMIT = 2000;
+
 /**
  * Direct-drive (CEBDD) speed bands. A direct-drive fan turns at the motor speed;
  * selection meets the static pressure at a band's nominal speed (4-pole first,
@@ -624,9 +627,9 @@ export function selectFan(
   const outletArea = num(model.specs?.outletArea_ft2);
   const wheelDia =
     num(model.specs?.bladeDia_in) ?? num(model.specs?.wheelDia_in);
-  // Forward-curve fans (CFAB) legitimately run at higher outlet velocity than
-  // the backward-curve (CEB) OV table allows, so the CEB limit is not enforced
-  // for them — OV is reported for info only, as with direct drive.
+  // Forward-curve fans (CFAB) follow the same selection rule as CEB, but their
+  // outlet-velocity limit is a flat 2000 fpm (higher than the CEB diameter-based
+  // table). Direct drive (CEBDD/CFABDD) disregards the OV limit either way.
   const isForwardCurve = /forward/i.test(String(model.specs?.bladeType ?? ""));
   // Outlet velocity reflects the actual delivered flow (direct drive may raise it).
   const flowCfm = (selectedAirflow_m3hr ?? duty.airflow_m3hr) * CFM_PER_M3HR;
@@ -635,9 +638,9 @@ export function selectFan(
   let ovWithinLimit: boolean | null = null;
   if (outletArea && outletArea > 0) {
     outletVelocity_fpm = Math.round(flowCfm / outletArea);
-    // CEBDD and forward-curve fans disregard the OV limit — info only.
-    if (!options.directDrive && !isForwardCurve) {
-      ovLimit_fpm = outletVelocityLimit(wheelDia);
+    // CEBDD/CFABDD disregard the OV limit — reported for info only.
+    if (!options.directDrive) {
+      ovLimit_fpm = isForwardCurve ? FORWARD_CURVE_OV_LIMIT : outletVelocityLimit(wheelDia);
       ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
       if (!ovWithinLimit) {
         warnings.push(
