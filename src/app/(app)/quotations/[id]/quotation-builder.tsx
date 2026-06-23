@@ -136,6 +136,7 @@ function productNoun(type: string, bladeType: string): string {
   if (type === "Cabinet Blower (SISW)") return "Cabinet Blower-SISW";
   if (type === "Cabinet Blower (DIDW)") return "Cabinet Blower-DIDW";
   if (type === "Centrifugal Inline Blower") return "Centrifugal Inline Blower";
+  if (type === "Square Inline Blower") return "Square Inline Blower";
   if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
     return "Centrifugal Blower - DIDW";
   if (/forward/i.test(bladeType)) return "Centrifugal Fresh Air Blower";
@@ -146,6 +147,7 @@ function productNoun(type: string, bladeType: string): string {
 const PRODUCT_NOUNS = [
   "Centrifugal Fresh Air Blower",
   "Centrifugal Inline Blower",
+  "Square Inline Blower",
   "Centrifugal Blower - DIDW",
   "Cabinet Blower-SISW",
   "Cabinet Blower-DIDW",
@@ -241,6 +243,7 @@ const materialFactor = (specs: LineSpecs): number =>
  */
 function resolveTag(type: string, bladeType: string): string {
   if (type === "Centrifugal Inline Blower") return "CIEB";
+  if (type === "Square Inline Blower") return "SIEB";
   if (type === "Cabinet Blower (DIDW)")
     return /forward/i.test(bladeType) ? "CFABCAB" : "CEBCAB";
   if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
@@ -271,6 +274,7 @@ function selectionTag(type: string, bladeType: string): string {
 const TAG_FACTORS: Record<string, number> = {
   CEB: 1,
   CIEB: 1,
+  SIEB: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
@@ -286,7 +290,7 @@ const bodyPriceOf = (specs: LineSpecs): number =>
 /** Re-tag a blower model code (AV#### + DIDWCFAB/DIDWCEB/CFABCAB/CEBCAB/CABSISW/CFAB/CEB). */
 function retagModel(model: string | null, type: string, bladeType: string): string | null {
   if (!model) return model;
-  return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CFABCAB|CEBCAB|CABSISW|CIEB|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
+  return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CFABCAB|CEBCAB|CABSISW|CIEB|SIEB|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
 }
 
 /** Shape / variant options for a Ventilation Accessory type. */

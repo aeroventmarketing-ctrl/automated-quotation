@@ -51,6 +51,17 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   },
   {
     "category": "Centrifugal Type",
+    "type": "Square Inline Blower",
+    "bladeTypes": [
+      "Backwardly Inclined"
+    ],
+    "drives": [
+      "Belt",
+      "Direct"
+    ]
+  },
+  {
+    "category": "Centrifugal Type",
     "type": "Cabinet Blower (SISW)",
     "bladeTypes": [
       "Backwardly Inlined",
