@@ -159,11 +159,16 @@ const PRODUCT_NOUNS = [
  */
 function rewriteProductNoun(desc: string, type: string, bladeType: string): string {
   const target = productNoun(type, bladeType);
+  let out = desc;
   for (const noun of PRODUCT_NOUNS) {
     const re = new RegExp(noun, "i");
-    if (re.test(desc)) return desc.replace(re, target);
+    if (re.test(out)) {
+      out = out.replace(re, target);
+      break;
+    }
   }
-  return desc;
+  // All centrifugal blowers are impeller-type; normalise the older inline wording.
+  return out.replace(/Tubular Inline Type/gi, "Impeller Type");
 }
 
 /**

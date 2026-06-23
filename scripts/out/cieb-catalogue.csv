@@ -1,69 +1,69 @@
 modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
 AV0900CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 9"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV0900CIEB",9,unit,17575,PHP,"{""bladeDia_in"":9,""outletArea_ft2"":1.418,""maxRpm"":3620,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV1050CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 10.5"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1050CIEB",10.5,unit,17575,PHP,"{""bladeDia_in"":10.5,""outletArea_ft2"":1.42,""maxRpm"":3636,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV1225CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 12.25"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1225CIEB",12.25,unit,19563,PHP,"{""bladeDia_in"":12.25,""outletArea_ft2"":1.82,""maxRpm"":3157,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV1350CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 13.5"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1350CIEB",13.5,unit,22738,PHP,"{""bladeDia_in"":13.5,""outletArea_ft2"":2.463,""maxRpm"":2873,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV1500CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 15"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1500CIEB",15,unit,24390,PHP,"{""bladeDia_in"":15,""outletArea_ft2"":2.685,""maxRpm"":2567,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV1650CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 16.5"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1650CIEB",16.5,unit,26451,PHP,"{""bladeDia_in"":16.5,""outletArea_ft2"":3.207,""maxRpm"":2347,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV1825CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 18.25"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV1825CIEB",18.25,unit,29506,PHP,"{""bladeDia_in"":18.25,""outletArea_ft2"":5.032,""maxRpm"":2112,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV2000CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 20"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV2000CIEB",20,unit,34977,PHP,"{""bladeDia_in"":20,""outletArea_ft2"":6.11,""maxRpm"":1926,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV2225CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 22.25"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV2225CIEB",22.25,unit,36654,PHP,"{""bladeDia_in"":22.25,""outletArea_ft2"":7.267,""maxRpm"":1724,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV2450CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 24.5"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV2450CIEB",24.5,unit,39349,PHP,"{""bladeDia_in"":24.5,""outletArea_ft2"":8.727,""maxRpm"":1571,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV2700CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 27"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV2700CIEB",27,unit,47634,PHP,"{""bladeDia_in"":27,""outletArea_ft2"":10.261,""maxRpm"":1391,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV3000CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 30"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV3000CIEB",30,unit,52823,PHP,"{""bladeDia_in"":30,""outletArea_ft2"":12.897,""maxRpm"":1250,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV3300CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 33"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV3300CIEB",33,unit,65433,PHP,"{""bladeDia_in"":33,""outletArea_ft2"":14.75,""maxRpm"":1125,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV3650CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 36.5"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV3650CIEB",36.5,unit,83827,PHP,"{""bladeDia_in"":36.5,""outletArea_ft2"":16.275,""maxRpm"":993,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV4025CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 40.25"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV4025CIEB",40.25,unit,99281,PHP,"{""bladeDia_in"":40.25,""outletArea_ft2"":20.045,""maxRpm"":896,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV4450CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 44.5"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV4450CIEB",44.5,unit,125775,PHP,"{""bladeDia_in"":44.5,""outletArea_ft2"":24.302,""maxRpm"":814,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
 AV4900CIEB,CENTRIFUGAL,"Centrifugal Inline Blower 49"" Backwardly Inclined (CIEB)","Centrifugal Inline Blower
-Tubular Inline Type / Belt Driven
+Impeller Type / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV4900CIEB",49,unit,146672,PHP,"{""bladeDia_in"":49,""outletArea_ft2"":28.863,""maxRpm"":737,""bladeType"":""Backwardly Inclined"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centrifugal Inline Blower"",""tag"":""CIEB""}"
