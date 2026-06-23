@@ -1,0 +1,37 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+AV0913CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 9.125"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV0913CFAB",9.125,unit,17575,PHP,"{""bladeDia_in"":9.125,""outletArea_ft2"":0.448,""maxRpm"":1834,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"
+AV1063CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 10.625"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1063CFAB",10.625,unit,17575,PHP,"{""bladeDia_in"":10.625,""outletArea_ft2"":0.659,""maxRpm"":1555,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"
+AV1263CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 12.625"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1263CFAB",12.625,unit,19563,PHP,"{""bladeDia_in"":12.625,""outletArea_ft2"":0.759,""maxRpm"":1442,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"
+AV1500CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 15"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1500CFAB",15,unit,24390,PHP,"{""bladeDia_in"":15,""outletArea_ft2"":1.342,""maxRpm"":980,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"
+AV1850CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 18.5"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1850CFAB",18.5,unit,29506,PHP,"{""bladeDia_in"":18.5,""outletArea_ft2"":1.616,""maxRpm"":1015,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"
+AV2000CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 20"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2000CFAB",20,unit,34977,PHP,"{""bladeDia_in"":20,""outletArea_ft2"":2.771,""maxRpm"":1013,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"
+AV2200CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 22"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2200CFAB",22,unit,36654,PHP,"{""bladeDia_in"":22,""outletArea_ft2"":3.128,""maxRpm"":840,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"
+AV2600CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 26"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2600CFAB",26,unit,47634,PHP,"{""bladeDia_in"":26,""outletArea_ft2"":4.34,""maxRpm"":701,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"
+AV3025CFAB,CENTRIFUGAL,"Centrifugal Fresh Air Blower 30.25"" Forward Curved (CFAB)","Centrifugal Fresh Air Blower
+Impeller Type / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3025CFAB",30.25,unit,52823,PHP,"{""bladeDia_in"":30.25,""outletArea_ft2"":5.714,""maxRpm"":658,""bladeType"":""Forward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Centfrifugal Blower"",""tag"":""CFAB""}"

@@ -21,9 +21,20 @@ const bodySchema = z.object({
   // Optionally restrict to specific catalogue models or a family.
   catalogueItemIds: z.array(z.string()).optional(),
   family: z.string().optional(),
+  // Restrict to a blade type so forward-curve (CFAB) and backward-curve (CEB)
+  // models don't compete in one list. Matched on the model-code tag.
+  bladeType: z.string().optional(),
   // Direct-drive (CEBDD) selection: constrain to standard 2-/4-pole speed bands.
   directDrive: z.boolean().optional(),
 });
+
+/** Model-code filter for a blade type: forward-curve models carry the CFAB tag. */
+function bladeTypeWhere(bladeType: string | undefined) {
+  if (!bladeType) return {};
+  return /forward/i.test(bladeType)
+    ? { modelCode: { contains: "CFAB" } }
+    : { modelCode: { not: { contains: "CFAB" } } };
+}
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -64,6 +75,7 @@ export async function POST(req: NextRequest) {
       ratingPoints: { some: {} },
       ...(body.catalogueItemIds ? { id: { in: body.catalogueItemIds } } : {}),
       ...(body.family ? { family: body.family as never } : {}),
+      ...bladeTypeWhere(body.bladeType),
     },
     include: { ratingPoints: true },
   });

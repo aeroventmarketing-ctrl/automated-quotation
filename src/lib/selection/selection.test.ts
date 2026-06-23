@@ -5,6 +5,7 @@ import {
   densityFromTemperature,
   suggestMotorHp,
   outletVelocityLimit,
+  forwardCurveOvLimit,
   MOTOR_HP_LIST,
   type FanModelInput,
 } from "./index";
@@ -57,6 +58,13 @@ describe("AFBM selection rules", () => {
     expect(outletVelocityLimit(44.5)).toBe(3000);
   });
 
+  it("uses 2000 fpm for forward-curve, 2400 fpm for the largest sizes (27\"/30\")", () => {
+    expect(forwardCurveOvLimit(15)).toBe(2000);
+    expect(forwardCurveOvLimit(22)).toBe(2000);
+    expect(forwardCurveOvLimit(26)).toBe(2400); // FC-126 (~27")
+    expect(forwardCurveOvLimit(30.25)).toBe(2400); // FC-130 (~30")
+  });
+
   it("flags an undersized fan (outlet velocity over the limit) as LOW", () => {
     const small: FanModelInput = {
       ...model,
@@ -66,6 +74,21 @@ describe("AFBM selection rules", () => {
     expect(r.ovWithinLimit).toBe(false);
     expect(r.confidence).toBe("LOW");
     expect(r.requiresEngineerConfirmation).toBe(true);
+  });
+
+  it("uses a flat 2000 fpm outlet-velocity limit for forward-curve (CFAB) fans", () => {
+    // OV ≈ 1899 fpm at this duty: over the CEB 1800 limit (12" wheel) but within
+    // the higher forward-curve 2000 fpm limit.
+    const specs = { outletArea_ft2: 0.62, bladeDia_in: 12 };
+    const duty = { airflow_m3hr: 2000, staticPressure_pa: 350 };
+    const ceb = selectFan({ ...model, specs }, duty)!;
+    expect(ceb.ovLimit_fpm).toBe(1800);
+    expect(ceb.ovWithinLimit).toBe(false);
+    expect(ceb.confidence).toBe("LOW");
+    const fwd = selectFan({ ...model, specs: { ...specs, bladeType: "Forward Curved" } }, duty)!;
+    expect(fwd.ovLimit_fpm).toBe(2000);
+    expect(fwd.ovWithinLimit).toBe(true);
+    expect(fwd.confidence).toBe("HIGH");
   });
 });
 

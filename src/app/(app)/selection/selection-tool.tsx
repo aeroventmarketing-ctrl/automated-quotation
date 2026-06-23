@@ -27,6 +27,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
   const [airflowUnit, setAirflowUnit] = useState("cfm");
   const [pressure, setPressure] = useState("");
   const [pressureUnit, setPressureUnit] = useState("inwg");
+  const [bladeType, setBladeType] = useState("");
   const [drive, setDrive] = useState("belt");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
             staticPressure: Number(pressure),
             pressureUnit,
           },
+          bladeType: bladeType || undefined,
           directDrive: drive === "direct",
         }),
       });
@@ -90,6 +92,14 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
             <Select className="w-28" value={pressureUnit} onChange={(e) => setPressureUnit(e.target.value)}>
               <option value="inwg">in w.g.</option>
               <option value="pa">Pa</option>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Blade type</Label>
+            <Select className="w-44" value={bladeType} onChange={(e) => setBladeType(e.target.value)}>
+              <option value="">All</option>
+              <option value="Forward Curved">Forward Curved (CFAB)</option>
+              <option value="Backward Curved">Backward / Inclined (CEB)</option>
             </Select>
           </div>
           <div className="space-y-1">
@@ -132,7 +142,8 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               Showing 3 sizes smaller and 3 sizes bigger around the recommended selection.
             </p>
             {windowed.map((sel) => {
-              const body = priceMap[sel.modelId] ?? 0;
+              // Forward-curve (CFAB) body price is the CEB base ÷ 0.9.
+              const body = (priceMap[sel.modelId] ?? 0) * (/CFAB/i.test(sel.modelCode) ? 1 / 0.9 : 1);
               const motor = lookupMotor(sel.motorHp, 3, sel.motorPole ?? 4);
               const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
               const isRec = sel.modelId === recommended.modelId;

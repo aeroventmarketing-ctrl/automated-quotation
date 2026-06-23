@@ -115,6 +115,26 @@ function rewriteDriveLine(desc: string, drive: string): string {
   }
   return desc.replace(/\b(Belt|Direct) Driven?\b/gi, "$1 Drive");
 }
+/**
+ * Forward-curve (CFAB) units are "Centrifugal Fresh Air Blower" in the
+ * description; any other blade type is plain "Centrifugal Blower". Idempotent
+ * both ways so it can run on every recompute.
+ */
+function rewriteBladeName(desc: string, bladeType: string): string {
+  return /forward/i.test(bladeType)
+    ? desc.replace(/Centrifugal (?:Fresh Air )?Blower/i, "Centrifugal Fresh Air Blower")
+    : desc.replace(/Centrifugal Fresh Air Blower/i, "Centrifugal Blower");
+}
+
+/**
+ * Drive options for a blade type. Forward curve (CFAB) is belt-only — its
+ * performance ratings don't reach direct-drive speeds (e.g. 1750 rpm).
+ */
+function drivesFor(category: string, type: string, bladeType: string): string[] {
+  const drives = entryFor(category, type)?.drives ?? [];
+  return /forward/i.test(bladeType) ? drives.filter((d) => !/direct/i.test(d)) : drives;
+}
+
 /** Standard paint line, dropped for stainless builds. */
 const PAINT_PHRASE = "Painted with Epoxy Enamel Aqua Green";
 /** Material phrase for the description (drops a redundant trailing "material"). */
@@ -174,6 +194,29 @@ const MATERIAL_CATEGORIES = new Set([
 ]);
 const materialFactor = (specs: LineSpecs): number =>
   MATERIAL_CATEGORIES.has(specs.category) ? MATERIAL_FACTORS[specs.material] ?? 1 : 1;
+
+/**
+ * Blade-type -> body-price factor. Forward-curve (CFAB) bodies are the CEB base
+ * price ÷ 0.9. The factor is applied to the body only, then × material.
+ */
+const BLADE_FACTORS: Record<string, number> = {
+  "Forward Curved": 1 / 0.9,
+};
+const bladeFactor = (specs: LineSpecs): number => BLADE_FACTORS[specs.bladeType] ?? 1;
+/** Body-price factor implied by a model-code tag (CFAB = forward curve). */
+const bladeFactorForModel = (modelCode: string): number =>
+  /CFAB/i.test(modelCode) ? 1 / 0.9 : 1;
+/** Net body price after blade-type and material factors. */
+const bodyPriceOf = (specs: LineSpecs): number =>
+  (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
+/** Model-code tag for a blade type (forward curve = CFAB, otherwise CEB). */
+const BLADE_TAGS: Record<string, string> = { "Forward Curved": "CFAB" };
+/** Re-tag a blower model code (AV####CEB <-> AV####CFAB) for the blade type. */
+function retagBladeModel(model: string | null, bladeType: string): string | null {
+  if (!model) return model;
+  const tag = BLADE_TAGS[bladeType] ?? "CEB";
+  return model.replace(/(AV\d+)(?:CFAB|CEB)/i, `$1${tag}`);
+}
 
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
@@ -301,13 +344,18 @@ export function QuotationBuilder({
         const specs = { ...l.specs, ...patch };
         // 1-phase motors are 220V only — snap voltage so the model code resolves.
         if (specs.motorPh === 1) specs.motorVolts = 220;
-        const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
+        // Keep the blower model's blade tag (CEB/CFAB) in step with the blade type.
+        specs.blowerModel = retagBladeModel(specs.blowerModel, specs.bladeType);
+        const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
         // Only auto-price true blower lines (those with a body price).
         if (body <= 0) {
-          const desc = rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material);
+          const desc = rewriteBladeName(
+            rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
+            specs.bladeType,
+          );
           return { ...l, specs, descriptionSnapshot: desc };
         }
         const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
@@ -318,9 +366,12 @@ export function QuotationBuilder({
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
-        const descriptionSnapshot = rewriteMaterialLine(
-          rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
-          specs.material,
+        const descriptionSnapshot = rewriteBladeName(
+          rewriteMaterialLine(
+            rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
+            specs.material,
+          ),
+          specs.bladeType,
         );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
@@ -342,6 +393,8 @@ export function QuotationBuilder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requirement: { airflow: cfm, airflowUnit: "cfm", staticPressure: sp, pressureUnit: "inwg" },
+          // Keep forward-curve (CFAB) and backward-curve (CEB) models apart.
+          bladeType: line.specs.bladeType || undefined,
           // Direct-drive lines constrain selection to standard 2-/4-pole speed bands.
           directDrive: /direct/i.test(line.specs.drive),
         }),
@@ -361,19 +414,24 @@ export function QuotationBuilder({
     setLines((ls) =>
       ls.map((l) => {
         if (l.id !== lineId) return l;
+        const chosenModel = cat?.modelCode ?? l.specs.blowerModel;
         const specs: LineSpecs = {
           ...l.specs,
           bodyPrice: cat?.basePrice ?? l.specs.bodyPrice,
-          blowerModel: cat?.modelCode ?? l.specs.blowerModel,
+          blowerModel: chosenModel,
           inches: cat?.bladeDia ?? l.specs.inches,
           motorHp: r.motorHp,
+          // A forward-curve (CFAB) pick implies the Forward Curved blade type, so
+          // the ÷0.9 body factor and CFAB description follow the selection.
+          bladeType:
+            chosenModel && /CFAB/i.test(chosenModel) ? "Forward Curved" : l.specs.bladeType,
           // Direct-drive selections also fix the motor pole (2- or 4-pole band).
           // The client's requested CFM is kept on the quote; the selection list
           // shows the higher delivered flow for reference.
           motorPole: r.motorPole ?? l.specs.motorPole,
         };
         const baseDesc = cat?.description || l.descriptionSnapshot;
-        const body = (specs.bodyPrice ?? 0) * materialFactor(specs);
+        const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
@@ -382,9 +440,12 @@ export function QuotationBuilder({
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
-        const descriptionSnapshot = rewriteMaterialLine(
-          rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
-          specs.material,
+        const descriptionSnapshot = rewriteBladeName(
+          rewriteMaterialLine(
+            rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
+            specs.material,
+          ),
+          specs.bladeType,
         );
         return { ...l, specs, unitPrice: gross, descriptionSnapshot };
       }),
@@ -490,7 +551,13 @@ export function QuotationBuilder({
               <Select
                 value={c.bladeType}
                 disabled={!editable || !c.type}
-                onChange={(e) => set({ bladeType: e.target.value })}
+                onChange={(e) => {
+                  const bladeType = e.target.value;
+                  // Forward curve is belt-only: drop an incompatible Direct drive.
+                  const patch: Partial<LineSpecs> = { bladeType };
+                  if (!drivesFor(c.category, c.type, bladeType).includes(c.drive)) patch.drive = "";
+                  applyMotor(l.id, patch);
+                }}
               >
                 <option value="">Blade type…</option>
                 {(entryFor(c.category, c.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
@@ -501,7 +568,7 @@ export function QuotationBuilder({
                 onChange={(e) => applyMotor(l.id, { drive: e.target.value })}
               >
                 <option value="">Drive…</option>
-                {(entryFor(c.category, c.type)?.drives ?? []).map((d) => (<option key={d} value={d}>{d}</option>))}
+                {drivesFor(c.category, c.type, c.bladeType).map((d) => (<option key={d} value={d}>{d}</option>))}
               </Select>
             </>
           )}
@@ -722,7 +789,8 @@ export function QuotationBuilder({
                         {w.list.map((r) => {
                           const cat = catalog[r.modelId];
                           const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
-                          const est = cat?.basePrice ? round2(computeUnitPrice(cat.basePrice, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate)) : 0;
+                          const estBody = (cat?.basePrice ?? 0) * bladeFactorForModel(r.modelCode) * materialFactor(l.specs);
+                          const est = estBody > 0 ? round2(computeUnitPrice(estBody, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate)) : 0;
                           const isRec = r.modelId === w.rec.modelId;
                           return (
                             <button
