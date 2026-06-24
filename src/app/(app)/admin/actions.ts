@@ -163,12 +163,15 @@ export async function deleteRatingPoint(id: string) {
 }
 
 // --- Location access (geofence) ---------------------------------------------
+const geofenceLocationSchema = z.object({
+  label: z.string().max(200).default(""),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  radiusMeters: z.number().min(10).max(500000),
+});
 const geofenceSchema = z.object({
   enabled: z.boolean(),
-  latitude: z.number().min(-90).max(90).nullable(),
-  longitude: z.number().min(-180).max(180).nullable(),
-  radiusMeters: z.number().min(10).max(500000),
-  label: z.string().max(200).default(""),
+  locations: z.array(geofenceLocationSchema),
 });
 
 export async function getGeofenceSetting() {
@@ -179,8 +182,8 @@ export async function getGeofenceSetting() {
 export async function saveGeofenceSetting(input: z.infer<typeof geofenceSchema>) {
   await assertAdmin();
   const d = geofenceSchema.parse(input);
-  if (d.enabled && (d.latitude == null || d.longitude == null)) {
-    throw new Error("Set the allowed location (latitude & longitude) before enabling.");
+  if (d.enabled && d.locations.length === 0) {
+    throw new Error("Add at least one location before enabling.");
   }
   await prisma.appSetting.upsert({
     where: { key: GEOFENCE_KEY },
