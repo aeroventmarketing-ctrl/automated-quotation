@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 export default function LoginPage() {
   return (
@@ -48,9 +48,12 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 h-12 w-12 rounded-lg bg-primary" />
-          <CardTitle className="text-2xl">AeroQuote</CardTitle>
-          <CardDescription>Aerovent Fans & Blowers — Quotation System</CardDescription>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/aerovent-logo.jpg"
+            alt="Aerovent Fans and Blowers Manufacturing"
+            className="mx-auto h-auto w-full max-w-[280px]"
+          />
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
