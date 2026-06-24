@@ -134,7 +134,12 @@ function rewriteDriveLine(desc: string, drive: string): string {
  * path — EWF (belt) / EWFDD (direct). "Panel Fan" is the legacy type name, kept
  * so older saved quotes still resolve.
  */
-const PROPELLER_FAN_TYPES = new Set(["Exhaust Wall Fan", "Fresh Air Wall Fan", "Panel Fan"]);
+const PROPELLER_FAN_TYPES = new Set([
+  "Exhaust Wall Fan",
+  "Fresh Air Wall Fan",
+  "Power Roof Ventilator",
+  "Panel Fan",
+]);
 const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
 /** Wheel-construction label for line 2 of a blower/fan description. */
 function constructionLabel(type: string): string {
@@ -303,6 +308,7 @@ function resolveTag(type: string, bladeType: string): string {
   // Propeller wall fans: Exhaust = EWF/EWFDD, Fresh Air = FAWF/FAWFDD. The belt
   // tag carries the ×1 price factor; the drive picks the direct variant in
   // selectionTag and via the model code from selection.
+  if (type === "Power Roof Ventilator") return "PRV";
   if (type === "Fresh Air Wall Fan") return "FAWF";
   if (PROPELLER_FAN_TYPES.has(type)) return "EWF";
   if (type === "Centrifugal Inline Blower") return "CIEB";
@@ -322,6 +328,7 @@ function resolveTag(type: string, bladeType: string): string {
  */
 function selectionTag(type: string, bladeType: string, drive = ""): string {
   // Propeller wall fans query their own belt/direct catalogue by application.
+  if (type === "Power Roof Ventilator") return /direct/i.test(drive) ? "PRVDD" : "PRV";
   if (type === "Fresh Air Wall Fan") return /direct/i.test(drive) ? "FAWFDD" : "FAWF";
   if (PROPELLER_FAN_TYPES.has(type)) return /direct/i.test(drive) ? "EWFDD" : "EWF";
   const tag = resolveTag(type, bladeType);
@@ -346,6 +353,8 @@ const TAG_FACTORS: Record<string, number> = {
   EWFDD: 1,
   FAWF: 1,
   FAWFDD: 1,
+  PRV: 1,
+  PRVDD: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
@@ -365,11 +374,12 @@ const bodyPriceOf = (specs: LineSpecs): number =>
  * Crossing between the centrifugal and wall-fan families returns null — the size
  * systems differ, so the model must be re-selected.
  */
-const WALL_FAN_SUFFIX = /(AV\d+)(?:FAWFDD|EWFDD|FAWF|EWF)$/i;
+const WALL_FAN_SUFFIX = /(AV\d+)(?:FAWFDD|EWFDD|PRVDD|FAWF|EWF|PRV)$/i;
 function retagModel(model: string | null, type: string, bladeType: string, drive = ""): string | null {
   if (!model) return model;
   if (PROPELLER_FAN_TYPES.has(type)) {
-    const app = type === "Fresh Air Wall Fan" ? "FAWF" : "EWF";
+    const app =
+      type === "Power Roof Ventilator" ? "PRV" : type === "Fresh Air Wall Fan" ? "FAWF" : "EWF";
     const suffix = app + (/direct/i.test(drive) ? "DD" : "");
     if (WALL_FAN_SUFFIX.test(model)) return model.replace(WALL_FAN_SUFFIX, `$1${suffix}`);
     return null; // came from another family — sizes differ, force re-selection

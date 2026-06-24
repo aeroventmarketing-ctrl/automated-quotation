@@ -48,6 +48,8 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "FAWFDD") return { modelCode: { endsWith: "FAWFDD" } };
   if (t === "FAWF") return { modelCode: { endsWith: "FAWF" } };
   if (t === "EWF") return { modelCode: { endsWith: "EWF" } };
+  if (t === "PRVDD") return { modelCode: { endsWith: "PRVDD" } };
+  if (t === "PRV") return { modelCode: { endsWith: "PRV" } };
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {
@@ -99,7 +101,7 @@ export async function POST(req: NextRequest) {
   // Propeller wall fans (EWF/EWFDD/FAWF/FAWFDD): when no static pressure is
   // given, select against the recommended 0.5" w.g. (≈124.5 Pa).
   if (
-    (body.tag === "EWF" || body.tag === "EWFDD" || body.tag === "FAWF" || body.tag === "FAWFDD") &&
+    ["EWF", "EWFDD", "FAWF", "FAWFDD", "PRV", "PRVDD"].includes(body.tag ?? "") &&
     duty.staticPressure_pa <= 0
   ) {
     duty = { ...duty, staticPressure_pa: 0.5 * 249.0889 };

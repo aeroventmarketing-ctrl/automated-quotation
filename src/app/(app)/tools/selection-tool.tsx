@@ -107,6 +107,8 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               <option value="EWFDD">Exhaust Wall Fan (EWFDD, direct)</option>
               <option value="FAWF">Fresh Air Wall Fan (FAWF, belt)</option>
               <option value="FAWFDD">Fresh Air Wall Fan (FAWFDD, direct)</option>
+              <option value="PRV">Power Roof Ventilator (PRV, belt)</option>
+              <option value="PRVDD">Power Roof Ventilator (PRVDD, direct)</option>
             </Select>
           </div>
           <div className="space-y-1">
