@@ -324,6 +324,60 @@ describe("selectFan — fixed-speed direct (EWFDD propeller): own rated speed", 
   });
 });
 
+describe("selectFan — propeller catalogue-row lookup (EWF/EWFDD/PRV/PRVDD)", () => {
+  // A belt propeller fan whose catalogue offers 30°, 40° and 45° rows. Selection
+  // picks an actual printed row (no fan-law scaling): highest angle ≤40° that
+  // meets the flow at the client SP, within the 1200 rpm belt ceiling.
+  const belt: FanModelInput = {
+    id: "ewf",
+    modelCode: "AV2400EWF",
+    name: "Exhaust Wall Fan 24 (EWF)",
+    specs: {
+      propeller: true,
+      drive: "belt",
+      bladeDia_in: 23,
+      outletArea_ft2: 3.0,
+      maxRpm: 1200,
+      rows: [
+        { a: 30, hp: 3, rpm: 700, bhp: 3.2, c: [[0, 8000], [0.25, 7000], [0.5, 6000]] },
+        { a: 40, hp: 5, rpm: 650, bhp: 5.0, c: [[0, 9000], [0.25, 8200], [0.5, 7400]] },
+        { a: 45, hp: 7.5, rpm: 600, bhp: 7.6, c: [[0, 10000], [0.25, 9200], [0.5, 8400]] },
+        { a: 40, hp: 7.5, rpm: 1300, bhp: 8.0, c: [[0, 14000], [0.25, 13000], [0.5, 12000]] },
+      ],
+    },
+    ratingPoints: [],
+  };
+
+  it("picks the highest ≤40° angle row that meets the duty, shows the actual angle and the row's motor", () => {
+    const r = selectFan(belt, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })!;
+    expect(r.bladeAngle).toBe(40); // highest ≤40°, never 45° and never relabelled
+    expect(r.rpm).toBe(650); // the printed catalogue rpm (≤1200), not fan-law
+    expect(r.motorHp).toBe(5); // straight from the row's MOTOR HP column
+    expect(r.confidence).toBe("HIGH");
+    expect(r.ovWithinLimit).toBe(true); // OV 6500/3.0 ≈ 2167 ≤ 2200
+  });
+
+  it("never selects a row above the 1200 rpm belt ceiling or a 45° angle", () => {
+    // A flow only the 1300-rpm or 45° rows could meet → undersized within the rules.
+    const r = selectFan(belt, { airflow_m3hr: 8600 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })!;
+    expect(r.bladeAngle).toBeLessThanOrEqual(40);
+    expect(r.rpm).toBeLessThanOrEqual(1200);
+    expect(r.withinEnvelope).toBe(false); // no ≤40°/≤1200rpm row reaches 8600 cfm
+  });
+
+  it("flags outlet velocity over 2200 fpm as LOW", () => {
+    const tight: FanModelInput = {
+      ...belt,
+      id: "ewf2",
+      specs: { ...belt.specs, outletArea_ft2: 2.0 }, // OV 6500/2.0 = 3250 > 2200
+    };
+    const r = selectFan(tight, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })!;
+    expect(r.outletVelocity_fpm).toBe(3250);
+    expect(r.ovWithinLimit).toBe(false);
+    expect(r.confidence).toBe("LOW");
+  });
+});
+
 describe("selectFans — ranking", () => {
   it("ranks HIGH-confidence candidates before LOW-confidence ones", () => {
     const big: FanModelInput = {

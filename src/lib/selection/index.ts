@@ -21,6 +21,8 @@ export const STANDARD_AIR_DENSITY = 1.2; // kg/m³
 
 // 1 ft³/min = 1.6990108 m³/h.
 const CFM_PER_M3HR = 1 / 1.6990108;
+// 1 in. w.g. = 249.0889 Pa.
+const PA_PER_INWG = 249.0889;
 
 // AFBM induction-motor sizes (HP). The suggested motor is BHP/0.75 rounded UP
 // to the next size in this list.
@@ -535,11 +537,167 @@ function fixedSpeedBands(
   return rpms.map((r) => ({ pole: polesForRpm(r), minRpm: r, maxRpm: r }));
 }
 
+/** Interpolate a propeller row's CFM at a static pressure (in. w.g.). The curve
+ *  is [sp_in, cfm] ascending by SP (CFM falls as SP rises). Returns null when the
+ *  SP is above the row's highest tabulated point — the fan can't develop it. */
+function interpCfmAtSp(curve: Array<[number, number]>, sp_in: number): number | null {
+  if (!curve.length) return null;
+  if (sp_in <= curve[0][0]) return curve[0][1];
+  for (let i = 0; i < curve.length - 1; i++) {
+    const [s0, c0] = curve[i];
+    const [s1, c1] = curve[i + 1];
+    if (sp_in >= s0 && sp_in <= s1) {
+      const t = s1 === s0 ? 0 : (sp_in - s0) / (s1 - s0);
+      return c0 + t * (c1 - c0);
+    }
+  }
+  return null; // beyond the highest tabulated SP
+}
+
+/**
+ * Catalogue-row selection for propeller fans (EWF/EWFDD/PRV/PRVDD). These
+ * catalogues are discrete tables — each row is a blade angle + motor HP + fan
+ * RPM with a CFM-per-static-pressure curve and a MAX BHP. We pick an actual
+ * printed row (no fan-law speed scaling), in this priority:
+ *   1. volume flow + 2. static pressure — the row's CFM at the client's SP must
+ *      meet the requested flow;
+ *   3. fan RPM within the drive ceiling (belt ≤1200, direct ≤1750);
+ *   4. outlet velocity ≤ 2200 fpm is the recommended ("good") range;
+ *   5. blade angle 40° or below — of the rows that meet the duty, the HIGHEST
+ *      angle, shown exactly as printed (never relabelled).
+ */
+function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionResult | null {
+  const rowsSpec = model.specs?.rows;
+  if (!Array.isArray(rowsSpec) || rowsSpec.length === 0) return null;
+  const numv = (v: unknown): number | null =>
+    typeof v === "number" && !Number.isNaN(v) ? v : null;
+
+  const direct = String(model.specs?.drive ?? "") === "direct";
+  const rpmCeiling = direct ? 1750 : 1200;
+  const sp_in = duty.staticPressure_pa / PA_PER_INWG;
+  const flow_cfm = duty.airflow_m3hr * CFM_PER_M3HR;
+  const warnings: string[] = [];
+
+  interface Cand {
+    angle: number;
+    hp: number;
+    rpm: number;
+    bhp: number;
+    cfm: number;
+  }
+  const cands: Cand[] = [];
+  for (const raw of rowsSpec as Array<Record<string, unknown>>) {
+    const angle = numv(raw.a);
+    const rpm = numv(raw.rpm);
+    const hp = numv(raw.hp);
+    const bhp = numv(raw.bhp);
+    if (angle == null || rpm == null || hp == null || bhp == null) continue;
+    if (angle > 40 || rpm > rpmCeiling) continue;
+    if (!Array.isArray(raw.c)) continue;
+    const curve = (raw.c as Array<[number, number]>)
+      .filter((e) => Array.isArray(e) && e.length === 2)
+      .map((e) => [Number(e[0]), Number(e[1])] as [number, number])
+      .sort((a, b) => a[0] - b[0]);
+    const cfmAtSp = interpCfmAtSp(curve, sp_in);
+    if (cfmAtSp == null) continue; // can't develop this static pressure
+    cands.push({ angle, hp, rpm, bhp, cfm: cfmAtSp });
+  }
+  if (cands.length === 0) return null;
+
+  const meeting = cands.filter((c) => c.cfm >= flow_cfm - 1e-6);
+  let chosen: Cand;
+  let meetsFlow: boolean;
+  if (meeting.length) {
+    // Highest blade angle first; then the least-oversized printed row at that
+    // angle (smallest adequate CFM → lowest rpm / smallest motor).
+    meeting.sort((a, b) => b.angle - a.angle || a.cfm - b.cfm || a.rpm - b.rpm);
+    chosen = meeting[0];
+    meetsFlow = true;
+  } else {
+    // No ≤40° row meets the flow at this SP — show the closest (highest angle,
+    // largest CFM) and flag it as undersized.
+    cands.sort((a, b) => b.angle - a.angle || b.cfm - a.cfm);
+    chosen = cands[0];
+    meetsFlow = false;
+    warnings.push(
+      `Highest ≤40° setting delivers ${Math.round(chosen.cfm)} cfm at ${sp_in.toFixed(2)} in.w.g. — below the required ${Math.round(flow_cfm)} cfm.`,
+    );
+  }
+
+  // Outlet velocity from the REQUIRED flow through the opening (blade Ø + 1").
+  const outletArea = numv(model.specs?.outletArea_ft2);
+  let outletVelocity_fpm: number | null = null;
+  let ovLimit_fpm: number | null = null;
+  let ovWithinLimit: boolean | null = null;
+  if (outletArea && outletArea > 0) {
+    outletVelocity_fpm = Math.round(flow_cfm / outletArea);
+    ovLimit_fpm = 2200;
+    ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
+    if (!ovWithinLimit) {
+      warnings.push(
+        `Outlet velocity ${outletVelocity_fpm} fpm exceeds the recommended ${ovLimit_fpm} fpm — consider a larger size.`,
+      );
+    }
+  }
+
+  const motorHp = chosen.hp;
+  const bhp = chosen.bhp;
+  const motorKw = Math.round(hpToKw(motorHp) * 100) / 100;
+  const motorPole = direct ? polesForRpm(chosen.rpm) : null;
+  const selectedAirflow_m3hr = Math.round((chosen.cfm / CFM_PER_M3HR) * 100) / 100;
+  const power_kw = Math.round(bhp * KW_PER_HP * 1000) / 1000;
+
+  const confidence: Confidence = meetsFlow && ovWithinLimit !== false ? "HIGH" : "LOW";
+  const ovStr =
+    outletVelocity_fpm != null ? ` OV ${outletVelocity_fpm} fpm (limit ${ovLimit_fpm}).` : "";
+  const note =
+    `${model.modelCode} ${chosen.angle}° blade at ${chosen.rpm} rpm — ` +
+    `delivers ${Math.round(chosen.cfm)} cfm @ ${sp_in.toFixed(2)} in.w.g. ` +
+    `MAX ${bhp.toFixed(2)} BHP → motor ${motorHp} HP (catalog).${ovStr} Confidence: ${confidence}.`;
+
+  return {
+    modelId: model.id,
+    modelCode: model.modelCode,
+    name: model.name,
+    sizeLabel: model.sizeLabel ?? null,
+    bladeAngle: chosen.angle,
+    rpm: chosen.rpm,
+    referenceRpm: chosen.rpm,
+    speedRatio: 1,
+    dutyAirflow_m3hr: duty.airflow_m3hr,
+    selectedAirflow_m3hr,
+    dutyStaticPressure_pa: duty.staticPressure_pa,
+    selectionStaticPressure_pa: duty.staticPressure_pa,
+    power_kw,
+    bhp: Math.round(bhp * 100) / 100,
+    motorKw,
+    motorHp,
+    motorPole,
+    efficiency: null,
+    serviceFactor: 1.15,
+    outletVelocity_fpm,
+    ovLimit_fpm,
+    ovWithinLimit,
+    maxRpm: rpmCeiling,
+    rpmWithinMax: true,
+    withinEnvelope: meetsFlow,
+    confidence,
+    requiresEngineerConfirmation: confidence === "LOW" || !meetsFlow || ovWithinLimit === false,
+    selectionNote: note,
+    warnings,
+  };
+}
+
 export function selectFan(
   model: FanModelInput,
   duty: DutyPoint,
   options: SelectionOptions = {},
 ): SelectionResult | null {
+  // Propeller fans (EWF/EWFDD/PRV/PRVDD) select an actual catalogue row rather
+  // than fan-law scaling a single design curve.
+  if (model.specs?.propeller === true && Array.isArray(model.specs?.rows)) {
+    return selectPropellerRow(model, duty);
+  }
   const serviceFactor = options.serviceFactor ?? 1.15;
   const maxSpeedRatio = options.maxSpeedRatio ?? 1.15;
   const minSpeedRatio = options.minSpeedRatio ?? 0.5;

@@ -51,13 +51,6 @@ const EWFDD_PRICES: Record<number, number> = {
   3000: 19629, 3600: 23555, 4200: 27481, 4800: 31376,
 };
 
-/** Design blade angle: 40° if offered, else the next lower; else the lowest. */
-function pickAngle(angles: number[]): number {
-  if (angles.includes(40)) return 40;
-  const lower = angles.filter((a) => a < 40);
-  return lower.length ? Math.max(...lower) : Math.min(...angles);
-}
-
 const isNum = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
 const cellVal = (c: ExcelJS.Cell): unknown => {
   const v = c.value as unknown;
@@ -148,22 +141,30 @@ function parseSheet(ws: ExcelJS.Worksheet): RawRow[] {
   return rows;
 }
 
+interface CatRow {
+  a: number; // blade angle (deg)
+  hp: number; // motor HP from the MOTOR HP column
+  rpm: number; // fan RPM
+  bhp: number; // MAX BHP
+  c: Array<[number, number]>; // [sp_in, cfm] ascending by SP
+}
 interface Model {
   code: number;
   modelCode: string;
   dia: number;
   sizeLabel: string;
-  angle: number;
-  maxRpm: number;
+  maxRpm: number; // RPM ceiling (belt 1200, direct 1750)
   basePrice: number;
   direct: boolean;
-  /** Catalog motor capacity table: [motorHp, maxBhp] across all blade angles —
-   *  selection picks the smallest motor whose MAX BHP covers the absorbed BHP. */
-  motorTable: Array<[number, number]>;
+  /** Catalog operating rows at 40° and below — each kept verbatim for selection. */
+  rows: CatRow[];
   points: Array<{ rpm: number; cfm: number; sp_in: number; bhp: number }>;
 }
 
-/** Collapse raw rows for one catalog (file) into per-size models at the design angle. */
+// Direct EWFDD runs at a motor speed; the rated rows top out at 1750 rpm.
+const EWFDD_DIRECT_MAX_RPM = 1750;
+
+/** Build per-size models keeping every blade angle 40° and below as its own row. */
 function buildModels(
   rows: RawRow[],
   direct: boolean,
@@ -177,42 +178,39 @@ function buildModels(
   }
   const models: Model[] = [];
   for (const [code, rs] of byCode) {
-    const angles = [...new Set(rs.map((r) => r.angle))];
-    const angle = pickAngle(angles);
-    const kept = rs.filter((r) => r.angle === angle);
-    const points: Model["points"] = [];
-    let topRpm = 0;
-    for (const r of kept) {
-      for (const c of r.cfm) points.push({ rpm: r.rpm, cfm: c.cfm, sp_in: c.sp_in, bhp: r.bhp });
-      if (r.rpm > topRpm) topRpm = r.rpm;
+    // Keep only blade angles 40° and below; each row stays a discrete operating
+    // point (angle + motor + rpm + CFM-by-SP), shown as-is in the selection.
+    const kept = rs.filter((r) => r.angle <= 40 && r.motorHp != null);
+    if (!kept.length) {
+      console.warn(`  ! ${code}${direct ? "EWFDD" : "EWF"}: no ≤40° rows — skipped`);
+      continue;
     }
-    // Motor capacity table from ALL blade-angle rows (not just the design angle):
-    // each MOTOR HP value paired with the largest MAX BHP the catalog lists for
-    // it — the motor's rated envelope. Selection reads the motor from here.
-    const motorCap = new Map<number, number>();
-    for (const r of rs) {
-      if (r.motorHp == null) continue;
-      if (r.bhp > (motorCap.get(r.motorHp) ?? 0)) motorCap.set(r.motorHp, r.bhp);
-    }
-    const motorTable = [...motorCap.entries()].sort((a, b) => a[0] - b[0]);
     const price = prices[code];
     if (price == null) {
       console.warn(`  ! no price for ${code}${direct ? "EWFDD" : "EWF"} — skipped`);
       continue;
     }
+    const points: Model["points"] = [];
+    const catRows: CatRow[] = [];
+    for (const r of kept) {
+      const c = r.cfm
+        .slice()
+        .sort((a, b) => a.sp_in - b.sp_in)
+        .map((p) => [p.sp_in, p.cfm] as [number, number]);
+      catRows.push({ a: r.angle, hp: r.motorHp as number, rpm: r.rpm, bhp: r.bhp, c });
+      for (const p of r.cfm) points.push({ rpm: r.rpm, cfm: p.cfm, sp_in: p.sp_in, bhp: r.bhp });
+    }
+    catRows.sort((a, b) => a.a - b.a || a.rpm - b.rpm);
     const tag = direct ? "EWFDD" : "EWF";
-    // Belt EWF is selected under 1200 rpm; direct EWFDD runs at its rated speed.
-    const maxRpm = direct ? topRpm : EWF_BELT_MAX_RPM;
     models.push({
       code,
       modelCode: `AV${code}${tag}`,
       dia: code / 100,
       sizeLabel: String(Math.round(code / 100)),
-      angle,
-      maxRpm,
+      maxRpm: direct ? EWFDD_DIRECT_MAX_RPM : EWF_BELT_MAX_RPM,
       basePrice: price,
       direct,
-      motorTable,
+      rows: catRows,
       points,
     });
   }
@@ -265,9 +263,12 @@ async function main() {
         `Painted with Epoxy Enamel Aqua Green / Model: ${modelCode}`;
       // Outlet opening = blade Ø + 1"; area in ft² for the OV readout.
       const outletArea_ft2 = Math.round((Math.PI / 4) * ((m.dia + 1) / 12) ** 2 * 1000) / 1000;
+      // Representative angle (highest ≤40°) for any non-selection display; the
+      // engine reads the actual angle from the chosen catalog row.
+      const maxAngle = Math.max(...m.rows.map((r) => r.a));
       const specs: Record<string, unknown> = {
         bladeDia_in: m.dia,
-        bladeAngle_deg: m.angle,
+        bladeAngle_deg: maxAngle,
         outletArea_ft2,
         maxRpm: m.maxRpm,
         propeller: true,
@@ -276,11 +277,9 @@ async function main() {
         category: "Propeller Type",
         type: fam.typeName,
         tag,
+        // Catalog operating rows (≤40°): selection picks an actual printed row.
+        rows: m.rows,
       };
-      // Motor comes from the catalog's MOTOR HP column: the smallest motor whose
-      // MAX BHP covers the absorbed BHP (not the BHP/0.75 rule). Omitted where the
-      // catalog leaves the MOTOR HP cells blank.
-      if (m.motorTable.length) specs.motorTable = m.motorTable;
       if (m.direct) specs.fixedSpeedDirect = true;
       const name = `${fam.typeName} ${m.sizeLabel}" Propeller (${tag})`;
       catRows.push(
@@ -327,7 +326,7 @@ async function main() {
   for (const m of models) {
     const rpms = [...new Set(m.points.map((p) => p.rpm))].sort((a, b) => a - b);
     console.log(
-      `  ${m.code}${m.direct ? " (direct)" : " (belt)  "}  Ø${m.sizeLabel}"  angle ${m.angle}°  ` +
+      `  ${m.code}${m.direct ? " (direct)" : " (belt)  "}  Ø${m.sizeLabel}"  angles ${[...new Set(m.rows.map((r) => r.a))].sort((a, b) => a - b).join("/")}°  ` +
         `rpm ${rpms.join("/")}  maxRPM ${m.maxRpm}  base ₱${m.basePrice}  ${m.points.length} pts`,
     );
   }
