@@ -64,6 +64,11 @@ function parseHp(v: unknown): number | null {
   if (isNum(v)) return v;
   if (typeof v === "string") {
     const t = v.trim();
+    // Mixed number, e.g. "1 1/2" -> 1.5, "7 1/2" -> 7.5.
+    const mixed = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+    if (mixed) {
+      return Math.round((Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3])) * 1000) / 1000;
+    }
     const frac = t.match(/^(\d+)\s*\/\s*(\d+)$/);
     if (frac) return Math.round((Number(frac[1]) / Number(frac[2])) * 1000) / 1000;
     return toNum(t);
