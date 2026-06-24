@@ -326,8 +326,9 @@ describe("selectFan — fixed-speed direct (EWFDD propeller): own rated speed", 
 
 describe("selectFan — propeller catalogue-row lookup (EWF/EWFDD/PRV/PRVDD)", () => {
   // A belt propeller fan whose catalogue offers 30°, 40° and 45° rows. Selection
-  // picks an actual printed row (no fan-law scaling): highest angle ≤40° that
-  // meets the flow at the client SP, within the 1200 rpm belt ceiling.
+  // picks an actual printed row (no fan-law scaling): the smallest motor among
+  // the ≤40° rows that meet the flow at the client SP, within the 1200 rpm belt
+  // ceiling — shown at that row's actual blade angle.
   const belt: FanModelInput = {
     id: "ewf",
     modelCode: "AV2400EWF",
@@ -348,11 +349,14 @@ describe("selectFan — propeller catalogue-row lookup (EWF/EWFDD/PRV/PRVDD)", (
     ratingPoints: [],
   };
 
-  it("picks the highest ≤40° angle row that meets the duty, shows the actual angle and the row's motor", () => {
+  it("picks the smallest-motor ≤40° row that meets the duty, shown at the row's actual angle and motor", () => {
+    // Both the 30°/3 HP (7000 cfm) and 40°/5 HP (8200 cfm) rows meet 6500 cfm @
+    // 0.25". The smallest motor that meets the duty wins → the 30°/3 HP row, not
+    // the higher-angle/bigger-motor one. The 45° and >1200 rpm rows are excluded.
     const r = selectFan(belt, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })!;
-    expect(r.bladeAngle).toBe(40); // highest ≤40°, never 45° and never relabelled
-    expect(r.rpm).toBe(650); // the printed catalogue rpm (≤1200), not fan-law
-    expect(r.motorHp).toBe(5); // straight from the row's MOTOR HP column
+    expect(r.motorHp).toBe(3); // smallest motor whose ≤40° row meets the flow
+    expect(r.bladeAngle).toBe(30); // that row's actual angle, never 45°/relabelled
+    expect(r.rpm).toBe(700); // the printed catalogue rpm (≤1200), not fan-law
     expect(r.confidence).toBe("HIGH");
     expect(r.ovWithinLimit).toBe(true); // OV 6500/3.0 ≈ 2167 ≤ 2200
   });

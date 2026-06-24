@@ -563,8 +563,9 @@ function interpCfmAtSp(curve: Array<[number, number]>, sp_in: number): number | 
  *      meet the requested flow;
  *   3. fan RPM within the drive ceiling (belt ≤1200, direct ≤1750);
  *   4. outlet velocity ≤ 2200 fpm is the recommended ("good") range;
- *   5. blade angle 40° or below — of the rows that meet the duty, the HIGHEST
- *      angle, shown exactly as printed (never relabelled).
+ *   5. blade angle 40° or below — of the ≤40° rows that meet the duty, the one
+ *      with the SMALLEST motor (the most economical fan that still meets the
+ *      flow), shown at its actual printed angle (never relabelled).
  */
 function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionResult | null {
   const rowsSpec = model.specs?.rows;
@@ -608,9 +609,11 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
   let chosen: Cand;
   let meetsFlow: boolean;
   if (meeting.length) {
-    // Highest blade angle first; then the least-oversized printed row at that
-    // angle (smallest adequate CFM → lowest rpm / smallest motor).
-    meeting.sort((a, b) => b.angle - a.angle || a.cfm - b.cfm || a.rpm - b.rpm);
+    // Smallest motor first (the most economical fan that still meets the duty);
+    // then the least-oversized printed row → smallest adequate CFM → lowest rpm.
+    // The blade angle is whatever that row prints (e.g. a 30°/5 HP row is taken
+    // over a 40°/7.5 HP row that also meets the flow).
+    meeting.sort((a, b) => a.hp - b.hp || a.cfm - b.cfm || a.rpm - b.rpm);
     chosen = meeting[0];
     meetsFlow = true;
   } else {
