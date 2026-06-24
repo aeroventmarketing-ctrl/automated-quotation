@@ -23,7 +23,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="flex-1 overflow-x-hidden">
         {/* Mobile top bar */}
         <div className="flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
-          <span className="font-bold">AeroQuote</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/aerovent-logo.jpg"
+            alt="Aerovent Fans and Blowers Manufacturing"
+            className="h-7 w-auto"
+          />
           <form action="/auth/signout" method="post">
             <button className="text-sm text-muted-foreground">Sign out</button>
           </form>

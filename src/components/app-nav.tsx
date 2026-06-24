@@ -20,13 +20,15 @@ export function AppNav({ role, name }: { role: Role; name: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 px-4 py-4">
-        <div className="h-8 w-8 rounded-md bg-primary" />
-        <div>
-          <div className="text-sm font-bold leading-tight">AeroQuote</div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            {role}
-          </div>
+      <div className="px-4 py-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/aerovent-logo.jpg"
+          alt="Aerovent Fans and Blowers Manufacturing"
+          className="h-auto w-full"
+        />
+        <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+          {role}
         </div>
       </div>
       <nav className="flex-1 space-y-1 px-2">
