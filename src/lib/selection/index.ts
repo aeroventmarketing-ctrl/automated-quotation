@@ -737,8 +737,8 @@ export function selectFan(
   // CIEB (inline) reports outlet velocity at half scale, so its true OV is
   // double the nominal CFM/area; the OV limit is the CEB diameter table.
   const isCieb = /CIEB$/i.test(model.modelCode);
-  // Propeller fans (EWF/PRV…) report outlet velocity through the opening
-  // (blade Ø + 1") for information only — no OV limit is applied.
+  // Propeller fans (EWF/EWFDD/PRV/PRVDD) report outlet velocity through the
+  // opening (blade Ø + 1") with a recommended OV limit of 2200 fpm.
   const isPropeller = model.specs?.propeller === true;
   // Outlet velocity reflects the actual delivered flow (direct drive may raise it).
   const flowCfm = (selectedAirflow_m3hr ?? duty.airflow_m3hr) * CFM_PER_M3HR;
@@ -747,8 +747,17 @@ export function selectFan(
   let ovWithinLimit: boolean | null = null;
   if (outletArea && outletArea > 0) {
     outletVelocity_fpm = Math.round((flowCfm / outletArea) * (isCieb ? 2 : 1));
-    // CEBDD/CFABDD and propeller fans disregard the OV limit — reported for info only.
-    if (!options.directDrive && !isPropeller) {
+    if (isPropeller) {
+      // Recommended OV limit 2200 fpm — applies to belt and direct.
+      ovLimit_fpm = 2200;
+      ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
+      if (!ovWithinLimit) {
+        warnings.push(
+          `Outlet velocity ${outletVelocity_fpm} fpm exceeds the recommended ${ovLimit_fpm} fpm — consider a larger size.`,
+        );
+      }
+    } else if (!options.directDrive) {
+      // CEBDD/CFABDD disregard the OV limit — reported for info only.
       ovLimit_fpm = isDidwCfab
         ? didwCfabOvLimit(wheelDia)
         : isForwardCurve
@@ -782,6 +791,9 @@ export function selectFan(
     if (directMeetsFlow && withinEnvelope && rpmWithinMax) confidence = "HIGH";
     else if (directMeetsFlow && rpmWithinMax) confidence = "MEDIUM";
     else confidence = "LOW";
+    // Direct propeller (EWFDD/FAWFDD/PRVDD) over the 2200 fpm recommended OV is
+    // undersized — never a good pick, so drop it to LOW like belt does.
+    if (ovWithinLimit === false) confidence = "LOW";
   } else if (extrapolated || !withinEnvelope) {
     confidence = "LOW";
   } else if (usedGrid) {
