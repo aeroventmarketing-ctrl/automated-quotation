@@ -49,15 +49,23 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/aerovent-logo.jpg"
-            alt="Aerovent Fans and Blowers Manufacturing"
-            className="mx-auto h-auto w-full max-w-[280px]"
-          />
-        </CardHeader>
+      <Card className="relative w-full max-w-sm overflow-hidden">
+        {/* Product collage background with a frosted overlay for legibility */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/login-bg.jpg')" }}
+          aria-hidden
+        />
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm" aria-hidden />
+        <div className="relative z-10">
+          <CardHeader className="text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/aerovent-logo.jpg"
+              alt="Aerovent Fans and Blowers Manufacturing"
+              className="mx-auto h-auto w-full max-w-[280px]"
+            />
+          </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-1.5">
@@ -109,6 +117,7 @@ function LoginForm() {
             </Button>
           </form>
         </CardContent>
+        </div>
       </Card>
     </div>
   );
