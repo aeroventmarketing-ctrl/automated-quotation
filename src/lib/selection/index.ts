@@ -35,6 +35,12 @@ export function suggestMotorHp(bhp: number): number {
   return Math.ceil(target);
 }
 
+/** Smallest standard motor HP at or above the target HP. */
+export function motorAtLeastHp(targetHp: number): number {
+  for (const hp of MOTOR_HP_LIST) if (hp >= targetHp - 1e-9) return hp;
+  return Math.ceil(targetHp);
+}
+
 /** AFBM outlet-velocity limit (fpm) by wheel diameter (inches). */
 export function outletVelocityLimit(wheelDia_in: number | null): number {
   if (wheelDia_in == null) return 1800;
@@ -691,15 +697,26 @@ export function selectFan(
   const dutyPower = dutyPowerStd * (density / STANDARD_AIR_DENSITY);
 
   // --- Motor sizing -------------------------------------------------------
-  // Propeller catalogues (EWF/EWFDD) give the motor HP directly in their MOTOR
-  // HP column (per rated speed); use it. Otherwise apply the AFBM rule
-  // (BHP / 0.75, rounded up to the motor list).
+  // Propeller catalogues (EWF/EWFDD/PRV…) give the motor HP in their MOTOR HP
+  // column — use it when it covers the absorbed power (within the service
+  // factor). Belt fans run above the catalog speed to meet a duty, which raises
+  // BHP beyond the catalog motor, so size up to a standard motor that covers it.
+  // Non-propeller fans use the AFBM rule (BHP / 0.75).
   const bhp = kwToHp(dutyPower);
   const motorMap = model.specs?.motorHpByRpm;
   const catalogMotorHp = Array.isArray(motorMap)
     ? motorHpForRpm(motorMap as Array<[number, number]>, rpm, options.directDrive === true)
     : null;
-  const motorHp = catalogMotorHp ?? suggestMotorHp(bhp);
+  let motorHp: number;
+  let motorFromCatalog = false;
+  if (catalogMotorHp != null && catalogMotorHp * serviceFactor >= bhp) {
+    motorHp = catalogMotorHp;
+    motorFromCatalog = true;
+  } else if (catalogMotorHp != null) {
+    motorHp = motorAtLeastHp(bhp / serviceFactor); // duty needs more than the catalog motor
+  } else {
+    motorHp = suggestMotorHp(bhp);
+  }
   const motorKw = Math.round(hpToKw(motorHp) * 100) / 100;
   void serviceFactor; // retained in the result for display only
 
@@ -790,7 +807,7 @@ export function selectFan(
     dutyPressure: duty.staticPressure_pa,
     bhp,
     motorHp,
-    motorFromCatalog: catalogMotorHp != null,
+    motorFromCatalog,
     outletVelocity_fpm,
     ovLimit_fpm,
     efficiency,
