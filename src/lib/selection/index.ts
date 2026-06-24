@@ -909,6 +909,18 @@ export function selectFans(
     const aOv = a.ovWithinLimit === false ? 1 : 0;
     const bOv = b.ovWithinLimit === false ? 1 : 0;
     if (aOv !== bOv) return aOv - bOv;
+    // When BOTH exceed the OV limit, none is acceptable — prefer the larger fan
+    // (lower outlet velocity, closest to within limit) so the recommendation
+    // points the user up in size rather than down to the smallest, fastest one.
+    if (
+      aOv === 1 &&
+      bOv === 1 &&
+      a.outletVelocity_fpm != null &&
+      b.outletVelocity_fpm != null &&
+      a.outletVelocity_fpm !== b.outletVelocity_fpm
+    ) {
+      return a.outletVelocity_fpm - b.outletVelocity_fpm;
+    }
     if (rank[a.confidence] !== rank[b.confidence])
       return rank[a.confidence] - rank[b.confidence];
     // Direct drive: prefer the tightest delivered flow (least increase over the request).
