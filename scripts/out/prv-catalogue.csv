@@ -1,0 +1,69 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+AV2000PRV,PROPELLER,"Power Roof Ventilator 20"" Propeller (PRV)","Power Roof Ventilator
+Propeller Type / Belt Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2000PRV",20,unit,20460,PHP,"{""bladeDia_in"":20,""bladeAngle_deg"":32,""outletArea_ft2"":2.405,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRV"",""motorHpByRpm"":[[885,0.25],[974,0.333],[1113,0.5],[1277,0.75]]}"
+AV2400PRV,PROPELLER,"Power Roof Ventilator 24"" Propeller (PRV)","Power Roof Ventilator
+Propeller Type / Belt Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2400PRV",24,unit,24552,PHP,"{""bladeDia_in"":24,""bladeAngle_deg"":30,""outletArea_ft2"":3.409,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRV"",""motorHpByRpm"":[[1003,0.333],[1146,0.5],[1310,0.75],[1446,1]]}"
+AV3000PRV,PROPELLER,"Power Roof Ventilator 30"" Propeller (PRV)","Power Roof Ventilator
+Propeller Type / Belt Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3000PRV",30,unit,30690,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":35,""outletArea_ft2"":5.241,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRV"",""motorHpByRpm"":[[813,0.5],[929,0.75],[1025,1],[1293,2]]}"
+AV3600PRV,PROPELLER,"Power Roof Ventilator 36"" Propeller (PRV)","Power Roof Ventilator
+Propeller Type / Belt Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3600PRV",36,unit,36828,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":35,""outletArea_ft2"":7.467,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRV"",""motorHpByRpm"":[[686,0.75],[757,1],[954,2],[1093,3]]}"
+AV4200PRV,PROPELLER,"Power Roof Ventilator 42"" Propeller (PRV)","Power Roof Ventilator
+Propeller Type / Belt Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV4200PRV",42,unit,42966,PHP,"{""bladeDia_in"":42,""bladeAngle_deg"":40,""outletArea_ft2"":10.085,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRV"",""motorHpByRpm"":[[848,5]]}"
+AV4800PRV,PROPELLER,"Power Roof Ventilator 48"" Propeller (PRV)","Power Roof Ventilator
+Propeller Type / Belt Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV4800PRV",48,unit,51480,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":35,""outletArea_ft2"":13.095,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRV"",""motorHpByRpm"":[[591,2],[676,3],[802,5]]}"
+AV5400PRV,PROPELLER,"Power Roof Ventilator 54"" Propeller (PRV)","Power Roof Ventilator
+Propeller Type / Belt Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV5400PRV",54,unit,60588,PHP,"{""bladeDia_in"":54,""bladeAngle_deg"":40,""outletArea_ft2"":16.499,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRV""}"
+AV6000PRV,PROPELLER,"Power Roof Ventilator 60"" Propeller (PRV)","Power Roof Ventilator
+Propeller Type / Belt Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV6000PRV",60,unit,74250,PHP,"{""bladeDia_in"":60,""bladeAngle_deg"":40,""outletArea_ft2"":20.295,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRV"",""motorHpByRpm"":[[609,10]]}"
+AV1200PRVDD,PROPELLER,"Power Roof Ventilator 12"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1200PRVDD",12,unit,12276,PHP,"{""bladeDia_in"":12,""bladeAngle_deg"":24,""outletArea_ft2"":0.922,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""motorHpByRpm"":[[1750,0.333]],""fixedSpeedDirect"":true}"
+AV1600PRVDD,PROPELLER,"Power Roof Ventilator 16"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1600PRVDD",16,unit,16368,PHP,"{""bladeDia_in"":16,""bladeAngle_deg"":24,""outletArea_ft2"":1.576,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""motorHpByRpm"":[[1750,0.5]],""fixedSpeedDirect"":true}"
+AV1800PRVDD,PROPELLER,"Power Roof Ventilator 18"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1800PRVDD",18,unit,18414,PHP,"{""bladeDia_in"":18,""bladeAngle_deg"":20,""outletArea_ft2"":1.969,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""motorHpByRpm"":[[1750,0.75]],""fixedSpeedDirect"":true}"
+AV2000PRVDD,PROPELLER,"Power Roof Ventilator 20"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2000PRVDD",20,unit,20460,PHP,"{""bladeDia_in"":20,""bladeAngle_deg"":24,""outletArea_ft2"":2.405,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""fixedSpeedDirect"":true}"
+AV2400PRVDD,PROPELLER,"Power Roof Ventilator 24"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2400PRVDD",24,unit,24552,PHP,"{""bladeDia_in"":24,""bladeAngle_deg"":40,""outletArea_ft2"":3.409,""maxRpm"":1160,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""motorHpByRpm"":[[860,0.5],[1160,1]],""fixedSpeedDirect"":true}"
+AV3000PRVDD,PROPELLER,"Power Roof Ventilator 30"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3000PRVDD",30,unit,30690,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":40,""outletArea_ft2"":5.241,""maxRpm"":1160,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""motorHpByRpm"":[[860,1],[1160,2]],""fixedSpeedDirect"":true}"
+AV3600PRVDD,PROPELLER,"Power Roof Ventilator 36"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3600PRVDD",36,unit,36828,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":40,""outletArea_ft2"":7.467,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""motorHpByRpm"":[[860,2]],""fixedSpeedDirect"":true}"
+AV4200PRVDD,PROPELLER,"Power Roof Ventilator 42"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV4200PRVDD",42,unit,42966,PHP,"{""bladeDia_in"":42,""bladeAngle_deg"":35,""outletArea_ft2"":10.085,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""motorHpByRpm"":[[860,5]],""fixedSpeedDirect"":true}"
+AV4800PRVDD,PROPELLER,"Power Roof Ventilator 48"" Propeller (PRVDD)","Power Roof Ventilator
+Propeller Type / Direct Drive
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV4800PRVDD",48,unit,51480,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":30,""outletArea_ft2"":13.095,""maxRpm"":860,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Power Roof Ventilator"",""tag"":""PRVDD"",""motorHpByRpm"":[[860,5]],""fixedSpeedDirect"":true}"

@@ -718,6 +718,9 @@ export function selectFan(
   // CIEB (inline) reports outlet velocity at half scale, so its true OV is
   // double the nominal CFM/area; the OV limit is the CEB diameter table.
   const isCieb = /CIEB$/i.test(model.modelCode);
+  // Propeller fans (EWF/PRV…) report outlet velocity through the opening
+  // (blade Ø + 1") for information only — no OV limit is applied.
+  const isPropeller = model.specs?.propeller === true;
   // Outlet velocity reflects the actual delivered flow (direct drive may raise it).
   const flowCfm = (selectedAirflow_m3hr ?? duty.airflow_m3hr) * CFM_PER_M3HR;
   let outletVelocity_fpm: number | null = null;
@@ -725,8 +728,8 @@ export function selectFan(
   let ovWithinLimit: boolean | null = null;
   if (outletArea && outletArea > 0) {
     outletVelocity_fpm = Math.round((flowCfm / outletArea) * (isCieb ? 2 : 1));
-    // CEBDD/CFABDD disregard the OV limit — reported for info only.
-    if (!options.directDrive) {
+    // CEBDD/CFABDD and propeller fans disregard the OV limit — reported for info only.
+    if (!options.directDrive && !isPropeller) {
       ovLimit_fpm = isDidwCfab
         ? didwCfabOvLimit(wheelDia)
         : isForwardCurve
