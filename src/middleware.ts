@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-const PUBLIC_PATHS = ["/login", "/offline", "/q/"]; // /q/ = public shared quote links
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/offline", "/q/"]; // /q/ = public shared quote links
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
