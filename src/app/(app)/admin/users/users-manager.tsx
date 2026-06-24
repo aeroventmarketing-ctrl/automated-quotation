@@ -72,9 +72,13 @@ export function UsersManager({ users }: { users: U[] }) {
     if (!pwUser) return;
     setPwBusy(true);
     try {
-      await setUserPassword({ email: pwUser.email, password: pw });
-      setPwMsg(`Password updated for ${pwUser.email}.`);
-      setPw(""); setPw2("");
+      const res = await setUserPassword({ email: pwUser.email, password: pw });
+      if ("error" in res) {
+        setPwErr(res.error);
+      } else {
+        setPwMsg(`Password updated for ${pwUser.email}.`);
+        setPw(""); setPw2("");
+      }
     } catch (e) {
       setPwErr(e instanceof Error ? e.message : "Failed to set password");
     } finally {

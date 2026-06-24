@@ -130,28 +130,38 @@ const passwordSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters."),
 });
 
-export async function setUserPassword(input: z.infer<typeof passwordSchema>) {
-  await assertAdmin();
-  const d = passwordSchema.parse(input);
-  const email = d.email.toLowerCase();
-  const sb = createServiceClient();
+export async function setUserPassword(
+  input: z.infer<typeof passwordSchema>,
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    await assertAdmin();
+    const d = passwordSchema.parse(input);
+    const email = d.email.toLowerCase();
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return { error: "Server is missing SUPABASE_SERVICE_ROLE_KEY — can't set passwords." };
+    }
+    const sb = createServiceClient();
 
-  // Find the Supabase Auth user by email (paginate a few pages for safety).
-  let authId: string | undefined;
-  for (let page = 1; page <= 10 && !authId; page++) {
-    const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw new Error(error.message);
-    const match = data.users.find(
-      (u: { id: string; email?: string }) => (u.email ?? "").toLowerCase() === email,
-    );
-    if (match) authId = match.id;
-    if (data.users.length < 200) break;
+    // Find the Supabase Auth user by email (paginate a few pages for safety).
+    let authId: string | undefined;
+    for (let page = 1; page <= 10 && !authId; page++) {
+      const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 200 });
+      if (error) return { error: error.message };
+      const match = data.users.find(
+        (u: { id: string; email?: string }) => (u.email ?? "").toLowerCase() === email,
+      );
+      if (match) authId = match.id;
+      if (data.users.length < 200) break;
+    }
+    if (!authId) {
+      return { error: "No Supabase Auth login exists for this email yet — create the login first." };
+    }
+    const { error } = await sb.auth.admin.updateUserById(authId, { password: d.password });
+    if (error) return { error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to set password" };
   }
-  if (!authId) {
-    throw new Error("No Supabase Auth login exists for this email yet — create the login first.");
-  }
-  const { error } = await sb.auth.admin.updateUserById(authId, { password: d.password });
-  if (error) throw new Error(error.message);
 }
 
 // --- Templates --------------------------------------------------------------
