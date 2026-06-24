@@ -38,12 +38,6 @@ const PRVDD_PRICES: Record<number, number> = {
   3000: 30690, 3600: 36828, 4200: 42966, 4800: 51480,
 };
 
-function pickAngle(angles: number[]): number {
-  if (angles.includes(40)) return 40;
-  const lower = angles.filter((a) => a < 40);
-  return lower.length ? Math.max(...lower) : Math.min(...angles);
-}
-
 const isNum = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
 const cellVal = (c: ExcelJS.Cell): unknown => {
   const v = c.value as unknown;
@@ -130,20 +124,28 @@ function parseSheet(ws: ExcelJS.Worksheet): RawRow[] {
   return rows;
 }
 
+interface CatRow {
+  a: number; // blade angle (deg)
+  hp: number; // motor HP
+  rpm: number; // fan RPM
+  bhp: number; // MAX BHP
+  c: Array<[number, number]>; // [sp_in, cfm] ascending by SP
+}
 interface Model {
   code: number;
   direct: boolean;
   modelCode: string;
   dia: number;
   sizeLabel: string;
-  angle: number;
-  maxRpm: number;
+  maxRpm: number; // RPM ceiling (belt 1200, direct 1750)
   basePrice: number;
-  /** Catalog motor capacity table: [motorHp, maxBhp] across all blade angles —
-   *  selection picks the smallest motor whose MAX BHP covers the absorbed BHP. */
-  motorTable: Array<[number, number]>;
+  /** Catalog operating rows at 40° and below — each kept verbatim for selection. */
+  rows: CatRow[];
   points: Array<{ rpm: number; cfm: number; sp_in: number; bhp: number }>;
 }
+
+// Direct PRVDD runs at a motor speed; the rated rows top out at 1750 rpm.
+const PRVDD_DIRECT_MAX_RPM = 1750;
 
 function buildModels(rows: RawRow[]): Model[] {
   const byKey = new Map<string, RawRow[]>();
@@ -156,28 +158,28 @@ function buildModels(rows: RawRow[]): Model[] {
   const models: Model[] = [];
   for (const rs of byKey.values()) {
     const { code, direct } = rs[0];
-    const angles = [...new Set(rs.map((r) => r.angle))];
-    const angle = pickAngle(angles);
-    const kept = rs.filter((r) => r.angle === angle);
-    const points: Model["points"] = [];
-    let topRpm = 0;
-    for (const r of kept) {
-      for (const c of r.cfm) points.push({ rpm: r.rpm, cfm: c.cfm, sp_in: c.sp_in, bhp: r.bhp });
-      if (r.rpm > topRpm) topRpm = r.rpm;
+    // Keep only blade angles 40° and below; each stays a discrete operating row.
+    const kept = rs.filter((r) => r.angle <= 40 && r.motorHp != null);
+    if (!kept.length) {
+      console.warn(`  ! ${code}${direct ? "PRVDD" : "PRV"}: no ≤40° rows — skipped`);
+      continue;
     }
-    // Motor capacity table from ALL blade-angle rows: each MOTOR HP paired with
-    // the largest MAX BHP the catalog lists for it (the motor's rated envelope).
-    const motorCap = new Map<number, number>();
-    for (const r of rs) {
-      if (r.motorHp == null) continue;
-      if (r.bhp > (motorCap.get(r.motorHp) ?? 0)) motorCap.set(r.motorHp, r.bhp);
-    }
-    const motorTable = [...motorCap.entries()].sort((a, b) => a[0] - b[0]);
     const price = (direct ? PRVDD_PRICES : PRV_PRICES)[code];
     if (price == null) {
       console.warn(`  ! no price for ${code}${direct ? "PRVDD" : "PRV"} — skipped`);
       continue;
     }
+    const points: Model["points"] = [];
+    const catRows: CatRow[] = [];
+    for (const r of kept) {
+      const c = r.cfm
+        .slice()
+        .sort((a, b) => a.sp_in - b.sp_in)
+        .map((p) => [p.sp_in, p.cfm] as [number, number]);
+      catRows.push({ a: r.angle, hp: r.motorHp as number, rpm: r.rpm, bhp: r.bhp, c });
+      for (const p of r.cfm) points.push({ rpm: r.rpm, cfm: p.cfm, sp_in: p.sp_in, bhp: r.bhp });
+    }
+    catRows.sort((a, b) => a.a - b.a || a.rpm - b.rpm);
     const tag = direct ? "PRVDD" : "PRV";
     models.push({
       code,
@@ -185,10 +187,9 @@ function buildModels(rows: RawRow[]): Model[] {
       modelCode: `AV${code}${tag}`,
       dia: code / 100,
       sizeLabel: String(Math.round(code / 100)),
-      angle,
-      maxRpm: direct ? topRpm : EWF_BELT_MAX_RPM,
+      maxRpm: direct ? PRVDD_DIRECT_MAX_RPM : EWF_BELT_MAX_RPM,
       basePrice: price,
-      motorTable,
+      rows: catRows,
       points,
     });
   }
@@ -218,9 +219,10 @@ async function main() {
       `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
     // Outlet opening = blade Ø + 1"; area in ft² for the OV readout.
     const outletArea_ft2 = Math.round((Math.PI / 4) * ((m.dia + 1) / 12) ** 2 * 1000) / 1000;
+    const maxAngle = Math.max(...m.rows.map((r) => r.a));
     const specs: Record<string, unknown> = {
       bladeDia_in: m.dia,
-      bladeAngle_deg: m.angle,
+      bladeAngle_deg: maxAngle,
       outletArea_ft2,
       maxRpm: m.maxRpm,
       propeller: true,
@@ -229,8 +231,9 @@ async function main() {
       category: "Propeller Type",
       type: "Power Roof Ventilator",
       tag,
+      // Catalog operating rows (≤40°): selection picks an actual printed row.
+      rows: m.rows,
     };
-    if (m.motorTable.length) specs.motorTable = m.motorTable;
     if (m.direct) specs.fixedSpeedDirect = true;
     const name = `Power Roof Ventilator ${m.sizeLabel}" Propeller (${tag})`;
     return [
@@ -257,7 +260,7 @@ async function main() {
   for (const m of models) {
     const rpms = [...new Set(m.points.map((p) => p.rpm))].sort((a, b) => a - b);
     console.log(
-      `  ${m.modelCode}  Ø${m.sizeLabel}"  angle ${m.angle}°  rpm ${rpms.join("/")}  ` +
+      `  ${m.modelCode}  Ø${m.sizeLabel}"  angles ${[...new Set(m.rows.map((r) => r.a))].sort((a, b) => a - b).join("/")}°  rpm ${rpms.join("/")}  ` +
         `maxRPM ${m.maxRpm}  base ₱${m.basePrice}  ${m.points.length} pts`,
     );
   }
