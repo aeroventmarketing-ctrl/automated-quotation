@@ -608,7 +608,12 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
   }
   if (cands.length === 0) return null;
 
-  const meeting = cands.filter((c) => c.cfm >= flow_cfm - 1e-6);
+  // Catalogue CFM are whole numbers and the duty CFM arrives via unit conversion
+  // (cfm→m³/hr→cfm), which drifts by a tiny fraction. Compare with a 1 cfm
+  // tolerance so a duty that lands exactly on a printed cell (e.g. 33668) still
+  // counts as met — otherwise sub-cfm rounding excludes that row and bumps the
+  // selection to the next motor size.
+  const meeting = cands.filter((c) => c.cfm >= flow_cfm - 1);
   let chosen: Cand;
   let meetsFlow: boolean;
   if (meeting.length) {

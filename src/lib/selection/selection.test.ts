@@ -254,6 +254,47 @@ describe("selectFan — direct drive (CEBDD): SP + pole priority", () => {
   });
 });
 
+describe("selectPropellerRow — duty exactly on a printed cell", () => {
+  // EWF-style belt propeller with a 30°/5 HP row that delivers exactly 33668 cfm
+  // at 0.5" w.g., and a 40°/7.5 HP row above it. The 5 HP row is the economical
+  // pick. The real API route converts cfm via lib/units (1.69901082), which is a
+  // hair off the selection module's own constant — so the round-tripped flow is
+  // 33668.0004, not 33668. A too-tight tolerance would exclude the on-cell 5 HP
+  // row and wrongly bump selection to the 7.5 HP row.
+  const CFM_UNITS = 1.69901082; // lib/units constant (differs from selection's)
+  const prop: FanModelInput = {
+    id: "prop",
+    modelCode: "AV6000EWF",
+    name: "Exhaust Wall Fan 60",
+    specs: {
+      propeller: true,
+      drive: "belt",
+      maxRpm: 1200,
+      outletArea_ft2: 20.295,
+      bladeAngle_deg: 40,
+      category: "Propeller Type",
+      type: "Exhaust Wall Fan",
+      tag: "EWF",
+      rows: [
+        { a: 30, hp: 5, rpm: 591, bhp: 5.32, c: [[0, 43462], [0.375, 36560], [0.5, 33668], [0.625, 30341]] },
+        { a: 40, hp: 7.5, rpm: 554, bhp: 8.22, c: [[0, 56047], [0.375, 47420], [0.5, 44030], [0.625, 39113]] },
+      ],
+    },
+    ratingPoints: [],
+  };
+
+  it("selects the on-cell 5 HP/30° row, not the next motor size up", () => {
+    const r = selectFan(prop, {
+      airflow_m3hr: 33668 * CFM_UNITS, // routed through the units constant
+      staticPressure_pa: 0.5 * 249.0889,
+    })!;
+    expect(r).not.toBeNull();
+    expect(r.motorHp).toBe(5);
+    expect(r.rpm).toBe(591);
+    expect(r.bladeAngle).toBe(30);
+  });
+});
+
 describe("selectFan — fixed-speed direct (EWFDD propeller): own rated speed", () => {
   // A natively-direct propeller fan runs at its own rated speed (here 860 rpm,
   // ~8-pole), not the centrifugal 2-/4-pole bands. Curve at 860 rpm.
