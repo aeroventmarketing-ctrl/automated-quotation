@@ -382,11 +382,11 @@ describe("selectFan — propeller catalogue-row lookup (EWF/EWFDD/PRV/PRVDD)", (
   });
 });
 
-describe("selectFan — centrifugal catalogue-row lookup (CIEB/DIDWCEB/DIDWCFAB/CFAB)", () => {
-  // A belt centrifugal whose catalogue prints two SP columns (1" and 2"), each a
-  // discrete set of (CFM, RPM, BHP) rows. Selection takes an actual printed row
-  // (no fan-law speed scaling): snap the duty SP UP to the next printed column,
-  // then the lowest-flow row that still meets the requested flow.
+describe("selectFan — centrifugal catalogue interpolation + envelope guard", () => {
+  // A belt centrifugal whose catalogue prints a CFM×SP grid (1" and 2" levels,
+  // three flows each). Selection is bilinear interpolation across the printed
+  // grid; duties outside the published envelope (left of peak / beyond range)
+  // are refused, never fan-law extrapolated.
   const cat: FanModelInput = {
     id: "didw",
     modelCode: "AV2400DIDWCEB",
@@ -398,46 +398,42 @@ describe("selectFan — centrifugal catalogue-row lookup (CIEB/DIDWCEB/DIDWCFAB/
       outletArea_ft2: 4.0, // OV limit for a 24" wheel = 1800 fpm
     },
     ratingPoints: [
-      // 1" w.g. column
+      // 1" w.g. level (flows 6000–8000)
       { rpm: 500, airflow_m3hr: 6000 * 1.6990108, staticPressure_pa: 1 * 249.0889, power_kw: 1.5 },
       { rpm: 600, airflow_m3hr: 7000 * 1.6990108, staticPressure_pa: 1 * 249.0889, power_kw: 2.0 },
       { rpm: 700, airflow_m3hr: 8000 * 1.6990108, staticPressure_pa: 1 * 249.0889, power_kw: 2.6 },
-      // 2" w.g. column
+      // 2" w.g. level (flows 6000–8000)
       { rpm: 700, airflow_m3hr: 6000 * 1.6990108, staticPressure_pa: 2 * 249.0889, power_kw: 2.2 },
       { rpm: 800, airflow_m3hr: 7000 * 1.6990108, staticPressure_pa: 2 * 249.0889, power_kw: 2.9 },
       { rpm: 900, airflow_m3hr: 8000 * 1.6990108, staticPressure_pa: 2 * 249.0889, power_kw: 3.6 },
     ],
   };
 
-  it("picks the lowest-flow printed row that meets the duty, with verbatim rpm", () => {
-    // 6500 cfm @ 1": the 7000-cfm row (600 rpm) is the smallest that meets it.
-    const r = selectFan(cat, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 1 * 249.0889 })!;
-    expect(r.rpm).toBe(600); // straight from the catalogue row, not fan-law scaled
-    expect(Math.round(r.selectedAirflow_m3hr! / 1.6990108)).toBe(7000); // catalogue capacity
+  it("bilinearly interpolates an in-envelope duty (between SP levels and flows)", () => {
+    // 7000 cfm @ 1.5" sits dead-centre: rpm interpolates to (600+800)/2 = 700.
+    const r = selectFan(cat, { airflow_m3hr: 7000 * 1.6990108, staticPressure_pa: 1.5 * 249.0889 })!;
+    expect(r.rpm).toBe(700);
+    expect(r.withinEnvelope).toBe(true);
     expect(r.confidence).toBe("HIGH");
+    expect(Math.round(r.dutyAirflow_m3hr / 1.6990108)).toBe(7000); // quote shows the client's duty
   });
 
-  it("snaps the duty SP up to the next printed column", () => {
-    // 6500 cfm @ 1.5" — no 1.5" column, so snap up to 2"; smallest meeting row
-    // there is 7000 cfm @ 800 rpm.
-    const r = selectFan(cat, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 1.5 * 249.0889 })!;
-    expect(r.rpm).toBe(800); // the 2" column row, not the 1" one
-    expect(Math.round(r.selectedAirflow_m3hr! / 1.6990108)).toBe(7000);
+  it("refuses (returns null) when the duty is left of peak — below the lowest printed flow", () => {
+    // 4000 cfm @ 1.5" is left of the published minimum flow (6000) → surge region.
+    const r = selectFan(cat, { airflow_m3hr: 4000 * 1.6990108, staticPressure_pa: 1.5 * 249.0889 });
+    expect(r).toBeNull();
   });
 
-  it("shows the client's duty in the quote while OV is judged at that duty flow", () => {
-    const r = selectFan(cat, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 1 * 249.0889 })!;
-    expect(Math.round(r.dutyAirflow_m3hr / 1.6990108)).toBe(6500); // quote shows the client's flow
-    expect(r.selectedAirflow_m3hr! / 1.6990108).toBeGreaterThan(6500); // selector shows catalogue flow
-    expect(r.outletVelocity_fpm).toBe(1625); // 6500/4.0, NOT 7000/4.0 — judged at the duty
-    expect(r.ovWithinLimit).toBe(true);
+  it("refuses (returns null) when the duty is beyond the rated range — above the printed pressure", () => {
+    // 7000 cfm @ 3" exceeds the highest printed SP level (2") → not supported.
+    const r = selectFan(cat, { airflow_m3hr: 7000 * 1.6990108, staticPressure_pa: 3 * 249.0889 });
+    expect(r).toBeNull();
   });
 
-  it("flags undersized when no printed row at the snapped SP reaches the flow", () => {
-    // 9000 cfm @ 1" exceeds the largest 1" row (8000 cfm).
-    const r = selectFan(cat, { airflow_m3hr: 9000 * 1.6990108, staticPressure_pa: 1 * 249.0889 })!;
-    expect(r.withinEnvelope).toBe(false);
-    expect(r.confidence).toBe("LOW");
+  it("refuses (returns null) past the highest printed flow rather than extrapolating", () => {
+    // 9000 cfm @ 1" is beyond the largest printed flow (8000) → refused.
+    const r = selectFan(cat, { airflow_m3hr: 9000 * 1.6990108, staticPressure_pa: 1 * 249.0889 });
+    expect(r).toBeNull();
   });
 });
 
