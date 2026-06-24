@@ -139,7 +139,9 @@ interface Model {
   angle: number;
   maxRpm: number;
   basePrice: number;
-  motorHpByRpm: Array<[number, number]>;
+  /** Catalog motor capacity table: [motorHp, maxBhp] across all blade angles —
+   *  selection picks the smallest motor whose MAX BHP covers the absorbed BHP. */
+  motorTable: Array<[number, number]>;
   points: Array<{ rpm: number; cfm: number; sp_in: number; bhp: number }>;
 }
 
@@ -158,13 +160,19 @@ function buildModels(rows: RawRow[]): Model[] {
     const angle = pickAngle(angles);
     const kept = rs.filter((r) => r.angle === angle);
     const points: Model["points"] = [];
-    const motorByRpm = new Map<number, number>();
     let topRpm = 0;
     for (const r of kept) {
       for (const c of r.cfm) points.push({ rpm: r.rpm, cfm: c.cfm, sp_in: c.sp_in, bhp: r.bhp });
       if (r.rpm > topRpm) topRpm = r.rpm;
-      if (r.motorHp != null) motorByRpm.set(r.rpm, r.motorHp);
     }
+    // Motor capacity table from ALL blade-angle rows: each MOTOR HP paired with
+    // the largest MAX BHP the catalog lists for it (the motor's rated envelope).
+    const motorCap = new Map<number, number>();
+    for (const r of rs) {
+      if (r.motorHp == null) continue;
+      if (r.bhp > (motorCap.get(r.motorHp) ?? 0)) motorCap.set(r.motorHp, r.bhp);
+    }
+    const motorTable = [...motorCap.entries()].sort((a, b) => a[0] - b[0]);
     const price = (direct ? PRVDD_PRICES : PRV_PRICES)[code];
     if (price == null) {
       console.warn(`  ! no price for ${code}${direct ? "PRVDD" : "PRV"} — skipped`);
@@ -180,7 +188,7 @@ function buildModels(rows: RawRow[]): Model[] {
       angle,
       maxRpm: direct ? topRpm : EWF_BELT_MAX_RPM,
       basePrice: price,
-      motorHpByRpm: [...motorByRpm.entries()].sort((a, b) => a[0] - b[0]),
+      motorTable,
       points,
     });
   }
@@ -222,7 +230,7 @@ async function main() {
       type: "Power Roof Ventilator",
       tag,
     };
-    if (m.motorHpByRpm.length) specs.motorHpByRpm = m.motorHpByRpm;
+    if (m.motorTable.length) specs.motorTable = m.motorTable;
     if (m.direct) specs.fixedSpeedDirect = true;
     const name = `Power Roof Ventilator ${m.sizeLabel}" Propeller (${tag})`;
     return [

@@ -157,8 +157,9 @@ interface Model {
   maxRpm: number;
   basePrice: number;
   direct: boolean;
-  /** Catalog MOTOR HP per rated speed: [rpm, hp] — selection reads the motor here. */
-  motorHpByRpm: Array<[number, number]>;
+  /** Catalog motor capacity table: [motorHp, maxBhp] across all blade angles —
+   *  selection picks the smallest motor whose MAX BHP covers the absorbed BHP. */
+  motorTable: Array<[number, number]>;
   points: Array<{ rpm: number; cfm: number; sp_in: number; bhp: number }>;
 }
 
@@ -181,12 +182,19 @@ function buildModels(
     const kept = rs.filter((r) => r.angle === angle);
     const points: Model["points"] = [];
     let topRpm = 0;
-    const motorByRpm = new Map<number, number>();
     for (const r of kept) {
       for (const c of r.cfm) points.push({ rpm: r.rpm, cfm: c.cfm, sp_in: c.sp_in, bhp: r.bhp });
       if (r.rpm > topRpm) topRpm = r.rpm;
-      if (r.motorHp != null) motorByRpm.set(r.rpm, r.motorHp);
     }
+    // Motor capacity table from ALL blade-angle rows (not just the design angle):
+    // each MOTOR HP value paired with the largest MAX BHP the catalog lists for
+    // it — the motor's rated envelope. Selection reads the motor from here.
+    const motorCap = new Map<number, number>();
+    for (const r of rs) {
+      if (r.motorHp == null) continue;
+      if (r.bhp > (motorCap.get(r.motorHp) ?? 0)) motorCap.set(r.motorHp, r.bhp);
+    }
+    const motorTable = [...motorCap.entries()].sort((a, b) => a[0] - b[0]);
     const price = prices[code];
     if (price == null) {
       console.warn(`  ! no price for ${code}${direct ? "EWFDD" : "EWF"} — skipped`);
@@ -204,7 +212,7 @@ function buildModels(
       maxRpm,
       basePrice: price,
       direct,
-      motorHpByRpm: [...motorByRpm.entries()].sort((a, b) => a[0] - b[0]),
+      motorTable,
       points,
     });
   }
@@ -269,9 +277,10 @@ async function main() {
         type: fam.typeName,
         tag,
       };
-      // Motor HP comes from the catalog's MOTOR HP column (per rated speed), not
-      // the BHP/0.75 rule. Omitted where the catalog leaves the cell blank.
-      if (m.motorHpByRpm.length) specs.motorHpByRpm = m.motorHpByRpm;
+      // Motor comes from the catalog's MOTOR HP column: the smallest motor whose
+      // MAX BHP covers the absorbed BHP (not the BHP/0.75 rule). Omitted where the
+      // catalog leaves the MOTOR HP cells blank.
+      if (m.motorTable.length) specs.motorTable = m.motorTable;
       if (m.direct) specs.fixedSpeedDirect = true;
       const name = `${fam.typeName} ${m.sizeLabel}" Propeller (${tag})`;
       catRows.push(

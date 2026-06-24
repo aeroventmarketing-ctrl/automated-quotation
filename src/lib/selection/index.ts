@@ -678,21 +678,26 @@ export function selectFan(
   const dutyPower = dutyPowerStd * (density / STANDARD_AIR_DENSITY);
 
   // --- Motor sizing -------------------------------------------------------
-  // Propeller fans (EWF/EWFDD/PRV/PRVDD — those with a MOTOR HP column) size the
-  // motor to the actual absorbed BHP with the 1.15 service factor: the smallest
-  // standard motor that covers BHP × SF. The catalog MOTOR HP column is the
-  // motor at the design speed; at a slower belt speed the duty BHP is lower
-  // (smaller motor) and at a faster belt speed it is higher (larger motor), so
-  // the motor follows the duty rather than the design-speed row. (No BHP/0.75.)
-  // Non-propeller fans use the AFBM rule (BHP / 0.75).
+  // Propeller fans (EWF/EWFDD/PRV/PRVDD) carry a catalog motor table: each MOTOR
+  // HP paired with the MAX BHP it is rated to cover. The motor is read straight
+  // from that column — the smallest motor whose MAX BHP covers the absorbed BHP
+  // at the duty (no BHP/0.75). e.g. AV5400EWF at 4.79 BHP → 5 HP (max 5.42), at
+  // 10.78 BHP → 10 HP (max 11.04). Non-propeller fans use the AFBM rule (BHP /
+  // 0.75 rounded up to the next standard motor).
   const bhp = kwToHp(dutyPower);
-  const motorMap = model.specs?.motorHpByRpm;
-  const hasCatalogMotor = Array.isArray(motorMap) && motorMap.length > 0;
+  const motorTbl = model.specs?.motorTable;
+  const hasMotorTable = Array.isArray(motorTbl) && motorTbl.length > 0;
   let motorHp: number;
-  let motorBasis: "BHP×SF" | "BHP/0.75";
-  if (hasCatalogMotor) {
-    motorHp = motorAtLeastHp(bhp / serviceFactor);
-    motorBasis = "BHP×SF";
+  let motorBasis: "catalog" | "BHP/0.75";
+  if (hasMotorTable) {
+    const table = (motorTbl as Array<[number, number]>)
+      .filter((e) => Array.isArray(e) && e.length === 2)
+      .sort((a, b) => a[0] - b[0]);
+    const hit = table.find(([, maxBhp]) => maxBhp >= bhp - 1e-9);
+    // Above the largest catalog motor's envelope, fall back to a standard motor
+    // that covers the absorbed BHP with the service factor.
+    motorHp = hit ? hit[0] : motorAtLeastHp(bhp / serviceFactor);
+    motorBasis = "catalog";
   } else {
     motorHp = suggestMotorHp(bhp);
     motorBasis = "BHP/0.75";
@@ -847,7 +852,7 @@ function buildSelectionNote(p: {
   dutyPressure: number;
   bhp: number;
   motorHp: number;
-  motorBasis: "BHP×SF" | "BHP/0.75";
+  motorBasis: "catalog" | "BHP/0.75";
   outletVelocity_fpm: number | null;
   ovLimit_fpm: number | null;
   efficiency: number | null;
