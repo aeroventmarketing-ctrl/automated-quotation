@@ -54,16 +54,16 @@ The app is **fully demoable right after `npm run seed`** — ~20 catalogue items
 families, matching prices, rating curves for 4 fan models, 5 templates, and 2 sample inquiries
 (one from a photo).
 
-### Demo logins
+### Roles
 
 The seed creates the **app role records** (matched by email). Create matching **Supabase Auth**
-users (Supabase dashboard → Authentication → Users → *Add user*, or invite) with the same emails:
+users (Supabase dashboard → Authentication → Users → *Add user*, or invite) with the same emails.
 
-| Email | Role | Can do |
-| --- | --- | --- |
-| `sales@aerovent.example` | SALES | Inquiries, drafts, submit for approval |
-| `engineer@aerovent.example` | ENGINEER | + confirm fan sizing, approve quotes |
-| `admin@aerovent.example` | ADMIN | + manage users, catalogue, prices, templates |
+| Role | Can do |
+| --- | --- |
+| SALES | Inquiries, drafts, submit for approval |
+| ENGINEER | + confirm fan sizing, approve quotes |
+| ADMIN | + manage users, catalogue, prices, templates |
 
 > Auth identities and the app `User` table are joined **by email**. Add a person in Supabase Auth,
 > then add/confirm their role under **Admin → Users**.
