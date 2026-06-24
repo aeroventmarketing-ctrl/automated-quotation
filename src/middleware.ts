@@ -55,5 +55,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // Run on everything except static assets, the SW, and the manifest.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icons|manifest.webmanifest|sw.js).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icons|aerovent-logo.jpg|manifest.webmanifest|sw.js).*)"],
 };
