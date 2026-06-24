@@ -106,11 +106,14 @@ export async function upsertUser(input: z.infer<typeof userSchema>) {
   await assertAdmin();
   const d = userSchema.parse(input);
   const salesCode = d.salesCode ? d.salesCode.toUpperCase() : null;
-  await prisma.user.upsert({
-    where: { email: d.email.toLowerCase() },
-    update: { name: d.name, role: d.role, salesCode },
-    create: { email: d.email.toLowerCase(), name: d.name, role: d.role, salesCode },
-  });
+  const email = d.email.toLowerCase();
+  const data = { email, name: d.name, role: d.role, salesCode };
+  if (d.id) {
+    // Editing an existing record by id — allows changing the email too.
+    await prisma.user.update({ where: { id: d.id }, data });
+  } else {
+    await prisma.user.upsert({ where: { email }, update: { name: d.name, role: d.role, salesCode }, create: data });
+  }
   revalidatePath("/admin/users");
 }
 

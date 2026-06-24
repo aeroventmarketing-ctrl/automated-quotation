@@ -17,6 +17,7 @@ interface U { id: string; email: string; name: string; role: string; salesCode: 
 
 export function UsersManager({ users }: { users: U[] }) {
   const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("SALES");
@@ -24,12 +25,20 @@ export function UsersManager({ users }: { users: U[] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function reset() {
+    setEditingId(null); setEmail(""); setName(""); setRole("SALES"); setSalesCode(""); setError(null);
+  }
+  function edit(u: U) {
+    setEditingId(u.id); setEmail(u.email); setName(u.name); setRole(u.role); setSalesCode(u.salesCode); setError(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function save() {
     setBusy(true);
     setError(null);
     try {
-      await upsertUser({ email, name, role: role as never, salesCode });
-      setEmail(""); setName(""); setRole("SALES"); setSalesCode("");
+      await upsertUser({ id: editingId ?? undefined, email, name, role: role as never, salesCode });
+      reset();
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -47,7 +56,7 @@ export function UsersManager({ users }: { users: U[] }) {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Add / update user</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{editingId ? "Edit user" : "Add / update user"}</CardTitle></CardHeader>
         <CardContent className="grid items-end gap-3 md:grid-cols-5">
           <div className="space-y-1">
             <Label>Email</Label>
@@ -67,7 +76,14 @@ export function UsersManager({ users }: { users: U[] }) {
             <Label>Quote letter</Label>
             <Input value={salesCode} maxLength={1} onChange={(e) => setSalesCode(e.target.value.toUpperCase())} placeholder="J" />
           </div>
-          <Button onClick={save} disabled={busy || !email || !name}>{busy ? "Saving…" : "Save"}</Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={save} disabled={busy || !email || !name}>
+              {busy ? "Saving…" : editingId ? "Update" : "Save"}
+            </Button>
+            {editingId && (
+              <Button variant="ghost" onClick={reset} disabled={busy}>Cancel</Button>
+            )}
+          </div>
           {error && <p className="text-sm text-destructive md:col-span-5">{error}</p>}
           <p className="text-xs text-muted-foreground md:col-span-5">
             Note: this manages the app role record (matched by email). Create the matching login in
@@ -89,7 +105,10 @@ export function UsersManager({ users }: { users: U[] }) {
                   <TableCell>{u.email}</TableCell>
                   <TableCell><Badge variant="secondary">{u.role}</Badge></TableCell>
                   <TableCell>{u.salesCode || "—"}</TableCell>
-                  <TableCell><Button size="sm" variant="ghost" onClick={() => remove(u.id)}>Delete</Button></TableCell>
+                  <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" onClick={() => edit(u)}>Edit</Button>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => remove(u.id)}>Delete</Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
