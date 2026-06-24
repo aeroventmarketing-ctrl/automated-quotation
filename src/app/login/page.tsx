@@ -82,9 +82,6 @@ function LoginForm() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-          <p className="mt-4 text-center text-xs text-muted-foreground">
-            Demo users (create in Supabase Auth): sales@ / engineer@ / admin@aerovent.example
-          </p>
         </CardContent>
       </Card>
     </div>
