@@ -535,27 +535,6 @@ function fixedSpeedBands(
   return rpms.map((r) => ({ pole: polesForRpm(r), minRpm: r, maxRpm: r }));
 }
 
-/**
- * Catalog motor HP (from the MOTOR HP column) for the operating speed. Direct
- * drive runs at an exact rated speed (nearest mapping); belt rounds the
- * interpolated speed up to the next tabulated motor selection.
- */
-function motorHpForRpm(
-  map: ReadonlyArray<readonly [number, number]>,
-  rpm: number,
-  direct: boolean,
-): number | null {
-  if (!map.length) return null;
-  const sorted = [...map].sort((a, b) => a[0] - b[0]);
-  if (direct) {
-    let best = sorted[0];
-    for (const e of sorted) if (Math.abs(e[0] - rpm) < Math.abs(best[0] - rpm)) best = e;
-    return best[1];
-  }
-  for (const e of sorted) if (e[0] >= rpm - 1) return e[1];
-  return sorted[sorted.length - 1][1];
-}
-
 export function selectFan(
   model: FanModelInput,
   duty: DutyPoint,
@@ -699,25 +678,24 @@ export function selectFan(
   const dutyPower = dutyPowerStd * (density / STANDARD_AIR_DENSITY);
 
   // --- Motor sizing -------------------------------------------------------
-  // Propeller catalogues (EWF/EWFDD/PRV…) give the motor HP in their MOTOR HP
-  // column — use it when it covers the absorbed power (within the service
-  // factor). Belt fans run above the catalog speed to meet a duty, which raises
-  // BHP beyond the catalog motor, so size up to a standard motor that covers it.
+  // Propeller fans (EWF/EWFDD/PRV/PRVDD — those with a MOTOR HP column) size the
+  // motor to the actual absorbed BHP with the 1.15 service factor: the smallest
+  // standard motor that covers BHP × SF. The catalog MOTOR HP column is the
+  // motor at the design speed; at a slower belt speed the duty BHP is lower
+  // (smaller motor) and at a faster belt speed it is higher (larger motor), so
+  // the motor follows the duty rather than the design-speed row. (No BHP/0.75.)
   // Non-propeller fans use the AFBM rule (BHP / 0.75).
   const bhp = kwToHp(dutyPower);
   const motorMap = model.specs?.motorHpByRpm;
-  const catalogMotorHp = Array.isArray(motorMap)
-    ? motorHpForRpm(motorMap as Array<[number, number]>, rpm, options.directDrive === true)
-    : null;
+  const hasCatalogMotor = Array.isArray(motorMap) && motorMap.length > 0;
   let motorHp: number;
-  let motorFromCatalog = false;
-  if (catalogMotorHp != null && catalogMotorHp * serviceFactor >= bhp) {
-    motorHp = catalogMotorHp;
-    motorFromCatalog = true;
-  } else if (catalogMotorHp != null) {
-    motorHp = motorAtLeastHp(bhp / serviceFactor); // duty needs more than the catalog motor
+  let motorBasis: "BHP×SF" | "BHP/0.75";
+  if (hasCatalogMotor) {
+    motorHp = motorAtLeastHp(bhp / serviceFactor);
+    motorBasis = "BHP×SF";
   } else {
     motorHp = suggestMotorHp(bhp);
+    motorBasis = "BHP/0.75";
   }
   const motorKw = Math.round(hpToKw(motorHp) * 100) / 100;
   void serviceFactor; // retained in the result for display only
@@ -821,7 +799,7 @@ export function selectFan(
     dutyPressure: duty.staticPressure_pa,
     bhp,
     motorHp,
-    motorFromCatalog,
+    motorBasis,
     outletVelocity_fpm,
     ovLimit_fpm,
     efficiency,
@@ -869,7 +847,7 @@ function buildSelectionNote(p: {
   dutyPressure: number;
   bhp: number;
   motorHp: number;
-  motorFromCatalog: boolean;
+  motorBasis: "BHP×SF" | "BHP/0.75";
   outletVelocity_fpm: number | null;
   ovLimit_fpm: number | null;
   efficiency: number | null;
@@ -880,7 +858,7 @@ function buildSelectionNote(p: {
     p.outletVelocity_fpm != null
       ? ` OV ${p.outletVelocity_fpm} fpm (limit ${p.ovLimit_fpm}).`
       : "";
-  const motorBasis = p.motorFromCatalog ? "catalog" : "BHP/0.75";
+  const motorBasis = p.motorBasis;
   return (
     `${p.modelCode} for ${Math.round(p.dutyAirflow)} m³/hr @ ${Math.round(p.dutyPressure)} Pa at ${p.rpm} rpm. ` +
     `Absorbed ${p.bhp.toFixed(2)} BHP → motor ${p.motorHp} HP (${motorBasis})${eff}.${ov} ` +
