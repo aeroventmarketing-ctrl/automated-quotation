@@ -13,13 +13,10 @@ export default async function SelectionPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Fan Selector</h1>
-        <p className="text-muted-foreground">
-          Enter a duty point to find matching fans — ranked by performance, with estimated price.
-        </p>
-      </div>
+    <div className="space-y-4">
+      <p className="text-muted-foreground">
+        Enter a duty point to find matching fans — ranked by performance, with estimated price.
+      </p>
       <SelectionTool priceMap={priceMap} />
     </div>
   );
