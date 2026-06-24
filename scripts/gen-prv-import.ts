@@ -203,9 +203,12 @@ async function main() {
       `Propeller Type / ${driveWord}\n` +
       "Made of Black Iron Sheet\n" +
       `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
+    // Outlet opening = blade Ø + 1"; area in ft² for the OV readout.
+    const outletArea_ft2 = Math.round((Math.PI / 4) * ((m.dia + 1) / 12) ** 2 * 1000) / 1000;
     const specs: Record<string, unknown> = {
       bladeDia_in: m.dia,
       bladeAngle_deg: m.angle,
+      outletArea_ft2,
       maxRpm: m.maxRpm,
       propeller: true,
       bladeType: "Propeller",
