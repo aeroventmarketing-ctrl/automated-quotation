@@ -435,6 +435,15 @@ describe("selectFan — centrifugal catalogue interpolation + envelope guard", (
     const r = selectFan(cat, { airflow_m3hr: 9000 * 1.6990108, staticPressure_pa: 1 * 249.0889 });
     expect(r).toBeNull();
   });
+
+  it("allows a duty below the lowest printed SP, selecting at the lowest column", () => {
+    // 7000 cfm @ 0.5" is below the 1" minimum column — a fan can always develop
+    // less pressure, so it's allowed and selected at the 1" column (600 rpm).
+    const r = selectFan(cat, { airflow_m3hr: 7000 * 1.6990108, staticPressure_pa: 0.5 * 249.0889 })!;
+    expect(r).not.toBeNull();
+    expect(r.rpm).toBe(600); // the lowest printed column's row for this flow
+    expect(r.withinEnvelope).toBe(true);
+  });
 });
 
 describe("selectFans — ranking", () => {

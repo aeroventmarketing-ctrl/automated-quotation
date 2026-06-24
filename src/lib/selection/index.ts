@@ -308,7 +308,10 @@ function interpolateGrid(
 
   const minSp = spLevels[0];
   const maxSp = spLevels[spLevels.length - 1];
-  const pInRange = p >= minSp - 1 && p <= maxSp + 1;
+  // A fan can always develop LESS than its lowest printed pressure, so a duty
+  // below the minimum SP column is allowed and selected at that lowest column.
+  // Only the high-pressure edge counts as outside the published data.
+  const pAboveMax = p > maxSp + 1;
   let lo = minSp;
   let hi = maxSp;
   if (p <= minSp) lo = hi = minSp;
@@ -336,7 +339,7 @@ function interpolateGrid(
   const maxQ = loS[loS.length - 1].q + (hiS[hiS.length - 1].q - loS[loS.length - 1].q) * t;
   const qInRange = q >= minQ - 1 && q <= maxQ + 1;
 
-  return { rpm: Math.round(rpm), bhp, withinEnvelope: pInRange && qInRange };
+  return { rpm: Math.round(rpm), bhp, withinEnvelope: !pAboveMax && qInRange };
 }
 
 // ---------------------------------------------------------------------------
