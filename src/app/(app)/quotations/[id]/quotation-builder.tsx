@@ -1065,6 +1065,7 @@ export function QuotationBuilder({
                               </div>
                               <p className="text-muted-foreground">
                                 {r.rpm} rpm · {r.bhp} BHP → {r.motorHp} HP{r.motorPole ? ` ${r.motorPole}-pole` : ""}
+                                {r.bladeAngle != null ? ` · ${r.bladeAngle}° blade` : ""}
                                 {r.selectedAirflow_m3hr != null && r.selectedAirflow_m3hr > r.dutyAirflow_m3hr
                                   ? ` · delivers ${Math.round(r.selectedAirflow_m3hr / 1.6990108)} cfm`
                                   : ""}

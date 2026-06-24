@@ -131,6 +131,8 @@ export interface SelectionResult {
   modelCode: string;
   name: string;
   sizeLabel?: string | null;
+  /** Propeller blade angle (degrees), if the model specifies one. */
+  bladeAngle: number | null;
   rpm: number;
   referenceRpm: number;
   speedRatio: number;
@@ -819,6 +821,7 @@ export function selectFan(
     modelCode: model.modelCode,
     name: model.name,
     sizeLabel: model.sizeLabel ?? null,
+    bladeAngle: num(model.specs?.bladeAngle_deg),
     rpm,
     referenceRpm,
     speedRatio: Math.round(speedRatio * 1000) / 1000,

@@ -193,6 +193,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {sel.rpm} rpm · {sel.bhp} BHP → {sel.motorHp} HP{sel.motorPole ? ` ${sel.motorPole}-pole` : ""} motor
+                    {sel.bladeAngle != null ? ` · ${sel.bladeAngle}° blade` : ""}
                     {sel.selectedAirflow_m3hr != null && sel.selectedAirflow_m3hr > sel.dutyAirflow_m3hr
                       ? ` · delivers ${Math.round(sel.selectedAirflow_m3hr / 1.6990108)} cfm`
                       : ""}
