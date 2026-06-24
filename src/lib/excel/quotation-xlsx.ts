@@ -60,8 +60,9 @@ const money = (n: number) =>
 export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Quotation", {
-    // Open the sheet in Page Break Preview so the printable layout shows on open.
-    views: [{ showGridLines: false, style: "pageBreakPreview" }],
+    // Open the sheet in Page Break Preview so the printable layout shows on
+    // open, with gridlines visible.
+    views: [{ showGridLines: true, style: "pageBreakPreview" }],
     pageSetup: {
       paperSize: 9, // A4
       orientation: "portrait",
