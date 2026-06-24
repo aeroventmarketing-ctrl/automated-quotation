@@ -305,14 +305,17 @@ describe("selectFan — fixed-speed direct (EWFDD propeller): own rated speed", 
     expect(r.motorPole).toBe(6);
   });
 
-  it("reports the motor HP from the catalog MOTOR HP column, not BHP/0.75", () => {
+  it("sizes the motor from absorbed BHP × service factor, not BHP/0.75 or the design-speed catalog row", () => {
     const withMotor: FanModelInput = {
       ...ewfdd,
       id: "ewfdd3",
       specs: { maxRpm: 860, propeller: true, fixedSpeedDirect: true, motorHpByRpm: [[860, 3]] },
     };
     const r = selectFan(withMotor, { airflow_m3hr: 2000, staticPressure_pa: 150 }, { directDrive: true })!;
-    expect(r.motorHp).toBe(3); // the catalog value, regardless of the lower absorbed BHP
+    // Light duty: the absorbed BHP needs only a 2 HP motor (BHP / 1.15 service
+    // factor → 2 HP), smaller than the 3 HP design-speed catalog motor and far
+    // below the BHP/0.75 size. The motor follows the duty BHP.
+    expect(r.motorHp).toBe(2);
   });
 });
 
