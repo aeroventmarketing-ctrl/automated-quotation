@@ -691,6 +691,69 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
   };
 }
 
+/** Distinct printed static-pressure columns (Pa) in a centrifugal catalogue, ascending. */
+function printedSpColumns(points: RatingPoint[]): number[] {
+  const set = new Set<number>();
+  for (const p of points) set.add(Math.round(p.staticPressure_pa * 100) / 100);
+  return [...set].sort((a, b) => a - b);
+}
+
+interface CatalogueChoice {
+  rpm: number;
+  powerStd_kw: number;
+  deliveredFlow_m3hr: number;
+  efficiency: number | null;
+  snappedSp_pa: number;
+  meetsFlow: boolean;
+  withinSpRange: boolean;
+}
+
+/**
+ * Centrifugal catalogue-row selection (CIEB/DIDWCEB/DIDWCFAB/CFAB). The printed
+ * tables are discrete: each (CFM, RPM, BHP) cell sits under a static-pressure
+ * column. We snap the duty SP UP to the next printed column, then take the
+ * lowest-flow printed row that still meets the requested flow — the actual
+ * catalogue selection, with NO fan-law speed scaling. The chosen row's rpm and
+ * power are used verbatim. Returns null only if the model has no usable rows.
+ */
+function selectCatalogueRow(
+  points: RatingPoint[],
+  selectionPressure_pa: number,
+  requiredFlow_m3hr: number,
+): CatalogueChoice | null {
+  const cols = printedSpColumns(points);
+  if (!cols.length) return null;
+  // Snap the duty SP up to the next printed column (verbatim catalogue rows).
+  const snappedCol = cols.find((sp) => sp >= selectionPressure_pa - 1e-6);
+  const withinSpRange = snappedCol != null;
+  const snapped = snappedCol ?? cols[cols.length - 1]; // above the table — use the top column
+  const atSp = points.filter(
+    (p) => Math.abs(Math.round(p.staticPressure_pa * 100) / 100 - snapped) < 1e-6,
+  );
+  if (!atSp.length) return null;
+  const meeting = atSp.filter((p) => p.airflow_m3hr >= requiredFlow_m3hr - 1e-6);
+  let chosen: RatingPoint;
+  let meetsFlow: boolean;
+  if (meeting.length) {
+    // Lowest flow that still meets the duty → least oversizing → lowest rpm.
+    chosen = meeting.reduce((a, b) => (a.airflow_m3hr <= b.airflow_m3hr ? a : b));
+    meetsFlow = true;
+  } else {
+    // No printed row at this SP reaches the flow → undersized; show the largest.
+    chosen = atSp.reduce((a, b) => (a.airflow_m3hr >= b.airflow_m3hr ? a : b));
+    meetsFlow = false;
+  }
+  return {
+    rpm: chosen.rpm,
+    powerStd_kw: chosen.power_kw,
+    deliveredFlow_m3hr: chosen.airflow_m3hr,
+    efficiency: chosen.efficiency ?? null,
+    snappedSp_pa: snapped,
+    meetsFlow,
+    withinSpRange,
+  };
+}
+
 export function selectFan(
   model: FanModelInput,
   duty: DutyPoint,
@@ -774,6 +837,38 @@ export function selectFan(
     if (model.specs?.fixedSpeedDirect === true && motorPole >= 6) {
       warnings.push(
         `Needs a ${motorPole}-pole motor (~${rpm} rpm) — higher-pole motors can be harder to source.`,
+      );
+    }
+  } else if (String(model.specs?.category ?? "") === "Centrifugal Type") {
+    // --- Catalogue-row lookup (CIEB/DIDWCEB/DIDWCFAB/CFAB): pick an actual
+    // printed (CFM, RPM, BHP) row — snap the duty SP up to the next printed
+    // column, then the lowest-flow row that still meets the requested flow. No
+    // fan-law speed scaling; rpm and power are taken straight from the row. The
+    // quotation still shows the client's requested duty, while the selector
+    // surfaces this row's real delivered flow so the engineer can choose. ------
+    const choice = selectCatalogueRow(model.ratingPoints, selectionPressure, duty.airflow_m3hr);
+    if (!choice) return null;
+    rpm = choice.rpm;
+    selectedAirflow_m3hr = Math.round(choice.deliveredFlow_m3hr);
+    dutyPowerStd = choice.powerStd_kw;
+    efficiency = choice.efficiency;
+    speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
+    usedGrid = true; // an exact printed row — accurate, not extrapolated
+    withinEnvelope = choice.meetsFlow && choice.withinSpRange;
+    extrapolated = !withinEnvelope;
+    const snappedSp_in = choice.snappedSp_pa / PA_PER_INWG;
+    if (!choice.meetsFlow) {
+      warnings.push(
+        `Largest catalogue row at ${snappedSp_in.toFixed(2)} in.w.g. delivers only ~${Math.round(choice.deliveredFlow_m3hr * CFM_PER_M3HR)} cfm — below the requested flow.`,
+      );
+    } else if (choice.deliveredFlow_m3hr > duty.airflow_m3hr * 1.001) {
+      warnings.push(
+        `Catalogue row delivers ~${Math.round(choice.deliveredFlow_m3hr * CFM_PER_M3HR)} cfm at ${snappedSp_in.toFixed(2)} in.w.g. (at or above the requested flow).`,
+      );
+    }
+    if (!choice.withinSpRange) {
+      warnings.push(
+        "Required static pressure is above the catalogue's highest printed column — result must be confirmed by an engineer.",
       );
     }
   } else {
@@ -884,8 +979,14 @@ export function selectFan(
   // Propeller fans (EWF/EWFDD/PRV/PRVDD) report outlet velocity through the
   // opening (blade Ø + 1") with a recommended OV limit of 2200 fpm.
   const isPropeller = model.specs?.propeller === true;
-  // Outlet velocity reflects the actual delivered flow (direct drive may raise it).
-  const flowCfm = (selectedAirflow_m3hr ?? duty.airflow_m3hr) * CFM_PER_M3HR;
+  // Outlet velocity reflects the operating flow. Direct drive runs at a fixed
+  // speed and may push more air than asked, so it uses the delivered flow. Belt
+  // fans (including catalogue-row centrifugals, whose printed row is snapped up
+  // above the duty) are judged at the client's requested flow — the airflow they
+  // actually move once balanced — matching the propeller OV rule.
+  const flowCfm =
+    (options.directDrive ? (selectedAirflow_m3hr ?? duty.airflow_m3hr) : duty.airflow_m3hr) *
+    CFM_PER_M3HR;
   let outletVelocity_fpm: number | null = null;
   let ovLimit_fpm: number | null = null;
   let ovWithinLimit: boolean | null = null;

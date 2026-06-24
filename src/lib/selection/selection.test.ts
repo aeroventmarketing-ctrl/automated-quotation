@@ -382,6 +382,65 @@ describe("selectFan — propeller catalogue-row lookup (EWF/EWFDD/PRV/PRVDD)", (
   });
 });
 
+describe("selectFan — centrifugal catalogue-row lookup (CIEB/DIDWCEB/DIDWCFAB/CFAB)", () => {
+  // A belt centrifugal whose catalogue prints two SP columns (1" and 2"), each a
+  // discrete set of (CFM, RPM, BHP) rows. Selection takes an actual printed row
+  // (no fan-law speed scaling): snap the duty SP UP to the next printed column,
+  // then the lowest-flow row that still meets the requested flow.
+  const cat: FanModelInput = {
+    id: "didw",
+    modelCode: "AV2400DIDWCEB",
+    name: "Centrifugal Blower DIDW 24",
+    specs: {
+      category: "Centrifugal Type",
+      drive: "belt",
+      bladeDia_in: 24,
+      outletArea_ft2: 4.0, // OV limit for a 24" wheel = 1800 fpm
+    },
+    ratingPoints: [
+      // 1" w.g. column
+      { rpm: 500, airflow_m3hr: 6000 * 1.6990108, staticPressure_pa: 1 * 249.0889, power_kw: 1.5 },
+      { rpm: 600, airflow_m3hr: 7000 * 1.6990108, staticPressure_pa: 1 * 249.0889, power_kw: 2.0 },
+      { rpm: 700, airflow_m3hr: 8000 * 1.6990108, staticPressure_pa: 1 * 249.0889, power_kw: 2.6 },
+      // 2" w.g. column
+      { rpm: 700, airflow_m3hr: 6000 * 1.6990108, staticPressure_pa: 2 * 249.0889, power_kw: 2.2 },
+      { rpm: 800, airflow_m3hr: 7000 * 1.6990108, staticPressure_pa: 2 * 249.0889, power_kw: 2.9 },
+      { rpm: 900, airflow_m3hr: 8000 * 1.6990108, staticPressure_pa: 2 * 249.0889, power_kw: 3.6 },
+    ],
+  };
+
+  it("picks the lowest-flow printed row that meets the duty, with verbatim rpm", () => {
+    // 6500 cfm @ 1": the 7000-cfm row (600 rpm) is the smallest that meets it.
+    const r = selectFan(cat, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 1 * 249.0889 })!;
+    expect(r.rpm).toBe(600); // straight from the catalogue row, not fan-law scaled
+    expect(Math.round(r.selectedAirflow_m3hr! / 1.6990108)).toBe(7000); // catalogue capacity
+    expect(r.confidence).toBe("HIGH");
+  });
+
+  it("snaps the duty SP up to the next printed column", () => {
+    // 6500 cfm @ 1.5" — no 1.5" column, so snap up to 2"; smallest meeting row
+    // there is 7000 cfm @ 800 rpm.
+    const r = selectFan(cat, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 1.5 * 249.0889 })!;
+    expect(r.rpm).toBe(800); // the 2" column row, not the 1" one
+    expect(Math.round(r.selectedAirflow_m3hr! / 1.6990108)).toBe(7000);
+  });
+
+  it("shows the client's duty in the quote while OV is judged at that duty flow", () => {
+    const r = selectFan(cat, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 1 * 249.0889 })!;
+    expect(Math.round(r.dutyAirflow_m3hr / 1.6990108)).toBe(6500); // quote shows the client's flow
+    expect(r.selectedAirflow_m3hr! / 1.6990108).toBeGreaterThan(6500); // selector shows catalogue flow
+    expect(r.outletVelocity_fpm).toBe(1625); // 6500/4.0, NOT 7000/4.0 — judged at the duty
+    expect(r.ovWithinLimit).toBe(true);
+  });
+
+  it("flags undersized when no printed row at the snapped SP reaches the flow", () => {
+    // 9000 cfm @ 1" exceeds the largest 1" row (8000 cfm).
+    const r = selectFan(cat, { airflow_m3hr: 9000 * 1.6990108, staticPressure_pa: 1 * 249.0889 })!;
+    expect(r.withinEnvelope).toBe(false);
+    expect(r.confidence).toBe("LOW");
+  });
+});
+
 describe("selectFans — ranking", () => {
   it("ranks HIGH-confidence candidates before LOW-confidence ones", () => {
     const big: FanModelInput = {
