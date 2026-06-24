@@ -101,8 +101,12 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               <option value="CFAB">Forward Curved (CFAB)</option>
               <option value="CEB">Backward / Inclined (CEB)</option>
               <option value="CIEB">Centrifugal Inline Blower (CIEB)</option>
+              <option value="SIEB">Square Inline Blower (SIEB)</option>
               <option value="DIDWCEB">Centrifugal Blower (DIDW) — Backward</option>
               <option value="DIDWCFAB">Centrifugal Blower (DIDW) — Forward</option>
+              <option value="CABSISW">Cabinet Blower SISW (CABSISW)</option>
+              <option value="CEBCAB">Cabinet Blower DIDW — Backward (CEBCAB)</option>
+              <option value="CFABCAB">Cabinet Blower DIDW — Forward (CFABCAB)</option>
               <option value="EWF">Exhaust Wall Fan (EWF, belt)</option>
               <option value="EWFDD">Exhaust Wall Fan (EWFDD, direct)</option>
               <option value="FAWF">Fresh Air Wall Fan (FAWF, belt)</option>
@@ -160,7 +164,11 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
                   : /CFAB$/i.test(sel.modelCode)
                     ? 1 / 0.9
                     : 1;
-              const body = (priceMap[sel.modelId] ?? 0) * tagFactor;
+              // Cabinet variants reuse the base catalogue but add a factor:
+              // CABSISW ÷0.54, CEBCAB ÷0.54 (on DIDWCEB), CFABCAB ÷0.9 (on DIDWCFAB).
+              const cabFactor =
+                tag === "CABSISW" || tag === "CEBCAB" ? 1 / 0.54 : tag === "CFABCAB" ? 1 / 0.9 : 1;
+              const body = (priceMap[sel.modelId] ?? 0) * tagFactor * cabFactor;
               const motor = lookupMotor(sel.motorHp, 3, sel.motorPole ?? 4);
               const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
               const isRec = sel.modelId === recommended.modelId;

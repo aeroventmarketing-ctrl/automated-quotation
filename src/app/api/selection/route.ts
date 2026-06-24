@@ -37,7 +37,17 @@ const bodySchema = z.object({
  */
 function catalogueWhere(tag: string | undefined, bladeType: string | undefined) {
   // Explicit tag from the quotation builder takes precedence.
-  const t = tag ?? (bladeType ? (/forward/i.test(bladeType) ? "CFAB" : "CEB") : undefined);
+  let t = tag ?? (bladeType ? (/forward/i.test(bladeType) ? "CFAB" : "CEB") : undefined);
+  // Cabinet / square-inline variants reuse a base catalogue (same models, just a
+  // different price factor at quote time): CABSISW→CEB, CEBCAB→DIDWCEB,
+  // CFABCAB→DIDWCFAB, SIEB→CIEB.
+  const reuse: Record<string, string> = {
+    CABSISW: "CEB",
+    CEBCAB: "DIDWCEB",
+    CFABCAB: "DIDWCFAB",
+    SIEB: "CIEB",
+  };
+  if (t && reuse[t]) t = reuse[t];
   if (t === "DIDWCFAB") return { modelCode: { endsWith: "DIDWCFAB" } };
   if (t === "DIDWCEB") return { modelCode: { endsWith: "DIDWCEB" } };
   if (t === "CIEB") return { modelCode: { endsWith: "CIEB" } };
