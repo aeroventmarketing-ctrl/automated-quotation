@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Inbox, FileText, Wrench, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Inbox, FileText, Wrench, Settings, LogOut, UserCog } from "lucide-react";
 import type { Role } from "@prisma/client";
 
 const NAV = [
@@ -52,6 +52,13 @@ export function AppNav({ role, name }: { role: Role; name: string }) {
       </nav>
       <div className="border-t p-3">
         <div className="mb-2 px-2 text-xs text-muted-foreground">{name}</div>
+        <Link
+          href="/account"
+          className="mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <UserCog className="h-4 w-4" />
+          Account
+        </Link>
         <form action="/auth/signout" method="post">
           <button
             type="submit"
