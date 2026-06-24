@@ -24,7 +24,7 @@ const num = (s: string): number | null => {
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
-type Mode = "rpm" | "cfm" | "sp";
+type Mode = "rpm" | "cfm" | "sp" | "bhp";
 
 export function FanLawCalculator() {
   const [n1, setN1] = useState("");
@@ -48,9 +48,12 @@ export function FanLawCalculator() {
     else if (mode === "cfm") {
       if (Q1 == null) return { error: "Enter the known airflow (CFM 1) to solve by airflow." };
       r = T / Q1;
-    } else {
+    } else if (mode === "sp") {
       if (P1 == null) return { error: "Enter the known pressure (SP 1) to solve by pressure." };
       r = Math.sqrt(T / P1);
+    } else {
+      if (W1 == null) return { error: "Enter the known power (BHP 1) to solve by power." };
+      r = Math.cbrt(T / W1);
     }
     if (!(r > 0) || !Number.isFinite(r)) return { error: "Check the values." };
 
@@ -90,6 +93,7 @@ export function FanLawCalculator() {
                 <option value="rpm">New speed (RPM)</option>
                 <option value="cfm">Target airflow (CFM)</option>
                 <option value="sp">Target pressure (SP)</option>
+                <option value="bhp">Target power (BHP)</option>
               </Select>
             </div>
             <Field label="Value" value={target} onChange={setTarget} placeholder="new value" />
