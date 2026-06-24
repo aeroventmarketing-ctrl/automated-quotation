@@ -5,6 +5,13 @@ import { MapPin, LoaderCircle } from "lucide-react";
 
 type Status = "checking" | "ok" | "denied" | "outside" | "unavailable";
 
+export interface GateLocation {
+  label: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+}
+
 /** Great-circle distance in metres (haversine) — inlined so this stays client-only. */
 function distanceMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const R = 6371000;
@@ -18,24 +25,18 @@ function distanceMeters(aLat: number, aLng: number, bLat: number, bLng: number):
 }
 
 /**
- * Blocks the app for non-admin users outside the allowed location. The server
+ * Blocks the app for non-admin users outside every allowed location. The server
  * only mounts this when the geofence is enabled and the user isn't an admin.
  */
 export function GeofenceGate({
-  latitude,
-  longitude,
-  radiusMeters,
-  label,
+  locations,
   children,
 }: {
-  latitude: number;
-  longitude: number;
-  radiusMeters: number;
-  label: string;
+  locations: GateLocation[];
   children: React.ReactNode;
 }) {
   const [status, setStatus] = useState<Status>("checking");
-  const [distance, setDistance] = useState<number | null>(null);
+  const [nearest, setNearest] = useState<{ distance: number; label: string } | null>(null);
 
   const check = useCallback(() => {
     setStatus("checking");
@@ -45,14 +46,20 @@ export function GeofenceGate({
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const d = distanceMeters(pos.coords.latitude, pos.coords.longitude, latitude, longitude);
-        setDistance(d);
-        setStatus(d <= radiusMeters ? "ok" : "outside");
+        let inside = false;
+        let best: { distance: number; label: string } | null = null;
+        for (const l of locations) {
+          const d = distanceMeters(pos.coords.latitude, pos.coords.longitude, l.latitude, l.longitude);
+          if (d <= l.radiusMeters) inside = true;
+          if (best == null || d < best.distance) best = { distance: d, label: l.label };
+        }
+        setNearest(best);
+        setStatus(inside ? "ok" : "outside");
       },
       (err) => setStatus(err.code === err.PERMISSION_DENIED ? "denied" : "unavailable"),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
     );
-  }, [latitude, longitude, radiusMeters]);
+  }, [locations]);
 
   useEffect(() => {
     check();
@@ -60,7 +67,7 @@ export function GeofenceGate({
 
   if (status === "ok") return <>{children}</>;
 
-  const where = label ? ` (${label})` : "";
+  const where = nearest?.label ? ` (nearest: ${nearest.label})` : "";
   const message =
     status === "checking"
       ? "Checking your location…"
@@ -68,8 +75,8 @@ export function GeofenceGate({
         ? "Location access is required to use this app. Please allow location in your browser and retry."
         : status === "unavailable"
           ? "Your location couldn't be determined. Enable location services and retry."
-          : `This app can only be used at the authorized location${where}. You appear to be ${
-              distance != null ? `about ${Math.round(distance)} m` : "too far"
+          : `This app can only be used at an authorized location${where}. You appear to be ${
+              nearest != null ? `about ${Math.round(nearest.distance)} m` : "too far"
             } away.`;
 
   return (

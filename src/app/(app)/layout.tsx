@@ -11,10 +11,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/login");
   }
 
-  // Location access: when enabled, non-admins are confined to the geofence.
+  // Location access: when enabled, non-admins are confined to the geofence(s).
   const geofence = await getGeofence();
-  const gated =
-    geofence.enabled && !isAdmin(user) && geofence.latitude != null && geofence.longitude != null;
+  const gated = geofence.enabled && !isAdmin(user) && geofence.locations.length > 0;
 
   const layout = (
     <div className="flex min-h-screen">
@@ -35,16 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
 
   if (gated) {
-    return (
-      <GeofenceGate
-        latitude={geofence.latitude!}
-        longitude={geofence.longitude!}
-        radiusMeters={geofence.radiusMeters}
-        label={geofence.label}
-      >
-        {layout}
-      </GeofenceGate>
-    );
+    return <GeofenceGate locations={geofence.locations}>{layout}</GeofenceGate>;
   }
   return layout;
 }

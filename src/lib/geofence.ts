@@ -2,33 +2,53 @@ import { prisma } from "./db";
 
 /**
  * Location access control (geofence). When enabled, non-admin users may only
- * use the app within `radiusMeters` of (latitude, longitude); admins are always
- * allowed. The check runs in the browser via the Geolocation API.
+ * use the app within `radiusMeters` of one of the configured locations; admins
+ * are always allowed. The check runs in the browser via the Geolocation API.
  */
 export const GEOFENCE_KEY = "geofence";
 
-export interface GeofenceConfig {
-  enabled: boolean;
-  latitude: number | null;
-  longitude: number | null;
-  radiusMeters: number;
+export interface GeofenceLocation {
   label: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
 }
 
-export const DEFAULT_GEOFENCE: GeofenceConfig = {
-  enabled: false,
-  latitude: null,
-  longitude: null,
-  radiusMeters: 200,
-  label: "",
-};
+export interface GeofenceConfig {
+  enabled: boolean;
+  locations: GeofenceLocation[];
+}
 
-/** Read the geofence config. Fails open (disabled) if the table doesn't exist yet. */
+export const DEFAULT_GEOFENCE: GeofenceConfig = { enabled: false, locations: [] };
+
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+function normalizeLocation(v: Record<string, unknown>): GeofenceLocation | null {
+  if (!isNum(v.latitude) || !isNum(v.longitude)) return null;
+  return {
+    label: typeof v.label === "string" ? v.label : "",
+    latitude: v.latitude,
+    longitude: v.longitude,
+    radiusMeters: isNum(v.radiusMeters) ? v.radiusMeters : 200,
+  };
+}
+
+/** Read the geofence config. Accepts the legacy single-location shape and fails
+ *  open (disabled) if the table doesn't exist yet. */
 export async function getGeofence(): Promise<GeofenceConfig> {
   try {
     const row = await prisma.appSetting.findUnique({ where: { key: GEOFENCE_KEY } });
     if (!row) return DEFAULT_GEOFENCE;
-    return { ...DEFAULT_GEOFENCE, ...(row.value as Partial<GeofenceConfig>) };
+    const v = row.value as Record<string, unknown>;
+    const enabled = v.enabled === true;
+    if (Array.isArray(v.locations)) {
+      const locations = (v.locations as Record<string, unknown>[])
+        .map(normalizeLocation)
+        .filter((l): l is GeofenceLocation => l != null);
+      return { enabled, locations };
+    }
+    // Legacy single-location shape.
+    const legacy = normalizeLocation(v);
+    return { enabled, locations: legacy ? [legacy] : [] };
   } catch {
     return DEFAULT_GEOFENCE;
   }
