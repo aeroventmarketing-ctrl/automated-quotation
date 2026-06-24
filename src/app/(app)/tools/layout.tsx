@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/tools", label: "Fan Selector" },
   { href: "/tools/ductulator", label: "Ductulator" },
+  { href: "/tools/pulley", label: "Pulley" },
+  { href: "/tools/fan-law", label: "Fan Law" },
 ];
 
 export default function ToolsLayout({ children }: { children: React.ReactNode }) {
