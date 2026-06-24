@@ -10,11 +10,11 @@ Painted with Epoxy Enamel Aqua Green / Model: AV2400EWF",24,unit,15703,PHP,"{""b
 AV3000EWF,PROPELLER,"Exhaust Wall Fan 30"" Propeller (EWF)","Exhaust Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000EWF",30,unit,19629,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":35,""outletArea_ft2"":5.241,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[815,0.5],[933,0.75],[1027,1],[1294,2]]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000EWF",30,unit,19629,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":35,""outletArea_ft2"":5.241,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[815,0.5],[933,0.75],[1027,1],[1174,1.5],[1294,2]]}"
 AV3600EWF,PROPELLER,"Exhaust Wall Fan 36"" Propeller (EWF)","Exhaust Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3600EWF",36,unit,23555,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":35,""outletArea_ft2"":7.467,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[688,0.75],[757,1],[954,2],[1092,3]]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3600EWF",36,unit,23555,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":35,""outletArea_ft2"":7.467,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[688,0.75],[757,1],[868,1.5],[954,2],[1092,3]]}"
 AV4200EWF,PROPELLER,"Exhaust Wall Fan 42"" Propeller (EWF)","Exhaust Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
@@ -22,15 +22,15 @@ Painted with Epoxy Enamel Aqua Green / Model: AV4200EWF",42,unit,27481,PHP,"{""b
 AV4800EWF,PROPELLER,"Exhaust Wall Fan 48"" Propeller (EWF)","Exhaust Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4800EWF",48,unit,31376,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":35,""outletArea_ft2"":13.095,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[591,2],[677,3],[802,5]]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4800EWF",48,unit,31376,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":35,""outletArea_ft2"":13.095,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[537,1.5],[591,2],[677,3],[802,5]]}"
 AV5400EWF,PROPELLER,"Exhaust Wall Fan 54"" Propeller (EWF)","Exhaust Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV5400EWF",54,unit,52999,PHP,"{""bladeDia_in"":54,""bladeAngle_deg"":40,""outletArea_ft2"":16.499,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV5400EWF",54,unit,52999,PHP,"{""bladeDia_in"":54,""bladeAngle_deg"":40,""outletArea_ft2"":16.499,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[622,7.5]]}"
 AV6000EWF,PROPELLER,"Exhaust Wall Fan 60"" Propeller (EWF)","Exhaust Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV6000EWF",60,unit,60065,PHP,"{""bladeDia_in"":60,""bladeAngle_deg"":40,""outletArea_ft2"":20.295,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[608,10]]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV6000EWF",60,unit,60065,PHP,"{""bladeDia_in"":60,""bladeAngle_deg"":40,""outletArea_ft2"":20.295,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWF"",""motorHpByRpm"":[[554,7.5],[608,10]]}"
 AV1400EWFDD,PROPELLER,"Exhaust Wall Fan 14"" Propeller (EWFDD)","Exhaust Wall Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
@@ -46,7 +46,7 @@ Painted with Epoxy Enamel Aqua Green / Model: AV1800EWFDD",18,unit,12366,PHP,"{"
 AV2000EWFDD,PROPELLER,"Exhaust Wall Fan 20"" Propeller (EWFDD)","Exhaust Wall Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2000EWFDD",20,unit,13152,PHP,"{""bladeDia_in"":20,""bladeAngle_deg"":24,""outletArea_ft2"":2.405,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2000EWFDD",20,unit,13152,PHP,"{""bladeDia_in"":20,""bladeAngle_deg"":24,""outletArea_ft2"":2.405,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Exhaust Wall Fan"",""tag"":""EWFDD"",""motorHpByRpm"":[[1750,1.5]],""fixedSpeedDirect"":true}"
 AV2400EWFDD,PROPELLER,"Exhaust Wall Fan 24"" Propeller (EWFDD)","Exhaust Wall Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
@@ -78,11 +78,11 @@ Painted with Epoxy Enamel Aqua Green / Model: AV2400FAWF",24,unit,15703,PHP,"{""
 AV3000FAWF,PROPELLER,"Fresh Air Wall Fan 30"" Propeller (FAWF)","Fresh Air Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000FAWF",30,unit,19629,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":35,""outletArea_ft2"":5.241,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[815,0.5],[933,0.75],[1027,1],[1294,2]]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000FAWF",30,unit,19629,PHP,"{""bladeDia_in"":30,""bladeAngle_deg"":35,""outletArea_ft2"":5.241,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[815,0.5],[933,0.75],[1027,1],[1174,1.5],[1294,2]]}"
 AV3600FAWF,PROPELLER,"Fresh Air Wall Fan 36"" Propeller (FAWF)","Fresh Air Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3600FAWF",36,unit,23555,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":35,""outletArea_ft2"":7.467,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[688,0.75],[757,1],[954,2],[1092,3]]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3600FAWF",36,unit,23555,PHP,"{""bladeDia_in"":36,""bladeAngle_deg"":35,""outletArea_ft2"":7.467,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[688,0.75],[757,1],[868,1.5],[954,2],[1092,3]]}"
 AV4200FAWF,PROPELLER,"Fresh Air Wall Fan 42"" Propeller (FAWF)","Fresh Air Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
@@ -90,15 +90,15 @@ Painted with Epoxy Enamel Aqua Green / Model: AV4200FAWF",42,unit,27481,PHP,"{""
 AV4800FAWF,PROPELLER,"Fresh Air Wall Fan 48"" Propeller (FAWF)","Fresh Air Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4800FAWF",48,unit,31376,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":35,""outletArea_ft2"":13.095,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[591,2],[677,3],[802,5]]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4800FAWF",48,unit,31376,PHP,"{""bladeDia_in"":48,""bladeAngle_deg"":35,""outletArea_ft2"":13.095,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[537,1.5],[591,2],[677,3],[802,5]]}"
 AV5400FAWF,PROPELLER,"Fresh Air Wall Fan 54"" Propeller (FAWF)","Fresh Air Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV5400FAWF",54,unit,52999,PHP,"{""bladeDia_in"":54,""bladeAngle_deg"":40,""outletArea_ft2"":16.499,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV5400FAWF",54,unit,52999,PHP,"{""bladeDia_in"":54,""bladeAngle_deg"":40,""outletArea_ft2"":16.499,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[622,7.5]]}"
 AV6000FAWF,PROPELLER,"Fresh Air Wall Fan 60"" Propeller (FAWF)","Fresh Air Wall Fan
 Propeller Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV6000FAWF",60,unit,60065,PHP,"{""bladeDia_in"":60,""bladeAngle_deg"":40,""outletArea_ft2"":20.295,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[608,10]]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV6000FAWF",60,unit,60065,PHP,"{""bladeDia_in"":60,""bladeAngle_deg"":40,""outletArea_ft2"":20.295,""maxRpm"":1200,""propeller"":true,""bladeType"":""Propeller"",""drive"":""belt"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWF"",""motorHpByRpm"":[[554,7.5],[608,10]]}"
 AV1400FAWFDD,PROPELLER,"Fresh Air Wall Fan 14"" Propeller (FAWFDD)","Fresh Air Wall Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
@@ -114,7 +114,7 @@ Painted with Epoxy Enamel Aqua Green / Model: AV1800FAWFDD",18,unit,12366,PHP,"{
 AV2000FAWFDD,PROPELLER,"Fresh Air Wall Fan 20"" Propeller (FAWFDD)","Fresh Air Wall Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2000FAWFDD",20,unit,13152,PHP,"{""bladeDia_in"":20,""bladeAngle_deg"":24,""outletArea_ft2"":2.405,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWFDD"",""fixedSpeedDirect"":true}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2000FAWFDD",20,unit,13152,PHP,"{""bladeDia_in"":20,""bladeAngle_deg"":24,""outletArea_ft2"":2.405,""maxRpm"":1750,""propeller"":true,""bladeType"":""Propeller"",""drive"":""direct"",""category"":""Propeller Type"",""type"":""Fresh Air Wall Fan"",""tag"":""FAWFDD"",""motorHpByRpm"":[[1750,1.5]],""fixedSpeedDirect"":true}"
 AV2400FAWFDD,PROPELLER,"Fresh Air Wall Fan 24"" Propeller (FAWFDD)","Fresh Air Wall Fan
 Propeller Type / Direct Drive
 Made of Black Iron Sheet

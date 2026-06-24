@@ -790,6 +790,7 @@ export function selectFan(
     dutyPressure: duty.staticPressure_pa,
     bhp,
     motorHp,
+    motorFromCatalog: catalogMotorHp != null,
     outletVelocity_fpm,
     ovLimit_fpm,
     efficiency,
@@ -836,6 +837,7 @@ function buildSelectionNote(p: {
   dutyPressure: number;
   bhp: number;
   motorHp: number;
+  motorFromCatalog: boolean;
   outletVelocity_fpm: number | null;
   ovLimit_fpm: number | null;
   efficiency: number | null;
@@ -846,9 +848,10 @@ function buildSelectionNote(p: {
     p.outletVelocity_fpm != null
       ? ` OV ${p.outletVelocity_fpm} fpm (limit ${p.ovLimit_fpm}).`
       : "";
+  const motorBasis = p.motorFromCatalog ? "catalog" : "BHP/0.75";
   return (
     `${p.modelCode} for ${Math.round(p.dutyAirflow)} m³/hr @ ${Math.round(p.dutyPressure)} Pa at ${p.rpm} rpm. ` +
-    `Absorbed ${p.bhp.toFixed(2)} BHP → motor ${p.motorHp} HP (BHP/0.75)${eff}.${ov} ` +
+    `Absorbed ${p.bhp.toFixed(2)} BHP → motor ${p.motorHp} HP (${motorBasis})${eff}.${ov} ` +
     `Confidence: ${p.confidence}.`
   );
 }
