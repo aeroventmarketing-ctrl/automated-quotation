@@ -341,7 +341,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: false, color: BLACK };
   r += 2;
 
-  const TERMS_MAXCHARS = 93; // fill the G:P width before wrapping (Payment fits in 2 lines)
+  const TERMS_MAXCHARS = 95; // each clause line stays on one row at this width
   if (data.terms) {
     const lines = data.terms.split("\n").map((l) => l.replace(/\r/g, "").trim());
     let i = 0;

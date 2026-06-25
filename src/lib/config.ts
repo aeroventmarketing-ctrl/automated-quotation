@@ -29,7 +29,8 @@ export const COMPANY = {
   // specify its own. One numbered clause per line; "a."–"h." sub-items sit on
   // their own lines under their parent clause.
   defaultTerms: [
-    "1. Payment : 50% down payment, 30% before delivery of items, 20% progress billing. VAT exclusive price. We accept Cash or Dated Check and online payments. Subject for bank clearing for check payment.",
+    "1. Payment : 50% down payment, 30% before delivery of items, 20% progress billing. VAT exclusive price.",
+    "We accept Cash or Dated Check and online payments. Subject for bank clearing for check payment.",
     "2. Production time : 20 to 30 working days upon confirmation of P.O. & D.P. Sundays & Holidays not included.",
     "3. Delivery : Subject for bank clearing for check payment. Free delivery within Metro Manila.",
     "4. Storage fee : 30 days free of charge. Orders that exceed 30 days after the last billing statement will be charged 0.1% of the purchase order amount multiplied by exceeding number of storage days.",
