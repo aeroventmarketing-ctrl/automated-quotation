@@ -57,6 +57,29 @@ const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
 const money = (n: number) =>
   Math.round((n + Number.EPSILON) * 100) / 100;
 
+/**
+ * Word-wrap a single line to at most `maxChars` characters per physical line
+ * (breaking only on spaces). Used for the Terms & Conditions body so each line
+ * is guaranteed to fit inside the page block — we don't rely on Excel's
+ * merged-cell wrapping, which renders inconsistently across viewers.
+ */
+function wrapTerms(s: string, maxChars: number): string[] {
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [""];
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    if (cur === "") cur = w;
+    else if ((cur + " " + w).length <= maxChars) cur += " " + w;
+    else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
 export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Quotation", {
@@ -308,7 +331,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: false, color: BLACK };
   r += 2;
 
-  const TERMS_CPL = 75; // approx chars per line that fit the merged G:P text area (Times New Roman 10)
+  const TERMS_MAXCHARS = 70; // hard-wrap width so each line fits the G:P block with a right margin
   if (data.terms) {
     const lines = data.terms.split("\n").map((l) => l.replace(/\r/g, "").trim());
     let i = 0;
@@ -344,13 +367,12 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       }
       ws.mergeCells(`G${r}:P${r}`);
       const tc = ws.getCell(`G${r}`);
-      tc.value = body;
+      // Pre-wrap to physical lines so nothing spills past the page's right edge.
+      const wrapped = wrapTerms(body, TERMS_MAXCHARS);
+      tc.value = wrapped.join("\n");
       tc.font = { name: FONT, size: 10, color: BLACK };
       tc.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
-      const wlines = Math.max(1, Math.ceil(body.length / TERMS_CPL));
-      // These clauses wrap to 3 lines in Excel; give them room so no text hides.
-      const threeLine = label === "11. Cancellation" || label === "1. Payment";
-      ws.getRow(r).height = threeLine ? 48 : wlines * 16;
+      ws.getRow(r).height = wrapped.length * 16;
       r++;
       i++;
     }
