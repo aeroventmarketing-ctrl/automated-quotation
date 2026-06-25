@@ -82,14 +82,21 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   // centred; placing it edge-to-edge (full content width) keeps it centred
   // reliably across screen and print, with no fragile offset math.
   const colPx = widths.map((w) => Math.round(w * 7 + 5));
-  // Content area excludes the left gutter column (index 0); logo starts at B.
+  // Content area excludes the left gutter column (index 0); logo spans B..P.
   const logoW = colPx.slice(1).reduce((a, b) => a + b, 0);
   const logoH = Math.round(logoW / HEADER_LOGO_RATIO);
-  const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "png" });
-  ws.addImage(imgId, { tl: { col: 1, row: 0 }, ext: { width: logoW, height: logoH } });
   // Reserve rows for the logo height (≈19px per default row).
   const logoRows = Math.round(logoH / 19);
   for (let r = 1; r <= logoRows; r++) ws.getRow(r).height = 19;
+  const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "png" });
+  // Two-cell anchor B1 → P{logoRows}: the letterhead is sized to exactly fill the
+  // content columns (B..P), so it stays centred and contained (no overflow into a
+  // stray right column) and moves/resizes together with the header cells.
+  ws.addImage(imgId, {
+    tl: { col: 1, row: 0 } as unknown as ExcelJS.Anchor,
+    br: { col: 16, row: logoRows } as unknown as ExcelJS.Anchor,
+    editAs: "twoCell",
+  });
 
   const center = (v: ExcelJS.CellValue, size: number, bold = false, italic = false) => ({
     value: v,
@@ -364,6 +371,10 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
   ws.getCell(`B${r}`).alignment = { horizontal: "center", vertical: "middle" };
   ws.getRow(r).height = 16;
+
+  // Print/page-break area is the content block only — B..P — so the empty left
+  // gutter (column A) and anything past column P are excluded from the page.
+  ws.pageSetup.printArea = `B1:P${r}`;
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
