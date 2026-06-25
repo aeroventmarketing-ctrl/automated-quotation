@@ -365,33 +365,29 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
           body = lines[i];
         }
       }
-      if (label !== null) {
-        const lc = ws.getCell(`B${r}`);
-        lc.value = label;
-        lc.font = { name: FONT, size: 10, color: BLACK };
-        lc.alignment = { vertical: "top" };
-        const cc = ws.getCell(`E${r}`);
-        cc.value = ":";
-        cc.font = { name: FONT, size: 10, color: BLACK };
-        cc.alignment = { vertical: "top" };
-      }
-      const tc = ws.getCell(`G${r}`);
-      // Pre-wrap to physical lines so nothing spills past the page's right edge.
+      // No merges: each wrapped physical line gets its own 14.5px row, with the
+      // body in G overflowing across the empty cells to the right. The first
+      // line carries the clause label (B) and colon (E).
       const wrapped = wrapTerms(body, TERMS_MAXCHARS);
-      tc.font = { name: FONT, size: 10, color: BLACK };
-      if (wrapped.length > 1) {
-        // Only a multi-line clause needs the merged full-width block to wrap.
-        ws.mergeCells(`G${r}:P${r}`);
-        tc.value = wrapped.join("\n");
-        tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-      } else {
-        // A single line fits — leave G unmerged; the text overflows across the
-        // empty cells to the right (no merge when it isn't necessary).
-        tc.value = wrapped[0];
+      wrapped.forEach((lineText, idx) => {
+        const rr = r + idx;
+        if (idx === 0 && label !== null) {
+          const lc = ws.getCell(`B${rr}`);
+          lc.value = label;
+          lc.font = { name: FONT, size: 10, color: BLACK };
+          lc.alignment = { vertical: "top" };
+          const cc = ws.getCell(`E${rr}`);
+          cc.value = ":";
+          cc.font = { name: FONT, size: 10, color: BLACK };
+          cc.alignment = { vertical: "top" };
+        }
+        const tc = ws.getCell(`G${rr}`);
+        tc.value = lineText;
+        tc.font = { name: FONT, size: 10, color: BLACK };
         tc.alignment = { horizontal: "left", vertical: "top" };
-      }
-      ws.getRow(r).height = wrapped.length * 16;
-      r++;
+        ws.getRow(rr).height = 14.5;
+      });
+      r += wrapped.length;
       i++;
     }
   }
