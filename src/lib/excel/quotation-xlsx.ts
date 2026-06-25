@@ -89,13 +89,13 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const logoRows = Math.round(logoH / 19);
   for (let r = 1; r <= logoRows; r++) ws.getRow(r).height = 19;
   const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "png" });
-  // Two-cell anchor B1 → P{logoRows}: the letterhead is sized to exactly fill the
-  // content columns (B..P), so it stays centred and contained (no overflow into a
-  // stray right column) and moves/resizes together with the header cells.
+  // One-cell anchor with a fixed, aspect-locked size (height = width / ratio):
+  // the letterhead keeps its proportions — it is never stretched — and moves
+  // with the header cell. Sized to the content width (B..P).
   ws.addImage(imgId, {
-    tl: { col: 1, row: 0 } as unknown as ExcelJS.Anchor,
-    br: { col: 16, row: logoRows } as unknown as ExcelJS.Anchor,
-    editAs: "twoCell",
+    tl: { col: 1, row: 0 },
+    ext: { width: logoW, height: logoH },
+    editAs: "oneCell",
   });
 
   const center = (v: ExcelJS.CellValue, size: number, bold = false, italic = false) => ({
