@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { AppNav } from "@/components/app-nav";
+import { MobileNav } from "@/components/mobile-nav";
 import { GeofenceGate } from "@/components/geofence-gate";
 import { getGeofence } from "@/lib/geofence";
 
@@ -33,9 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             alt="Aerovent Fans and Blowers Manufacturing"
             className="h-7 w-auto"
           />
-          <form action="/auth/signout" method="post">
-            <button className="text-sm text-muted-foreground">Sign out</button>
-          </form>
+          <MobileNav role={user.role} name={user.name} />
         </div>
         <div className="mx-auto max-w-6xl p-4 md:p-8">{children}</div>
       </main>

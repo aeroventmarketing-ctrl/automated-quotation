@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { LayoutDashboard, Inbox, FileText, Wrench, Settings, LogOut, UserCog } from "lucide-react";
 import type { Role } from "@prisma/client";
 
-const NAV = [
+export const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/inquiries", label: "Inquiries", icon: Inbox, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/quotations", label: "Quotations", icon: FileText, roles: ["SALES", "ENGINEER", "ADMIN"] },
