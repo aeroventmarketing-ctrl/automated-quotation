@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getCurrentUser, canApprove } from "@/lib/auth";
+import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { QuotationBuilder } from "./quotation-builder";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +52,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   return (
     <QuotationBuilder
       canApprove={canApprove(user)}
+      isAdmin={isAdmin(user)}
       catalog={catalog}
       templates={templates.map((t) => ({ id: t.id, name: t.name }))}
       quotation={{

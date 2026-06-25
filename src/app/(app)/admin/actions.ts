@@ -247,3 +247,52 @@ export async function saveGeofenceSetting(input: z.infer<typeof geofenceSchema>)
   revalidatePath("/", "layout");
   return d;
 }
+
+// --- Quotation numbering ----------------------------------------------------
+// The running sequence lives in QuoteCounter (single row keyed 0). The number a
+// quote receives is lastValue + 1 after an atomic increment, so "next number" =
+// lastValue + 1. Format: "YYYY - AFBM{00000000}{sales letter}".
+const QUOTE_COUNTER_KEY = 0;
+
+/** The 8-digit running number the next quotation will receive (admin). */
+export async function getNextQuoteSeq(): Promise<number> {
+  await assertAdmin();
+  const c = await prisma.quoteCounter.findUnique({ where: { year: QUOTE_COUNTER_KEY } });
+  return (c?.lastValue ?? 0) + 1;
+}
+
+const nextSeqSchema = z.object({ next: z.number().int().min(1) });
+/** Set the running number the next quotation will receive (admin only). */
+export async function setNextQuoteSeq(input: z.infer<typeof nextSeqSchema>): Promise<number> {
+  await assertAdmin();
+  const d = nextSeqSchema.parse(input);
+  await prisma.quoteCounter.upsert({
+    where: { year: QUOTE_COUNTER_KEY },
+    create: { year: QUOTE_COUNTER_KEY, lastValue: d.next - 1 },
+    update: { lastValue: d.next - 1 },
+  });
+  revalidatePath("/admin");
+  return d.next;
+}
+
+const quoteNumSchema = z.object({ id: z.string().min(1), quoteNumber: z.string().trim().min(1) });
+/** Edit a single quotation's number (admin only). Must stay unique. */
+export async function updateQuoteNumber(
+  input: z.infer<typeof quoteNumSchema>,
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    await assertAdmin();
+    const d = quoteNumSchema.parse(input);
+    const clash = await prisma.quotation.findFirst({
+      where: { quoteNumber: d.quoteNumber, NOT: { id: d.id } },
+      select: { id: true },
+    });
+    if (clash) return { error: "That quotation number is already in use." };
+    await prisma.quotation.update({ where: { id: d.id }, data: { quoteNumber: d.quoteNumber } });
+    revalidatePath(`/quotations/${d.id}`);
+    revalidatePath("/quotations");
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to update quotation number" };
+  }
+}

@@ -31,6 +31,7 @@ import {
   convertPressure,
 } from "@/lib/units";
 import { updateQuotationLines, transitionQuotation } from "../actions";
+import { updateQuoteNumber } from "../../admin/actions";
 
 interface CatalogEntry {
   modelCode: string;
@@ -430,15 +431,37 @@ export function QuotationBuilder({
   quotation,
   templates,
   canApprove,
+  isAdmin = false,
   catalog,
 }: {
   quotation: Quote;
   templates: { id: string; name: string }[];
   canApprove: boolean;
+  isAdmin?: boolean;
   catalog: Record<string, CatalogEntry>;
 }) {
   const router = useRouter();
   const editable = quotation.status === "DRAFT";
+
+  // Admin-only quotation-number editing.
+  const [quoteNo, setQuoteNo] = useState(quotation.quoteNumber);
+  const [editingNo, setEditingNo] = useState(false);
+  const [noDraft, setNoDraft] = useState(quotation.quoteNumber);
+  const [noBusy, setNoBusy] = useState(false);
+  const [noErr, setNoErr] = useState<string | null>(null);
+  async function saveQuoteNo() {
+    setNoBusy(true);
+    setNoErr(null);
+    const res = await updateQuoteNumber({ id: quotation.id, quoteNumber: noDraft.trim() });
+    setNoBusy(false);
+    if ("error" in res) {
+      setNoErr(res.error);
+      return;
+    }
+    setQuoteNo(noDraft.trim());
+    setEditingNo(false);
+    router.refresh();
+  }
 
   const [lines, setLines] = useState<Line[]>(quotation.items);
   const [templateId, setTemplateId] = useState(quotation.templateId);
@@ -816,7 +839,23 @@ export function QuotationBuilder({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">QUOT NO. {quotation.quoteNumber}</h1>
+          {isAdmin && editingNo ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-2xl font-bold">QUOT NO.</span>
+              <Input className="h-9 w-72 font-mono" value={noDraft} onChange={(e) => setNoDraft(e.target.value)} />
+              <Button size="sm" onClick={saveQuoteNo} disabled={noBusy || !noDraft.trim()}>{noBusy ? "Saving…" : "Save"}</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setEditingNo(false); setNoDraft(quoteNo); setNoErr(null); }} disabled={noBusy}>Cancel</Button>
+              {noErr && <span className="text-xs text-destructive">{noErr}</span>}
+            </div>
+          ) : (
+            <h1 className="text-2xl font-bold">
+              QUOT NO. {quoteNo}
+              {isAdmin && (
+                <button type="button" onClick={() => { setNoDraft(quoteNo); setEditingNo(true); }}
+                  className="ml-2 align-middle text-xs font-normal text-primary underline">edit</button>
+              )}
+            </h1>
+          )}
           <p className="text-sm text-muted-foreground">
             {quotation.customer} · prepared by {quotation.preparedBy}
             {quotation.approvedBy ? ` · approved by ${quotation.approvedBy}` : ""}
