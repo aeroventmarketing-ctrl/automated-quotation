@@ -3,7 +3,7 @@ import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import React from "react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { config } from "@/lib/config";
+import { config, COMPANY } from "@/lib/config";
 import { convertAirflow } from "@/lib/units";
 import {
   QuotationPdf,
@@ -99,7 +99,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     approvedBy: quotation.approvedBy?.name ?? null,
     status: quotation.status,
     specNote: quotation.notes ?? (typeof tplConfig.specNote === "string" ? tplConfig.specNote : null),
-    terms: quotation.terms ?? (typeof tplConfig.terms === "string" ? tplConfig.terms : null),
+    terms:
+      (quotation.terms && quotation.terms.trim()) ||
+      (typeof tplConfig.terms === "string" && tplConfig.terms.trim() ? tplConfig.terms : "") ||
+      COMPANY.defaultTerms,
     items,
     subtotal: Number(quotation.subtotal),
     vat: Number(quotation.vat),

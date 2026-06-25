@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { config } from "@/lib/config";
+import { config, COMPANY } from "@/lib/config";
 import { buildQuotationXlsx, type XlsxLine, type XlsxData } from "@/lib/excel/quotation-xlsx";
 
 export const runtime = "nodejs";
@@ -61,7 +61,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     motorUnit: (typeof units.motor === "string" && units.motor) || "HP",
     preparedBy: q.preparedBy.name,
     specNote: q.notes ?? (typeof tpl.specNote === "string" ? tpl.specNote : null),
-    terms: q.terms ?? (typeof tpl.terms === "string" ? tpl.terms : null),
+    // Quote terms → template terms → built-in standard terms (never blank).
+    terms:
+      (q.terms && q.terms.trim()) ||
+      (typeof tpl.terms === "string" && tpl.terms.trim() ? tpl.terms : "") ||
+      COMPANY.defaultTerms,
     items,
     total: Number(q.total),
   };
