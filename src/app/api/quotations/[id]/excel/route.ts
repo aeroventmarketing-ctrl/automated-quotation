@@ -59,7 +59,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     capacityUnit: (typeof units.capacity === "string" && units.capacity) || "cfm",
     pressureUnit: (typeof units.pressure === "string" && units.pressure) || "in-w.g.",
     motorUnit: (typeof units.motor === "string" && units.motor) || "HP",
-    preparedBy: q.preparedBy.name,
+    // Signature reflects the currently logged-in sales user, not the original
+    // preparer, so each sales person's downloads carry their own name.
+    preparedBy: user.name,
     specNote: q.notes ?? (typeof tpl.specNote === "string" ? tpl.specNote : null),
     // Quote terms → template terms → built-in standard terms (never blank).
     terms:

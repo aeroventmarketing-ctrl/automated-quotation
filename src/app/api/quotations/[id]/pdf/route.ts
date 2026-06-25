@@ -95,7 +95,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       contactName: quotation.inquiry.customer.contactName,
       address: quotation.inquiry.customer.address,
     },
-    preparedBy: quotation.preparedBy.name,
+    // Signature reflects the currently logged-in sales user, not the original
+    // preparer, so each sales person's downloads carry their own name.
+    preparedBy: user.name,
     approvedBy: quotation.approvedBy?.name ?? null,
     status: quotation.status,
     specNote: quotation.notes ?? (typeof tplConfig.specNote === "string" ? tplConfig.specNote : null),
