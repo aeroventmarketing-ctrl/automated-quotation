@@ -82,18 +82,28 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   // centred; placing it edge-to-edge (full content width) keeps it centred
   // reliably across screen and print, with no fragile offset math.
   const colPx = widths.map((w) => Math.round(w * 7 + 5));
-  // Content area excludes the left gutter column (index 0); logo spans B..P.
-  const logoW = colPx.slice(1).reduce((a, b) => a + b, 0);
+  // Full content width (B..P). The letterhead is sized to ~85% of it and kept
+  // aspect-locked (height = width / ratio), then centred with equal side margins.
+  const contentW = colPx.slice(1).reduce((a, b) => a + b, 0);
+  const logoW = Math.round(contentW * 0.85);
   const logoH = Math.round(logoW / HEADER_LOGO_RATIO);
-  // Reserve rows for the logo height (≈19px per default row).
   const logoRows = Math.round(logoH / 19);
-  for (let r = 1; r <= logoRows; r++) ws.getRow(r).height = 19;
+  // Left inset (px from column B's left edge) that centres the logo across B..P,
+  // expressed as a fractional ExcelJS column index for the anchor.
+  const leftInsetPx = Math.round((contentW - logoW) / 2);
+  const logoStartCol = (() => {
+    let acc = 0;
+    for (let c = 1; c < colPx.length; c++) {
+      if (acc + colPx[c] >= leftInsetPx) return c + (leftInsetPx - acc) / colPx[c];
+      acc += colPx[c];
+    }
+    return colPx.length;
+  })();
+  for (let rr = 1; rr <= logoRows; rr++) ws.getRow(rr).height = 19;
   const imgId = wb.addImage({ base64: HEADER_LOGO.split(",")[1], extension: "png" });
-  // One-cell anchor with a fixed, aspect-locked size (height = width / ratio):
-  // the letterhead keeps its proportions — it is never stretched — and moves
-  // with the header cell. Sized to the content width (B..P).
+  // Aspect-locked, centred across B..P, and moves with the header cell.
   ws.addImage(imgId, {
-    tl: { col: 1, row: 0 },
+    tl: { col: logoStartCol, row: 0 },
     ext: { width: logoW, height: logoH },
     editAs: "oneCell",
   });
@@ -283,8 +293,13 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   // --- Page break + repeated letterhead on page 2 ---------------------------
   ws.getRow(r).addPageBreak();
   r += 1;
-  // Repeat the same header logo at the top of page 2.
-  ws.addImage(imgId, { tl: { col: 1, row: r - 1 }, ext: { width: logoW, height: logoH } });
+  // Repeat the same header logo at the top of page 2 — same centred, aspect-
+  // locked placement as page 1.
+  ws.addImage(imgId, {
+    tl: { col: logoStartCol, row: r - 1 },
+    ext: { width: logoW, height: logoH },
+    editAs: "oneCell",
+  });
   for (let i = 0; i < logoRows; i++) ws.getRow(r + i).height = 19;
   r += logoRows - 1; // tighten gap below the page-2 logo (match page 1)
 
