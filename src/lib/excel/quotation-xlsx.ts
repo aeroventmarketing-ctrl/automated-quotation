@@ -369,11 +369,11 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
         const lc = ws.getCell(`B${r}`);
         lc.value = label;
         lc.font = { name: FONT, size: 10, color: BLACK };
-        lc.alignment = { vertical: "middle" };
+        lc.alignment = { vertical: "top" };
         const cc = ws.getCell(`E${r}`);
         cc.value = ":";
         cc.font = { name: FONT, size: 10, color: BLACK };
-        cc.alignment = { vertical: "middle" };
+        cc.alignment = { vertical: "top" };
       }
       ws.mergeCells(`G${r}:P${r}`);
       const tc = ws.getCell(`G${r}`);
@@ -381,7 +381,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       const wrapped = wrapTerms(body, TERMS_MAXCHARS);
       tc.value = wrapped.join("\n");
       tc.font = { name: FONT, size: 10, color: BLACK };
-      tc.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+      tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
       ws.getRow(r).height = wrapped.length * 16;
       r++;
       i++;
