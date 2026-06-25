@@ -7,8 +7,12 @@ import { getGeofence } from "@/lib/geofence";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) {
-    // Authenticated in Supabase but no matching app User row, or not signed in.
-    redirect("/login");
+    // We only reach the layout once the middleware has verified a Supabase
+    // session, so a null app user here means an orphaned session (signed in to
+    // Supabase Auth but no matching app User row by email). Redirecting to
+    // /login would loop with the middleware (which sends authed users to
+    // /dashboard), so clear the session via the signout route instead.
+    redirect("/auth/signout");
   }
 
   // Location access: when enabled, non-admins are confined to the geofence(s).
