@@ -92,7 +92,17 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 0,
-      margins: { left: 0.3, right: 0.3, top: 0.1, bottom: 0.3, header: 0, footer: 0.2 },
+      // Margins per the requested Page Setup: 3 mm sides/top/bottom, 8 mm
+      // header/footer (ExcelJS margins are in inches; 1 mm = 1/25.4 in).
+      margins: {
+        left: 3 / 25.4,
+        right: 3 / 25.4,
+        top: 3 / 25.4,
+        bottom: 3 / 25.4,
+        header: 8 / 25.4,
+        footer: 8 / 25.4,
+      },
+      horizontalCentered: true, // "Center on page → Horizontally"
     },
   });
 
