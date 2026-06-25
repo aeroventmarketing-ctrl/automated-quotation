@@ -154,7 +154,16 @@ export async function setUserPassword(
       if (data.users.length < 200) break;
     }
     if (!authId) {
-      return { error: "No Supabase Auth login exists for this email yet — create the login first." };
+      // No Auth login yet — create one with this email + password, pre-confirmed
+      // so the user can sign in immediately. The app User row joins by email, so
+      // no extra linking is needed.
+      const { error: createErr } = await sb.auth.admin.createUser({
+        email,
+        password: d.password,
+        email_confirm: true,
+      });
+      if (createErr) return { error: createErr.message };
+      return { ok: true };
     }
     const { error } = await sb.auth.admin.updateUserById(authId, { password: d.password });
     if (error) return { error: error.message };

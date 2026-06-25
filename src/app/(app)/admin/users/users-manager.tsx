@@ -144,7 +144,8 @@ export function UsersManager({ users }: { users: U[] }) {
             {pwErr && <p className="text-sm text-destructive md:col-span-4">{pwErr}</p>}
             {pwMsg && <p className="text-sm text-emerald-700 md:col-span-4">{pwMsg}</p>}
             <p className="text-xs text-muted-foreground md:col-span-4">
-              Sets the Supabase Auth login password immediately. Share it with the user securely.
+              Sets the Supabase Auth login password immediately — creating the login if the user
+              doesn&apos;t have one yet. Share it with the user securely.
             </p>
           </CardContent>
         </Card>
