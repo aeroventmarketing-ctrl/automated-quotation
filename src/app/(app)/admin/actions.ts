@@ -296,3 +296,44 @@ export async function updateQuoteNumber(
     return { error: e instanceof Error ? e.message : "Failed to update quotation number" };
   }
 }
+
+// --- Login audit ------------------------------------------------------------
+// Cross-reference app User rows against Supabase Auth logins (matched by email)
+// to surface: app users who can't sign in (no login) and logins that have no
+// app user (these cause the post-login redirect loop).
+export interface LoginAudit {
+  appUsers: number;
+  authUsers: number;
+  missingLogin: { email: string; name: string; role: string }[];
+  orphanAuth: string[];
+}
+export async function auditLogins(): Promise<LoginAudit | { error: string }> {
+  try {
+    await assertAdmin();
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return { error: "Server is missing SUPABASE_SERVICE_ROLE_KEY — can't read Auth logins." };
+    }
+    const sb = createServiceClient();
+    const appUsers = await prisma.user.findMany({ select: { email: true, name: true, role: true } });
+    const appEmails = new Set(appUsers.map((u) => u.email.toLowerCase()));
+
+    const authEmails = new Set<string>();
+    for (let page = 1; page <= 25; page++) {
+      const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 200 });
+      if (error) return { error: error.message };
+      for (const u of data.users as { email?: string }[]) {
+        if (u.email) authEmails.add(u.email.toLowerCase());
+      }
+      if (data.users.length < 200) break;
+    }
+
+    const missingLogin = appUsers
+      .filter((u) => !authEmails.has(u.email.toLowerCase()))
+      .map((u) => ({ email: u.email, name: u.name, role: String(u.role) }));
+    const orphanAuth = [...authEmails].filter((e) => !appEmails.has(e)).sort();
+
+    return { appUsers: appUsers.length, authUsers: authEmails.size, missingLogin, orphanAuth };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Audit failed" };
+  }
+}
