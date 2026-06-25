@@ -341,7 +341,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, bold: false, color: BLACK };
   r += 2;
 
-  const TERMS_MAXCHARS = 92; // fill the G:P width before wrapping (Payment fits in 2 lines)
+  const TERMS_MAXCHARS = 93; // fill the G:P width before wrapping (Payment fits in 2 lines)
   if (data.terms) {
     const lines = data.terms.split("\n").map((l) => l.replace(/\r/g, "").trim());
     let i = 0;
@@ -375,13 +375,21 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
         cc.font = { name: FONT, size: 10, color: BLACK };
         cc.alignment = { vertical: "top" };
       }
-      ws.mergeCells(`G${r}:P${r}`);
       const tc = ws.getCell(`G${r}`);
       // Pre-wrap to physical lines so nothing spills past the page's right edge.
       const wrapped = wrapTerms(body, TERMS_MAXCHARS);
-      tc.value = wrapped.join("\n");
       tc.font = { name: FONT, size: 10, color: BLACK };
-      tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
+      if (wrapped.length > 1) {
+        // Only a multi-line clause needs the merged full-width block to wrap.
+        ws.mergeCells(`G${r}:P${r}`);
+        tc.value = wrapped.join("\n");
+        tc.alignment = { horizontal: "left", vertical: "top", wrapText: true };
+      } else {
+        // A single line fits — leave G unmerged; the text overflows across the
+        // empty cells to the right (no merge when it isn't necessary).
+        tc.value = wrapped[0];
+        tc.alignment = { horizontal: "left", vertical: "top" };
+      }
       ws.getRow(r).height = wrapped.length * 16;
       r++;
       i++;
