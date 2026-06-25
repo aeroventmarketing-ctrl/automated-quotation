@@ -614,26 +614,16 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
   // counts as met — otherwise sub-cfm rounding excludes that row and bumps the
   // selection to the next motor size.
   const meeting = cands.filter((c) => c.cfm >= flow_cfm - 1);
-  let chosen: Cand;
-  let meetsFlow: boolean;
-  if (meeting.length) {
-    // Smallest motor first (the most economical fan that still meets the duty);
-    // then the least-oversized printed row → smallest adequate CFM → lowest rpm.
-    // The blade angle is whatever that row prints (e.g. a 30°/5 HP row is taken
-    // over a 40°/7.5 HP row that also meets the flow).
-    meeting.sort((a, b) => a.hp - b.hp || a.cfm - b.cfm || a.rpm - b.rpm);
-    chosen = meeting[0];
-    meetsFlow = true;
-  } else {
-    // No ≤40° row meets the flow at this SP — show the closest (highest angle,
-    // largest CFM) and flag it as undersized.
-    cands.sort((a, b) => b.angle - a.angle || b.cfm - a.cfm);
-    chosen = cands[0];
-    meetsFlow = false;
-    warnings.push(
-      `Highest ≤40° setting delivers ${Math.round(chosen.cfm)} cfm at ${sp_in.toFixed(2)} in.w.g. — below the required ${Math.round(flow_cfm)} cfm.`,
-    );
-  }
+  // No ≤40° row can deliver the requested flow at this static pressure — the
+  // size cannot satisfy the duty, so it is excluded from the selection entirely
+  // (a size that can't provide the requested volume flow is never shown).
+  if (meeting.length === 0) return null;
+  // Smallest motor first (the most economical fan that still meets the duty);
+  // then the least-oversized printed row → smallest adequate CFM → lowest rpm.
+  // The blade angle is whatever that row prints (e.g. a 30°/5 HP row is taken
+  // over a 40°/7.5 HP row that also meets the flow).
+  meeting.sort((a, b) => a.hp - b.hp || a.cfm - b.cfm || a.rpm - b.rpm);
+  const chosen: Cand = meeting[0];
 
   // Outlet velocity from the REQUIRED flow through the opening (blade Ø + 1").
   const outletArea = numv(model.specs?.outletArea_ft2);
@@ -658,7 +648,7 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
   const selectedAirflow_m3hr = Math.round((chosen.cfm / CFM_PER_M3HR) * 100) / 100;
   const power_kw = Math.round(bhp * KW_PER_HP * 1000) / 1000;
 
-  const confidence: Confidence = meetsFlow && ovWithinLimit !== false ? "HIGH" : "LOW";
+  const confidence: Confidence = ovWithinLimit !== false ? "HIGH" : "LOW";
   const ovStr =
     outletVelocity_fpm != null ? ` OV ${outletVelocity_fpm} fpm (limit ${ovLimit_fpm}).` : "";
   const note =
@@ -691,9 +681,9 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
     ovWithinLimit,
     maxRpm: rpmCeiling,
     rpmWithinMax: true,
-    withinEnvelope: meetsFlow,
+    withinEnvelope: true,
     confidence,
-    requiresEngineerConfirmation: confidence === "LOW" || !meetsFlow || ovWithinLimit === false,
+    requiresEngineerConfirmation: confidence === "LOW" || ovWithinLimit === false,
     selectionNote: note,
     warnings,
   };
@@ -770,11 +760,10 @@ export function selectFan(
     efficiency = dd.efficiency;
     withinEnvelope = dd.withinEnvelope;
     extrapolated = !dd.withinEnvelope;
-    if (!dd.meetsFlow) {
-      warnings.push(
-        `Undersized for direct drive — delivers only ~${Math.round(dd.deliveredFlow_m3hr * CFM_PER_M3HR)} cfm at the required static pressure (below the requested flow).`,
-      );
-    } else if (dd.deliveredFlow_m3hr > duty.airflow_m3hr * 1.001) {
+    // Can't deliver the requested flow at the required static pressure → the
+    // size cannot satisfy the duty, so it is excluded from the selection.
+    if (!dd.meetsFlow) return null;
+    if (dd.deliveredFlow_m3hr > duty.airflow_m3hr * 1.001) {
       warnings.push(
         `Delivers ~${Math.round(dd.deliveredFlow_m3hr * CFM_PER_M3HR)} cfm at the required static pressure (above the requested flow) at ${rpm} rpm, ${dd.pole}-pole.`,
       );
@@ -851,11 +840,7 @@ export function selectFan(
   // printed flow at the required SP) or outside the rated range (beyond the
   // printed flow/pressure span) is refused outright rather than extrapolated —
   // the engine will not quote a selection the published curve doesn't support.
-  if (
-    !options.directDrive &&
-    String(model.specs?.category ?? "") === "Centrifugal Type" &&
-    !withinEnvelope
-  ) {
+  if (!options.directDrive && usedGrid && !withinEnvelope) {
     return null;
   }
 

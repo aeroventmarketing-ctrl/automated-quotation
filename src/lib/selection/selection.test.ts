@@ -402,12 +402,11 @@ describe("selectFan — propeller catalogue-row lookup (EWF/EWFDD/PRV/PRVDD)", (
     expect(r.ovWithinLimit).toBe(true); // OV 6500/3.0 ≈ 2167 ≤ 2200
   });
 
-  it("never selects a row above the 1200 rpm belt ceiling or a 45° angle", () => {
-    // A flow only the 1300-rpm or 45° rows could meet → undersized within the rules.
-    const r = selectFan(belt, { airflow_m3hr: 8600 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })!;
-    expect(r.bladeAngle).toBeLessThanOrEqual(40);
-    expect(r.rpm).toBeLessThanOrEqual(1200);
-    expect(r.withinEnvelope).toBe(false); // no ≤40°/≤1200rpm row reaches 8600 cfm
+  it("excludes the size when no ≤40°/≤1200rpm row can deliver the flow", () => {
+    // 8600 cfm @ 0.25" can only be met by a 1300-rpm or 45° row — both barred by
+    // the selection rules — so the size can't satisfy the duty and isn't shown.
+    const r = selectFan(belt, { airflow_m3hr: 8600 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 });
+    expect(r).toBeNull();
   });
 
   it("flags outlet velocity over 2200 fpm as LOW", () => {
