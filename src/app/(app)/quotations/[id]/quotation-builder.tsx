@@ -958,6 +958,11 @@ export function QuotationBuilder({
                   <Input className="h-8" value={l.specs.itemLabel} placeholder={String(idx + 1)} disabled={!editable}
                     onChange={(e) => updateSpec(l.id, { itemLabel: e.target.value })} />
                 </div>
+                <div className="md:col-span-1">
+                  <Label className="text-[10px]">Qty</Label>
+                  <Input className="h-8 text-right" type="number" min={1} value={l.qty} disabled={!editable}
+                    onChange={(e) => updateLine(l.id, { qty: Math.max(1, Number(e.target.value) || 1) })} />
+                </div>
                 <div className="md:col-span-9">
                   <Label className="text-[10px]">Description (one detail per line)</Label>
                   {editable ? (
@@ -966,11 +971,6 @@ export function QuotationBuilder({
                   ) : (
                     <div className="whitespace-pre-wrap text-sm">{l.descriptionSnapshot}</div>
                   )}
-                </div>
-                <div className="md:col-span-1">
-                  <Label className="text-[10px]">Qty</Label>
-                  <Input className="h-8 text-right" type="number" min={1} value={l.qty} disabled={!editable}
-                    onChange={(e) => updateLine(l.id, { qty: Math.max(1, Number(e.target.value) || 1) })} />
                 </div>
                 <div className="md:col-span-1">
                   <Label className="text-[10px]">Unit ₱ (incl. VAT)</Label>
