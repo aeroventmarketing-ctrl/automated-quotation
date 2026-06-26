@@ -1128,9 +1128,7 @@ export function QuotationBuilder({
                               <p className="text-muted-foreground">
                                 {r.rpm} rpm · {r.bhp} BHP → {r.motorHp} HP{r.motorPole ? ` ${r.motorPole}-pole` : ""}
                                 {r.bladeAngle != null ? ` · ${r.bladeAngle}° blade` : ""}
-                                {r.selectedAirflow_m3hr != null && r.selectedAirflow_m3hr > r.dutyAirflow_m3hr
-                                  ? ` · delivers ${Math.round(r.selectedAirflow_m3hr / 1.6990108)} cfm`
-                                  : ""}
+                                {` · delivers ${Math.round((r.selectedAirflow_m3hr ?? r.dutyAirflow_m3hr) / 1.6990108)} cfm`}
                                 {r.outletVelocity_fpm != null
                                   ? ` · OV ${r.outletVelocity_fpm}${r.ovLimit_fpm != null ? `/${r.ovLimit_fpm}` : ""} fpm`
                                   : ""}
