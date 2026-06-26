@@ -60,6 +60,12 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "EWF") return { modelCode: { endsWith: "EWF" } };
   if (t === "PRVDD") return { modelCode: { endsWith: "PRVDD" } };
   if (t === "PRV") return { modelCode: { endsWith: "PRV" } };
+  // Axial fans (TAF tubeaxial / VAF vaneaxial), belt vs direct. The "…DD" codes
+  // end in "DD" so endsWith "TAF"/"VAF" never matches the direct variants.
+  if (t === "TAFDD") return { modelCode: { endsWith: "TAFDD" } };
+  if (t === "VAFDD") return { modelCode: { endsWith: "VAFDD" } };
+  if (t === "TAF") return { modelCode: { endsWith: "TAF" } };
+  if (t === "VAF") return { modelCode: { endsWith: "VAF" } };
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {

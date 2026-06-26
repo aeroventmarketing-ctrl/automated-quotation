@@ -305,7 +305,11 @@ const materialFactor = (specs: LineSpecs): number =>
  * (sold as CABSISW); Cabinet DIDW reuses the DIDW catalogue (sold as CEBCAB
  * backward / CFABCAB forward); forward curve is CFAB; otherwise CEB.
  */
-function resolveTag(type: string, bladeType: string): string {
+function resolveTag(type: string, bladeType: string, category = ""): string {
+  // Axial fans: Tubeaxial = TAF, Vaneaxial = VAF (belt tag; the drive picks the
+  // "…DD" direct variant in selectionTag). Gated on the Axial Type category so
+  // the Tubular Inline Type tube-/vane-axial entries are unaffected.
+  if (category === "Axial Type") return type === "Vaneaxial" ? "VAF" : "TAF";
   // Propeller wall fans: Exhaust = EWF/EWFDD, Fresh Air = FAWF/FAWFDD. The belt
   // tag carries the ×1 price factor; the drive picks the direct variant in
   // selectionTag and via the model code from selection.
@@ -327,12 +331,17 @@ function resolveTag(type: string, bladeType: string): string {
  * the matching blower catalogue: CABSISW→CEB, CEBCAB→DIDWCEB, CFABCAB→DIDWCFAB;
  * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
-function selectionTag(type: string, bladeType: string, drive = ""): string {
+function selectionTag(type: string, bladeType: string, drive = "", category = ""): string {
+  // Axial fans query their own belt/direct catalogue: TAF/TAFDD, VAF/VAFDD.
+  if (category === "Axial Type") {
+    const base = type === "Vaneaxial" ? "VAF" : "TAF";
+    return /direct/i.test(drive) ? `${base}DD` : base;
+  }
   // Propeller wall fans query their own belt/direct catalogue by application.
   if (type === "Power Roof Ventilator") return /direct/i.test(drive) ? "PRVDD" : "PRV";
   if (type === "Fresh Air Wall Fan") return /direct/i.test(drive) ? "FAWFDD" : "FAWF";
   if (PROPELLER_FAN_TYPES.has(type)) return /direct/i.test(drive) ? "EWFDD" : "EWF";
-  const tag = resolveTag(type, bladeType);
+  const tag = resolveTag(type, bladeType, category);
   if (tag === "CABSISW") return "CEB";
   if (tag === "CEBCAB") return "DIDWCEB";
   if (tag === "CFABCAB") return "DIDWCFAB";
@@ -356,6 +365,12 @@ const TAG_FACTORS: Record<string, number> = {
   FAWFDD: 1,
   PRV: 1,
   PRVDD: 1,
+  // Axial fans carry their own catalogue price (VAF = TAF ÷ 0.75 is baked into
+  // the stored VAF price), so the body factor is ×1; belt and direct share it.
+  TAF: 1,
+  TAFDD: 1,
+  VAF: 1,
+  VAFDD: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
@@ -364,7 +379,7 @@ const TAG_FACTORS: Record<string, number> = {
   CFABCAB: 1 / (0.9 * 0.57 * 0.9),
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
-const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType));
+const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType, specs.category));
 /** Net body price after the tag (blade/type) factor and material factor. */
 const bodyPriceOf = (specs: LineSpecs): number =>
   (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
@@ -376,8 +391,16 @@ const bodyPriceOf = (specs: LineSpecs): number =>
  * systems differ, so the model must be re-selected.
  */
 const WALL_FAN_SUFFIX = /(AV\d+)(?:FAWFDD|EWFDD|PRVDD|FAWF|EWF|PRV)$/i;
-function retagModel(model: string | null, type: string, bladeType: string, drive = ""): string | null {
+const AXIAL_SUFFIX = /(AV\d+)(?:VAFDD|TAFDD|VAF|TAF)$/i;
+function retagModel(model: string | null, type: string, bladeType: string, drive = "", category = ""): string | null {
   if (!model) return model;
+  if (category === "Axial Type") {
+    const base = type === "Vaneaxial" ? "VAF" : "TAF";
+    const suffix = base + (/direct/i.test(drive) ? "DD" : "");
+    if (AXIAL_SUFFIX.test(model)) return model.replace(AXIAL_SUFFIX, `$1${suffix}`);
+    return null; // came from another family — sizes differ, force re-selection
+  }
+  if (AXIAL_SUFFIX.test(model)) return null; // axial -> other family, force re-selection
   if (PROPELLER_FAN_TYPES.has(type)) {
     const app =
       type === "Power Roof Ventilator" ? "PRV" : type === "Fresh Air Wall Fan" ? "FAWF" : "EWF";
@@ -386,7 +409,7 @@ function retagModel(model: string | null, type: string, bladeType: string, drive
     return null; // came from another family — sizes differ, force re-selection
   }
   if (WALL_FAN_SUFFIX.test(model)) return null; // wall fan -> centrifugal, force re-selection
-  return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CFABCAB|CEBCAB|CABSISW|CIEB|SIEB|CFAB|CEB)/i, `$1${resolveTag(type, bladeType)}`);
+  return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CFABCAB|CEBCAB|CABSISW|CIEB|SIEB|CFAB|CEB)/i, `$1${resolveTag(type, bladeType, category)}`);
 }
 
 /** Shape / variant options for a Ventilation Accessory type. */
@@ -543,7 +566,7 @@ export function QuotationBuilder({
         if (specs.motorPh === 1) specs.motorVolts = 220;
         // Keep the model tag in step with the type/blade/drive. Crossing product
         // families clears the model (and its stale price) — re-select to re-price.
-        const retagged = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive);
+        const retagged = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive, specs.category);
         if (specs.blowerModel && retagged == null) specs.bodyPrice = null;
         specs.blowerModel = retagged;
         const body = bodyPriceOf(specs);
@@ -622,7 +645,7 @@ export function QuotationBuilder({
           requirement: { airflow: cfm, airflowUnit: "cfm", staticPressure: sp, pressureUnit: "inwg" },
           // Query only this product's catalogue (CEB / CFAB / DIDWCEB) so the
           // lists never mix; CABSISW reuses the CEB models.
-          tag: selectionTag(line.specs.type, line.specs.bladeType, line.specs.drive),
+          tag: selectionTag(line.specs.type, line.specs.bladeType, line.specs.drive, line.specs.category),
           // Direct-drive lines constrain selection to standard 2-/4-pole speed bands.
           directDrive: /direct/i.test(line.specs.drive),
         }),
@@ -659,7 +682,7 @@ export function QuotationBuilder({
           motorPole: r.motorPole ?? l.specs.motorPole,
         };
         // Cabinet SISW reuses the CEB catalogue model, so re-tag it to CABSISW.
-        specs.blowerModel = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive);
+        specs.blowerModel = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive, specs.category);
         const baseDesc = cat?.description || l.descriptionSnapshot;
         const body = bodyPriceOf(specs);
         const hp = specs.motorHp ?? 0;

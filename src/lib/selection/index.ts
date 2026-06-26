@@ -745,10 +745,17 @@ export function selectFan(
     // flow when needed. Outlet velocity is disregarded. The valid pick is the
     // tightest band that meets the flow; undersized/oversized neighbours are
     // still returned (flagged) so they appear next to the recommendation. -----
+    const customBands = Array.isArray(model.specs?.directBands)
+      ? (model.specs!.directBands as Array<{ pole: number; minRpm: number; maxRpm: number }>).filter(
+          (b) => b && typeof b.pole === "number" && typeof b.minRpm === "number" && typeof b.maxRpm === "number",
+        )
+      : [];
     const bands =
       model.specs?.fixedSpeedDirect === true
         ? fixedSpeedBands(model.ratingPoints)
-        : DIRECT_DRIVE_BANDS;
+        : customBands.length > 0
+          ? customBands
+          : DIRECT_DRIVE_BANDS;
     const dd = selectDirectDrive(model.ratingPoints, curve, referenceRpm, selectionPressure, duty.airflow_m3hr, bands);
     if (!dd) return null;
     rpm = dd.rpm;
@@ -925,12 +932,18 @@ export function selectFan(
     }
   }
 
+  // Axial fans (TAF/VAF tube-/vane-axial) run far above the ~1200 rpm that the
+  // centrifugal "good selection" rule recommends — their design speed is set by
+  // the grid, capped only by the Class I max RPM. Exempt them from the 1200 rpm
+  // warning/downgrade so a valid high-speed axial pick still scores HIGH.
+  const isAxial = String(model.specs?.category ?? "") === "Axial Type";
+
   // --- Maximum-RPM check --------------------------------------------------
   const maxRpm = num(model.specs?.maxRpm) ?? num(model.specs?.maxRpmClassI);
   const rpmWithinMax = maxRpm == null ? true : rpm <= maxRpm;
   if (!rpmWithinMax) {
     warnings.push(`Required speed ${rpm} rpm exceeds the rated max ${maxRpm} rpm.`);
-  } else if (rpm > 1200 && !options.directDrive) {
+  } else if (rpm > 1200 && !options.directDrive && !isAxial) {
     warnings.push(`Speed ${rpm} rpm is above the recommended ~1200 rpm.`);
   }
 
@@ -960,7 +973,7 @@ export function selectFan(
   // never a good pick; above the recommended ~1200 rpm drops HIGH to MEDIUM.
   if (!options.directDrive) {
     if (ovWithinLimit === false || !rpmWithinMax) confidence = "LOW";
-    else if (confidence === "HIGH" && rpm > 1200) confidence = "MEDIUM";
+    else if (confidence === "HIGH" && rpm > 1200 && !isAxial) confidence = "MEDIUM";
   }
 
   const requiresEngineerConfirmation =
