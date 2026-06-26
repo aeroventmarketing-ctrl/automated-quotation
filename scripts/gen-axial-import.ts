@@ -22,7 +22,16 @@
  * Each size yields a belt and a direct model that SHARE the same rating grid
  * (like EWF/EWFDD): TAF/TAFDD from the TAF catalog, VAF/VAFDD from the VAF
  * catalog. Direct drive runs at a single ~1750 rpm (4-pole) band 1663–1838 rpm
- * (specs.directBands); belt selects anywhere on the grid up to Class I 4455 rpm.
+ * (specs.directBands); belt selects anywhere on the grid up to the 2000 rpm
+ * design ceiling (specs.maxRpm).
+ *
+ * Application limits (supplied by AFBM):
+ *  - Speed: both TAF and VAF run below 2000 rpm (maxRpm 2000).
+ *  - Static pressure: TAF up to 1.5" w.g.; above that choose VAF, which is rated
+ *    to 4" w.g. (specs.maxStaticPressure_pa). A duty past a product's SP cap
+ *    drops that product from the results.
+ *  - Volume flow / SP priority and motor sizing (BHP ÷ 0.75, same as the
+ *    centrifugal CEB rule) are handled by the selection engine.
  *
  * Prices: TAF by wheel size from "TAF Prices.xlsx"; VAF = TAF ÷ 0.75 (≈ ×1.333),
  * per the supplied rule. Belt and direct of the same size share one price.
@@ -42,8 +51,10 @@ const KW_PER_HP = 0.745699872;
 
 const OUT_DIR = join(process.cwd(), "scripts", "out");
 
-// Class I maximum rated speed (rpm) printed on every sheet ("Max. RPM — Class I: 4455").
-const MAX_RPM_CLASS_I = 4455;
+// Design speed ceiling: both TAF and VAF are applied below 2000 rpm.
+const MAX_RPM = 2000;
+// Static-pressure ceiling per product (in. w.g.): TAF to 1.5", VAF to 4".
+const MAX_SP_INWG = { TAF: 1.5, VAF: 4 } as const;
 // Direct-drive band: a single 4-pole motor at ~1750 rpm (1663–1838 rpm allowed).
 const DIRECT_BANDS = [{ pole: 4, minRpm: 1663, maxRpm: 1838 }] as const;
 // VAF price = TAF price ÷ 0.75 (≈ ×1.333).
@@ -217,9 +228,11 @@ async function main() {
       `Axial Type / ${driveWord}\n` +
       "Made of Black Iron Sheet\n" +
       `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
+    const spCapInwg = m.type === "Vaneaxial" ? MAX_SP_INWG.VAF : MAX_SP_INWG.TAF;
     const specs: Record<string, unknown> = {
       bladeDia_in: m.size.dia,
-      maxRpm: MAX_RPM_CLASS_I,
+      maxRpm: MAX_RPM,
+      maxStaticPressure_pa: Math.round(spCapInwg * INWG_TO_PA * 100) / 100,
       bladeType: "Axial",
       drive: m.direct ? "direct" : "belt",
       category: "Axial Type",

@@ -2,192 +2,192 @@ modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
 AV1200TAF,AXIAL,"Tubeaxial 12"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1200TAF",12,unit,17666,PHP,"{""bladeDia_in"":12,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1200TAF",12,unit,17666,PHP,"{""bladeDia_in"":12,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV1200TAFDD,AXIAL,"Tubeaxial 12"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1200TAFDD",12,unit,17666,PHP,"{""bladeDia_in"":12,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1200TAFDD",12,unit,17666,PHP,"{""bladeDia_in"":12,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV1600TAF,AXIAL,"Tubeaxial 16"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1600TAF",16,unit,22770,PHP,"{""bladeDia_in"":16,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1600TAF",16,unit,22770,PHP,"{""bladeDia_in"":16,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV1600TAFDD,AXIAL,"Tubeaxial 16"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1600TAFDD",16,unit,22770,PHP,"{""bladeDia_in"":16,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1600TAFDD",16,unit,22770,PHP,"{""bladeDia_in"":16,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV1800TAF,AXIAL,"Tubeaxial 18"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1800TAF",18,unit,26827,PHP,"{""bladeDia_in"":18,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1800TAF",18,unit,26827,PHP,"{""bladeDia_in"":18,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV1800TAFDD,AXIAL,"Tubeaxial 18"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1800TAFDD",18,unit,26827,PHP,"{""bladeDia_in"":18,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1800TAFDD",18,unit,26827,PHP,"{""bladeDia_in"":18,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV2200TAF,AXIAL,"Tubeaxial 22"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2200TAF",22,unit,39112,PHP,"{""bladeDia_in"":22,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2200TAF",22,unit,39112,PHP,"{""bladeDia_in"":22,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV2200TAFDD,AXIAL,"Tubeaxial 22"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2200TAFDD",22,unit,39112,PHP,"{""bladeDia_in"":22,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2200TAFDD",22,unit,39112,PHP,"{""bladeDia_in"":22,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV2400TAF,AXIAL,"Tubeaxial 24"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2400TAF",24,unit,41384,PHP,"{""bladeDia_in"":24,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2400TAF",24,unit,41384,PHP,"{""bladeDia_in"":24,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV2400TAFDD,AXIAL,"Tubeaxial 24"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2400TAFDD",24,unit,41384,PHP,"{""bladeDia_in"":24,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2400TAFDD",24,unit,41384,PHP,"{""bladeDia_in"":24,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV2800TAF,AXIAL,"Tubeaxial 28"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2800TAF",28,unit,41810,PHP,"{""bladeDia_in"":28,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2800TAF",28,unit,41810,PHP,"{""bladeDia_in"":28,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV2800TAFDD,AXIAL,"Tubeaxial 28"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2800TAFDD",28,unit,41810,PHP,"{""bladeDia_in"":28,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2800TAFDD",28,unit,41810,PHP,"{""bladeDia_in"":28,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV3000TAF,AXIAL,"Tubeaxial 30"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000TAF",30,unit,46546,PHP,"{""bladeDia_in"":30,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000TAF",30,unit,46546,PHP,"{""bladeDia_in"":30,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV3000TAFDD,AXIAL,"Tubeaxial 30"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000TAFDD",30,unit,46546,PHP,"{""bladeDia_in"":30,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000TAFDD",30,unit,46546,PHP,"{""bladeDia_in"":30,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV3400TAF,AXIAL,"Tubeaxial 34"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3400TAF",34,unit,48995,PHP,"{""bladeDia_in"":34,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3400TAF",34,unit,48995,PHP,"{""bladeDia_in"":34,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV3400TAFDD,AXIAL,"Tubeaxial 34"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3400TAFDD",34,unit,48995,PHP,"{""bladeDia_in"":34,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3400TAFDD",34,unit,48995,PHP,"{""bladeDia_in"":34,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV3600TAF,AXIAL,"Tubeaxial 36"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3600TAF",36,unit,53319,PHP,"{""bladeDia_in"":36,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3600TAF",36,unit,53319,PHP,"{""bladeDia_in"":36,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV3600TAFDD,AXIAL,"Tubeaxial 36"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3600TAFDD",36,unit,53319,PHP,"{""bladeDia_in"":36,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3600TAFDD",36,unit,53319,PHP,"{""bladeDia_in"":36,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV4200TAF,AXIAL,"Tubeaxial 42"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4200TAF",42,unit,60523,PHP,"{""bladeDia_in"":42,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4200TAF",42,unit,60523,PHP,"{""bladeDia_in"":42,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV4200TAFDD,AXIAL,"Tubeaxial 42"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4200TAFDD",42,unit,60523,PHP,"{""bladeDia_in"":42,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4200TAFDD",42,unit,60523,PHP,"{""bladeDia_in"":42,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV4800TAF,AXIAL,"Tubeaxial 48"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4800TAF",48,unit,69357,PHP,"{""bladeDia_in"":48,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4800TAF",48,unit,69357,PHP,"{""bladeDia_in"":48,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV4800TAFDD,AXIAL,"Tubeaxial 48"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4800TAFDD",48,unit,69357,PHP,"{""bladeDia_in"":48,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4800TAFDD",48,unit,69357,PHP,"{""bladeDia_in"":48,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV5400TAF,AXIAL,"Tubeaxial 54"" Axial Fan (TAF)","Tubeaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV5400TAF",54,unit,79760,PHP,"{""bladeDia_in"":54,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV5400TAF",54,unit,79760,PHP,"{""bladeDia_in"":54,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAF""}"
 AV5400TAFDD,AXIAL,"Tubeaxial 54"" Axial Fan (TAFDD)","Tubeaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV5400TAFDD",54,unit,79760,PHP,"{""bladeDia_in"":54,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV5400TAFDD",54,unit,79760,PHP,"{""bladeDia_in"":54,""maxRpm"":2000,""maxStaticPressure_pa"":373.63,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Tubeaxial"",""tag"":""TAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV1200VAF,AXIAL,"Vaneaxial 12"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1200VAF",12,unit,23555,PHP,"{""bladeDia_in"":12,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1200VAF",12,unit,23555,PHP,"{""bladeDia_in"":12,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV1200VAFDD,AXIAL,"Vaneaxial 12"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1200VAFDD",12,unit,23555,PHP,"{""bladeDia_in"":12,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1200VAFDD",12,unit,23555,PHP,"{""bladeDia_in"":12,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV1600VAF,AXIAL,"Vaneaxial 16"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1600VAF",16,unit,30360,PHP,"{""bladeDia_in"":16,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1600VAF",16,unit,30360,PHP,"{""bladeDia_in"":16,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV1600VAFDD,AXIAL,"Vaneaxial 16"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1600VAFDD",16,unit,30360,PHP,"{""bladeDia_in"":16,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1600VAFDD",16,unit,30360,PHP,"{""bladeDia_in"":16,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV1800VAF,AXIAL,"Vaneaxial 18"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1800VAF",18,unit,35769,PHP,"{""bladeDia_in"":18,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1800VAF",18,unit,35769,PHP,"{""bladeDia_in"":18,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV1800VAFDD,AXIAL,"Vaneaxial 18"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1800VAFDD",18,unit,35769,PHP,"{""bladeDia_in"":18,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1800VAFDD",18,unit,35769,PHP,"{""bladeDia_in"":18,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV2200VAF,AXIAL,"Vaneaxial 22"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2200VAF",22,unit,52149,PHP,"{""bladeDia_in"":22,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2200VAF",22,unit,52149,PHP,"{""bladeDia_in"":22,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV2200VAFDD,AXIAL,"Vaneaxial 22"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2200VAFDD",22,unit,52149,PHP,"{""bladeDia_in"":22,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2200VAFDD",22,unit,52149,PHP,"{""bladeDia_in"":22,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV2400VAF,AXIAL,"Vaneaxial 24"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2400VAF",24,unit,55179,PHP,"{""bladeDia_in"":24,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2400VAF",24,unit,55179,PHP,"{""bladeDia_in"":24,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV2400VAFDD,AXIAL,"Vaneaxial 24"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2400VAFDD",24,unit,55179,PHP,"{""bladeDia_in"":24,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2400VAFDD",24,unit,55179,PHP,"{""bladeDia_in"":24,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV2800VAF,AXIAL,"Vaneaxial 28"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2800VAF",28,unit,55747,PHP,"{""bladeDia_in"":28,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2800VAF",28,unit,55747,PHP,"{""bladeDia_in"":28,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV2800VAFDD,AXIAL,"Vaneaxial 28"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2800VAFDD",28,unit,55747,PHP,"{""bladeDia_in"":28,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2800VAFDD",28,unit,55747,PHP,"{""bladeDia_in"":28,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV3000VAF,AXIAL,"Vaneaxial 30"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000VAF",30,unit,62061,PHP,"{""bladeDia_in"":30,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000VAF",30,unit,62061,PHP,"{""bladeDia_in"":30,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV3000VAFDD,AXIAL,"Vaneaxial 30"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000VAFDD",30,unit,62061,PHP,"{""bladeDia_in"":30,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000VAFDD",30,unit,62061,PHP,"{""bladeDia_in"":30,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV3400VAF,AXIAL,"Vaneaxial 34"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3400VAF",34,unit,65327,PHP,"{""bladeDia_in"":34,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3400VAF",34,unit,65327,PHP,"{""bladeDia_in"":34,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV3400VAFDD,AXIAL,"Vaneaxial 34"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3400VAFDD",34,unit,65327,PHP,"{""bladeDia_in"":34,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3400VAFDD",34,unit,65327,PHP,"{""bladeDia_in"":34,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV3600VAF,AXIAL,"Vaneaxial 36"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3600VAF",36,unit,71092,PHP,"{""bladeDia_in"":36,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3600VAF",36,unit,71092,PHP,"{""bladeDia_in"":36,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV3600VAFDD,AXIAL,"Vaneaxial 36"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3600VAFDD",36,unit,71092,PHP,"{""bladeDia_in"":36,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3600VAFDD",36,unit,71092,PHP,"{""bladeDia_in"":36,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV4200VAF,AXIAL,"Vaneaxial 42"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4200VAF",42,unit,80697,PHP,"{""bladeDia_in"":42,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4200VAF",42,unit,80697,PHP,"{""bladeDia_in"":42,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV4200VAFDD,AXIAL,"Vaneaxial 42"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4200VAFDD",42,unit,80697,PHP,"{""bladeDia_in"":42,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4200VAFDD",42,unit,80697,PHP,"{""bladeDia_in"":42,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV4800VAF,AXIAL,"Vaneaxial 48"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4800VAF",48,unit,92476,PHP,"{""bladeDia_in"":48,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4800VAF",48,unit,92476,PHP,"{""bladeDia_in"":48,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV4800VAFDD,AXIAL,"Vaneaxial 48"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4800VAFDD",48,unit,92476,PHP,"{""bladeDia_in"":48,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4800VAFDD",48,unit,92476,PHP,"{""bladeDia_in"":48,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
 AV5400VAF,AXIAL,"Vaneaxial 54"" Axial Fan (VAF)","Vaneaxial
 Axial Type / Belt Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV5400VAF",54,unit,106347,PHP,"{""bladeDia_in"":54,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV5400VAF",54,unit,106347,PHP,"{""bladeDia_in"":54,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""belt"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAF""}"
 AV5400VAFDD,AXIAL,"Vaneaxial 54"" Axial Fan (VAFDD)","Vaneaxial
 Axial Type / Direct Drive
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV5400VAFDD",54,unit,106347,PHP,"{""bladeDia_in"":54,""maxRpm"":4455,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"
+Painted with Epoxy Enamel Aqua Green / Model: AV5400VAFDD",54,unit,106347,PHP,"{""bladeDia_in"":54,""maxRpm"":2000,""maxStaticPressure_pa"":996.36,""bladeType"":""Axial"",""drive"":""direct"",""category"":""Axial Type"",""type"":""Vaneaxial"",""tag"":""VAFDD"",""directBands"":[{""pole"":4,""minRpm"":1663,""maxRpm"":1838}]}"

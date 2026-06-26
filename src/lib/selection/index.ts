@@ -728,6 +728,13 @@ export function selectFan(
 
   if (duty.airflow_m3hr <= 0 || selectionPressure < 0) return null;
 
+  // Static-pressure application cap (axial TAF 1.5"/VAF 4" w.g.): a duty whose
+  // SP exceeds the product's rated ceiling drops it from the results entirely
+  // (e.g. a 2" duty excludes TAF, leaving VAF), rather than extrapolating.
+  const maxSpRaw = model.specs?.maxStaticPressure_pa;
+  const maxSp = typeof maxSpRaw === "number" && !Number.isNaN(maxSpRaw) ? maxSpRaw : null;
+  if (maxSp != null && selectionPressure > maxSp + 1) return null;
+
   let withinEnvelope = true;
   let extrapolated = false;
   let rpm: number;
@@ -934,13 +941,19 @@ export function selectFan(
 
   // Axial fans (TAF/VAF tube-/vane-axial) run far above the ~1200 rpm that the
   // centrifugal "good selection" rule recommends — their design speed is set by
-  // the grid, capped only by the Class I max RPM. Exempt them from the 1200 rpm
-  // warning/downgrade so a valid high-speed axial pick still scores HIGH.
+  // the grid, capped by the axial design ceiling (maxRpm, e.g. 2000 rpm for
+  // TAF/VAF). Exempt them from the 1200 rpm warning/downgrade so a valid
+  // high-speed axial pick still scores HIGH.
   const isAxial = String(model.specs?.category ?? "") === "Axial Type";
 
   // --- Maximum-RPM check --------------------------------------------------
   const maxRpm = num(model.specs?.maxRpm) ?? num(model.specs?.maxRpmClassI);
   const rpmWithinMax = maxRpm == null ? true : rpm <= maxRpm;
+  // Belt axial fans (TAF/VAF) are applied below their design speed ceiling
+  // (2000 rpm): a duty that drives a size past that speed excludes the size
+  // (pick a larger size, or VAF over TAF), rather than offering an over-speed
+  // selection. Direct drive is fixed at ~1750 rpm, always under the ceiling.
+  if (isAxial && !options.directDrive && !rpmWithinMax) return null;
   if (!rpmWithinMax) {
     warnings.push(`Required speed ${rpm} rpm exceeds the rated max ${maxRpm} rpm.`);
   } else if (rpm > 1200 && !options.directDrive && !isAxial) {
