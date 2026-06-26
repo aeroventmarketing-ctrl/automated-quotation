@@ -990,7 +990,11 @@ export function selectFan(
     motorHp = hit ? hit[0] : motorAtLeastHp(bhp / serviceFactor);
     motorBasis = "catalog";
   } else {
-    motorHp = suggestMotorHp(bhp);
+    // Size from the BHP as displayed (rounded to 2 dp): the rating power is
+    // stored to a few decimals, so a catalogue 3.75 BHP can come back as
+    // 3.75005 and tip BHP/0.75 just past a motor size (5.0 → 5.00006 → 7.5 HP).
+    // Rounding first keeps the motor consistent with the shown BHP (3.75 → 5 HP).
+    motorHp = suggestMotorHp(Math.round(bhp * 100) / 100);
     motorBasis = "BHP/0.75";
   }
   const motorKw = Math.round(hpToKw(motorHp) * 100) / 100;
