@@ -1021,9 +1021,8 @@ export function selectFan(
   let ovWithinLimit: boolean | null = null;
   if (outletArea && outletArea > 0) {
     outletVelocity_fpm = Math.round((flowCfm / outletArea) * (isCieb ? 2 : 1));
-    if (isPropeller || isAxial) {
-      // Recommended OV limit 2200 fpm (same reference as EWF) — applies to belt
-      // and direct. Axial outlet velocity = delivered flow ÷ catalogue outlet area.
+    if (isPropeller) {
+      // Recommended OV limit 2200 fpm — applies to belt and direct.
       ovLimit_fpm = 2200;
       ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
       if (!ovWithinLimit) {
@@ -1031,6 +1030,12 @@ export function selectFan(
           `Outlet velocity ${outletVelocity_fpm} fpm exceeds the recommended ${ovLimit_fpm} fpm — consider a larger size.`,
         );
       }
+    } else if (isAxial) {
+      // Axial outlet velocity = delivered flow ÷ catalogue outlet area (same
+      // computation as EWF). Reported for information only — no OV limit is
+      // applied, so it never flags or downgrades the selection.
+      ovLimit_fpm = null;
+      ovWithinLimit = null;
     } else if (!options.directDrive) {
       // CEBDD/CFABDD disregard the OV limit — reported for info only.
       ovLimit_fpm = isDidwCfab
