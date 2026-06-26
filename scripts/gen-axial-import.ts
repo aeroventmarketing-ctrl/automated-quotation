@@ -100,13 +100,21 @@ interface SizeData {
   code: number;
   dia: number;
   sizeLabel: string;
+  outletArea_ft2: number | null;
   points: Point[];
+}
+
+/** Outlet area (ft²) from the sheet title: "… Outlet Area 0.807 ft² …". */
+function parseOutletArea(title: string): number | null {
+  const m = title.match(/Outlet\s*Area\s*([\d.]+)\s*ft/i);
+  return m ? Number(m[1]) : null;
 }
 
 /** Parse one TAF/VAF worksheet (one size) into its rating points. */
 function parseSheet(ws: ExcelJS.Worksheet): SizeData | null {
   const code = codeOf(ws.name);
   if (code == null) return null;
+  const outletArea_ft2 = parseOutletArea(String(cellVal(ws.getRow(1).getCell(1)) ?? ""));
 
   // Sub-header row: the one whose 3rd cell reads "RPM"; SP labels sit one above.
   let rpmRow = 0;
@@ -150,6 +158,7 @@ function parseSheet(ws: ExcelJS.Worksheet): SizeData | null {
     code,
     dia,
     sizeLabel: Number.isInteger(dia) ? String(dia) : String(Math.round(dia * 100) / 100),
+    outletArea_ft2,
     points,
   };
 }
@@ -239,6 +248,9 @@ async function main() {
       type: m.type,
       tag: m.tag,
     };
+    // Outlet velocity (CFM ÷ outlet area) is shown against the EWF reference
+    // limit of 2200 fpm; the area comes from the catalogue sheet title.
+    if (m.size.outletArea_ft2 != null) specs.outletArea_ft2 = m.size.outletArea_ft2;
     if (m.direct) specs.directBands = DIRECT_BANDS;
     const name = `${m.type} ${m.size.sizeLabel}" Axial Fan (${m.tag})`;
     return [

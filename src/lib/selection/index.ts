@@ -1021,8 +1021,9 @@ export function selectFan(
   let ovWithinLimit: boolean | null = null;
   if (outletArea && outletArea > 0) {
     outletVelocity_fpm = Math.round((flowCfm / outletArea) * (isCieb ? 2 : 1));
-    if (isPropeller) {
-      // Recommended OV limit 2200 fpm — applies to belt and direct.
+    if (isPropeller || isAxial) {
+      // Recommended OV limit 2200 fpm (same reference as EWF) — applies to belt
+      // and direct. Axial outlet velocity = delivered flow ÷ catalogue outlet area.
       ovLimit_fpm = 2200;
       ovWithinLimit = outletVelocity_fpm <= ovLimit_fpm;
       if (!ovWithinLimit) {
