@@ -264,30 +264,13 @@ interface GridResult {
   rpm: number;
   bhp: number; // absorbed power in HP, at standard density
   withinEnvelope: boolean;
-  /** Airflow (m³/hr) actually used — equals q unless lifted to the size's minimum. */
-  deliveredQ: number;
-  /** True when the requested flow was below the size's minimum and lifted up. */
-  lifted: boolean;
 }
 
-/**
- * Interpolate the operating point on a full CFM×SP rating grid (each cell gives
- * the RPM and BHP for that airflow + static pressure). Returns null when the
- * data is a single fan curve rather than a grid (≥2 distinct SP levels each
- * with ≥2 airflow points) — callers then fall back to the fan-law method.
- *
- * When `liftToMinFlow` is set (axial fans, where static pressure is the priority
- * and a higher delivered flow is acceptable), a requested flow below the size's
- * lowest tabulated flow at the duty SP is lifted up to that minimum rather than
- * refused — the caller then steps up to a larger size if this size's minimum
- * still needs an over-ceiling rpm.
- */
-function interpolateGrid(
-  points: RatingPoint[],
-  q: number,
-  p: number,
-  liftToMinFlow = false,
-): GridResult | null {
+/** Group rating points by static-pressure level (each a CFM-sorted series). */
+function gridBySp(points: RatingPoint[]): {
+  bySp: Map<number, { q: number; rpm: number; bhp: number }[]>;
+  spLevels: number[];
+} | null {
   const bySp = new Map<number, { q: number; rpm: number; bhp: number }[]>();
   for (const pt of points) {
     if (pt.rpm <= 0) continue;
@@ -300,29 +283,17 @@ function interpolateGrid(
     .sort((a, b) => a - b);
   if (spLevels.length < 2) return null; // single curve, not a grid
   for (const sp of spLevels) bySp.get(sp)!.sort((a, b) => a.q - b.q);
+  return { bySp, spLevels };
+}
 
-  const atQ = (series: { q: number; rpm: number; bhp: number }[], qq: number) => {
-    const first = series[0];
-    const last = series[series.length - 1];
-    if (qq <= first.q) return { rpm: first.rpm, bhp: first.bhp, inRange: qq >= first.q - 1 };
-    if (qq >= last.q) return { rpm: last.rpm, bhp: last.bhp, inRange: qq <= last.q + 1 };
-    for (let i = 0; i < series.length - 1; i++) {
-      const a = series[i];
-      const b = series[i + 1];
-      if (qq >= a.q && qq <= b.q) {
-        const t = (qq - a.q) / (b.q - a.q);
-        return { rpm: a.rpm + (b.rpm - a.rpm) * t, bhp: a.bhp + (b.bhp - a.bhp) * t, inRange: true };
-      }
-    }
-    return { rpm: last.rpm, bhp: last.bhp, inRange: false };
-  };
-
+/** Bracket a static pressure between the two printed SP levels around it. */
+function bracketSp(spLevels: number[], p: number): { lo: number; hi: number; t: number } {
   const minSp = spLevels[0];
   const maxSp = spLevels[spLevels.length - 1];
-  // A fan can always develop LESS than its lowest printed pressure, so a duty
-  // below the minimum SP column is allowed and selected at that lowest column.
-  // Only the high-pressure edge counts as outside the published data.
-  const pAboveMax = p > maxSp + 1;
+  // Snap to a printed column when the duty SP is within a hair of it (unit
+  // conversion drifts the duty Pa by a few thousandths vs the stored grid),
+  // so a 0.25" duty uses the 0.25" column rather than spilling into the next.
+  for (const lvl of spLevels) if (Math.abs(p - lvl) <= 0.5) return { lo: lvl, hi: lvl, t: 0 };
   let lo = minSp;
   let hi = maxSp;
   if (p <= minSp) lo = hi = minSp;
@@ -335,29 +306,115 @@ function interpolateGrid(
         break;
       }
     }
+  const t = lo === hi ? 0 : (p - lo) / (hi - lo);
+  return { lo, hi, t };
+}
+
+/** Interpolate {rpm,bhp} at an airflow within one SP series. */
+function atQ(series: { q: number; rpm: number; bhp: number }[], qq: number) {
+  const first = series[0];
+  const last = series[series.length - 1];
+  if (qq <= first.q) return { rpm: first.rpm, bhp: first.bhp, inRange: qq >= first.q - 1 };
+  if (qq >= last.q) return { rpm: last.rpm, bhp: last.bhp, inRange: qq <= last.q + 1 };
+  for (let i = 0; i < series.length - 1; i++) {
+    const a = series[i];
+    const b = series[i + 1];
+    if (qq >= a.q && qq <= b.q) {
+      const t = (qq - a.q) / (b.q - a.q);
+      return { rpm: a.rpm + (b.rpm - a.rpm) * t, bhp: a.bhp + (b.bhp - a.bhp) * t, inRange: true };
+    }
+  }
+  return { rpm: last.rpm, bhp: last.bhp, inRange: false };
+}
+
+/**
+ * Interpolate the operating point on a full CFM×SP rating grid (each cell gives
+ * the RPM and BHP for that airflow + static pressure). Returns null when the
+ * data is a single fan curve rather than a grid (≥2 distinct SP levels each
+ * with ≥2 airflow points) — callers then fall back to the fan-law method.
+ */
+function interpolateGrid(
+  points: RatingPoint[],
+  q: number,
+  p: number,
+): GridResult | null {
+  const g = gridBySp(points);
+  if (!g) return null;
+  const { bySp, spLevels } = g;
+  const maxSp = spLevels[spLevels.length - 1];
+  // A fan can always develop LESS than its lowest printed pressure, so a duty
+  // below the minimum SP column is allowed and selected at that lowest column.
+  // Only the high-pressure edge counts as outside the published data.
+  const pAboveMax = p > maxSp + 1;
+  const { lo, hi, t } = bracketSp(spLevels, p);
 
   const loS = bySp.get(lo)!;
   const hiS = bySp.get(hi)!;
-  const t = lo === hi ? 0 : (p - lo) / (hi - lo);
+  const aLo = atQ(loS, q);
+  const aHi = atQ(hiS, q);
+  const rpm = aLo.rpm + (aHi.rpm - aLo.rpm) * t;
+  const bhp = aLo.bhp + (aHi.bhp - aLo.bhp) * t;
 
   // Envelope = the airflow range interpolated between the two pressure levels
   // (the rating grid is triangular, so each SP level has its own CFM span).
   const minQ = loS[0].q + (hiS[0].q - loS[0].q) * t;
   const maxQ = loS[loS.length - 1].q + (hiS[hiS.length - 1].q - loS[loS.length - 1].q) * t;
+  const qInRange = q >= minQ - 1 && q <= maxQ + 1;
 
-  // Static-pressure-priority lift: deliver the size's minimum flow when the
-  // request is below it (axial). Otherwise operate at the requested flow.
-  const lifted = liftToMinFlow && q < minQ;
-  const qEff = lifted ? minQ : q;
+  return { rpm: Math.round(rpm), bhp, withinEnvelope: !pAboveMax && qInRange };
+}
 
-  const aLo = atQ(loS, qEff);
-  const aHi = atQ(hiS, qEff);
+interface AxialBeltResult {
+  rpm: number;
+  bhp: number; // absorbed power in HP, at standard density
+  /** Catalogue airflow (m³/hr) actually delivered — a printed CFM row, ≥ requested. */
+  deliveredQ: number;
+  withinEnvelope: boolean;
+}
+
+/**
+ * Axial belt operating point, snapped to the catalogue. Static pressure is the
+ * priority and a higher delivered flow is acceptable, so the fan is quoted at an
+ * actual printed CFM row: the smallest tabulated flow ≥ the requested flow that
+ * the size can develop at the duty SP (the higher-SP column's rows are the
+ * limiting set). RPM/BHP come from that catalogue row (interpolated across the
+ * two SP columns), so the delivered flow is always a real catalogue value rather
+ * than an interpolated one. Returns null for non-grid data; flags out-of-range
+ * when the requested flow exceeds the size's largest tabulated flow at the SP.
+ */
+function axialBeltOperatingPoint(
+  points: RatingPoint[],
+  q: number,
+  p: number,
+): AxialBeltResult | null {
+  const g = gridBySp(points);
+  if (!g) return null;
+  const { bySp, spLevels } = g;
+  const maxSp = spLevels[spLevels.length - 1];
+  const pAboveMax = p > maxSp + 1;
+  const { lo, hi, t } = bracketSp(spLevels, p);
+  const loS = bySp.get(lo)!;
+  const hiS = bySp.get(hi)!;
+
+  // The higher-SP column lists the flows the size can develop at this SP; snap
+  // the requested flow up to the smallest such printed flow ≥ request.
+  const rows = hiS.map((r) => r.q);
+  const maxRow = rows[rows.length - 1];
+  let deliveredQ = rows.find((c) => c >= q - 1);
+  let withinEnvelope = !pAboveMax;
+  if (deliveredQ == null) {
+    // Requested flow is above the size's largest tabulated flow at this SP —
+    // out of the published range; report the top row, flagged out-of-envelope.
+    deliveredQ = maxRow;
+    withinEnvelope = false;
+  }
+
+  const aLo = atQ(loS, deliveredQ);
+  const aHi = atQ(hiS, deliveredQ);
   const rpm = aLo.rpm + (aHi.rpm - aLo.rpm) * t;
   const bhp = aLo.bhp + (aHi.bhp - aLo.bhp) * t;
 
-  const qInRange = qEff >= minQ - 1 && qEff <= maxQ + 1;
-
-  return { rpm: Math.round(rpm), bhp, withinEnvelope: !pAboveMax && qInRange, deliveredQ: qEff, lifted };
+  return { rpm: Math.round(rpm), bhp, deliveredQ, withinEnvelope };
 }
 
 // ---------------------------------------------------------------------------
@@ -814,25 +871,40 @@ export function selectFan(
   } else {
 
   // --- Preferred path: direct interpolation on the CFM×SP rating grid ------
-  // Axial fans lift the flow up to the size's minimum when the request is below
-  // it (static pressure is the priority; a higher delivered flow is accepted).
-  const grid = interpolateGrid(model.ratingPoints, duty.airflow_m3hr, selectionPressure, isAxial);
-  if (grid) {
+  // Axial fans quote an actual catalogue CFM row (static pressure priority; a
+  // higher delivered flow is acceptable), so the delivered flow is a real
+  // catalogue value; centrifugal fans interpolate the requested flow directly.
+  const axialOp = isAxial
+    ? axialBeltOperatingPoint(model.ratingPoints, duty.airflow_m3hr, selectionPressure)
+    : null;
+  const grid = isAxial ? null : interpolateGrid(model.ratingPoints, duty.airflow_m3hr, selectionPressure);
+  if (axialOp) {
+    usedGrid = true;
+    rpm = axialOp.rpm;
+    dutyPowerStd = hpToKw(axialOp.bhp);
+    withinEnvelope = axialOp.withinEnvelope;
+    extrapolated = !axialOp.withinEnvelope;
+    speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
+    // The delivered flow is the snapped catalogue row (always shown). When it
+    // exceeds the request, note the higher delivered flow.
+    selectedAirflow_m3hr = Math.round(axialOp.deliveredQ);
+    if (axialOp.deliveredQ > duty.airflow_m3hr + 1) {
+      warnings.push(
+        `Delivers ${Math.round(axialOp.deliveredQ * CFM_PER_M3HR)} cfm at the required static pressure (the next catalogue flow above the requested) at ${rpm} rpm.`,
+      );
+    }
+    if (!withinEnvelope) {
+      warnings.push(
+        "Duty point is outside the rated grid; result is extrapolated and must be confirmed by an engineer.",
+      );
+    }
+  } else if (grid) {
     usedGrid = true;
     rpm = grid.rpm;
     dutyPowerStd = hpToKw(grid.bhp);
     withinEnvelope = grid.withinEnvelope;
     extrapolated = !grid.withinEnvelope;
     speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
-    if (grid.lifted) {
-      // Below the size's minimum flow at this SP — report the higher delivered
-      // flow (the engine prefers the smallest size whose minimum still fits the
-      // rpm ceiling, so a too-fast small size is dropped in favour of the next).
-      selectedAirflow_m3hr = Math.round(grid.deliveredQ);
-      warnings.push(
-        `Delivers ~${Math.round(grid.deliveredQ * CFM_PER_M3HR)} cfm at the required static pressure (above the requested flow) at ${rpm} rpm.`,
-      );
-    }
     if (!withinEnvelope) {
       warnings.push(
         "Duty point is outside the rated grid; result is extrapolated and must be confirmed by an engineer.",
@@ -1136,17 +1208,30 @@ export function selectFans(
     }
     if (rank[a.confidence] !== rank[b.confidence])
       return rank[a.confidence] - rank[b.confidence];
-    // Prefer the tightest delivered flow (least over-delivery above the request):
-    // a belt fan that meets the request exactly carries no selectedAirflow
-    // (excess 0) and beats an axial step-up or direct-drive size that delivers a
-    // higher flow; among step-ups, the smallest over-delivery wins.
-    const aExcess = (a.selectedAirflow_m3hr ?? a.dutyAirflow_m3hr) - a.dutyAirflow_m3hr;
-    const bExcess = (b.selectedAirflow_m3hr ?? b.dutyAirflow_m3hr) - b.dutyAirflow_m3hr;
-    if (Math.abs(aExcess - bExcess) > 1) return aExcess - bExcess;
+    // Direct drive: prefer the tightest delivered flow (least increase over the
+    // request) — the fan runs at a fixed speed, so a smaller size that still
+    // meets the flow is the better pick.
+    if (options.directDrive) {
+      const aD = Math.abs((a.selectedAirflow_m3hr ?? a.dutyAirflow_m3hr) - a.dutyAirflow_m3hr);
+      const bD = Math.abs((b.selectedAirflow_m3hr ?? b.dutyAirflow_m3hr) - b.dutyAirflow_m3hr);
+      if (Math.abs(aD - bD) > 1) return aD - bD;
+    }
     const effA = a.efficiency ?? 0;
     const effB = b.efficiency ?? 0;
     if (Math.abs(effA - effB) > 0.005) return effB - effA;
+    // Most economical motor first, then the smaller (cheaper) fan for an equal
+    // motor — for belt axial this prefers e.g. the 18" at 0.5 HP over a larger
+    // 0.5 HP size, rather than whichever happens to hit the flow exactly.
     if (Math.abs(a.motorKw - b.motorKw) > 1e-6) return a.motorKw - b.motorKw;
+    const sizeOf = (r: SelectionResult): number => {
+      const n = r.sizeLabel != null ? parseFloat(r.sizeLabel) : NaN;
+      if (!Number.isNaN(n)) return n;
+      const m = r.modelCode.match(/(\d{3,5})/);
+      return m ? parseInt(m[1], 10) / 100 : 0;
+    };
+    const aSize = sizeOf(a);
+    const bSize = sizeOf(b);
+    if (aSize !== bSize) return aSize - bSize;
     return Math.abs(a.speedRatio - 1) - Math.abs(b.speedRatio - 1);
   });
   return results;
