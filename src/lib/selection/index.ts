@@ -264,6 +264,10 @@ interface GridResult {
   rpm: number;
   bhp: number; // absorbed power in HP, at standard density
   withinEnvelope: boolean;
+  /** Airflow (m³/hr) actually used — equals q unless lifted to the size's minimum. */
+  deliveredQ: number;
+  /** True when the requested flow was below the size's minimum and lifted up. */
+  lifted: boolean;
 }
 
 /**
@@ -271,11 +275,18 @@ interface GridResult {
  * the RPM and BHP for that airflow + static pressure). Returns null when the
  * data is a single fan curve rather than a grid (≥2 distinct SP levels each
  * with ≥2 airflow points) — callers then fall back to the fan-law method.
+ *
+ * When `liftToMinFlow` is set (axial fans, where static pressure is the priority
+ * and a higher delivered flow is acceptable), a requested flow below the size's
+ * lowest tabulated flow at the duty SP is lifted up to that minimum rather than
+ * refused — the caller then steps up to a larger size if this size's minimum
+ * still needs an over-ceiling rpm.
  */
 function interpolateGrid(
   points: RatingPoint[],
   q: number,
   p: number,
+  liftToMinFlow = false,
 ): GridResult | null {
   const bySp = new Map<number, { q: number; rpm: number; bhp: number }[]>();
   for (const pt of points) {
@@ -327,19 +338,26 @@ function interpolateGrid(
 
   const loS = bySp.get(lo)!;
   const hiS = bySp.get(hi)!;
-  const aLo = atQ(loS, q);
-  const aHi = atQ(hiS, q);
   const t = lo === hi ? 0 : (p - lo) / (hi - lo);
-  const rpm = aLo.rpm + (aHi.rpm - aLo.rpm) * t;
-  const bhp = aLo.bhp + (aHi.bhp - aLo.bhp) * t;
 
   // Envelope = the airflow range interpolated between the two pressure levels
   // (the rating grid is triangular, so each SP level has its own CFM span).
   const minQ = loS[0].q + (hiS[0].q - loS[0].q) * t;
   const maxQ = loS[loS.length - 1].q + (hiS[hiS.length - 1].q - loS[loS.length - 1].q) * t;
-  const qInRange = q >= minQ - 1 && q <= maxQ + 1;
 
-  return { rpm: Math.round(rpm), bhp, withinEnvelope: !pAboveMax && qInRange };
+  // Static-pressure-priority lift: deliver the size's minimum flow when the
+  // request is below it (axial). Otherwise operate at the requested flow.
+  const lifted = liftToMinFlow && q < minQ;
+  const qEff = lifted ? minQ : q;
+
+  const aLo = atQ(loS, qEff);
+  const aHi = atQ(hiS, qEff);
+  const rpm = aLo.rpm + (aHi.rpm - aLo.rpm) * t;
+  const bhp = aLo.bhp + (aHi.bhp - aLo.bhp) * t;
+
+  const qInRange = qEff >= minQ - 1 && qEff <= maxQ + 1;
+
+  return { rpm: Math.round(rpm), bhp, withinEnvelope: !pAboveMax && qInRange, deliveredQ: qEff, lifted };
 }
 
 // ---------------------------------------------------------------------------
@@ -728,6 +746,12 @@ export function selectFan(
 
   if (duty.airflow_m3hr <= 0 || selectionPressure < 0) return null;
 
+  // Axial fans (TAF/VAF) prioritise static pressure and accept a higher
+  // delivered flow, run below a design speed ceiling (e.g. 2000 rpm), and have
+  // per-product SP caps — flagged here so the belt grid path can lift the flow
+  // and the rpm/SP guards can step the selection up to a larger size.
+  const isAxial = String(model.specs?.category ?? "") === "Axial Type";
+
   // Static-pressure application cap (axial TAF 1.5"/VAF 4" w.g.): a duty whose
   // SP exceeds the product's rated ceiling drops it from the results entirely
   // (e.g. a 2" duty excludes TAF, leaving VAF), rather than extrapolating.
@@ -790,7 +814,9 @@ export function selectFan(
   } else {
 
   // --- Preferred path: direct interpolation on the CFM×SP rating grid ------
-  const grid = interpolateGrid(model.ratingPoints, duty.airflow_m3hr, selectionPressure);
+  // Axial fans lift the flow up to the size's minimum when the request is below
+  // it (static pressure is the priority; a higher delivered flow is accepted).
+  const grid = interpolateGrid(model.ratingPoints, duty.airflow_m3hr, selectionPressure, isAxial);
   if (grid) {
     usedGrid = true;
     rpm = grid.rpm;
@@ -798,6 +824,15 @@ export function selectFan(
     withinEnvelope = grid.withinEnvelope;
     extrapolated = !grid.withinEnvelope;
     speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
+    if (grid.lifted) {
+      // Below the size's minimum flow at this SP — report the higher delivered
+      // flow (the engine prefers the smallest size whose minimum still fits the
+      // rpm ceiling, so a too-fast small size is dropped in favour of the next).
+      selectedAirflow_m3hr = Math.round(grid.deliveredQ);
+      warnings.push(
+        `Delivers ~${Math.round(grid.deliveredQ * CFM_PER_M3HR)} cfm at the required static pressure (above the requested flow) at ${rpm} rpm.`,
+      );
+    }
     if (!withinEnvelope) {
       warnings.push(
         "Duty point is outside the rated grid; result is extrapolated and must be confirmed by an engineer.",
@@ -943,8 +978,7 @@ export function selectFan(
   // centrifugal "good selection" rule recommends — their design speed is set by
   // the grid, capped by the axial design ceiling (maxRpm, e.g. 2000 rpm for
   // TAF/VAF). Exempt them from the 1200 rpm warning/downgrade so a valid
-  // high-speed axial pick still scores HIGH.
-  const isAxial = String(model.specs?.category ?? "") === "Axial Type";
+  // high-speed axial pick still scores HIGH (isAxial computed above).
 
   // --- Maximum-RPM check --------------------------------------------------
   const maxRpm = num(model.specs?.maxRpm) ?? num(model.specs?.maxRpmClassI);
@@ -1102,12 +1136,13 @@ export function selectFans(
     }
     if (rank[a.confidence] !== rank[b.confidence])
       return rank[a.confidence] - rank[b.confidence];
-    // Direct drive: prefer the tightest delivered flow (least increase over the request).
-    if (a.selectedAirflow_m3hr != null && b.selectedAirflow_m3hr != null) {
-      const aD = Math.abs(a.selectedAirflow_m3hr - a.dutyAirflow_m3hr);
-      const bD = Math.abs(b.selectedAirflow_m3hr - b.dutyAirflow_m3hr);
-      if (Math.abs(aD - bD) > 1) return aD - bD;
-    }
+    // Prefer the tightest delivered flow (least over-delivery above the request):
+    // a belt fan that meets the request exactly carries no selectedAirflow
+    // (excess 0) and beats an axial step-up or direct-drive size that delivers a
+    // higher flow; among step-ups, the smallest over-delivery wins.
+    const aExcess = (a.selectedAirflow_m3hr ?? a.dutyAirflow_m3hr) - a.dutyAirflow_m3hr;
+    const bExcess = (b.selectedAirflow_m3hr ?? b.dutyAirflow_m3hr) - b.dutyAirflow_m3hr;
+    if (Math.abs(aExcess - bExcess) > 1) return aExcess - bExcess;
     const effA = a.efficiency ?? 0;
     const effB = b.efficiency ?? 0;
     if (Math.abs(effA - effB) > 0.005) return effB - effA;
