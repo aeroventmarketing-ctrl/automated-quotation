@@ -142,6 +142,8 @@ const PROPELLER_FAN_TYPES = new Set([
   "Panel Fan",
 ]);
 const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
+// Pre-built units selected by model (no blade type / drive / material config).
+const NO_BLADE_DRIVE_TYPES = new Set(["Ceiling Cassette"]);
 /** Wheel-construction label for line 2 of a blower/fan description. */
 function constructionLabel(type: string): string {
   if (PROPELLER_FAN_TYPES.has(type)) return "Propeller Type";
@@ -814,6 +816,10 @@ export function QuotationBuilder({
                 </>
               )}
             </>
+          ) : NO_BLADE_DRIVE_TYPES.has(c.type) ? (
+            // Pre-built units (e.g. Ceiling Cassette) have no blade type / drive
+            // and aren't material-configurable — the model is picked by selection.
+            null
           ) : (
             <>
               <Select
@@ -840,19 +846,23 @@ export function QuotationBuilder({
               </Select>
             </>
           )}
-          {/* Material applies to both blowers and accessories */}
-          <Select
-            value={c.material || "Black Iron Sheet"}
-            disabled={!editable}
-            onChange={(e) => applyMotor(l.id, { material: e.target.value })}
-          >
-            {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
-          </Select>
+          {/* Material applies to blowers and accessories, not pre-built units. */}
+          {!NO_BLADE_DRIVE_TYPES.has(c.type) && (
+            <Select
+              value={c.material || "Black Iron Sheet"}
+              disabled={!editable}
+              onChange={(e) => applyMotor(l.id, { material: e.target.value })}
+            >
+              {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
+            </Select>
+          )}
         </div>
         <p className="text-xs text-muted-foreground">
           {c.category === "Ventilation Accessories"
             ? "Category · Type · Shape/Mounting · Size — Round = diameter, Square/Rectangle = L × W (mm), isolator = capacity (kg)."
-            : "Product Category · Type · Blade Type · Drive (more details to follow)."}
+            : NO_BLADE_DRIVE_TYPES.has(c.type)
+              ? "Category · Type — run the selection to pick a model by duty."
+              : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
       </div>
     );
