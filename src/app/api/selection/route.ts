@@ -80,6 +80,8 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
       OR: ["NSB", "NFB", "NLB"].map((s) => ({ modelCode: { endsWith: s } })),
     };
   }
+  // KDK mini sirocco fans — model codes like 10CGB15 / 21CGB15.
+  if (t === "MINISIROCCO") return { modelCode: { endsWith: "CGB15" } };
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {

@@ -357,6 +357,7 @@ function selectionTag(type: string, bladeType: string, drive = "", category = ""
   // KDK fixed-speed units query their own catalogue by type.
   if (KDK_TYPES.has(type)) return "CASSETTE";
   if (type === "Cabinet Fan") return "CABINETFAN";
+  if (type === "Mini Sirocco") return "MINISIROCCO";
   // Axial fans query their own belt/direct catalogue: TAF/TAFDD, VAF/VAFDD.
   if (category === "Axial Type") {
     const base = type === "Vaneaxial" ? "VAF" : "TAF";
@@ -1207,11 +1208,12 @@ export function QuotationBuilder({
                                 </span>
                               </div>
                               {isPrebuiltUnit(l.specs) ? (
-                                // Fixed-speed units (ceiling cassette) are rated in
-                                // watts and m³/hr, not HP / CFM.
+                                // KDK fixed-speed units are rated in watts and m³/hr,
+                                // not HP / CFM. rpm / W are omitted when unknown.
                                 <p className="text-muted-foreground">
-                                  {r.rpm} rpm · {Math.round(r.power_kw * 10000) / 10} W
-                                  {` · delivers ${Math.round(r.selectedAirflow_m3hr ?? r.dutyAirflow_m3hr)} m³/hr`}
+                                  {r.rpm > 0 ? `${r.rpm} rpm · ` : ""}
+                                  {r.power_kw > 0 ? `${Math.round(r.power_kw * 10000) / 10} W · ` : ""}
+                                  delivers {Math.round(r.selectedAirflow_m3hr ?? r.dutyAirflow_m3hr)} m³/hr
                                 </p>
                               ) : (
                                 <p className="text-muted-foreground">

@@ -1,0 +1,29 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+10CGB15,CENTRIFUGAL,"KDK Mini Sirocco 10 (10CGB15)","KDK Mini Sirocco Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 132 m³/hr (220V 60Hz Hi)
+Model: 10CGB15",10,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Mini Sirocco"",""tag"":""MINISIROCCO"",""fixedSpeed"":true,""speeds"":2,""airVolume_cmh"":132}"
+12CGB15,CENTRIFUGAL,"KDK Mini Sirocco 12 (12CGB15)","KDK Mini Sirocco Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 235 m³/hr (220V 60Hz Hi)
+Model: 12CGB15",12,unit,7963,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Mini Sirocco"",""tag"":""MINISIROCCO"",""fixedSpeed"":true,""speeds"":2,""airVolume_cmh"":235}"
+14CGB15,CENTRIFUGAL,"KDK Mini Sirocco 14 (14CGB15)","KDK Mini Sirocco Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 258 m³/hr (220V 60Hz Hi)
+Model: 14CGB15",14,unit,8793,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Mini Sirocco"",""tag"":""MINISIROCCO"",""fixedSpeed"":true,""speeds"":2,""airVolume_cmh"":258}"
+16CGB15,CENTRIFUGAL,"KDK Mini Sirocco 16 (16CGB15)","KDK Mini Sirocco Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 510 m³/hr (220V 60Hz Hi)
+Model: 16CGB15",16,unit,12941,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Mini Sirocco"",""tag"":""MINISIROCCO"",""fixedSpeed"":true,""speeds"":2,""airVolume_cmh"":510}"
+17CGB15,CENTRIFUGAL,"KDK Mini Sirocco 17 (17CGB15)","KDK Mini Sirocco Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 730 m³/hr (220V 60Hz Hi)
+Model: 17CGB15",17,unit,15484,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Mini Sirocco"",""tag"":""MINISIROCCO"",""fixedSpeed"":true,""speeds"":2,""airVolume_cmh"":730}"
+19CGB15,CENTRIFUGAL,"KDK Mini Sirocco 19 (19CGB15)","KDK Mini Sirocco Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 880 m³/hr (220V 60Hz Hi)
+Model: 19CGB15",19,unit,19687,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Mini Sirocco"",""tag"":""MINISIROCCO"",""fixedSpeed"":true,""speeds"":2,""airVolume_cmh"":880}"
+21CGB15,CENTRIFUGAL,"KDK Mini Sirocco 21 (21CGB15)","KDK Mini Sirocco Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 1440 m³/hr (220V 60Hz Hi)
+Model: 21CGB15",21,unit,37494,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Mini Sirocco"",""tag"":""MINISIROCCO"",""fixedSpeed"":true,""speeds"":2,""airVolume_cmh"":1440}"
