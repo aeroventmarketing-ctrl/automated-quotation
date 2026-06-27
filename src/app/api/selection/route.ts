@@ -84,6 +84,15 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "MINISIROCCO") return { modelCode: { endsWith: "CGB15" } };
   // Wall Mounted Fan, High Pressure Series — model codes like 25GSC / 60GSC.
   if (t === "GSCHP") return { modelCode: { endsWith: "GSC" } };
+  // Wall Mounted Fan, Shutter Series — shutter/louver wall fans. The codes share
+  // no common suffix (AAQ1/ALH/AUH/RLF/ALF/AUH/KQT/RLE), so list them explicitly.
+  if (t === "WMFSHUTTER") {
+    return {
+      modelCode: {
+        in: ["15AAQ1", "20ALH", "20AUH", "25ALH", "25AUH", "25RLF", "30ALF", "30AUH", "30KQT", "30RLE", "40KQT"],
+      },
+    };
+  }
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {
