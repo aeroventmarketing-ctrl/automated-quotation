@@ -59,7 +59,8 @@ const GSCS: Gsc[] = [
   },
   {
     code: "45GSC", blade_mm: 450, airVolume_cmh: 5970, power_w: 325, noise_db: 54, rpm: 1630, weight_kg: 19, volts: 220, price: 0,
-    curve: [[0, 118], [1500, 116], [3000, 110], [4000, 100], [4700, 88], [5200, 68], [5600, 40], [5850, 15], [5970, 0]],
+    // Black curve (the higher-flow of the two on the sheet, ending at 5,970 m³/h).
+    curve: [[0, 118], [2000, 117], [3500, 116], [4700, 114], [5000, 104], [5300, 90], [5500, 75], [5700, 52], [5850, 28], [5970, 0]],
   },
   {
     code: "50GSC", blade_mm: 500, airVolume_cmh: 7100, power_w: 326, noise_db: 51, rpm: 1130, weight_kg: 22.5, volts: 230, price: 0,
