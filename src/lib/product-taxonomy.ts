@@ -351,13 +351,6 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   },
   {
     "category": "Other Products",
-    "type": "Compact Axial Fan",
-    "brand": "KDK",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
     "type": "Mini Sirocco",
     "brand": "KDK",
     "bladeTypes": [],
