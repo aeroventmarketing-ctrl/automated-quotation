@@ -21,7 +21,7 @@ import {
   type Voltage,
 } from "@/lib/pricing/motors";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus } from "lucide-react";
-import { PRODUCT_CATEGORIES, typesFor, entryFor } from "@/lib/product-taxonomy";
+import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
 import {
@@ -53,6 +53,7 @@ interface LineSpecs {
   blowerModel: string | null; // base catalogue model code, e.g. AV1225CEB
   // Per-item product selection (classification).
   category: string;
+  brand: string;
   type: string;
   bladeType: string;
   drive: string;
@@ -143,8 +144,9 @@ const PROPELLER_FAN_TYPES = new Set([
 ]);
 const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
 // KDK pre-built units: selected by model (no blade type / drive / material) and
-// always quoted VAT-inclusive. "Ceiling Cassette" is kept for older saved quotes.
-const KDK_TYPES = new Set(["KDK - Ceiling Cassette", "Ceiling Cassette"]);
+// always quoted VAT-inclusive. The "KDK - Ceiling Cassette" alias covers quotes
+// saved during the brief window the brand was part of the type name.
+const KDK_TYPES = new Set(["Ceiling Cassette", "KDK - Ceiling Cassette"]);
 const NO_BLADE_DRIVE_TYPES = KDK_TYPES;
 /** Wheel-construction label for line 2 of a blower/fan description. */
 function constructionLabel(type: string): string {
@@ -513,7 +515,7 @@ export function QuotationBuilder({
   const vatRate = config.vatRate;
   // KDK products (ceiling cassette) are always VAT-inclusive; the presentation is
   // forced to INCLUSIVE and locked when any line is a KDK product.
-  const hasKdk = lines.some((l) => KDK_TYPES.has(l.specs.type));
+  const hasKdk = lines.some((l) => l.specs.brand === "KDK" || KDK_TYPES.has(l.specs.type));
   const effectiveVatMode = hasKdk ? "INCLUSIVE" : vatMode;
   const totals = useMemo(() => {
     const gross = lines.reduce((a, l) => a + l.qty * l.unitPrice, 0); // VAT-inclusive
@@ -551,7 +553,7 @@ export function QuotationBuilder({
           itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
           motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
           bodyPrice: null, blowerModel: null,
-          category: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
+          category: "", brand: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
         },
         rawSpecs: {},
       },
@@ -792,14 +794,25 @@ export function QuotationBuilder({
           <Select
             value={c.category}
             disabled={!editable}
-            onChange={(e) => set({ category: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+            onChange={(e) => set({ category: e.target.value, brand: "", type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
           >
             <option value="">Category…</option>
             {PRODUCT_CATEGORIES.map((x) => (<option key={x} value={x}>{x}</option>))}
           </Select>
+          {/* Make/brand level (e.g. KDK) for categories that carry brands. */}
+          {brandsFor(c.category).length > 0 && (
+            <Select
+              value={c.brand}
+              disabled={!editable || !c.category}
+              onChange={(e) => set({ brand: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+            >
+              <option value="">Brand…</option>
+              {brandsFor(c.category).map((b) => (<option key={b} value={b}>{b}</option>))}
+            </Select>
+          )}
           <Select
             value={c.type}
-            disabled={!editable || !c.category}
+            disabled={!editable || !c.category || (brandsFor(c.category).length > 0 && !c.brand)}
             onChange={(e) => {
               const type = e.target.value;
               // Blower/fan categories route through applyMotor so the description
@@ -815,7 +828,7 @@ export function QuotationBuilder({
             }}
           >
             <option value="">Type…</option>
-            {typesFor(c.category).map((t) => (<option key={t} value={t}>{t}</option>))}
+            {typesFor(c.category, brandsFor(c.category).length > 0 ? c.brand : undefined).map((t) => (<option key={t} value={t}>{t}</option>))}
           </Select>
           {c.category === "Ventilation Accessories" ? (
             <>

@@ -9,6 +9,8 @@ export interface TaxonomyEntry {
   type: string;
   bladeTypes: string[];
   drives: string[];
+  /** Optional make/brand level (e.g. "KDK") shown between Category and Type. */
+  brand?: string;
 }
 
 export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
@@ -352,7 +354,8 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   },
   {
     "category": "Other Products",
-    "type": "KDK - Ceiling Cassette",
+    "type": "Ceiling Cassette",
+    "brand": "KDK",
     "bladeTypes": [],
     "drives": []
   },
@@ -422,9 +425,30 @@ export const PRODUCT_CATEGORIES: string[] = Array.from(
   new Set(PRODUCT_TAXONOMY.map((e) => e.category)),
 );
 
-export function typesFor(category: string): string[] {
+/** Default brand bucket for entries in a branded category that have no brand. */
+export const DEFAULT_BRAND = "Aerovent";
+
+/**
+ * Brands (makes) offered in a category — only when at least one entry carries a
+ * brand. Entries without a brand fall under DEFAULT_BRAND, so the category still
+ * exposes all its types via a brand level. Empty when the category isn't branded.
+ */
+export function brandsFor(category: string): string[] {
+  const entries = PRODUCT_TAXONOMY.filter((e) => e.category === category);
+  if (!entries.some((e) => e.brand)) return [];
+  return Array.from(new Set(entries.map((e) => e.brand || DEFAULT_BRAND)));
+}
+
+/** Types in a category, optionally filtered to one brand (for branded categories). */
+export function typesFor(category: string, brand?: string): string[] {
   return Array.from(
-    new Set(PRODUCT_TAXONOMY.filter((e) => e.category === category).map((e) => e.type)),
+    new Set(
+      PRODUCT_TAXONOMY.filter(
+        (e) =>
+          e.category === category &&
+          (!brand || (e.brand || DEFAULT_BRAND) === brand),
+      ).map((e) => e.type),
+    ),
   );
 }
 

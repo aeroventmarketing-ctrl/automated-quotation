@@ -105,6 +105,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               bodyPrice: num(s.bodyPrice),
               blowerModel: typeof s.blowerModel === "string" ? s.blowerModel : null,
               category: typeof s.category === "string" ? s.category : "",
+              brand: typeof s.brand === "string" ? s.brand : "",
               type: typeof s.type === "string" ? s.type : "",
               bladeType: typeof s.bladeType === "string" ? s.bladeType : "",
               drive: typeof s.drive === "string" ? s.drive : "",

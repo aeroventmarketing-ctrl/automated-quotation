@@ -123,7 +123,8 @@ function main() {
         `Model: ${code}`;
       const specs: Record<string, unknown> = {
         category: "Other Products",
-        type: "KDK - Ceiling Cassette",
+        brand: "KDK",
+        type: "Ceiling Cassette",
         tag: "CASSETTE",
         fixedSpeed: true,
         rpm: c.rpm,
