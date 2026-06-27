@@ -727,7 +727,8 @@ export function QuotationBuilder({
           return {
             ...l,
             specs,
-            unitPrice: round2(base * (1 + vatRate)),
+            // KDK catalogue prices are already VAT-inclusive — use as-is.
+            unitPrice: round2(base),
             descriptionSnapshot: buildKdkDescription(specs.type, model),
           };
         }
@@ -1215,7 +1216,12 @@ export function QuotationBuilder({
                           const cat = catalog[r.modelId];
                           const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
                           const estBody = (cat?.basePrice ?? 0) * bladeFactor(l.specs) * materialFactor(l.specs);
-                          const est = estBody > 0 ? round2(computeUnitPrice(estBody, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate)) : 0;
+                          // KDK catalogue prices are already VAT-inclusive (no motor add-on).
+                          const est = isPrebuiltUnit(l.specs)
+                            ? round2(cat?.basePrice ?? 0)
+                            : estBody > 0
+                              ? round2(computeUnitPrice(estBody, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate))
+                              : 0;
                           const isRec = r.modelId === w.rec.modelId;
                           return (
                             <button
