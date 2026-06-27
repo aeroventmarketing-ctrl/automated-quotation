@@ -342,18 +342,6 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   },
   {
     "category": "Other Products",
-    "type": "Air Curtain",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Cabinet Fan",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
     "type": "Ceiling Cassette",
     "brand": "KDK",
     "bladeTypes": [],
@@ -361,7 +349,36 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   },
   {
     "category": "Other Products",
-    "type": "Compact Axial Flow Fan",
+    "type": "Compact Axial Fan",
+    "brand": "KDK",
+    "bladeTypes": [],
+    "drives": []
+  },
+  {
+    "category": "Other Products",
+    "type": "Mini Sirocco",
+    "brand": "KDK",
+    "bladeTypes": [],
+    "drives": []
+  },
+  {
+    "category": "Other Products",
+    "type": "Cabinet Fan",
+    "brand": "KDK",
+    "bladeTypes": [],
+    "drives": []
+  },
+  {
+    "category": "Other Products",
+    "type": "Air Curtain",
+    "brand": "KDK",
+    "bladeTypes": [],
+    "drives": []
+  },
+  {
+    "category": "Other Products",
+    "type": "Wall Mounted Fan",
+    "brand": "KDK",
     "bladeTypes": [],
     "drives": []
   },
@@ -380,12 +397,6 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   {
     "category": "Other Products",
     "type": "Jet Fan",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Mini Sirocco",
     "bladeTypes": [],
     "drives": []
   },

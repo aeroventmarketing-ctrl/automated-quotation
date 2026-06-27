@@ -148,6 +148,9 @@ const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
 // saved during the brief window the brand was part of the type name.
 const KDK_TYPES = new Set(["Ceiling Cassette", "KDK - Ceiling Cassette"]);
 const NO_BLADE_DRIVE_TYPES = KDK_TYPES;
+/** KDK pre-built units (whole catalogue items) hide blade type / drive / material. */
+const isPrebuiltUnit = (specs: { brand: string; type: string }): boolean =>
+  specs.brand === "KDK" || NO_BLADE_DRIVE_TYPES.has(specs.type);
 /** Wheel-construction label for line 2 of a blower/fan description. */
 function constructionLabel(type: string): string {
   if (PROPELLER_FAN_TYPES.has(type)) return "Propeller Type";
@@ -859,9 +862,9 @@ export function QuotationBuilder({
                 </>
               )}
             </>
-          ) : NO_BLADE_DRIVE_TYPES.has(c.type) ? (
-            // Pre-built units (e.g. Ceiling Cassette) have no blade type / drive
-            // and aren't material-configurable — the model is picked by selection.
+          ) : isPrebuiltUnit(c) ? (
+            // KDK pre-built units have no blade type / drive and aren't
+            // material-configurable — the model is picked by selection.
             null
           ) : (
             <>
@@ -890,7 +893,7 @@ export function QuotationBuilder({
             </>
           )}
           {/* Material applies to blowers and accessories, not pre-built units. */}
-          {!NO_BLADE_DRIVE_TYPES.has(c.type) && (
+          {!isPrebuiltUnit(c) && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -903,8 +906,8 @@ export function QuotationBuilder({
         <p className="text-xs text-muted-foreground">
           {c.category === "Ventilation Accessories"
             ? "Category · Type · Shape/Mounting · Size — Round = diameter, Square/Rectangle = L × W (mm), isolator = capacity (kg)."
-            : NO_BLADE_DRIVE_TYPES.has(c.type)
-              ? "Category · Type — run the selection to pick a model by duty."
+            : isPrebuiltUnit(c)
+              ? "Category · Brand · Type — run the selection to pick a model by duty."
               : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
       </div>
