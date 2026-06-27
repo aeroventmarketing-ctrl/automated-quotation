@@ -323,7 +323,7 @@ function rewritePaintLine(desc: string, material: string): string {
 }
 
 /** Unit options for the quote table headers (from the English & Metric chart). */
-const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "l/s", "l/min"];
+const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "L/s", "L/min"];
 const PRESSURE_UNITS = ["in-w.g.", "mm-w.g.", "Pa", "in-Hg", "mm-Hg", "psi", "atm"];
 const POWER_UNITS = ["HP", "kW", "W"];
 /** Material -> body-price multiplier (applied to the catalogue body price). */
@@ -562,6 +562,13 @@ export function QuotationBuilder({
   const [msg, setMsg] = useState<string | null>(null);
   // Per-line fan-selector state, keyed by line id.
   const [sel, setSel] = useState<Record<string, { loading: boolean; error: string | null; results: SelectionResult[] | null }>>({});
+  // Air-curtain recommendation list: collapse after a unit is picked (per line).
+  // Lines that already have a picked air-curtain model load collapsed.
+  const [acCollapsed, setAcCollapsed] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      quotation.items.filter((l) => isAirCurtain(l.specs) && l.specs.blowerModel).map((l) => [l.id, true]),
+    ),
+  );
 
   const vatRate = config.vatRate;
   // KDK products (ceiling cassette) are always VAT-inclusive; the presentation is
@@ -638,6 +645,12 @@ export function QuotationBuilder({
         };
       }),
     );
+    setAcCollapsed((m) => ({ ...m, [lineId]: true })); // collapse the list after picking
+  }
+  // Editing the client height/width re-opens the recommendation list.
+  function acInput(lineId: string, patch: Partial<LineSpecs>) {
+    updateSpec(lineId, patch);
+    setAcCollapsed((m) => ({ ...m, [lineId]: false }));
   }
 
   // Add a fresh, blank line item (saved on "Save changes"; available while DRAFT).
@@ -1207,12 +1220,12 @@ export function QuotationBuilder({
                     <Label className="text-[10px]">Installation height (client)</Label>
                     <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
                       value={l.specs.acHeight ?? ""}
-                      onChange={(e) => updateSpec(l.id, { acHeight: numOrNull(e.target.value) })} />
+                      onChange={(e) => acInput(l.id, { acHeight: numOrNull(e.target.value) })} />
                   </div>
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Unit</Label>
                     <Select className="h-8" value={l.specs.acHeightUnit ?? "meter"} disabled={!editable}
-                      onChange={(e) => updateSpec(l.id, { acHeightUnit: e.target.value })}>
+                      onChange={(e) => acInput(l.id, { acHeightUnit: e.target.value })}>
                       {LENGTH_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
                     </Select>
                   </div>
@@ -1220,12 +1233,12 @@ export function QuotationBuilder({
                     <Label className="text-[10px]">Door width (client)</Label>
                     <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
                       value={l.specs.acWidth ?? ""}
-                      onChange={(e) => updateSpec(l.id, { acWidth: numOrNull(e.target.value) })} />
+                      onChange={(e) => acInput(l.id, { acWidth: numOrNull(e.target.value) })} />
                   </div>
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Unit</Label>
                     <Select className="h-8" value={l.specs.acWidthUnit ?? "mm"} disabled={!editable}
-                      onChange={(e) => updateSpec(l.id, { acWidthUnit: e.target.value })}>
+                      onChange={(e) => acInput(l.id, { acWidthUnit: e.target.value })}>
                       {LENGTH_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
                     </Select>
                   </div>
@@ -1274,8 +1287,17 @@ export function QuotationBuilder({
                 </div>
               )}
 
-              {/* Air-curtain recommendation list (replaces the duty fan selector). */}
-              {editable && isAirCurtain(l.specs) && (
+              {/* Air-curtain recommendation list (replaces the duty fan selector).
+                  Collapses to a one-line summary once a unit is picked. */}
+              {editable && isAirCurtain(l.specs) && acCollapsed[l.id] && l.specs.blowerModel ? (
+                <div className="mt-2 flex items-center justify-between rounded-md border border-dashed p-2 text-xs">
+                  <span className="font-medium">Selected: {l.specs.blowerModel} · {formatCurrency(round2(l.unitPrice), quotation.currency)}</span>
+                  <button type="button" className="text-primary underline"
+                    onClick={() => setAcCollapsed((m) => ({ ...m, [l.id]: false }))}>
+                    Change unit
+                  </button>
+                </div>
+              ) : editable && isAirCurtain(l.specs) ? (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <span className="text-xs font-medium text-muted-foreground">
                     Recommended units — effective height ≥ installation height and unit width ≥ door width
@@ -1311,7 +1333,7 @@ export function QuotationBuilder({
                     );
                   })()}
                 </div>
-              )}
+              ) : null}
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains are picked by the height/width dropdowns instead. */}
