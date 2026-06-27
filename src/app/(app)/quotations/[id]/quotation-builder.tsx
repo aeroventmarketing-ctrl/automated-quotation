@@ -358,10 +358,12 @@ function selectionTag(type: string, bladeType: string, drive = "", category = ""
   if (KDK_TYPES.has(type)) return "CASSETTE";
   if (type === "Cabinet Fan") return "CABINETFAN";
   if (type === "Mini Sirocco") return "MINISIROCCO";
-  // Wall Mounted Fan series (held in bladeType): High Pressure → GSC catalogue.
+  // Wall Mounted Fan series (held in bladeType): High Pressure → GSC catalogue,
+  // Shutter → the shutter/louver wall fans (flow-only selection).
   if (type === "Wall Mounted Fan") {
     if (bladeType === "High Pressure Series") return "GSCHP";
-    return ""; // Shutter Series catalogue not provided yet.
+    if (bladeType === "Shutter Series") return "WMFSHUTTER";
+    return "";
   }
   // Axial fans query their own belt/direct catalogue: TAF/TAFDD, VAF/VAFDD.
   if (category === "Axial Type") {
