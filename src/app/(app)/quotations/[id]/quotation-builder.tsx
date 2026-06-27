@@ -1132,7 +1132,18 @@ export function QuotationBuilder({
                     <p className="mt-1 text-xs text-muted-foreground">No matching fans for this duty.</p>
                   )}
                   {(() => {
-                    const w = sel[l.id]?.results ? sizeWindow(sel[l.id]!.results!) : null;
+                    const results = sel[l.id]?.results ?? null;
+                    // Fixed-speed units (ceiling cassette): list EVERY unit whose
+                    // curve covers the duty (sorted by size) so the salesperson can
+                    // pick any — not just the recommended ± a size window.
+                    const w = results
+                      ? NO_BLADE_DRIVE_TYPES.has(l.specs.type)
+                        ? {
+                            rec: results.find((r) => r.confidence === "HIGH") ?? results[0],
+                            list: [...results].sort((a, b) => selSize(a) - selSize(b)),
+                          }
+                        : sizeWindow(results)
+                      : null;
                     if (!w) return null;
                     return (
                       <div className="mt-2 space-y-1">
