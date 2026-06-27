@@ -1296,12 +1296,12 @@ export function QuotationBuilder({
               {/* Air-curtain recommendation list (replaces the duty fan selector).
                   Collapses to a one-line summary once a unit is picked. */}
               {editable && isAirCurtain(l.specs) && acCollapsed[l.id] && l.specs.blowerModel ? (
-                <div className="mt-2 flex items-center justify-between rounded-md border border-dashed p-2 text-xs">
-                  <span className="font-medium">Selected: {l.specs.blowerModel} · {formatCurrency(round2(l.unitPrice), quotation.currency)}</span>
-                  <button type="button" className="text-primary underline"
+                <div className="mt-2 flex items-center justify-between rounded-md border border-dashed p-2">
+                  <span className="text-xs font-medium">Selected: {l.specs.blowerModel} · {formatCurrency(round2(l.unitPrice), quotation.currency)}</span>
+                  <Button size="sm" variant="outline"
                     onClick={() => { setAcCollapsed((m) => ({ ...m, [l.id]: false })); setAcRan((m) => ({ ...m, [l.id]: true })); }}>
-                    Change unit
-                  </button>
+                    <Gauge className="h-3.5 w-3.5" /> Run selection
+                  </Button>
                 </div>
               ) : editable && isAirCurtain(l.specs) ? (
                 <div className="mt-2 rounded-md border border-dashed p-2">
