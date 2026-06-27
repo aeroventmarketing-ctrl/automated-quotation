@@ -211,7 +211,7 @@ async function main() {
     { layoutKey: "detailed", name: "Detailed Engineering", config: { accent: "#7c3aed", showSpecs: true, showSelectionNotes: true, showTerms: true } },
     { layoutKey: "budgetary", name: "Quick Budgetary", config: { accent: "#b45309", showSpecs: false, budgetary: true } },
     { layoutKey: "export", name: "Export / USD", config: { accent: "#0f766e", currency: "USD", showSpecs: true, showTerms: true } },
-    { layoutKey: "kdk", name: "KDK", config: { accent: "#1d4ed8", showSpecs: true, showTerms: true, terms: COMPANY.kdkTerms } },
+    { layoutKey: "kdk", name: "KDK", config: { accent: "#1d4ed8", showSpecs: true, showTerms: true, terms: COMPANY.kdkTerms, specNote: "All units are made of high quality materials." } },
   ];
   for (const t of templates) {
     await prisma.quotationTemplate.upsert({

@@ -73,7 +73,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // Signature reflects the currently logged-in sales user, not the original
     // preparer, so each sales person's downloads carry their own name.
     preparedBy: user.name,
-    specNote: q.notes ?? (typeof tpl.specNote === "string" ? tpl.specNote : null),
+    // Quote note → template note (blank quote note falls through to the template).
+    specNote: (q.notes && q.notes.trim()) || (typeof tpl.specNote === "string" ? tpl.specNote : null),
     // Quote terms → template terms → built-in standard terms (never blank).
     terms:
       (q.terms && q.terms.trim()) ||

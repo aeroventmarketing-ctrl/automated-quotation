@@ -104,7 +104,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     preparedBy: user.name,
     approvedBy: quotation.approvedBy?.name ?? null,
     status: quotation.status,
-    specNote: quotation.notes ?? (typeof tplConfig.specNote === "string" ? tplConfig.specNote : null),
+    specNote: (quotation.notes && quotation.notes.trim()) || (typeof tplConfig.specNote === "string" ? tplConfig.specNote : null),
     terms:
       (quotation.terms && quotation.terms.trim()) ||
       (typeof tplConfig.terms === "string" && tplConfig.terms.trim() ? tplConfig.terms : "") ||
