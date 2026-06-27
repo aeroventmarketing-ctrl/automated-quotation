@@ -572,6 +572,8 @@ export function QuotationBuilder({
       quotation.items.filter((l) => isAirCurtain(l.specs) && l.specs.blowerModel).map((l) => [l.id, true]),
     ),
   );
+  // Air-curtain picks only show after the user clicks "Run selection" (per line).
+  const [acRan, setAcRan] = useState<Record<string, boolean>>({});
 
   const vatRate = config.vatRate;
   // KDK products (ceiling cassette) are always VAT-inclusive; the presentation is
@@ -650,10 +652,11 @@ export function QuotationBuilder({
     );
     setAcCollapsed((m) => ({ ...m, [lineId]: true })); // collapse the list after picking
   }
-  // Editing the client height/width re-opens the recommendation list.
+  // Editing the client height/width clears the run result — the user re-runs.
   function acInput(lineId: string, patch: Partial<LineSpecs>) {
     updateSpec(lineId, patch);
     setAcCollapsed((m) => ({ ...m, [lineId]: false }));
+    setAcRan((m) => ({ ...m, [lineId]: false }));
   }
 
   // Add a fresh, blank line item (saved on "Save changes"; available while DRAFT).
@@ -1296,16 +1299,22 @@ export function QuotationBuilder({
                 <div className="mt-2 flex items-center justify-between rounded-md border border-dashed p-2 text-xs">
                   <span className="font-medium">Selected: {l.specs.blowerModel} · {formatCurrency(round2(l.unitPrice), quotation.currency)}</span>
                   <button type="button" className="text-primary underline"
-                    onClick={() => setAcCollapsed((m) => ({ ...m, [l.id]: false }))}>
+                    onClick={() => { setAcCollapsed((m) => ({ ...m, [l.id]: false })); setAcRan((m) => ({ ...m, [l.id]: true })); }}>
                     Change unit
                   </button>
                 </div>
               ) : editable && isAirCurtain(l.specs) ? (
                 <div className="mt-2 rounded-md border border-dashed p-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Recommended units — effective height ≥ installation height and unit width ≥ door width
-                  </span>
-                  {(() => {
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Recommended units — effective height ≥ installation height and unit width ≥ door width
+                    </span>
+                    <Button size="sm" variant="outline"
+                      onClick={() => setAcRan((m) => ({ ...m, [l.id]: true }))}>
+                      <Gauge className="h-3.5 w-3.5" /> Run selection
+                    </Button>
+                  </div>
+                  {acRan[l.id] && (() => {
                     if (l.specs.acHeight == null || l.specs.acWidth == null)
                       return <p className="mt-1 text-xs text-muted-foreground">Enter the client&apos;s installation height and door width.</p>;
                     const picks = airCurtainPicks(l.specs);
