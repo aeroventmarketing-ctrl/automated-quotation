@@ -630,6 +630,10 @@ export function QuotationBuilder({
   // Apply a recommended air-curtain model: VAT-inclusive price + consumption,
   // single-phase 220 V (the client height/width inputs are kept on the line).
   function applyAirCurtainModel(lineId: string, entry: CatalogEntry) {
+    // Air volume for the quote's Capacity column, in the header's flow unit.
+    const headerUnit = normalizeAirflowUnit(units.capacity) ?? "m3hr";
+    const capVal =
+      entry.airVolumeCmh != null ? fmtFlow(convertAirflow(entry.airVolumeCmh, "m3hr", headerUnit)) : null;
     setLines((ls) =>
       ls.map((l) => {
         if (l.id !== lineId) return l;
@@ -638,6 +642,7 @@ export function QuotationBuilder({
           blowerModel: entry.modelCode,
           bodyPrice: entry.basePrice,
           power_w: entry.powerW ?? null,
+          capacity_cfm: capVal ?? l.specs.capacity_cfm,
           motorPh: 1,
           motorVolts: 220,
           inches: null,
