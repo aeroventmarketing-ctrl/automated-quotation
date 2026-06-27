@@ -142,8 +142,10 @@ const PROPELLER_FAN_TYPES = new Set([
   "Panel Fan",
 ]);
 const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
-// Pre-built units selected by model (no blade type / drive / material config).
-const NO_BLADE_DRIVE_TYPES = new Set(["Ceiling Cassette"]);
+// KDK pre-built units: selected by model (no blade type / drive / material) and
+// always quoted VAT-inclusive. "Ceiling Cassette" is kept for older saved quotes.
+const KDK_TYPES = new Set(["KDK - Ceiling Cassette", "Ceiling Cassette"]);
+const NO_BLADE_DRIVE_TYPES = KDK_TYPES;
 /** Wheel-construction label for line 2 of a blower/fan description. */
 function constructionLabel(type: string): string {
   if (PROPELLER_FAN_TYPES.has(type)) return "Propeller Type";
@@ -334,8 +336,8 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
  * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
 function selectionTag(type: string, bladeType: string, drive = "", category = ""): string {
-  // Ceiling-cassette ventilating fans query their own fixed-speed catalogue.
-  if (type === "Ceiling Cassette") return "CASSETTE";
+  // KDK ceiling-cassette ventilating fans query their own fixed-speed catalogue.
+  if (KDK_TYPES.has(type)) return "CASSETTE";
   // Axial fans query their own belt/direct catalogue: TAF/TAFDD, VAF/VAFDD.
   if (category === "Axial Type") {
     const base = type === "Vaneaxial" ? "VAF" : "TAF";
@@ -509,18 +511,22 @@ export function QuotationBuilder({
   const [sel, setSel] = useState<Record<string, { loading: boolean; error: string | null; results: SelectionResult[] | null }>>({});
 
   const vatRate = config.vatRate;
+  // KDK products (ceiling cassette) are always VAT-inclusive; the presentation is
+  // forced to INCLUSIVE and locked when any line is a KDK product.
+  const hasKdk = lines.some((l) => KDK_TYPES.has(l.specs.type));
+  const effectiveVatMode = hasKdk ? "INCLUSIVE" : vatMode;
   const totals = useMemo(() => {
     const gross = lines.reduce((a, l) => a + l.qty * l.unitPrice, 0); // VAT-inclusive
     const net = gross / (1 + vatRate);
-    const exclusive = vatMode !== "INCLUSIVE";
+    const exclusive = effectiveVatMode !== "INCLUSIVE";
     const displayedNet = exclusive ? net : gross;
     const discountAmt = displayedNet * (discountPct / 100);
     const finalNet = displayedNet - discountAmt;
-    const addVat = vatMode === "EXCLUSIVE_PLUS";
+    const addVat = effectiveVatMode === "EXCLUSIVE_PLUS";
     const vatAmt = addVat ? finalNet * vatRate : 0;
     const grandTotal = finalNet + vatAmt;
     return { net, vat: gross - net, gross, exclusive, displayedNet, discountAmt, finalNet, addVat, vatAmt, grandTotal };
-  }, [lines, vatRate, vatMode, discountPct]);
+  }, [lines, vatRate, effectiveVatMode, discountPct]);
 
   function updateLine(id: string, patch: Partial<Line>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -751,7 +757,7 @@ export function QuotationBuilder({
           // merge edited flat specs back over anything nested (selection/requirement)
           specsSnapshot: { ...l.rawSpecs, ...l.specs },
         })),
-        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode, discountPct, headerUnits: units },
+        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode: effectiveVatMode, discountPct, headerUnits: units },
       );
       setMsg("Saved.");
       router.refresh();
@@ -1005,11 +1011,14 @@ export function QuotationBuilder({
             </div>
             <div className="space-y-1">
               <Label>VAT presentation</Label>
-              <Select value={vatMode} onChange={(e) => setVatMode(e.target.value as never)} disabled={!editable}>
+              <Select value={effectiveVatMode} onChange={(e) => setVatMode(e.target.value as never)} disabled={!editable || hasKdk}>
                 <option value="INCLUSIVE">VAT inclusive</option>
                 <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
                 <option value="EXCLUSIVE_PLUS">VAT exclusive (+12%)</option>
               </Select>
+              {hasKdk && (
+                <p className="text-xs text-muted-foreground">KDK products are VAT-inclusive — locked.</p>
+              )}
             </div>
           </div>
           <div className="space-y-1">

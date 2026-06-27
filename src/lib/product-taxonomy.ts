@@ -352,7 +352,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   },
   {
     "category": "Other Products",
-    "type": "Ceiling Cassette",
+    "type": "KDK - Ceiling Cassette",
     "bladeTypes": [],
     "drives": []
   },

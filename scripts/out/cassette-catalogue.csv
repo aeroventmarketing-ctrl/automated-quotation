@@ -1,49 +1,49 @@
 modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
-17CUF,CENTRIFUGAL,"Ceiling Cassette 17"" (17CUF)","Ceiling Cassette Ventilating Fan
+17CUF,CENTRIFUGAL,"KDK Ceiling Cassette 17"" (17CUF)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / single-speed / Ceiling mounting
 Air Volume 85 m³/hr · 10 W · 770 rpm · 26 dB(A)
-Model: 17CUF",17,unit,5807,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":770,""power_w"":10,""speeds"":1,""noise_db"":26,""weight_kg"":1.9,""airVolume_cmh"":85}"
-17CUG,CENTRIFUGAL,"Ceiling Cassette 17"" (17CUG)","Ceiling Cassette Ventilating Fan
+Model: 17CUF",17,unit,5807,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":770,""power_w"":10,""speeds"":1,""noise_db"":26,""weight_kg"":1.9,""airVolume_cmh"":85}"
+17CUG,CENTRIFUGAL,"KDK Ceiling Cassette 17"" (17CUG)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / single-speed / Ceiling mounting
 Air Volume 85 m³/hr · 10 W · 770 rpm · 26 dB(A)
-Model: 17CUG",17,unit,5807,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":770,""power_w"":10,""speeds"":1,""noise_db"":26,""weight_kg"":1.9,""airVolume_cmh"":85}"
-24CUF,CENTRIFUGAL,"Ceiling Cassette 24"" (24CUF)","Ceiling Cassette Ventilating Fan
+Model: 17CUG",17,unit,5807,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":770,""power_w"":10,""speeds"":1,""noise_db"":26,""weight_kg"":1.9,""airVolume_cmh"":85}"
+24CUF,CENTRIFUGAL,"KDK Ceiling Cassette 24"" (24CUF)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / single-speed / Ceiling mounting
 Air Volume 140 m³/hr · 15.5 W · 615 rpm · 28 dB(A)
-Model: 24CUF",24,unit,6802,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":615,""power_w"":15.5,""speeds"":1,""noise_db"":28,""weight_kg"":2.8,""airVolume_cmh"":140}"
-24CUG,CENTRIFUGAL,"Ceiling Cassette 24"" (24CUG)","Ceiling Cassette Ventilating Fan
+Model: 24CUF",24,unit,6802,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":615,""power_w"":15.5,""speeds"":1,""noise_db"":28,""weight_kg"":2.8,""airVolume_cmh"":140}"
+24CUG,CENTRIFUGAL,"KDK Ceiling Cassette 24"" (24CUG)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / single-speed / Ceiling mounting
 Air Volume 140 m³/hr · 15.5 W · 615 rpm · 28 dB(A)
-Model: 24CUG",24,unit,6802,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":615,""power_w"":15.5,""speeds"":1,""noise_db"":28,""weight_kg"":2.8,""airVolume_cmh"":140}"
-24CDF,CENTRIFUGAL,"Ceiling Cassette 24"" (24CDF)","Ceiling Cassette Ventilating Fan
+Model: 24CUG",24,unit,6802,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":615,""power_w"":15.5,""speeds"":1,""noise_db"":28,""weight_kg"":2.8,""airVolume_cmh"":140}"
+24CDF,CENTRIFUGAL,"KDK Ceiling Cassette 24"" (24CDF)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / single-speed / Ceiling mounting
 Air Volume 170 m³/hr · 16.5 W · 700 rpm · 31.5 dB(A)
-Model: 24CDF",24,unit,7300,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":700,""power_w"":16.5,""speeds"":1,""noise_db"":31.5,""weight_kg"":2.8,""airVolume_cmh"":170}"
-24CDG,CENTRIFUGAL,"Ceiling Cassette 24"" (24CDG)","Ceiling Cassette Ventilating Fan
+Model: 24CDF",24,unit,7300,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":700,""power_w"":16.5,""speeds"":1,""noise_db"":31.5,""weight_kg"":2.8,""airVolume_cmh"":170}"
+24CDG,CENTRIFUGAL,"KDK Ceiling Cassette 24"" (24CDG)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / single-speed / Ceiling mounting
 Air Volume 170 m³/hr · 16.5 W · 700 rpm · 31.5 dB(A)
-Model: 24CDG",24,unit,7300,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":700,""power_w"":16.5,""speeds"":1,""noise_db"":31.5,""weight_kg"":2.8,""airVolume_cmh"":170}"
-24CHG,CENTRIFUGAL,"Ceiling Cassette 24"" (24CHG)","Ceiling Cassette Ventilating Fan
+Model: 24CDG",24,unit,7300,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":700,""power_w"":16.5,""speeds"":1,""noise_db"":31.5,""weight_kg"":2.8,""airVolume_cmh"":170}"
+24CHG,CENTRIFUGAL,"KDK Ceiling Cassette 24"" (24CHG)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / single-speed / Ceiling mounting
 Air Volume 190 m³/hr · 22 W · 730 rpm · 33.5 dB(A)
-Model: 24CHG",24,unit,7687,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":730,""power_w"":22,""speeds"":1,""noise_db"":33.5,""weight_kg"":2.8,""airVolume_cmh"":190}"
-27CHH,CENTRIFUGAL,"Ceiling Cassette 27"" (27CHH)","Ceiling Cassette Ventilating Fan
+Model: 24CHG",24,unit,7687,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":730,""power_w"":22,""speeds"":1,""noise_db"":33.5,""weight_kg"":2.8,""airVolume_cmh"":190}"
+27CHH,CENTRIFUGAL,"KDK Ceiling Cassette 27"" (27CHH)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / 2-speed / Ceiling mounting
 Air Volume 345 m³/hr · 36 W · 590 rpm · 35.5 dB(A)
-Model: 27CHH",27,unit,11005,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":590,""power_w"":36,""speeds"":2,""noise_db"":35.5,""weight_kg"":4.4,""airVolume_cmh"":345}"
-32CDH,CENTRIFUGAL,"Ceiling Cassette 32"" (32CDH)","Ceiling Cassette Ventilating Fan
+Model: 27CHH",27,unit,11005,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":590,""power_w"":36,""speeds"":2,""noise_db"":35.5,""weight_kg"":4.4,""airVolume_cmh"":345}"
+32CDH,CENTRIFUGAL,"KDK Ceiling Cassette 32"" (32CDH)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / 2-speed / Ceiling mounting
 Air Volume 410 m³/hr · 48 W · 580 rpm · 35.5 dB(A)
-Model: 32CDH",32,unit,14268,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":580,""power_w"":48,""speeds"":2,""noise_db"":35.5,""weight_kg"":5.2,""airVolume_cmh"":410}"
-32CHH,CENTRIFUGAL,"Ceiling Cassette 32"" (32CHH)","Ceiling Cassette Ventilating Fan
+Model: 32CDH",32,unit,14268,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":580,""power_w"":48,""speeds"":2,""noise_db"":35.5,""weight_kg"":5.2,""airVolume_cmh"":410}"
+32CHH,CENTRIFUGAL,"KDK Ceiling Cassette 32"" (32CHH)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / 2-speed / Ceiling mounting
 Air Volume 545 m³/hr · 68 W · 725 rpm · 41.5 dB(A)
-Model: 32CHH",32,unit,14378,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":725,""power_w"":68,""speeds"":2,""noise_db"":41.5,""weight_kg"":5.6,""airVolume_cmh"":545}"
-38CDG,CENTRIFUGAL,"Ceiling Cassette 38"" (38CDG)","Ceiling Cassette Ventilating Fan
+Model: 32CHH",32,unit,14378,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":725,""power_w"":68,""speeds"":2,""noise_db"":41.5,""weight_kg"":5.6,""airVolume_cmh"":545}"
+38CDG,CENTRIFUGAL,"KDK Ceiling Cassette 38"" (38CDG)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / 2-speed / Ceiling mounting
 Air Volume 665 m³/hr · 107 W · 657 rpm · 45 dB(A)
-Model: 38CDG",38,unit,21346,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":657,""power_w"":107,""speeds"":2,""noise_db"":45,""weight_kg"":9.7,""airVolume_cmh"":665}"
-38CHG,CENTRIFUGAL,"Ceiling Cassette 38"" (38CHG)","Ceiling Cassette Ventilating Fan
+Model: 38CDG",38,unit,21346,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":657,""power_w"":107,""speeds"":2,""noise_db"":45,""weight_kg"":9.7,""airVolume_cmh"":665}"
+38CHG,CENTRIFUGAL,"KDK Ceiling Cassette 38"" (38CHG)","KDK Ceiling Cassette Ventilating Fan
 Sirocco / 2-speed / Ceiling mounting
 Air Volume 790 m³/hr · 138 W · 760 rpm · 49 dB(A)
-Model: 38CHG",38,unit,22397,PHP,"{""category"":""Other Products"",""type"":""Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":760,""power_w"":138,""speeds"":2,""noise_db"":49,""weight_kg"":10.4,""airVolume_cmh"":790}"
+Model: 38CHG",38,unit,22397,PHP,"{""category"":""Other Products"",""type"":""KDK - Ceiling Cassette"",""tag"":""CASSETTE"",""fixedSpeed"":true,""rpm"":760,""power_w"":138,""speeds"":2,""noise_db"":49,""weight_kg"":10.4,""airVolume_cmh"":790}"

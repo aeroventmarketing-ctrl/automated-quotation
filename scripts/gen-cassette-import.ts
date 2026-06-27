@@ -117,13 +117,13 @@ function main() {
       const sizeLabel = code.slice(0, 2); // 17, 24, 27, 32, 38
       const speedWord = c.speeds === 2 ? "2-speed" : "single-speed";
       const description =
-        "Ceiling Cassette Ventilating Fan\n" +
+        "KDK Ceiling Cassette Ventilating Fan\n" +
         `Sirocco / ${speedWord} / Ceiling mounting\n` +
         `Air Volume ${c.airVolume_cmh} m³/hr · ${c.power_w} W · ${c.rpm} rpm · ${c.noise_db} dB(A)\n` +
         `Model: ${code}`;
       const specs: Record<string, unknown> = {
         category: "Other Products",
-        type: "Ceiling Cassette",
+        type: "KDK - Ceiling Cassette",
         tag: "CASSETTE",
         fixedSpeed: true,
         rpm: c.rpm,
@@ -137,7 +137,7 @@ function main() {
         [
           code,
           "CENTRIFUGAL",
-          csv(`Ceiling Cassette ${sizeLabel}" (${code})`),
+          csv(`KDK Ceiling Cassette ${sizeLabel}" (${code})`),
           csv(description),
           sizeLabel,
           "unit",
