@@ -2,14 +2,23 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 
-/** Footer note shown under the KDK quotation ("Note: ..."). */
+/** Footer note shown under the KDK quotation ("Note: ..."). KDK is short. */
 export const KDK_NOTE = "All units are made of high quality materials.";
 
 /**
+ * The long Standard (Fans and Blowers) note. If it ever ended up on the KDK
+ * template it is replaced with the short KDK note — but the Standard template
+ * keeps it (the two templates have different notes by design).
+ */
+const STANDARD_LONG_NOTE =
+  "All units are made of high quality materials. Designed and built for continuous duty operation. Statically and Dynamically balanced. Without installed Inlet Safety and Outlet Safety Screen as standard. Installed with TECO / TECO MONARCH / HYUNDAI TEFC Induction Motor.";
+
+/**
  * Ensure the built-in "KDK" quotation template exists and carries the KDK terms
- * and footer note. Created once if missing; for an existing template, only
- * missing fields (terms / specNote) are filled in — present values (admin edits)
- * are never overwritten. Safe to call on any page load.
+ * and short footer note. Created once if missing. For an existing KDK template,
+ * missing terms are backfilled and the note is set to the short KDK note only
+ * when absent or still holding the long Standard note — any other admin-set note
+ * is preserved. Only the KDK template is touched; Standard is left alone.
  */
 export async function ensureKdkTemplate(): Promise<void> {
   const baseConfig = {
@@ -26,7 +35,6 @@ export async function ensureKdkTemplate(): Promise<void> {
     });
     return;
   }
-  // Backfill terms / note only when absent, preserving any admin edits.
   const config = (existing.config as Record<string, unknown>) ?? {};
   const patch: Record<string, unknown> = { ...config };
   let changed = false;
@@ -34,9 +42,12 @@ export async function ensureKdkTemplate(): Promise<void> {
     patch.terms = COMPANY.kdkTerms;
     changed = true;
   }
-  if (typeof config.specNote !== "string" || !config.specNote) {
-    patch.specNote = KDK_NOTE;
-    changed = true;
+  const note = typeof config.specNote === "string" ? config.specNote.trim() : "";
+  if (!note || note === STANDARD_LONG_NOTE) {
+    if (config.specNote !== KDK_NOTE) {
+      patch.specNote = KDK_NOTE;
+      changed = true;
+    }
   }
   if (changed) {
     await prisma.quotationTemplate.update({
