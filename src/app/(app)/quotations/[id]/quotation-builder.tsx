@@ -21,7 +21,7 @@ import {
   type Voltage,
 } from "@/lib/pricing/motors";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus } from "lucide-react";
-import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor } from "@/lib/product-taxonomy";
+import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor, seriesFor } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
 import {
@@ -197,8 +197,8 @@ function buildBlowerDescription(
  *   line 2  KDK Brand
  *   line 3  Model: <model>          once the salesperson picks a model
  */
-function buildKdkDescription(type: string, model?: string | null): string {
-  return [type, "KDK Brand", model ? `Model: ${model}` : ""]
+function buildKdkDescription(type: string, model?: string | null, series?: string | null): string {
+  return [series ? `${type} - ${series}` : type, "KDK Brand", model ? `Model: ${model}` : ""]
     .filter((l) => l.length > 0)
     .join("\n");
 }
@@ -561,7 +561,7 @@ export function QuotationBuilder({
       ls.map((l) => {
         if (l.id !== id) return l;
         const specs = { ...l.specs, ...patch, motorPh: 1, motorVolts: 220, inches: null };
-        return { ...l, specs, descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel) };
+        return { ...l, specs, descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel, specs.bladeType) };
       }),
     );
   }
@@ -732,7 +732,7 @@ export function QuotationBuilder({
             specs,
             // KDK catalogue prices are already VAT-inclusive — use as-is.
             unitPrice: round2(base),
-            descriptionSnapshot: buildKdkDescription(specs.type, model),
+            descriptionSnapshot: buildKdkDescription(specs.type, model, specs.bladeType),
           };
         }
         const chosenModel = cat?.modelCode ?? l.specs.blowerModel;
@@ -876,6 +876,18 @@ export function QuotationBuilder({
             <option value="">Type…</option>
             {typesFor(c.category, brandsFor(c.category).length > 0 ? c.brand : undefined).map((t) => (<option key={t} value={t}>{t}</option>))}
           </Select>
+          {seriesFor(c.category, c.type).length > 0 && (
+            // KDK series level (e.g. Wall Mounted Fan → Shutter / High Pressure).
+            // Stored in the otherwise-unused bladeType field for KDK units.
+            <Select
+              value={c.bladeType}
+              disabled={!editable || !c.type}
+              onChange={(e) => applyKdk(l.id, { bladeType: e.target.value, blowerModel: null })}
+            >
+              <option value="">Series…</option>
+              {seriesFor(c.category, c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
+            </Select>
+          )}
           {c.category === "Ventilation Accessories" ? (
             <>
               <Select

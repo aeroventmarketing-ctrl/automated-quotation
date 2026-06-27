@@ -11,6 +11,8 @@ export interface TaxonomyEntry {
   drives: string[];
   /** Optional make/brand level (e.g. "KDK") shown between Category and Type. */
   brand?: string;
+  /** Optional series level (e.g. "Shutter Series") shown after Type. */
+  series?: string[];
 }
 
 export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
@@ -379,6 +381,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "category": "Other Products",
     "type": "Wall Mounted Fan",
     "brand": "KDK",
+    "series": ["Shutter Series", "High Pressure Series"],
     "bladeTypes": [],
     "drives": []
   },
@@ -465,4 +468,9 @@ export function typesFor(category: string, brand?: string): string[] {
 
 export function entryFor(category: string, type: string): TaxonomyEntry | undefined {
   return PRODUCT_TAXONOMY.find((e) => e.category === category && e.type === type);
+}
+
+/** Series options for a type (e.g. Wall Mounted Fan → Shutter / High Pressure). */
+export function seriesFor(category: string, type: string): string[] {
+  return entryFor(category, type)?.series ?? [];
 }
