@@ -74,6 +74,12 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
       })),
     };
   }
+  // KDK cabinet fans — model codes like 12NSB / 18NFB / 23NLB.
+  if (t === "CABINETFAN") {
+    return {
+      OR: ["NSB", "NFB", "NLB"].map((s) => ({ modelCode: { endsWith: s } })),
+    };
+  }
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {

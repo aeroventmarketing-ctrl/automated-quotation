@@ -354,8 +354,9 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
  * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
 function selectionTag(type: string, bladeType: string, drive = "", category = ""): string {
-  // KDK ceiling-cassette ventilating fans query their own fixed-speed catalogue.
+  // KDK fixed-speed units query their own catalogue by type.
   if (KDK_TYPES.has(type)) return "CASSETTE";
+  if (type === "Cabinet Fan") return "CABINETFAN";
   // Axial fans query their own belt/direct catalogue: TAF/TAFDD, VAF/VAFDD.
   if (category === "Axial Type") {
     const base = type === "Vaneaxial" ? "VAF" : "TAF";
@@ -664,7 +665,7 @@ export function QuotationBuilder({
     // Fixed-speed units (ceiling cassette) may also be selected on flow alone,
     // defaulting to free-air (0 Pa) when static pressure isn't given.
     const panel = PROPELLER_FAN_TYPES.has(line.specs.type);
-    const fixedUnit = NO_BLADE_DRIVE_TYPES.has(line.specs.type);
+    const fixedUnit = isPrebuiltUnit(line.specs);
     if (!flow || (!spVal && !panel && !fixedUnit)) {
       setSel((s) => ({ ...s, [line.id]: { loading: false, error: panel || fixedUnit ? "Enter volume flow first." : "Enter volume flow and static pressure first.", results: null } }));
       return;
@@ -1167,7 +1168,7 @@ export function QuotationBuilder({
                     // curve covers the duty (sorted by size) so the salesperson can
                     // pick any — not just the recommended ± a size window.
                     const w = results
-                      ? NO_BLADE_DRIVE_TYPES.has(l.specs.type)
+                      ? isPrebuiltUnit(l.specs)
                         ? {
                             rec: results.find((r) => r.confidence === "HIGH") ?? results[0],
                             list: [...results].sort((a, b) => selSize(a) - selSize(b)),
@@ -1205,7 +1206,7 @@ export function QuotationBuilder({
                                   <ConfidenceBadge confidence={r.confidence} />
                                 </span>
                               </div>
-                              {NO_BLADE_DRIVE_TYPES.has(l.specs.type) ? (
+                              {isPrebuiltUnit(l.specs) ? (
                                 // Fixed-speed units (ceiling cassette) are rated in
                                 // watts and m³/hr, not HP / CFM.
                                 <p className="text-muted-foreground">
