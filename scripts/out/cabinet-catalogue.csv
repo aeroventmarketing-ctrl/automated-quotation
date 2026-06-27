@@ -1,0 +1,33 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+12NSB,CENTRIFUGAL,"KDK Cabinet Fan 12 (12NSB)","KDK Cabinet Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 190 m³/hr · 23 W · 1370 rpm · 22 dB(A)
+Model: 12NSB",12,unit,11447,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Cabinet Fan"",""tag"":""CABINETFAN"",""fixedSpeed"":true,""rpm"":1370,""power_w"":23,""speeds"":2,""noise_db"":22,""weight_kg"":5.5,""airVolume_cmh"":190}"
+15NSB,CENTRIFUGAL,"KDK Cabinet Fan 15 (15NSB)","KDK Cabinet Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 370 m³/hr · 42 W · 1385 rpm · 27 dB(A)
+Model: 15NSB",15,unit,13991,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Cabinet Fan"",""tag"":""CABINETFAN"",""fixedSpeed"":true,""rpm"":1385,""power_w"":42,""speeds"":2,""noise_db"":27,""weight_kg"":6.5,""airVolume_cmh"":370}"
+18NSB,CENTRIFUGAL,"KDK Cabinet Fan 18 (18NSB)","KDK Cabinet Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 510 m³/hr · 79 W · 1370 rpm · 32 dB(A)
+Model: 18NSB",18,unit,19134,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Cabinet Fan"",""tag"":""CABINETFAN"",""fixedSpeed"":true,""rpm"":1370,""power_w"":79,""speeds"":2,""noise_db"":32,""weight_kg"":8.5,""airVolume_cmh"":510}"
+18NFB,CENTRIFUGAL,"KDK Cabinet Fan 18 (18NFB)","KDK Cabinet Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 760 m³/hr · 129 W · 1370 rpm · 32 dB(A)
+Model: 18NFB",18,unit,26323,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Cabinet Fan"",""tag"":""CABINETFAN"",""fixedSpeed"":true,""rpm"":1370,""power_w"":129,""speeds"":2,""noise_db"":32,""weight_kg"":10,""airVolume_cmh"":760}"
+20NSB,CENTRIFUGAL,"KDK Cabinet Fan 20 (20NSB)","KDK Cabinet Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 880 m³/hr · 169 W · 1370 rpm · 33 dB(A)
+Model: 20NSB",20,unit,30969,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Cabinet Fan"",""tag"":""CABINETFAN"",""fixedSpeed"":true,""rpm"":1370,""power_w"":169,""speeds"":2,""noise_db"":33,""weight_kg"":14,""airVolume_cmh"":880}"
+23NLB,CENTRIFUGAL,"KDK Cabinet Fan 23 (23NLB)","KDK Cabinet Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 1100 m³/hr · 310 W · 1210 rpm · 40 dB(A)
+Model: 23NLB",23,unit,35172,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Cabinet Fan"",""tag"":""CABINETFAN"",""fixedSpeed"":true,""rpm"":1210,""power_w"":310,""speeds"":2,""noise_db"":40,""weight_kg"":18,""airVolume_cmh"":1100}"
+25NSB,CENTRIFUGAL,"KDK Cabinet Fan 25 (25NSB)","KDK Cabinet Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 1700 m³/hr · 467 W · 1245 rpm · 42 dB(A)
+Model: 25NSB",25,unit,43135,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Cabinet Fan"",""tag"":""CABINETFAN"",""fixedSpeed"":true,""rpm"":1245,""power_w"":467,""speeds"":2,""noise_db"":42,""weight_kg"":24,""airVolume_cmh"":1700}"
+25NFB,CENTRIFUGAL,"KDK Cabinet Fan 25 (25NFB)","KDK Cabinet Fan
+Sirocco / 2-speed / Ceiling mounting
+Air Volume 1810 m³/hr · 520 W · 1245 rpm · 42 dB(A)
+Model: 25NFB",25,unit,48112,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Cabinet Fan"",""tag"":""CABINETFAN"",""fixedSpeed"":true,""rpm"":1245,""power_w"":520,""speeds"":2,""noise_db"":42,""weight_kg"":24,""airVolume_cmh"":1810}"
