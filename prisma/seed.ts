@@ -4,6 +4,7 @@
  * rating data via the Admin CSV import or by editing these rows.
  */
 import { PrismaClient, Family, Role, Prisma } from "@prisma/client";
+import { COMPANY } from "../src/lib/config";
 
 const prisma = new PrismaClient();
 
@@ -210,6 +211,7 @@ async function main() {
     { layoutKey: "detailed", name: "Detailed Engineering", config: { accent: "#7c3aed", showSpecs: true, showSelectionNotes: true, showTerms: true } },
     { layoutKey: "budgetary", name: "Quick Budgetary", config: { accent: "#b45309", showSpecs: false, budgetary: true } },
     { layoutKey: "export", name: "Export / USD", config: { accent: "#0f766e", currency: "USD", showSpecs: true, showTerms: true } },
+    { layoutKey: "kdk", name: "KDK", config: { accent: "#1d4ed8", showSpecs: true, showTerms: true, terms: COMPANY.kdkTerms } },
   ];
   for (const t of templates) {
     await prisma.quotationTemplate.upsert({

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
+import { ensureKdkTemplate } from "@/lib/ensure-templates";
 import { QuotationBuilder } from "./quotation-builder";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,8 @@ const num = (v: unknown): number | null =>
 
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // Make sure the built-in "KDK" template is available in the picker.
+  await ensureKdkTemplate();
   const [quotation, templates, user, catItems] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
