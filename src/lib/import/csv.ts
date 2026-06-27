@@ -238,6 +238,10 @@ export async function importRatings(csv: string): Promise<ImportResult> {
   });
 
   if (data.length) {
+    // Replace each referenced model's rating points so re-importing the same
+    // file refreshes the curve instead of appending duplicate points.
+    const itemIds = Array.from(new Set(data.map((d) => d.catalogueItemId)));
+    await prisma.fanRatingPoint.deleteMany({ where: { catalogueItemId: { in: itemIds } } });
     await prisma.fanRatingPoint.createMany({ data });
     res.inserted = data.length;
   }

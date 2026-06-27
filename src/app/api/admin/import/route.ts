@@ -27,6 +27,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     console.error("import error", err);
-    return NextResponse.json({ error: "Import failed" }, { status: 500 });
+    // Surface the real reason (Prisma/DB message) so the failure is diagnosable
+    // rather than a generic "Import failed".
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: `Import failed: ${message}` }, { status: 500 });
   }
 }
