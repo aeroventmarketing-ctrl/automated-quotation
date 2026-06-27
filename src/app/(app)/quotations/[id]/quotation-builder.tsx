@@ -984,45 +984,6 @@ export function QuotationBuilder({
         <QuotationStatusBadge status={quotation.status} />
       </div>
 
-      {/* Workflow + exports */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 pt-6">
-          {quotation.status === "DRAFT" && (
-            <Button onClick={() => transition("PENDING_APPROVAL")} disabled={busy}>
-              <Send className="h-4 w-4" /> Submit for approval
-            </Button>
-          )}
-          {quotation.status === "PENDING_APPROVAL" && (
-            <>
-              <Button onClick={() => transition("APPROVED")} disabled={busy || !canApprove}>
-                <Check className="h-4 w-4" /> Approve
-              </Button>
-              <Button variant="outline" onClick={() => transition("DRAFT")} disabled={busy}>
-                <CornerUpLeft className="h-4 w-4" /> Return to draft
-              </Button>
-              {!canApprove && <span className="text-xs text-muted-foreground">Approval requires Engineer/Admin.</span>}
-            </>
-          )}
-          {quotation.status === "APPROVED" && (
-            <Button onClick={() => transition("SENT")} disabled={busy}>
-              <Send className="h-4 w-4" /> Mark as sent
-            </Button>
-          )}
-          <div className="ml-auto flex gap-2">
-            <Button asChild>
-              <a href={`/api/quotations/${quotation.id}/excel`}>
-                <Download className="h-4 w-4" /> Download Excel
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href={`/api/quotations/${quotation.id}/pdf`} target="_blank" rel="noopener noreferrer">
-                <Download className="h-4 w-4" /> PDF
-              </a>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {msg && <p className="text-sm text-muted-foreground">{msg}</p>}
 
       {/* Header fields */}
@@ -1434,9 +1395,45 @@ export function QuotationBuilder({
         </CardContent>
       </Card>
 
-      {editable && (
-        <Button onClick={save} disabled={busy} size="lg">{busy ? "Saving…" : "Save changes"}</Button>
-      )}
+      {/* Bottom action bar: Save changes (left) + workflow / exports (right). */}
+      <div className="flex flex-wrap items-center gap-2">
+        {editable && (
+          <Button onClick={save} disabled={busy} size="lg">{busy ? "Saving…" : "Save changes"}</Button>
+        )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {quotation.status === "DRAFT" && (
+            <Button onClick={() => transition("PENDING_APPROVAL")} disabled={busy}>
+              <Send className="h-4 w-4" /> Submit for approval
+            </Button>
+          )}
+          {quotation.status === "PENDING_APPROVAL" && (
+            <>
+              <Button onClick={() => transition("APPROVED")} disabled={busy || !canApprove}>
+                <Check className="h-4 w-4" /> Approve
+              </Button>
+              <Button variant="outline" onClick={() => transition("DRAFT")} disabled={busy}>
+                <CornerUpLeft className="h-4 w-4" /> Return to draft
+              </Button>
+              {!canApprove && <span className="text-xs text-muted-foreground">Approval requires Engineer/Admin.</span>}
+            </>
+          )}
+          {quotation.status === "APPROVED" && (
+            <Button onClick={() => transition("SENT")} disabled={busy}>
+              <Send className="h-4 w-4" /> Mark as sent
+            </Button>
+          )}
+          <Button asChild>
+            <a href={`/api/quotations/${quotation.id}/excel`}>
+              <Download className="h-4 w-4" /> Download Excel
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href={`/api/quotations/${quotation.id}/pdf`} target="_blank" rel="noopener noreferrer">
+              <Download className="h-4 w-4" /> PDF
+            </a>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
