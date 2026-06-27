@@ -190,6 +190,18 @@ function buildBlowerDescription(
   return lines.filter((l) => l.length > 0).join("\n");
 }
 /**
+ * KDK pre-built unit description, built from the selections (no blade/drive/
+ * material/paint lines):
+ *   line 1  <type>                  e.g. "Ceiling Cassette"
+ *   line 2  KDK Brand
+ *   line 3  Model: <model>          once the salesperson picks a model
+ */
+function buildKdkDescription(type: string, model?: string | null): string {
+  return [type, "KDK Brand", model ? `Model: ${model}` : ""]
+    .filter((l) => l.length > 0)
+    .join("\n");
+}
+/**
  * Product noun for the first description line, by type and blade type:
  *  - Cabinet Blower (SISW) -> "Cabinet Blower-SISW"
  *  - Forward Curved        -> "Centrifugal Fresh Air Blower"
@@ -539,6 +551,17 @@ export function QuotationBuilder({
   function updateSpec(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
   }
+  // KDK pre-built units: merge the patch and rebuild the KDK description
+  // (Type / KDK Brand / Model) so it tracks the brand, type and chosen model.
+  function applyKdk(id: string, patch: Partial<LineSpecs>) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== id) return l;
+        const specs = { ...l.specs, ...patch };
+        return { ...l, specs, descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel) };
+      }),
+    );
+  }
 
   // Add a fresh, blank line item (saved on "Save changes"; available while DRAFT).
   function addLine() {
@@ -683,15 +706,16 @@ export function QuotationBuilder({
     setLines((ls) =>
       ls.map((l) => {
         if (l.id !== lineId) return l;
-        // Fixed-speed pre-built units (ceiling cassette): the catalogue item is
-        // the whole unit — take its price and description as-is (no motor add-on,
-        // no blower-style description rewrites), priced as base × VAT.
-        if (NO_BLADE_DRIVE_TYPES.has(l.specs.type)) {
+        // KDK pre-built units: the catalogue item is the whole unit — take its
+        // price as base × VAT (no motor add-on) and build the KDK description
+        // (Type / KDK Brand / Model: <chosen model>).
+        if (isPrebuiltUnit(l.specs)) {
           const base = cat?.basePrice ?? 0;
+          const model = cat?.modelCode ?? l.specs.blowerModel;
           const specs: LineSpecs = {
             ...l.specs,
             bodyPrice: base,
-            blowerModel: cat?.modelCode ?? l.specs.blowerModel,
+            blowerModel: model,
             motorHp: null,
             motorPole: null,
           };
@@ -699,7 +723,7 @@ export function QuotationBuilder({
             ...l,
             specs,
             unitPrice: round2(base * (1 + vatRate)),
-            descriptionSnapshot: cat?.description || l.descriptionSnapshot,
+            descriptionSnapshot: buildKdkDescription(specs.type, model),
           };
         }
         const chosenModel = cat?.modelCode ?? l.specs.blowerModel;
@@ -807,7 +831,13 @@ export function QuotationBuilder({
             <Select
               value={c.brand}
               disabled={!editable || !c.category}
-              onChange={(e) => set({ brand: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+              onChange={(e) => {
+                const brand = e.target.value;
+                const reset = { brand, type: "", blowerModel: null, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" };
+                // KDK lines build their own description (Type / KDK Brand / Model).
+                if (brand === "KDK") applyKdk(l.id, reset);
+                else set(reset);
+              }}
             >
               <option value="">Brand…</option>
               {brandsFor(c.category).map((b) => (<option key={b} value={b}>{b}</option>))}
@@ -825,6 +855,10 @@ export function QuotationBuilder({
                 applyMotor(l.id, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
               } else if (MATERIAL_CATEGORIES.has(c.category)) {
                 applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
+              } else if (c.brand === "KDK") {
+                // KDK pre-built unit: rebuild Type / KDK Brand / Model and clear
+                // any previously-picked model (the type changed).
+                applyKdk(l.id, { type, blowerModel: null, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               } else {
                 set({ type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               }
