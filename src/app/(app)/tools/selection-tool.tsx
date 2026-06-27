@@ -81,7 +81,6 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
             <Select className="w-28" value={airflowUnit} onChange={(e) => setAirflowUnit(e.target.value)}>
               <option value="cfm">CFM</option>
               <option value="m3hr">m³/hr</option>
-              <option value="ls">L/s</option>
             </Select>
           </div>
           <div className="space-y-1">

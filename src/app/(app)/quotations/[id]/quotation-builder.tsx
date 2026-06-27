@@ -323,7 +323,7 @@ function rewritePaintLine(desc: string, material: string): string {
 }
 
 /** Unit options for the quote table headers (from the English & Metric chart). */
-const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "L/s", "L/min"];
+const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "l/s", "l/min"];
 const PRESSURE_UNITS = ["in-w.g.", "mm-w.g.", "Pa", "in-Hg", "mm-Hg", "psi", "atm"];
 const POWER_UNITS = ["HP", "kW", "W"];
 /** Material -> body-price multiplier (applied to the catalogue body price). */
