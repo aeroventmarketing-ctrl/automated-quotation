@@ -36,6 +36,8 @@ export interface QuotationPdfData {
   status: string;
   specNote?: string | null;
   terms?: string | null;
+  /** Motor column unit header — "Hp" for blowers, "W" for KDK units. */
+  motorUnit?: string;
   items: QuotationPdfLine[];
   subtotal: number; // net of VAT
   vat: number;
@@ -108,7 +110,7 @@ function Letterhead() {
   );
 }
 
-function TableHeader() {
+function TableHeader({ motorUnit }: { motorUnit?: string }) {
   return (
     <View style={s.row} fixed>
       <View style={[s.hCellFull, { width: W.item }]}><Text>Item</Text></View>
@@ -129,7 +131,7 @@ function TableHeader() {
       <View style={[s.hGroup, { width: W.hp + W.ph + W.volts }]}>
         <View style={s.hMotorTop}><Text>MOTOR</Text></View>
         <View style={s.hMotorSub}>
-          <View style={[s.hMotorCell, { width: W.hp, borderRight: BORDER }]}><Text>Hp</Text></View>
+          <View style={[s.hMotorCell, { width: W.hp, borderRight: BORDER }]}><Text>{motorUnit || "Hp"}</Text></View>
           <View style={[s.hMotorCell, { width: W.ph, borderRight: BORDER }]}><Text>Ph</Text></View>
           <View style={[s.hMotorCell, { width: W.volts }]}><Text>Volts</Text></View>
         </View>
@@ -169,7 +171,7 @@ export function QuotationPdf({ data }: { data: QuotationPdfData }) {
 
         {/* Table */}
         <View style={s.table}>
-          <TableHeader />
+          <TableHeader motorUnit={data.motorUnit} />
           {data.items.map((it, i) => (
             <View key={i} style={s.row} wrap={false}>
               <View style={[s.cell, s.cCenter, { width: W.item }]}><Text>{it.itemLabel || String(i + 1)}</Text></View>

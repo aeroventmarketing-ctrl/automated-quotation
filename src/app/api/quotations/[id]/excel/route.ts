@@ -29,9 +29,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const tpl = (q.template.config as Record<string, unknown>) ?? {};
   const units = (q.headerUnits as Record<string, unknown>) ?? {};
 
+  // KDK units are rated in watts, not HP — show the consumption under a "W"
+  // motor column when the quote carries any KDK product.
+  const isKdkSpecs = (s: Record<string, unknown>) =>
+    s.brand === "KDK" || typeof s.power_w === "number";
+  const anyKdk = q.items.some((it) => isKdkSpecs((it.specsSnapshot as Record<string, unknown>) ?? {}));
+
   const items: XlsxLine[] = q.items.map((it) => {
     const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
-    const motorHp = typeof s.motorHp === "number" || typeof s.motorHp === "string" ? s.motorHp : null;
+    const motorHp =
+      isKdkSpecs(s) && typeof s.power_w === "number"
+        ? s.power_w
+        : typeof s.motorHp === "number" || typeof s.motorHp === "string"
+          ? s.motorHp
+          : null;
     return {
       itemLabel: typeof s.itemLabel === "string" && s.itemLabel ? s.itemLabel : "",
       descriptionSnapshot: it.descriptionSnapshot,
@@ -58,7 +69,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     vatRate: config.vatRate,
     capacityUnit: (typeof units.capacity === "string" && units.capacity) || "cfm",
     pressureUnit: (typeof units.pressure === "string" && units.pressure) || "in-w.g.",
-    motorUnit: (typeof units.motor === "string" && units.motor) || "HP",
+    motorUnit: anyKdk ? "W" : (typeof units.motor === "string" && units.motor) || "HP",
     // Signature reflects the currently logged-in sales user, not the original
     // preparer, so each sales person's downloads carry their own name.
     preparedBy: user.name,

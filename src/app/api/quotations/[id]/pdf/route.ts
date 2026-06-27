@@ -38,7 +38,11 @@ function lineSpecs(specs: Record<string, unknown>, index: number) {
       n(specs.staticPressure_pa) ??
       (typeof sel.dutyStaticPressure_pa === "number" ? Math.round(sel.dutyStaticPressure_pa) : null),
     inches: n(specs.inches),
-    motorHp: n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null),
+    // KDK units are rated in watts: show the consumption in the motor column.
+    motorHp:
+      specs.brand === "KDK" || typeof specs.power_w === "number"
+        ? n(specs.power_w)
+        : n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null),
     motorPh: n(specs.motorPh),
     motorVolts: n(specs.motorVolts),
   };
@@ -106,6 +110,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       (typeof tplConfig.terms === "string" && tplConfig.terms.trim() ? tplConfig.terms : "") ||
       COMPANY.defaultTerms,
     items,
+    // KDK units are watt-rated, so label the motor column "W" when present.
+    motorUnit: quotation.items.some((it) => {
+      const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
+      return s.brand === "KDK" || typeof s.power_w === "number";
+    })
+      ? "W"
+      : "Hp",
     subtotal: Number(quotation.subtotal),
     vat: Number(quotation.vat),
     total: Number(quotation.total),

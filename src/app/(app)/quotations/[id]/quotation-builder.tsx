@@ -1270,9 +1270,9 @@ export function QuotationBuilder({
                     <Select className="h-8" disabled value="1"><option value="1">1-phase</option></Select>
                   </div>
                   <div>
-                    <Label className="text-[10px]">Motor</Label>
+                    <Label className="text-[10px]">W</Label>
                     <Input className="h-8" disabled
-                      value={l.specs.motorHp ? `${l.specs.motorHp} HP` : l.specs.power_w ? `${l.specs.power_w} W` : "—"} />
+                      value={l.specs.power_w != null ? `${l.specs.power_w} W` : "—"} />
                   </div>
                   <div>
                     <Label className="text-[10px]">Volts</Label>
