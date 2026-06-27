@@ -688,7 +688,9 @@ export function QuotationBuilder({
       return;
     }
     const cfm = convertAirflow(flow, aUnit, "cfm");
-    let sp = spVal ? convertPressure(spVal, pUnit, "inwg") : 0;
+    // Shutter Series selects on volume flow only — ignore any stored static
+    // pressure (e.g. left over from a previous product on this line).
+    let sp = spVal && !isFlowOnlyUnit(line.specs) ? convertPressure(spVal, pUnit, "inwg") : 0;
     if (panel && sp <= 0) sp = 0.5; // Recommended 0.5" w.g. when not given.
     setSel((s) => ({ ...s, [line.id]: { loading: true, error: null, results: null } }));
     try {
@@ -892,7 +894,11 @@ export function QuotationBuilder({
             <Select
               value={c.bladeType}
               disabled={!editable || !c.type}
-              onChange={(e) => applyKdk(l.id, { bladeType: e.target.value, blowerModel: null })}
+              onChange={(e) => applyKdk(l.id, {
+                bladeType: e.target.value, blowerModel: null,
+                // Shutter Series is flow-only — drop any stale static pressure.
+                ...(e.target.value === "Shutter Series" ? { staticPressure_pa: null } : {}),
+              })}
             >
               <option value="">Series…</option>
               {seriesFor(c.category, c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
