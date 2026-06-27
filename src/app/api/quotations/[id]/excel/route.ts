@@ -50,7 +50,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       unitPrice: Number(it.unitPrice),
       lineTotal: Number(it.lineTotal),
       capacity_cfm: n(s.capacity_cfm),
-      staticPressure_inwg: n(s.staticPressure_pa), // stored value, shown under in-w.g.
+      // Air curtains have no static pressure rating — leave the column blank ("--").
+      staticPressure_inwg: s.type === "Air Curtain" ? null : n(s.staticPressure_pa),
       // KDK units aren't sized in inches — leave the Size column blank.
       inches: isKdkSpecs(s) ? null : n(s.inches),
       motorHp,

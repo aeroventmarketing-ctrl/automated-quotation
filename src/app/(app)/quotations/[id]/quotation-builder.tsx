@@ -176,8 +176,13 @@ const lenToMeters = (v: number, unit: string): number => v * (LEN_TO_M[unit] ?? 
 const fmtFlow = (v: number): number => (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10);
 /** Air-curtain description (covers client opening; lists the unit's ratings). */
 function buildAirCurtainDescription(model?: string | null, heightM?: number | null, widthMm?: number | null): string {
-  const dims = heightM != null && widthMm != null ? `Effective height ${heightM} m · Unit width ${widthMm} mm` : "";
-  return ["Air Curtain", "KDK Brand", dims, model ? `Model: ${model}` : ""]
+  return [
+    "Air Curtain",
+    "KDK Brand",
+    heightM != null ? `Effective height ${heightM} m` : "",
+    widthMm != null ? `Unit width ${widthMm} mm` : "",
+    model ? `Model: ${model}` : "",
+  ]
     .filter((l) => l.length > 0)
     .join("\n");
 }
