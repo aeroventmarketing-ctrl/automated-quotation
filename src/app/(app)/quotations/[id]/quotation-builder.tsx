@@ -558,7 +558,7 @@ export function QuotationBuilder({
     setLines((ls) =>
       ls.map((l) => {
         if (l.id !== id) return l;
-        const specs = { ...l.specs, ...patch, motorPh: 1, motorVolts: 220 };
+        const specs = { ...l.specs, ...patch, motorPh: 1, motorVolts: 220, inches: null };
         return { ...l, specs, descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel) };
       }),
     );
@@ -723,6 +723,7 @@ export function QuotationBuilder({
             motorPole: null,
             motorPh: 1,
             motorVolts: 220,
+            inches: null, // KDK units aren't sized in inches
           };
           return {
             ...l,
@@ -1173,12 +1174,15 @@ export function QuotationBuilder({
                       <option key={u} value={u}>{u}</option>))}
                   </Select>
                 </div>
-                <div className="md:col-span-1">
-                  <Label className="text-[10px]">Size (in)</Label>
-                  <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
-                    value={l.specs.inches ?? ""}
-                    onChange={(e) => updateSpec(l.id, { inches: numOrNull(e.target.value) })} />
-                </div>
+                {/* KDK units aren't sized in inches — hide the Size field. */}
+                {!isPrebuiltUnit(l.specs) && (
+                  <div className="md:col-span-1">
+                    <Label className="text-[10px]">Size (in)</Label>
+                    <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
+                      value={l.specs.inches ?? ""}
+                      onChange={(e) => updateSpec(l.id, { inches: numOrNull(e.target.value) })} />
+                  </div>
+                )}
               </div>
 
               {/* Per-line fan selector — click a candidate to populate this item */}

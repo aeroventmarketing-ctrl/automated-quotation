@@ -51,7 +51,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       lineTotal: Number(it.lineTotal),
       capacity_cfm: n(s.capacity_cfm),
       staticPressure_inwg: n(s.staticPressure_pa), // stored value, shown under in-w.g.
-      inches: n(s.inches),
+      // KDK units aren't sized in inches — leave the Size column blank.
+      inches: isKdkSpecs(s) ? null : n(s.inches),
       motorHp,
       motorPh: n(s.motorPh),
       motorVolts: n(s.motorVolts),

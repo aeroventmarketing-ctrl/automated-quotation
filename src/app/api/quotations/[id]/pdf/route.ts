@@ -37,7 +37,8 @@ function lineSpecs(specs: Record<string, unknown>, index: number) {
     staticPressure_pa:
       n(specs.staticPressure_pa) ??
       (typeof sel.dutyStaticPressure_pa === "number" ? Math.round(sel.dutyStaticPressure_pa) : null),
-    inches: n(specs.inches),
+    // KDK units aren't sized in inches — leave the Size column blank.
+    inches: specs.brand === "KDK" || typeof specs.power_w === "number" ? null : n(specs.inches),
     // KDK units are rated in watts: show the consumption in the motor column.
     motorHp:
       specs.brand === "KDK" || typeof specs.power_w === "number"
