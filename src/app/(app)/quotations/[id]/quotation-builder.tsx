@@ -152,6 +152,9 @@ const NO_BLADE_DRIVE_TYPES = KDK_TYPES;
 /** KDK pre-built units (whole catalogue items) hide blade type / drive / material. */
 const isPrebuiltUnit = (specs: { brand: string; type: string }): boolean =>
   specs.brand === "KDK" || NO_BLADE_DRIVE_TYPES.has(specs.type);
+/** Shutter Series wall fans select on air volume only — static pressure is N/A. */
+const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
+  specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";
 /** Wheel-construction label for line 2 of a blower/fan description. */
 function constructionLabel(type: string): string {
   if (PROPELLER_FAN_TYPES.has(type)) return "Propeller Type";
@@ -1143,14 +1146,16 @@ export function QuotationBuilder({
                   </Select>
                 </div>
                 <div className="md:col-span-2">
-                  <Label className="text-[10px]">Static pressure</Label>
-                  <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
-                    value={l.specs.staticPressure_pa ?? ""}
+                  <Label className="text-[10px]">Static pressure{isFlowOnlyUnit(l.specs) ? " (N/A)" : ""}</Label>
+                  <Input className="h-8 text-right" type="number" step="any"
+                    disabled={!editable || isFlowOnlyUnit(l.specs)}
+                    value={isFlowOnlyUnit(l.specs) ? "" : (l.specs.staticPressure_pa ?? "")}
                     onChange={(e) => updateSpec(l.id, { staticPressure_pa: numOrNull(e.target.value) })} />
                 </div>
                 <div className="md:col-span-2">
                   <Label className="text-[10px]">Unit</Label>
-                  <Select className="h-8" value={units.pressure} disabled={!editable}
+                  <Select className="h-8" value={units.pressure}
+                    disabled={!editable || isFlowOnlyUnit(l.specs)}
                     onChange={(e) => setUnits({ ...units, pressure: e.target.value })}>
                     {(units.pressure && !PRESSURE_UNITS.includes(units.pressure) ? [units.pressure, ...PRESSURE_UNITS] : PRESSURE_UNITS).map((u) => (
                       <option key={u} value={u}>{u}</option>))}
@@ -1172,7 +1177,7 @@ export function QuotationBuilder({
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
-                      Fan selector — uses Capacity + S.P. above
+                      Fan selector — uses {isFlowOnlyUnit(l.specs) ? "Capacity (volume flow only)" : "Capacity + S.P."} above
                     </span>
                     <Button size="sm" variant="outline" onClick={() => runLineSelection(l)} disabled={sel[l.id]?.loading}>
                       <Gauge className="h-3.5 w-3.5" /> {sel[l.id]?.loading ? "Selecting…" : "Run selection"}
