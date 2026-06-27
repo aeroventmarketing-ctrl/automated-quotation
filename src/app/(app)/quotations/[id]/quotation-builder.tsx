@@ -43,6 +43,7 @@ interface CatalogEntry {
   lengthMm?: number | null;
   heightM?: number | null;
   powerW?: number | null;
+  airVolumeCmh?: number | null;
 }
 
 interface LineSpecs {
@@ -171,6 +172,8 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
 const LEN_TO_M: Record<string, number> = { mm: 0.001, cm: 0.01, inches: 0.0254, feet: 0.3048, meter: 1, m: 1 };
 const lenToMeters = (v: number, unit: string): number => v * (LEN_TO_M[unit] ?? 1);
+/** Format an air-volume value: whole number when large, 1 decimal when small. */
+const fmtFlow = (v: number): number => (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10);
 /** Air-curtain description (covers client opening; lists the unit's ratings). */
 function buildAirCurtainDescription(model?: string | null, heightM?: number | null, widthMm?: number | null): string {
   const dims = heightM != null && widthMm != null ? `Effective height ${heightM} m · Unit width ${widthMm} mm` : "";
@@ -1324,7 +1327,11 @@ export function QuotationBuilder({
                                 <span className="font-medium">{formatCurrency(round2(c.basePrice), quotation.currency)}</span>
                               </div>
                               <p className="text-muted-foreground">
-                                Effective height {c.heightM} m · Unit width {c.lengthMm} mm{c.powerW != null ? ` · ${c.powerW} W` : ""}
+                                Effective height {c.heightM} m · Unit width {c.lengthMm} mm
+                                {c.airVolumeCmh != null
+                                  ? ` · ${fmtFlow(convertAirflow(c.airVolumeCmh, "m3hr", normalizeAirflowUnit(units.capacity) ?? "m3hr"))} ${units.capacity}`
+                                  : ""}
+                                {c.powerW != null ? ` · ${c.powerW} W` : ""}
                               </p>
                             </button>
                           );

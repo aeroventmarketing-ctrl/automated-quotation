@@ -53,6 +53,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         lengthMm: num(s?.length_mm),
         heightM: num(s?.effectiveHeight_m),
         powerW: num(s?.power_w),
+        airVolumeCmh: num(s?.airVolume_cmh),
       }))(i.specs as Record<string, unknown>),
     ]),
   );
