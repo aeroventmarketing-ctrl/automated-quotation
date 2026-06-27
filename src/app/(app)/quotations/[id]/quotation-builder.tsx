@@ -67,6 +67,11 @@ interface LineSpecs {
   shape: string;
   sizeL: string;
   sizeW: string;
+  // Air-curtain client inputs (installation height + door width with units).
+  acHeight?: number | null;
+  acHeightUnit?: string;
+  acWidth?: number | null;
+  acWidthUnit?: string;
 }
 interface Line {
   id: string;
@@ -162,6 +167,17 @@ const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
   specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";
 /** Air curtains are picked differently from the duty-selected fans. */
 const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air Curtain";
+/** Length units the sales team can enter the client's height / door width in. */
+const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
+const LEN_TO_M: Record<string, number> = { mm: 0.001, cm: 0.01, inches: 0.0254, feet: 0.3048, meter: 1, m: 1 };
+const lenToMeters = (v: number, unit: string): number => v * (LEN_TO_M[unit] ?? 1);
+/** Air-curtain description (covers client opening; lists the unit's ratings). */
+function buildAirCurtainDescription(model?: string | null, heightM?: number | null, widthMm?: number | null): string {
+  const dims = heightM != null && widthMm != null ? `Effective height ${heightM} m · Unit width ${widthMm} mm` : "";
+  return ["Air Curtain", "KDK Brand", dims, model ? `Model: ${model}` : ""]
+    .filter((l) => l.length > 0)
+    .join("\n");
+}
 /** Wheel-construction label for line 2 of a blower/fan description. */
 function constructionLabel(type: string): string {
   if (PROPELLER_FAN_TYPES.has(type)) return "Propeller Type";
@@ -582,6 +598,48 @@ export function QuotationBuilder({
       }),
     );
   }
+  // Air-curtain recommendation: from the client's installation height + door
+  // width, the unit must reach the full height (effective height ≥ installation
+  // height) and span the opening (unit width ≥ door width). Cheapest qualifying
+  // model first. Returns [] until both inputs are entered.
+  function airCurtainPicks(specs: LineSpecs): CatalogEntry[] {
+    if (specs.acHeight == null || specs.acWidth == null) return [];
+    const needH = lenToMeters(specs.acHeight, specs.acHeightUnit ?? "meter");
+    const needW = lenToMeters(specs.acWidth, specs.acWidthUnit ?? "mm") * 1000; // → mm
+    return Object.values(catalog)
+      .filter((c) => c.type === "Air Curtain" && (c.heightM ?? 0) >= needH && (c.lengthMm ?? 0) >= needW)
+      .sort(
+        (a, b) =>
+          a.basePrice - b.basePrice ||
+          (a.heightM ?? 0) - (b.heightM ?? 0) ||
+          (a.lengthMm ?? 0) - (b.lengthMm ?? 0),
+      );
+  }
+  // Apply a recommended air-curtain model: VAT-inclusive price + consumption,
+  // single-phase 220 V (the client height/width inputs are kept on the line).
+  function applyAirCurtainModel(lineId: string, entry: CatalogEntry) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== lineId) return l;
+        const specs: LineSpecs = {
+          ...l.specs,
+          blowerModel: entry.modelCode,
+          bodyPrice: entry.basePrice,
+          power_w: entry.powerW ?? null,
+          motorPh: 1,
+          motorVolts: 220,
+          inches: null,
+        };
+        return {
+          ...l,
+          specs,
+          unitPrice: round2(entry.basePrice),
+          descriptionSnapshot: buildAirCurtainDescription(entry.modelCode, entry.heightM, entry.lengthMm),
+        };
+      }),
+    );
+  }
+
   // Add a fresh, blank line item (saved on "Save changes"; available while DRAFT).
   function addLine() {
     const id = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -599,6 +657,7 @@ export function QuotationBuilder({
           motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
           bodyPrice: null, power_w: null, blowerModel: null,
           category: "", brand: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
+          acHeight: null, acHeightUnit: "meter", acWidth: null, acWidthUnit: "mm",
         },
         rawSpecs: {},
       },
@@ -1138,51 +1197,121 @@ export function QuotationBuilder({
                 </div>
               </div>
 
-              {/* Table specs (Capacity / S.P. / Size columns in the quote). The flow
-                  and pressure units mirror the quotation header; the value is stored
-                  and shown in that unit, and converted to CFM / in-w.g. only to read
-                  the catalog in the fan selector. */}
-              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
-                <div className="md:col-span-2">
-                  <Label className="text-[10px]">Volume flow</Label>
-                  <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
-                    value={l.specs.capacity_cfm ?? ""}
-                    onChange={(e) => updateSpec(l.id, { capacity_cfm: numOrNull(e.target.value) })} />
-                </div>
-                <div className="md:col-span-2">
-                  <Label className="text-[10px]">Unit</Label>
-                  <Select className="h-8" value={units.capacity} disabled={!editable}
-                    onChange={(e) => setUnits({ ...units, capacity: e.target.value })}>
-                    {(units.capacity && !CAPACITY_UNITS.includes(units.capacity) ? [units.capacity, ...CAPACITY_UNITS] : CAPACITY_UNITS).map((u) => (
-                      <option key={u} value={u}>{u}</option>))}
-                  </Select>
-                </div>
-                <div className="md:col-span-2">
-                  <Label className="text-[10px]">Static pressure{isFlowOnlyUnit(l.specs) ? " (N/A)" : ""}</Label>
-                  <Input className="h-8 text-right" type="number" step="any"
-                    disabled={!editable || isFlowOnlyUnit(l.specs)}
-                    value={isFlowOnlyUnit(l.specs) ? "" : (l.specs.staticPressure_pa ?? "")}
-                    onChange={(e) => updateSpec(l.id, { staticPressure_pa: numOrNull(e.target.value) })} />
-                </div>
-                <div className="md:col-span-2">
-                  <Label className="text-[10px]">Unit</Label>
-                  <Select className="h-8" value={units.pressure}
-                    disabled={!editable || isFlowOnlyUnit(l.specs)}
-                    onChange={(e) => setUnits({ ...units, pressure: e.target.value })}>
-                    {(units.pressure && !PRESSURE_UNITS.includes(units.pressure) ? [units.pressure, ...PRESSURE_UNITS] : PRESSURE_UNITS).map((u) => (
-                      <option key={u} value={u}>{u}</option>))}
-                  </Select>
-                </div>
-                {/* KDK units aren't sized in inches — hide the Size field. */}
-                {!isPrebuiltUnit(l.specs) && (
-                  <div className="md:col-span-1">
-                    <Label className="text-[10px]">Size (in)</Label>
+              {/* Air curtain: the sales team enters the client's opening (installation
+                  height + door width, each with its own unit) and the program
+                  recommends a unit that covers it. Other products use the
+                  Capacity / S.P. / Size columns instead. */}
+              {isAirCurtain(l.specs) ? (
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
+                  <div className="md:col-span-2">
+                    <Label className="text-[10px]">Installation height (client)</Label>
                     <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
-                      value={l.specs.inches ?? ""}
-                      onChange={(e) => updateSpec(l.id, { inches: numOrNull(e.target.value) })} />
+                      value={l.specs.acHeight ?? ""}
+                      onChange={(e) => updateSpec(l.id, { acHeight: numOrNull(e.target.value) })} />
                   </div>
-                )}
-              </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-[10px]">Unit</Label>
+                    <Select className="h-8" value={l.specs.acHeightUnit ?? "meter"} disabled={!editable}
+                      onChange={(e) => updateSpec(l.id, { acHeightUnit: e.target.value })}>
+                      {LENGTH_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-[10px]">Door width (client)</Label>
+                    <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
+                      value={l.specs.acWidth ?? ""}
+                      onChange={(e) => updateSpec(l.id, { acWidth: numOrNull(e.target.value) })} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-[10px]">Unit</Label>
+                    <Select className="h-8" value={l.specs.acWidthUnit ?? "mm"} disabled={!editable}
+                      onChange={(e) => updateSpec(l.id, { acWidthUnit: e.target.value })}>
+                      {LENGTH_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
+                    </Select>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
+                  <div className="md:col-span-2">
+                    <Label className="text-[10px]">Volume flow</Label>
+                    <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
+                      value={l.specs.capacity_cfm ?? ""}
+                      onChange={(e) => updateSpec(l.id, { capacity_cfm: numOrNull(e.target.value) })} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-[10px]">Unit</Label>
+                    <Select className="h-8" value={units.capacity} disabled={!editable}
+                      onChange={(e) => setUnits({ ...units, capacity: e.target.value })}>
+                      {(units.capacity && !CAPACITY_UNITS.includes(units.capacity) ? [units.capacity, ...CAPACITY_UNITS] : CAPACITY_UNITS).map((u) => (
+                        <option key={u} value={u}>{u}</option>))}
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-[10px]">Static pressure{isFlowOnlyUnit(l.specs) ? " (N/A)" : ""}</Label>
+                    <Input className="h-8 text-right" type="number" step="any"
+                      disabled={!editable || isFlowOnlyUnit(l.specs)}
+                      value={isFlowOnlyUnit(l.specs) ? "" : (l.specs.staticPressure_pa ?? "")}
+                      onChange={(e) => updateSpec(l.id, { staticPressure_pa: numOrNull(e.target.value) })} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-[10px]">Unit</Label>
+                    <Select className="h-8" value={units.pressure}
+                      disabled={!editable || isFlowOnlyUnit(l.specs)}
+                      onChange={(e) => setUnits({ ...units, pressure: e.target.value })}>
+                      {(units.pressure && !PRESSURE_UNITS.includes(units.pressure) ? [units.pressure, ...PRESSURE_UNITS] : PRESSURE_UNITS).map((u) => (
+                        <option key={u} value={u}>{u}</option>))}
+                    </Select>
+                  </div>
+                  {/* KDK units aren't sized in inches — hide the Size field. */}
+                  {!isPrebuiltUnit(l.specs) && (
+                    <div className="md:col-span-1">
+                      <Label className="text-[10px]">Size (in)</Label>
+                      <Input className="h-8 text-right" type="number" step="any" disabled={!editable}
+                        value={l.specs.inches ?? ""}
+                        onChange={(e) => updateSpec(l.id, { inches: numOrNull(e.target.value) })} />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Air-curtain recommendation list (replaces the duty fan selector). */}
+              {editable && isAirCurtain(l.specs) && (
+                <div className="mt-2 rounded-md border border-dashed p-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Recommended units — effective height ≥ installation height and unit width ≥ door width
+                  </span>
+                  {(() => {
+                    if (l.specs.acHeight == null || l.specs.acWidth == null)
+                      return <p className="mt-1 text-xs text-muted-foreground">Enter the client&apos;s installation height and door width.</p>;
+                    const picks = airCurtainPicks(l.specs);
+                    if (picks.length === 0)
+                      return <p className="mt-1 text-xs text-destructive">No air curtain covers this opening — check the height/width or units.</p>;
+                    return (
+                      <div className="mt-2 space-y-1">
+                        {picks.map((c, i) => {
+                          const isRec = i === 0;
+                          return (
+                            <button key={c.modelCode} type="button"
+                              onClick={() => applyAirCurtainModel(l.id, c)}
+                              className={`w-full rounded-md border p-2 text-left text-xs hover:bg-accent ${isRec ? "border-primary ring-1 ring-primary" : ""}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">
+                                  {c.modelCode}
+                                  {isRec && <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">RECOMMENDED</span>}
+                                </span>
+                                <span className="font-medium">{formatCurrency(round2(c.basePrice), quotation.currency)}</span>
+                              </div>
+                              <p className="text-muted-foreground">
+                                Effective height {c.heightM} m · Unit width {c.lengthMm} mm{c.powerW != null ? ` · ${c.powerW} W` : ""}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains are picked by the height/width dropdowns instead. */}
