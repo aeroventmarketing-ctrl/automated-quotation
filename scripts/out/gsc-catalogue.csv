@@ -2,28 +2,28 @@ modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
 25GSC,AXIAL,"Aerovent High Pressure Wall Fan 250mm (25GSC)","Aerovent High Pressure Wall Fan
 High pressure series / Single phase / Reversible
 Blade 250 mm · Air Volume 1250 m³/hr · 47 W · 1560 rpm · 39 dB(A)
-Model: 25GSC",250,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1560,""power_w"":47,""volts"":220,""noise_db"":39,""weight_kg"":4.4,""blade_mm"":250,""airVolume_cmh"":1250}"
+Model: 25GSC",250,unit,11005,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1560,""power_w"":47,""volts"":220,""noise_db"":39,""weight_kg"":4.4,""blade_mm"":250,""airVolume_cmh"":1250}"
 30GSC,AXIAL,"Aerovent High Pressure Wall Fan 300mm (30GSC)","Aerovent High Pressure Wall Fan
 High pressure series / Single phase / Reversible
 Blade 300 mm · Air Volume 2080 m³/hr · 80 W · 1560 rpm · 42 dB(A)
-Model: 30GSC",300,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1560,""power_w"":80,""volts"":220,""noise_db"":42,""weight_kg"":6.1,""blade_mm"":300,""airVolume_cmh"":2080}"
+Model: 30GSC",300,unit,15706,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1560,""power_w"":80,""volts"":220,""noise_db"":42,""weight_kg"":6.1,""blade_mm"":300,""airVolume_cmh"":2080}"
 35GSC,AXIAL,"Aerovent High Pressure Wall Fan 350mm (35GSC)","Aerovent High Pressure Wall Fan
 High pressure series / Single phase / Reversible
 Blade 350 mm · Air Volume 2940 m³/hr · 127 W · 1660 rpm · 48 dB(A)
-Model: 35GSC",350,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1660,""power_w"":127,""volts"":230,""noise_db"":48,""weight_kg"":10.5,""blade_mm"":350,""airVolume_cmh"":2940}"
+Model: 35GSC",350,unit,17365,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1660,""power_w"":127,""volts"":230,""noise_db"":48,""weight_kg"":10.5,""blade_mm"":350,""airVolume_cmh"":2940}"
 40GSC,AXIAL,"Aerovent High Pressure Wall Fan 400mm (40GSC)","Aerovent High Pressure Wall Fan
 High pressure series / Single phase / Reversible
 Blade 400 mm · Air Volume 4240 m³/hr · 210 W · 1710 rpm · 51 dB(A)
-Model: 40GSC",400,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1710,""power_w"":210,""volts"":230,""noise_db"":51,""weight_kg"":19,""blade_mm"":400,""airVolume_cmh"":4240}"
+Model: 40GSC",400,unit,21291,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1710,""power_w"":210,""volts"":230,""noise_db"":51,""weight_kg"":19,""blade_mm"":400,""airVolume_cmh"":4240}"
 45GSC,AXIAL,"Aerovent High Pressure Wall Fan 450mm (45GSC)","Aerovent High Pressure Wall Fan
 High pressure series / Single phase / Reversible
 Blade 450 mm · Air Volume 5970 m³/hr · 325 W · 1630 rpm · 54 dB(A)
-Model: 45GSC",450,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1630,""power_w"":325,""volts"":220,""noise_db"":54,""weight_kg"":19,""blade_mm"":450,""airVolume_cmh"":5970}"
+Model: 45GSC",450,unit,33070,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1630,""power_w"":325,""volts"":220,""noise_db"":54,""weight_kg"":19,""blade_mm"":450,""airVolume_cmh"":5970}"
 50GSC,AXIAL,"Aerovent High Pressure Wall Fan 500mm (50GSC)","Aerovent High Pressure Wall Fan
 High pressure series / Single phase / Reversible
 Blade 500 mm · Air Volume 7100 m³/hr · 326 W · 1130 rpm · 51 dB(A)
-Model: 50GSC",500,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1130,""power_w"":326,""volts"":230,""noise_db"":51,""weight_kg"":22.5,""blade_mm"":500,""airVolume_cmh"":7100}"
+Model: 50GSC",500,unit,38490,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1130,""power_w"":326,""volts"":230,""noise_db"":51,""weight_kg"":22.5,""blade_mm"":500,""airVolume_cmh"":7100}"
 60GSC,AXIAL,"Aerovent High Pressure Wall Fan 620mm (60GSC)","Aerovent High Pressure Wall Fan
 High pressure series / Single phase / Reversible
 Blade 620 mm · Air Volume 9410 m³/hr · 361 W · 1150 rpm · 54 dB(A)
-Model: 60GSC",620,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1150,""power_w"":361,""volts"":230,""noise_db"":54,""weight_kg"":34,""blade_mm"":620,""airVolume_cmh"":9410}"
+Model: 60GSC",620,unit,56407,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""High Pressure Series"",""tag"":""GSCHP"",""fixedSpeed"":true,""rpm"":1150,""power_w"":361,""volts"":230,""noise_db"":54,""weight_kg"":34,""blade_mm"":620,""airVolume_cmh"":9410}"

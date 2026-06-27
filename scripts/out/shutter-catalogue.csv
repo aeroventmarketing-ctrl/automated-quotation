@@ -2,35 +2,35 @@ modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
 15AAQ1,PROPELLER,"Shutter Series Wall Fan 150mm (15AAQ1)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 150 mm · Air Volume 306 m³/hr · 19 W · 1560 rpm · 34 dB(A)
-Model: 15AAQ1",150,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1560,""power_w"":19,""volts"":220,""noise_db"":34,""weight_kg"":1.4,""blade_mm"":150,""airVolume_cmh"":306}"
+Model: 15AAQ1",150,unit,2876,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1560,""power_w"":19,""volts"":220,""noise_db"":34,""weight_kg"":1.4,""blade_mm"":150,""airVolume_cmh"":306}"
 20ALH,PROPELLER,"Shutter Series Wall Fan 200mm (20ALH)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 200 mm · Air Volume 600 m³/hr · 29 W · 1340 rpm · 44 dB(A)
-Model: 20ALH",200,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1340,""power_w"":29,""noise_db"":44,""weight_kg"":2.2,""blade_mm"":200,""airVolume_cmh"":600}"
+Model: 20ALH",200,unit,3429,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1340,""power_w"":29,""noise_db"":44,""weight_kg"":2.2,""blade_mm"":200,""airVolume_cmh"":600}"
 20AUH,PROPELLER,"Shutter Series Wall Fan 200mm (20AUH)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 200 mm · Air Volume 650 m³/hr · 29 W · 1400 rpm · 42 dB(A)
-Model: 20AUH",200,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1400,""power_w"":29,""noise_db"":42,""weight_kg"":2,""blade_mm"":200,""airVolume_cmh"":650}"
+Model: 20AUH",200,unit,2876,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1400,""power_w"":29,""noise_db"":42,""weight_kg"":2,""blade_mm"":200,""airVolume_cmh"":650}"
 25ALH,PROPELLER,"Shutter Series Wall Fan 250mm (25ALH)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 250 mm · Air Volume 846 m³/hr · 33 W · 1050 rpm · 43 dB(A)
-Model: 25ALH",250,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1050,""power_w"":33,""noise_db"":43,""weight_kg"":2.7,""blade_mm"":250,""airVolume_cmh"":846}"
+Model: 25ALH",250,unit,4148,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1050,""power_w"":33,""noise_db"":43,""weight_kg"":2.7,""blade_mm"":250,""airVolume_cmh"":846}"
 25AUH,PROPELLER,"Shutter Series Wall Fan 250mm (25AUH)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 250 mm · Air Volume 940 m³/hr · 33 W · 1125 rpm · 39 dB(A)
-Model: 25AUH",250,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1125,""power_w"":33,""noise_db"":39,""weight_kg"":2.4,""blade_mm"":250,""airVolume_cmh"":940}"
+Model: 25AUH",250,unit,4148,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1125,""power_w"":33,""noise_db"":39,""weight_kg"":2.4,""blade_mm"":250,""airVolume_cmh"":940}"
 25RLF,PROPELLER,"Shutter Series Wall Fan 250mm (25RLF)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 250 mm · Air Volume 835 m³/hr · 34 W · 1060 rpm · 45 dB(A)
-Model: 25RLF",250,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1060,""power_w"":34,""noise_db"":45,""weight_kg"":2.7,""blade_mm"":250,""airVolume_cmh"":835}"
+Model: 25RLF",250,unit,5066,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":1060,""power_w"":34,""noise_db"":45,""weight_kg"":2.7,""blade_mm"":250,""airVolume_cmh"":835}"
 30ALF,PROPELLER,"Shutter Series Wall Fan 300mm (30ALF)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 300 mm · Air Volume 915 m³/hr · 33 W · 835 rpm · 43 dB(A)
-Model: 30ALF",300,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":835,""power_w"":33,""noise_db"":43,""weight_kg"":3.1,""blade_mm"":300,""airVolume_cmh"":915}"
+Model: 30ALF",300,unit,7466,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":835,""power_w"":33,""noise_db"":43,""weight_kg"":3.1,""blade_mm"":300,""airVolume_cmh"":915}"
 30AUH,PROPELLER,"Shutter Series Wall Fan 300mm (30AUH)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 300 mm · Air Volume 1140 m³/hr · 33 W · 950 rpm · 38 dB(A)
-Model: 30AUH",300,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":950,""power_w"":33,""noise_db"":38,""weight_kg"":2.7,""blade_mm"":300,""airVolume_cmh"":1140}"
+Model: 30AUH",300,unit,5807,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":950,""power_w"":33,""noise_db"":38,""weight_kg"":2.7,""blade_mm"":300,""airVolume_cmh"":1140}"
 30KQT,PROPELLER,"Shutter Series Wall Fan 307mm (30KQT)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 307 mm · Air Volume 1270 m³/hr · 51 W · 1255 rpm · 46.5 dB(A)
@@ -38,7 +38,7 @@ Model: 30KQT",307,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK""
 30RLE,PROPELLER,"Shutter Series Wall Fan 300mm (30RLE)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 300 mm · Air Volume 730 m³/hr · 33 W · 835 rpm · 43 dB(A)
-Model: 30RLE",300,unit,0,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":835,""power_w"":33,""noise_db"":43,""weight_kg"":3.1,""blade_mm"":300,""airVolume_cmh"":730}"
+Model: 30RLE",300,unit,8351,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Wall Mounted Fan"",""series"":""Shutter Series"",""tag"":""WMFSHUTTER"",""fixedSpeed"":true,""flowOnly"":true,""rpm"":835,""power_w"":33,""noise_db"":43,""weight_kg"":3.1,""blade_mm"":300,""airVolume_cmh"":730}"
 40KQT,PROPELLER,"Shutter Series Wall Fan 410mm (40KQT)","Shutter Series Wall Mounted Fan
 Automatic shutter / Wall mounting / Single speed
 Blade 410 mm · Air Volume 2190 m³/hr · 76 W · 1260 rpm · 51 dB(A)

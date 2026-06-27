@@ -40,16 +40,17 @@ interface Shutter {
 }
 
 const SHUTTERS: Shutter[] = [
-  { code: "15AAQ1", blade_mm: 150, airVolume_cmh: 306, power_w: 19, noise_db: 34, rpm: 1560, weight_kg: 1.4, volts: 220, shutoff_pa: 32, price: 0 },
-  { code: "20ALH", blade_mm: 200, airVolume_cmh: 600, power_w: 29, noise_db: 44, rpm: 1340, weight_kg: 2.2, volts: null, shutoff_pa: 25, price: 0 },
-  { code: "20AUH", blade_mm: 200, airVolume_cmh: 650, power_w: 29, noise_db: 42, rpm: 1400, weight_kg: 2.0, volts: null, shutoff_pa: 25, price: 0 },
-  { code: "25ALH", blade_mm: 250, airVolume_cmh: 846, power_w: 33, noise_db: 43, rpm: 1050, weight_kg: 2.7, volts: null, shutoff_pa: 25, price: 0 },
-  { code: "25AUH", blade_mm: 250, airVolume_cmh: 940, power_w: 33, noise_db: 39, rpm: 1125, weight_kg: 2.4, volts: null, shutoff_pa: 25, price: 0 },
-  { code: "25RLF", blade_mm: 250, airVolume_cmh: 835, power_w: 34, noise_db: 45, rpm: 1060, weight_kg: 2.7, volts: null, shutoff_pa: 25, price: 0 },
-  { code: "30ALF", blade_mm: 300, airVolume_cmh: 915, power_w: 33, noise_db: 43, rpm: 835, weight_kg: 3.1, volts: null, shutoff_pa: 25, price: 0 },
-  { code: "30AUH", blade_mm: 300, airVolume_cmh: 1140, power_w: 33, noise_db: 38, rpm: 950, weight_kg: 2.7, volts: null, shutoff_pa: 25, price: 0 },
+  { code: "15AAQ1", blade_mm: 150, airVolume_cmh: 306, power_w: 19, noise_db: 34, rpm: 1560, weight_kg: 1.4, volts: 220, shutoff_pa: 32, price: 2876 },
+  { code: "20ALH", blade_mm: 200, airVolume_cmh: 600, power_w: 29, noise_db: 44, rpm: 1340, weight_kg: 2.2, volts: null, shutoff_pa: 25, price: 3429 },
+  { code: "20AUH", blade_mm: 200, airVolume_cmh: 650, power_w: 29, noise_db: 42, rpm: 1400, weight_kg: 2.0, volts: null, shutoff_pa: 25, price: 2876 },
+  { code: "25ALH", blade_mm: 250, airVolume_cmh: 846, power_w: 33, noise_db: 43, rpm: 1050, weight_kg: 2.7, volts: null, shutoff_pa: 25, price: 4148 },
+  { code: "25AUH", blade_mm: 250, airVolume_cmh: 940, power_w: 33, noise_db: 39, rpm: 1125, weight_kg: 2.4, volts: null, shutoff_pa: 25, price: 4148 },
+  { code: "25RLF", blade_mm: 250, airVolume_cmh: 835, power_w: 34, noise_db: 45, rpm: 1060, weight_kg: 2.7, volts: null, shutoff_pa: 25, price: 5066 },
+  { code: "30ALF", blade_mm: 300, airVolume_cmh: 915, power_w: 33, noise_db: 43, rpm: 835, weight_kg: 3.1, volts: null, shutoff_pa: 25, price: 7466 },
+  { code: "30AUH", blade_mm: 300, airVolume_cmh: 1140, power_w: 33, noise_db: 38, rpm: 950, weight_kg: 2.7, volts: null, shutoff_pa: 25, price: 5807 },
+  // 30KQT / 40KQT appear as 30KQT1 / 40KQT1 on the price list with no price yet.
   { code: "30KQT", blade_mm: 307, airVolume_cmh: 1270, power_w: 51, noise_db: 46.5, rpm: 1255, weight_kg: 4.9, volts: 220, shutoff_pa: 60, price: 0 },
-  { code: "30RLE", blade_mm: 300, airVolume_cmh: 730, power_w: 33, noise_db: 43, rpm: 835, weight_kg: 3.1, volts: null, shutoff_pa: 25, price: 0 },
+  { code: "30RLE", blade_mm: 300, airVolume_cmh: 730, power_w: 33, noise_db: 43, rpm: 835, weight_kg: 3.1, volts: null, shutoff_pa: 25, price: 8351 },
   { code: "40KQT", blade_mm: 410, airVolume_cmh: 2190, power_w: 76, noise_db: 51, rpm: 1260, weight_kg: 6.4, volts: 230, shutoff_pa: 60, price: 0 },
 ];
 
