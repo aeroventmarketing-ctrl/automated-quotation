@@ -12,9 +12,8 @@
  * the unit runs at one rated speed and selection checks the duty against the fan
  * curve (no speed scaling). Air Volume is m³/hr and the curve SP is Pa.
  *
- * NOTE: the charts don't list Consumption (W) or RPM, so power_w / rpm are left
- * blank here — they show "--" until provided. Prices are VAT-inclusive; 10CGB15
- * had no price on the list (₱0 until supplied).
+ * NOTE: Consumption (W) is from the supplied list; RPM isn't published, so rpm is
+ * blank (omitted in the UI). Prices are VAT-inclusive; 10CGB15 had no price (₱0).
  *
  * Run: npx tsx scripts/gen-minisirocco-import.ts
  */
@@ -27,18 +26,19 @@ type Pt = [cmh: number, pa: number]; // (air volume m³/hr, static pressure Pa)
 
 interface Mini {
   code: string; // sold code, e.g. "10CGB15"
+  power_w: number; // Consumption (W), from the supplied list
   price: number; // VAT-inclusive selling price (PHP); 0 = not yet priced
   curve: Pt[]; // 220V 60Hz Hi curve, digitised from the chart (descending SP)
 }
 
 const MINIS: Mini[] = [
-  { code: "10CGB15", price: 0, curve: [[0, 95], [30, 88], [60, 76], [90, 58], [110, 38], [125, 15], [132, 0]] },
-  { code: "12CGB15", price: 7963, curve: [[0, 140], [60, 118], [120, 90], [160, 65], [200, 32], [225, 8], [235, 0]] },
-  { code: "14CGB15", price: 8793, curve: [[0, 135], [60, 125], [120, 108], [180, 80], [220, 48], [245, 15], [258, 0]] },
-  { code: "16CGB15", price: 12941, curve: [[0, 215], [120, 180], [240, 140], [360, 95], [450, 50], [490, 15], [510, 0]] },
-  { code: "17CGB15", price: 15484, curve: [[0, 240], [150, 200], [300, 155], [450, 110], [600, 58], [700, 20], [730, 0]] },
-  { code: "19CGB15", price: 19687, curve: [[0, 300], [180, 258], [360, 215], [540, 160], [720, 95], [840, 30], [880, 0]] },
-  { code: "21CGB15", price: 37494, curve: [[0, 390], [360, 335], [720, 265], [1080, 175], [1300, 90], [1440, 0]] },
+  { code: "10CGB15", power_w: 12, price: 0, curve: [[0, 95], [30, 88], [60, 76], [90, 58], [110, 38], [125, 15], [132, 0]] },
+  { code: "12CGB15", power_w: 25, price: 7963, curve: [[0, 140], [60, 118], [120, 90], [160, 65], [200, 32], [225, 8], [235, 0]] },
+  { code: "14CGB15", power_w: 30, price: 8793, curve: [[0, 135], [60, 125], [120, 108], [180, 80], [220, 48], [245, 15], [258, 0]] },
+  { code: "16CGB15", power_w: 57, price: 12941, curve: [[0, 215], [120, 180], [240, 140], [360, 95], [450, 50], [490, 15], [510, 0]] },
+  { code: "17CGB15", power_w: 95, price: 15484, curve: [[0, 240], [150, 200], [300, 155], [450, 110], [600, 58], [700, 20], [730, 0]] },
+  { code: "19CGB15", power_w: 107, price: 19687, curve: [[0, 300], [180, 258], [360, 215], [540, 160], [720, 95], [840, 30], [880, 0]] },
+  { code: "21CGB15", power_w: 328, price: 37494, curve: [[0, 390], [360, 335], [720, 265], [1080, 175], [1300, 90], [1440, 0]] },
 ];
 
 function csv(s: string): string {
@@ -57,10 +57,11 @@ function main() {
   for (const m of MINIS) {
     const sizeLabel = m.code.replace(/CGB.*$/, ""); // 10, 12, 14, 16, 17, 19, 21
     const maxFlow = m.curve[m.curve.length - 1][0];
+    const power_kw = Math.round((m.power_w / 1000) * 100000) / 100000;
     const description =
       "KDK Mini Sirocco Fan\n" +
       "Sirocco / 2-speed / Ceiling mounting\n" +
-      `Air Volume ${maxFlow} m³/hr (220V 60Hz Hi)\n` +
+      `Air Volume ${maxFlow} m³/hr · ${m.power_w} W (220V 60Hz Hi)\n` +
       `Model: ${m.code}`;
     const specs: Record<string, unknown> = {
       category: "Other Products",
@@ -69,6 +70,7 @@ function main() {
       tag: "MINISIROCCO",
       fixedSpeed: true,
       speeds: 2,
+      power_w: m.power_w,
       airVolume_cmh: maxFlow,
     };
     catRows.push(
@@ -84,9 +86,9 @@ function main() {
         csv(JSON.stringify(specs)),
       ].join(","),
     );
-    // rpm / power unknown (not on the charts) → 0; the UI omits them until set.
+    // rpm unknown (not on the charts) → 0; power from the supplied consumption.
     for (const [cmh, pa] of m.curve) {
-      ratRows.push([m.code, "0", cmh.toFixed(2), pa.toFixed(2), "0", ""].join(","));
+      ratRows.push([m.code, "0", cmh.toFixed(2), pa.toFixed(2), power_kw.toFixed(5), ""].join(","));
     }
   }
 
