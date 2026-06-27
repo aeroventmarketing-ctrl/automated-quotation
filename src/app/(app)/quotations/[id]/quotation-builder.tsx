@@ -334,6 +334,8 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
  * SIEB (Square Inline) reuses the CIEB catalogue; every other tag queries its own.
  */
 function selectionTag(type: string, bladeType: string, drive = "", category = ""): string {
+  // Ceiling-cassette ventilating fans query their own fixed-speed catalogue.
+  if (type === "Ceiling Cassette") return "CASSETTE";
   // Axial fans query their own belt/direct catalogue: TAF/TAFDD, VAF/VAFDD.
   if (category === "Axial Type") {
     const base = type === "Vaneaxial" ? "VAF" : "TAF";
@@ -624,9 +626,12 @@ export function QuotationBuilder({
     const spVal = line.specs.staticPressure_pa;
     // Propeller wall fans (EWF/EWFDD) may be selected on flow alone — static
     // pressure defaults to the recommended 0.5" w.g. below when it isn't given.
+    // Fixed-speed units (ceiling cassette) may also be selected on flow alone,
+    // defaulting to free-air (0 Pa) when static pressure isn't given.
     const panel = PROPELLER_FAN_TYPES.has(line.specs.type);
-    if (!flow || (!spVal && !panel)) {
-      setSel((s) => ({ ...s, [line.id]: { loading: false, error: panel ? "Enter volume flow first." : "Enter volume flow and static pressure first.", results: null } }));
+    const fixedUnit = NO_BLADE_DRIVE_TYPES.has(line.specs.type);
+    if (!flow || (!spVal && !panel && !fixedUnit)) {
+      setSel((s) => ({ ...s, [line.id]: { loading: false, error: panel || fixedUnit ? "Enter volume flow first." : "Enter volume flow and static pressure first.", results: null } }));
       return;
     }
     const aUnit = normalizeAirflowUnit(units.capacity);
@@ -667,6 +672,25 @@ export function QuotationBuilder({
     setLines((ls) =>
       ls.map((l) => {
         if (l.id !== lineId) return l;
+        // Fixed-speed pre-built units (ceiling cassette): the catalogue item is
+        // the whole unit — take its price and description as-is (no motor add-on,
+        // no blower-style description rewrites), priced as base × VAT.
+        if (NO_BLADE_DRIVE_TYPES.has(l.specs.type)) {
+          const base = cat?.basePrice ?? 0;
+          const specs: LineSpecs = {
+            ...l.specs,
+            bodyPrice: base,
+            blowerModel: cat?.modelCode ?? l.specs.blowerModel,
+            motorHp: null,
+            motorPole: null,
+          };
+          return {
+            ...l,
+            specs,
+            unitPrice: round2(base * (1 + vatRate)),
+            descriptionSnapshot: cat?.description || l.descriptionSnapshot,
+          };
+        }
         const chosenModel = cat?.modelCode ?? l.specs.blowerModel;
         const specs: LineSpecs = {
           ...l.specs,
@@ -1135,14 +1159,23 @@ export function QuotationBuilder({
                                   <ConfidenceBadge confidence={r.confidence} />
                                 </span>
                               </div>
-                              <p className="text-muted-foreground">
-                                {r.rpm} rpm · {r.bhp} BHP → {r.motorHp} HP{r.motorPole ? ` ${r.motorPole}-pole` : ""}
-                                {r.bladeAngle != null ? ` · ${r.bladeAngle}° blade` : ""}
-                                {` · delivers ${Math.round((r.selectedAirflow_m3hr ?? r.dutyAirflow_m3hr) / 1.6990108)} cfm`}
-                                {r.outletVelocity_fpm != null
-                                  ? ` · OV ${r.outletVelocity_fpm}${r.ovLimit_fpm != null ? `/${r.ovLimit_fpm}` : ""} fpm`
-                                  : ""}
-                              </p>
+                              {NO_BLADE_DRIVE_TYPES.has(l.specs.type) ? (
+                                // Fixed-speed units (ceiling cassette) are rated in
+                                // watts and m³/hr, not HP / CFM.
+                                <p className="text-muted-foreground">
+                                  {r.rpm} rpm · {Math.round(r.power_kw * 1000)} W
+                                  {` · delivers ${Math.round(r.selectedAirflow_m3hr ?? r.dutyAirflow_m3hr)} m³/hr`}
+                                </p>
+                              ) : (
+                                <p className="text-muted-foreground">
+                                  {r.rpm} rpm · {r.bhp} BHP → {r.motorHp} HP{r.motorPole ? ` ${r.motorPole}-pole` : ""}
+                                  {r.bladeAngle != null ? ` · ${r.bladeAngle}° blade` : ""}
+                                  {` · delivers ${Math.round((r.selectedAirflow_m3hr ?? r.dutyAirflow_m3hr) / 1.6990108)} cfm`}
+                                  {r.outletVelocity_fpm != null
+                                    ? ` · OV ${r.outletVelocity_fpm}${r.ovLimit_fpm != null ? `/${r.ovLimit_fpm}` : ""} fpm`
+                                    : ""}
+                                </p>
+                              )}
                             </button>
                           );
                         })}

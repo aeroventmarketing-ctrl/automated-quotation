@@ -66,6 +66,14 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "VAFDD") return { modelCode: { endsWith: "VAFDD" } };
   if (t === "TAF") return { modelCode: { endsWith: "TAF" } };
   if (t === "VAF") return { modelCode: { endsWith: "VAF" } };
+  // Ceiling-cassette ventilating fans — model codes like 17CUG / 24CDF / 38CHG.
+  if (t === "CASSETTE") {
+    return {
+      OR: ["CUF", "CUG", "CDF", "CDG", "CHG", "CHH", "CDH"].map((s) => ({
+        modelCode: { endsWith: s },
+      })),
+    };
+  }
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {

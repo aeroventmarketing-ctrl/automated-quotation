@@ -764,6 +764,94 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
   };
 }
 
+/**
+ * Fixed-speed unit selection (ceiling-cassette ventilating fans). The unit runs
+ * at one rated speed, so there is no speed scaling: the single rated curve (flow
+ * vs static pressure, Pa, at the fixed rpm) either covers the duty or it doesn't.
+ * The unit covers the duty when the requested flow is within its range and the
+ * curve develops at least the required static pressure at that flow. Power is the
+ * unit's rated consumption (constant). Off-curve units are excluded.
+ */
+function selectFixedSpeed(model: FanModelInput, duty: DutyPoint): SelectionResult | null {
+  const numv = (v: unknown): number | null =>
+    typeof v === "number" && !Number.isNaN(v) ? v : null;
+  const pts = model.ratingPoints
+    .filter((p) => p.airflow_m3hr >= 0 && p.staticPressure_pa >= 0)
+    .map((p) => ({ q: p.airflow_m3hr, sp: p.staticPressure_pa }))
+    .sort((a, b) => a.q - b.q);
+  if (pts.length < 2) return null;
+
+  const Q = duty.airflow_m3hr;
+  const P = duty.staticPressure_pa;
+  const qMax = pts[pts.length - 1].q;
+
+  // Static pressure the curve develops at the requested flow (SP falls as flow
+  // rises). Below the first point's flow, hold the shut-off (max) pressure.
+  let spAtQ: number;
+  if (Q <= pts[0].q) spAtQ = pts[0].sp;
+  else if (Q >= qMax) spAtQ = pts[pts.length - 1].sp;
+  else {
+    spAtQ = pts[pts.length - 1].sp;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      if (Q >= a.q && Q <= b.q) {
+        const t = b.q === a.q ? 0 : (Q - a.q) / (b.q - a.q);
+        spAtQ = a.sp + (b.sp - a.sp) * t;
+        break;
+      }
+    }
+  }
+
+  // Excluded when the unit can't move the requested flow, or can't develop the
+  // required static pressure at that flow (1 Pa / small flow tolerance).
+  if (Q > qMax + 1) return null;
+  if (P > spAtQ + 1) return null;
+
+  const ratedRpms = model.ratingPoints.map((p) => p.rpm).filter((r) => r > 0);
+  const rpm = Math.round(numv(model.specs?.rpm) ?? (ratedRpms.length ? Math.max(...ratedRpms) : 0));
+  const powerW = numv(model.specs?.power_w) ?? 0;
+  const power_kw = Math.round((powerW / 1000) * 1000) / 1000;
+  const bhp = Math.round(kwToHp(power_kw) * 100) / 100;
+  const speeds = numv(model.specs?.speeds);
+  const note =
+    `${model.modelCode} fixed-speed at ${rpm} rpm — delivers ${Math.round(Q)} m³/hr ` +
+    `@ ${Math.round(P)} Pa (curve to ${Math.round(spAtQ)} Pa). ${powerW} W` +
+    `${speeds === 2 ? ", 2-speed (Hi)" : ""}. Confidence: HIGH.`;
+
+  return {
+    modelId: model.id,
+    modelCode: model.modelCode,
+    name: model.name,
+    sizeLabel: model.sizeLabel ?? null,
+    bladeAngle: null,
+    rpm,
+    referenceRpm: rpm,
+    speedRatio: 1,
+    dutyAirflow_m3hr: Q,
+    selectedAirflow_m3hr: Math.round(Q),
+    dutyStaticPressure_pa: P,
+    selectionStaticPressure_pa: P,
+    power_kw,
+    bhp,
+    motorKw: power_kw,
+    motorHp: 0, // integral motor — rated in watts, shown by the builder
+    motorPole: null,
+    efficiency: null,
+    serviceFactor: 1,
+    outletVelocity_fpm: null,
+    ovLimit_fpm: null,
+    ovWithinLimit: null,
+    maxRpm: rpm,
+    rpmWithinMax: true,
+    withinEnvelope: true,
+    confidence: "HIGH",
+    requiresEngineerConfirmation: false,
+    selectionNote: note,
+    warnings: [],
+  };
+}
+
 export function selectFan(
   model: FanModelInput,
   duty: DutyPoint,
@@ -773,6 +861,10 @@ export function selectFan(
   // than fan-law scaling a single design curve.
   if (model.specs?.propeller === true && Array.isArray(model.specs?.rows)) {
     return selectPropellerRow(model, duty);
+  }
+  // Fixed-speed units (ceiling-cassette ventilating fans) check curve coverage.
+  if (model.specs?.fixedSpeed === true) {
+    return selectFixedSpeed(model, duty);
   }
   const serviceFactor = options.serviceFactor ?? 1.15;
   const maxSpeedRatio = options.maxSpeedRatio ?? 1.15;
