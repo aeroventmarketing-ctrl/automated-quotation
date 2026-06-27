@@ -50,6 +50,7 @@ interface LineSpecs {
   motorVolts: number | null;
   motorPole: number | null;
   bodyPrice: number | null; // net blower-body price (before motor / VAT)
+  power_w: number | null; // KDK unit rated consumption (W), from the catalog
   blowerModel: string | null; // base catalogue model code, e.g. AV1225CEB
   // Per-item product selection (classification).
   category: string;
@@ -552,12 +553,12 @@ export function QuotationBuilder({
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
   }
   // KDK pre-built units: merge the patch and rebuild the KDK description
-  // (Type / KDK Brand / Model) so it tracks the brand, type and chosen model.
+  // (Type / KDK Brand / Model). KDK units are single-phase, 220 V (fixed).
   function applyKdk(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) =>
       ls.map((l) => {
         if (l.id !== id) return l;
-        const specs = { ...l.specs, ...patch };
+        const specs = { ...l.specs, ...patch, motorPh: 1, motorVolts: 220 };
         return { ...l, specs, descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel) };
       }),
     );
@@ -578,7 +579,7 @@ export function QuotationBuilder({
         specs: {
           itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
           motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
-          bodyPrice: null, blowerModel: null,
+          bodyPrice: null, power_w: null, blowerModel: null,
           category: "", brand: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
         },
         rawSpecs: {},
@@ -716,8 +717,12 @@ export function QuotationBuilder({
             ...l.specs,
             bodyPrice: base,
             blowerModel: model,
-            motorHp: null,
+            // Rated consumption (W) from the catalogue; single-phase, 220 V fixed.
+            power_w: r.power_kw ? Math.round(r.power_kw * 10000) / 10 : l.specs.power_w,
+            motorHp: r.motorHp || null,
             motorPole: null,
+            motorPh: 1,
+            motorVolts: 220,
           };
           return {
             ...l,
@@ -1233,7 +1238,7 @@ export function QuotationBuilder({
                                 // Fixed-speed units (ceiling cassette) are rated in
                                 // watts and m³/hr, not HP / CFM.
                                 <p className="text-muted-foreground">
-                                  {r.rpm} rpm · {Math.round(r.power_kw * 1000)} W
+                                  {r.rpm} rpm · {Math.round(r.power_kw * 10000) / 10} W
                                   {` · delivers ${Math.round(r.selectedAirflow_m3hr ?? r.dutyAirflow_m3hr)} m³/hr`}
                                 </p>
                               ) : (
@@ -1256,6 +1261,30 @@ export function QuotationBuilder({
               )}
 
               {/* Motor + price calculator */}
+              {isPrebuiltUnit(l.specs) ? (
+                // KDK pre-built units: single-phase and 220 V (both fixed), the
+                // motor rating from the catalogue, and the unit price.
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <div>
+                    <Label className="text-[10px]">Phase</Label>
+                    <Select className="h-8" disabled value="1"><option value="1">1-phase</option></Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Motor</Label>
+                    <Input className="h-8" disabled
+                      value={l.specs.motorHp ? `${l.specs.motorHp} HP` : l.specs.power_w ? `${l.specs.power_w} W` : "—"} />
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Volts</Label>
+                    <Select className="h-8" disabled value="220"><option value="220">220</option></Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Unit ₱ (incl. VAT)</Label>
+                    <Input className="h-8 text-right" type="number" step="0.01" value={l.unitPrice} disabled={!editable}
+                      onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
+                  </div>
+                </div>
+              ) : (
               <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-6">
                 <div>
                   <Label className="text-[10px]">Body ₱ (net)</Label>
@@ -1313,9 +1342,10 @@ export function QuotationBuilder({
                     onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                 </div>
               </div>
+              )}
 
-              {/* Calculator readout */}
-              {(() => {
+              {/* Calculator readout (blower motor pricing — not for KDK units) */}
+              {!isPrebuiltUnit(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;

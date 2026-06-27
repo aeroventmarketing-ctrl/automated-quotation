@@ -103,6 +103,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               motorVolts: num(s.motorVolts),
               motorPole: num(s.motorPole),
               bodyPrice: num(s.bodyPrice),
+              power_w: num(s.power_w),
               blowerModel: typeof s.blowerModel === "string" ? s.blowerModel : null,
               category: typeof s.category === "string" ? s.category : "",
               brand: typeof s.brand === "string" ? s.brand : "",
