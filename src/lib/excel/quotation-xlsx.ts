@@ -315,12 +315,16 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Note -----------------------------------------------------------------
   if (data.specNote) {
-    ws.mergeCells(`B${r}:P${r + 1}`);
+    // Single merged row (B..P); the next row stays unmerged. Height auto-fits the
+    // wrapped note (B..P is wide, ~110 chars per line).
+    ws.mergeCells(`B${r}:P${r}`);
     const c = ws.getCell(`B${r}`);
     c.value = `Note: ${data.specNote}`;
     c.font = { name: FONT, size: 9, color: BLACK };
     c.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-    r += 2;
+    const noteLines = Math.max(1, Math.ceil(`Note: ${data.specNote}`.length / 110));
+    ws.getRow(r).height = Math.max(15, noteLines * 13.5);
+    r += 1;
   }
 
   // --- Page break + repeated letterhead on page 2 ---------------------------
