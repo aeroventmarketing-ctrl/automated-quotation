@@ -82,6 +82,8 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   }
   // KDK mini sirocco fans — model codes like 10CGB15 / 21CGB15.
   if (t === "MINISIROCCO") return { modelCode: { endsWith: "CGB15" } };
+  // Wall Mounted Fan, High Pressure Series — model codes like 25GSC / 60GSC.
+  if (t === "GSCHP") return { modelCode: { endsWith: "GSC" } };
   if (t === "CFAB") {
     // Forward-curve single-width: ends "CFAB" but not the DIDW catalogue (…DIDWCFAB).
     return {
