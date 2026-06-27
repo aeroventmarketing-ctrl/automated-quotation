@@ -18,7 +18,7 @@
  *
  * Per the supplied rules, the F/G code pairs are the same fan under two codes
  * (17CUF≡17CUG, 24CUF≡24CUG, 24CDF≡24CDG): both codes are created sharing one
- * curve. Prices are pending a price list — basePrice is 0 until provided.
+ * curve and one price (from the supplied KDK selling-price list).
  *
  * Run: npx tsx scripts/gen-cassette-import.ts
  */
@@ -41,6 +41,20 @@ interface Cassette {
   /** Hi-speed curve, digitised from the PDF chart, by descending SP. */
   curve: Pt[];
 }
+
+// Selling price (PHP) by model code, from the supplied KDK price list. F/G code
+// pairs share the price of their listed (G) model: 17CUF≡17CUG, etc.
+const PRICES: Record<string, number> = {
+  "17CUG": 5807,
+  "24CUG": 6802,
+  "24CDG": 7300,
+  "24CHG": 7687,
+  "27CHH": 11005,
+  "32CDH": 14268,
+  "32CHH": 14378,
+  "38CDG": 21346,
+  "38CHG": 22397,
+};
 
 // All curves below are digitised from the PDF charts (approximate).
 const CASSETTES: Cassette[] = [
@@ -97,6 +111,8 @@ function main() {
 
   for (const c of CASSETTES) {
     const power_kw = Math.round((c.power_w / 1000) * 100000) / 100000;
+    // F/G pairs share the price of whichever code is in the price list (the G).
+    const price = c.codes.map((code) => PRICES[code]).find((p) => p != null) ?? 0;
     for (const code of c.codes) {
       const sizeLabel = code.slice(0, 2); // 17, 24, 27, 32, 38
       const speedWord = c.speeds === 2 ? "2-speed" : "single-speed";
@@ -125,7 +141,7 @@ function main() {
           csv(description),
           sizeLabel,
           "unit",
-          "0", // price pending the supplied price list
+          String(price),
           "PHP",
           csv(JSON.stringify(specs)),
         ].join(","),
@@ -147,7 +163,7 @@ function main() {
       `  ${c.codes.join("/")}  ${c.airVolume_cmh} m³/hr  ${c.power_w}W  ${c.rpm}rpm  ${c.speeds}-spd  SPmax ${c.curve[0][1]}Pa`,
     );
   }
-  console.log(`\n${catRows.length} catalogue items, ${ratRows.length} rating points. Prices = 0 (pending price list).`);
+  console.log(`\n${catRows.length} catalogue items, ${ratRows.length} rating points. Prices from the supplied list.`);
   console.log("Wrote scripts/out/cassette-catalogue.csv and scripts/out/cassette-ratings.csv");
 }
 
