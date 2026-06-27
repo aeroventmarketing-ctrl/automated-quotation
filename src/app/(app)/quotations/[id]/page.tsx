@@ -43,12 +43,17 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const catalog = Object.fromEntries(
     catItems.map((i) => [
       i.id,
-      {
+      ((s) => ({
         modelCode: i.modelCode,
         description: i.description ?? "",
         basePrice: i.priceList[0] ? Number(i.priceList[0].basePrice) : 0,
-        bladeDia: num((i.specs as Record<string, unknown>)?.bladeDia_in),
-      },
+        bladeDia: num(s?.bladeDia_in),
+        // Air-curtain attributes (used to pick a model by height + door width).
+        type: typeof s?.type === "string" ? (s.type as string) : null,
+        lengthMm: num(s?.length_mm),
+        heightM: num(s?.effectiveHeight_m),
+        powerW: num(s?.power_w),
+      }))(i.specs as Record<string, unknown>),
     ]),
   );
 

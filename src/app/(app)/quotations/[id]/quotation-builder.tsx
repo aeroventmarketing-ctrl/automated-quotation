@@ -38,6 +38,11 @@ interface CatalogEntry {
   description: string;
   basePrice: number;
   bladeDia: number | null;
+  // Air-curtain attributes — present only on Air Curtain catalogue items.
+  type?: string | null;
+  lengthMm?: number | null;
+  heightM?: number | null;
+  powerW?: number | null;
 }
 
 interface LineSpecs {
@@ -155,6 +160,10 @@ const isPrebuiltUnit = (specs: { brand: string; type: string }): boolean =>
 /** Shutter Series wall fans select on air volume only — static pressure is N/A. */
 const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
   specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";
+/** Air curtains are picked by installation height + door width, not by duty. */
+const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air Curtain";
+/** Format a number cleanly (3, 3.5 — no trailing zeros). */
+const fmtNum = (n: number): string => String(Math.round(n * 100) / 100);
 /** Wheel-construction label for line 2 of a blower/fan description. */
 function constructionLabel(type: string): string {
   if (PROPELLER_FAN_TYPES.has(type)) return "Propeller Type";
@@ -202,6 +211,16 @@ function buildBlowerDescription(
  */
 function buildKdkDescription(type: string, model?: string | null, series?: string | null): string {
   return [series ? `${type} - ${series}` : type, "KDK Brand", model ? `Model: ${model}` : ""]
+    .filter((l) => l.length > 0)
+    .join("\n");
+}
+/**
+ * KDK Air Curtain description — selected by installation height + door width:
+ *   Air Curtain / KDK Brand / Effective height X m · Door width Y mm / Model: Z
+ */
+function buildAirCurtainDescription(height?: string, width?: string, model?: string | null): string {
+  const dims = height && width ? `Effective height ${height} m · Door width ${width} mm` : "";
+  return ["Air Curtain", "KDK Brand", dims, model ? `Model: ${model}` : ""]
     .filter((l) => l.length > 0)
     .join("\n");
 }
@@ -575,6 +594,58 @@ export function QuotationBuilder({
       }),
     );
   }
+  // KDK Air Curtain: store the height (shape) / door width (sizeL) selection and,
+  // once both are set, look the single matching model up from the catalogue and
+  // apply its price + consumption (VAT-inclusive, single-phase 220 V).
+  function applyAirCurtain(id: string, patch: { shape?: string; sizeL?: string }) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== id) return l;
+        const shape = patch.shape ?? l.specs.shape;
+        const sizeL = patch.sizeL ?? l.specs.sizeL;
+        const match =
+          shape && sizeL
+            ? Object.values(catalog).find(
+                (c) =>
+                  c.type === "Air Curtain" &&
+                  fmtNum(c.heightM ?? NaN) === shape &&
+                  fmtNum(c.lengthMm ?? NaN) === sizeL,
+              )
+            : undefined;
+        const specs: LineSpecs = {
+          ...l.specs,
+          shape,
+          sizeL,
+          motorPh: 1,
+          motorVolts: 220,
+          inches: null,
+          ...(match
+            ? { blowerModel: match.modelCode, bodyPrice: match.basePrice, power_w: match.powerW ?? null }
+            : { blowerModel: null }),
+        };
+        return {
+          ...l,
+          specs,
+          // Air-curtain prices are already VAT-inclusive — use as-is.
+          ...(match ? { unitPrice: round2(match.basePrice) } : {}),
+          descriptionSnapshot: buildAirCurtainDescription(shape, sizeL, specs.blowerModel),
+        };
+      }),
+    );
+  }
+
+  // Air-curtain height / door-width options, derived from the imported catalogue.
+  const airCurtainOptions = useMemo(() => {
+    const heights = new Set<string>();
+    const widths = new Set<string>();
+    for (const c of Object.values(catalog)) {
+      if (c.type !== "Air Curtain") continue;
+      if (c.heightM != null) heights.add(fmtNum(c.heightM));
+      if (c.lengthMm != null) widths.add(fmtNum(c.lengthMm));
+    }
+    const byNum = (a: string, b: string) => Number(a) - Number(b);
+    return { heights: [...heights].sort(byNum), widths: [...widths].sort(byNum) };
+  }, [catalog]);
 
   // Add a fresh, blank line item (saved on "Save changes"; available while DRAFT).
   function addLine() {
@@ -904,6 +975,28 @@ export function QuotationBuilder({
               {seriesFor(c.category, c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
             </Select>
           )}
+          {isAirCurtain(c) && (
+            // Air curtain is picked by installation height + door width; the pair
+            // maps to one model, applied straight from the catalogue.
+            <>
+              <Select
+                value={c.shape}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAirCurtain(l.id, { shape: e.target.value })}
+              >
+                <option value="">Installation height…</option>
+                {airCurtainOptions.heights.map((h) => (<option key={h} value={h}>{h} m</option>))}
+              </Select>
+              <Select
+                value={c.sizeL}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAirCurtain(l.id, { sizeL: e.target.value })}
+              >
+                <option value="">Door width…</option>
+                {airCurtainOptions.widths.map((w) => (<option key={w} value={w}>{w} mm</option>))}
+              </Select>
+            </>
+          )}
           {c.category === "Ventilation Accessories" ? (
             <>
               <Select
@@ -1178,8 +1271,9 @@ export function QuotationBuilder({
                 )}
               </div>
 
-              {/* Per-line fan selector — click a candidate to populate this item */}
-              {editable && (
+              {/* Per-line fan selector — click a candidate to populate this item.
+                  Air curtains are picked by the height/width dropdowns instead. */}
+              {editable && !isAirCurtain(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">

@@ -1,0 +1,25 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+10ESK,CENTRIFUGAL,"KDK Air Curtain 900mm / 3m (10ESK)","KDK Air Curtain
+Effective height 3 m · Door width 900 mm
+Air Volume 860 m³/hr (239 L/s · 506 cfm) · 88 W
+Model: 10ESK",900,unit,37384,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Air Curtain"",""tag"":""AIRCURTAIN"",""length_mm"":900,""effectiveHeight_m"":3,""power_w"":88,""airVolume_cmh"":860,""airVolume_lps"":239,""airVolume_cfm"":506}"
+10ELK,CENTRIFUGAL,"KDK Air Curtain 1200mm / 3m (10ELK)","KDK Air Curtain
+Effective height 3 m · Door width 1200 mm
+Air Volume 1150 m³/hr (319 L/s · 677 cfm) · 116 W
+Model: 10ELK",1200,unit,39817,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Air Curtain"",""tag"":""AIRCURTAIN"",""length_mm"":1200,""effectiveHeight_m"":3,""power_w"":116,""airVolume_cmh"":1150,""airVolume_lps"":319,""airVolume_cfm"":677}"
+12ESK,CENTRIFUGAL,"KDK Air Curtain 900mm / 3.5m (12ESK)","KDK Air Curtain
+Effective height 3.5 m · Door width 900 mm
+Air Volume 990 m³/hr (275 L/s · 583 cfm) · 202 W
+Model: 12ESK",900,unit,41808,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Air Curtain"",""tag"":""AIRCURTAIN"",""length_mm"":900,""effectiveHeight_m"":3.5,""power_w"":202,""airVolume_cmh"":990,""airVolume_lps"":275,""airVolume_cfm"":583}"
+12ELK,CENTRIFUGAL,"KDK Air Curtain 1200mm / 3.5m (12ELK)","KDK Air Curtain
+Effective height 3.5 m · Door width 1200 mm
+Air Volume 1340 m³/hr (372 L/s · 789 cfm) · 258 W
+Model: 12ELK",1200,unit,45347,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Air Curtain"",""tag"":""AIRCURTAIN"",""length_mm"":1200,""effectiveHeight_m"":3.5,""power_w"":258,""airVolume_cmh"":1340,""airVolume_lps"":372,""airVolume_cfm"":789}"
+14ESK,CENTRIFUGAL,"KDK Air Curtain 900mm / 4m (14ESK)","KDK Air Curtain
+Effective height 4 m · Door width 900 mm
+Air Volume 1303 m³/hr (362 L/s · 767 cfm) · 312 W
+Model: 14ESK",900,unit,45237,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Air Curtain"",""tag"":""AIRCURTAIN"",""length_mm"":900,""effectiveHeight_m"":4,""power_w"":312,""airVolume_cmh"":1303,""airVolume_lps"":362,""airVolume_cfm"":767}"
+14ELK,CENTRIFUGAL,"KDK Air Curtain 1200mm / 4m (14ELK)","KDK Air Curtain
+Effective height 4 m · Door width 1200 mm
+Air Volume 1826 m³/hr (507 L/s · 1075 cfm) · 423 W
+Model: 14ELK",1200,unit,47559,PHP,"{""category"":""Other Products"",""brand"":""KDK"",""type"":""Air Curtain"",""tag"":""AIRCURTAIN"",""length_mm"":1200,""effectiveHeight_m"":4,""power_w"":423,""airVolume_cmh"":1826,""airVolume_lps"":507,""airVolume_cfm"":1075}"
