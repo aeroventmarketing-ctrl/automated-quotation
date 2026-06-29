@@ -190,6 +190,11 @@ const ISO_PRICE: { foot: Record<number, number>; ceiling: Record<number, number>
   foot: { 25: 1417, 35: 1478, 50: 1540, 80: 1589, 120: 1663, 175: 1724, 225: 2587, 300: 3819, 450: 4127, 600: 4805, 825: 4866 },
   ceiling: { 25: 1294, 35: 1331, 50: 1355, 80: 1417, 120: 1478, 175: 1540, 225: 1725, 300: 3696, 450: 4189, 600: 5544, 825: 5667 },
 };
+/** Motor weight (kg) by HP — used to recommend an isolator capacity from a motor. */
+const MOTOR_WEIGHT_KG: Record<number, number> = {
+  0.5: 12, 1: 14, 1.5: 25, 2: 25, 3: 31, 5: 42, 7.5: 67, 10: 78, 15: 122,
+  20: 144, 25: 182, 30: 182, 40: 215, 50: 315, 60: 315, 75: 375,
+};
 /** Smallest rated capacity that covers the required load (kg). */
 const isolatorRatedCap = (capKg: number | null): number | null =>
   capKg == null ? null : ISO_CAPS.find((c) => c >= capKg) ?? null;
@@ -741,10 +746,23 @@ export function QuotationBuilder({
     setLines((ls) => {
       let changed = false;
       const next = ls.map((l, idx) => {
-        if (!isMotorController(l.specs) || !l.specs.mcRecommend) return l;
+        if (!l.specs.mcRecommend || (!isMotorController(l.specs) && !isIsolator(l.specs))) return l;
         let src: LineSpecs | null = null;
         for (let i = idx - 1; i >= 0; i--) {
           if (BLOWER_CATEGORIES.has(ls[i].specs.category)) { src = ls[i].specs; break; }
+        }
+        // Isolator: recommend a spring from the motor weight (HP → kg → rated cap).
+        if (isIsolator(l.specs)) {
+          const hp = src?.motorHp ?? null;
+          const weight = hp != null ? MOTOR_WEIGHT_KG[hp] ?? null : null;
+          const rated = isolatorRatedCap(weight);
+          const sizeL = rated != null ? String(rated) : "";
+          const net = isolatorNetPrice(l.specs.shape, rated);
+          const unitPrice = net != null ? round2(net * (1 + vatRate)) : 0;
+          if (l.specs.sizeL === sizeL && l.unitPrice === unitPrice) return l;
+          changed = true;
+          const specs = { ...l.specs, sizeL };
+          return { ...l, specs, descriptionSnapshot: buildIsolatorDescription(specs.shape, rated), unitPrice };
         }
         const ph = src?.motorPh ?? null;
         const pole = src?.motorPole ?? null;
@@ -1306,7 +1324,7 @@ export function QuotationBuilder({
                 {shapesFor(c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
               </Select>
               {sizeMode(c.type, c.shape) === "capacity" ? (
-                <Select className="h-9" disabled={!editable || !c.type} value={c.sizeL}
+                <Select className="h-9" disabled={!editable || !c.type || !!c.mcRecommend} value={c.sizeL}
                   onChange={(e) => applyIsolator(l.id, { sizeL: e.target.value, sizeW: "" })}>
                   <option value="">Capacity (kg)…</option>
                   {ISO_CAPS.map((cap) => (
@@ -1326,6 +1344,15 @@ export function QuotationBuilder({
                     disabled={!editable || !c.type} value={c.sizeW}
                     onChange={(e) => set({ sizeW: e.target.value })} />
                 </>
+              )}
+              {/* Recommend the spring capacity from the motor above (HP → weight). */}
+              {isIsolator(c) && (
+                <label className="flex h-9 items-center gap-1.5 text-sm">
+                  <input type="checkbox" className="h-4 w-4" disabled={!editable}
+                    checked={!!c.mcRecommend}
+                    onChange={(e) => updateSpec(l.id, { mcRecommend: e.target.checked })} />
+                  Recommend?
+                </label>
               )}
             </>
           ) : isPrebuiltUnit(c) || isMotorController(c) ? (
