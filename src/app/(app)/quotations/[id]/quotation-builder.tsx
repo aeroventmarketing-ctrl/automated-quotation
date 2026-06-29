@@ -174,7 +174,7 @@ const isMotorController = (specs: { type: string }): boolean => specs.type === "
 /** Motor-starter wiring options (dropdown values keep the Y/Δ symbol). */
 const MOTOR_STARTER_TYPES = ["DOL", "Y/Δ", "Y/YY"];
 /** Spelled-out labels for the description box (the dropdown keeps the symbol). */
-const STARTER_DESC_LABEL: Record<string, string> = { "Y/Δ": "Y-Delta" };
+const STARTER_DESC_LABEL: Record<string, string> = { DOL: "Direct Online", "Y/Δ": "Y-Delta" };
 /**
  * Motor Controller description. For a Motor Starter the "Motor Starter" line is
  * dropped and the starter type is spelled out (e.g. Y/Δ → Y-Delta); other
