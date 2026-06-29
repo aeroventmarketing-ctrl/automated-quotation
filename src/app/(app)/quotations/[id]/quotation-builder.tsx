@@ -1284,6 +1284,9 @@ export function QuotationBuilder({
                   type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null,
                   capacity_cfm: null, staticPressure_pa: null, inches: null, power_w: null,
                 });
+              } else if (type === "Spring Vibration Isolator") {
+                // Seed the description with the type; mounting/capacity add to it.
+                applyIsolator(l.id, { type, shape: "", sizeL: "", sizeW: "" });
               } else {
                 set({ type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               }
