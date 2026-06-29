@@ -726,8 +726,10 @@ export function QuotationBuilder({
         const specs = { ...l.specs, ...patch };
         if (specs.motorPh === 1) specs.motorVolts = 220; // single-phase is 220 V only
         const isDol = specs.bladeType === "Motor Starter" && specs.drive === "DOL";
-        const price = isDol ? dolUnitPrice(specs.motorPh, specs.motorVolts, specs.motorHp) : null;
-        return { ...l, specs, ...(price != null ? { unitPrice: round2(price) } : {}) };
+        // Table prices are VAT-exclusive (net); the unit price is shown incl. VAT.
+        const net = isDol ? dolUnitPrice(specs.motorPh, specs.motorVolts, specs.motorHp) : null;
+        if (net != null) specs.bodyPrice = net;
+        return { ...l, specs, ...(net != null ? { unitPrice: round2(net * (1 + vatRate)) } : {}) };
       }),
     );
   }
