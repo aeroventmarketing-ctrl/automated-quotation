@@ -1590,8 +1590,8 @@ export function QuotationBuilder({
                     <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
                       onChange={(e) => applyMotorController(l.id, { motorPh: numOrNull(e.target.value) })}>
                       <option value="">—</option>
-                      {/* Y-Δ / Y-YY are 3-phase only — disable single phase. */}
-                      <option value="1" disabled={l.specs.drive === "Y/Δ" || l.specs.drive === "Y/YY"}>1-phase</option>
+                      {/* Y-Δ / Y-YY are 3-phase only — single phase isn't listed. */}
+                      {l.specs.drive !== "Y/Δ" && l.specs.drive !== "Y/YY" && <option value="1">1-phase</option>}
                       <option value="3">3-phase</option>
                     </Select>
                   </div>
@@ -1612,9 +1612,9 @@ export function QuotationBuilder({
                       ) : (
                         <>
                           <option value="">—</option>
-                          {/* Y-Δ → 220/440, Y-YY → 380/400; others greyed out. */}
-                          {[220, 380, 400, 440].map((v) => (
-                            <option key={v} value={v} disabled={!starterVolts(l.specs.drive).includes(v)}>{v}V</option>
+                          {/* Only the voltages valid for this starter (Y-Δ → 220/440, Y-YY → 380/400). */}
+                          {starterVolts(l.specs.drive).map((v) => (
+                            <option key={v} value={v}>{v}V</option>
                           ))}
                         </>
                       )}
