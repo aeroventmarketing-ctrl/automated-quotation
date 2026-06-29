@@ -246,6 +246,21 @@ function starterNetPrice(
   if (drive === "Y/YY") return volts === 380 || volts === 400 ? YYY_PRICE[hp] ?? null : null;
   return null;
 }
+/** Variable Frequency Drive: price by HP only; voltage just gates availability. */
+const VFD_HP_OPTIONS = [1, 2, 3, 5, 7.5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100, 125, 150];
+const VFD_PRICE: Record<number, number> = {
+  1: 25042, 2: 25706, 3: 29696, 5: 32577, 7.5: 44100, 10: 49862, 15: 65485, 20: 77229, 25: 96620,
+  30: 149804, 40: 167422, 50: 349137, 60: 394454, 75: 452071, 100: 573178, 125: 396893, 150: 461379,
+};
+/** VFD voltages: 220/380/440 up to 100 HP; 440 V only for 125 & 150 HP. */
+function vfdVolts(hp: number | null): number[] {
+  return hp === 125 || hp === 150 ? [440] : [220, 380, 440];
+}
+/** VFD net (VAT-exclusive) price — needs HP and an available voltage. */
+function vfdNetPrice(volts: number | null, hp: number | null): number | null {
+  if (hp == null || volts == null || !vfdVolts(hp).includes(volts)) return null;
+  return VFD_PRICE[hp] ?? null;
+}
 /** Length units the sales team can enter the client's height / door width in. */
 const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
 const LEN_TO_M: Record<string, number> = { mm: 0.001, cm: 0.01, inches: 0.0254, feet: 0.3048, meter: 1, m: 1 };
@@ -749,8 +764,14 @@ export function QuotationBuilder({
         if (l.id !== id) return l;
         const specs = { ...l.specs, ...patch };
         if (specs.motorPh === 1) specs.motorVolts = 220; // single-phase is 220 V only
-        const net =
-          specs.bladeType === "Motor Starter"
+        const isVfd = specs.bladeType === "Variable Frequency Drive";
+        // VFD 125/150 HP are 440 V only — drop a now-invalid voltage.
+        if (isVfd && specs.motorVolts != null && !vfdVolts(specs.motorHp).includes(specs.motorVolts)) {
+          specs.motorVolts = null;
+        }
+        const net = isVfd
+          ? vfdNetPrice(specs.motorVolts, specs.motorHp)
+          : specs.bladeType === "Motor Starter"
             ? starterNetPrice(specs.drive, specs.motorPh, specs.motorVolts, specs.motorHp)
             : null;
         if (net != null) specs.bodyPrice = net;
@@ -1095,7 +1116,7 @@ export function QuotationBuilder({
               disabled={!editable || !c.type}
               onChange={(e) =>
                 isMotorController(c)
-                  ? applyMotorController(l.id, { bladeType: e.target.value, drive: "" })
+                  ? applyMotorController(l.id, { bladeType: e.target.value, drive: "", motorPh: null, motorHp: null, motorVolts: null })
                   : applyKdk(l.id, {
                       bladeType: e.target.value, blowerModel: null,
                       // Shutter Series is flow-only — drop any stale static pressure.
@@ -1585,35 +1606,43 @@ export function QuotationBuilder({
                 // Motor Controller: phase → motor HP → voltage; for a DOL starter
                 // the unit price auto-fills from the DOL price table.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-                  <div>
-                    <Label className="text-[10px]">Phase</Label>
-                    <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
-                      onChange={(e) => applyMotorController(l.id, { motorPh: numOrNull(e.target.value) })}>
-                      <option value="">—</option>
-                      {/* Y-Δ / Y-YY are 3-phase only — single phase isn't listed. */}
-                      {l.specs.drive !== "Y/Δ" && l.specs.drive !== "Y/YY" && <option value="1">1-phase</option>}
-                      <option value="3">3-phase</option>
-                    </Select>
-                  </div>
+                  {/* Phase doesn't apply to a VFD (priced by HP). */}
+                  {l.specs.bladeType !== "Variable Frequency Drive" && (
+                    <div>
+                      <Label className="text-[10px]">Phase</Label>
+                      <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
+                        onChange={(e) => applyMotorController(l.id, { motorPh: numOrNull(e.target.value) })}>
+                        <option value="">—</option>
+                        {/* Y-Δ / Y-YY are 3-phase only — single phase isn't listed. */}
+                        {l.specs.drive !== "Y/Δ" && l.specs.drive !== "Y/YY" && <option value="1">1-phase</option>}
+                        <option value="3">3-phase</option>
+                      </Select>
+                    </div>
+                  )}
                   <div>
                     <Label className="text-[10px]">Motor HP</Label>
                     <Select className="h-8" disabled={!editable} value={l.specs.motorHp ?? ""}
                       onChange={(e) => applyMotorController(l.id, { motorHp: numOrNull(e.target.value) })}>
                       <option value="">—</option>
-                      {starterHpOptions(l.specs.drive).map((hp) => (<option key={hp} value={hp}>{hp} HP</option>))}
+                      {(l.specs.bladeType === "Variable Frequency Drive" ? VFD_HP_OPTIONS : starterHpOptions(l.specs.drive)).map((hp) => (
+                        <option key={hp} value={hp}>{hp} HP</option>
+                      ))}
                     </Select>
                   </div>
                   <div>
                     <Label className="text-[10px]">Voltage</Label>
                     <Select className="h-8" disabled={!editable} value={l.specs.motorVolts ?? ""}
                       onChange={(e) => applyMotorController(l.id, { motorVolts: numOrNull(e.target.value) })}>
-                      {l.specs.motorPh === 1 ? (
+                      {l.specs.motorPh === 1 && l.specs.bladeType !== "Variable Frequency Drive" ? (
                         <option value="220">220V</option>
                       ) : (
                         <>
                           <option value="">—</option>
-                          {/* Only the voltages valid for this starter (Y-Δ → 220/440, Y-YY → 380/400). */}
-                          {starterVolts(l.specs.drive).map((v) => (
+                          {/* VFD: 220/380/440 (440-only at 125/150 HP); starters per type. */}
+                          {(l.specs.bladeType === "Variable Frequency Drive"
+                            ? vfdVolts(l.specs.motorHp)
+                            : starterVolts(l.specs.drive)
+                          ).map((v) => (
                             <option key={v} value={v}>{v}V</option>
                           ))}
                         </>
