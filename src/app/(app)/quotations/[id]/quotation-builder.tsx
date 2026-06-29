@@ -717,25 +717,39 @@ export function QuotationBuilder({
           if (BLOWER_CATEGORIES.has(ls[i].specs.category)) { src = ls[i].specs; break; }
         }
         const isVfd = l.specs.bladeType === "Variable Frequency Drive";
-        const ph = isVfd ? 3 : src?.motorPh ?? null;
+        const ph = src?.motorPh ?? null;
         const pole = src?.motorPole ?? null;
         const hp = src?.motorHp ?? null;
         let volts = src?.motorVolts ?? null;
-        if (!isVfd && ph === 1) volts = 220; // single-phase is 220 V only
-        if (isVfd && volts != null && !vfdVolts(hp).includes(volts)) volts = null;
+        let drive = l.specs.drive;
+        if (isVfd) {
+          drive = ""; // VFD has no starter type
+        } else {
+          // Motor Starter: pick the starter type from phase + HP + voltage.
+          //  ≤ 5 HP (or single phase) → DOL; 3-phase ≥ 7.5 HP → Y-Δ (220/440) or Y-YY (380/400).
+          if (hp == null || ph == null) drive = "";
+          else if (ph === 1 || hp < 7.5) drive = "DOL";
+          else drive = volts === 220 || volts === 440 ? "Y/Δ" : volts === 380 || volts === 400 ? "Y/YY" : "";
+          if (ph === 1) volts = 220; // DOL single-phase is 220 V
+        }
+        // Price: VFD has no single-phase output; otherwise look up the right table.
+        const net = isVfd
+          ? ph === 1 ? null : vfdNetPrice(volts, hp)
+          : starterNetPrice(drive, ph, volts, hp);
+        const unitPrice = net != null ? round2(net * (1 + vatRate)) : 0;
         if (
-          l.specs.motorPh === ph && l.specs.motorPole === pole &&
-          l.specs.motorHp === hp && l.specs.motorVolts === volts
+          l.specs.drive === drive && l.specs.motorPh === ph && l.specs.motorPole === pole &&
+          l.specs.motorHp === hp && l.specs.motorVolts === volts && l.unitPrice === unitPrice
         ) return l; // already in sync
         changed = true;
-        const specs = { ...l.specs, motorPh: ph, motorPole: pole, motorHp: hp, motorVolts: volts };
-        const net = isVfd
-          ? vfdNetPrice(volts, hp)
-          : specs.bladeType === "Motor Starter"
-            ? starterNetPrice(specs.drive, ph, volts, hp)
-            : null;
+        const specs = { ...l.specs, drive, motorPh: ph, motorPole: pole, motorHp: hp, motorVolts: volts };
         if (net != null) specs.bodyPrice = net;
-        return { ...l, specs, ...(net != null ? { unitPrice: round2(net * (1 + vatRate)) } : {}) };
+        return {
+          ...l,
+          specs,
+          descriptionSnapshot: buildMotorControllerDescription(specs.bladeType, drive),
+          unitPrice,
+        };
       });
       return changed ? next : ls;
     });
@@ -1190,9 +1204,10 @@ export function QuotationBuilder({
           )}
           {isMotorController(c) && c.bladeType === "Motor Starter" && (
             // Motor-starter wiring: DOL / Y-Δ / Y-YY (stored in the unused drive field).
+            // Auto-selected (and locked) when Recommend? is on.
             <Select
               value={c.drive}
-              disabled={!editable}
+              disabled={!editable || !!c.mcRecommend}
               onChange={(e) => {
                 const starter = e.target.value;
                 const patch: Partial<LineSpecs> = { drive: starter };
@@ -1675,11 +1690,14 @@ export function QuotationBuilder({
                 // Motor Controller: phase → motor HP → voltage; for a DOL starter
                 // the unit price auto-fills from the DOL price table.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-                  {/* VFD is fixed 3-phase; starters let the user pick. */}
+                  {/* VFD is 3-phase (recommend may surface a single-phase source). */}
                   {l.specs.bladeType === "Variable Frequency Drive" ? (
                     <div>
                       <Label className="text-[10px]">Phase</Label>
-                      <Select className="h-8" disabled value="3"><option value="3">3-phase</option></Select>
+                      <Select className="h-8" disabled value={l.specs.motorPh === 1 ? "1" : "3"}>
+                        <option value="1">1-phase</option>
+                        <option value="3">3-phase</option>
+                      </Select>
                     </div>
                   ) : (
                     <div>
@@ -1730,6 +1748,10 @@ export function QuotationBuilder({
                     <Input className="h-8 text-right" type="number" step="0.01" value={l.unitPrice} disabled={!editable}
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
+                  {/* VFD has no single-phase output — flag a recommended single-phase source. */}
+                  {l.specs.bladeType === "Variable Frequency Drive" && l.specs.mcRecommend && l.specs.motorPh === 1 && (
+                    <p className="col-span-2 text-xs font-medium text-destructive md:col-span-4">No Single Phase Output Available</p>
+                  )}
                 </div>
               ) : isPrebuiltUnit(l.specs) ? (
                 // KDK pre-built units: single-phase and 220 V (both fixed), the
