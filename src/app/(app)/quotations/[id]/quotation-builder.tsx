@@ -218,6 +218,34 @@ function starterVolts(drive: string | null | undefined): number[] {
   if (drive === "Y/YY") return [380, 400];
   return [220, 380, 400, 440];
 }
+/** Reduced-voltage starters (Y-Δ / Y-YY) are sized for larger motors (5–50 HP). */
+const REDUCED_HP_OPTIONS = [5, 7.5, 10, 15, 20, 25, 30, 40, 50];
+const YDELTA_PRICE: Record<"220" | "440", Record<number, number>> = {
+  "220": { 5: 19928, 7.5: 22930, 10: 25686, 15: 27725, 20: 32020, 25: 37213, 30: 39462, 40: 50266, 50: 64021 },
+  "440": { 5: 22532, 7.5: 22532, 10: 23235, 15: 24945, 20: 25502, 25: 28249, 30: 29925, 40: 37443, 50: 39605 },
+};
+const YYY_PRICE: Record<number, number> = { 5: 25624, 7.5: 25624, 10: 25926, 15: 28195, 20: 30378, 25: 32575, 30: 36307, 40: 42261, 50: 48414 };
+/** HP buckets for a starter type (DOL: 0.25–7.5; Y-Δ / Y-YY: 5–50). */
+function starterHpOptions(drive: string | null | undefined): number[] {
+  return drive === "Y/Δ" || drive === "Y/YY" ? REDUCED_HP_OPTIONS : DOL_HP_OPTIONS;
+}
+/** VAT-exclusive (net) price for a motor-starter selection, or null if incomplete. */
+function starterNetPrice(
+  drive: string | null | undefined,
+  phase: number | null,
+  volts: number | null,
+  hp: number | null,
+): number | null {
+  if (hp == null) return null;
+  if (drive === "DOL") return dolUnitPrice(phase, volts, hp);
+  if (drive === "Y/Δ") {
+    if (volts === 220) return YDELTA_PRICE["220"][hp] ?? null;
+    if (volts === 440) return YDELTA_PRICE["440"][hp] ?? null;
+    return null;
+  }
+  if (drive === "Y/YY") return volts === 380 || volts === 400 ? YYY_PRICE[hp] ?? null : null;
+  return null;
+}
 /** Length units the sales team can enter the client's height / door width in. */
 const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
 const LEN_TO_M: Record<string, number> = { mm: 0.001, cm: 0.01, inches: 0.0254, feet: 0.3048, meter: 1, m: 1 };
@@ -712,30 +740,26 @@ export function QuotationBuilder({
     );
     setAcCollapsed((m) => ({ ...m, [lineId]: true })); // collapse the list after picking
   }
-  // Motor Controller: merge the patch (type and/or sub-type) and rebuild the
-  // simple description (Motor Controller / <sub-type>). No fan/duty fields.
+  // Motor Controller: merge the patch (sub-type and/or phase/HP/voltage), rebuild
+  // the description, and — for a Motor Starter — auto-fill the VAT-inclusive unit
+  // price from the starter table (DOL / Y-Δ / Y-YY). Table prices are net.
   function applyMotorController(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) =>
       ls.map((l) => {
         if (l.id !== id) return l;
         const specs = { ...l.specs, ...patch };
-        return { ...l, specs, descriptionSnapshot: buildMotorControllerDescription(specs.bladeType, specs.drive) };
-      }),
-    );
-  }
-  // Motor Controller price row: merge the phase / HP / voltage patch and, for a
-  // DOL starter, auto-fill the VAT-inclusive unit price from the DOL table.
-  function applyMotorControllerPrice(id: string, patch: Partial<LineSpecs>) {
-    setLines((ls) =>
-      ls.map((l) => {
-        if (l.id !== id) return l;
-        const specs = { ...l.specs, ...patch };
         if (specs.motorPh === 1) specs.motorVolts = 220; // single-phase is 220 V only
-        const isDol = specs.bladeType === "Motor Starter" && specs.drive === "DOL";
-        // Table prices are VAT-exclusive (net); the unit price is shown incl. VAT.
-        const net = isDol ? dolUnitPrice(specs.motorPh, specs.motorVolts, specs.motorHp) : null;
+        const net =
+          specs.bladeType === "Motor Starter"
+            ? starterNetPrice(specs.drive, specs.motorPh, specs.motorVolts, specs.motorHp)
+            : null;
         if (net != null) specs.bodyPrice = net;
-        return { ...l, specs, ...(net != null ? { unitPrice: round2(net * (1 + vatRate)) } : {}) };
+        return {
+          ...l,
+          specs,
+          descriptionSnapshot: buildMotorControllerDescription(specs.bladeType, specs.drive),
+          ...(net != null ? { unitPrice: round2(net * (1 + vatRate)) } : {}),
+        };
       }),
     );
   }
@@ -1093,8 +1117,9 @@ export function QuotationBuilder({
                 const patch: Partial<LineSpecs> = { drive: starter };
                 // Y-Δ / Y-YY are 3-phase only — drop a stale single-phase choice.
                 if ((starter === "Y/Δ" || starter === "Y/YY") && c.motorPh === 1) patch.motorPh = null;
-                // Drop a voltage that the new starter type doesn't allow.
+                // Drop a voltage or HP the new starter type doesn't offer.
                 if (c.motorVolts != null && !starterVolts(starter).includes(c.motorVolts)) patch.motorVolts = null;
+                if (c.motorHp != null && !starterHpOptions(starter).includes(c.motorHp)) patch.motorHp = null;
                 applyMotorController(l.id, patch);
               }}
             >
@@ -1563,7 +1588,7 @@ export function QuotationBuilder({
                   <div>
                     <Label className="text-[10px]">Phase</Label>
                     <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
-                      onChange={(e) => applyMotorControllerPrice(l.id, { motorPh: numOrNull(e.target.value) })}>
+                      onChange={(e) => applyMotorController(l.id, { motorPh: numOrNull(e.target.value) })}>
                       <option value="">—</option>
                       {/* Y-Δ / Y-YY are 3-phase only — disable single phase. */}
                       <option value="1" disabled={l.specs.drive === "Y/Δ" || l.specs.drive === "Y/YY"}>1-phase</option>
@@ -1573,15 +1598,15 @@ export function QuotationBuilder({
                   <div>
                     <Label className="text-[10px]">Motor HP</Label>
                     <Select className="h-8" disabled={!editable} value={l.specs.motorHp ?? ""}
-                      onChange={(e) => applyMotorControllerPrice(l.id, { motorHp: numOrNull(e.target.value) })}>
+                      onChange={(e) => applyMotorController(l.id, { motorHp: numOrNull(e.target.value) })}>
                       <option value="">—</option>
-                      {DOL_HP_OPTIONS.map((hp) => (<option key={hp} value={hp}>{hp} HP</option>))}
+                      {starterHpOptions(l.specs.drive).map((hp) => (<option key={hp} value={hp}>{hp} HP</option>))}
                     </Select>
                   </div>
                   <div>
                     <Label className="text-[10px]">Voltage</Label>
                     <Select className="h-8" disabled={!editable} value={l.specs.motorVolts ?? ""}
-                      onChange={(e) => applyMotorControllerPrice(l.id, { motorVolts: numOrNull(e.target.value) })}>
+                      onChange={(e) => applyMotorController(l.id, { motorVolts: numOrNull(e.target.value) })}>
                       {l.specs.motorPh === 1 ? (
                         <option value="220">220V</option>
                       ) : (
