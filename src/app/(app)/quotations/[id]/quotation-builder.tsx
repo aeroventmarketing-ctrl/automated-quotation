@@ -1310,9 +1310,13 @@ export function QuotationBuilder({
                 {shapesFor(c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
               </Select>
               {sizeMode(c.type, c.shape) === "capacity" ? (
-                <Input className="h-9" type="number" step="any" placeholder="Capacity (kg)"
-                  disabled={!editable || !c.type} value={c.sizeL}
-                  onChange={(e) => applyIsolator(l.id, { sizeL: e.target.value, sizeW: "" })} />
+                <Select className="h-9" disabled={!editable || !c.type} value={c.sizeL}
+                  onChange={(e) => applyIsolator(l.id, { sizeL: e.target.value, sizeW: "" })}>
+                  <option value="">Capacity (kg)…</option>
+                  {ISO_CAPS.map((cap) => (
+                    <option key={cap} value={cap}>{cap} kg{ISO_COLOR[cap] ? ` · ${ISO_COLOR[cap]}` : ""}</option>
+                  ))}
+                </Select>
               ) : sizeMode(c.type, c.shape) === "diameter" ? (
                 <Input className="h-9" type="number" step="any" placeholder="Diameter Ø (mm)"
                   disabled={!editable || !c.type} value={c.sizeL}
