@@ -212,6 +212,12 @@ function dolUnitPrice(phase: number | null, volts: number | null, hp: number | n
             : null;
   return col ? col[hp] ?? null : null;
 }
+/** Voltages valid for a starter type: Y-Δ → 220/440, Y-YY → 380/400, else all. */
+function starterVolts(drive: string | null | undefined): number[] {
+  if (drive === "Y/Δ") return [220, 440];
+  if (drive === "Y/YY") return [380, 400];
+  return [220, 380, 400, 440];
+}
 /** Length units the sales team can enter the client's height / door width in. */
 const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
 const LEN_TO_M: Record<string, number> = { mm: 0.001, cm: 0.01, inches: 0.0254, feet: 0.3048, meter: 1, m: 1 };
@@ -1086,10 +1092,9 @@ export function QuotationBuilder({
                 const starter = e.target.value;
                 const patch: Partial<LineSpecs> = { drive: starter };
                 // Y-Δ / Y-YY are 3-phase only — drop a stale single-phase choice.
-                if ((starter === "Y/Δ" || starter === "Y/YY") && c.motorPh === 1) {
-                  patch.motorPh = null;
-                  patch.motorVolts = null;
-                }
+                if ((starter === "Y/Δ" || starter === "Y/YY") && c.motorPh === 1) patch.motorPh = null;
+                // Drop a voltage that the new starter type doesn't allow.
+                if (c.motorVolts != null && !starterVolts(starter).includes(c.motorVolts)) patch.motorVolts = null;
                 applyMotorController(l.id, patch);
               }}
             >
@@ -1582,10 +1587,10 @@ export function QuotationBuilder({
                       ) : (
                         <>
                           <option value="">—</option>
-                          <option value="220">220V</option>
-                          <option value="380">380V</option>
-                          <option value="400">400V</option>
-                          <option value="440">440V</option>
+                          {/* Y-Δ → 220/440, Y-YY → 380/400; others greyed out. */}
+                          {[220, 380, 400, 440].map((v) => (
+                            <option key={v} value={v} disabled={!starterVolts(l.specs.drive).includes(v)}>{v}V</option>
+                          ))}
                         </>
                       )}
                     </Select>
