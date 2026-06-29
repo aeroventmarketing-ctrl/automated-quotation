@@ -189,6 +189,29 @@ function buildMotorControllerDescription(subType?: string | null, starterType?: 
       : subType || "";
   return ["Motor Controller", line2].filter((l) => l.length > 0).join("\n");
 }
+/** DOL motor-starter HP buckets and VAT-inclusive price by phase/voltage column. */
+const DOL_HP_OPTIONS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 7.5];
+const DOL_PRICE: Record<"sp220" | "tp220" | "tp380400" | "tp440", Record<number, number>> = {
+  sp220: { 0.25: 9784, 0.5: 9784, 0.75: 9784, 1: 9784, 1.5: 9784, 2: 10826, 3: 11000, 5: 13045, 7.5: 16884 },
+  tp220: { 0.25: 10405, 0.5: 10405, 0.75: 10405, 1: 10405, 1.5: 10405, 2: 10405, 3: 10405, 5: 11514, 7.5: 12692 },
+  tp380400: { 0.25: 10386, 0.5: 10386, 0.75: 10386, 1: 10386, 1.5: 10386, 2: 10386, 3: 10386, 5: 10386, 7.5: 11507 },
+  tp440: { 0.25: 10386, 0.5: 10386, 0.75: 10386, 1: 10386, 1.5: 10386, 2: 10386, 3: 10386, 5: 10386, 7.5: 10386 },
+};
+/** DOL price from phase + voltage + HP (single-phase is 220 V only). */
+function dolUnitPrice(phase: number | null, volts: number | null, hp: number | null): number | null {
+  if (phase == null || hp == null) return null;
+  const col =
+    phase === 1
+      ? DOL_PRICE.sp220
+      : volts === 220
+        ? DOL_PRICE.tp220
+        : volts === 440
+          ? DOL_PRICE.tp440
+          : volts === 380 || volts === 400
+            ? DOL_PRICE.tp380400
+            : null;
+  return col ? col[hp] ?? null : null;
+}
 /** Length units the sales team can enter the client's height / door width in. */
 const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
 const LEN_TO_M: Record<string, number> = { mm: 0.001, cm: 0.01, inches: 0.0254, feet: 0.3048, meter: 1, m: 1 };
@@ -691,6 +714,20 @@ export function QuotationBuilder({
         if (l.id !== id) return l;
         const specs = { ...l.specs, ...patch };
         return { ...l, specs, descriptionSnapshot: buildMotorControllerDescription(specs.bladeType, specs.drive) };
+      }),
+    );
+  }
+  // Motor Controller price row: merge the phase / HP / voltage patch and, for a
+  // DOL starter, auto-fill the VAT-inclusive unit price from the DOL table.
+  function applyMotorControllerPrice(id: string, patch: Partial<LineSpecs>) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== id) return l;
+        const specs = { ...l.specs, ...patch };
+        if (specs.motorPh === 1) specs.motorVolts = 220; // single-phase is 220 V only
+        const isDol = specs.bladeType === "Motor Starter" && specs.drive === "DOL";
+        const price = isDol ? dolUnitPrice(specs.motorPh, specs.motorVolts, specs.motorHp) : null;
+        return { ...l, specs, ...(price != null ? { unitPrice: round2(price) } : {}) };
       }),
     );
   }
@@ -1503,7 +1540,51 @@ export function QuotationBuilder({
               )}
 
               {/* Motor + price calculator */}
-              {isPrebuiltUnit(l.specs) ? (
+              {isMotorController(l.specs) ? (
+                // Motor Controller: phase → motor HP → voltage; for a DOL starter
+                // the unit price auto-fills from the DOL price table.
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <div>
+                    <Label className="text-[10px]">Phase</Label>
+                    <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
+                      onChange={(e) => applyMotorControllerPrice(l.id, { motorPh: numOrNull(e.target.value) })}>
+                      <option value="">—</option>
+                      <option value="1">1-phase</option>
+                      <option value="3">3-phase</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Motor HP</Label>
+                    <Select className="h-8" disabled={!editable} value={l.specs.motorHp ?? ""}
+                      onChange={(e) => applyMotorControllerPrice(l.id, { motorHp: numOrNull(e.target.value) })}>
+                      <option value="">—</option>
+                      {DOL_HP_OPTIONS.map((hp) => (<option key={hp} value={hp}>{hp} HP</option>))}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Voltage</Label>
+                    <Select className="h-8" disabled={!editable} value={l.specs.motorVolts ?? ""}
+                      onChange={(e) => applyMotorControllerPrice(l.id, { motorVolts: numOrNull(e.target.value) })}>
+                      {l.specs.motorPh === 1 ? (
+                        <option value="220">220V</option>
+                      ) : (
+                        <>
+                          <option value="">—</option>
+                          <option value="220">220V</option>
+                          <option value="380">380V</option>
+                          <option value="400">400V</option>
+                          <option value="440">440V</option>
+                        </>
+                      )}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Unit ₱ (incl. VAT)</Label>
+                    <Input className="h-8 text-right" type="number" step="0.01" value={l.unitPrice} disabled={!editable}
+                      onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
+                  </div>
+                </div>
+              ) : isPrebuiltUnit(l.specs) ? (
                 // KDK pre-built units: single-phase and 220 V (both fixed), the
                 // motor rating from the catalogue, and the unit price.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -1586,8 +1667,8 @@ export function QuotationBuilder({
               </div>
               )}
 
-              {/* Calculator readout (blower motor pricing — not for KDK units) */}
-              {!isPrebuiltUnit(l.specs) && (() => {
+              {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
