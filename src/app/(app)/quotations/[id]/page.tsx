@@ -127,6 +127,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               acHeightUnit: typeof s.acHeightUnit === "string" ? s.acHeightUnit : "meter",
               acWidth: num(s.acWidth),
               acWidthUnit: typeof s.acWidthUnit === "string" ? s.acWidthUnit : "mm",
+              mcRecommend: s.mcRecommend === true,
             },
             // keep any nested selection/requirement so it isn't lost on save
             rawSpecs: s,

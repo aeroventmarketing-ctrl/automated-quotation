@@ -73,7 +73,17 @@ interface LineSpecs {
   acHeightUnit?: string;
   acWidth?: number | null;
   acWidthUnit?: string;
+  // Motor Controller: pull phase/pole/HP/volts from the nearest fan line above.
+  mcRecommend?: boolean;
 }
+/** Fan/blower categories a Motor Controller can take its motor details from. */
+const BLOWER_CATEGORIES = new Set([
+  "Centrifugal Type",
+  "Axial Type",
+  "Propeller Type",
+  "Tubular Inline Type",
+  "Cabinet Type",
+]);
 interface Line {
   id: string;
   descriptionSnapshot: string;
@@ -267,6 +277,9 @@ const LEN_TO_M: Record<string, number> = { mm: 0.001, cm: 0.01, inches: 0.0254, 
 const lenToMeters = (v: number, unit: string): number => v * (LEN_TO_M[unit] ?? 1);
 /** Format an air-volume value: whole number when large, 1 decimal when small. */
 const fmtFlow = (v: number): number => (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10);
+/** Ensure a current value shows in a dropdown even if it's outside the options. */
+const withVal = (opts: number[], v: number | null | undefined): number[] =>
+  v != null && !opts.includes(v) ? [v, ...opts] : opts;
 /** Air-curtain description (covers client opening; lists the unit's ratings). */
 function buildAirCurtainDescription(model?: string | null, heightM?: number | null, widthMm?: number | null): string {
   return [
@@ -784,6 +797,25 @@ export function QuotationBuilder({
       }),
     );
   }
+  // Motor Controller "Recommend?": on check, copy phase / pole / motor HP / volts
+  // from the nearest fan-or-blower line above this one, then re-price.
+  function applyMcRecommend(lineId: string, checked: boolean) {
+    const idx = lines.findIndex((l) => l.id === lineId);
+    const patch: Partial<LineSpecs> = { mcRecommend: checked };
+    if (checked && idx > 0) {
+      for (let i = idx - 1; i >= 0; i--) {
+        if (BLOWER_CATEGORIES.has(lines[i].specs.category)) {
+          const src = lines[i].specs;
+          patch.motorPh = src.motorPh;
+          patch.motorPole = src.motorPole;
+          patch.motorHp = src.motorHp;
+          patch.motorVolts = src.motorVolts;
+          break;
+        }
+      }
+    }
+    applyMotorController(lineId, patch);
+  }
   // Editing the client height/width clears the run result — the user re-runs.
   function acInput(lineId: string, patch: Partial<LineSpecs>) {
     updateSpec(lineId, patch);
@@ -1152,6 +1184,15 @@ export function QuotationBuilder({
               <option value="">Starter type…</option>
               {MOTOR_STARTER_TYPES.map((s) => (<option key={s} value={s}>{s}</option>))}
             </Select>
+          )}
+          {isMotorController(c) && (c.bladeType === "Motor Starter" || c.bladeType === "Variable Frequency Drive") && (
+            // Pull phase / pole / motor HP / volts from the nearest fan line above.
+            <label className="flex h-9 items-center gap-1.5 text-sm">
+              <input type="checkbox" className="h-4 w-4" disabled={!editable}
+                checked={!!c.mcRecommend}
+                onChange={(e) => applyMcRecommend(l.id, e.target.checked)} />
+              Recommend?
+            </label>
           )}
           {c.category === "Ventilation Accessories" ? (
             <>
@@ -1620,7 +1661,7 @@ export function QuotationBuilder({
                   ) : (
                     <div>
                       <Label className="text-[10px]">Phase</Label>
-                      <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
+                      <Select className="h-8" disabled={!editable || !!l.specs.mcRecommend} value={l.specs.motorPh ?? ""}
                         onChange={(e) => applyMotorController(l.id, { motorPh: numOrNull(e.target.value) })}>
                         <option value="">—</option>
                         {/* Y-Δ / Y-YY are 3-phase only — single phase isn't listed. */}
@@ -1631,17 +1672,17 @@ export function QuotationBuilder({
                   )}
                   <div>
                     <Label className="text-[10px]">Motor HP</Label>
-                    <Select className="h-8" disabled={!editable} value={l.specs.motorHp ?? ""}
+                    <Select className="h-8" disabled={!editable || !!l.specs.mcRecommend} value={l.specs.motorHp ?? ""}
                       onChange={(e) => applyMotorController(l.id, { motorHp: numOrNull(e.target.value) })}>
                       <option value="">—</option>
-                      {(l.specs.bladeType === "Variable Frequency Drive" ? VFD_HP_OPTIONS : starterHpOptions(l.specs.drive)).map((hp) => (
+                      {withVal(l.specs.bladeType === "Variable Frequency Drive" ? VFD_HP_OPTIONS : starterHpOptions(l.specs.drive), l.specs.motorHp).map((hp) => (
                         <option key={hp} value={hp}>{hp} HP</option>
                       ))}
                     </Select>
                   </div>
                   <div>
                     <Label className="text-[10px]">Voltage</Label>
-                    <Select className="h-8" disabled={!editable} value={l.specs.motorVolts ?? ""}
+                    <Select className="h-8" disabled={!editable || !!l.specs.mcRecommend} value={l.specs.motorVolts ?? ""}
                       onChange={(e) => applyMotorController(l.id, { motorVolts: numOrNull(e.target.value) })}>
                       {l.specs.motorPh === 1 && l.specs.bladeType !== "Variable Frequency Drive" ? (
                         <option value="220">220V</option>
@@ -1649,9 +1690,11 @@ export function QuotationBuilder({
                         <>
                           <option value="">—</option>
                           {/* VFD: 220/380/440 (440-only at 125/150 HP); starters per type. */}
-                          {(l.specs.bladeType === "Variable Frequency Drive"
-                            ? vfdVolts(l.specs.motorHp)
-                            : starterVolts(l.specs.drive)
+                          {withVal(
+                            l.specs.bladeType === "Variable Frequency Drive"
+                              ? vfdVolts(l.specs.motorHp)
+                              : starterVolts(l.specs.drive),
+                            l.specs.motorVolts,
                           ).map((v) => (
                             <option key={v} value={v}>{v}V</option>
                           ))}
