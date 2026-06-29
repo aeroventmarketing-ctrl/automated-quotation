@@ -171,9 +171,17 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 /** Motor Controller is a simple sub-typed item (Motor Starter / VFD) — no fan
  *  fields (blade/drive/material/duty/size). The sub-type lives in bladeType. */
 const isMotorController = (specs: { type: string }): boolean => specs.type === "Motor Controller";
-/** Motor Controller description: type then the chosen sub-type. */
-function buildMotorControllerDescription(subType?: string | null): string {
-  return ["Motor Controller", subType || ""].filter((l) => l.length > 0).join("\n");
+/** Motor-starter wiring options (shown when sub-type is Motor Starter). */
+const MOTOR_STARTER_TYPES = ["DOL", "Y/Δ", "Y/YY"];
+/** Motor Controller description: type, sub-type, then starter type (if any). */
+function buildMotorControllerDescription(subType?: string | null, starterType?: string | null): string {
+  return [
+    "Motor Controller",
+    subType || "",
+    subType === "Motor Starter" ? starterType || "" : "",
+  ]
+    .filter((l) => l.length > 0)
+    .join("\n");
 }
 /** Length units the sales team can enter the client's height / door width in. */
 const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
@@ -676,7 +684,7 @@ export function QuotationBuilder({
       ls.map((l) => {
         if (l.id !== id) return l;
         const specs = { ...l.specs, ...patch };
-        return { ...l, specs, descriptionSnapshot: buildMotorControllerDescription(specs.bladeType) };
+        return { ...l, specs, descriptionSnapshot: buildMotorControllerDescription(specs.bladeType, specs.drive) };
       }),
     );
   }
@@ -1012,7 +1020,7 @@ export function QuotationBuilder({
               disabled={!editable || !c.type}
               onChange={(e) =>
                 isMotorController(c)
-                  ? applyMotorController(l.id, { bladeType: e.target.value })
+                  ? applyMotorController(l.id, { bladeType: e.target.value, drive: "" })
                   : applyKdk(l.id, {
                       bladeType: e.target.value, blowerModel: null,
                       // Shutter Series is flow-only — drop any stale static pressure.
@@ -1022,6 +1030,17 @@ export function QuotationBuilder({
             >
               <option value="">{isMotorController(c) ? "Type…" : "Series…"}</option>
               {seriesFor(c.category, c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
+            </Select>
+          )}
+          {isMotorController(c) && c.bladeType === "Motor Starter" && (
+            // Motor-starter wiring: DOL / Y-Δ / Y-YY (stored in the unused drive field).
+            <Select
+              value={c.drive}
+              disabled={!editable}
+              onChange={(e) => applyMotorController(l.id, { drive: e.target.value })}
+            >
+              <option value="">Starter type…</option>
+              {MOTOR_STARTER_TYPES.map((s) => (<option key={s} value={s}>{s}</option>))}
             </Select>
           )}
           {c.category === "Ventilation Accessories" ? (
