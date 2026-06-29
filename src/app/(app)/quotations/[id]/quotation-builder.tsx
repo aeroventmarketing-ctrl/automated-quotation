@@ -252,9 +252,9 @@ const VFD_PRICE: Record<number, number> = {
   1: 25042, 2: 25706, 3: 29696, 5: 32577, 7.5: 44100, 10: 49862, 15: 65485, 20: 77229, 25: 96620,
   30: 149804, 40: 167422, 50: 349137, 60: 394454, 75: 452071, 100: 573178, 125: 396893, 150: 461379,
 };
-/** VFD voltages: 220/380/440 up to 100 HP; 440 V only for 125 & 150 HP. */
+/** VFD voltages (3-phase): 220/380/400/440 up to 100 HP; 440 V only for 125 & 150 HP. */
 function vfdVolts(hp: number | null): number[] {
-  return hp === 125 || hp === 150 ? [440] : [220, 380, 440];
+  return hp === 125 || hp === 150 ? [440] : [220, 380, 400, 440];
 }
 /** VFD net (VAT-exclusive) price — needs HP and an available voltage. */
 function vfdNetPrice(volts: number | null, hp: number | null): number | null {
@@ -1116,7 +1116,12 @@ export function QuotationBuilder({
               disabled={!editable || !c.type}
               onChange={(e) =>
                 isMotorController(c)
-                  ? applyMotorController(l.id, { bladeType: e.target.value, drive: "", motorPh: null, motorHp: null, motorVolts: null })
+                  ? applyMotorController(l.id, {
+                      bladeType: e.target.value, drive: "",
+                      // VFD is always 3-phase; starters start unset.
+                      motorPh: e.target.value === "Variable Frequency Drive" ? 3 : null,
+                      motorHp: null, motorVolts: null,
+                    })
                   : applyKdk(l.id, {
                       bladeType: e.target.value, blowerModel: null,
                       // Shutter Series is flow-only — drop any stale static pressure.
@@ -1606,8 +1611,13 @@ export function QuotationBuilder({
                 // Motor Controller: phase → motor HP → voltage; for a DOL starter
                 // the unit price auto-fills from the DOL price table.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-                  {/* Phase doesn't apply to a VFD (priced by HP). */}
-                  {l.specs.bladeType !== "Variable Frequency Drive" && (
+                  {/* VFD is fixed 3-phase; starters let the user pick. */}
+                  {l.specs.bladeType === "Variable Frequency Drive" ? (
+                    <div>
+                      <Label className="text-[10px]">Phase</Label>
+                      <Select className="h-8" disabled value="3"><option value="3">3-phase</option></Select>
+                    </div>
+                  ) : (
                     <div>
                       <Label className="text-[10px]">Phase</Label>
                       <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
