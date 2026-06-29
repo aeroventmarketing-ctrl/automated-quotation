@@ -458,10 +458,16 @@ describe("selectFan — centrifugal catalogue interpolation + envelope guard", (
     expect(Math.round(r.dutyAirflow_m3hr / 1.6990108)).toBe(7000); // quote shows the client's duty
   });
 
-  it("refuses (returns null) when the duty is left of peak — below the lowest printed flow", () => {
-    // 4000 cfm @ 1.5" is left of the published minimum flow (6000) → surge region.
-    const r = selectFan(cat, { airflow_m3hr: 4000 * 1.6990108, staticPressure_pa: 1.5 * 249.0889 });
-    expect(r).toBeNull();
+  it("selects (low-flow, flagged) when the duty is left of peak — below the lowest printed flow", () => {
+    // 4000 cfm @ 1.5" is left of the published minimum flow (6000). The fan still
+    // develops the pressure, so the smallest size that can make it is offered as a
+    // low-flow pick (left of peak) rather than refused — MEDIUM, never HIGH, with a
+    // warning so the user can confirm it's acceptable for the application.
+    const r = selectFan(cat, { airflow_m3hr: 4000 * 1.6990108, staticPressure_pa: 1.5 * 249.0889 })!;
+    expect(r).not.toBeNull();
+    expect(r.withinEnvelope).toBe(true);
+    expect(r.confidence).toBe("MEDIUM");
+    expect(r.warnings.some((w) => /left of peak/i.test(w))).toBe(true);
   });
 
   it("refuses (returns null) when the duty is beyond the rated range — above the printed pressure", () => {

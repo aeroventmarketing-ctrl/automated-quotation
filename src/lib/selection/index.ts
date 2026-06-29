@@ -264,6 +264,13 @@ interface GridResult {
   rpm: number;
   bhp: number; // absorbed power in HP, at standard density
   withinEnvelope: boolean;
+  /**
+   * The duty flow is below the lowest printed flow at the required SP — the fan
+   * develops the pressure but runs left of its peak (a low-flow / surge-region
+   * pick). Selectable, but flagged so the smallest size that can make the
+   * pressure is still offered rather than refused outright.
+   */
+  leftOfPeak: boolean;
 }
 
 /** Group rating points by static-pressure level (each a CFM-sorted series). */
@@ -359,9 +366,19 @@ function interpolateGrid(
   // (the rating grid is triangular, so each SP level has its own CFM span).
   const minQ = loS[0].q + (hiS[0].q - loS[0].q) * t;
   const maxQ = loS[loS.length - 1].q + (hiS[hiS.length - 1].q - loS[loS.length - 1].q) * t;
-  const qInRange = q >= minQ - 1 && q <= maxQ + 1;
+  // A duty BELOW the lowest printed flow is a left-of-peak (low-flow) point: the
+  // fan still develops the SP, so it is selectable (RPM/BHP snap to the lowest
+  // printed row via atQ) rather than refused — only flow ABOVE the printed span
+  // or pressure ABOVE the printed maximum is genuinely outside the published data.
+  const belowMinFlow = q < minQ - 1;
+  const aboveMaxFlow = q > maxQ + 1;
 
-  return { rpm: Math.round(rpm), bhp, withinEnvelope: !pAboveMax && qInRange };
+  return {
+    rpm: Math.round(rpm),
+    bhp,
+    withinEnvelope: !pAboveMax && !aboveMaxFlow,
+    leftOfPeak: belowMinFlow && !pAboveMax && !aboveMaxFlow,
+  };
 }
 
 interface AxialBeltResult {
@@ -910,6 +927,7 @@ export function selectFan(
 
   let withinEnvelope = true;
   let extrapolated = false;
+  let leftOfPeak = false;
   let rpm: number;
   let speedRatio: number;
   let dutyPowerStd: number; // absorbed power (kW) at standard density
@@ -996,10 +1014,15 @@ export function selectFan(
     dutyPowerStd = hpToKw(grid.bhp);
     withinEnvelope = grid.withinEnvelope;
     extrapolated = !grid.withinEnvelope;
+    leftOfPeak = grid.leftOfPeak;
     speedRatio = Math.round((rpm / referenceRpm) * 1000) / 1000;
     if (!withinEnvelope) {
       warnings.push(
         "Duty point is outside the rated grid; result is extrapolated and must be confirmed by an engineer.",
+      );
+    } else if (leftOfPeak) {
+      warnings.push(
+        "Duty flow is below the lowest tabulated flow at this static pressure — the fan develops the pressure but runs left of peak (low-flow selection); confirm acceptable for the application.",
       );
     }
   } else {
@@ -1183,6 +1206,10 @@ export function selectFan(
     if (ovWithinLimit === false) confidence = "LOW";
   } else if (extrapolated || !withinEnvelope) {
     confidence = "LOW";
+  } else if (leftOfPeak) {
+    // Develops the SP but runs left of peak (flow below the lowest printed row):
+    // a usable low-flow pick, but not a clean grid hit — never recommend as HIGH.
+    confidence = "MEDIUM";
   } else if (usedGrid) {
     confidence = "HIGH"; // direct grid interpolation is accurate within the envelope
   } else if (speedRatio >= 0.85 && speedRatio <= 1.08) {
