@@ -420,12 +420,6 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "type": "Variable Air Volume",
     "bladeTypes": [],
     "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "VFD",
-    "bladeTypes": [],
-    "drives": []
   }
 ];
 
