@@ -31,22 +31,23 @@ function lineSpecs(specs: Record<string, unknown>, index: number) {
     cfm = req.airflow;
   }
 
+  const isKdk = specs.brand === "KDK"; // "W" motor rating is for KDK products only
+  const isMotorCtrl = specs.type === "Motor Controller"; // no airflow/SP/size
   return {
     itemLabel: typeof specs.itemLabel === "string" ? specs.itemLabel : String(index + 1),
-    capacity_cfm: cfm,
-    // Air curtains have no static pressure rating — leave the column blank ("--").
+    capacity_cfm: isMotorCtrl ? null : cfm,
+    // Air curtains / Motor Controllers have no static pressure — blank ("--").
     staticPressure_pa:
-      specs.type === "Air Curtain"
+      specs.type === "Air Curtain" || isMotorCtrl
         ? null
         : n(specs.staticPressure_pa) ??
           (typeof sel.dutyStaticPressure_pa === "number" ? Math.round(sel.dutyStaticPressure_pa) : null),
-    // KDK units aren't sized in inches — leave the Size column blank.
-    inches: specs.brand === "KDK" || typeof specs.power_w === "number" ? null : n(specs.inches),
+    // KDK units and Motor Controllers aren't sized in inches — blank the Size.
+    inches: isKdk || isMotorCtrl ? null : n(specs.inches),
     // KDK units are rated in watts: show the consumption in the motor column.
-    motorHp:
-      specs.brand === "KDK" || typeof specs.power_w === "number"
-        ? n(specs.power_w)
-        : n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null),
+    motorHp: isKdk
+      ? n(specs.power_w)
+      : n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null),
     motorPh: n(specs.motorPh),
     motorVolts: n(specs.motorVolts),
   };
@@ -117,7 +118,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // KDK units are watt-rated, so label the motor column "W" when present.
     motorUnit: quotation.items.some((it) => {
       const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
-      return s.brand === "KDK" || typeof s.power_w === "number";
+      return s.brand === "KDK"; // "W" column only when the quote carries a KDK product
     })
       ? "W"
       : "Hp",

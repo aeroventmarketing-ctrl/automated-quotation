@@ -31,9 +31,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   // KDK units are rated in watts, not HP — show the consumption under a "W"
   // motor column when the quote carries any KDK product.
-  const isKdkSpecs = (s: Record<string, unknown>) =>
-    s.brand === "KDK" || typeof s.power_w === "number";
+  // "W" is for KDK products only (rated in watts); everything else uses HP.
+  const isKdkSpecs = (s: Record<string, unknown>) => s.brand === "KDK";
   const anyKdk = q.items.some((it) => isKdkSpecs((it.specsSnapshot as Record<string, unknown>) ?? {}));
+  // Motor Controllers have no airflow / static pressure / physical size.
+  const isMotorCtrl = (s: Record<string, unknown>) => s.type === "Motor Controller";
 
   const items: XlsxLine[] = q.items.map((it) => {
     const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
@@ -49,11 +51,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       qty: it.qty,
       unitPrice: Number(it.unitPrice),
       lineTotal: Number(it.lineTotal),
-      capacity_cfm: n(s.capacity_cfm),
-      // Air curtains have no static pressure rating — leave the column blank ("--").
-      staticPressure_inwg: s.type === "Air Curtain" ? null : n(s.staticPressure_pa),
-      // KDK units aren't sized in inches — leave the Size column blank.
-      inches: isKdkSpecs(s) ? null : n(s.inches),
+      capacity_cfm: isMotorCtrl(s) ? null : n(s.capacity_cfm),
+      // Air curtains / Motor Controllers have no static pressure — blank ("--").
+      staticPressure_inwg: s.type === "Air Curtain" || isMotorCtrl(s) ? null : n(s.staticPressure_pa),
+      // KDK units and Motor Controllers aren't sized in inches — blank the Size.
+      inches: isKdkSpecs(s) || isMotorCtrl(s) ? null : n(s.inches),
       motorHp,
       motorPh: n(s.motorPh),
       motorVolts: n(s.motorVolts),

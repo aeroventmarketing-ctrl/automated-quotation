@@ -1176,8 +1176,12 @@ export function QuotationBuilder({
                 // any previously-picked model (the type changed).
                 applyKdk(l.id, { type, blowerModel: null, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               } else if (type === "Motor Controller") {
-                // Simple sub-typed item (Motor Starter / VFD) — no fan fields.
-                applyMotorController(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null });
+                // Simple sub-typed item (Motor Starter / VFD) — no fan fields,
+                // no airflow / static pressure / size / watt rating.
+                applyMotorController(l.id, {
+                  type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null,
+                  capacity_cfm: null, staticPressure_pa: null, inches: null, power_w: null,
+                });
               } else {
                 set({ type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               }
