@@ -716,38 +716,48 @@ export function QuotationBuilder({
         for (let i = idx - 1; i >= 0; i--) {
           if (BLOWER_CATEGORIES.has(ls[i].specs.category)) { src = ls[i].specs; break; }
         }
-        const isVfd = l.specs.bladeType === "Variable Frequency Drive";
         const ph = src?.motorPh ?? null;
         const pole = src?.motorPole ?? null;
         const hp = src?.motorHp ?? null;
         let volts = src?.motorVolts ?? null;
+        // Pick the controller from the motor: ≥15 HP → VFD; 3-phase 7.5–10 HP →
+        // Y-Δ (220/440) or Y-YY (380/400); otherwise (≤5 HP or single-phase) → DOL.
+        let bladeType = l.specs.bladeType;
         let drive = l.specs.drive;
-        if (isVfd) {
-          drive = ""; // VFD has no starter type
-        } else {
-          // Motor Starter: pick the starter type from phase + HP + voltage.
-          //  ≤ 5 HP (or single phase) → DOL; 3-phase ≥ 7.5 HP → Y-Δ (220/440) or Y-YY (380/400).
-          if (hp == null || ph == null) drive = "";
-          else if (ph === 1 || hp < 7.5) drive = "DOL";
-          else drive = volts === 220 || volts === 440 ? "Y/Δ" : volts === 380 || volts === 400 ? "Y/YY" : "";
-          if (ph === 1) volts = 220; // DOL single-phase is 220 V
+        if (hp != null && ph != null) {
+          if (hp >= 15) {
+            bladeType = "Variable Frequency Drive";
+            drive = "";
+          } else if (ph === 1 || hp < 7.5) {
+            bladeType = "Motor Starter";
+            drive = "DOL";
+          } else {
+            bladeType = "Motor Starter";
+            drive = volts === 220 || volts === 440 ? "Y/Δ" : volts === 380 || volts === 400 ? "Y/YY" : "";
+          }
         }
+        const isVfd = bladeType === "Variable Frequency Drive";
+        if (!isVfd && ph === 1) volts = 220; // DOL single-phase is 220 V
         // Price: VFD has no single-phase output; otherwise look up the right table.
-        const net = isVfd
-          ? ph === 1 ? null : vfdNetPrice(volts, hp)
-          : starterNetPrice(drive, ph, volts, hp);
+        const net =
+          hp == null || ph == null
+            ? null
+            : isVfd
+              ? ph === 1 ? null : vfdNetPrice(volts, hp)
+              : starterNetPrice(drive, ph, volts, hp);
         const unitPrice = net != null ? round2(net * (1 + vatRate)) : 0;
         if (
-          l.specs.drive === drive && l.specs.motorPh === ph && l.specs.motorPole === pole &&
-          l.specs.motorHp === hp && l.specs.motorVolts === volts && l.unitPrice === unitPrice
+          l.specs.bladeType === bladeType && l.specs.drive === drive && l.specs.motorPh === ph &&
+          l.specs.motorPole === pole && l.specs.motorHp === hp && l.specs.motorVolts === volts &&
+          l.unitPrice === unitPrice
         ) return l; // already in sync
         changed = true;
-        const specs = { ...l.specs, drive, motorPh: ph, motorPole: pole, motorHp: hp, motorVolts: volts };
+        const specs = { ...l.specs, bladeType, drive, motorPh: ph, motorPole: pole, motorHp: hp, motorVolts: volts };
         if (net != null) specs.bodyPrice = net;
         return {
           ...l,
           specs,
-          descriptionSnapshot: buildMotorControllerDescription(specs.bladeType, drive),
+          descriptionSnapshot: buildMotorControllerDescription(bladeType, drive),
           unitPrice,
         };
       });
@@ -1182,7 +1192,7 @@ export function QuotationBuilder({
             // Stored in the otherwise-unused bladeType field.
             <Select
               value={c.bladeType}
-              disabled={!editable || !c.type}
+              disabled={!editable || !c.type || (isMotorController(c) && !!c.mcRecommend)}
               onChange={(e) =>
                 isMotorController(c)
                   ? applyMotorController(l.id, {
