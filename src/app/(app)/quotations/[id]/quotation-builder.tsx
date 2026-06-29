@@ -181,6 +181,40 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 /** Motor Controller is a simple sub-typed item (Motor Starter / VFD) — no fan
  *  fields (blade/drive/material/duty/size). The sub-type lives in bladeType. */
 const isMotorController = (specs: { type: string }): boolean => specs.type === "Motor Controller";
+/** Spring Vibration Isolator: priced by mounting + rated capacity (no duty/motor). */
+const isIsolator = (specs: { type: string }): boolean => specs.type === "Spring Vibration Isolator";
+/** Rated capacities (kg) and spring colours; price by mounting (foot/ceiling). */
+const ISO_CAPS = [25, 35, 50, 80, 120, 175, 225, 300, 450, 600, 825];
+const ISO_COLOR: Record<number, string> = {
+  25: "White", 35: "Yellow", 50: "Orange", 80: "Violet", 120: "Red",
+  175: "Silver", 225: "Brown", 300: "Red", 450: "Green", 600: "Silver", 825: "Brown",
+};
+const ISO_PRICE: { foot: Record<number, number>; ceiling: Record<number, number> } = {
+  // Foot Mounted = "Floor Mounted" table; Ceiling Mounted = "Hanger Type" table.
+  foot: { 25: 1417, 35: 1478, 50: 1540, 80: 1589, 120: 1663, 175: 1724, 225: 2587, 300: 3819, 450: 4127, 600: 4805, 825: 4866 },
+  ceiling: { 25: 1294, 35: 1331, 50: 1355, 80: 1417, 120: 1478, 175: 1540, 225: 1725, 300: 3696, 450: 4189, 600: 5544, 825: 5667 },
+};
+/** Smallest rated capacity that covers the required load (kg). */
+const isolatorRatedCap = (capKg: number | null): number | null =>
+  capKg == null ? null : ISO_CAPS.find((c) => c >= capKg) ?? null;
+/** Isolator net (VAT-exclusive) price from mounting + required capacity. */
+function isolatorNetPrice(shape: string, capKg: number | null): number | null {
+  const rated = isolatorRatedCap(capKg);
+  if (rated == null) return null;
+  const table = shape === "Foot Mounted" ? ISO_PRICE.foot : shape === "Ceiling Mounted" ? ISO_PRICE.ceiling : null;
+  return table ? table[rated] ?? null : null;
+}
+/** Isolator description: type / mounting / rated capacity + spring colour. */
+function buildIsolatorDescription(shape: string, capKg: number | null): string {
+  const rated = isolatorRatedCap(capKg);
+  return [
+    "Spring Vibration Isolator",
+    shape || "",
+    rated != null ? `Rated capacity ${rated} kg${ISO_COLOR[rated] ? ` · ${ISO_COLOR[rated]} spring` : ""}` : "",
+  ]
+    .filter((l) => l.length > 0)
+    .join("\n");
+}
 /** Motor-starter wiring options (dropdown values keep the Y/Δ symbol). */
 const MOTOR_STARTER_TYPES = ["DOL", "Y/Δ", "Y/YY"];
 /** Spelled-out labels for the description box (the dropdown keeps the symbol). */
@@ -829,6 +863,25 @@ export function QuotationBuilder({
     );
     setAcCollapsed((m) => ({ ...m, [lineId]: true })); // collapse the list after picking
   }
+  // Spring Vibration Isolator: merge the mounting / capacity patch, rebuild the
+  // description, and auto-fill the VAT-inclusive unit price (table prices are net).
+  function applyIsolator(lineId: string, patch: Partial<LineSpecs>) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== lineId) return l;
+        const specs = { ...l.specs, ...patch };
+        const capRaw = specs.sizeL ? Number(specs.sizeL) : NaN;
+        const capKg = Number.isNaN(capRaw) ? null : capRaw;
+        const net = isolatorNetPrice(specs.shape, capKg);
+        return {
+          ...l,
+          specs,
+          descriptionSnapshot: buildIsolatorDescription(specs.shape, capKg),
+          ...(net != null ? { unitPrice: round2(net * (1 + vatRate)) } : {}),
+        };
+      }),
+    );
+  }
   // Motor Controller: merge the patch (sub-type and/or phase/HP/voltage), rebuild
   // the description, and — for a Motor Starter — auto-fill the VAT-inclusive unit
   // price from the starter table (DOL / Y-Δ / Y-YY). Table prices are net.
@@ -1251,7 +1304,7 @@ export function QuotationBuilder({
               <Select
                 value={c.shape}
                 disabled={!editable || !c.type}
-                onChange={(e) => set({ shape: e.target.value })}
+                onChange={(e) => (isIsolator(c) ? applyIsolator(l.id, { shape: e.target.value }) : set({ shape: e.target.value }))}
               >
                 <option value="">{variantLabel(c.type)}…</option>
                 {shapesFor(c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
@@ -1259,7 +1312,7 @@ export function QuotationBuilder({
               {sizeMode(c.type, c.shape) === "capacity" ? (
                 <Input className="h-9" type="number" step="any" placeholder="Capacity (kg)"
                   disabled={!editable || !c.type} value={c.sizeL}
-                  onChange={(e) => set({ sizeL: e.target.value, sizeW: "" })} />
+                  onChange={(e) => applyIsolator(l.id, { sizeL: e.target.value, sizeW: "" })} />
               ) : sizeMode(c.type, c.shape) === "diameter" ? (
                 <Input className="h-9" type="number" step="any" placeholder="Diameter Ø (mm)"
                   disabled={!editable || !c.type} value={c.sizeL}
@@ -1510,7 +1563,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -1614,7 +1667,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -1767,7 +1820,7 @@ export function QuotationBuilder({
                     <p className="col-span-2 text-xs font-medium text-destructive md:col-span-4">No Single Phase Output Available</p>
                   )}
                 </div>
-              ) : isPrebuiltUnit(l.specs) ? (
+              ) : isIsolator(l.specs) ? null : isPrebuiltUnit(l.specs) ? (
                 // KDK pre-built units: single-phase and 220 V (both fixed), the
                 // motor rating from the catalogue, and the unit price.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -1851,7 +1904,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;

@@ -33,23 +33,26 @@ function lineSpecs(specs: Record<string, unknown>, index: number) {
 
   const isKdk = specs.brand === "KDK"; // "W" motor rating is for KDK products only
   const isMotorCtrl = specs.type === "Motor Controller"; // no airflow/SP/size
+  const isIso = specs.type === "Spring Vibration Isolator"; // no airflow/SP/size/motor
   return {
     itemLabel: typeof specs.itemLabel === "string" ? specs.itemLabel : String(index + 1),
-    capacity_cfm: isMotorCtrl ? null : cfm,
-    // Air curtains / Motor Controllers have no static pressure — blank ("--").
+    capacity_cfm: isMotorCtrl || isIso ? null : cfm,
+    // Air curtains / Motor Controllers / isolators have no static pressure — "--".
     staticPressure_pa:
-      specs.type === "Air Curtain" || isMotorCtrl
+      specs.type === "Air Curtain" || isMotorCtrl || isIso
         ? null
         : n(specs.staticPressure_pa) ??
           (typeof sel.dutyStaticPressure_pa === "number" ? Math.round(sel.dutyStaticPressure_pa) : null),
-    // KDK units and Motor Controllers aren't sized in inches — blank the Size.
-    inches: isKdk || isMotorCtrl ? null : n(specs.inches),
+    // KDK units / Motor Controllers / isolators aren't sized in inches — blank.
+    inches: isKdk || isMotorCtrl || isIso ? null : n(specs.inches),
     // KDK units are rated in watts: show the consumption in the motor column.
-    motorHp: isKdk
-      ? n(specs.power_w)
-      : n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null),
-    motorPh: n(specs.motorPh),
-    motorVolts: n(specs.motorVolts),
+    motorHp: isIso
+      ? null
+      : isKdk
+        ? n(specs.power_w)
+        : n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null),
+    motorPh: isIso ? null : n(specs.motorPh),
+    motorVolts: isIso ? null : n(specs.motorVolts),
   };
 }
 

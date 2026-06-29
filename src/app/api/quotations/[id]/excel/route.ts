@@ -34,13 +34,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // "W" is for KDK products only (rated in watts); everything else uses HP.
   const isKdkSpecs = (s: Record<string, unknown>) => s.brand === "KDK";
   const anyKdk = q.items.some((it) => isKdkSpecs((it.specsSnapshot as Record<string, unknown>) ?? {}));
-  // Motor Controllers have no airflow / static pressure / physical size.
+  // Motor Controllers / vibration isolators have no airflow / static pressure /
+  // physical size, and isolators have no motor either.
   const isMotorCtrl = (s: Record<string, unknown>) => s.type === "Motor Controller";
+  const isIso = (s: Record<string, unknown>) => s.type === "Spring Vibration Isolator";
 
   const items: XlsxLine[] = q.items.map((it) => {
     const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
-    const motorHp =
-      isKdkSpecs(s) && typeof s.power_w === "number"
+    const motorHp = isIso(s)
+      ? null
+      : isKdkSpecs(s) && typeof s.power_w === "number"
         ? s.power_w
         : typeof s.motorHp === "number" || typeof s.motorHp === "string"
           ? s.motorHp
@@ -51,14 +54,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       qty: it.qty,
       unitPrice: Number(it.unitPrice),
       lineTotal: Number(it.lineTotal),
-      capacity_cfm: isMotorCtrl(s) ? null : n(s.capacity_cfm),
-      // Air curtains / Motor Controllers have no static pressure — blank ("--").
-      staticPressure_inwg: s.type === "Air Curtain" || isMotorCtrl(s) ? null : n(s.staticPressure_pa),
-      // KDK units and Motor Controllers aren't sized in inches — blank the Size.
-      inches: isKdkSpecs(s) || isMotorCtrl(s) ? null : n(s.inches),
+      capacity_cfm: isMotorCtrl(s) || isIso(s) ? null : n(s.capacity_cfm),
+      // Air curtains / Motor Controllers / isolators have no static pressure — "--".
+      staticPressure_inwg: s.type === "Air Curtain" || isMotorCtrl(s) || isIso(s) ? null : n(s.staticPressure_pa),
+      // KDK units / Motor Controllers / isolators aren't sized in inches — blank.
+      inches: isKdkSpecs(s) || isMotorCtrl(s) || isIso(s) ? null : n(s.inches),
       motorHp,
-      motorPh: n(s.motorPh),
-      motorVolts: n(s.motorVolts),
+      motorPh: isIso(s) ? null : n(s.motorPh),
+      motorVolts: isIso(s) ? null : n(s.motorVolts),
     };
   });
 
