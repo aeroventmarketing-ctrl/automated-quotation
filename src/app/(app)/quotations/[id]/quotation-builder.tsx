@@ -183,12 +183,8 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 const isMotorController = (specs: { type: string }): boolean => specs.type === "Motor Controller";
 /** Spring Vibration Isolator: priced by mounting + rated capacity (no duty/motor). */
 const isIsolator = (specs: { type: string }): boolean => specs.type === "Spring Vibration Isolator";
-/** Rated capacities (kg) and spring colours; price by mounting (foot/ceiling). */
+/** Rated capacities (kg); price by mounting (foot/ceiling). */
 const ISO_CAPS = [25, 35, 50, 80, 120, 175, 225, 300, 450, 600, 825];
-const ISO_COLOR: Record<number, string> = {
-  25: "White", 35: "Yellow", 50: "Orange", 80: "Violet", 120: "Red",
-  175: "Silver", 225: "Brown", 300: "Red", 450: "Green", 600: "Silver", 825: "Brown",
-};
 const ISO_PRICE: { foot: Record<number, number>; ceiling: Record<number, number> } = {
   // Foot Mounted = "Floor Mounted" table; Ceiling Mounted = "Hanger Type" table.
   foot: { 25: 1417, 35: 1478, 50: 1540, 80: 1589, 120: 1663, 175: 1724, 225: 2587, 300: 3819, 450: 4127, 600: 4805, 825: 4866 },
@@ -210,7 +206,7 @@ function buildIsolatorDescription(shape: string, capKg: number | null): string {
   return [
     "Spring Vibration Isolator",
     shape || "",
-    rated != null ? `Rated capacity ${rated} kg${ISO_COLOR[rated] ? ` · ${ISO_COLOR[rated]} spring` : ""}` : "",
+    rated != null ? `Rated capacity ${rated} kg` : "",
   ]
     .filter((l) => l.length > 0)
     .join("\n");
@@ -1314,7 +1310,7 @@ export function QuotationBuilder({
                   onChange={(e) => applyIsolator(l.id, { sizeL: e.target.value, sizeW: "" })}>
                   <option value="">Capacity (kg)…</option>
                   {ISO_CAPS.map((cap) => (
-                    <option key={cap} value={cap}>{cap} kg{ISO_COLOR[cap] ? ` · ${ISO_COLOR[cap]}` : ""}</option>
+                    <option key={cap} value={cap}>{cap} kg</option>
                   ))}
                 </Select>
               ) : sizeMode(c.type, c.shape) === "diameter" ? (
