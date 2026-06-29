@@ -1082,7 +1082,16 @@ export function QuotationBuilder({
             <Select
               value={c.drive}
               disabled={!editable}
-              onChange={(e) => applyMotorController(l.id, { drive: e.target.value })}
+              onChange={(e) => {
+                const starter = e.target.value;
+                const patch: Partial<LineSpecs> = { drive: starter };
+                // Y-Δ / Y-YY are 3-phase only — drop a stale single-phase choice.
+                if ((starter === "Y/Δ" || starter === "Y/YY") && c.motorPh === 1) {
+                  patch.motorPh = null;
+                  patch.motorVolts = null;
+                }
+                applyMotorController(l.id, patch);
+              }}
             >
               <option value="">Starter type…</option>
               {MOTOR_STARTER_TYPES.map((s) => (<option key={s} value={s}>{s}</option>))}
@@ -1551,7 +1560,8 @@ export function QuotationBuilder({
                     <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
                       onChange={(e) => applyMotorControllerPrice(l.id, { motorPh: numOrNull(e.target.value) })}>
                       <option value="">—</option>
-                      <option value="1">1-phase</option>
+                      {/* Y-Δ / Y-YY are 3-phase only — disable single phase. */}
+                      <option value="1" disabled={l.specs.drive === "Y/Δ" || l.specs.drive === "Y/YY"}>1-phase</option>
                       <option value="3">3-phase</option>
                     </Select>
                   </div>
