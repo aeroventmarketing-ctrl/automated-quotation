@@ -210,7 +210,8 @@ function isolatorNetPrice(shape: string, capKg: number | null): number | null {
  * rated capacity per spring. Load = motor weight × 9, divided per category, then
  * rounded up to the next rated capacity. Propeller types use no springs.
  *   Axial / Tubular Inline → 4 springs, ÷4
- *   Centrifugal (non-cabinet) → 6 springs, ÷6
+ *   Centrifugal SISW (non-cabinet) → 6 springs, ÷6
+ *   Centrifugal DIDW (non-cabinet) → 6 springs, ÷5
  *   Cabinet SISW → 4 springs, ÷3   ·   Cabinet DIDW → 4 springs, ÷2
  */
 function isolatorRecommend(
@@ -226,7 +227,7 @@ function isolatorRecommend(
   if (t.includes("cabinet") && t.includes("sisw")) { divisor = 3; springs = 4; }
   else if (t.includes("cabinet") && t.includes("didw")) { divisor = 2; springs = 4; }
   else if (category === "Axial Type" || category === "Tubular Inline Type") { divisor = 4; springs = 4; }
-  else if (category === "Centrifugal Type") { divisor = 6; springs = 6; }
+  else if (category === "Centrifugal Type") { divisor = t.includes("didw") ? 5 : 6; springs = 6; }
   else return null;
   return { springs, rated: isolatorRatedCap((motorKg * 9) / divisor), noSpring: false };
 }
