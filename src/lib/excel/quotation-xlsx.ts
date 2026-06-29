@@ -270,7 +270,13 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     const wrappedLines = String(it.descriptionSnapshot)
       .split("\n")
       .reduce((acc, seg) => acc + Math.max(1, Math.ceil(seg.length / descCharsPerLine)), 0);
-    ws.getRow(r).height = Math.max(28, wrappedLines * 13.5);
+    // Row height = text height + a fixed ~9pt of vertical breathing room so a
+    // short 2–3 line row (Motor Controller, isolator) gets the same space above
+    // and below its text as a tall multi-line blower row. `12·lines + 9` adds
+    // that fixed padding; `13.5·lines` is the no-clip floor for long
+    // descriptions. They coincide at 6 lines, so a 6-line blower row is
+    // unchanged while shorter rows grow to match its padding.
+    ws.getRow(r).height = Math.max(28, wrappedLines * 13.5, wrappedLines * 12 + 9);
     r++;
   }
 
