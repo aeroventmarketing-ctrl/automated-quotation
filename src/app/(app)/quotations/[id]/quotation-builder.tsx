@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -704,6 +704,43 @@ export function QuotationBuilder({
     return { net, vat: gross - net, gross, exclusive, displayedNet, discountAmt, finalNet, addVat, vatAmt, grandTotal };
   }, [lines, vatRate, effectiveVatMode, discountPct]);
 
+  // Keep "Recommend?" Motor Controller lines in sync with the nearest fan line
+  // above: whenever any line changes, re-pull phase/pole/HP/volts and re-price.
+  // Returns the same array reference when nothing changed (so it can't loop).
+  useEffect(() => {
+    setLines((ls) => {
+      let changed = false;
+      const next = ls.map((l, idx) => {
+        if (!isMotorController(l.specs) || !l.specs.mcRecommend) return l;
+        let src: LineSpecs | null = null;
+        for (let i = idx - 1; i >= 0; i--) {
+          if (BLOWER_CATEGORIES.has(ls[i].specs.category)) { src = ls[i].specs; break; }
+        }
+        const isVfd = l.specs.bladeType === "Variable Frequency Drive";
+        const ph = isVfd ? 3 : src?.motorPh ?? null;
+        const pole = src?.motorPole ?? null;
+        const hp = src?.motorHp ?? null;
+        let volts = src?.motorVolts ?? null;
+        if (!isVfd && ph === 1) volts = 220; // single-phase is 220 V only
+        if (isVfd && volts != null && !vfdVolts(hp).includes(volts)) volts = null;
+        if (
+          l.specs.motorPh === ph && l.specs.motorPole === pole &&
+          l.specs.motorHp === hp && l.specs.motorVolts === volts
+        ) return l; // already in sync
+        changed = true;
+        const specs = { ...l.specs, motorPh: ph, motorPole: pole, motorHp: hp, motorVolts: volts };
+        const net = isVfd
+          ? vfdNetPrice(volts, hp)
+          : specs.bladeType === "Motor Starter"
+            ? starterNetPrice(specs.drive, ph, volts, hp)
+            : null;
+        if (net != null) specs.bodyPrice = net;
+        return { ...l, specs, ...(net != null ? { unitPrice: round2(net * (1 + vatRate)) } : {}) };
+      });
+      return changed ? next : ls;
+    });
+  }, [lines, vatRate]);
+
   function updateLine(id: string, patch: Partial<Line>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   }
@@ -797,24 +834,10 @@ export function QuotationBuilder({
       }),
     );
   }
-  // Motor Controller "Recommend?": on check, copy phase / pole / motor HP / volts
-  // from the nearest fan-or-blower line above this one, then re-price.
+  // Motor Controller "Recommend?": toggling the flag is enough — the effect below
+  // keeps the phase / pole / HP / volts synced from the nearest fan line above.
   function applyMcRecommend(lineId: string, checked: boolean) {
-    const idx = lines.findIndex((l) => l.id === lineId);
-    const patch: Partial<LineSpecs> = { mcRecommend: checked };
-    if (checked && idx > 0) {
-      for (let i = idx - 1; i >= 0; i--) {
-        if (BLOWER_CATEGORIES.has(lines[i].specs.category)) {
-          const src = lines[i].specs;
-          patch.motorPh = src.motorPh;
-          patch.motorPole = src.motorPole;
-          patch.motorHp = src.motorHp;
-          patch.motorVolts = src.motorVolts;
-          break;
-        }
-      }
-    }
-    applyMotorController(lineId, patch);
+    applyMotorController(lineId, { mcRecommend: checked });
   }
   // Editing the client height/width clears the run result — the user re-runs.
   function acInput(lineId: string, patch: Partial<LineSpecs>) {
