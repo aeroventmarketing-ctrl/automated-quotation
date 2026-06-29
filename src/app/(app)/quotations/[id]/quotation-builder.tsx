@@ -205,6 +205,31 @@ function isolatorNetPrice(shape: string, capKg: number | null): number | null {
   const table = shape === "Foot Mounted" ? ISO_PRICE.foot : shape === "Ceiling Mounted" ? ISO_PRICE.ceiling : null;
   return table ? table[rated] ?? null : null;
 }
+/**
+ * Recommend a spring set from the fan/blower above: number of springs and the
+ * rated capacity per spring. Load = motor weight × 9, divided per category, then
+ * rounded up to the next rated capacity. Propeller types use no springs.
+ *   Axial / Tubular Inline → 4 springs, ÷4
+ *   Centrifugal (non-cabinet) → 6 springs, ÷6
+ *   Cabinet SISW → 4 springs, ÷3   ·   Cabinet DIDW → 4 springs, ÷2
+ */
+function isolatorRecommend(
+  category: string,
+  type: string,
+  motorKg: number | null,
+): { springs: number; rated: number | null; noSpring: boolean } | null {
+  if (category === "Propeller Type") return { springs: 0, rated: null, noSpring: true };
+  if (motorKg == null) return null;
+  const t = (type || "").toLowerCase();
+  let divisor: number;
+  let springs: number;
+  if (t.includes("cabinet") && t.includes("sisw")) { divisor = 3; springs = 4; }
+  else if (t.includes("cabinet") && t.includes("didw")) { divisor = 2; springs = 4; }
+  else if (category === "Axial Type" || category === "Tubular Inline Type") { divisor = 4; springs = 4; }
+  else if (category === "Centrifugal Type") { divisor = 6; springs = 6; }
+  else return null;
+  return { springs, rated: isolatorRatedCap((motorKg * 9) / divisor), noSpring: false };
+}
 /** Isolator description: type / mounting / rated capacity + spring colour. */
 function buildIsolatorDescription(shape: string, capKg: number | null): string {
   const rated = isolatorRatedCap(capKg);
@@ -751,18 +776,28 @@ export function QuotationBuilder({
         for (let i = idx - 1; i >= 0; i--) {
           if (BLOWER_CATEGORIES.has(ls[i].specs.category)) { src = ls[i].specs; break; }
         }
-        // Isolator: recommend a spring from the motor weight (HP → kg → rated cap).
+        // Isolator: recommend a spring set from the motor above. Number of springs
+        // + per-spring capacity are computed per fan category; price is always the
+        // foot-mounted price for that capacity; Qty = number of springs.
         if (isIsolator(l.specs)) {
-          const hp = src?.motorHp ?? null;
-          const weight = hp != null ? MOTOR_WEIGHT_KG[hp] ?? null : null;
-          const rated = isolatorRatedCap(weight);
+          const motorKg = src?.motorHp != null ? MOTOR_WEIGHT_KG[src.motorHp] ?? null : null;
+          const rec = src ? isolatorRecommend(src.category, src.type, motorKg) : null;
+          const shape = "Foot Mounted"; // recommendation always uses the foot-mounted price
+          const rated = rec && !rec.noSpring ? rec.rated : null;
           const sizeL = rated != null ? String(rated) : "";
-          const net = isolatorNetPrice(l.specs.shape, rated);
+          const qty = rec && rec.springs > 0 ? rec.springs : l.qty;
+          const net = rated != null ? ISO_PRICE.foot[rated] ?? null : null;
           const unitPrice = net != null ? round2(net * (1 + vatRate)) : 0;
-          if (l.specs.sizeL === sizeL && l.unitPrice === unitPrice) return l;
+          const desc = rec?.noSpring
+            ? "Spring Vibration Isolator\nNo spring required (propeller type)"
+            : buildIsolatorDescription(shape, rated);
+          if (
+            l.specs.shape === shape && l.specs.sizeL === sizeL && l.qty === qty &&
+            l.unitPrice === unitPrice && l.descriptionSnapshot === desc
+          ) return l;
           changed = true;
-          const specs = { ...l.specs, sizeL };
-          return { ...l, specs, descriptionSnapshot: buildIsolatorDescription(specs.shape, rated), unitPrice };
+          const specs = { ...l.specs, shape, sizeL };
+          return { ...l, qty, specs, descriptionSnapshot: desc, unitPrice };
         }
         const ph = src?.motorPh ?? null;
         const pole = src?.motorPole ?? null;
@@ -1317,7 +1352,7 @@ export function QuotationBuilder({
             <>
               <Select
                 value={c.shape}
-                disabled={!editable || !c.type}
+                disabled={!editable || !c.type || (isIsolator(c) && !!c.mcRecommend)}
                 onChange={(e) => (isIsolator(c) ? applyIsolator(l.id, { shape: e.target.value }) : set({ shape: e.target.value }))}
               >
                 <option value="">{variantLabel(c.type)}…</option>
@@ -1538,7 +1573,9 @@ export function QuotationBuilder({
                 </div>
                 <div className="md:col-span-1">
                   <Label className="text-[10px]">Qty</Label>
-                  <Input className="h-8 text-right" type="number" min={1} value={l.qty} disabled={!editable}
+                  {/* Isolator recommend sets Qty = number of springs (locked). */}
+                  <Input className="h-8 text-right" type="number" min={1} value={l.qty}
+                    disabled={!editable || (isIsolator(l.specs) && !!l.specs.mcRecommend)}
                     onChange={(e) => updateLine(l.id, { qty: Math.max(1, Number(e.target.value) || 1) })} />
                 </div>
                 <div className="md:col-span-9">
