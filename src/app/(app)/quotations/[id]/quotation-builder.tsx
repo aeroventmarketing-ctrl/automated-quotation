@@ -1305,9 +1305,9 @@ export function QuotationBuilder({
               </Select>
             </>
           )}
-          {/* Material applies to blowers and accessories, not pre-built units
-              or Motor Controllers. */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && (
+          {/* Material applies to blowers — not pre-built units, Motor Controllers,
+              or Ventilation Accessories. */}
+          {!isPrebuiltUnit(c) && !isMotorController(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
