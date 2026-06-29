@@ -171,17 +171,23 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 /** Motor Controller is a simple sub-typed item (Motor Starter / VFD) — no fan
  *  fields (blade/drive/material/duty/size). The sub-type lives in bladeType. */
 const isMotorController = (specs: { type: string }): boolean => specs.type === "Motor Controller";
-/** Motor-starter wiring options (shown when sub-type is Motor Starter). */
+/** Motor-starter wiring options (dropdown values keep the Y/Δ symbol). */
 const MOTOR_STARTER_TYPES = ["DOL", "Y/Δ", "Y/YY"];
-/** Motor Controller description: type, sub-type, then starter type (if any). */
+/** Spelled-out labels for the description box (the dropdown keeps the symbol). */
+const STARTER_DESC_LABEL: Record<string, string> = { "Y/Δ": "Y-Delta" };
+/**
+ * Motor Controller description. For a Motor Starter the "Motor Starter" line is
+ * dropped and the starter type is spelled out (e.g. Y/Δ → Y-Delta); other
+ * sub-types (VFD) keep their name.
+ */
 function buildMotorControllerDescription(subType?: string | null, starterType?: string | null): string {
-  return [
-    "Motor Controller",
-    subType || "",
-    subType === "Motor Starter" ? starterType || "" : "",
-  ]
-    .filter((l) => l.length > 0)
-    .join("\n");
+  const line2 =
+    subType === "Motor Starter"
+      ? starterType
+        ? STARTER_DESC_LABEL[starterType] ?? starterType
+        : ""
+      : subType || "";
+  return ["Motor Controller", line2].filter((l) => l.length > 0).join("\n");
 }
 /** Length units the sales team can enter the client's height / door width in. */
 const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
