@@ -399,6 +399,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   {
     "category": "Other Products",
     "type": "Motor Controller",
+    "series": ["Motor Starter", "Variable Frequency Drive"],
     "bladeTypes": [],
     "drives": []
   },

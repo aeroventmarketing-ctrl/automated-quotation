@@ -168,6 +168,13 @@ const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
   specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";
 /** Air curtains are picked differently from the duty-selected fans. */
 const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air Curtain";
+/** Motor Controller is a simple sub-typed item (Motor Starter / VFD) — no fan
+ *  fields (blade/drive/material/duty/size). The sub-type lives in bladeType. */
+const isMotorController = (specs: { type: string }): boolean => specs.type === "Motor Controller";
+/** Motor Controller description: type then the chosen sub-type. */
+function buildMotorControllerDescription(subType?: string | null): string {
+  return ["Motor Controller", subType || ""].filter((l) => l.length > 0).join("\n");
+}
 /** Length units the sales team can enter the client's height / door width in. */
 const LENGTH_UNITS = ["mm", "cm", "inches", "feet", "meter"];
 const LEN_TO_M: Record<string, number> = { mm: 0.001, cm: 0.01, inches: 0.0254, feet: 0.3048, meter: 1, m: 1 };
@@ -662,6 +669,17 @@ export function QuotationBuilder({
     );
     setAcCollapsed((m) => ({ ...m, [lineId]: true })); // collapse the list after picking
   }
+  // Motor Controller: merge the patch (type and/or sub-type) and rebuild the
+  // simple description (Motor Controller / <sub-type>). No fan/duty fields.
+  function applyMotorController(id: string, patch: Partial<LineSpecs>) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== id) return l;
+        const specs = { ...l.specs, ...patch };
+        return { ...l, specs, descriptionSnapshot: buildMotorControllerDescription(specs.bladeType) };
+      }),
+    );
+  }
   // Editing the client height/width clears the run result — the user re-runs.
   function acInput(lineId: string, patch: Partial<LineSpecs>) {
     updateSpec(lineId, patch);
@@ -974,6 +992,9 @@ export function QuotationBuilder({
                 // KDK pre-built unit: rebuild Type / KDK Brand / Model and clear
                 // any previously-picked model (the type changed).
                 applyKdk(l.id, { type, blowerModel: null, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
+              } else if (type === "Motor Controller") {
+                // Simple sub-typed item (Motor Starter / VFD) — no fan fields.
+                applyMotorController(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null });
               } else {
                 set({ type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               }
@@ -983,18 +1004,23 @@ export function QuotationBuilder({
             {typesFor(c.category, brandsFor(c.category).length > 0 ? c.brand : undefined).map((t) => (<option key={t} value={t}>{t}</option>))}
           </Select>
           {seriesFor(c.category, c.type).length > 0 && (
-            // KDK series level (e.g. Wall Mounted Fan → Shutter / High Pressure).
-            // Stored in the otherwise-unused bladeType field for KDK units.
+            // Sub-type level — KDK series (Wall Mounted Fan → Shutter / High
+            // Pressure) or Aerovent Motor Controller (Motor Starter / VFD).
+            // Stored in the otherwise-unused bladeType field.
             <Select
               value={c.bladeType}
               disabled={!editable || !c.type}
-              onChange={(e) => applyKdk(l.id, {
-                bladeType: e.target.value, blowerModel: null,
-                // Shutter Series is flow-only — drop any stale static pressure.
-                ...(e.target.value === "Shutter Series" ? { staticPressure_pa: null } : {}),
-              })}
+              onChange={(e) =>
+                isMotorController(c)
+                  ? applyMotorController(l.id, { bladeType: e.target.value })
+                  : applyKdk(l.id, {
+                      bladeType: e.target.value, blowerModel: null,
+                      // Shutter Series is flow-only — drop any stale static pressure.
+                      ...(e.target.value === "Shutter Series" ? { staticPressure_pa: null } : {}),
+                    })
+              }
             >
-              <option value="">Series…</option>
+              <option value="">{isMotorController(c) ? "Type…" : "Series…"}</option>
               {seriesFor(c.category, c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
             </Select>
           )}
@@ -1027,9 +1053,9 @@ export function QuotationBuilder({
                 </>
               )}
             </>
-          ) : isPrebuiltUnit(c) ? (
-            // KDK pre-built units have no blade type / drive and aren't
-            // material-configurable — the model is picked by selection.
+          ) : isPrebuiltUnit(c) || isMotorController(c) ? (
+            // KDK pre-built units and Motor Controllers have no blade type /
+            // drive and aren't material-configurable.
             null
           ) : (
             <>
@@ -1057,8 +1083,9 @@ export function QuotationBuilder({
               </Select>
             </>
           )}
-          {/* Material applies to blowers and accessories, not pre-built units. */}
-          {!isPrebuiltUnit(c) && (
+          {/* Material applies to blowers and accessories, not pre-built units
+              or Motor Controllers. */}
+          {!isPrebuiltUnit(c) && !isMotorController(c) && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -1071,9 +1098,11 @@ export function QuotationBuilder({
         <p className="text-xs text-muted-foreground">
           {c.category === "Ventilation Accessories"
             ? "Category · Type · Shape/Mounting · Size — Round = diameter, Square/Rectangle = L × W (mm), isolator = capacity (kg)."
-            : isPrebuiltUnit(c)
-              ? "Category · Brand · Type — run the selection to pick a model by duty."
-              : "Product Category · Type · Blade Type · Drive (more details to follow)."}
+            : isMotorController(c)
+              ? "Category · Brand · Type · Motor Starter / Variable Frequency Drive — enter the description and price."
+              : isPrebuiltUnit(c)
+                ? "Category · Brand · Type — run the selection to pick a model by duty."
+                : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
       </div>
     );
@@ -1259,7 +1288,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : (
+              ) : isMotorController(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -1362,8 +1391,8 @@ export function QuotationBuilder({
               ) : null}
 
               {/* Per-line fan selector — click a candidate to populate this item.
-                  Air curtains are picked by the height/width dropdowns instead. */}
-              {editable && !isAirCurtain(l.specs) && (
+                  Air curtains and Motor Controllers aren't duty-selected. */}
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
