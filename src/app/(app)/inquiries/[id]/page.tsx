@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { InquiryWorkspace } from "./inquiry-workspace";
+import { RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,10 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
         priceList: { where: { active: true }, orderBy: { effectiveDate: "desc" }, take: 1 },
       },
     }),
-    prisma.quotationTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.quotationTemplate.findMany({
+      where: { active: true, layoutKey: { in: [...RETAINED_TEMPLATE_LAYOUT_KEYS] } },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   if (!inquiry) notFound();

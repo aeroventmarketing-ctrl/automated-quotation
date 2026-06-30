@@ -6,6 +6,13 @@ import { COMPANY } from "@/lib/config";
 export const KDK_NOTE = "All units are made of high quality materials.";
 
 /**
+ * Quotation templates offered in the picker: the Standard "Fans & Blowers"
+ * layout and KDK. The Government / Detailed / Budgetary / Export layouts are
+ * retired — matched by layoutKey so admin-renamed display names still resolve.
+ */
+export const RETAINED_TEMPLATE_LAYOUT_KEYS = ["standard", "kdk"] as const;
+
+/**
  * The long Standard (Fans and Blowers) note. If it ever ended up on the KDK
  * template it is replaced with the short KDK note — but the Standard template
  * keeps it (the two templates have different notes by design).

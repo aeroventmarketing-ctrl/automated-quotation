@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove } from "@/lib/auth";
 import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
+import { RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
 
 const lineSchema = z.object({
   catalogueItemId: z.string().nullable().optional(),
@@ -35,7 +36,10 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
 
   const template = data.templateId
     ? await prisma.quotationTemplate.findUnique({ where: { id: data.templateId } })
-    : await prisma.quotationTemplate.findFirst({ where: { active: true }, orderBy: { name: "asc" } });
+    : await prisma.quotationTemplate.findFirst({
+        where: { active: true, layoutKey: { in: [...RETAINED_TEMPLATE_LAYOUT_KEYS] } },
+        orderBy: { name: "asc" },
+      });
   if (!template) throw new Error("No quotation template available — seed templates first.");
 
   const resolvedLines = await Promise.all(

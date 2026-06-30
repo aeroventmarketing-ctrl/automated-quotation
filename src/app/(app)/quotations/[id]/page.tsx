@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
-import { ensureKdkTemplate } from "@/lib/ensure-templates";
+import { ensureKdkTemplate, RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
 import { QuotationBuilder } from "./quotation-builder";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,10 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         approvedBy: true,
       },
     }),
-    prisma.quotationTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.quotationTemplate.findMany({
+      where: { active: true, layoutKey: { in: [...RETAINED_TEMPLATE_LAYOUT_KEYS] } },
+      orderBy: { name: "asc" },
+    }),
     getCurrentUser(),
     prisma.catalogueItem.findMany({
       where: { active: true },

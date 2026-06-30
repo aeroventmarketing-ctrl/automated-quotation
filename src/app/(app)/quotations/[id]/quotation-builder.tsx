@@ -1539,6 +1539,10 @@ export function QuotationBuilder({
           <div className="space-y-1">
             <Label>Template (pattern)</Label>
             <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)} disabled={!editable}>
+              {/* Keep a retired template visible on an existing quote that still uses it. */}
+              {!templates.some((t) => t.id === templateId) && (
+                <option value={templateId}>{quotation.templateName}</option>
+              )}
               {templates.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
             </Select>
           </div>
