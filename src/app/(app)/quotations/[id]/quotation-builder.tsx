@@ -73,6 +73,7 @@ interface LineSpecs {
   sizeW: string;
   sizeUnit?: string; // dimension unit (mm/cm/inches) for sized accessories
   powderCoated?: boolean; // accessory powder-coat finish flag
+  movement?: string; // motorized damper movement (open/close, modulating, adjustable)
   // Air-curtain client inputs (installation height + door width with units).
   acHeight?: number | null;
   acHeightUnit?: string;
@@ -671,6 +672,13 @@ const UOM_TYPES = new Set([
   "Motorized Volume Damper",
 ]);
 const SIZE_UNITS = ["mm", "cm", "inches"];
+/** Motorized damper types that carry a "Movement" dropdown. */
+const MOTORIZED_DAMPER_TYPES = new Set([
+  "Motorized Fire Damper",
+  "Motorized Smoke Damper",
+  "Motorized Volume Damper",
+]);
+const MOVEMENT_OPTIONS = ["open/close", "modulating", "adjustable"];
 /** Material options for Ventilation Accessories (Air Terminals / Dampers). */
 const ACC_MATERIALS = ["Galvanized Iron", "Aluminum", "Stainless Steel 304"];
 /** Accessory types that offer the powder-coat finish option. */
@@ -1642,6 +1650,17 @@ export function QuotationBuilder({
                     checked={!!c.powderCoated}
                     onChange={(e) => applyAccessory(l.id, { powderCoated: e.target.checked })} />
                 </label>
+              )}
+              {/* Movement — motorized dampers only. */}
+              {MOTORIZED_DAMPER_TYPES.has(c.type) && (
+                <Select
+                  value={c.movement || ""}
+                  disabled={!editable || !c.type}
+                  onChange={(e) => applyAccessory(l.id, { movement: e.target.value })}
+                >
+                  <option value="" disabled>Movement…</option>
+                  {MOVEMENT_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                </Select>
               )}
             </>
           ) : isPrebuiltUnit(c) || isMotorController(c) ? (
