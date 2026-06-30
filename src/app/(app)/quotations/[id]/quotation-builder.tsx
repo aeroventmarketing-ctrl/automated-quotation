@@ -749,14 +749,18 @@ function accBilledAreaSqIn(specs: LineSpecs): number | null {
 function accPowderFactor(type: string): number {
   return type === "Ceiling Diffuser" ? 2.12 : 1.5;
 }
+/** Flat add-on (VAT-inclusive) on top of the body price — fire damper fusible link. */
+function accFlatAdd(type: string): number {
+  return type === "Fire Damper" ? 455 : 0;
+}
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
 function accessoryUnitPrice(specs: LineSpecs): number | null {
   const rate = accessoryRate(specs.type, specs.shape);
   const area = accBilledAreaSqIn(specs);
   const mat = ACC_MATERIAL_FACTOR[specs.material];
   if (rate == null || area == null || mat == null) return null;
-  const price = area * rate * mat * (specs.powderCoated ? accPowderFactor(specs.type) : 1);
-  return round2(price);
+  const body = area * rate * mat * (specs.powderCoated ? accPowderFactor(specs.type) : 1);
+  return round2(body + accFlatAdd(specs.type));
 }
 /** A Ventilation Accessory that isn't the spring isolator (which prices itself). */
 const isAccessory = (specs: { category: string; type: string }): boolean =>
@@ -2174,7 +2178,8 @@ export function QuotationBuilder({
                         if (rate == null) return "Enter the unit price manually — this type isn't auto-priced yet.";
                         if (area == null || mat == null) return "Pick shape, dimensions and material to auto-price.";
                         const minNote = area <= ACC_MIN_SQIN ? " (100 sq in min)" : "";
-                        return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? ` × ${accPowderFactor(l.specs.type)} powder-coat` : ""} = auto-priced (editable).`;
+                        const flat = accFlatAdd(l.specs.type);
+                        return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? ` × ${accPowderFactor(l.specs.type)} powder-coat` : ""}${flat ? ` + ${flat} fusible link` : ""} = auto-priced (editable).`;
                       })()}
                     </p>
                   </div>
