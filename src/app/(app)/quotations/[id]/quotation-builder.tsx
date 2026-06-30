@@ -21,7 +21,7 @@ import {
   type Voltage,
 } from "@/lib/pricing/motors";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus } from "lucide-react";
-import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor, seriesFor } from "@/lib/product-taxonomy";
+import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
 import {
@@ -1240,6 +1240,12 @@ export function QuotationBuilder({
   function renderProductSelection(l: Line) {
     const c = l.specs;
     const set = (patch: Partial<LineSpecs>) => updateSpec(l.id, patch);
+    // Grouped categories (Ventilation Accessories → Air Terminals / Dampers /
+    // Accessories) carry an extra dropdown before Type. The group is stored in
+    // the otherwise-unused brand field; older lines (saved before grouping) fall
+    // back to the group implied by their already-chosen type.
+    const hasGroups = groupsFor(c.category).length > 0;
+    const accGroup = hasGroups ? c.brand || groupForType(c.category, c.type) : "";
     return (
       <div className="space-y-1">
         <Label>Product selection</Label>
@@ -1269,9 +1275,20 @@ export function QuotationBuilder({
               {brandsFor(c.category).map((b) => (<option key={b} value={b}>{b}</option>))}
             </Select>
           )}
+          {/* Group level (e.g. Ventilation Accessories → Air Terminals / Dampers). */}
+          {hasGroups && (
+            <Select
+              value={accGroup}
+              disabled={!editable || !c.category}
+              onChange={(e) => set({ brand: e.target.value, type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" })}
+            >
+              <option value="">Group…</option>
+              {groupsFor(c.category).map((g) => (<option key={g} value={g}>{g}</option>))}
+            </Select>
+          )}
           <Select
             value={c.type}
-            disabled={!editable || !c.category || (brandsFor(c.category).length > 0 && !c.brand)}
+            disabled={!editable || !c.category || (brandsFor(c.category).length > 0 && !c.brand) || (hasGroups && !accGroup)}
             onChange={(e) => {
               const type = e.target.value;
               // Blower/fan categories route through applyMotor so the description
@@ -1301,7 +1318,11 @@ export function QuotationBuilder({
             }}
           >
             <option value="">Type…</option>
-            {typesFor(c.category, brandsFor(c.category).length > 0 ? c.brand : undefined).map((t) => (<option key={t} value={t}>{t}</option>))}
+            {typesFor(
+              c.category,
+              brandsFor(c.category).length > 0 ? c.brand : undefined,
+              hasGroups ? accGroup || undefined : undefined,
+            ).map((t) => (<option key={t} value={t}>{t}</option>))}
           </Select>
           {seriesFor(c.category, c.type).length > 0 && (
             // Sub-type level — KDK series (Wall Mounted Fan → Shutter / High

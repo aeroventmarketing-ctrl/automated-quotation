@@ -13,6 +13,8 @@ export interface TaxonomyEntry {
   brand?: string;
   /** Optional series level (e.g. "Shutter Series") shown after Type. */
   series?: string[];
+  /** Optional group level (e.g. "Air Terminals" / "Dampers") shown before Type. */
+  group?: string;
 }
 
 export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
@@ -258,90 +260,24 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
       "Direct"
     ]
   },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Air Grille",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Ceiling Diffuser",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Louvers",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Bar Grille",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Fire Damper",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Gravity Shutter",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Backdraft Damper",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Smoke Damper",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Volume Damper",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Jet Nozzle Diffuser",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Vent Cap",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Spring Vibration Isolator",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Weaherhood",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Ventilation Accessories",
-    "type": "Wind Driven Roof Ventilator",
-    "bladeTypes": [],
-    "drives": []
-  },
+  // Air Terminals
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Air Grille", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Bar Grille", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Diffusers", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Jet Nozzle Diffuser", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Louvers", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Vent Cap", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Weather hood", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Wind Driven Roof Ventilator", "bladeTypes": [], "drives": [] },
+  // Dampers
+  { "category": "Ventilation Accessories", "group": "Dampers", "type": "Backdraft Damper", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Dampers", "type": "Fire Damper", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Dampers", "type": "Gravity Shutter", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Dampers", "type": "OBVD", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Dampers", "type": "Smoke Damper", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Dampers", "type": "Volume Damper", "bladeTypes": [], "drives": [] },
+  // Accessories
+  { "category": "Ventilation Accessories", "group": "Accessories", "type": "Spring Vibration Isolator", "bladeTypes": [], "drives": [] },
   {
     "category": "Other Products",
     "type": "Ceiling Cassette",
@@ -441,17 +377,37 @@ export function brandsFor(category: string): string[] {
   return Array.from(new Set(entries.map((e) => e.brand || DEFAULT_BRAND)));
 }
 
-/** Types in a category, optionally filtered to one brand (for branded categories). */
-export function typesFor(category: string, brand?: string): string[] {
+/**
+ * Groups (sub-categories) within a category — e.g. Ventilation Accessories →
+ * Air Terminals / Dampers / Accessories. Empty when the category isn't grouped.
+ * Order follows first appearance in the taxonomy.
+ */
+export function groupsFor(category: string): string[] {
+  const entries = PRODUCT_TAXONOMY.filter((e) => e.category === category);
+  if (!entries.some((e) => e.group)) return [];
+  return Array.from(new Set(entries.map((e) => e.group).filter((g): g is string => !!g)));
+}
+
+/**
+ * Types in a category, optionally filtered to one brand (branded categories) and
+ * one group (grouped categories like Ventilation Accessories).
+ */
+export function typesFor(category: string, brand?: string, group?: string): string[] {
   return Array.from(
     new Set(
       PRODUCT_TAXONOMY.filter(
         (e) =>
           e.category === category &&
-          (!brand || (e.brand || DEFAULT_BRAND) === brand),
+          (!brand || (e.brand || DEFAULT_BRAND) === brand) &&
+          (!group || e.group === group),
       ).map((e) => e.type),
     ),
   );
+}
+
+/** The group a given type belongs to (empty string if the category isn't grouped). */
+export function groupForType(category: string, type: string): string {
+  return PRODUCT_TAXONOMY.find((e) => e.category === category && e.type === type)?.group ?? "";
 }
 
 export function entryFor(category: string, type: string): TaxonomyEntry | undefined {
