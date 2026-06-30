@@ -778,7 +778,7 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     // Finish follows the material: powder coat (when ticked & offered) else paint.
     lines.push(
       POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated
-        ? "Powder Coated"
+        ? "Powder Coated White"
         : "Painted with Oven Baked Enamel",
     );
   }
