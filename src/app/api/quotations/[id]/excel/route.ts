@@ -77,7 +77,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   const data: XlsxData = {
-    quoteNumber: q.quoteNumber,
+    quoteNumber: ((r) => (typeof r === "number" && r > 0 ? `${q.quoteNumber} rev. ${r}` : q.quoteNumber))(
+      (q.classification as Record<string, unknown> | null)?.revision,
+    ),
     dateStr: q.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     projectName: q.projectName,
     customerName: q.inquiry.customer.contactName || q.inquiry.customer.company,

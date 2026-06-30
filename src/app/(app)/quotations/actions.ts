@@ -249,6 +249,34 @@ export async function transitionQuotation(quotationId: string, to: string) {
 }
 
 /**
+ * Open a new revision of a quotation: bump its revision counter (shown as
+ * "rev. N" after the quote number) and reopen it for editing (back to DRAFT,
+ * clearing the prior approval so it is re-approved). The counter rides in the
+ * classification JSON, so no schema change is needed.
+ */
+export async function reviseQuotation(quotationId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, classification: true },
+  });
+  if (!quote) throw new Error("Quotation not found");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const revision = (typeof cls.revision === "number" ? cls.revision : 0) + 1;
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: {
+      status: "DRAFT",
+      approvedById: null,
+      classification: { ...cls, revision } as Prisma.InputJsonObject,
+    },
+  });
+  revalidatePath(`/quotations/${quotationId}`);
+  revalidatePath("/dashboard");
+}
+
+/**
  * Convert a quotation into a sale (the client purchased) or undo it. The sale is
  * stamped on the quote (date + who recorded it) and the inquiry is marked WON;
  * the sale is credited to the quote's preparer (salesperson in charge) on the

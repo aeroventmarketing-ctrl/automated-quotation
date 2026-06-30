@@ -100,7 +100,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   const data: QuotationPdfData = {
-    quoteNumber: quotation.quoteNumber,
+    quoteNumber: ((r) => (typeof r === "number" && r > 0 ? `${quotation.quoteNumber} rev. ${r}` : quotation.quoteNumber))(
+      (quotation.classification as Record<string, unknown> | null)?.revision,
+    ),
     createdAt: quotation.createdAt.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",

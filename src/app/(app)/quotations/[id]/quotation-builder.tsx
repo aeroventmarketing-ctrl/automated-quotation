@@ -20,7 +20,7 @@ import {
   dynamicBalancingApplies,
   type Voltage,
 } from "@/lib/pricing/motors";
-import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus } from "lucide-react";
+import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw } from "lucide-react";
 import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
@@ -33,7 +33,7 @@ import {
   convertPower,
   roundPower,
 } from "@/lib/units";
-import { updateQuotationLines, transitionQuotation, markQuotationSold } from "../actions";
+import { updateQuotationLines, transitionQuotation, markQuotationSold, reviseQuotation } from "../actions";
 import { updateQuoteNumber } from "../../admin/actions";
 
 interface CatalogEntry {
@@ -105,6 +105,7 @@ interface Quote {
   quoteNumber: string;
   status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "SENT";
   sold: boolean;
+  revision: number;
   currency: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
   discountPct: number;
@@ -1472,6 +1473,20 @@ export function QuotationBuilder({
     }
   }
 
+  // Open a new revision: bump "rev. N" and reopen for editing.
+  async function revise() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await reviseQuotation(quotation.id);
+      router.refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Product selection workflow, bound to one line item's specs.
   function renderProductSelection(l: Line) {
     const c = l.specs;
@@ -1791,6 +1806,9 @@ export function QuotationBuilder({
           ) : (
             <h1 className="text-2xl font-bold">
               QUOT NO. {quoteNo}
+              {quotation.revision > 0 && (
+                <span className="ml-2 align-middle text-base font-semibold text-muted-foreground">rev. {quotation.revision}</span>
+              )}
               {isAdmin && (
                 <button type="button" onClick={() => { setNoDraft(quoteNo); setEditingNo(true); }}
                   className="ml-2 align-middle text-xs font-normal text-primary underline">edit</button>
@@ -2440,6 +2458,12 @@ export function QuotationBuilder({
           {quotation.status === "APPROVED" && (
             <Button onClick={() => transition("SENT")} disabled={busy}>
               <Send className="h-4 w-4" /> Mark as sent
+            </Button>
+          )}
+          {/* Revise a finalized quote: bump rev. N and reopen for editing. */}
+          {(quotation.status === "APPROVED" || quotation.status === "SENT") && (
+            <Button variant="outline" onClick={revise} disabled={busy}>
+              <RotateCcw className="h-4 w-4" /> Revise
             </Button>
           )}
           {/* Convert to a sale once the quote is finalized (approved/sent). */}
