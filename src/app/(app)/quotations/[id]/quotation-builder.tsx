@@ -696,6 +696,54 @@ function convertAccSize(value: string, from: string, to: string): string {
   return String(Math.round(out * 1000) / 1000); // trim float noise
 }
 
+// --- Air Terminals / Dampers body pricing (per square inch, VAT-inclusive) ----
+// Body price = area(sq in) × rate × material factor (powder coat ×1.5). Area uses
+// the trade inch (25 mm = 1 inch); round = bounding square (D × D).
+const ACC_GRILLE_TYPES = new Set(["Air Grille", "Bar Grille", "Diffusers", "Louvers"]);
+const ACC_DAMPER_TYPES = new Set(["Backdraft Damper", "Fire Damper", "Smoke Damper", "Volume Damper"]);
+const ACC_MATERIAL_FACTOR: Record<string, number> = {
+  "Galvanized Iron": 1,
+  Aluminum: 3,
+  "Stainless Steel 304": 4,
+};
+/** Per-square-inch body rate for an accessory, or null if not auto-priced. */
+function accessoryRate(type: string, shape: string): number | null {
+  const priced = ACC_GRILLE_TYPES.has(type) || ACC_DAMPER_TYPES.has(type) || type === "OBVD";
+  if (!priced) return null;
+  if (shape === "Round") return 10.42; // round grilles / dampers / diffusers
+  if (type === "OBVD") return 5;
+  if (ACC_DAMPER_TYPES.has(type)) return 8; // square / rectangular damper / volume
+  return 5; // square / rectangular grilles / louvers / diffusers
+}
+/** Accessory area in square inches (trade inch). Round = bounding square D×D. */
+function accAreaSqIn(specs: LineSpecs): number | null {
+  const unit = specs.sizeUnit || "mm";
+  const toIn = (v: string): number | null => {
+    const n = parseFloat(v);
+    if (!v || Number.isNaN(n)) return null;
+    return (n * (ACC_MM_PER_UNIT[unit] ?? 1)) / 25; // 25 mm = 1 inch
+  };
+  if (specs.shape === "Round") {
+    const d = toIn(specs.sizeL);
+    return d != null ? d * d : null;
+  }
+  const L = toIn(specs.sizeL);
+  const W = toIn(specs.sizeW);
+  return L != null && W != null ? L * W : null;
+}
+/** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
+function accessoryUnitPrice(specs: LineSpecs): number | null {
+  const rate = accessoryRate(specs.type, specs.shape);
+  const area = accAreaSqIn(specs);
+  const mat = ACC_MATERIAL_FACTOR[specs.material];
+  if (rate == null || area == null || mat == null) return null;
+  const price = area * rate * mat * (specs.powderCoated ? 1.5 : 1);
+  return round2(price);
+}
+/** A Ventilation Accessory that isn't the spring isolator (which prices itself). */
+const isAccessory = (specs: { category: string; type: string }): boolean =>
+  specs.category === "Ventilation Accessories" && specs.type !== "Spring Vibration Isolator";
+
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
@@ -980,6 +1028,23 @@ export function QuotationBuilder({
           specs,
           descriptionSnapshot: buildIsolatorDescription(specs.shape, capKg),
           ...(net != null ? { unitPrice: round2(net * (1 + vatRate)) } : {}),
+        };
+      }),
+    );
+  }
+  // Air Terminals / Dampers: merge the patch and auto-fill the per-square-inch
+  // body price (VAT-inclusive). When the inputs aren't complete the price is left
+  // as-is, except on a type change (resetPrice) where the stale price is cleared.
+  function applyAccessory(lineId: string, patch: Partial<LineSpecs>, resetPrice = false) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== lineId) return l;
+        const specs = { ...l.specs, ...patch };
+        const price = accessoryUnitPrice(specs);
+        return {
+          ...l,
+          specs,
+          ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
         };
       }),
     );
@@ -1362,6 +1427,14 @@ export function QuotationBuilder({
               } else if (type === "Spring Vibration Isolator") {
                 // Seed the description with the type; mounting/capacity add to it.
                 applyIsolator(l.id, { type, shape: "", sizeL: "", sizeW: "" });
+              } else if (c.category === "Ventilation Accessories") {
+                // Air Terminals / Dampers: reset shape/size/material/finish and
+                // clear any stale auto-price (recomputes once dimensions are set).
+                applyAccessory(
+                  l.id,
+                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "", powderCoated: false },
+                  true,
+                );
               } else {
                 set({ type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               }
@@ -1436,7 +1509,7 @@ export function QuotationBuilder({
                 // Legacy lines stored "Square" before it became "Square/Rectangle".
                 value={c.shape === "Square" ? "Square/Rectangle" : c.shape}
                 disabled={!editable || !c.type || (isIsolator(c) && !!c.mcRecommend)}
-                onChange={(e) => (isIsolator(c) ? applyIsolator(l.id, { shape: e.target.value }) : set({ shape: e.target.value }))}
+                onChange={(e) => (isIsolator(c) ? applyIsolator(l.id, { shape: e.target.value }) : applyAccessory(l.id, { shape: e.target.value }))}
               >
                 <option value="">{variantLabel(c.type)}…</option>
                 {shapesFor(c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
@@ -1450,7 +1523,7 @@ export function QuotationBuilder({
                     const to = e.target.value;
                     const from = c.sizeUnit || "mm";
                     // Convert the entered dimensions to the new unit (trade ratio).
-                    set({
+                    applyAccessory(l.id, {
                       sizeUnit: to,
                       sizeL: convertAccSize(c.sizeL, from, to),
                       sizeW: convertAccSize(c.sizeW, from, to),
@@ -1472,15 +1545,15 @@ export function QuotationBuilder({
               ) : sizeMode(c.type, c.shape) === "diameter" ? (
                 <Input className="h-9" type="number" step="any" placeholder={`Diameter Ø (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                   disabled={!editable || !c.type} value={c.sizeL}
-                  onChange={(e) => set({ sizeL: e.target.value, sizeW: "" })} />
+                  onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })} />
               ) : (
                 <>
                   <Input className="h-9" type="number" step="any" placeholder={`L (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                     disabled={!editable || !c.type} value={c.sizeL}
-                    onChange={(e) => set({ sizeL: e.target.value })} />
+                    onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value })} />
                   <Input className="h-9" type="number" step="any" placeholder={`W (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                     disabled={!editable || !c.type} value={c.sizeW}
-                    onChange={(e) => set({ sizeW: e.target.value })} />
+                    onChange={(e) => applyAccessory(l.id, { sizeW: e.target.value })} />
                 </>
               )}
               {/* Recommend the spring capacity from the motor above (HP → weight). */}
@@ -1497,7 +1570,7 @@ export function QuotationBuilder({
                 <Select
                   value={ACC_MATERIALS.includes(c.material) ? c.material : ""}
                   disabled={!editable || !c.type}
-                  onChange={(e) => set({ material: e.target.value })}
+                  onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
                 >
                   <option value="" disabled>Material…</option>
                   {ACC_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
@@ -1509,7 +1582,7 @@ export function QuotationBuilder({
                   Powder Coated
                   <input type="checkbox" className="h-4 w-4" disabled={!editable}
                     checked={!!c.powderCoated}
-                    onChange={(e) => set({ powderCoated: e.target.checked })} />
+                    onChange={(e) => applyAccessory(l.id, { powderCoated: e.target.checked })} />
                 </label>
               )}
             </>
@@ -1751,7 +1824,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -1855,7 +1928,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -2035,6 +2108,27 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
+              ) : isAccessory(l.specs) ? (
+                // Air Terminals / Dampers: per-square-inch body price + manual override.
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <div className="flex items-end md:col-span-3">
+                    <p className="text-xs text-muted-foreground">
+                      {(() => {
+                        const rate = accessoryRate(l.specs.type, l.specs.shape);
+                        const area = accAreaSqIn(l.specs);
+                        const mat = ACC_MATERIAL_FACTOR[l.specs.material];
+                        if (rate == null) return "Enter the unit price manually — this type isn't auto-priced yet.";
+                        if (area == null || mat == null) return "Pick shape, dimensions and material to auto-price.";
+                        return `${round2(area)} sq in × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? " × 1.5 powder-coat" : ""} = auto-priced (editable).`;
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Unit ₱ (incl. VAT)</Label>
+                    <Input className="h-8 text-right" type="number" step="0.01" value={l.unitPrice} disabled={!editable}
+                      onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
+                  </div>
+                </div>
               ) : (
               <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-6">
                 <div>
@@ -2096,7 +2190,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
