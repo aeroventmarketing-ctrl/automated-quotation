@@ -887,8 +887,9 @@ export function QuotationBuilder({
           (a.lengthMm ?? 0) - (b.lengthMm ?? 0),
       );
   }
-  // Apply a recommended air-curtain model: VAT-inclusive price + consumption,
-  // single-phase 220 V (the client height/width inputs are kept on the line).
+  // Apply a recommended air-curtain model: the catalogue (VAT-exclusive) price
+  // stored gross + consumption, single-phase 220 V (the client height/width
+  // inputs are kept on the line).
   function applyAirCurtainModel(lineId: string, entry: CatalogEntry) {
     // Air volume for the quote's Capacity column, in the header's flow unit.
     const headerUnit = normalizeAirflowUnit(units.capacity) ?? "m3hr";
@@ -910,7 +911,7 @@ export function QuotationBuilder({
         return {
           ...l,
           specs,
-          unitPrice: round2(entry.basePrice),
+          unitPrice: round2(entry.basePrice * (1 + vatRate)),
           descriptionSnapshot: buildAirCurtainDescription(entry.modelCode, entry.heightM, entry.lengthMm),
         };
       }),
@@ -1144,8 +1145,10 @@ export function QuotationBuilder({
           return {
             ...l,
             specs,
-            // KDK catalogue prices are already VAT-inclusive — use as-is.
-            unitPrice: round2(base),
+            // KDK catalogue prices are the VAT-exclusive (net) price, like every
+            // other catalogue price; store gross so the exclusive display shows
+            // exactly the catalogue price (no ÷1.12 deduction).
+            unitPrice: round2(base * (1 + vatRate)),
             descriptionSnapshot: buildKdkDescription(specs.type, model, specs.bladeType),
           };
         }
@@ -1774,9 +1777,9 @@ export function QuotationBuilder({
                           const cat = catalog[r.modelId];
                           const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
                           const estBody = (cat?.basePrice ?? 0) * bladeFactor(l.specs) * materialFactor(l.specs);
-                          // KDK catalogue prices are already VAT-inclusive (no motor add-on).
+                          // KDK catalogue prices are VAT-exclusive (net); store gross (no motor add-on).
                           const est = isPrebuiltUnit(l.specs)
-                            ? round2(cat?.basePrice ?? 0)
+                            ? round2((cat?.basePrice ?? 0) * (1 + vatRate))
                             : estBody > 0
                               ? round2(computeUnitPrice(estBody, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate))
                               : 0;
