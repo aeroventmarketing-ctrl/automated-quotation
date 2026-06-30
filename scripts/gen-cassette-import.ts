@@ -51,7 +51,7 @@ const PRICES: Record<string, number> = {
   "24CHG": 7687,
   "27CHH": 11005,
   "32CDH": 14268,
-  "32CHH": 14378,
+  "32CHH": 14931,
   "38CDG": 21346,
   "38CHG": 22397,
 };
