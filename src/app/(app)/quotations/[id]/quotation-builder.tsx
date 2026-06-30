@@ -658,6 +658,7 @@ const UOM_TYPES = new Set([
   "Bar Grille",
   "Diffusers",
   "Louvers",
+  "Perforated Air Grille",
   "Weather hood",
   "Backdraft Damper",
   "Fire Damper",
@@ -675,6 +676,7 @@ const POWDER_COAT_TYPES = new Set([
   "Bar Grille",
   "Diffusers",
   "Louvers",
+  "Perforated Air Grille",
   "Vent Cap",
   "Weather hood",
   "Backdraft Damper",
@@ -708,9 +710,11 @@ const ACC_MATERIAL_FACTOR: Record<string, number> = {
 };
 /** Per-square-inch body rate for an accessory, or null if not auto-priced. */
 function accessoryRate(type: string, shape: string): number | null {
-  const priced = ACC_GRILLE_TYPES.has(type) || ACC_DAMPER_TYPES.has(type) || type === "OBVD";
+  const priced =
+    ACC_GRILLE_TYPES.has(type) || ACC_DAMPER_TYPES.has(type) || type === "OBVD" || type === "Perforated Air Grille";
   if (!priced) return null;
   if (shape === "Round") return 10.42; // round grilles / dampers / diffusers
+  if (type === "Perforated Air Grille") return 6; // perforated air grilles
   if (type === "OBVD") return 5;
   if (ACC_DAMPER_TYPES.has(type)) return 8; // square / rectangular damper / volume
   return 5; // square / rectangular grilles / louvers / diffusers

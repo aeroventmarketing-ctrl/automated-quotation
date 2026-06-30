@@ -266,6 +266,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Diffusers", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Jet Nozzle Diffuser", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Louvers", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Perforated Air Grille", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Vent Cap", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Weather hood", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Wind Driven Roof Ventilator", "bladeTypes": [], "drives": [] },
