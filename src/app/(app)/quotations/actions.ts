@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove } from "@/lib/auth";
 import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
@@ -243,6 +244,39 @@ export async function transitionQuotation(quotationId: string, to: string) {
     await prisma.inquiry.update({ where: { id: quote.inquiryId }, data: { status: "SENT" } });
   }
 
+  revalidatePath(`/quotations/${quotationId}`);
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Convert a quotation into a sale (the client purchased) or undo it. The sale is
+ * stamped on the quote (date + who recorded it) and the inquiry is marked WON;
+ * the sale is credited to the quote's preparer (salesperson in charge) on the
+ * dashboard. Undoing clears the stamp and returns the inquiry to SENT.
+ */
+export async function markQuotationSold(quotationId: string, sold: boolean) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, inquiryId: true, classification: true },
+  });
+  if (!quote) throw new Error("Quotation not found");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const classification = {
+    ...cls,
+    sale: sold ? { soldAt: new Date().toISOString(), recordedById: user.id } : null,
+  };
+  await prisma.$transaction([
+    prisma.quotation.update({
+      where: { id: quotationId },
+      data: { classification: classification as Prisma.InputJsonObject },
+    }),
+    prisma.inquiry.update({
+      where: { id: quote.inquiryId },
+      data: { status: sold ? "WON" : "SENT" },
+    }),
+  ]);
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
 }

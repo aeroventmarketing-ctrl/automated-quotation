@@ -46,6 +46,7 @@ export default async function DashboardPage() {
       select: {
         createdAt: true,
         total: true,
+        classification: true,
         preparedBy: { select: { name: true } },
         inquiry: { select: { customer: { select: { company: true } } } },
       },
@@ -80,17 +81,20 @@ export default async function DashboardPage() {
     return d;
   });
   const monthCount = new Map(months.map((d) => [monthKey(d), 0]));
-  // --- Salesperson + customers (last 30 days) ------------------------------
-  const salesMap = new Map<string, number>();
-  const custMap = new Map<string, number>();
-  // --- Per-month quotes per salesperson (for "top salesperson of the month") -
+  // --- Salesperson (actual sales) + customers (quoted, last 30 days) -------
+  const salesMap = new Map<string, number>(); // amount SOLD per salesperson, 30d
+  const custMap = new Map<string, number>(); // quoted value per customer, 30d
+  // --- Per-month amount SOLD per salesperson (top salesperson of the month) -
   const monthSales = new Map(months.map((d) => [monthKey(d), new Map<string, number>()]));
+  const currentMK = monthKey(startOfDay);
+  let salesMTD = 0; // amount sold this calendar month
 
   for (const q of quotes) {
     const at = new Date(q.createdAt);
     const dk = dayKey(at);
     const total = Number(q.total);
     const name = q.preparedBy?.name ?? "—";
+    // Quote-activity buckets (by creation date).
     if (countByDay.has(dk)) {
       countByDay.set(dk, (countByDay.get(dk) ?? 0) + 1);
       valueByDay.set(dk, (valueByDay.get(dk) ?? 0) + total);
@@ -98,18 +102,25 @@ export default async function DashboardPage() {
     if (value30.has(dk)) value30.set(dk, (value30.get(dk) ?? 0) + total);
     const mk = monthKey(at);
     if (monthCount.has(mk)) monthCount.set(mk, (monthCount.get(mk) ?? 0) + 1);
-    const ms = monthSales.get(mk);
-    if (ms) ms.set(name, (ms.get(name) ?? 0) + total);
     if (at >= since30) {
-      salesMap.set(name, (salesMap.get(name) ?? 0) + total);
       const company = q.inquiry.customer.company || "—";
       custMap.set(company, (custMap.get(company) ?? 0) + total);
     }
+    // Sales buckets (by the date the quote was marked sold).
+    const sale = (q.classification as Record<string, unknown> | null)?.sale as { soldAt?: string } | null | undefined;
+    const soldAt = sale?.soldAt ? new Date(sale.soldAt) : null;
+    if (soldAt) {
+      const smk = monthKey(soldAt);
+      const sms = monthSales.get(smk);
+      if (sms) sms.set(name, (sms.get(name) ?? 0) + total);
+      if (soldAt >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + total);
+      if (smk === currentMK) salesMTD += total;
+    }
   }
 
-  // Top salesperson of the month: the current month's leader by amount (total
-  // quoted value). If the current month has no quotes yet, the previous month's
-  // winner is retained until a new leader emerges (then it switches).
+  // Top salesperson of the month: the current month's leader by amount SOLD.
+  // If the current month has no sales yet, the previous month's winner is
+  // retained until a new leader emerges (then it switches).
   const leaderOf = (mk: string): { name: string; amount: number } | null => {
     const ms = monthSales.get(mk);
     if (!ms || ms.size === 0) return null;
@@ -162,7 +173,6 @@ export default async function DashboardPage() {
   const total14 = last14.length;
   const value14 = last14.reduce((a, q) => a + Number(q.total), 0);
   const quotes7 = quotes.filter((q) => new Date(q.createdAt) >= weekAgo).length;
-  const avgPerDay = Math.round((total14 / DAYS) * 10) / 10;
   const won = counts.WON ?? 0;
   const lost = counts.LOST ?? 0;
   const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null;
@@ -222,7 +232,7 @@ export default async function DashboardPage() {
         {[
           { label: "Quotes this week", value: String(quotes7) },
           { label: "Quotes last 14 days", value: String(total14) },
-          { label: "Avg quotes / day", value: String(avgPerDay) },
+          { label: "Sales this month", value: formatCurrency(salesMTD) },
           { label: "Win rate", value: winRate == null ? "—" : `${winRate}%` },
         ].map((k) => (
           <Card key={k.label}>
@@ -249,7 +259,7 @@ export default async function DashboardPage() {
               </div>
               <div className="text-xl font-bold">{topSales.name}</div>
               <div className="text-xs text-muted-foreground">
-                {formatCurrency(topSales.amount)} quoted
+                {formatCurrency(topSales.amount)} sold
               </div>
             </div>
           </CardContent>
@@ -357,10 +367,10 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex-row items-baseline justify-between space-y-0">
             <CardTitle>Sales by salesperson</CardTitle>
-            <span className="text-xs text-muted-foreground">by quoted value · last {LINE_DAYS} days</span>
+            <span className="text-xs text-muted-foreground">amount sold · last {LINE_DAYS} days</span>
           </CardHeader>
           <CardContent className="space-y-2.5 pt-1">
-            {bySales.length === 0 && <p className="text-sm text-muted-foreground">No quotes in this window.</p>}
+            {bySales.length === 0 && <p className="text-sm text-muted-foreground">No sales recorded in this window.</p>}
             {bySales.map((s) => (
               <div key={s.name} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 truncate text-xs text-muted-foreground" title={s.name}>{s.name}</span>

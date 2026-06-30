@@ -33,7 +33,7 @@ import {
   convertPower,
   roundPower,
 } from "@/lib/units";
-import { updateQuotationLines, transitionQuotation } from "../actions";
+import { updateQuotationLines, transitionQuotation, markQuotationSold } from "../actions";
 import { updateQuoteNumber } from "../../admin/actions";
 
 interface CatalogEntry {
@@ -104,6 +104,7 @@ interface Quote {
   id: string;
   quoteNumber: string;
   status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "SENT";
+  sold: boolean;
   currency: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
   discountPct: number;
@@ -1457,6 +1458,20 @@ export function QuotationBuilder({
     }
   }
 
+  // Convert the quote to a sale (client purchased) or undo it.
+  async function markSold(sold: boolean) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await markQuotationSold(quotation.id, sold);
+      router.refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Product selection workflow, bound to one line item's specs.
   function renderProductSelection(l: Line) {
     const c = l.specs;
@@ -2426,6 +2441,23 @@ export function QuotationBuilder({
             <Button onClick={() => transition("SENT")} disabled={busy}>
               <Send className="h-4 w-4" /> Mark as sent
             </Button>
+          )}
+          {/* Convert to a sale once the quote is finalized (approved/sent). */}
+          {quotation.sold ? (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1.5 text-sm font-semibold text-white">
+                <Check className="h-4 w-4" /> Sold
+              </span>
+              <Button variant="outline" onClick={() => markSold(false)} disabled={busy}>
+                <CornerUpLeft className="h-4 w-4" /> Undo sale
+              </Button>
+            </div>
+          ) : (
+            (quotation.status === "APPROVED" || quotation.status === "SENT") && (
+              <Button className="bg-green-600 hover:bg-green-700" onClick={() => markSold(true)} disabled={busy}>
+                <Check className="h-4 w-4" /> Mark as Sold
+              </Button>
+            )
           )}
           <Button asChild>
             <a href={`/api/quotations/${quotation.id}/excel`}>

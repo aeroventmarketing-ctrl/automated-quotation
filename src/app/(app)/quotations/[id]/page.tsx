@@ -71,6 +71,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         id: quotation.id,
         quoteNumber: quotation.quoteNumber,
         status: quotation.status,
+        sold: !!((quotation.classification as Record<string, unknown> | null)?.sale as { soldAt?: string } | null)?.soldAt,
         currency: quotation.currency,
         vatMode:
           quotation.vatMode === "EXCLUSIVE"
