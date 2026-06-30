@@ -1275,10 +1275,13 @@ export function QuotationBuilder({
     // back to the group implied by their already-chosen type.
     const hasGroups = groupsFor(c.category).length > 0;
     const accGroup = hasGroups ? c.brand || groupForType(c.category, c.type) : "";
+    // Ventilation Accessories add a Group + Unit dropdown and two size fields,
+    // so the row needs up to 7 columns to stay on one line.
+    const selCols = c.category === "Ventilation Accessories" ? "md:grid-cols-7" : "md:grid-cols-6";
     return (
       <div className="space-y-1">
         <Label>Product selection</Label>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+        <div className={`grid grid-cols-2 gap-2 ${selCols}`}>
           <Select
             value={c.category}
             disabled={!editable}
