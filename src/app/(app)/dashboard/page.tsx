@@ -99,26 +99,26 @@ export default async function DashboardPage() {
     const mk = monthKey(at);
     if (monthCount.has(mk)) monthCount.set(mk, (monthCount.get(mk) ?? 0) + 1);
     const ms = monthSales.get(mk);
-    if (ms) ms.set(name, (ms.get(name) ?? 0) + 1);
+    if (ms) ms.set(name, (ms.get(name) ?? 0) + total);
     if (at >= since30) {
-      salesMap.set(name, (salesMap.get(name) ?? 0) + 1);
+      salesMap.set(name, (salesMap.get(name) ?? 0) + total);
       const company = q.inquiry.customer.company || "—";
       custMap.set(company, (custMap.get(company) ?? 0) + total);
     }
   }
 
-  // Top salesperson of the month: the current month's leader by quotes prepared.
-  // If the current month has no quotes yet, the previous month's winner is
-  // retained until a new leader emerges (then it switches automatically).
-  const leaderOf = (mk: string): { name: string; count: number } | null => {
+  // Top salesperson of the month: the current month's leader by amount (total
+  // quoted value). If the current month has no quotes yet, the previous month's
+  // winner is retained until a new leader emerges (then it switches).
+  const leaderOf = (mk: string): { name: string; amount: number } | null => {
     const ms = monthSales.get(mk);
     if (!ms || ms.size === 0) return null;
     let best: string | null = null;
-    let bestC = -1;
-    for (const [n, c] of ms) if (c > bestC) ((best = n), (bestC = c));
-    return best ? { name: best, count: bestC } : null;
+    let bestV = -1;
+    for (const [n, v] of ms) if (v > bestV) ((best = n), (bestV = v));
+    return best ? { name: best, amount: bestV } : null;
   };
-  let topSales: { name: string; count: number; monthLabel: string } | null = null;
+  let topSales: { name: string; amount: number; monthLabel: string } | null = null;
   for (let i = months.length - 1; i >= 0; i--) {
     const found = leaderOf(monthKey(months[i]));
     if (found) {
@@ -146,10 +146,10 @@ export default async function DashboardPage() {
   const maxMonth = Math.max(1, ...monthly.map((m) => m.count));
 
   const bySales = [...salesMap.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
     .slice(0, 6);
-  const maxSales = Math.max(1, ...bySales.map((s) => s.count));
+  const maxSales = Math.max(1, ...bySales.map((s) => s.value));
 
   const topCustomers = [...custMap.entries()]
     .map(([company, value]) => ({ company, value }))
@@ -249,7 +249,7 @@ export default async function DashboardPage() {
               </div>
               <div className="text-xl font-bold">{topSales.name}</div>
               <div className="text-xs text-muted-foreground">
-                {topSales.count} quote{topSales.count === 1 ? "" : "s"} prepared
+                {formatCurrency(topSales.amount)} quoted
               </div>
             </div>
           </CardContent>
@@ -356,18 +356,18 @@ export default async function DashboardPage() {
         {/* Quotes by salesperson */}
         <Card>
           <CardHeader className="flex-row items-baseline justify-between space-y-0">
-            <CardTitle>Quotes by salesperson</CardTitle>
-            <span className="text-xs text-muted-foreground">last {LINE_DAYS} days</span>
+            <CardTitle>Sales by salesperson</CardTitle>
+            <span className="text-xs text-muted-foreground">by quoted value · last {LINE_DAYS} days</span>
           </CardHeader>
           <CardContent className="space-y-2.5 pt-1">
             {bySales.length === 0 && <p className="text-sm text-muted-foreground">No quotes in this window.</p>}
             {bySales.map((s) => (
               <div key={s.name} className="flex items-center gap-2">
-                <span className="w-28 shrink-0 truncate text-xs text-muted-foreground" title={s.name}>{s.name}</span>
+                <span className="w-24 shrink-0 truncate text-xs text-muted-foreground" title={s.name}>{s.name}</span>
                 <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round((s.count / maxSales) * 100)}%` }} />
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round((s.value / maxSales) * 100)}%` }} />
                 </div>
-                <span className="w-7 shrink-0 text-right text-xs font-semibold">{s.count}</span>
+                <span className="shrink-0 text-right text-xs font-semibold">{formatCurrency(s.value)}</span>
               </div>
             ))}
           </CardContent>
