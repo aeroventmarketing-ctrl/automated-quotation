@@ -656,7 +656,7 @@ function retagModel(model: string | null, type: string, bladeType: string, drive
 const UOM_TYPES = new Set([
   "Air Grille",
   "Bar Grille",
-  "Diffusers",
+  "Ceiling Diffuser",
   "Louvers",
   "Perforated Air Grille",
   "Weather hood",
@@ -674,7 +674,7 @@ const ACC_MATERIALS = ["Galvanized Iron", "Aluminum", "Stainless Steel 304"];
 const POWDER_COAT_TYPES = new Set([
   "Air Grille",
   "Bar Grille",
-  "Diffusers",
+  "Ceiling Diffuser",
   "Louvers",
   "Perforated Air Grille",
   "Vent Cap",
@@ -701,7 +701,7 @@ function convertAccSize(value: string, from: string, to: string): string {
 // --- Air Terminals / Dampers body pricing (per square inch, VAT-inclusive) ----
 // Body price = area(sq in) × rate × material factor (powder coat ×1.5). Area uses
 // the trade inch (25 mm = 1 inch); round = bounding square (D × D).
-const ACC_GRILLE_TYPES = new Set(["Air Grille", "Bar Grille", "Diffusers", "Louvers"]);
+const ACC_GRILLE_TYPES = new Set(["Air Grille", "Bar Grille", "Ceiling Diffuser", "Louvers"]);
 const ACC_DAMPER_TYPES = new Set(["Backdraft Damper", "Fire Damper", "Smoke Damper", "Volume Damper"]);
 const ACC_MATERIAL_FACTOR: Record<string, number> = {
   "Galvanized Iron": 1,
