@@ -168,9 +168,10 @@ const PROPELLER_FAN_TYPES = new Set([
   "Panel Fan",
 ]);
 const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
-// KDK pre-built units: selected by model (no blade type / drive / material) and
-// always quoted VAT-inclusive. The "KDK - Ceiling Cassette" alias covers quotes
-// saved during the brief window the brand was part of the type name.
+// KDK pre-built units: selected by model (no blade type / drive / material).
+// They follow the quote's VAT presentation like any other product. The
+// "KDK - Ceiling Cassette" alias covers quotes saved during the brief window
+// the brand was part of the type name.
 const KDK_TYPES = new Set(["Ceiling Cassette", "KDK - Ceiling Cassette"]);
 const NO_BLADE_DRIVE_TYPES = KDK_TYPES;
 /** KDK pre-built units (whole catalogue items) hide blade type / drive / material. */
@@ -751,10 +752,10 @@ export function QuotationBuilder({
   const [acRan, setAcRan] = useState<Record<string, boolean>>({});
 
   const vatRate = config.vatRate;
-  // KDK products (ceiling cassette) are always VAT-inclusive; the presentation is
-  // forced to INCLUSIVE and locked when any line is a KDK product.
-  const hasKdk = lines.some((l) => l.specs.brand === "KDK" || KDK_TYPES.has(l.specs.type));
-  const effectiveVatMode = hasKdk ? "INCLUSIVE" : vatMode;
+  // KDK products follow the quote's VAT presentation like every other product
+  // (priced VAT-exclusive when the quote is in an exclusive mode); the catalogue
+  // price is stored VAT-inclusive and the mode strips/adds VAT for display.
+  const effectiveVatMode = vatMode;
   const totals = useMemo(() => {
     const gross = lines.reduce((a, l) => a + l.qty * l.unitPrice, 0); // VAT-inclusive
     const net = gross / (1 + vatRate);
@@ -1526,14 +1527,11 @@ export function QuotationBuilder({
             </div>
             <div className="space-y-1">
               <Label>VAT presentation</Label>
-              <Select value={effectiveVatMode} onChange={(e) => setVatMode(e.target.value as never)} disabled={!editable || hasKdk}>
+              <Select value={effectiveVatMode} onChange={(e) => setVatMode(e.target.value as never)} disabled={!editable}>
                 <option value="INCLUSIVE">VAT inclusive</option>
                 <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
                 <option value="EXCLUSIVE_PLUS">VAT exclusive (+12%)</option>
               </Select>
-              {hasKdk && (
-                <p className="text-xs text-muted-foreground">KDK products are VAT-inclusive — locked.</p>
-              )}
             </div>
           </div>
           <div className="space-y-1">
