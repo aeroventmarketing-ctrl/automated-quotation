@@ -742,13 +742,17 @@ function accBilledAreaSqIn(specs: LineSpecs): number | null {
   const area = accAreaSqIn(specs);
   return area == null ? null : Math.max(area, ACC_MIN_SQIN);
 }
+/** Powder-coat multiplier by type — ceiling diffuser ×2.12, otherwise ×1.5. */
+function accPowderFactor(type: string): number {
+  return type === "Ceiling Diffuser" ? 2.12 : 1.5;
+}
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
 function accessoryUnitPrice(specs: LineSpecs): number | null {
   const rate = accessoryRate(specs.type, specs.shape);
   const area = accBilledAreaSqIn(specs);
   const mat = ACC_MATERIAL_FACTOR[specs.material];
   if (rate == null || area == null || mat == null) return null;
-  const price = area * rate * mat * (specs.powderCoated ? 1.5 : 1);
+  const price = area * rate * mat * (specs.powderCoated ? accPowderFactor(specs.type) : 1);
   return round2(price);
 }
 /** A Ventilation Accessory that isn't the spring isolator (which prices itself). */
@@ -2167,7 +2171,7 @@ export function QuotationBuilder({
                         if (rate == null) return "Enter the unit price manually — this type isn't auto-priced yet.";
                         if (area == null || mat == null) return "Pick shape, dimensions and material to auto-price.";
                         const minNote = area <= ACC_MIN_SQIN ? " (100 sq in min)" : "";
-                        return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? " × 1.5 powder-coat" : ""} = auto-priced (editable).`;
+                        return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? ` × ${accPowderFactor(l.specs.type)} powder-coat` : ""} = auto-priced (editable).`;
                       })()}
                     </p>
                   </div>
