@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { getCurrentUser, canApprove } from "@/lib/auth";
+import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
@@ -273,8 +273,9 @@ export async function reviseQuotation(quotationId: string) {
     },
   });
   if (!quote) throw new Error("Quotation not found");
-  // Only the salesperson who prepared the quote may revise it.
-  if (quote.preparedById !== user.id) throw new Error("Only the preparer can revise this quotation.");
+  // The salesperson who prepared the quote — or an admin — may revise it.
+  if (quote.preparedById !== user.id && !isAdmin(user))
+    throw new Error("Only the preparer or an admin can revise this quotation.");
 
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const currentRev = typeof cls.revision === "number" ? cls.revision : 0;

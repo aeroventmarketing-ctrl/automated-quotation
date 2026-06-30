@@ -2518,8 +2518,8 @@ export function QuotationBuilder({
             </Button>
           )}
           {/* Revise a finalized quote: bump rev. N and reopen for editing.
-              Only the salesperson who prepared the quote may revise it. */}
-          {isPreparer && (quotation.status === "APPROVED" || quotation.status === "SENT") && (
+              The preparer or an admin may revise it. */}
+          {(isPreparer || isAdmin) && (quotation.status === "APPROVED" || quotation.status === "SENT") && (
             <Button variant="outline" onClick={revise} disabled={busy}>
               <RotateCcw className="h-4 w-4" /> Revise
             </Button>
