@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { createServiceClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/db";
-import { config } from "@/lib/config";
+import { uploadToStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -25,15 +24,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const supabase = createServiceClient();
     const ext = file.name.split(".").pop() || "bin";
     const path = `inquiries/${inquiryId}/${Date.now()}.${ext}`;
     const bytes = new Uint8Array(await file.arrayBuffer());
-
-    const { error } = await supabase.storage
-      .from(config.storageBucket)
-      .upload(path, bytes, { contentType: file.type, upsert: false });
-    if (error) throw error;
+    await uploadToStorage(path, bytes, file.type);
 
     const attachment = await prisma.attachment.create({
       data: { inquiryId, storagePath: path, kind: kind as never },
@@ -42,8 +36,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ attachment });
   } catch (err) {
     console.error("upload error", err);
+    const detail = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "Upload failed. Verify the Supabase Storage bucket exists and the service role key is set." },
+      { error: `Upload failed: ${detail}. Check the Supabase Storage bucket and the service role key.` },
       { status: 502 },
     );
   }

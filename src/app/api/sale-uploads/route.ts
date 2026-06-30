@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { createServiceClient } from "@/lib/supabase/server";
-import { config } from "@/lib/config";
+import { uploadToStorage, signedUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -23,19 +22,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const supabase = createServiceClient();
     const ext = file.name.split(".").pop() || "bin";
     const path = `sales/${quotationId}/${Date.now()}-${Math.round(performance.now())}.${ext}`;
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const { error } = await supabase.storage
-      .from(config.storageBucket)
-      .upload(path, bytes, { contentType: file.type, upsert: false });
-    if (error) throw error;
+    await uploadToStorage(path, bytes, file.type);
     return NextResponse.json({ path, name: file.name, uploadedAt: new Date().toISOString() });
   } catch (err) {
     console.error("sale upload error", err);
+    const detail = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "Upload failed. Verify the Supabase Storage bucket exists and the service role key is set." },
+      { error: `Upload failed: ${detail}. Check the Supabase Storage bucket and the service role key.` },
       { status: 502 },
     );
   }
@@ -48,10 +44,7 @@ export async function GET(req: NextRequest) {
   const path = req.nextUrl.searchParams.get("path");
   if (!path) return NextResponse.json({ error: "path is required" }, { status: 400 });
   try {
-    const supabase = createServiceClient();
-    const { data, error } = await supabase.storage.from(config.storageBucket).createSignedUrl(path, 120);
-    if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
-    return NextResponse.redirect(data.signedUrl);
+    return NextResponse.redirect(await signedUrl(path));
   } catch (err) {
     console.error("sale download error", err);
     return NextResponse.json({ error: "Could not open the file." }, { status: 502 });
