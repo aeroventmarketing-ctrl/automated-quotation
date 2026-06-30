@@ -15,8 +15,14 @@ export async function uploadToStorage(path: string, bytes: Uint8Array, contentTy
   const first = await supabase.storage.from(bucket).upload(path, bytes, opts);
   if (!first.error) return;
 
-  // The bucket may not exist — create it (private) and retry once.
-  await supabase.storage.createBucket(bucket, { public: false }).catch(() => {});
+  // The bucket may not exist — create it (private) and retry once. If creation
+  // itself fails, surface that reason (usually a bad/missing service-role key).
+  const created = await supabase.storage.createBucket(bucket, { public: false });
+  if (created.error) {
+    throw new Error(
+      `${first.error.message} — could not auto-create bucket "${bucket}": ${created.error.message}`,
+    );
+  }
   const retry = await supabase.storage.from(bucket).upload(path, bytes, opts);
   if (retry.error) throw retry.error;
 }
