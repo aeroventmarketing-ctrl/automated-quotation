@@ -259,17 +259,53 @@ export async function reviseQuotation(quotationId: string) {
   if (!user) throw new Error("Unauthorized");
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, classification: true },
+    select: {
+      id: true,
+      classification: true,
+      preparedById: true,
+      subtotal: true,
+      vat: true,
+      total: true,
+      items: {
+        orderBy: { sortOrder: "asc" },
+        select: { descriptionSnapshot: true, specsSnapshot: true, qty: true, unitPrice: true, lineTotal: true },
+      },
+    },
   });
   if (!quote) throw new Error("Quotation not found");
+  // Only the salesperson who prepared the quote may revise it.
+  if (quote.preparedById !== user.id) throw new Error("Only the preparer can revise this quotation.");
+
   const cls = (quote.classification as Record<string, unknown>) ?? {};
-  const revision = (typeof cls.revision === "number" ? cls.revision : 0) + 1;
+  const currentRev = typeof cls.revision === "number" ? cls.revision : 0;
+  // Snapshot the version being superseded so past revisions stay for reference.
+  const snapshot = {
+    rev: currentRev,
+    savedAt: new Date().toISOString(),
+    savedById: user.id,
+    subtotal: Number(quote.subtotal),
+    vat: Number(quote.vat),
+    total: Number(quote.total),
+    lines: quote.items.map((it) => ({
+      itemLabel: ((s) => (typeof s?.itemLabel === "string" ? s.itemLabel : ""))(
+        it.specsSnapshot as Record<string, unknown>,
+      ),
+      description: it.descriptionSnapshot,
+      qty: it.qty,
+      unitPrice: Number(it.unitPrice),
+      lineTotal: Number(it.lineTotal),
+    })),
+  };
+  const prev = Array.isArray(cls.revisions) ? cls.revisions : [];
+  const revisions = [...prev, snapshot];
+  const revision = currentRev + 1;
+
   await prisma.quotation.update({
     where: { id: quotationId },
     data: {
       status: "DRAFT",
       approvedById: null,
-      classification: { ...cls, revision } as Prisma.InputJsonObject,
+      classification: { ...cls, revision, revisions } as Prisma.InputJsonObject,
     },
   });
   revalidatePath(`/quotations/${quotationId}`);

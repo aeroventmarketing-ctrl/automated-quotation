@@ -100,6 +100,17 @@ interface Line {
   specs: LineSpecs;
   rawSpecs: Record<string, unknown>;
 }
+/** A retained snapshot of a past quote revision (for reference). */
+export interface RevisionSnapshot {
+  rev: number;
+  savedAt: string;
+  savedById?: string;
+  subtotal: number;
+  vat: number;
+  total: number;
+  lines: { itemLabel: string; description: string; qty: number; unitPrice: number; lineTotal: number }[];
+}
+
 interface Quote {
   id: string;
   quoteNumber: string;
@@ -895,12 +906,16 @@ export function QuotationBuilder({
   templates,
   canApprove,
   isAdmin = false,
+  isPreparer = false,
+  revisionHistory = [],
   catalog,
 }: {
   quotation: Quote;
   templates: { id: string; name: string }[];
   canApprove: boolean;
   isAdmin?: boolean;
+  isPreparer?: boolean;
+  revisionHistory?: RevisionSnapshot[];
   catalog: Record<string, CatalogEntry>;
 }) {
   const router = useRouter();
@@ -2433,6 +2448,48 @@ export function QuotationBuilder({
         </CardContent>
       </Card>
 
+      {/* Revision history — retained snapshots of superseded versions. */}
+      {revisionHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Revision history</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {[...revisionHistory].reverse().map((r) => (
+              <details key={r.rev} className="rounded-md border">
+                <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium">
+                  rev. {r.rev} · {new Date(r.savedAt).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · {formatCurrency(round2(r.total), quotation.currency)}
+                </summary>
+                <div className="border-t px-3 py-2">
+                  <table className="w-full text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="py-1 pr-2 font-medium">#</th>
+                        <th className="py-1 pr-2 font-medium">Description</th>
+                        <th className="py-1 pr-2 text-right font-medium">Qty</th>
+                        <th className="py-1 pr-2 text-right font-medium">Unit ₱</th>
+                        <th className="py-1 text-right font-medium">Total ₱</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.lines.map((ln, i) => (
+                        <tr key={i} className="border-t align-top">
+                          <td className="py-1 pr-2">{ln.itemLabel || i + 1}</td>
+                          <td className="py-1 pr-2 whitespace-pre-wrap">{ln.description}</td>
+                          <td className="py-1 pr-2 text-right">{ln.qty}</td>
+                          <td className="py-1 pr-2 text-right">{formatCurrency(round2(ln.unitPrice), quotation.currency)}</td>
+                          <td className="py-1 text-right">{formatCurrency(round2(ln.lineTotal), quotation.currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Bottom action bar: Save changes (left) + workflow / exports (right). */}
       <div className="flex flex-wrap items-center gap-2">
         {editable && (
@@ -2460,8 +2517,9 @@ export function QuotationBuilder({
               <Send className="h-4 w-4" /> Mark as sent
             </Button>
           )}
-          {/* Revise a finalized quote: bump rev. N and reopen for editing. */}
-          {(quotation.status === "APPROVED" || quotation.status === "SENT") && (
+          {/* Revise a finalized quote: bump rev. N and reopen for editing.
+              Only the salesperson who prepared the quote may revise it. */}
+          {isPreparer && (quotation.status === "APPROVED" || quotation.status === "SENT") && (
             <Button variant="outline" onClick={revise} disabled={busy}>
               <RotateCcw className="h-4 w-4" /> Revise
             </Button>
