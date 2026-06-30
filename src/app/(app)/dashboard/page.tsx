@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { Award } from "lucide-react";
 import type { InquiryStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -82,11 +83,14 @@ export default async function DashboardPage() {
   // --- Salesperson + customers (last 30 days) ------------------------------
   const salesMap = new Map<string, number>();
   const custMap = new Map<string, number>();
+  // --- Per-month quotes per salesperson (for "top salesperson of the month") -
+  const monthSales = new Map(months.map((d) => [monthKey(d), new Map<string, number>()]));
 
   for (const q of quotes) {
     const at = new Date(q.createdAt);
     const dk = dayKey(at);
     const total = Number(q.total);
+    const name = q.preparedBy?.name ?? "—";
     if (countByDay.has(dk)) {
       countByDay.set(dk, (countByDay.get(dk) ?? 0) + 1);
       valueByDay.set(dk, (valueByDay.get(dk) ?? 0) + total);
@@ -94,11 +98,32 @@ export default async function DashboardPage() {
     if (value30.has(dk)) value30.set(dk, (value30.get(dk) ?? 0) + total);
     const mk = monthKey(at);
     if (monthCount.has(mk)) monthCount.set(mk, (monthCount.get(mk) ?? 0) + 1);
+    const ms = monthSales.get(mk);
+    if (ms) ms.set(name, (ms.get(name) ?? 0) + 1);
     if (at >= since30) {
-      const name = q.preparedBy?.name ?? "—";
       salesMap.set(name, (salesMap.get(name) ?? 0) + 1);
       const company = q.inquiry.customer.company || "—";
       custMap.set(company, (custMap.get(company) ?? 0) + total);
+    }
+  }
+
+  // Top salesperson of the month: the current month's leader by quotes prepared.
+  // If the current month has no quotes yet, the previous month's winner is
+  // retained until a new leader emerges (then it switches automatically).
+  const leaderOf = (mk: string): { name: string; count: number } | null => {
+    const ms = monthSales.get(mk);
+    if (!ms || ms.size === 0) return null;
+    let best: string | null = null;
+    let bestC = -1;
+    for (const [n, c] of ms) if (c > bestC) ((best = n), (bestC = c));
+    return best ? { name: best, count: bestC } : null;
+  };
+  let topSales: { name: string; count: number; monthLabel: string } | null = null;
+  for (let i = months.length - 1; i >= 0; i--) {
+    const found = leaderOf(monthKey(months[i]));
+    if (found) {
+      topSales = { ...found, monthLabel: months[i].toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
+      break;
     }
   }
 
@@ -210,6 +235,26 @@ export default async function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      {/* Top salesperson of the month (retained across the month boundary). */}
+      {topSales && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex items-center gap-4 py-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+              <Award className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Top salesperson · {topSales.monthLabel}
+              </div>
+              <div className="text-xl font-bold">{topSales.name}</div>
+              <div className="text-xs text-muted-foreground">
+                {topSales.count} quote{topSales.count === 1 ? "" : "s"} prepared
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Daily quotations bar chart */}
