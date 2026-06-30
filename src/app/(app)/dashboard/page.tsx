@@ -10,21 +10,29 @@ import type { InquiryStatus } from "@prisma/client";
 export const dynamic = "force-dynamic";
 
 const STATUSES: InquiryStatus[] = ["NEW", "DRAFTING", "QUOTED", "SENT", "WON", "LOST"];
-const DAYS = 14;
+const DAYS = 14; // daily quotations bar chart window
+const LINE_DAYS = 30; // value-over-time + salesperson/customer window
+const MONTHS = 6; // monthly trend window
 
-/** Local Y-M-D key so buckets line up with the server's "today". */
+/** Local Y-M-D key so day buckets line up with the server's "today". */
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+const monthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-  const since = new Date(startOfDay);
-  since.setDate(since.getDate() - (DAYS - 1));
+  const since14 = new Date(startOfDay);
+  since14.setDate(since14.getDate() - (DAYS - 1));
+  const since30 = new Date(startOfDay);
+  since30.setDate(since30.getDate() - (LINE_DAYS - 1));
   const weekAgo = new Date(startOfDay);
   weekAgo.setDate(weekAgo.getDate() - 6);
+  const since6mo = new Date(startOfDay);
+  since6mo.setDate(1);
+  since6mo.setMonth(since6mo.getMonth() - (MONTHS - 1));
 
-  const [byStatus, quotesToday, recentInquiries, recentQuotes] = await Promise.all([
+  const [byStatus, quotesToday, recentInquiries, quotes] = await Promise.all([
     prisma.inquiry.groupBy({ by: ["status"], _count: true }),
     prisma.quotation.count({ where: { createdAt: { gte: startOfDay } } }),
     prisma.inquiry.findMany({
@@ -33,8 +41,13 @@ export default async function DashboardPage() {
       include: { customer: true, _count: { select: { items: true } } },
     }),
     prisma.quotation.findMany({
-      where: { createdAt: { gte: since } },
-      select: { createdAt: true, total: true },
+      where: { createdAt: { gte: since6mo } },
+      select: {
+        createdAt: true,
+        total: true,
+        preparedBy: { select: { name: true } },
+        inquiry: { select: { customer: { select: { company: true } } } },
+      },
     }),
   ]);
 
@@ -43,7 +56,7 @@ export default async function DashboardPage() {
     number
   >;
 
-  // Build the last-14-days buckets (count + value) for the daily chart.
+  // --- Daily quotations (last 14 days): count + value ----------------------
   const days = Array.from({ length: DAYS }, (_, i) => {
     const d = new Date(startOfDay);
     d.setDate(d.getDate() - (DAYS - 1 - i));
@@ -51,13 +64,44 @@ export default async function DashboardPage() {
   });
   const countByDay = new Map(days.map((d) => [dayKey(d), 0]));
   const valueByDay = new Map(days.map((d) => [dayKey(d), 0]));
-  for (const q of recentQuotes) {
-    const k = dayKey(new Date(q.createdAt));
-    if (countByDay.has(k)) {
-      countByDay.set(k, (countByDay.get(k) ?? 0) + 1);
-      valueByDay.set(k, (valueByDay.get(k) ?? 0) + Number(q.total));
+  // --- Value over time (last 30 days) --------------------------------------
+  const days30 = Array.from({ length: LINE_DAYS }, (_, i) => {
+    const d = new Date(startOfDay);
+    d.setDate(d.getDate() - (LINE_DAYS - 1 - i));
+    return d;
+  });
+  const value30 = new Map(days30.map((d) => [dayKey(d), 0]));
+  // --- Monthly trend (last 6 months) ---------------------------------------
+  const months = Array.from({ length: MONTHS }, (_, i) => {
+    const d = new Date(startOfDay);
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (MONTHS - 1 - i));
+    return d;
+  });
+  const monthCount = new Map(months.map((d) => [monthKey(d), 0]));
+  // --- Salesperson + customers (last 30 days) ------------------------------
+  const salesMap = new Map<string, number>();
+  const custMap = new Map<string, number>();
+
+  for (const q of quotes) {
+    const at = new Date(q.createdAt);
+    const dk = dayKey(at);
+    const total = Number(q.total);
+    if (countByDay.has(dk)) {
+      countByDay.set(dk, (countByDay.get(dk) ?? 0) + 1);
+      valueByDay.set(dk, (valueByDay.get(dk) ?? 0) + total);
+    }
+    if (value30.has(dk)) value30.set(dk, (value30.get(dk) ?? 0) + total);
+    const mk = monthKey(at);
+    if (monthCount.has(mk)) monthCount.set(mk, (monthCount.get(mk) ?? 0) + 1);
+    if (at >= since30) {
+      const name = q.preparedBy?.name ?? "—";
+      salesMap.set(name, (salesMap.get(name) ?? 0) + 1);
+      const company = q.inquiry.customer.company || "—";
+      custMap.set(company, (custMap.get(company) ?? 0) + total);
     }
   }
+
   const daily = days.map((d) => ({
     key: dayKey(d),
     label: d.toLocaleDateString("en-US", { day: "numeric" }),
@@ -67,10 +111,32 @@ export default async function DashboardPage() {
   }));
   const maxCount = Math.max(1, ...daily.map((d) => d.count));
 
-  // KPIs.
-  const total14 = recentQuotes.length;
-  const value14 = recentQuotes.reduce((a, q) => a + Number(q.total), 0);
-  const quotes7 = recentQuotes.filter((q) => new Date(q.createdAt) >= weekAgo).length;
+  const line = days30.map((d) => ({ key: dayKey(d), date: d, value: value30.get(dayKey(d)) ?? 0 }));
+  const lineMax = Math.max(1, ...line.map((p) => p.value));
+
+  const monthly = months.map((d) => ({
+    label: d.toLocaleDateString("en-US", { month: "short" }),
+    count: monthCount.get(monthKey(d)) ?? 0,
+  }));
+  const maxMonth = Math.max(1, ...monthly.map((m) => m.count));
+
+  const bySales = [...salesMap.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+  const maxSales = Math.max(1, ...bySales.map((s) => s.count));
+
+  const topCustomers = [...custMap.entries()]
+    .map(([company, value]) => ({ company, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+  const maxCust = Math.max(1, ...topCustomers.map((c) => c.value));
+
+  // --- KPIs ----------------------------------------------------------------
+  const last14 = quotes.filter((q) => new Date(q.createdAt) >= since14);
+  const total14 = last14.length;
+  const value14 = last14.reduce((a, q) => a + Number(q.total), 0);
+  const quotes7 = quotes.filter((q) => new Date(q.createdAt) >= weekAgo).length;
   const avgPerDay = Math.round((total14 / DAYS) * 10) / 10;
   const won = counts.WON ?? 0;
   const lost = counts.LOST ?? 0;
@@ -78,6 +144,20 @@ export default async function DashboardPage() {
   const maxStatus = Math.max(1, ...STATUSES.map((s) => counts[s] ?? 0));
 
   const CHART_H = 150; // px
+  // Value-over-time line/area geometry (stretched to fill width).
+  const LW = 300;
+  const LH = 80;
+  const coords = line.map((p, i) => ({
+    x: line.length > 1 ? (i / (line.length - 1)) * LW : 0,
+    y: LH - 2 - (p.value / lineMax) * (LH - 6),
+  }));
+  const linePath = coords.map((c, i) => `${i ? "L" : "M"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
+  const areaPath =
+    coords.length > 0
+      ? `M${coords[0].x.toFixed(1)},${LH} ` +
+        coords.map((c) => `L${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ") +
+        ` L${coords[coords.length - 1].x.toFixed(1)},${LH} Z`
+      : "";
 
   return (
     <div className="space-y-6">
@@ -175,15 +255,96 @@ export default async function DashboardPage() {
                 <div key={s} className="flex items-center gap-2">
                   <span className="w-16 shrink-0 text-xs text-muted-foreground">{s}</span>
                   <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary"
-                      style={{ width: `${Math.round((c / maxStatus) * 100)}%` }}
-                    />
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round((c / maxStatus) * 100)}%` }} />
                   </div>
                   <span className="w-7 shrink-0 text-right text-xs font-semibold">{c}</span>
                 </div>
               );
             })}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Value over time (line) */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex-row items-baseline justify-between space-y-0">
+            <CardTitle>Quoted value over time</CardTitle>
+            <span className="text-xs text-muted-foreground">last {LINE_DAYS} days · peak {formatCurrency(lineMax)}/day</span>
+          </CardHeader>
+          <CardContent>
+            <svg viewBox={`0 0 ${LW} ${LH}`} preserveAspectRatio="none" className="h-36 w-full">
+              {areaPath && <path d={areaPath} className="fill-primary/10" />}
+              <path d={linePath} className="fill-none stroke-primary" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+            </svg>
+            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+              <span>{line[0]?.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              <span>{line[line.length - 1]?.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Monthly trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-2" style={{ height: 130 }}>
+              {monthly.map((m) => (
+                <div key={m.label} className="flex flex-1 flex-col items-center justify-end">
+                  <span className="mb-0.5 text-[10px] font-medium text-muted-foreground">{m.count || ""}</span>
+                  <div
+                    className="w-full rounded-t bg-primary"
+                    style={{ height: Math.max(m.count ? 3 : 0, Math.round((m.count / maxMonth) * 105)) }}
+                    title={`${m.label}: ${m.count} quote(s)`}
+                  />
+                  <span className="mt-1 text-[10px] text-muted-foreground">{m.label}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Quotes by salesperson */}
+        <Card>
+          <CardHeader className="flex-row items-baseline justify-between space-y-0">
+            <CardTitle>Quotes by salesperson</CardTitle>
+            <span className="text-xs text-muted-foreground">last {LINE_DAYS} days</span>
+          </CardHeader>
+          <CardContent className="space-y-2.5 pt-1">
+            {bySales.length === 0 && <p className="text-sm text-muted-foreground">No quotes in this window.</p>}
+            {bySales.map((s) => (
+              <div key={s.name} className="flex items-center gap-2">
+                <span className="w-28 shrink-0 truncate text-xs text-muted-foreground" title={s.name}>{s.name}</span>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round((s.count / maxSales) * 100)}%` }} />
+                </div>
+                <span className="w-7 shrink-0 text-right text-xs font-semibold">{s.count}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Top customers by quoted value */}
+        <Card>
+          <CardHeader className="flex-row items-baseline justify-between space-y-0">
+            <CardTitle>Top customers</CardTitle>
+            <span className="text-xs text-muted-foreground">by quoted value · last {LINE_DAYS} days</span>
+          </CardHeader>
+          <CardContent className="space-y-2.5 pt-1">
+            {topCustomers.length === 0 && <p className="text-sm text-muted-foreground">No quotes in this window.</p>}
+            {topCustomers.map((c) => (
+              <div key={c.company} className="flex items-center gap-2">
+                <span className="w-32 shrink-0 truncate text-xs text-muted-foreground" title={c.company}>{c.company}</span>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round((c.value / maxCust) * 100)}%` }} />
+                </div>
+                <span className="shrink-0 text-right text-xs font-semibold">{formatCurrency(c.value)}</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
