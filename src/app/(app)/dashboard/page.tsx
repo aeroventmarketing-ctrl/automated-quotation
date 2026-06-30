@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Award } from "lucide-react";
+import { saleFromClassification } from "@/lib/sale";
 import type { InquiryStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -106,15 +107,18 @@ export default async function DashboardPage() {
       const company = q.inquiry.customer.company || "—";
       custMap.set(company, (custMap.get(company) ?? 0) + total);
     }
-    // Sales buckets (by the date the quote was marked sold).
-    const sale = (q.classification as Record<string, unknown> | null)?.sale as { soldAt?: string } | null | undefined;
-    const soldAt = sale?.soldAt ? new Date(sale.soldAt) : null;
-    if (soldAt) {
-      const smk = monthKey(soldAt);
-      const sms = monthSales.get(smk);
-      if (sms) sms.set(name, (sms.get(name) ?? 0) + total);
-      if (soldAt >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + total);
-      if (smk === currentMK) salesMTD += total;
+    // Sales buckets = amount actually COLLECTED, credited to the preparer and
+    // bucketed by each payment's date (a sale is the money received, not quoted).
+    const sale = saleFromClassification(q.classification);
+    for (const p of sale?.payments ?? []) {
+      const amt = Number(p.amount) || 0;
+      const pd = p.date ? new Date(p.date) : null;
+      if (amt <= 0 || !pd || Number.isNaN(pd.getTime())) continue;
+      const pmk = monthKey(pd);
+      const pms = monthSales.get(pmk);
+      if (pms) pms.set(name, (pms.get(name) ?? 0) + amt);
+      if (pd >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + amt);
+      if (pmk === currentMK) salesMTD += amt;
     }
   }
 
@@ -259,7 +263,7 @@ export default async function DashboardPage() {
               </div>
               <div className="text-xl font-bold">{topSales.name}</div>
               <div className="text-xs text-muted-foreground">
-                {formatCurrency(topSales.amount)} sold
+                {formatCurrency(topSales.amount)} collected
               </div>
             </div>
           </CardContent>
@@ -367,7 +371,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex-row items-baseline justify-between space-y-0">
             <CardTitle>Sales by salesperson</CardTitle>
-            <span className="text-xs text-muted-foreground">amount sold · last {LINE_DAYS} days</span>
+            <span className="text-xs text-muted-foreground">amount collected · last {LINE_DAYS} days</span>
           </CardHeader>
           <CardContent className="space-y-2.5 pt-1">
             {bySales.length === 0 && <p className="text-sm text-muted-foreground">No sales recorded in this window.</p>}

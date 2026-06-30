@@ -33,7 +33,9 @@ import {
   convertPower,
   roundPower,
 } from "@/lib/units";
-import { updateQuotationLines, transitionQuotation, markQuotationSold, reviseQuotation } from "../actions";
+import { updateQuotationLines, transitionQuotation, reviseQuotation } from "../actions";
+import { SalePanel } from "./sale-panel";
+import { isSaleConfirmed, type SaleRecord } from "@/lib/sale";
 import { updateQuoteNumber } from "../../admin/actions";
 
 interface CatalogEntry {
@@ -115,7 +117,7 @@ interface Quote {
   id: string;
   quoteNumber: string;
   status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "SENT";
-  sold: boolean;
+  sale: SaleRecord | null;
   revision: number;
   currency: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
@@ -1474,20 +1476,6 @@ export function QuotationBuilder({
     }
   }
 
-  // Convert the quote to a sale (client purchased) or undo it.
-  async function markSold(sold: boolean) {
-    setBusy(true);
-    setMsg(null);
-    try {
-      await markQuotationSold(quotation.id, sold);
-      router.refresh();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Action failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   // Open a new revision: bump "rev. N" and reopen for editing.
   async function revise() {
     setBusy(true);
@@ -2448,6 +2436,17 @@ export function QuotationBuilder({
         </CardContent>
       </Card>
 
+      {/* Sale & payment — record the PO, payments collected, and proofs. */}
+      {(quotation.status === "APPROVED" || quotation.status === "SENT" || isSaleConfirmed(quotation.sale) || !!quotation.sale) && (
+        <SalePanel
+          quotationId={quotation.id}
+          currency={quotation.currency}
+          dealTotal={quotation.total}
+          initialSale={quotation.sale}
+          canEdit={(isPreparer || isAdmin) && quotation.status !== "DRAFT" && quotation.status !== "PENDING_APPROVAL"}
+        />
+      )}
+
       {/* Revision history — retained snapshots of superseded versions. */}
       {revisionHistory.length > 0 && (
         <Card>
@@ -2523,23 +2522,6 @@ export function QuotationBuilder({
             <Button variant="outline" onClick={revise} disabled={busy}>
               <RotateCcw className="h-4 w-4" /> Revise
             </Button>
-          )}
-          {/* Convert to a sale once the quote is finalized (approved/sent). */}
-          {quotation.sold ? (
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1.5 text-sm font-semibold text-white">
-                <Check className="h-4 w-4" /> Sold
-              </span>
-              <Button variant="outline" onClick={() => markSold(false)} disabled={busy}>
-                <CornerUpLeft className="h-4 w-4" /> Undo sale
-              </Button>
-            </div>
-          ) : (
-            (quotation.status === "APPROVED" || quotation.status === "SENT") && (
-              <Button className="bg-green-600 hover:bg-green-700" onClick={() => markSold(true)} disabled={busy}>
-                <Check className="h-4 w-4" /> Mark as Sold
-              </Button>
-            )
           )}
           <Button asChild>
             <a href={`/api/quotations/${quotation.id}/excel`}>

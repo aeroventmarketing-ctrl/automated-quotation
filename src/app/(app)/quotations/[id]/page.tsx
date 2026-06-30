@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { ensureKdkTemplate, RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
+import { saleFromClassification } from "@/lib/sale";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +77,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         id: quotation.id,
         quoteNumber: quotation.quoteNumber,
         status: quotation.status,
-        sold: !!((quotation.classification as Record<string, unknown> | null)?.sale as { soldAt?: string } | null)?.soldAt,
+        sale: saleFromClassification(quotation.classification),
         revision: ((r) => (typeof r === "number" ? r : 0))((quotation.classification as Record<string, unknown> | null)?.revision),
         currency: quotation.currency,
         vatMode:

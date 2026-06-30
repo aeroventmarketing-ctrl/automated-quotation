@@ -9,6 +9,7 @@ import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
+import { isSaleConfirmed, saleFromClassification, type SaleRecord } from "@/lib/sale";
 
 const lineSchema = z.object({
   catalogueItemId: z.string().nullable().optional(),
@@ -341,6 +342,85 @@ export async function markQuotationSold(quotationId: string, sold: boolean) {
       where: { id: quote.inquiryId },
       data: { status: sold ? "WON" : "SENT" },
     }),
+  ]);
+  revalidatePath(`/quotations/${quotationId}`);
+  revalidatePath("/dashboard");
+}
+
+const saleDocSchema = z.object({ path: z.string(), name: z.string(), uploadedAt: z.string() });
+const saleSchema = z.object({
+  arrangement: z.enum(["downpayment_full", "downpayment_progress", "terms"]),
+  po: saleDocSchema.nullable().optional(),
+  payments: z
+    .array(
+      z.object({
+        id: z.string(),
+        kind: z.enum(["down", "full", "progress"]),
+        amount: z.number().nonnegative(),
+        date: z.string(),
+        proof: saleDocSchema.nullable().optional(),
+        note: z.string().optional(),
+      }),
+    )
+    .default([]),
+});
+
+/**
+ * Record (or update) a sale on a quotation: the payment arrangement, the PO, and
+ * the payments collected so far (each with its proof). The inquiry is marked WON
+ * only when the sale is confirmed — a PO is attached and, unless on terms, at
+ * least one payment exists. The preparer or an admin may record it.
+ */
+export async function recordSale(quotationId: string, input: z.infer<typeof saleSchema>) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const data = saleSchema.parse(input);
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, inquiryId: true, preparedById: true, classification: true },
+  });
+  if (!quote) throw new Error("Quotation not found");
+  if (quote.preparedById !== user.id && !isAdmin(user))
+    throw new Error("Only the preparer or an admin can record this sale.");
+
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const existing = saleFromClassification(cls);
+  const sale: SaleRecord = { ...data, recordedById: user.id, soldAt: existing?.soldAt };
+  const confirmed = isSaleConfirmed(sale);
+  sale.soldAt = confirmed ? sale.soldAt ?? new Date().toISOString() : undefined;
+
+  await prisma.$transaction([
+    prisma.quotation.update({
+      where: { id: quotationId },
+      data: { classification: { ...cls, sale } as unknown as Prisma.InputJsonObject },
+    }),
+    prisma.inquiry.update({
+      where: { id: quote.inquiryId },
+      data: { status: confirmed ? "WON" : "SENT" },
+    }),
+  ]);
+  revalidatePath(`/quotations/${quotationId}`);
+  revalidatePath("/dashboard");
+}
+
+/** Remove the sale record from a quotation (and return the inquiry to SENT). */
+export async function clearSale(quotationId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, inquiryId: true, preparedById: true, classification: true },
+  });
+  if (!quote) throw new Error("Quotation not found");
+  if (quote.preparedById !== user.id && !isAdmin(user))
+    throw new Error("Only the preparer or an admin can clear this sale.");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  await prisma.$transaction([
+    prisma.quotation.update({
+      where: { id: quotationId },
+      data: { classification: { ...cls, sale: null } as Prisma.InputJsonObject },
+    }),
+    prisma.inquiry.update({ where: { id: quote.inquiryId }, data: { status: "SENT" } }),
   ]);
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
