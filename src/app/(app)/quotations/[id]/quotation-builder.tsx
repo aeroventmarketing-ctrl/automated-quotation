@@ -72,6 +72,7 @@ interface LineSpecs {
   sizeL: string;
   sizeW: string;
   sizeUnit?: string; // dimension unit (mm/cm/inches) for sized accessories
+  powderCoated?: boolean; // accessory powder-coat finish flag
   // Air-curtain client inputs (installation height + door width with units).
   acHeight?: number | null;
   acHeightUnit?: string;
@@ -666,6 +667,8 @@ const UOM_TYPES = new Set([
   "Volume Damper",
 ]);
 const SIZE_UNITS = ["mm", "cm", "inches"];
+/** Material options for Ventilation Accessories (Air Terminals / Dampers). */
+const ACC_MATERIALS = ["Galvanized Iron", "Aluminum", "Stainless Steel 304"];
 // Air Terminals / Dampers use a trade conversion (NOT the exact 25.4 mm/inch):
 //   25 mm = 1 inch · 2.5 cm = 1 inch · 10 mm = 1 cm.
 const ACC_MM_PER_UNIT: Record<string, number> = { mm: 1, cm: 10, inches: 25 };
@@ -1473,6 +1476,25 @@ export function QuotationBuilder({
                     onChange={(e) => updateSpec(l.id, { mcRecommend: e.target.checked })} />
                   Recommend?
                 </label>
+              )}
+              {/* Material + powder-coat finish (Air Terminals / Dampers). */}
+              {!isIsolator(c) && (
+                <>
+                  <Select
+                    value={ACC_MATERIALS.includes(c.material) ? c.material : ""}
+                    disabled={!editable || !c.type}
+                    onChange={(e) => set({ material: e.target.value })}
+                  >
+                    <option value="" disabled>Material…</option>
+                    {ACC_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                  </Select>
+                  <label className="flex h-9 items-center gap-1.5 text-sm">
+                    Powder Coated
+                    <input type="checkbox" className="h-4 w-4" disabled={!editable}
+                      checked={!!c.powderCoated}
+                      onChange={(e) => set({ powderCoated: e.target.checked })} />
+                  </label>
+                </>
               )}
             </>
           ) : isPrebuiltUnit(c) || isMotorController(c) ? (

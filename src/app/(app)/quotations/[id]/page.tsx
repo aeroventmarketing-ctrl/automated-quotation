@@ -127,6 +127,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               sizeL: typeof s.sizeL === "string" ? s.sizeL : "",
               sizeW: typeof s.sizeW === "string" ? s.sizeW : "",
               sizeUnit: typeof s.sizeUnit === "string" ? s.sizeUnit : "",
+              powderCoated: s.powderCoated === true,
               acHeight: num(s.acHeight),
               acHeightUnit: typeof s.acHeightUnit === "string" ? s.acHeightUnit : "meter",
               acWidth: num(s.acWidth),
