@@ -775,12 +775,14 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   }
   if (ACC_MATERIALS.includes(specs.material)) {
     lines.push(`${accMaterialLabel(specs.material)} Material`);
-    // Finish follows the material: powder coat (when ticked & offered) else paint.
-    lines.push(
-      POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated
-        ? "Powder Coated White"
-        : "Painted with Oven Baked Enamel",
-    );
+    // Finish follows the material — but stainless steel 304 carries no finish.
+    if (specs.material !== "Stainless Steel 304") {
+      lines.push(
+        POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated
+          ? "Powder Coated White"
+          : "Painted with Oven Baked Enamel",
+      );
+    }
   }
   return lines.join("\n");
 }
@@ -1081,6 +1083,9 @@ export function QuotationBuilder({
       ls.map((l) => {
         if (l.id !== lineId) return l;
         const specs = { ...l.specs, ...patch };
+        // Stainless steel 304 is never powder-coated — drop any stale flag so the
+        // price and description don't carry the ×1.5 / "Powder Coated" finish.
+        if (specs.material === "Stainless Steel 304") specs.powderCoated = false;
         const price = accessoryUnitPrice(specs);
         return {
           ...l,
@@ -1618,8 +1623,8 @@ export function QuotationBuilder({
                   {ACC_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
                 </Select>
               )}
-              {/* Powder-coat finish — only the types that support it. */}
-              {POWDER_COAT_TYPES.has(c.type) && (
+              {/* Powder-coat finish — supported types only; not for stainless steel. */}
+              {POWDER_COAT_TYPES.has(c.type) && c.material !== "Stainless Steel 304" && (
                 <label className="flex h-9 items-center gap-1.5 text-sm">
                   Powder Coated
                   <input type="checkbox" className="h-4 w-4" disabled={!editable}
