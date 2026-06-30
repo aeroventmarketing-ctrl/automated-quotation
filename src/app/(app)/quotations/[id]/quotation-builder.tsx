@@ -666,6 +666,17 @@ const UOM_TYPES = new Set([
   "Volume Damper",
 ]);
 const SIZE_UNITS = ["mm", "cm", "inches"];
+// Air Terminals / Dampers use a trade conversion (NOT the exact 25.4 mm/inch):
+//   25 mm = 1 inch · 2.5 cm = 1 inch · 10 mm = 1 cm.
+const ACC_MM_PER_UNIT: Record<string, number> = { mm: 1, cm: 10, inches: 25 };
+/** Convert a sized-accessory dimension between mm/cm/inches via the trade ratio. */
+function convertAccSize(value: string, from: string, to: string): string {
+  const n = parseFloat(value);
+  if (!value || Number.isNaN(n) || from === to) return value;
+  const mm = n * (ACC_MM_PER_UNIT[from] ?? 1);
+  const out = mm / (ACC_MM_PER_UNIT[to] ?? 1);
+  return String(Math.round(out * 1000) / 1000); // trim float noise
+}
 
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
@@ -1412,7 +1423,16 @@ export function QuotationBuilder({
                 <Select
                   value={c.sizeUnit || "mm"}
                   disabled={!editable || !c.type}
-                  onChange={(e) => set({ sizeUnit: e.target.value })}
+                  onChange={(e) => {
+                    const to = e.target.value;
+                    const from = c.sizeUnit || "mm";
+                    // Convert the entered dimensions to the new unit (trade ratio).
+                    set({
+                      sizeUnit: to,
+                      sizeL: convertAccSize(c.sizeL, from, to),
+                      sizeW: convertAccSize(c.sizeW, from, to),
+                    });
+                  }}
                 >
                   <option value="" disabled>Unit of Measurement…</option>
                   {SIZE_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
