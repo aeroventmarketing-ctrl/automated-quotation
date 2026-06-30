@@ -666,6 +666,9 @@ const UOM_TYPES = new Set([
   "OBVD",
   "Smoke Damper",
   "Volume Damper",
+  "Motorized Fire Damper",
+  "Motorized Smoke Damper",
+  "Motorized Volume Damper",
 ]);
 const SIZE_UNITS = ["mm", "cm", "inches"];
 /** Material options for Ventilation Accessories (Air Terminals / Dampers). */
