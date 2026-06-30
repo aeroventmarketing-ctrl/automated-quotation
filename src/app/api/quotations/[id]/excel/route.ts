@@ -37,15 +37,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const isKdkSpecs = (s: Record<string, unknown>) => s.brand === "KDK";
   const motorUnit = normalizePowerUnit(typeof units.motor === "string" ? units.motor : null) ?? "HP";
   // Motor Controllers / vibration isolators have no airflow / static pressure /
-  // physical size, and isolators have no motor either.
+  // physical size, and isolators have no motor either. Ventilation Accessories
+  // (Air Terminals / Dampers) carry their size in the description, so their
+  // Capacity / S.P. / Size / Motor columns are blanked too.
   const isMotorCtrl = (s: Record<string, unknown>) => s.type === "Motor Controller";
   const isIso = (s: Record<string, unknown>) => s.type === "Spring Vibration Isolator";
+  const isAcc = (s: Record<string, unknown>) => s.category === "Ventilation Accessories";
 
   const items: XlsxLine[] = q.items.map((it) => {
     const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
     // Native rating → header unit. KDK is watts (power_w); everything else HP.
     let motorHp: number | string | null;
-    if (isIso(s)) {
+    if (isIso(s) || isAcc(s)) {
       motorHp = null;
     } else if (isKdkSpecs(s) && typeof s.power_w === "number") {
       motorHp = roundPower(convertPower(s.power_w, "W", motorUnit), motorUnit);
@@ -62,14 +65,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       qty: it.qty,
       unitPrice: Number(it.unitPrice),
       lineTotal: Number(it.lineTotal),
-      capacity_cfm: isMotorCtrl(s) || isIso(s) ? null : n(s.capacity_cfm),
-      // Air curtains / Motor Controllers / isolators have no static pressure — "--".
-      staticPressure_inwg: s.type === "Air Curtain" || isMotorCtrl(s) || isIso(s) ? null : n(s.staticPressure_pa),
-      // KDK units / Motor Controllers / isolators aren't sized in inches — blank.
-      inches: isKdkSpecs(s) || isMotorCtrl(s) || isIso(s) ? null : n(s.inches),
+      capacity_cfm: isMotorCtrl(s) || isIso(s) || isAcc(s) ? null : n(s.capacity_cfm),
+      // Air curtains / Motor Controllers / isolators / accessories — no S.P. ("--").
+      staticPressure_inwg: s.type === "Air Curtain" || isMotorCtrl(s) || isIso(s) || isAcc(s) ? null : n(s.staticPressure_pa),
+      // KDK units / Motor Controllers / isolators / accessories aren't sized in inches.
+      inches: isKdkSpecs(s) || isMotorCtrl(s) || isIso(s) || isAcc(s) ? null : n(s.inches),
       motorHp,
-      motorPh: isIso(s) ? null : n(s.motorPh),
-      motorVolts: isIso(s) ? null : n(s.motorVolts),
+      motorPh: isIso(s) || isAcc(s) ? null : n(s.motorPh),
+      motorVolts: isIso(s) || isAcc(s) ? null : n(s.motorVolts),
     };
   });
 

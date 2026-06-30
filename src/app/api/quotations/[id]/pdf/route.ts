@@ -34,29 +34,32 @@ function lineSpecs(specs: Record<string, unknown>, index: number, motorUnit: Pow
   const isKdk = specs.brand === "KDK"; // "W" motor rating is for KDK products only
   const isMotorCtrl = specs.type === "Motor Controller"; // no airflow/SP/size
   const isIso = specs.type === "Spring Vibration Isolator"; // no airflow/SP/size/motor
+  // Ventilation Accessories carry their size in the description — blank the
+  // Capacity / S.P. / Size / Motor columns.
+  const isAcc = specs.category === "Ventilation Accessories";
   return {
     itemLabel: typeof specs.itemLabel === "string" ? specs.itemLabel : String(index + 1),
-    capacity_cfm: isMotorCtrl || isIso ? null : cfm,
-    // Air curtains / Motor Controllers / isolators have no static pressure — "--".
+    capacity_cfm: isMotorCtrl || isIso || isAcc ? null : cfm,
+    // Air curtains / Motor Controllers / isolators / accessories — no S.P. ("--").
     staticPressure_pa:
-      specs.type === "Air Curtain" || isMotorCtrl || isIso
+      specs.type === "Air Curtain" || isMotorCtrl || isIso || isAcc
         ? null
         : n(specs.staticPressure_pa) ??
           (typeof sel.dutyStaticPressure_pa === "number" ? Math.round(sel.dutyStaticPressure_pa) : null),
-    // KDK units / Motor Controllers / isolators aren't sized in inches — blank.
-    inches: isKdk || isMotorCtrl || isIso ? null : n(specs.inches),
+    // KDK units / Motor Controllers / isolators / accessories aren't sized in inches.
+    inches: isKdk || isMotorCtrl || isIso || isAcc ? null : n(specs.inches),
     // Motor rating shown in the header unit (HP / kW / W). KDK is catalogued in
     // watts and everything else in HP, so each value is converted to that unit.
     motorHp: (() => {
-      if (isIso) return null;
+      if (isIso || isAcc) return null;
       if (isKdk) return n(specs.power_w) != null
         ? roundPower(convertPower(n(specs.power_w)!, "W", motorUnit), motorUnit)
         : null;
       const hp = n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null);
       return hp != null ? roundPower(convertPower(hp, "HP", motorUnit), motorUnit) : null;
     })(),
-    motorPh: isIso ? null : n(specs.motorPh),
-    motorVolts: isIso ? null : n(specs.motorVolts),
+    motorPh: isIso || isAcc ? null : n(specs.motorPh),
+    motorVolts: isIso || isAcc ? null : n(specs.motorVolts),
   };
 }
 
