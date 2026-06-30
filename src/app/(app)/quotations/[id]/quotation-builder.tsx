@@ -1701,7 +1701,7 @@ export function QuotationBuilder({
                   disabled={!editable || !c.type}
                   onChange={(e) => applyAccessory(l.id, { movement: e.target.value })}
                 >
-                  <option value="" disabled>Movement…</option>
+                  <option value="" disabled>Operation…</option>
                   {MOVEMENT_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
                 </Select>
               )}
@@ -2248,7 +2248,7 @@ export function QuotationBuilder({
                             ? actCost
                               ? ` + actuator ${round2(actCost)} (×${actuatorQty(l.specs)})`
                               : ""
-                            : " — pick Movement to add the actuator"
+                            : " — pick Operation to add the actuator"
                           : "";
                         return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? ` × ${accPowderFactor(l.specs.type)} powder-coat` : ""}${flat ? ` + ${flat} fusible link` : ""}${actNote} = auto-priced (editable).`;
                       })()}
