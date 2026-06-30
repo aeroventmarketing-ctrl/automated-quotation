@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
 import { buildQuotationXlsx, type XlsxLine, type XlsxData } from "@/lib/excel/quotation-xlsx";
+import { normalizePowerUnit, convertPower, roundPower } from "@/lib/units";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,11 +30,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const tpl = (q.template.config as Record<string, unknown>) ?? {};
   const units = (q.headerUnits as Record<string, unknown>) ?? {};
 
-  // KDK units are rated in watts, not HP — show the consumption under a "W"
-  // motor column when the quote carries any KDK product.
-  // "W" is for KDK products only (rated in watts); everything else uses HP.
+  // The motor column shows whichever unit the header selects (HP / kW / W).
+  // KDK units are catalogued in watts and everything else in HP, so each value
+  // is converted to the header unit for display (e.g. a 750 W KDK fan shows as
+  // ~1 HP when the header unit is HP). Falls back to HP for an unknown label.
   const isKdkSpecs = (s: Record<string, unknown>) => s.brand === "KDK";
-  const anyKdk = q.items.some((it) => isKdkSpecs((it.specsSnapshot as Record<string, unknown>) ?? {}));
+  const motorUnit = normalizePowerUnit(typeof units.motor === "string" ? units.motor : null) ?? "HP";
   // Motor Controllers / vibration isolators have no airflow / static pressure /
   // physical size, and isolators have no motor either.
   const isMotorCtrl = (s: Record<string, unknown>) => s.type === "Motor Controller";
@@ -41,13 +43,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const items: XlsxLine[] = q.items.map((it) => {
     const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
-    const motorHp = isIso(s)
-      ? null
-      : isKdkSpecs(s) && typeof s.power_w === "number"
-        ? s.power_w
-        : typeof s.motorHp === "number" || typeof s.motorHp === "string"
-          ? s.motorHp
-          : null;
+    // Native rating → header unit. KDK is watts (power_w); everything else HP.
+    let motorHp: number | string | null;
+    if (isIso(s)) {
+      motorHp = null;
+    } else if (isKdkSpecs(s) && typeof s.power_w === "number") {
+      motorHp = roundPower(convertPower(s.power_w, "W", motorUnit), motorUnit);
+    } else if (typeof s.motorHp === "number") {
+      motorHp = roundPower(convertPower(s.motorHp, "HP", motorUnit), motorUnit);
+    } else if (typeof s.motorHp === "string") {
+      motorHp = s.motorHp;
+    } else {
+      motorHp = null;
+    }
     return {
       itemLabel: typeof s.itemLabel === "string" && s.itemLabel ? s.itemLabel : "",
       descriptionSnapshot: it.descriptionSnapshot,
@@ -76,7 +84,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     vatRate: config.vatRate,
     capacityUnit: (typeof units.capacity === "string" && units.capacity) || "cfm",
     pressureUnit: (typeof units.pressure === "string" && units.pressure) || "in-w.g.",
-    motorUnit: anyKdk ? "W" : (typeof units.motor === "string" && units.motor) || "HP",
+    motorUnit,
     // Signature reflects the currently logged-in sales user, not the original
     // preparer, so each sales person's downloads carry their own name.
     preparedBy: user.name,

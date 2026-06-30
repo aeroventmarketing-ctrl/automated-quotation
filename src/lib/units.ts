@@ -121,6 +121,37 @@ export function hpToKw(hp: number): number {
   return hp * KW_PER_HP;
 }
 
+/** Power unit for the quotation motor column. */
+export type PowerUnit = "HP" | "kW" | "W";
+
+/** Tolerant parse of the header motor-unit label to a known power unit. */
+export function normalizePowerUnit(raw: string | null | undefined): PowerUnit | null {
+  const s = String(raw ?? "").trim().toLowerCase();
+  if (s === "hp") return "HP";
+  if (s === "kw") return "kW";
+  if (s === "w" || s === "watt" || s === "watts") return "W";
+  return null;
+}
+
+// kW per unit (HP via KW_PER_HP, W = 0.001 kW).
+const KW_PER_POWER: Record<PowerUnit, number> = { HP: KW_PER_HP, kW: 1, W: 0.001 };
+
+/**
+ * Convert a motor rating between HP / kW / W. KDK units are catalogued in watts
+ * and everything else in HP; the quotation motor column shows whichever unit the
+ * header selects, so each value is converted to that unit for display.
+ */
+export function convertPower(value: number, from: PowerUnit, to: PowerUnit): number {
+  if (from === to) return value;
+  return (value * KW_PER_POWER[from]) / KW_PER_POWER[to];
+}
+
+/** Round a converted power value for display: W → integer, HP/kW → 2 dp (trimmed). */
+export function roundPower(value: number, unit: PowerUnit): number {
+  if (unit === "W") return Math.round(value);
+  return Math.round(value * 100) / 100;
+}
+
 // ---------------------------------------------------------------------------
 // Normalization helpers — tolerant parsing of free-text unit strings
 // ---------------------------------------------------------------------------

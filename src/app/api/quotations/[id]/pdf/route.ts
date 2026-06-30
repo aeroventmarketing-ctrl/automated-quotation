@@ -4,7 +4,7 @@ import React from "react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
-import { convertAirflow } from "@/lib/units";
+import { convertAirflow, normalizePowerUnit, convertPower, roundPower, type PowerUnit } from "@/lib/units";
 import {
   QuotationPdf,
   type QuotationPdfData,
@@ -18,7 +18,7 @@ const n = (v: unknown): number | null =>
   typeof v === "number" && !Number.isNaN(v) ? v : null;
 
 /** Pull the per-line engineering specs from specsSnapshot (flat or nested). */
-function lineSpecs(specs: Record<string, unknown>, index: number) {
+function lineSpecs(specs: Record<string, unknown>, index: number, motorUnit: PowerUnit) {
   const sel = (specs.selection ?? {}) as Record<string, unknown>;
   const req = (specs.requirement ?? {}) as Record<string, unknown>;
 
@@ -45,12 +45,16 @@ function lineSpecs(specs: Record<string, unknown>, index: number) {
           (typeof sel.dutyStaticPressure_pa === "number" ? Math.round(sel.dutyStaticPressure_pa) : null),
     // KDK units / Motor Controllers / isolators aren't sized in inches — blank.
     inches: isKdk || isMotorCtrl || isIso ? null : n(specs.inches),
-    // KDK units are rated in watts: show the consumption in the motor column.
-    motorHp: isIso
-      ? null
-      : isKdk
-        ? n(specs.power_w)
-        : n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null),
+    // Motor rating shown in the header unit (HP / kW / W). KDK is catalogued in
+    // watts and everything else in HP, so each value is converted to that unit.
+    motorHp: (() => {
+      if (isIso) return null;
+      if (isKdk) return n(specs.power_w) != null
+        ? roundPower(convertPower(n(specs.power_w)!, "W", motorUnit), motorUnit)
+        : null;
+      const hp = n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null);
+      return hp != null ? roundPower(convertPower(hp, "HP", motorUnit), motorUnit) : null;
+    })(),
     motorPh: isIso ? null : n(specs.motorPh),
     motorVolts: isIso ? null : n(specs.motorVolts),
   };
@@ -75,9 +79,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const tplConfig = (quotation.template.config as Record<string, unknown>) ?? {};
 
+  // Motor column unit comes from the header (HP / kW / W); values convert to it.
+  const headerUnits = (quotation.headerUnits as Record<string, unknown>) ?? {};
+  const motorUnit: PowerUnit =
+    normalizePowerUnit(typeof headerUnits.motor === "string" ? headerUnits.motor : null) ?? "HP";
+
   const items: QuotationPdfLine[] = quotation.items.map((it, i) => {
     const specs = (it.specsSnapshot as Record<string, unknown>) ?? {};
-    const s = lineSpecs(specs, i);
+    const s = lineSpecs(specs, i, motorUnit);
     return {
       ...s,
       descriptionSnapshot: it.descriptionSnapshot,
@@ -118,13 +127,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       (typeof tplConfig.terms === "string" && tplConfig.terms.trim() ? tplConfig.terms : "") ||
       COMPANY.defaultTerms,
     items,
-    // KDK units are watt-rated, so label the motor column "W" when present.
-    motorUnit: quotation.items.some((it) => {
-      const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
-      return s.brand === "KDK"; // "W" column only when the quote carries a KDK product
-    })
-      ? "W"
-      : "Hp",
+    // Motor column label follows the header unit (values are converted to it).
+    motorUnit,
     subtotal: Number(quotation.subtotal),
     vat: Number(quotation.vat),
     total: Number(quotation.total),

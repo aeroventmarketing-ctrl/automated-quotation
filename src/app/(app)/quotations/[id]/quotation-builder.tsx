@@ -29,6 +29,9 @@ import {
   normalizePressureUnit,
   convertAirflow,
   convertPressure,
+  normalizePowerUnit,
+  convertPower,
+  roundPower,
 } from "@/lib/units";
 import { updateQuotationLines, transitionQuotation } from "../actions";
 import { updateQuoteNumber } from "../../admin/actions";
@@ -1897,9 +1900,13 @@ export function QuotationBuilder({
                     <Select className="h-8" disabled value="1"><option value="1">1-phase</option></Select>
                   </div>
                   <div>
-                    <Label className="text-[10px]">W</Label>
+                    <Label className="text-[10px]">{normalizePowerUnit(units.motor) ?? "HP"}</Label>
                     <Input className="h-8" disabled
-                      value={l.specs.power_w != null ? `${l.specs.power_w} W` : "—"} />
+                      value={(() => {
+                        if (l.specs.power_w == null) return "—";
+                        const u = normalizePowerUnit(units.motor) ?? "HP";
+                        return `${roundPower(convertPower(l.specs.power_w, "W", u), u)} ${u}`;
+                      })()} />
                   </div>
                   <div>
                     <Label className="text-[10px]">Volts</Label>
