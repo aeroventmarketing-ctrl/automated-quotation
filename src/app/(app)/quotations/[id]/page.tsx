@@ -126,7 +126,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               shape: typeof s.shape === "string" ? s.shape : "",
               sizeL: typeof s.sizeL === "string" ? s.sizeL : "",
               sizeW: typeof s.sizeW === "string" ? s.sizeW : "",
-              sizeUnit: typeof s.sizeUnit === "string" ? s.sizeUnit : "mm",
+              sizeUnit: typeof s.sizeUnit === "string" ? s.sizeUnit : "",
               acHeight: num(s.acHeight),
               acHeightUnit: typeof s.acHeightUnit === "string" ? s.acHeightUnit : "meter",
               acWidth: num(s.acWidth),

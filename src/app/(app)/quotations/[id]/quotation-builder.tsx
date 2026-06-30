@@ -1426,7 +1426,7 @@ export function QuotationBuilder({
               {/* Unit of measurement for the dimensions (selected accessories). */}
               {UOM_TYPES.has(c.type) && (
                 <Select
-                  value={c.sizeUnit || "mm"}
+                  value={c.sizeUnit || ""}
                   disabled={!editable || !c.type}
                   onChange={(e) => {
                     const to = e.target.value;
