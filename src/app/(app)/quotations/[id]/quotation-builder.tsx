@@ -731,10 +731,17 @@ function accAreaSqIn(specs: LineSpecs): number | null {
   const W = toIn(specs.sizeW);
   return L != null && W != null ? L * W : null;
 }
+/** Minimum billable accessory area — anything smaller is charged as 100 sq in. */
+const ACC_MIN_SQIN = 100;
+/** Billed area: the computed area, floored to the 100 sq in minimum. */
+function accBilledAreaSqIn(specs: LineSpecs): number | null {
+  const area = accAreaSqIn(specs);
+  return area == null ? null : Math.max(area, ACC_MIN_SQIN);
+}
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
 function accessoryUnitPrice(specs: LineSpecs): number | null {
   const rate = accessoryRate(specs.type, specs.shape);
-  const area = accAreaSqIn(specs);
+  const area = accBilledAreaSqIn(specs);
   const mat = ACC_MATERIAL_FACTOR[specs.material];
   if (rate == null || area == null || mat == null) return null;
   const price = area * rate * mat * (specs.powderCoated ? 1.5 : 1);
@@ -2115,11 +2122,12 @@ export function QuotationBuilder({
                     <p className="text-xs text-muted-foreground">
                       {(() => {
                         const rate = accessoryRate(l.specs.type, l.specs.shape);
-                        const area = accAreaSqIn(l.specs);
+                        const area = accBilledAreaSqIn(l.specs);
                         const mat = ACC_MATERIAL_FACTOR[l.specs.material];
                         if (rate == null) return "Enter the unit price manually — this type isn't auto-priced yet.";
                         if (area == null || mat == null) return "Pick shape, dimensions and material to auto-price.";
-                        return `${round2(area)} sq in × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? " × 1.5 powder-coat" : ""} = auto-priced (editable).`;
+                        const minNote = area <= ACC_MIN_SQIN ? " (100 sq in min)" : "";
+                        return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? " × 1.5 powder-coat" : ""} = auto-priced (editable).`;
                       })()}
                     </p>
                   </div>
