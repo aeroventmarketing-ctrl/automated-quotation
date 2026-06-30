@@ -754,6 +754,36 @@ function accessoryUnitPrice(specs: LineSpecs): number | null {
 /** A Ventilation Accessory that isn't the spring isolator (which prices itself). */
 const isAccessory = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && specs.type !== "Spring Vibration Isolator";
+/** Material label as shown in the description ("G.I." for Galvanized Iron). */
+function accMaterialLabel(material: string): string {
+  return material === "Galvanized Iron" ? "G.I." : material;
+}
+/**
+ * Accessory description, one detail per line:
+ *   Type / dimensions + unit / material / finish (oven-baked enamel or powder).
+ * Lines appear as the matching selections are made; the finish line follows the
+ * material. Round uses Ø diameter; square/rectangle uses L x W.
+ */
+function buildAccessoryDescription(specs: LineSpecs): string {
+  const lines: string[] = [];
+  if (specs.type) lines.push(specs.type);
+  const unit = specs.sizeUnit || "mm";
+  if (specs.shape === "Round") {
+    if (specs.sizeL) lines.push(`Ø${specs.sizeL} ${unit}`);
+  } else if (specs.sizeL && specs.sizeW) {
+    lines.push(`${specs.sizeL} x ${specs.sizeW} ${unit}`);
+  }
+  if (ACC_MATERIALS.includes(specs.material)) {
+    lines.push(`${accMaterialLabel(specs.material)} Material`);
+    // Finish follows the material: powder coat (when ticked & offered) else paint.
+    lines.push(
+      POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated
+        ? "Powder Coated"
+        : "Painted with Oven Baked Enamel",
+    );
+  }
+  return lines.join("\n");
+}
 
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
@@ -1055,6 +1085,7 @@ export function QuotationBuilder({
         return {
           ...l,
           specs,
+          descriptionSnapshot: buildAccessoryDescription(specs),
           ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
         };
       }),
