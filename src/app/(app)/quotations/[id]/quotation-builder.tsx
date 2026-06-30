@@ -71,6 +71,7 @@ interface LineSpecs {
   shape: string;
   sizeL: string;
   sizeW: string;
+  sizeUnit?: string; // dimension unit (mm/cm/inches) for sized accessories
   // Air-curtain client inputs (installation height + door width with units).
   acHeight?: number | null;
   acHeightUnit?: string;
@@ -649,6 +650,22 @@ function retagModel(model: string | null, type: string, bladeType: string, drive
   if (WALL_FAN_SUFFIX.test(model)) return null; // wall fan -> centrifugal, force re-selection
   return model.replace(/(AV\d+)(?:DIDWCFAB|DIDWCEB|CFABCAB|CEBCAB|CABSISW|CIEB|SIEB|CFAB|CEB)/i, `$1${resolveTag(type, bladeType, category)}`);
 }
+
+/** Sized accessory types that carry a unit-of-measurement dropdown (mm/cm/inches). */
+const UOM_TYPES = new Set([
+  "Air Grille",
+  "Bar Grille",
+  "Diffusers",
+  "Louvers",
+  "Weather hood",
+  "Backdraft Damper",
+  "Fire Damper",
+  "Gravity Shutter",
+  "OBVD",
+  "Smoke Damper",
+  "Volume Damper",
+]);
+const SIZE_UNITS = ["mm", "cm", "inches"];
 
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
@@ -1390,6 +1407,17 @@ export function QuotationBuilder({
                 <option value="">{variantLabel(c.type)}…</option>
                 {shapesFor(c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
               </Select>
+              {/* Unit of measurement for the dimensions (selected accessories). */}
+              {UOM_TYPES.has(c.type) && (
+                <Select
+                  value={c.sizeUnit || "mm"}
+                  disabled={!editable || !c.type}
+                  onChange={(e) => set({ sizeUnit: e.target.value })}
+                >
+                  <option value="" disabled>Unit of Measurement…</option>
+                  {SIZE_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
+                </Select>
+              )}
               {sizeMode(c.type, c.shape) === "capacity" ? (
                 <Select className="h-9" disabled={!editable || !c.type || !!c.mcRecommend} value={c.sizeL}
                   onChange={(e) => applyIsolator(l.id, { sizeL: e.target.value, sizeW: "" })}>
@@ -1399,15 +1427,15 @@ export function QuotationBuilder({
                   ))}
                 </Select>
               ) : sizeMode(c.type, c.shape) === "diameter" ? (
-                <Input className="h-9" type="number" step="any" placeholder="Diameter Ø (mm)"
+                <Input className="h-9" type="number" step="any" placeholder={`Diameter Ø (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                   disabled={!editable || !c.type} value={c.sizeL}
                   onChange={(e) => set({ sizeL: e.target.value, sizeW: "" })} />
               ) : (
                 <>
-                  <Input className="h-9" type="number" step="any" placeholder="L (mm)"
+                  <Input className="h-9" type="number" step="any" placeholder={`L (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                     disabled={!editable || !c.type} value={c.sizeL}
                     onChange={(e) => set({ sizeL: e.target.value })} />
-                  <Input className="h-9" type="number" step="any" placeholder="W (mm)"
+                  <Input className="h-9" type="number" step="any" placeholder={`W (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                     disabled={!editable || !c.type} value={c.sizeW}
                     onChange={(e) => set({ sizeW: e.target.value })} />
                 </>
