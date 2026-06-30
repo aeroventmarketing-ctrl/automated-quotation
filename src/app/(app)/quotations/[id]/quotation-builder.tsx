@@ -683,7 +683,8 @@ function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
   if (type === "Jet Nozzle Diffuser" || type === "Vent Cap" || type === "Wind Driven Roof Ventilator") return ["Round"];
   if (type === "Spring Vibration Isolator") return ["Foot Mounted", "Ceiling Mounted"];
-  return ["Round", "Square"];
+  // Air Terminals / Dampers: square and rectangle share the L×W size fields.
+  return ["Round", "Square/Rectangle"];
 }
 
 /** Label for the variant dropdown (mounting for isolators, otherwise shape). */
@@ -1411,7 +1412,8 @@ export function QuotationBuilder({
           {c.category === "Ventilation Accessories" ? (
             <>
               <Select
-                value={c.shape}
+                // Legacy lines stored "Square" before it became "Square/Rectangle".
+                value={c.shape === "Square" ? "Square/Rectangle" : c.shape}
                 disabled={!editable || !c.type || (isIsolator(c) && !!c.mcRecommend)}
                 onChange={(e) => (isIsolator(c) ? applyIsolator(l.id, { shape: e.target.value }) : set({ shape: e.target.value }))}
               >
