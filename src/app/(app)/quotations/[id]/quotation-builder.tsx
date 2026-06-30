@@ -721,13 +721,13 @@ const ACC_MATERIAL_FACTOR: Record<string, number> = {
 };
 /** Per-square-inch body rate for an accessory, or null if not auto-priced. */
 function accessoryRate(type: string, shape: string): number | null {
-  const priced =
-    ACC_GRILLE_TYPES.has(type) || ACC_DAMPER_TYPES.has(type) || type === "OBVD" || type === "Perforated Air Grille";
+  const isDamper = ACC_DAMPER_TYPES.has(type) || MOTORIZED_DAMPER_TYPES.has(type);
+  const priced = ACC_GRILLE_TYPES.has(type) || isDamper || type === "OBVD" || type === "Perforated Air Grille";
   if (!priced) return null;
   if (shape === "Round") return 10.42; // round grilles / dampers / diffusers
   if (type === "Perforated Air Grille") return 6; // perforated air grilles
   if (type === "OBVD") return 5;
-  if (ACC_DAMPER_TYPES.has(type)) return 8; // square / rectangular damper / volume
+  if (isDamper) return 8; // square / rectangular damper / volume (incl. motorized body)
   return 5; // square / rectangular grilles / louvers / diffusers
 }
 /** Accessory area in square inches (trade inch). Round = bounding square D×D. */
@@ -761,6 +761,49 @@ function accPowderFactor(type: string): number {
 function accFlatAdd(type: string): number {
   return type === "Fire Damper" ? 455 : 0;
 }
+
+// --- Motorized-damper actuators --------------------------------------------
+// Torque is chosen by the damper area: 310 sq inch per NM (pick the smallest NM
+// that covers the area). The model/price comes from the movement — open/close →
+// spring return, modulating → spring-return -SR, adjustable → non spring — at
+// the default 230 V (220 V). A damper over 1.5 m (1500 mm) on any side uses 2.
+const ACTUATOR_SQIN_PER_NM = 310;
+const SPRING_ACTUATOR: { nm: number; std: number; sr: number }[] = [
+  { nm: 2.5, std: 10502, sr: 14062 },
+  { nm: 4, std: 13657, sr: 17307 },
+  { nm: 10, std: 15685, sr: 19787 },
+  { nm: 20, std: 21048, sr: 24518 },
+  { nm: 30, std: 58769, sr: 56291 },
+];
+const NONSPRING_ACTUATOR: { nm: number; std: number; sr: number }[] = [
+  { nm: 2, std: 6963, sr: 7883 },
+  { nm: 5, std: 7842, sr: 10321 },
+  { nm: 10, std: 10096, sr: 12980 },
+  { nm: 20, std: 11898, sr: 12980 },
+  { nm: 40, std: 19934, sr: 21356 },
+];
+/** Price of one actuator for the given movement + damper area, or null. */
+function actuatorUnitPrice(movement: string, areaSqIn: number): number | null {
+  const ladder = movement === "adjustable" ? NONSPRING_ACTUATOR : SPRING_ACTUATOR;
+  const reqNm = areaSqIn / ACTUATOR_SQIN_PER_NM;
+  const pick = ladder.find((a) => a.nm >= reqNm - 1e-9) ?? ladder[ladder.length - 1];
+  return movement === "modulating" ? pick.sr : pick.std;
+}
+/** Number of actuators — 2 when the damper exceeds 1.5 m (1500 mm) on any side. */
+function actuatorQty(specs: LineSpecs): number {
+  const unit = specs.sizeUnit || "mm";
+  const toMm = (v: string) => (parseFloat(v) || 0) * (ACC_MM_PER_UNIT[unit] ?? 1);
+  const dims = specs.shape === "Round" ? [toMm(specs.sizeL)] : [toMm(specs.sizeL), toMm(specs.sizeW)];
+  return dims.some((d) => d > 1500) ? 2 : 1;
+}
+/** Total actuator cost (price × qty) for a motorized damper, 0 when N/A. */
+function accActuatorCost(specs: LineSpecs): number {
+  if (!MOTORIZED_DAMPER_TYPES.has(specs.type) || !specs.movement) return 0;
+  const area = accAreaSqIn(specs);
+  if (area == null) return 0;
+  const price = actuatorUnitPrice(specs.movement, area);
+  return price == null ? 0 : price * actuatorQty(specs);
+}
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
 function accessoryUnitPrice(specs: LineSpecs): number | null {
   const rate = accessoryRate(specs.type, specs.shape);
@@ -768,7 +811,7 @@ function accessoryUnitPrice(specs: LineSpecs): number | null {
   const mat = ACC_MATERIAL_FACTOR[specs.material];
   if (rate == null || area == null || mat == null) return null;
   const body = area * rate * mat * (specs.powderCoated ? accPowderFactor(specs.type) : 1);
-  return round2(body + accFlatAdd(specs.type));
+  return round2(body + accFlatAdd(specs.type) + accActuatorCost(specs));
 }
 /** A Ventilation Accessory that isn't the spring isolator (which prices itself). */
 const isAccessory = (specs: { category: string; type: string }): boolean =>
@@ -2198,7 +2241,16 @@ export function QuotationBuilder({
                         if (area == null || mat == null) return "Pick shape, dimensions and material to auto-price.";
                         const minNote = area <= ACC_MIN_SQIN ? " (100 sq in min)" : "";
                         const flat = accFlatAdd(l.specs.type);
-                        return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? ` × ${accPowderFactor(l.specs.type)} powder-coat` : ""}${flat ? ` + ${flat} fusible link` : ""} = auto-priced (editable).`;
+                        const isMotor = MOTORIZED_DAMPER_TYPES.has(l.specs.type);
+                        const actCost = accActuatorCost(l.specs);
+                        const actNote = isMotor
+                          ? l.specs.movement
+                            ? actCost
+                              ? ` + actuator ${round2(actCost)} (×${actuatorQty(l.specs)})`
+                              : ""
+                            : " — pick Movement to add the actuator"
+                          : "";
+                        return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? ` × ${accPowderFactor(l.specs.type)} powder-coat` : ""}${flat ? ` + ${flat} fusible link` : ""}${actNote} = auto-priced (editable).`;
                       })()}
                     </p>
                   </div>
