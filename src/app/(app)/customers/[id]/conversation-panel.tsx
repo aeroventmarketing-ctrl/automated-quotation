@@ -26,21 +26,26 @@ export interface ConversationView {
   createdAt: string;
 }
 
+export interface ConversationBoxData {
+  quoteNumber: string | null; // the quotation this box represents (null = general)
+  label: string;
+  conversations: ConversationView[];
+}
+
 const CHANNELS = ["Phone", "Email", "Viber", "Meeting", "SMS", "WhatsApp", "Other"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function ConversationPanel({
+/** One conversation box, representing a single quotation (or the general box). */
+function ConversationBox({
   customerId,
-  conversations,
-  quoteNumbers,
+  box,
   defaultContact,
   currentUserId,
   isAdmin,
 }: {
   customerId: string;
-  conversations: ConversationView[];
-  quoteNumbers: string[];
+  box: ConversationBoxData;
   defaultContact: string;
   currentUserId: string | null;
   isAdmin: boolean;
@@ -49,7 +54,6 @@ export function ConversationPanel({
   const [date, setDate] = useState(today());
   const [channel, setChannel] = useState("Phone");
   const [contactPerson, setContactPerson] = useState(defaultContact);
-  const [quoteNumber, setQuoteNumber] = useState("");
   const [nextFollowUp, setNextFollowUp] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -63,7 +67,14 @@ export function ConversationPanel({
     setBusy(true);
     setError(null);
     try {
-      await addConversation(customerId, { date, channel, contactPerson, message, quoteNumber, nextFollowUp });
+      await addConversation(customerId, {
+        date,
+        channel,
+        contactPerson,
+        message,
+        quoteNumber: box.quoteNumber ?? "",
+        nextFollowUp,
+      });
       setMessage("");
       setNextFollowUp("");
       setDate(today());
@@ -87,13 +98,19 @@ export function ConversationPanel({
     }
   }
 
-  // Newest first.
-  const sorted = [...conversations].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const sorted = [...box.conversations].sort(
+    (a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt),
+  );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Conversation history</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base">
+          {box.quoteNumber ? <Badge variant="secondary">{box.label}</Badge> : <span>{box.label}</span>}
+          <span className="text-xs font-normal text-muted-foreground">
+            {sorted.length} conversation{sorted.length === 1 ? "" : "s"}
+          </span>
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* New entry */}
@@ -111,13 +128,6 @@ export function ConversationPanel({
           <div className="space-y-1">
             <Label>Spoke with</Label>
             <Input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} placeholder="Contact person" />
-          </div>
-          <div className="space-y-1">
-            <Label>Quotation #</Label>
-            <Select value={quoteNumber} onChange={(e) => setQuoteNumber(e.target.value)}>
-              <option value="">— none —</option>
-              {quoteNumbers.map((q) => (<option key={q} value={q}>{q}</option>))}
-            </Select>
           </div>
           <div className="space-y-1">
             <Label>Next follow-up</Label>
@@ -152,7 +162,6 @@ export function ConversationPanel({
                   <span className="font-medium">{formatDate(new Date(c.date))}</span>
                   <Badge variant="outline">{c.channel}</Badge>
                   {c.contactPerson && <span className="text-muted-foreground">with {c.contactPerson}</span>}
-                  {c.quoteNumber && <Badge variant="secondary">{c.quoteNumber}</Badge>}
                   <span className="ml-auto flex items-center gap-2">
                     {(isAdmin || c.loggedById === currentUserId) && (
                       <Button
@@ -186,5 +195,38 @@ export function ConversationPanel({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function ConversationPanel({
+  customerId,
+  boxes,
+  defaultContact,
+  currentUserId,
+  isAdmin,
+}: {
+  customerId: string;
+  boxes: ConversationBoxData[];
+  defaultContact: string;
+  currentUserId: string | null;
+  isAdmin: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold">Conversation history</h2>
+      <p className="text-sm text-muted-foreground">
+        One box per quotation — log each follow-up under the quote it relates to.
+      </p>
+      {boxes.map((box) => (
+        <ConversationBox
+          key={box.quoteNumber ?? "__general__"}
+          customerId={customerId}
+          box={box}
+          defaultContact={defaultContact}
+          currentUserId={currentUserId}
+          isAdmin={isAdmin}
+        />
+      ))}
+    </div>
   );
 }

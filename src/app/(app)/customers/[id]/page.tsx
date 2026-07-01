@@ -10,7 +10,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LABEL } from "@/lib/sale";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
 import { AccountPanel } from "./account-panel";
-import { ConversationPanel } from "./conversation-panel";
+import { ConversationPanel, type ConversationBoxData } from "./conversation-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +90,37 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   // The current sales in-charge, or an admin, may transfer the account.
   const canTransfer = isAdmin(viewer) || (!!owner && owner.userId === viewer?.id);
   const salespeople = users.filter((u) => u.id !== owner?.userId);
+
+  // Conversation log split into one box per quotation. Each conversation is
+  // filed under the quote it relates to; anything without a matching quote (or
+  // logged before this split) collects in a "General" box.
+  const conversations = accountData?.conversations ?? [];
+  const toView = (c: (typeof conversations)[number]) => ({
+    id: c.id,
+    date: c.date,
+    channel: c.channel,
+    contactPerson: c.contactPerson,
+    message: c.message,
+    quoteNumber: c.quoteNumber,
+    nextFollowUp: c.nextFollowUp,
+    loggedById: c.loggedById,
+    loggedByName: c.loggedByName,
+    createdAt: c.createdAt,
+  });
+  const quoteNumbers = new Set(quotes.map((q) => q.quoteNumber));
+  const conversationBoxes: ConversationBoxData[] = quotes.map((q) => ({
+    quoteNumber: q.quoteNumber,
+    label: q.quoteNumber,
+    conversations: conversations.filter((c) => c.quoteNumber === q.quoteNumber).map(toView),
+  }));
+  const generalConversations = conversations.filter((c) => !c.quoteNumber || !quoteNumbers.has(c.quoteNumber));
+  if (generalConversations.length > 0 || conversationBoxes.length === 0) {
+    conversationBoxes.push({
+      quoteNumber: null,
+      label: "General (no quotation)",
+      conversations: generalConversations.map(toView),
+    });
+  }
 
   const detail = (label: string, value: string | null | undefined) => (
     <div>
@@ -287,22 +318,10 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
         </CardContent>
       </Card>
 
-      {/* Conversation history (follow-ups) */}
+      {/* Conversation history (follow-ups) — one box per quotation */}
       <ConversationPanel
         customerId={customer.id}
-        conversations={(accountData?.conversations ?? []).map((c) => ({
-          id: c.id,
-          date: c.date,
-          channel: c.channel,
-          contactPerson: c.contactPerson,
-          message: c.message,
-          quoteNumber: c.quoteNumber,
-          nextFollowUp: c.nextFollowUp,
-          loggedById: c.loggedById,
-          loggedByName: c.loggedByName,
-          createdAt: c.createdAt,
-        }))}
-        quoteNumbers={quotes.map((q) => q.quoteNumber)}
+        boxes={conversationBoxes}
         defaultContact={customer.contactName ?? ""}
         currentUserId={viewer?.id ?? null}
         isAdmin={isAdmin(viewer)}
