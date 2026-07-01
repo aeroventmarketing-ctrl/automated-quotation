@@ -806,9 +806,12 @@ function accFlatAdd(type: string): number {
 //   open/close        → spring return,      220 V
 //   modulating        → non-spring SR model, 24 V
 //   adjustable volume → non spring return,  220 V
-// Voltage is a spec label only (it doesn't change the table price). A damper
-// over 1.5 m (1500 mm) on any side uses 2 actuators.
+// Voltage is a spec label only (it doesn't change the table price). A damper is
+// sectioned so no piece exceeds 1.5 m (1500 mm) on a side — each dimension is
+// split into equal parts (ceil(dim / 1.5 m)) — and one actuator, sized to a
+// single section's area, is fitted per section.
 const ACTUATOR_SQIN_PER_NM = 310;
+const ACTUATOR_MAX_SECTION_MM = 1500;
 const SPRING_ACTUATOR: { nm: number; std: number; sr: number }[] = [
   { nm: 2.5, std: 10502, sr: 14062 },
   { nm: 4, std: 13657, sr: 17307 },
@@ -851,20 +854,48 @@ function actuatorModelCode(movement: string, areaSqIn: number): string | null {
   const table = ACTUATOR_MODEL_CODES[movement];
   return table?.find((r) => areaSqIn <= r.max + 1e-9)?.code ?? null;
 }
-/** Number of actuators — 2 when the damper exceeds 1.5 m (1500 mm) on any side. */
-function actuatorQty(specs: LineSpecs): number {
+/**
+ * Section a motorized damper so no piece exceeds 1.5 m on a side: split each
+ * dimension into equal parts (ceil(dim / 1.5 m)). Returns the number of sections
+ * (one actuator each) and the area of a single section in trade sq in (25 mm =
+ * 1 in). Round dampers aren't gridded — one actuator sized to the full area.
+ */
+function damperSectioning(specs: LineSpecs): { sections: number; sectionAreaSqIn: number | null } {
   const unit = specs.sizeUnit || "mm";
-  const toMm = (v: string) => (parseFloat(v) || 0) * (ACC_MM_PER_UNIT[unit] ?? 1);
-  const dims = specs.shape === "Round" ? [toMm(specs.sizeL)] : [toMm(specs.sizeL), toMm(specs.sizeW)];
-  return dims.some((d) => d > 1500) ? 2 : 1;
+  const toMm = (v: string): number | null => {
+    const n = parseFloat(v);
+    return !v || Number.isNaN(n) ? null : n * (ACC_MM_PER_UNIT[unit] ?? 1);
+  };
+  const mmToIn = (mm: number) => mm / 25;
+  const partsOf = (mm: number) => Math.max(1, Math.ceil(mm / ACTUATOR_MAX_SECTION_MM));
+  if (specs.shape === "Round") {
+    const d = toMm(specs.sizeL);
+    if (d == null) return { sections: 1, sectionAreaSqIn: null };
+    const din = mmToIn(d);
+    return { sections: 1, sectionAreaSqIn: din * din };
+  }
+  const L = toMm(specs.sizeL);
+  const W = toMm(specs.sizeW);
+  if (L == null || W == null) return { sections: 1, sectionAreaSqIn: null };
+  const pL = partsOf(L);
+  const pW = partsOf(W);
+  return { sections: pL * pW, sectionAreaSqIn: mmToIn(L / pL) * mmToIn(W / pW) };
 }
-/** Total actuator cost (price × qty) for a motorized damper, 0 when N/A. */
+/** Number of actuators fitted to a motorized damper (one per 1.5 m section). */
+function actuatorQty(specs: LineSpecs): number {
+  return damperSectioning(specs).sections;
+}
+/**
+ * Total actuator cost for a motorized damper (0 when N/A): one actuator sized to
+ * a single section's area — the next-higher torque that covers it — times the
+ * number of sections.
+ */
 function accActuatorCost(specs: LineSpecs): number {
   if (!MOTORIZED_DAMPER_TYPES.has(specs.type) || !specs.movement) return 0;
-  const area = accAreaSqIn(specs);
-  if (area == null) return 0;
-  const price = actuatorUnitPrice(specs.movement, area);
-  return price == null ? 0 : price * actuatorQty(specs);
+  const { sections, sectionAreaSqIn } = damperSectioning(specs);
+  if (sectionAreaSqIn == null) return 0;
+  const price = actuatorUnitPrice(specs.movement, sectionAreaSqIn);
+  return price == null ? 0 : price * sections;
 }
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
 function accessoryUnitPrice(specs: LineSpecs): number | null {
@@ -908,15 +939,15 @@ function buildAccessoryDescription(specs: LineSpecs): string {
       );
     }
   }
-  // Motorized dampers: spell out the actuator — operation, model code (or the
-  // model-type name when the area is off the table), voltage, and the two-actuator
-  // count when the damper is over 1.5 m on a side.
+  // Motorized dampers: spell out the actuator — operation, model code sized to a
+  // single 1.5 m section (or the model-type name when the section area is off the
+  // table), voltage, and the section count (one actuator each).
   if (MOTORIZED_DAMPER_TYPES.has(specs.type) && specs.movement) {
     const op = MOVEMENT_LABEL[specs.movement] ?? specs.movement;
-    const area = accAreaSqIn(specs);
-    const model = (area != null ? actuatorModelCode(specs.movement, area) : null) ?? actuatorModelLabel(specs.movement);
-    const qty = actuatorQty(specs);
-    const pcs = qty > 1 ? ` (${qty} pcs)` : "";
+    const { sections, sectionAreaSqIn } = damperSectioning(specs);
+    const code = sectionAreaSqIn != null ? actuatorModelCode(specs.movement, sectionAreaSqIn) : null;
+    const model = code ?? actuatorModelLabel(specs.movement);
+    const pcs = sections > 1 ? ` (${sections} pcs)` : "";
     lines.push(`Motorized: ${op}, ${model}, ${actuatorVoltage(specs.movement)}${pcs}`);
   }
   return lines.join("\n");
