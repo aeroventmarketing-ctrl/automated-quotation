@@ -946,8 +946,9 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   }
   if (ACC_MATERIALS.includes(specs.material)) {
     lines.push(`${accMaterialLabel(specs.material)} Material`);
-    // Finish follows the material — but stainless steel 304 carries no finish.
-    if (specs.material !== "Stainless Steel 304") {
+    // Finish follows the material — but stainless steel 304 carries no finish,
+    // and motorized dampers carry none either (the actuator spec follows instead).
+    if (specs.material !== "Stainless Steel 304" && !MOTORIZED_DAMPER_TYPES.has(specs.type)) {
       lines.push(
         POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated
           ? "Powder Coated White"
