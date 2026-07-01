@@ -842,8 +842,8 @@ function actuatorUnitPrice(movement: string, areaSqIn: number): number {
   return actuatorPick(movement, areaSqIn).price;
 }
 /** Actuator supply voltage by operation (label only — does not change price). */
-const actuatorVoltage = (movement: string): string => (movement === "modulating" ? "24v" : "220v");
-/** Actuator model-type name by operation — the fallback when no specific code fits. */
+const actuatorVoltage = (movement: string): string => (movement === "modulating" ? "24V" : "230V");
+/** Actuator model-type name by operation (shown on the quote line). */
 const actuatorModelLabel = (movement: string): string =>
   movement === "open/close" ? "Spring Return" : movement === "modulating" ? "SR Model" : "Non Spring Return";
 // Actuator model codes by operation and damper area (the sheet's own breakpoints:
@@ -944,15 +944,14 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   } else if (specs.sizeL && specs.sizeW) {
     lines.push(`${specs.sizeL} x ${specs.sizeW} ${unit}`);
   }
-  // Motorized dampers: the actuator (model / voltage) sits above the material —
-  // model code sized to a single 1.5 m section, or the model-type name when the
-  // section area is off the table; the section count follows when there's >1.
+  // Motorized dampers: the actuator (model type / voltage) sits above the
+  // material, e.g. "Spring Return / 230V". The section count follows when the
+  // damper splits into more than one 1.5 m section. (The specific model code
+  // stays in the internal price hint, not the customer-facing description.)
   if (MOTORIZED_DAMPER_TYPES.has(specs.type) && specs.movement) {
-    const { sections, sectionAreaSqIn } = damperSectioning(specs);
-    const code = sectionAreaSqIn != null ? actuatorModelCode(specs.movement, sectionAreaSqIn) : null;
-    const model = code ?? actuatorModelLabel(specs.movement);
+    const { sections } = damperSectioning(specs);
     const pcs = sections > 1 ? ` (${sections} pcs)` : "";
-    lines.push(`${model} / ${actuatorVoltage(specs.movement)}${pcs}`);
+    lines.push(`${actuatorModelLabel(specs.movement)} / ${actuatorVoltage(specs.movement)}${pcs}`);
   }
   if (ACC_MATERIALS.includes(specs.material)) {
     lines.push(`${accMaterialLabel(specs.material)} Material`);
