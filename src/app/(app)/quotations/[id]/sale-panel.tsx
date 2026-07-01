@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Check, Upload, Trash2, Plus, FileText } from "lucide-react";
+import { Check, Upload, Trash2, Plus, FileText, Download } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { recordSale, clearSale } from "../actions";
 import {
@@ -121,7 +121,10 @@ export function SalePanel({
     }
   }
 
+  // View opens the file inline; download forces a save with its original name.
   const docLink = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
+  const docDownload = (d: SaleDoc) =>
+    `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
 
   return (
     <Card>
@@ -169,6 +172,10 @@ export function SalePanel({
                 className="inline-flex items-center gap-1 text-sm text-primary underline">
                 <FileText className="h-4 w-4" /> {po.name}
               </a>
+              <a href={docDownload(po)} className="text-muted-foreground hover:text-primary"
+                title="Download PO" aria-label="Download PO">
+                <Download className="h-4 w-4" />
+              </a>
               {canEdit && (
                 <Button variant="ghost" size="sm" onClick={() => setPo(null)} disabled={busy}>
                   <Trash2 className="h-4 w-4" />
@@ -207,10 +214,16 @@ export function SalePanel({
                 onChange={(e) => updatePayment(p.id, { date: e.target.value })} />
               <div className="md:col-span-2">
                 {p.proof ? (
-                  <a href={docLink(p.proof)} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary underline">
-                    <FileText className="h-3.5 w-3.5" /> proof
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <a href={docLink(p.proof)} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary underline">
+                      <FileText className="h-3.5 w-3.5" /> proof
+                    </a>
+                    <a href={docDownload(p.proof)} className="text-muted-foreground hover:text-primary"
+                      title="Download proof" aria-label="Download proof">
+                      <Download className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
                 ) : canEdit ? (
                   <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-primary underline">
                     <Upload className="h-3.5 w-3.5" /> proof

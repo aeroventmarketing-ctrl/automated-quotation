@@ -27,10 +27,20 @@ export async function uploadToStorage(path: string, bytes: Uint8Array, contentTy
   if (retry.error) throw retry.error;
 }
 
-/** A short-lived signed URL for a stored object (for viewing/downloading). */
-export async function signedUrl(path: string, expiresInSeconds = 120): Promise<string> {
+/**
+ * A short-lived signed URL for a stored object. Pass `download` to force a
+ * download (a filename string sets the saved name; `true` uses the stored one);
+ * omit it to view the file inline in the browser.
+ */
+export async function signedUrl(
+  path: string,
+  expiresInSeconds = 120,
+  download?: string | boolean,
+): Promise<string> {
   const supabase = createServiceClient();
-  const { data, error } = await supabase.storage.from(config.storageBucket).createSignedUrl(path, expiresInSeconds);
+  const { data, error } = await supabase.storage
+    .from(config.storageBucket)
+    .createSignedUrl(path, expiresInSeconds, download ? { download } : undefined);
   if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
   return data.signedUrl;
 }

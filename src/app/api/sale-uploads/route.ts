@@ -37,14 +37,21 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** GET ?path=... → redirect to a short-lived signed URL for the stored file. */
+/**
+ * GET ?path=... → redirect to a short-lived signed URL for the stored file.
+ * Add ?download=1 (optionally &name=…) to force a download instead of viewing
+ * the file inline.
+ */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const path = req.nextUrl.searchParams.get("path");
   if (!path) return NextResponse.json({ error: "path is required" }, { status: 400 });
+  const wantsDownload = req.nextUrl.searchParams.get("download") !== null;
+  const name = req.nextUrl.searchParams.get("name");
+  const download = wantsDownload ? (name ?? true) : undefined;
   try {
-    return NextResponse.redirect(await signedUrl(path));
+    return NextResponse.redirect(await signedUrl(path, 120, download));
   } catch (err) {
     console.error("sale download error", err);
     return NextResponse.json({ error: "Could not open the file." }, { status: 502 });
