@@ -826,14 +826,20 @@ const NONSPRING_ACTUATOR: { nm: number; std: number; sr: number }[] = [
   { nm: 20, std: 11898, sr: 12980 },
   { nm: 40, std: 19934, sr: 21356 },
 ];
-/** Price of one actuator for the given operation + damper area, or null. */
-function actuatorUnitPrice(movement: string, areaSqIn: number): number | null {
-  // open/close → spring-return ladder; modulating / adjustable → non-spring
-  // ladder, with modulating on the SR column (24 V) and adjustable on std.
+/**
+ * The actuator chosen for an operation + section area: its torque (NM) and unit
+ * price. open/close → spring-return ladder; modulating / adjustable → non-spring
+ * ladder, with modulating on the SR column (24 V) and adjustable on std.
+ */
+function actuatorPick(movement: string, areaSqIn: number): { nm: number; price: number } {
   const ladder = movement === "open/close" ? SPRING_ACTUATOR : NONSPRING_ACTUATOR;
   const reqNm = areaSqIn / ACTUATOR_SQIN_PER_NM;
   const pick = ladder.find((a) => a.nm >= reqNm - 1e-9) ?? ladder[ladder.length - 1];
-  return movement === "modulating" ? pick.sr : pick.std;
+  return { nm: pick.nm, price: movement === "modulating" ? pick.sr : pick.std };
+}
+/** Price of one actuator for the given operation + section area. */
+function actuatorUnitPrice(movement: string, areaSqIn: number): number {
+  return actuatorPick(movement, areaSqIn).price;
 }
 /** Actuator supply voltage by operation (label only — does not change price). */
 const actuatorVoltage = (movement: string): string => (movement === "modulating" ? "24V" : "230V");
@@ -881,10 +887,6 @@ function damperSectioning(specs: LineSpecs): { sections: number; sectionAreaSqIn
   const pW = partsOf(W);
   return { sections: pL * pW, sectionAreaSqIn: mmToIn(L / pL) * mmToIn(W / pW) };
 }
-/** Number of actuators fitted to a motorized damper (one per 1.5 m section). */
-function actuatorQty(specs: LineSpecs): number {
-  return damperSectioning(specs).sections;
-}
 /**
  * Total actuator cost for a motorized damper (0 when N/A): one actuator sized to
  * a single section's area — the next-higher torque that covers it — times the
@@ -894,8 +896,22 @@ function accActuatorCost(specs: LineSpecs): number {
   if (!MOTORIZED_DAMPER_TYPES.has(specs.type) || !specs.movement) return 0;
   const { sections, sectionAreaSqIn } = damperSectioning(specs);
   if (sectionAreaSqIn == null) return 0;
-  const price = actuatorUnitPrice(specs.movement, sectionAreaSqIn);
-  return price == null ? 0 : price * sections;
+  return round2(actuatorUnitPrice(specs.movement, sectionAreaSqIn) * sections);
+}
+/**
+ * Actuator summary for a motorized-damper line — torque, model code (or type
+ * name), voltage, per-section count and cost — for the price hint / description.
+ * Null until an operation and dimensions are set.
+ */
+function actuatorSummary(specs: LineSpecs): {
+  sections: number; nm: number; model: string; voltage: string; unit: number; total: number;
+} | null {
+  if (!MOTORIZED_DAMPER_TYPES.has(specs.type) || !specs.movement) return null;
+  const { sections, sectionAreaSqIn } = damperSectioning(specs);
+  if (sectionAreaSqIn == null) return null;
+  const { nm, price } = actuatorPick(specs.movement, sectionAreaSqIn);
+  const model = actuatorModelCode(specs.movement, sectionAreaSqIn) ?? actuatorModelLabel(specs.movement);
+  return { sections, nm, model, voltage: actuatorVoltage(specs.movement), unit: price, total: round2(price * sections) };
 }
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
 function accessoryUnitPrice(specs: LineSpecs): number | null {
@@ -2378,11 +2394,11 @@ export function QuotationBuilder({
                         const minNote = area <= ACC_MIN_SQIN ? " (100 sq in min)" : "";
                         const flat = accFlatAdd(l.specs.type);
                         const isMotor = MOTORIZED_DAMPER_TYPES.has(l.specs.type);
-                        const actCost = accActuatorCost(l.specs);
+                        const act = actuatorSummary(l.specs);
                         const actNote = isMotor
                           ? l.specs.movement
-                            ? actCost
-                              ? ` + actuator ${round2(actCost)} (×${actuatorQty(l.specs)})`
+                            ? act
+                              ? ` + actuator ${act.total} (${act.nm}NM ${act.model}, ${act.voltage}, ×${act.sections})`
                               : ""
                             : " — pick Operation to add the actuator"
                           : "";
