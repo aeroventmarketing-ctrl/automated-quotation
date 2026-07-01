@@ -24,6 +24,7 @@ export default async function InquiriesPage() {
   const rows = inquiries.map((inq) => ({
     id: inq.id,
     company: inq.customer.company,
+    customerId: inq.customerId,
     createdByName: inq.createdBy.name,
     source: inq.source,
     items: inq._count.items,

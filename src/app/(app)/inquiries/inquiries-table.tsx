@@ -15,6 +15,7 @@ import { InquiryActions } from "./inquiry-actions";
 export interface InquiryRow {
   id: string;
   company: string;
+  customerId: string;
   createdByName: string;
   source: string;
   items: number;
@@ -146,14 +147,14 @@ export function InquiriesTable({ rows, admin }: { rows: InquiryRow[]; admin: boo
             <TableHead>Quotes</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Status</TableHead>
-            {admin && <TableHead className="text-right">Actions</TableHead>}
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {filtered.map((inq) => (
             <TableRow key={inq.id} className="cursor-pointer">
               <TableCell>
-                <Link href={`/inquiries/${inq.id}`} className="font-medium hover:underline">
+                <Link href={`/customers/${inq.customerId}`} className="font-medium hover:underline" title="View client profile">
                   {inq.company}
                 </Link>
                 <div className="text-xs text-muted-foreground">by {inq.createdByName}</div>
@@ -165,16 +166,14 @@ export function InquiriesTable({ rows, admin }: { rows: InquiryRow[]; admin: boo
               <TableCell>
                 <InquiryStatusBadge status={inq.status} />
               </TableCell>
-              {admin && (
-                <TableCell>
-                  <InquiryActions id={inq.id} label={inq.company} />
-                </TableCell>
-              )}
+              <TableCell>
+                <InquiryActions id={inq.id} label={inq.company} admin={admin} />
+              </TableCell>
             </TableRow>
           ))}
           {filtered.length === 0 && (
             <TableRow>
-              <TableCell colSpan={admin ? 7 : 6} className="text-center text-muted-foreground">
+              <TableCell colSpan={7} className="text-center text-muted-foreground">
                 {rows.length === 0 ? "No inquiries yet." : "No inquiries match your search."}
               </TableCell>
             </TableRow>
