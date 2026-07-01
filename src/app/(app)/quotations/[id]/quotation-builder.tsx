@@ -919,8 +919,20 @@ function accessoryUnitPrice(specs: LineSpecs): number | null {
   const area = accBilledAreaSqIn(specs);
   const mat = ACC_MATERIAL_FACTOR[specs.material];
   if (rate == null || area == null || mat == null) return null;
-  const body = area * rate * mat * (specs.powderCoated ? accPowderFactor(specs.type) : 1);
+  const body = accessoryBody(specs, area, rate, mat);
   return round2(body + accFlatAdd(specs.type) + accActuatorCost(specs));
+}
+/**
+ * Body price. Powder coating is applied on a GI base (area × rate × 1 × powder
+ * factor); aluminum adds its material premium on top (area × rate × 2), e.g. a
+ * powder-coated aluminum grille = area × rate × 2 + area × rate × 1 × powder.
+ * Un-coated items are simply area × rate × material factor.
+ */
+function accessoryBody(specs: LineSpecs, area: number, rate: number, mat: number): number {
+  if (!specs.powderCoated) return area * rate * mat;
+  const powder = area * rate * accPowderFactor(specs.type); // GI base × powder factor
+  const aluPremium = specs.material === "Aluminum" ? area * rate * 2 : 0;
+  return powder + aluPremium;
 }
 /** A Ventilation Accessory that isn't the spring isolator (which prices itself). */
 const isAccessory = (specs: { category: string; type: string }): boolean =>
@@ -2401,7 +2413,11 @@ export function QuotationBuilder({
                               : ""
                             : " — pick Operation to add the actuator"
                           : "";
-                        return `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})${l.specs.powderCoated ? ` × ${accPowderFactor(l.specs.type)} powder-coat` : ""}${flat ? ` + ${flat} fusible link` : ""}${actNote} = auto-priced (editable).`;
+                        const pf = accPowderFactor(l.specs.type);
+                        const bodyDesc = l.specs.powderCoated
+                          ? `${round2(area)} sq in${minNote} × ${rate} × ${pf} powder-coat (GI base)${l.specs.material === "Aluminum" ? ` + area × ${rate} × 2 aluminum` : ""}`
+                          : `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})`;
+                        return `${bodyDesc}${flat ? ` + ${flat} fusible link` : ""}${actNote} = auto-priced (editable).`;
                       })()}
                     </p>
                   </div>
