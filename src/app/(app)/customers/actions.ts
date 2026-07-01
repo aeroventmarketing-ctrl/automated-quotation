@@ -2,9 +2,17 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { nextQuoteNumber } from "@/lib/quote";
+import { config } from "@/lib/config";
+import {
+  ensureBuiltinTemplates,
+  RETAINED_TEMPLATE_LAYOUT_KEYS,
+  sortTemplatesByPickerOrder,
+} from "@/lib/ensure-templates";
 import {
   getAccountsRegistry,
   saveAccountsRegistry,
@@ -71,6 +79,68 @@ export async function transferAccount(customerId: string, toUserId: string) {
   accounts[customerId] = data;
   await saveAccountsRegistry(accounts);
   revalidatePath(`/customers/${customerId}`);
+}
+
+/**
+ * Start a new quotation for a client from the profile. Quotations attach to an
+ * inquiry, so the newest inquiry is reused (or a fresh one is created if the
+ * client has none). A blank DRAFT quote is created on the default Fans and
+ * Blowers template and the builder is opened so products can be added.
+ */
+export async function addQuotation(customerId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+  if (!customer) throw new Error("Customer not found");
+
+  let inquiry = await prisma.inquiry.findFirst({
+    where: { customerId },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!inquiry) {
+    inquiry = await prisma.inquiry.create({
+      data: { customerId, source: "OTHER", status: "DRAFTING", createdById: user.id },
+    });
+  }
+
+  await ensureBuiltinTemplates();
+  const templates = await prisma.quotationTemplate.findMany({
+    where: { active: true, layoutKey: { in: [...RETAINED_TEMPLATE_LAYOUT_KEYS] } },
+  });
+  const template = sortTemplatesByPickerOrder(templates)[0];
+  if (!template) throw new Error("No quotation template available — seed templates first.");
+  const tplConfig = (template.config as Record<string, unknown>) ?? {};
+  const terms = typeof tplConfig.terms === "string" ? tplConfig.terms : null;
+
+  const validUntil = new Date();
+  validUntil.setDate(validUntil.getDate() + 7);
+
+  const quotation = await prisma.$transaction(async (tx) => {
+    const quoteNumber = await nextQuoteNumber(tx, user.salesCode ?? "");
+    return tx.quotation.create({
+      data: {
+        inquiryId: inquiry!.id,
+        quoteNumber,
+        templateId: template.id,
+        status: "DRAFT",
+        vatMode: "INCLUSIVE",
+        discountPct: 0,
+        headerUnits: { capacity: "cfm", pressure: "in-w.g.", motor: "HP" },
+        projectName: inquiry!.projectName ?? undefined,
+        subtotal: 0,
+        vat: 0,
+        total: 0,
+        currency: config.defaultCurrency,
+        validUntil,
+        terms,
+        preparedById: user.id,
+      },
+    });
+  });
+
+  revalidatePath(`/customers/${customerId}`);
+  redirect(`/quotations/${quotation.id}`);
 }
 
 const conversationSchema = z.object({

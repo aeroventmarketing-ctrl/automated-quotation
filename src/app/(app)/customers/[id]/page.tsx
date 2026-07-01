@@ -8,7 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LABEL } from "@/lib/sale";
+import { Plus } from "lucide-react";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
+import { addQuotation } from "../actions";
 import { AccountPanel } from "./account-panel";
 import { ConversationPanel, type ConversationBoxData } from "./conversation-panel";
 
@@ -242,7 +244,15 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
 
       {/* Quotation history (all quotes) */}
       <Card>
-        <CardHeader><CardTitle>Quotation history</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+          <CardTitle>Quotation history</CardTitle>
+          <form action={addQuotation.bind(null, customer.id)}>
+            <Button type="submit" size="sm">
+              <Plus className="h-4 w-4" />
+              Add quotation
+            </Button>
+          </form>
+        </CardHeader>
         <CardContent className="pt-0">
           <Table>
             <TableHeader>
