@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/db";
-import { ensureKdkTemplate } from "@/lib/ensure-templates";
+import { ensureBuiltinTemplates } from "@/lib/ensure-templates";
 import { TemplatesManager } from "./templates-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminTemplatesPage() {
-  await ensureKdkTemplate();
+  await ensureBuiltinTemplates();
   const templates = await prisma.quotationTemplate.findMany({ orderBy: { name: "asc" } });
   return (
     <TemplatesManager

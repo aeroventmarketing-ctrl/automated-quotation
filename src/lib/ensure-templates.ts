@@ -10,7 +10,10 @@ export const KDK_NOTE = "All units are made of high quality materials.";
  * layout and KDK. The Government / Detailed / Budgetary / Export layouts are
  * retired — matched by layoutKey so admin-renamed display names still resolve.
  */
-export const RETAINED_TEMPLATE_LAYOUT_KEYS = ["standard", "kdk"] as const;
+export const RETAINED_TEMPLATE_LAYOUT_KEYS = ["standard", "kdk", "air_terminals"] as const;
+
+/** Short footer note for the Air Terminals and Ducts template. */
+export const AIR_TERMINALS_NOTE = "All units are made of high quality materials.";
 
 /**
  * The long Standard (Fans and Blowers) note. If it ever ended up on the KDK
@@ -62,4 +65,39 @@ export async function ensureKdkTemplate(): Promise<void> {
       data: { config: patch as Prisma.InputJsonObject },
     });
   }
+}
+
+/**
+ * Ensure the built-in "Air Terminals and Ducts" quotation template exists with
+ * its terms and short note. Created once if missing; an existing template only
+ * has missing terms backfilled (any admin-edited config is otherwise preserved).
+ */
+export async function ensureAirTerminalsTemplate(): Promise<void> {
+  const baseConfig = {
+    accent: "#1d4ed8",
+    showSpecs: true,
+    showTerms: true,
+    terms: COMPANY.airTerminalsTerms,
+    specNote: AIR_TERMINALS_NOTE,
+  };
+  const existing = await prisma.quotationTemplate.findUnique({ where: { layoutKey: "air_terminals" } });
+  if (!existing) {
+    await prisma.quotationTemplate.create({
+      data: { layoutKey: "air_terminals", name: "Air Terminals and Ducts", config: baseConfig, active: true },
+    });
+    return;
+  }
+  const config = (existing.config as Record<string, unknown>) ?? {};
+  if (typeof config.terms !== "string" || !config.terms) {
+    await prisma.quotationTemplate.update({
+      where: { layoutKey: "air_terminals" },
+      data: { config: { ...config, terms: COMPANY.airTerminalsTerms } as Prisma.InputJsonObject },
+    });
+  }
+}
+
+/** Ensure all built-in templates (KDK + Air Terminals and Ducts) exist. */
+export async function ensureBuiltinTemplates(): Promise<void> {
+  await ensureKdkTemplate();
+  await ensureAirTerminalsTemplate();
 }

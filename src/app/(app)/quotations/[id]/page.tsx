@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
-import { ensureKdkTemplate, RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
+import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { saleFromClassification } from "@/lib/sale";
 
@@ -13,7 +13,7 @@ const num = (v: unknown): number | null =>
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   // Make sure the built-in "KDK" template is available in the picker.
-  await ensureKdkTemplate();
+  await ensureBuiltinTemplates();
   const [quotation, templates, user, catItems] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },

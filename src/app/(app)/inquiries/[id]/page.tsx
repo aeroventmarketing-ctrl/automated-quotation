@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { InquiryWorkspace } from "./inquiry-workspace";
-import { RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
+import { RETAINED_TEMPLATE_LAYOUT_KEYS, ensureBuiltinTemplates } from "@/lib/ensure-templates";
 
 export const dynamic = "force-dynamic";
 
 export default async function InquiryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await ensureBuiltinTemplates(); // make sure the built-in templates are in the picker
   const [inquiry, catalogue, templates] = await Promise.all([
     prisma.inquiry.findUnique({
       where: { id },
