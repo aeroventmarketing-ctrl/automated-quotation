@@ -833,10 +833,24 @@ function actuatorUnitPrice(movement: string, areaSqIn: number): number | null {
   return movement === "modulating" ? pick.sr : pick.std;
 }
 /** Actuator supply voltage by operation (label only — does not change price). */
-const actuatorVoltage = (movement: string): string => (movement === "modulating" ? "24V" : "220V");
-/** Actuator model name by operation, as it should read on the quote. */
+const actuatorVoltage = (movement: string): string => (movement === "modulating" ? "24V" : "230V");
+/** Actuator model-type name by operation — the fallback when no specific code fits. */
 const actuatorModelLabel = (movement: string): string =>
   movement === "open/close" ? "Spring Return" : movement === "modulating" ? "SR Model" : "Non Spring Return";
+// Actuator model codes by operation and damper area (the sheet's own breakpoints:
+// ≤620 sq in and ≤1240 sq in). Voltage is fixed per operation — open/close and
+// adjustable at 230 V, modulating at 24 V — so only that voltage's code is used.
+// Dampers larger than 1240 sq in have no listed code (fall back to the type name).
+const ACTUATOR_MODEL_CODES: Record<string, { max: number; code: string }[]> = {
+  "open/close": [{ max: 620, code: "TF230" }, { max: 1240, code: "LF230" }],
+  adjustable: [{ max: 620, code: "CM230" }, { max: 1240, code: "LM230A" }],
+  modulating: [{ max: 620, code: "CM24-SR-R" }, { max: 1240, code: "LM24A-SR" }],
+};
+/** Actuator model code for an operation + damper area, or null when off the table. */
+function actuatorModelCode(movement: string, areaSqIn: number): string | null {
+  const table = ACTUATOR_MODEL_CODES[movement];
+  return table?.find((r) => areaSqIn <= r.max + 1e-9)?.code ?? null;
+}
 /** Number of actuators — 2 when the damper exceeds 1.5 m (1500 mm) on any side. */
 function actuatorQty(specs: LineSpecs): number {
   const unit = specs.sizeUnit || "mm";
@@ -894,13 +908,16 @@ function buildAccessoryDescription(specs: LineSpecs): string {
       );
     }
   }
-  // Motorized dampers: spell out the actuator — operation, model, voltage and
-  // (when the damper is over 1.5 m on a side) the two-actuator count.
+  // Motorized dampers: spell out the actuator — operation, model code (or the
+  // model-type name when the area is off the table), voltage, and the two-actuator
+  // count when the damper is over 1.5 m on a side.
   if (MOTORIZED_DAMPER_TYPES.has(specs.type) && specs.movement) {
     const op = MOVEMENT_LABEL[specs.movement] ?? specs.movement;
+    const area = accAreaSqIn(specs);
+    const model = (area != null ? actuatorModelCode(specs.movement, area) : null) ?? actuatorModelLabel(specs.movement);
     const qty = actuatorQty(specs);
     const pcs = qty > 1 ? ` (${qty} pcs)` : "";
-    lines.push(`Motorized: ${op}, ${actuatorModelLabel(specs.movement)}, ${actuatorVoltage(specs.movement)}${pcs}`);
+    lines.push(`Motorized: ${op}, ${model}, ${actuatorVoltage(specs.movement)}${pcs}`);
   }
   return lines.join("\n");
 }
