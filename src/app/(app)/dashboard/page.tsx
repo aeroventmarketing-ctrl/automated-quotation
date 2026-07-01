@@ -145,9 +145,9 @@ export default async function DashboardPage() {
     }
   }
 
-  // Top salesperson of the month: the current month's leader by total sales value.
-  // If the current month has no sales yet, the previous month's winner is
-  // retained until a new leader emerges (then it switches).
+  // Top salesperson of the CURRENT calendar month by total sales value. Resets on
+  // the 1st — each new month starts with an empty tally, so the card follows this
+  // month's leader (and simply stays put while the same person keeps the lead).
   const leaderOf = (mk: string): { name: string; amount: number } | null => {
     const ms = monthSales.get(mk);
     if (!ms || ms.size === 0) return null;
@@ -156,14 +156,13 @@ export default async function DashboardPage() {
     for (const [n, v] of ms) if (v > bestV) ((best = n), (bestV = v));
     return best ? { name: best, amount: bestV } : null;
   };
-  let topSales: { name: string; amount: number; monthLabel: string } | null = null;
-  for (let i = months.length - 1; i >= 0; i--) {
-    const found = leaderOf(monthKey(months[i]));
-    if (found) {
-      topSales = { ...found, monthLabel: months[i].toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
-      break;
-    }
-  }
+  const currentLeader = leaderOf(currentMK);
+  const topSales = currentLeader
+    ? {
+        ...currentLeader,
+        monthLabel: startOfDay.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      }
+    : null;
 
   const daily = days.map((d) => ({
     key: dayKey(d),
