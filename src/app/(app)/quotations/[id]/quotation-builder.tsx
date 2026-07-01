@@ -842,7 +842,7 @@ function actuatorUnitPrice(movement: string, areaSqIn: number): number {
   return actuatorPick(movement, areaSqIn).price;
 }
 /** Actuator supply voltage by operation (label only — does not change price). */
-const actuatorVoltage = (movement: string): string => (movement === "modulating" ? "24V" : "230V");
+const actuatorVoltage = (movement: string): string => (movement === "modulating" ? "24v" : "220v");
 /** Actuator model-type name by operation — the fallback when no specific code fits. */
 const actuatorModelLabel = (movement: string): string =>
   movement === "open/close" ? "Spring Return" : movement === "modulating" ? "SR Model" : "Non Spring Return";
@@ -944,10 +944,20 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   } else if (specs.sizeL && specs.sizeW) {
     lines.push(`${specs.sizeL} x ${specs.sizeW} ${unit}`);
   }
+  // Motorized dampers: the actuator (model / voltage) sits above the material —
+  // model code sized to a single 1.5 m section, or the model-type name when the
+  // section area is off the table; the section count follows when there's >1.
+  if (MOTORIZED_DAMPER_TYPES.has(specs.type) && specs.movement) {
+    const { sections, sectionAreaSqIn } = damperSectioning(specs);
+    const code = sectionAreaSqIn != null ? actuatorModelCode(specs.movement, sectionAreaSqIn) : null;
+    const model = code ?? actuatorModelLabel(specs.movement);
+    const pcs = sections > 1 ? ` (${sections} pcs)` : "";
+    lines.push(`${model} / ${actuatorVoltage(specs.movement)}${pcs}`);
+  }
   if (ACC_MATERIALS.includes(specs.material)) {
     lines.push(`${accMaterialLabel(specs.material)} Material`);
     // Finish follows the material — but stainless steel 304 carries no finish,
-    // and motorized dampers carry none either (the actuator spec follows instead).
+    // and motorized dampers carry none either (the actuator line is shown above).
     if (specs.material !== "Stainless Steel 304" && !MOTORIZED_DAMPER_TYPES.has(specs.type)) {
       lines.push(
         POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated
@@ -955,17 +965,6 @@ function buildAccessoryDescription(specs: LineSpecs): string {
           : "Painted with Oven Baked Enamel",
       );
     }
-  }
-  // Motorized dampers: spell out the actuator — operation, model code sized to a
-  // single 1.5 m section (or the model-type name when the section area is off the
-  // table), voltage, and the section count (one actuator each).
-  if (MOTORIZED_DAMPER_TYPES.has(specs.type) && specs.movement) {
-    const op = MOVEMENT_LABEL[specs.movement] ?? specs.movement;
-    const { sections, sectionAreaSqIn } = damperSectioning(specs);
-    const code = sectionAreaSqIn != null ? actuatorModelCode(specs.movement, sectionAreaSqIn) : null;
-    const model = code ?? actuatorModelLabel(specs.movement);
-    const pcs = sections > 1 ? ` (${sections} pcs)` : "";
-    lines.push(`Motorized: ${op}, ${model}, ${actuatorVoltage(specs.movement)}${pcs}`);
   }
   return lines.join("\n");
 }
