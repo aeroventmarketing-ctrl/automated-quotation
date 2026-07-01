@@ -10,6 +10,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LABEL } from "@/lib/sale";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
 import { AccountPanel } from "./account-panel";
+import { ConversationPanel } from "./conversation-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +85,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
     : null;
   const historyEntries: AccountAssignment[] =
     accountData?.history?.length ? accountData.history : derivedInitial ? [derivedInitial] : [];
-  const owner = accountData ? currentOwner(accountData) : derivedInitial;
+  const owner = (accountData ? currentOwner(accountData) : null) ?? derivedInitial;
   const ownerName = owner?.name ?? null;
   // The current sales in-charge, or an admin, may transfer the account.
   const canTransfer = isAdmin(viewer) || (!!owner && owner.userId === viewer?.id);
@@ -285,6 +286,27 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           </Table>
         </CardContent>
       </Card>
+
+      {/* Conversation history (follow-ups) */}
+      <ConversationPanel
+        customerId={customer.id}
+        conversations={(accountData?.conversations ?? []).map((c) => ({
+          id: c.id,
+          date: c.date,
+          channel: c.channel,
+          contactPerson: c.contactPerson,
+          message: c.message,
+          quoteNumber: c.quoteNumber,
+          nextFollowUp: c.nextFollowUp,
+          loggedById: c.loggedById,
+          loggedByName: c.loggedByName,
+          createdAt: c.createdAt,
+        }))}
+        quoteNumbers={quotes.map((q) => q.quoteNumber)}
+        defaultContact={customer.contactName ?? ""}
+        currentUserId={viewer?.id ?? null}
+        isAdmin={isAdmin(viewer)}
+      />
     </div>
   );
 }

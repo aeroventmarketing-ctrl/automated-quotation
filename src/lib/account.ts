@@ -21,8 +21,23 @@ export interface AccountAssignment {
   endedAt: string | null; // ISO when transferred away, or null while current
 }
 
+/** A logged conversation / follow-up with the client. */
+export interface ConversationEntry {
+  id: string;
+  date: string; // ISO date the conversation happened
+  channel: string; // Phone / Email / Viber / Meeting / SMS / Other
+  contactPerson: string; // who the salesperson spoke with
+  message: string; // what was discussed / follow-up notes
+  quoteNumber: string | null; // related quotation number, if any
+  nextFollowUp: string | null; // ISO date of the planned next follow-up
+  loggedById: string; // the user who logged it (the salesperson)
+  loggedByName: string;
+  createdAt: string; // ISO when the entry was logged
+}
+
 export interface AccountData {
   history: AccountAssignment[]; // chronological; the open (endedAt=null) one is current
+  conversations?: ConversationEntry[]; // logged follow-ups, chronological
 }
 
 /** The current sales in-charge (the open assignment), or null. */
@@ -39,8 +54,15 @@ function parseAccounts(config: unknown): Record<string, AccountData> {
   if (!accounts || typeof accounts !== "object") return {};
   const out: Record<string, AccountData> = {};
   for (const [cid, v] of Object.entries(accounts as Record<string, unknown>)) {
-    const hist = (v as Record<string, unknown> | null)?.history;
-    if (Array.isArray(hist)) out[cid] = { history: hist as AccountAssignment[] };
+    const rec = v as Record<string, unknown> | null;
+    const hist = rec?.history;
+    const convs = rec?.conversations;
+    if (Array.isArray(hist) || Array.isArray(convs)) {
+      out[cid] = {
+        history: Array.isArray(hist) ? (hist as AccountAssignment[]) : [],
+        conversations: Array.isArray(convs) ? (convs as ConversationEntry[]) : [],
+      };
+    }
   }
   return out;
 }
