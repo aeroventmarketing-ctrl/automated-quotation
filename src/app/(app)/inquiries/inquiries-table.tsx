@@ -23,12 +23,13 @@ export interface InquiryRow {
   status: InquiryStatus;
 }
 
-type SortKey = "customer" | "source" | "items" | "quotes" | "created" | "status";
+type SortKey = "customer" | "sales" | "source" | "items" | "quotes" | "created" | "status";
 type SortDir = "asc" | "desc";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "created", label: "Created" },
   { value: "customer", label: "Customer" },
+  { value: "sales", label: "Sales" },
   { value: "source", label: "Source" },
   { value: "items", label: "Items" },
   { value: "quotes", label: "Quotes" },
@@ -106,6 +107,7 @@ export function InquiriesTable({ rows, admin }: { rows: InquiryRow[]; admin: boo
       let cmp = 0;
       switch (sortKey) {
         case "customer": cmp = a.company.localeCompare(b.company); break;
+        case "sales": cmp = a.createdByName.localeCompare(b.createdByName); break;
         case "source": cmp = a.source.localeCompare(b.source); break;
         case "items": cmp = a.items - b.items; break;
         case "quotes": cmp = a.quotes - b.quotes; break;
