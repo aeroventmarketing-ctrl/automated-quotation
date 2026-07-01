@@ -691,13 +691,32 @@ const UOM_TYPES = new Set([
   "Motorized Volume Damper",
 ]);
 const SIZE_UNITS = ["mm", "cm", "inches"];
-/** Motorized damper types that carry a "Movement" dropdown. */
+/** Motorized damper types that carry an "Operation" dropdown (+ actuator). */
 const MOTORIZED_DAMPER_TYPES = new Set([
   "Motorized Fire Damper",
+  "Motorized Relief Damper",
   "Motorized Smoke Damper",
   "Motorized Volume Damper",
 ]);
 const MOVEMENT_OPTIONS = ["open/close", "modulating", "adjustable"];
+/**
+ * Operations offered per motorized-damper type. Fire and Smoke dampers are
+ * open/close only; Volume and Relief dampers also modulate / adjust. The first
+ * entry is the default (spring return, 220 V) when the client doesn't indicate.
+ */
+const MOVEMENT_OPTIONS_BY_TYPE: Record<string, string[]> = {
+  "Motorized Fire Damper": ["open/close"],
+  "Motorized Smoke Damper": ["open/close"],
+  "Motorized Volume Damper": ["open/close", "modulating", "adjustable"],
+  "Motorized Relief Damper": ["open/close", "modulating", "adjustable"],
+};
+const movementOptionsFor = (type: string): string[] => MOVEMENT_OPTIONS_BY_TYPE[type] ?? MOVEMENT_OPTIONS;
+/** Human label for an operation (the stored value stays terse). */
+const MOVEMENT_LABEL: Record<string, string> = {
+  "open/close": "open/close",
+  modulating: "modulating",
+  adjustable: "adjustable volume",
+};
 /** Material options for Ventilation Accessories (Air Terminals / Dampers). */
 const ACC_MATERIALS = ["Galvanized Iron", "Aluminum", "Stainless Steel 304"];
 /** Accessory types that offer the powder-coat finish option. */
@@ -783,9 +802,12 @@ function accFlatAdd(type: string): number {
 
 // --- Motorized-damper actuators --------------------------------------------
 // Torque is chosen by the damper area: 310 sq inch per NM (pick the smallest NM
-// that covers the area). The model/price comes from the movement — open/close →
-// spring return, modulating → spring-return -SR, adjustable → non spring — at
-// the default 230 V (220 V). A damper over 1.5 m (1500 mm) on any side uses 2.
+// that covers the area). Model/price + supply voltage come from the operation:
+//   open/close        → spring return,      220 V
+//   modulating        → non-spring SR model, 24 V
+//   adjustable volume → non spring return,  220 V
+// Voltage is a spec label only (it doesn't change the table price). A damper
+// over 1.5 m (1500 mm) on any side uses 2 actuators.
 const ACTUATOR_SQIN_PER_NM = 310;
 const SPRING_ACTUATOR: { nm: number; std: number; sr: number }[] = [
   { nm: 2.5, std: 10502, sr: 14062 },
@@ -801,13 +823,20 @@ const NONSPRING_ACTUATOR: { nm: number; std: number; sr: number }[] = [
   { nm: 20, std: 11898, sr: 12980 },
   { nm: 40, std: 19934, sr: 21356 },
 ];
-/** Price of one actuator for the given movement + damper area, or null. */
+/** Price of one actuator for the given operation + damper area, or null. */
 function actuatorUnitPrice(movement: string, areaSqIn: number): number | null {
-  const ladder = movement === "adjustable" ? NONSPRING_ACTUATOR : SPRING_ACTUATOR;
+  // open/close → spring-return ladder; modulating / adjustable → non-spring
+  // ladder, with modulating on the SR column (24 V) and adjustable on std.
+  const ladder = movement === "open/close" ? SPRING_ACTUATOR : NONSPRING_ACTUATOR;
   const reqNm = areaSqIn / ACTUATOR_SQIN_PER_NM;
   const pick = ladder.find((a) => a.nm >= reqNm - 1e-9) ?? ladder[ladder.length - 1];
   return movement === "modulating" ? pick.sr : pick.std;
 }
+/** Actuator supply voltage by operation (label only — does not change price). */
+const actuatorVoltage = (movement: string): string => (movement === "modulating" ? "24V" : "220V");
+/** Actuator model name by operation, as it should read on the quote. */
+const actuatorModelLabel = (movement: string): string =>
+  movement === "open/close" ? "Spring Return" : movement === "modulating" ? "SR Model" : "Non Spring Return";
 /** Number of actuators — 2 when the damper exceeds 1.5 m (1500 mm) on any side. */
 function actuatorQty(specs: LineSpecs): number {
   const unit = specs.sizeUnit || "mm";
@@ -864,6 +893,14 @@ function buildAccessoryDescription(specs: LineSpecs): string {
           : "Painted with Oven Baked Enamel",
       );
     }
+  }
+  // Motorized dampers: spell out the actuator — operation, model, voltage and
+  // (when the damper is over 1.5 m on a side) the two-actuator count.
+  if (MOTORIZED_DAMPER_TYPES.has(specs.type) && specs.movement) {
+    const op = MOVEMENT_LABEL[specs.movement] ?? specs.movement;
+    const qty = actuatorQty(specs);
+    const pcs = qty > 1 ? ` (${qty} pcs)` : "";
+    lines.push(`Motorized: ${op}, ${actuatorModelLabel(specs.movement)}, ${actuatorVoltage(specs.movement)}${pcs}`);
   }
   return lines.join("\n");
 }
@@ -1171,6 +1208,15 @@ export function QuotationBuilder({
         // Stainless steel 304 is never powder-coated — drop any stale flag so the
         // price and description don't carry the ×1.5 / "Powder Coated" finish.
         if (specs.material === "Stainless Steel 304") specs.powderCoated = false;
+        // Motorized dampers: keep a valid operation — default to the first one
+        // offered (open/close = spring return, 220 V) when unset or not available
+        // for this type. Non-motorized accessories carry no operation.
+        if (MOTORIZED_DAMPER_TYPES.has(specs.type)) {
+          const opts = movementOptionsFor(specs.type);
+          if (!specs.movement || !opts.includes(specs.movement)) specs.movement = opts[0];
+        } else {
+          specs.movement = undefined;
+        }
         const price = accessoryUnitPrice(specs);
         return {
           ...l,
@@ -1731,7 +1777,7 @@ export function QuotationBuilder({
                     onChange={(e) => applyAccessory(l.id, { powderCoated: e.target.checked })} />
                 </label>
               )}
-              {/* Movement — motorized dampers only. */}
+              {/* Operation — motorized dampers only (options vary by type). */}
               {MOTORIZED_DAMPER_TYPES.has(c.type) && (
                 <Select
                   value={c.movement || ""}
@@ -1739,7 +1785,9 @@ export function QuotationBuilder({
                   onChange={(e) => applyAccessory(l.id, { movement: e.target.value })}
                 >
                   <option value="" disabled>Operation…</option>
-                  {MOVEMENT_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                  {movementOptionsFor(c.type).map((m) => (
+                    <option key={m} value={m}>{MOVEMENT_LABEL[m] ?? m}</option>
+                  ))}
                 </Select>
               )}
             </>
