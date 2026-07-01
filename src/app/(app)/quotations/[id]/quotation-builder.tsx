@@ -956,7 +956,7 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   if (specs.shape === "Round") {
     if (specs.sizeL) lines.push(`Ø${specs.sizeL} ${unit}`);
   } else if (specs.sizeL && specs.sizeW) {
-    lines.push(`${specs.sizeL} x ${specs.sizeW} ${unit}`);
+    lines.push(`${specs.sizeL} ${unit} x ${specs.sizeW} ${unit}`);
   }
   // Motorized dampers: the actuator (model type / voltage) sits above the
   // material, e.g. "Spring Return / 230V". The section count follows when the
