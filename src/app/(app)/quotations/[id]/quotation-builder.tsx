@@ -799,7 +799,7 @@ function accPowderFactor(type: string): number {
 }
 /** Flat add-on (VAT-inclusive) on top of the body price — fire damper fusible link. */
 function accFlatAdd(type: string): number {
-  return type === "Fire Damper" || type === "Pressure Relief Damper" ? 455 : 0;
+  return type === "Fire Damper" ? 455 : 0;
 }
 
 // --- Motorized-damper actuators --------------------------------------------
