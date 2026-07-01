@@ -1271,6 +1271,9 @@ export function QuotationBuilder({
         // Stainless steel 304 is never powder-coated — drop any stale flag so the
         // price and description don't carry the ×1.5 / "Powder Coated" finish.
         if (specs.material === "Stainless Steel 304") specs.powderCoated = false;
+        // Powder coating is a GI finish — priced on the Galvanized Iron base, so
+        // force the material to GI whenever the powder-coat option is on.
+        if (specs.powderCoated) specs.material = "Galvanized Iron";
         // Motorized dampers: keep a valid operation — default to the first one
         // offered (open/close = spring return, 220 V) when unset or not available
         // for this type. Non-motorized accessories carry no operation.
@@ -1824,7 +1827,8 @@ export function QuotationBuilder({
               {!isIsolator(c) && (
                 <Select
                   value={ACC_MATERIALS.includes(c.material) ? c.material : ""}
-                  disabled={!editable || !c.type}
+                  disabled={!editable || !c.type || !!c.powderCoated}
+                  title={c.powderCoated ? "Powder-coated items are Galvanized Iron" : undefined}
                   onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
                 >
                   <option value="" disabled>Material…</option>
