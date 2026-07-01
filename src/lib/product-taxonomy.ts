@@ -279,6 +279,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Motorized Smoke Damper", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Motorized Volume Damper", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "OBVD", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Dampers", "type": "Pressure Relief Damper", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Smoke Damper", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Volume Damper", "bladeTypes": [], "drives": [] },
   // Accessories

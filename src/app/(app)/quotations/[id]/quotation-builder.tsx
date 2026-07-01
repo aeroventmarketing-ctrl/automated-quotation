@@ -684,6 +684,7 @@ const UOM_TYPES = new Set([
   "Fire Damper",
   "Gravity Shutter",
   "OBVD",
+  "Pressure Relief Damper",
   "Smoke Damper",
   "Volume Damper",
   "Motorized Fire Damper",
@@ -732,6 +733,7 @@ const POWDER_COAT_TYPES = new Set([
   "Fire Damper",
   "Gravity Shutter",
   "OBVD",
+  "Pressure Relief Damper",
   "Smoke Damper",
   "Volume Damper",
 ]);
@@ -751,7 +753,7 @@ function convertAccSize(value: string, from: string, to: string): string {
 // Body price = area(sq in) × rate × material factor (powder coat ×1.5). Area uses
 // the trade inch (25 mm = 1 inch); round = bounding square (D × D).
 const ACC_GRILLE_TYPES = new Set(["Air Grille", "Bar Grille", "Ceiling Diffuser", "Louvers"]);
-const ACC_DAMPER_TYPES = new Set(["Backdraft Damper", "Fire Damper", "Smoke Damper", "Volume Damper"]);
+const ACC_DAMPER_TYPES = new Set(["Backdraft Damper", "Fire Damper", "Pressure Relief Damper", "Smoke Damper", "Volume Damper"]);
 const ACC_MATERIAL_FACTOR: Record<string, number> = {
   "Galvanized Iron": 1,
   Aluminum: 3,
@@ -797,7 +799,7 @@ function accPowderFactor(type: string): number {
 }
 /** Flat add-on (VAT-inclusive) on top of the body price — fire damper fusible link. */
 function accFlatAdd(type: string): number {
-  return type === "Fire Damper" ? 455 : 0;
+  return type === "Fire Damper" || type === "Pressure Relief Damper" ? 455 : 0;
 }
 
 // --- Motorized-damper actuators --------------------------------------------
