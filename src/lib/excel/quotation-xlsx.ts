@@ -238,7 +238,44 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const dash = (v: number | string | null | undefined) =>
     v === null || v === undefined || v === 0 || v === "" ? "--" : v;
 
+  // Repeat the letterhead (logo + company header, all baked into the image) on
+  // every printed page. We track the height used on the current page and, before
+  // a row would overflow, force a manual page break and re-place the logo at the
+  // top of the new page — so table-continuation pages carry the header too. A
+  // conservative page height (pt) keeps the break ahead of Excel's own, so a
+  // page never spills onto a header-less one.
+  const PAGE_PT = 720;
+  const logoBlockPt = logoRows * 19;
+  let pageUsed = 0;
+  for (let i = 1; i < r; i++) pageUsed += ws.getRow(i).height ?? 15;
+  const placeLogoAtR = () => {
+    ws.addImage(imgId, {
+      tl: { col: logoStartCol, row: r - 1 },
+      ext: { width: logoW, height: logoH },
+      editAs: "oneCell",
+    });
+    for (let i = 0; i < logoRows; i++) ws.getRow(r + i).height = 19;
+    r += logoRows;
+  };
+  const guardPage = (h: number) => {
+    if (pageUsed + h <= PAGE_PT) return;
+    ws.getRow(r - 1).addPageBreak(); // new page starts at row r
+    placeLogoAtR();
+    pageUsed = logoBlockPt;
+  };
+
   for (const it of data.items) {
+    // Row height = text height + a fixed ~9pt of vertical breathing room so a
+    // short 2–3 line row (Motor Controller, isolator) gets the same space above
+    // and below its text as a tall multi-line blower row (estimate wrapped line
+    // count from the merged C:G width, ~25 chars at Times New Roman 10).
+    const descCharsPerLine = 25;
+    const wrappedLines = String(it.descriptionSnapshot)
+      .split("\n")
+      .reduce((acc, seg) => acc + Math.max(1, Math.ceil(seg.length / descCharsPerLine)), 0);
+    const rowH = Math.max(28, wrappedLines * 13.5, wrappedLines * 12 + 9);
+    guardPage(rowH); // may advance r past a break + fresh logo
+
     ws.mergeCells(`D${r}:H${r}`);
     const cellCfg = (addr: string, v: ExcelJS.CellValue, size: number, wrap = false) => {
       const c = ws.getCell(addr);
@@ -263,20 +300,8 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     cellCfg(`P${r}`, money(it.lineTotal * f), 9);
     ws.getCell(`P${r}`).numFmt = "#,##0.00";
 
-    // Auto-fit row height to the (wrapped) description. Excel does NOT
-    // auto-grow merged cells, so estimate wrapped line count from the merged
-    // C:G width (~25 chars at Times New Roman 10).
-    const descCharsPerLine = 25;
-    const wrappedLines = String(it.descriptionSnapshot)
-      .split("\n")
-      .reduce((acc, seg) => acc + Math.max(1, Math.ceil(seg.length / descCharsPerLine)), 0);
-    // Row height = text height + a fixed ~9pt of vertical breathing room so a
-    // short 2–3 line row (Motor Controller, isolator) gets the same space above
-    // and below its text as a tall multi-line blower row. `12·lines + 9` adds
-    // that fixed padding; `13.5·lines` is the no-clip floor for long
-    // descriptions. They coincide at 6 lines, so a 6-line blower row is
-    // unchanged while shorter rows grow to match its padding.
-    ws.getRow(r).height = Math.max(28, wrappedLines * 13.5, wrappedLines * 12 + 9);
+    ws.getRow(r).height = rowH;
+    pageUsed += rowH;
     r++;
   }
 
@@ -290,6 +315,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       : "NET AMOUNT (VAT inclusive price) =>";
 
   function totalRow(label: string, value: number, valColor: "RED" | "BLACK" = "RED") {
+    guardPage(16); // keep the letterhead if totals spill onto a new page
     ws.mergeCells(`B${r}:O${r}`);
     const lc = ws.getCell(`B${r}`);
     lc.value = label;
@@ -306,6 +332,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     vc.alignment = { horizontal: "right", vertical: "middle" };
     vc.border = allBorders;
     ws.getRow(r).height = 16;
+    pageUsed += 16;
     r++;
   }
   totalRow(netLabel, displayedNet, "RED");
@@ -323,13 +350,16 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   if (data.specNote) {
     // Single merged row (B..P); the next row stays unmerged. Height auto-fits the
     // wrapped note (B..P is wide, ~110 chars per line).
+    const noteLines = Math.max(1, Math.ceil(`Note: ${data.specNote}`.length / 110));
+    const noteH = Math.max(15, noteLines * 13.5);
+    guardPage(noteH); // keep the letterhead if the note spills onto a new page
     ws.mergeCells(`B${r}:P${r}`);
     const c = ws.getCell(`B${r}`);
     c.value = `Note: ${data.specNote}`;
     c.font = { name: FONT, size: 9, color: BLACK };
     c.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-    const noteLines = Math.max(1, Math.ceil(`Note: ${data.specNote}`.length / 110));
-    ws.getRow(r).height = Math.max(15, noteLines * 13.5);
+    ws.getRow(r).height = noteH;
+    pageUsed += noteH;
     r += 1;
   }
 
