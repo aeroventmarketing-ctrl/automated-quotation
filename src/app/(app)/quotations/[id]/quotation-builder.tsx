@@ -972,11 +972,13 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     // Finish follows the material — but stainless steel 304 carries no finish,
     // and motorized dampers carry none either (the actuator line is shown above).
     if (specs.material !== "Stainless Steel 304" && !MOTORIZED_DAMPER_TYPES.has(specs.type)) {
-      lines.push(
-        POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated
-          ? "Powder Coated White"
-          : "Painted with Oven Baked Enamel",
-      );
+      const isDamper = groupForType(specs.category, specs.type) === "Dampers";
+      if (POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated) {
+        lines.push("Powder Coated White");
+      } else if (!isDamper) {
+        // Air terminals carry the oven-baked-enamel finish; dampers don't.
+        lines.push("Painted with Oven Baked Enamel");
+      }
     }
   }
   return lines.join("\n");
