@@ -5,7 +5,10 @@ export const config = {
   defaultCurrency: process.env.NEXT_PUBLIC_DEFAULT_CURRENCY ?? "PHP",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6",
-  storageBucket: process.env.SUPABASE_STORAGE_BUCKET ?? "attachments",
+  // Trim stray whitespace from the env value — a leading/trailing space makes
+  // the bucket name invalid (Supabase rejects "  attachments"). Fall back to the
+  // default when the variable is unset or only whitespace.
+  storageBucket: (process.env.SUPABASE_STORAGE_BUCKET ?? "").trim() || "attachments",
 };
 
 export const COMPANY = {
