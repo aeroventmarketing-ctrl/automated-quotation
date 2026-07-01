@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Award } from "lucide-react";
-import { saleFromClassification } from "@/lib/sale";
+import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import type { InquiryStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -85,7 +85,7 @@ export default async function DashboardPage() {
   // --- Salesperson (actual sales) + customers (quoted, last 30 days) -------
   const salesMap = new Map<string, number>(); // amount SOLD per salesperson, 30d
   const custMap = new Map<string, number>(); // quoted value per customer, 30d
-  // --- Per-month amount SOLD per salesperson (top salesperson of the month) -
+  // --- Per-month total SALES value per salesperson (top salesperson of month) -
   const monthSales = new Map(months.map((d) => [monthKey(d), new Map<string, number>()]));
   const currentMK = monthKey(startOfDay);
   let salesMTD = 0; // amount sold this calendar month
@@ -107,22 +107,28 @@ export default async function DashboardPage() {
       const company = q.inquiry.customer.company || "—";
       custMap.set(company, (custMap.get(company) ?? 0) + total);
     }
-    // Sales buckets = amount actually COLLECTED, credited to the preparer and
-    // bucketed by each payment's date (a sale is the money received, not quoted).
     const sale = saleFromClassification(q.classification);
+    // Top salesperson of the month ranks by TOTAL SALES value: the full deal
+    // value of each confirmed sale, credited to the preparer and bucketed by the
+    // month the sale was confirmed (soldAt; falls back to the quote's date).
+    if (sale && isSaleConfirmed(sale)) {
+      const soldAt = sale.soldAt ? new Date(sale.soldAt) : at;
+      const smk = monthKey(Number.isNaN(soldAt.getTime()) ? at : soldAt);
+      const sms = monthSales.get(smk);
+      if (sms) sms.set(name, (sms.get(name) ?? 0) + total);
+    }
+    // The 30-day "amount collected" chart + MTD stay on cash actually received,
+    // bucketed by each payment's date (the money in, not the deal value).
     for (const p of sale?.payments ?? []) {
       const amt = Number(p.amount) || 0;
       const pd = p.date ? new Date(p.date) : null;
       if (amt <= 0 || !pd || Number.isNaN(pd.getTime())) continue;
-      const pmk = monthKey(pd);
-      const pms = monthSales.get(pmk);
-      if (pms) pms.set(name, (pms.get(name) ?? 0) + amt);
       if (pd >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + amt);
-      if (pmk === currentMK) salesMTD += amt;
+      if (monthKey(pd) === currentMK) salesMTD += amt;
     }
   }
 
-  // Top salesperson of the month: the current month's leader by amount SOLD.
+  // Top salesperson of the month: the current month's leader by total sales value.
   // If the current month has no sales yet, the previous month's winner is
   // retained until a new leader emerges (then it switches).
   const leaderOf = (mk: string): { name: string; amount: number } | null => {
@@ -263,7 +269,7 @@ export default async function DashboardPage() {
               </div>
               <div className="text-xl font-bold">{topSales.name}</div>
               <div className="text-xs text-muted-foreground">
-                {formatCurrency(topSales.amount)} collected
+                {formatCurrency(topSales.amount)} in sales
               </div>
             </div>
           </CardContent>
