@@ -95,10 +95,11 @@ const s = StyleSheet.create({
 });
 
 function Letterhead() {
-  // `fixed` so the header + logo repeat on every physical page a <Page> spills
-  // onto (long item tables / terms), not just the first.
+  // NOT `fixed`: the header + logo render once at the top of each <Page> (the
+  // first quotation page and the terms page), not on table-continuation pages a
+  // long item table spills onto.
   return (
-    <View fixed>
+    <View>
       <Image style={s.logo} src={AEROVENT_LOGO} />
       <Text style={s.head2}>FANS AND BLOWERS MANUFACTURING</Text>
       <Text style={s.head3}>VENTILATION, AIR MOVING &amp; ENGINEERING SPECIALISTS</Text>
