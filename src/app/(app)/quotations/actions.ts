@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
-import { RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
+import { RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
 import { isSaleConfirmed, saleFromClassification, type SaleRecord } from "@/lib/sale";
 
 const lineSchema = z.object({
@@ -38,10 +38,12 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
 
   const template = data.templateId
     ? await prisma.quotationTemplate.findUnique({ where: { id: data.templateId } })
-    : await prisma.quotationTemplate.findFirst({
-        where: { active: true, layoutKey: { in: [...RETAINED_TEMPLATE_LAYOUT_KEYS] } },
-        orderBy: { name: "asc" },
-      });
+    : // Default to the first template in picker order (Fans and Blowers).
+      sortTemplatesByPickerOrder(
+        await prisma.quotationTemplate.findMany({
+          where: { active: true, layoutKey: { in: [...RETAINED_TEMPLATE_LAYOUT_KEYS] } },
+        }),
+      )[0] ?? null;
   if (!template) throw new Error("No quotation template available — seed templates first.");
 
   const resolvedLines = await Promise.all(

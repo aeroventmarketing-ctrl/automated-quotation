@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
-import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS } from "@/lib/ensure-templates";
+import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { saleFromClassification } from "@/lib/sale";
 
@@ -72,7 +72,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         return Array.isArray(r) ? (r as RevisionSnapshot[]) : [];
       })()}
       catalog={catalog}
-      templates={templates.map((t) => ({ id: t.id, name: t.name }))}
+      templates={sortTemplatesByPickerOrder(templates).map((t) => ({ id: t.id, name: t.name, layoutKey: t.layoutKey }))}
       quotation={{
         id: quotation.id,
         quoteNumber: quotation.quoteNumber,

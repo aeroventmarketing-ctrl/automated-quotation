@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { InquiryWorkspace } from "./inquiry-workspace";
-import { RETAINED_TEMPLATE_LAYOUT_KEYS, ensureBuiltinTemplates } from "@/lib/ensure-templates";
+import { RETAINED_TEMPLATE_LAYOUT_KEYS, ensureBuiltinTemplates, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +106,7 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
           status: it.status,
         }))}
         catalogue={catalogueLite}
-        templates={templates.map((t) => ({ id: t.id, name: t.name }))}
+        templates={sortTemplatesByPickerOrder(templates).map((t) => ({ id: t.id, name: t.name }))}
       />
     </div>
   );

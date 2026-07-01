@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1033,7 +1033,7 @@ export function QuotationBuilder({
   catalog,
 }: {
   quotation: Quote;
-  templates: { id: string; name: string }[];
+  templates: { id: string; name: string; layoutKey: string }[];
   canApprove: boolean;
   isAdmin?: boolean;
   isPreparer?: boolean;
@@ -1089,6 +1089,29 @@ export function QuotationBuilder({
   );
   // Air-curtain picks only show after the user clicks "Run selection" (per line).
   const [acRan, setAcRan] = useState<Record<string, boolean>>({});
+
+  // When every line is a fans-and-blowers product, prioritize the "Fans and
+  // Blowers" (standard) pattern: switch to that template and reset the header
+  // units to the fans-and-blowers defaults (cfm / in-w.g. / HP). Fires only when
+  // the quote *becomes* all-blowers while editing — never on mount, so a saved
+  // quote's chosen template/units are preserved, and the user can still override
+  // afterward until the line mix changes again.
+  const stdTemplateId = useMemo(
+    () => templates.find((t) => t.layoutKey === "standard")?.id ?? null,
+    [templates],
+  );
+  const allBlowers = useMemo(
+    () => lines.length > 0 && lines.every((l) => BLOWER_CATEGORIES.has(l.specs.category)),
+    [lines],
+  );
+  const prevAllBlowers = useRef(allBlowers);
+  useEffect(() => {
+    const became = allBlowers && !prevAllBlowers.current;
+    prevAllBlowers.current = allBlowers;
+    if (!became || !editable) return;
+    if (stdTemplateId) setTemplateId(stdTemplateId);
+    setUnits({ capacity: "cfm", pressure: "in-w.g.", motor: "HP" });
+  }, [allBlowers, stdTemplateId, editable]);
 
   const vatRate = config.vatRate;
   // KDK products follow the quote's VAT presentation like every other product

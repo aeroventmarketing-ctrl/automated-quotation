@@ -6,11 +6,27 @@ import { COMPANY } from "@/lib/config";
 export const KDK_NOTE = "All units are made of high quality materials.";
 
 /**
- * Quotation templates offered in the picker: the Standard "Fans & Blowers"
- * layout and KDK. The Government / Detailed / Budgetary / Export layouts are
- * retired — matched by layoutKey so admin-renamed display names still resolve.
+ * Quotation templates offered in the picker: the "Fans and Blowers" (standard)
+ * layout, "Air Terminals and Ducts", and KDK. The Government / Detailed /
+ * Budgetary / Export layouts are retired — matched by layoutKey so
+ * admin-renamed display names still resolve.
  */
-export const RETAINED_TEMPLATE_LAYOUT_KEYS = ["standard", "kdk", "air_terminals"] as const;
+export const RETAINED_TEMPLATE_LAYOUT_KEYS = ["standard", "air_terminals", "kdk"] as const;
+
+/**
+ * Display order for the template picker: Fans and Blowers first (the default),
+ * then Air Terminals and Ducts, then KDK. Sorted by layoutKey so admin-renamed
+ * display names keep their position; unknown keys fall to the end.
+ */
+export const TEMPLATE_PICKER_ORDER = ["standard", "air_terminals", "kdk"] as const;
+
+export function sortTemplatesByPickerOrder<T extends { layoutKey: string }>(templates: T[]): T[] {
+  const rank = (k: string) => {
+    const i = (TEMPLATE_PICKER_ORDER as readonly string[]).indexOf(k);
+    return i === -1 ? TEMPLATE_PICKER_ORDER.length : i;
+  };
+  return [...templates].sort((a, b) => rank(a.layoutKey) - rank(b.layoutKey));
+}
 
 /** Short footer note for the Air Terminals and Ducts template. */
 export const AIR_TERMINALS_NOTE = "All units are made of high quality materials.";
@@ -96,8 +112,42 @@ export async function ensureAirTerminalsTemplate(): Promise<void> {
   }
 }
 
-/** Ensure all built-in templates (KDK + Air Terminals and Ducts) exist. */
+/**
+ * Ensure the built-in "Fans and Blowers" (standard) quotation template exists
+ * and carries the customer-facing name. Created once if missing. For an
+ * existing template still holding the seed default name "Standard", the display
+ * name is upgraded to "Fans and Blowers" — any other admin-set name is kept.
+ */
+export async function ensureStandardTemplate(): Promise<void> {
+  const existing = await prisma.quotationTemplate.findUnique({ where: { layoutKey: "standard" } });
+  if (!existing) {
+    await prisma.quotationTemplate.create({
+      data: {
+        layoutKey: "standard",
+        name: "Fans and Blowers",
+        config: {
+          accent: "#1d4ed8",
+          showSpecs: true,
+          showTerms: true,
+          terms: COMPANY.defaultTerms,
+          specNote: STANDARD_LONG_NOTE,
+        },
+        active: true,
+      },
+    });
+    return;
+  }
+  if (existing.name === "Standard") {
+    await prisma.quotationTemplate.update({
+      where: { layoutKey: "standard" },
+      data: { name: "Fans and Blowers" },
+    });
+  }
+}
+
+/** Ensure all built-in templates (Fans and Blowers + KDK + Air Terminals) exist. */
 export async function ensureBuiltinTemplates(): Promise<void> {
+  await ensureStandardTemplate();
   await ensureKdkTemplate();
   await ensureAirTerminalsTemplate();
 }
