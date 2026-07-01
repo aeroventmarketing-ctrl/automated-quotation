@@ -15,6 +15,7 @@ export interface QuotationRow {
   id: string;
   quoteNumber: string;
   company: string;
+  customerId: string;
   preparedByName: string;
   total: number;
   currency: string;
@@ -153,7 +154,11 @@ export function QuotationsTable({ rows }: { rows: QuotationRow[] }) {
                   {q.quoteNumber}
                 </Link>
               </TableCell>
-              <TableCell>{q.company}</TableCell>
+              <TableCell>
+                <Link href={`/customers/${q.customerId}`} className="hover:underline" title="View client profile">
+                  {q.company}
+                </Link>
+              </TableCell>
               <TableCell>{q.preparedByName}</TableCell>
               <TableCell className="text-right">{formatCurrency(q.total, q.currency)}</TableCell>
               <TableCell>{formatDate(new Date(q.createdISO))}</TableCell>

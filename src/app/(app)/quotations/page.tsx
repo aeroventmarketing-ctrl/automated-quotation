@@ -15,6 +15,7 @@ export default async function QuotationsPage() {
     id: q.id,
     quoteNumber: q.quoteNumber,
     company: q.inquiry.customer.company,
+    customerId: q.inquiry.customerId,
     preparedByName: q.preparedBy.name,
     total: Number(q.total),
     currency: q.currency,
