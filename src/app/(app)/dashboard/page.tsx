@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Award } from "lucide-react";
-import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
+import { saleFromClassification, isSaleConfirmed, type SaleRecord } from "@/lib/sale";
 import type { InquiryStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,29 @@ const MONTHS = 6; // monthly trend window
 /** Local Y-M-D key so day buckets line up with the server's "today". */
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 const monthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
+
+const parseDate = (s?: string | null): Date | null => {
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+/**
+ * Best-known date a sale happened, for windowing/bucketing: when it was first
+ * confirmed (soldAt), else its earliest payment, else when the PO was uploaded,
+ * else the quote's own date. Keeps a recently-confirmed sale on an older quote
+ * inside the window even when a legacy record never stored soldAt.
+ */
+const saleDate = (sale: SaleRecord, fallback: Date): Date => {
+  const sold = parseDate(sale.soldAt);
+  if (sold) return sold;
+  let earliest: Date | null = null;
+  for (const p of sale.payments ?? []) {
+    const d = parseDate(p.date);
+    if (d && (!earliest || d < earliest)) earliest = d;
+  }
+  return earliest ?? parseDate(sale.po?.uploadedAt) ?? fallback;
+};
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -113,8 +136,7 @@ export default async function DashboardPage() {
     // records). Feeds the top-salesperson card, the 30-day chart and the MTD KPI.
     const sale = saleFromClassification(q.classification);
     if (sale && isSaleConfirmed(sale)) {
-      const soldAt = sale.soldAt ? new Date(sale.soldAt) : at;
-      const sd = Number.isNaN(soldAt.getTime()) ? at : soldAt;
+      const sd = saleDate(sale, at);
       const smk = monthKey(sd);
       const sms = monthSales.get(smk);
       if (sms) sms.set(name, (sms.get(name) ?? 0) + total);
