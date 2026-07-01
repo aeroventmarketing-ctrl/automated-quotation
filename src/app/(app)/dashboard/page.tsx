@@ -83,12 +83,12 @@ export default async function DashboardPage() {
   });
   const monthCount = new Map(months.map((d) => [monthKey(d), 0]));
   // --- Salesperson (actual sales) + customers (quoted, last 30 days) -------
-  const salesMap = new Map<string, number>(); // amount SOLD per salesperson, 30d
+  const salesMap = new Map<string, number>(); // total sales value per salesperson, 30d
   const custMap = new Map<string, number>(); // quoted value per customer, 30d
   // --- Per-month total SALES value per salesperson (top salesperson of month) -
   const monthSales = new Map(months.map((d) => [monthKey(d), new Map<string, number>()]));
   const currentMK = monthKey(startOfDay);
-  let salesMTD = 0; // amount sold this calendar month
+  let salesMTD = 0; // total sales value this calendar month
 
   for (const q of quotes) {
     const at = new Date(q.createdAt);
@@ -107,24 +107,19 @@ export default async function DashboardPage() {
       const company = q.inquiry.customer.company || "—";
       custMap.set(company, (custMap.get(company) ?? 0) + total);
     }
+    // Sales = the full deal value of each CONFIRMED sale (a partial payment —
+    // or, on terms, the PO alone — books the whole amount), credited to the
+    // preparer and dated by soldAt (falling back to the quote's date for older
+    // records). Feeds the top-salesperson card, the 30-day chart and the MTD KPI.
     const sale = saleFromClassification(q.classification);
-    // Top salesperson of the month ranks by TOTAL SALES value: the full deal
-    // value of each confirmed sale, credited to the preparer and bucketed by the
-    // month the sale was confirmed (soldAt; falls back to the quote's date).
     if (sale && isSaleConfirmed(sale)) {
       const soldAt = sale.soldAt ? new Date(sale.soldAt) : at;
-      const smk = monthKey(Number.isNaN(soldAt.getTime()) ? at : soldAt);
+      const sd = Number.isNaN(soldAt.getTime()) ? at : soldAt;
+      const smk = monthKey(sd);
       const sms = monthSales.get(smk);
       if (sms) sms.set(name, (sms.get(name) ?? 0) + total);
-    }
-    // The 30-day "amount collected" chart + MTD stay on cash actually received,
-    // bucketed by each payment's date (the money in, not the deal value).
-    for (const p of sale?.payments ?? []) {
-      const amt = Number(p.amount) || 0;
-      const pd = p.date ? new Date(p.date) : null;
-      if (amt <= 0 || !pd || Number.isNaN(pd.getTime())) continue;
-      if (pd >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + amt);
-      if (monthKey(pd) === currentMK) salesMTD += amt;
+      if (sd >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + total);
+      if (smk === currentMK) salesMTD += total;
     }
   }
 
@@ -377,7 +372,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex-row items-baseline justify-between space-y-0">
             <CardTitle>Sales by salesperson</CardTitle>
-            <span className="text-xs text-muted-foreground">amount collected · last {LINE_DAYS} days</span>
+            <span className="text-xs text-muted-foreground">total sales · last {LINE_DAYS} days</span>
           </CardHeader>
           <CardContent className="space-y-2.5 pt-1">
             {bySales.length === 0 && <p className="text-sm text-muted-foreground">No sales recorded in this window.</p>}
