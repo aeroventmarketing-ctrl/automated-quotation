@@ -1,34 +1,41 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LABEL } from "@/lib/sale";
+import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
+import { AccountPanel } from "./account-panel";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const customer = await prisma.customer.findUnique({
-    where: { id },
-    include: {
-      inquiries: {
-        orderBy: { createdAt: "desc" },
-        include: {
-          createdBy: true,
-          _count: { select: { items: true, quotations: true } },
-          quotations: {
-            orderBy: { createdAt: "desc" },
-            include: { preparedBy: true },
+  const [customer, viewer, users, accountData] = await Promise.all([
+    prisma.customer.findUnique({
+      where: { id },
+      include: {
+        inquiries: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            createdBy: true,
+            _count: { select: { items: true, quotations: true } },
+            quotations: {
+              orderBy: { createdAt: "desc" },
+              include: { preparedBy: true },
+            },
           },
         },
       },
-    },
-  });
+    }),
+    getCurrentUser(),
+    prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    getAccountData(id),
+  ]);
 
   if (!customer) notFound();
 
@@ -60,13 +67,28 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const collectedAmount = orders.reduce((a, q) => a + q.collected, 0);
   const currency = quotes[0]?.currency ?? "PHP";
 
-  // Sales people who have worked this account: inquiry creators + quote preparers.
-  const salesInCharge = Array.from(
-    new Set([
-      ...customer.inquiries.map((i) => i.createdBy.name),
-      ...customer.inquiries.flatMap((i) => i.quotations.map((q) => q.preparedBy.name)),
-    ]),
-  );
+  // Account ownership ("sales in-charge") + transfer history. When the account
+  // was never explicitly assigned/transferred, derive the initial owner from the
+  // earliest inquiry's creator (starting from that inquiry's date) so the panel
+  // still shows who currently holds it and since when.
+  const earliestInquiry = customer.inquiries.length
+    ? customer.inquiries.reduce((a, b) => (a.createdAt <= b.createdAt ? a : b))
+    : null;
+  const derivedInitial: AccountAssignment | null = earliestInquiry
+    ? {
+        userId: earliestInquiry.createdById,
+        name: earliestInquiry.createdBy.name,
+        startedAt: earliestInquiry.createdAt.toISOString(),
+        endedAt: null,
+      }
+    : null;
+  const historyEntries: AccountAssignment[] =
+    accountData?.history?.length ? accountData.history : derivedInitial ? [derivedInitial] : [];
+  const owner = accountData ? currentOwner(accountData) : derivedInitial;
+  const ownerName = owner?.name ?? null;
+  // The current sales in-charge, or an admin, may transfer the account.
+  const canTransfer = isAdmin(viewer) || (!!owner && owner.userId === viewer?.id);
+  const salespeople = users.filter((u) => u.id !== owner?.userId);
 
   const detail = (label: string, value: string | null | undefined) => (
     <div>
@@ -137,15 +159,13 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
         <Card>
           <CardHeader><CardTitle>Sales in-charge</CardTitle></CardHeader>
           <CardContent>
-            {salesInCharge.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {salesInCharge.map((name) => (
-                  <Badge key={name} variant="secondary">{name}</Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
+            <AccountPanel
+              customerId={customer.id}
+              currentOwnerName={ownerName}
+              history={historyEntries.map((h) => ({ name: h.name, startedAt: h.startedAt, endedAt: h.endedAt }))}
+              salespeople={salespeople}
+              canTransfer={canTransfer}
+            />
           </CardContent>
         </Card>
       </div>

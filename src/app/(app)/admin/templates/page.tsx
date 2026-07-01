@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/db";
 import { ensureBuiltinTemplates } from "@/lib/ensure-templates";
+import { ACCOUNT_REGISTRY_KEY } from "@/lib/account";
 import { TemplatesManager } from "./templates-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminTemplatesPage() {
   await ensureBuiltinTemplates();
-  const templates = await prisma.quotationTemplate.findMany({ orderBy: { name: "asc" } });
+  const templates = await prisma.quotationTemplate.findMany({
+    where: { layoutKey: { not: ACCOUNT_REGISTRY_KEY } }, // hide the internal account registry row
+    orderBy: { name: "asc" },
+  });
   return (
     <TemplatesManager
       templates={templates.map((t) => ({
