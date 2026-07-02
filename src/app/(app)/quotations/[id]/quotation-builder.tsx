@@ -729,20 +729,25 @@ const isVentCap = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && specs.type === "Vent Cap";
 /** Any stainless grade — no paint/powder finish applies. */
 const isStainlessMaterial = (m: string): boolean => /stainless/i.test(m);
-// Vent Cap selling prices (VAT-inclusive) by diameter. Powder coated is a single
+// Vent Cap prices (VAT-EXCLUSIVE net) by diameter. Powder coated is a single
 // price per size (100 pcs minimum) that replaces the plain material price.
 const VENT_CAP_PRICE: Record<string, Record<string, number>> = {
   "Stainless 201": { "4": 300, "6": 500, "8": 900 },
   "Stainless 304": { "4": 400, "6": 650, "8": 1100 },
 };
 const VENT_CAP_POWDER_PRICE: Record<string, number> = { "4": 370, "6": 590, "8": 1010 };
-/** Auto unit price (VAT-inclusive) for a Vent Cap, or null until size/material set. */
-function ventCapUnitPrice(specs: LineSpecs): number | null {
+/** Net (VAT-exclusive) unit price for a Vent Cap, or null until size/material set. */
+function ventCapNet(specs: LineSpecs): number | null {
   const size = specs.sizeL;
   if (!size) return null;
   if (specs.powderCoated) return VENT_CAP_POWDER_PRICE[size] ?? null;
   if (!VENT_CAP_MATERIALS.includes(specs.material)) return null;
   return VENT_CAP_PRICE[specs.material]?.[size] ?? null;
+}
+/** Auto unit price (VAT-inclusive, as stored) for a Vent Cap, or null. */
+function ventCapUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = ventCapNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
 }
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
@@ -1433,7 +1438,7 @@ export function QuotationBuilder({
         }
         // Vent Cap: price by diameter + material; powder-coated shows its own price.
         if (isVentCap(specs)) {
-          const price = ventCapUnitPrice(specs);
+          const price = ventCapUnitPrice(specs, vatRate);
           return {
             ...l,
             specs,
@@ -2641,13 +2646,13 @@ export function QuotationBuilder({
                     <p className="text-xs text-muted-foreground">
                       {(() => {
                         if (isVentCap(l.specs)) {
-                          const price = ventCapUnitPrice(l.specs);
-                          if (price == null)
+                          const net = ventCapNet(l.specs);
+                          if (net == null)
                             return l.specs.powderCoated
                               ? "Pick a diameter to auto-price."
                               : "Pick a diameter and material to auto-price.";
                           const min = l.specs.powderCoated ? " (powder coated, 100 pcs min)" : "";
-                          return `${formatCurrency(price, quotation.currency)} / pc${min} = auto-priced (editable).`;
+                          return `₱${net} / pc${min} (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isDuctHardware(l.specs)) {
                           const net = ductHardwareNet(l.specs, l.qty);
