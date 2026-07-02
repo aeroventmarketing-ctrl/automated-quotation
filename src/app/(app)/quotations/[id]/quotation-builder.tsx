@@ -1005,14 +1005,15 @@ const isDuctHardware = (specs: { category: string; type: string }): boolean =>
 /**
  * Volume discount factor on the Duct Angle corner per-piece price, by the order
  * quantity (discounts compound):
- *   500–4,999 pcs   → less 10%            (×0.90)
- *   5,000–9,999 pcs → less 10% + less 10% (×0.81)
- *   10,000+ pcs     → less 10% + less 15% (×0.765)
+ *   up to 500 pcs     → none                (×1.00)
+ *   501–5,000 pcs     → less 10%            (×0.90)
+ *   5,001–10,000 pcs  → less 10% + less 10% (×0.81)
+ *   10,001+ pcs       → less 10% + less 15% (×0.765)
  */
 function angleCornerDiscountFactor(qty: number): number {
-  if (qty >= 10000) return 0.9 * 0.85;
-  if (qty >= 5000) return 0.9 * 0.9;
-  if (qty >= 500) return 0.9;
+  if (qty >= 10001) return 0.9 * 0.85;
+  if (qty >= 5001) return 0.9 * 0.9;
+  if (qty >= 501) return 0.9;
   return 1;
 }
 /** Net (VAT-exclusive) per-piece price for a duct-hardware line, or null if incomplete. */
