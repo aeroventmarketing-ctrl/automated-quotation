@@ -1002,9 +1002,25 @@ const CLEAT_PRICE: Record<string, Record<string, number>> = {
 };
 const isDuctHardware = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && DUCT_HARDWARE_TYPES.has(specs.type);
+/**
+ * Volume discount factor on the Duct Angle corner per-piece price, by the order
+ * quantity (discounts compound):
+ *   500–4,999 pcs   → less 10%            (×0.90)
+ *   5,000–9,999 pcs → less 10% + less 10% (×0.81)
+ *   10,000+ pcs     → less 10% + less 15% (×0.765)
+ */
+function angleCornerDiscountFactor(qty: number): number {
+  if (qty >= 10000) return 0.9 * 0.85;
+  if (qty >= 5000) return 0.9 * 0.9;
+  if (qty >= 500) return 0.9;
+  return 1;
+}
 /** Net (VAT-exclusive) per-piece price for a duct-hardware line, or null if incomplete. */
-function ductHardwareNet(specs: LineSpecs): number | null {
-  if (specs.type === "Duct Angle corner") return specs.gauge ? ANGLE_CORNER_PRICE[specs.gauge] ?? null : null;
+function ductHardwareNet(specs: LineSpecs, qty: number): number | null {
+  if (specs.type === "Duct Angle corner") {
+    const base = specs.gauge ? ANGLE_CORNER_PRICE[specs.gauge] ?? null : null;
+    return base == null ? null : round2(base * angleCornerDiscountFactor(qty));
+  }
   if (CLEAT_TYPES.has(specs.type)) {
     if (!specs.gauge || !specs.cleatSize) return null;
     return CLEAT_PRICE[specs.cleatSize]?.[specs.gauge] ?? null;
@@ -1012,8 +1028,8 @@ function ductHardwareNet(specs: LineSpecs): number | null {
   return null;
 }
 /** Unit price (VAT-inclusive, as stored) for a duct-hardware line, or null. */
-function ductHardwareUnitPrice(specs: LineSpecs, vatRate: number): number | null {
-  const net = ductHardwareNet(specs);
+function ductHardwareUnitPrice(specs: LineSpecs, vatRate: number, qty: number): number | null {
+  const net = ductHardwareNet(specs, qty);
   return net == null ? null : round2(net * (1 + vatRate));
 }
 /** Description for a duct-hardware line: type, length (cleats), gauge, material. */
@@ -1260,6 +1276,21 @@ export function QuotationBuilder({
   function updateLine(id: string, patch: Partial<Line>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   }
+  // Set a line's quantity; for Duct Angle corner, re-apply the volume discount so
+  // the unit price steps with the 500 / 5,000 / 10,000 pc tiers.
+  function updateQty(id: string, qty: number) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== id) return l;
+        const next = { ...l, qty };
+        if (isDuctHardware(l.specs)) {
+          const price = ductHardwareUnitPrice(l.specs, vatRate, qty);
+          if (price != null) next.unitPrice = price;
+        }
+        return next;
+      }),
+    );
+  }
   function updateSpec(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
   }
@@ -1352,9 +1383,10 @@ export function QuotationBuilder({
         // Stainless steel 304 is never powder-coated — drop any stale flag so the
         // price and description don't carry the ×1.5 / "Powder Coated" finish.
         if (specs.material === "Stainless Steel 304") specs.powderCoated = false;
-        // Duct hardware (clips, cleats, corners): per-piece price by gauge (+ length).
+        // Duct hardware (clips, cleats, corners): per-piece price by gauge (+ length),
+        // with the Duct Angle corner volume discount applied by line quantity.
         if (isDuctHardware(specs)) {
-          const price = ductHardwareUnitPrice(specs, vatRate);
+          const price = ductHardwareUnitPrice(specs, vatRate, l.qty);
           return {
             ...l,
             specs,
@@ -2186,7 +2218,7 @@ export function QuotationBuilder({
                   {/* Isolator recommend sets Qty = number of springs (locked). */}
                   <Input className="h-8 text-right" type="number" min={1} value={l.qty}
                     disabled={!editable || (isIsolator(l.specs) && !!l.specs.mcRecommend)}
-                    onChange={(e) => updateLine(l.id, { qty: Math.max(1, Number(e.target.value) || 1) })} />
+                    onChange={(e) => updateQty(l.id, Math.max(1, Number(e.target.value) || 1))} />
                 </div>
                 <div className="md:col-span-9">
                   <Label className="text-[10px]">Description (one detail per line)</Label>
@@ -2528,12 +2560,17 @@ export function QuotationBuilder({
                     <p className="text-xs text-muted-foreground">
                       {(() => {
                         if (isDuctHardware(l.specs)) {
-                          const net = ductHardwareNet(l.specs);
+                          const net = ductHardwareNet(l.specs, l.qty);
                           if (net == null)
                             return CLEAT_TYPES.has(l.specs.type)
                               ? "Pick gauge and length to auto-price."
                               : "Pick a gauge to auto-price.";
-                          return `₱${net} / pc (VAT ex) × 1.12 = auto-priced (editable).`;
+                          let discNote = "";
+                          if (l.specs.type === "Duct Angle corner") {
+                            const f = angleCornerDiscountFactor(l.qty);
+                            if (f < 1) discNote = ` (−${+((1 - f) * 100).toFixed(1)}% at ${l.qty} pcs)`;
+                          }
+                          return `₱${net} / pc${discNote} (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         const rate = accessoryRate(l.specs.type, l.specs.shape);
                         const area = accBilledAreaSqIn(l.specs);
