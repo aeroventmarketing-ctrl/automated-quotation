@@ -208,6 +208,8 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 const isMotorController = (specs: { type: string }): boolean => specs.type === "Motor Controller";
 /** Spring Vibration Isolator: priced by mounting + rated capacity (no duty/motor). */
 const isIsolator = (specs: { type: string }): boolean => specs.type === "Spring Vibration Isolator";
+/** Isolator mounting options. */
+const ISO_MOUNTINGS = ["Foot Mounted", "Ceiling Mounted", "Housed Spring"];
 /** Rated capacities (kg); price by mounting (foot/ceiling). */
 const ISO_CAPS = [25, 35, 50, 80, 120, 175, 225, 300, 450, 600, 825];
 const ISO_PRICE: { foot: Record<number, number>; ceiling: Record<number, number> } = {
@@ -215,6 +217,16 @@ const ISO_PRICE: { foot: Record<number, number>; ceiling: Record<number, number>
   foot: { 25: 1417, 35: 1478, 50: 1540, 80: 1589, 120: 1663, 175: 1724, 225: 2587, 300: 3819, 450: 4127, 600: 4805, 825: 4866 },
   ceiling: { 25: 1294, 35: 1331, 50: 1355, 80: 1417, 120: 1478, 175: 1540, 225: 1725, 300: 3696, 450: 4189, 600: 5544, 825: 5667 },
 };
+/** Housed Spring isolator: its own capacity (kg) range and VAT-exclusive prices. */
+const HOUSED_SPRING_CAPS = [200, 300, 450, 600, 825, 1100, 1400];
+const HOUSED_SPRING_PRICE: Record<number, number> = {
+  200: 8594, 300: 8986, 450: 9341, 600: 9692, 825: 9939, 1100: 10172, 1400: 12208,
+};
+/** Capacity (kg) options for an isolator mounting. */
+const isoCapsFor = (shape: string): number[] => (shape === "Housed Spring" ? HOUSED_SPRING_CAPS : ISO_CAPS);
+/** Smallest rated capacity covering the load, from the mounting's own list. */
+const ratedCapFor = (shape: string, capKg: number | null): number | null =>
+  capKg == null ? null : isoCapsFor(shape).find((c) => c >= capKg) ?? null;
 /** Motor weight (kg) by HP — used to recommend an isolator capacity from a motor. */
 const MOTOR_WEIGHT_KG: Record<number, number> = {
   0.5: 12, 1: 14, 1.5: 25, 2: 25, 3: 31, 5: 42, 7.5: 67, 10: 78, 15: 122,
@@ -225,8 +237,9 @@ const isolatorRatedCap = (capKg: number | null): number | null =>
   capKg == null ? null : ISO_CAPS.find((c) => c >= capKg) ?? null;
 /** Isolator net (VAT-exclusive) price from mounting + required capacity. */
 function isolatorNetPrice(shape: string, capKg: number | null): number | null {
-  const rated = isolatorRatedCap(capKg);
+  const rated = ratedCapFor(shape, capKg);
   if (rated == null) return null;
+  if (shape === "Housed Spring") return HOUSED_SPRING_PRICE[rated] ?? null;
   const table = shape === "Foot Mounted" ? ISO_PRICE.foot : shape === "Ceiling Mounted" ? ISO_PRICE.ceiling : null;
   return table ? table[rated] ?? null : null;
 }
@@ -262,7 +275,7 @@ function isolatorRecommend(
 }
 /** Isolator description: type / mounting / rated capacity + spring colour. */
 function buildIsolatorDescription(shape: string, capKg: number | null): string {
-  const rated = isolatorRatedCap(capKg);
+  const rated = ratedCapFor(shape, capKg);
   return [
     "Spring Vibration Isolator",
     shape || "",
@@ -1136,7 +1149,7 @@ function buildDuctHardwareDescription(specs: LineSpecs): string {
 function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
   if (type === "Jet Nozzle Diffuser" || type === "Vent Cap") return ["Round"];
-  if (type === "Spring Vibration Isolator") return ["Foot Mounted", "Ceiling Mounted"];
+  if (type === "Spring Vibration Isolator") return ISO_MOUNTINGS;
   // Air Terminals / Dampers: square and rectangle share the L×W size fields.
   return ["Round", "Square/Rectangle"];
 }
@@ -1461,6 +1474,11 @@ export function QuotationBuilder({
       ls.map((l) => {
         if (l.id !== lineId) return l;
         const specs = { ...l.specs, ...patch };
+        // Mounting changed to one that doesn't offer the current capacity → clear it
+        // (Housed Spring has a different kg range than Foot/Ceiling Mounted).
+        if (patch.shape !== undefined && specs.sizeL && !isoCapsFor(specs.shape).includes(Number(specs.sizeL))) {
+          specs.sizeL = "";
+        }
         const capRaw = specs.sizeL ? Number(specs.sizeL) : NaN;
         const capKg = Number.isNaN(capRaw) ? null : capRaw;
         const net = isolatorNetPrice(specs.shape, capKg);
@@ -2175,7 +2193,7 @@ export function QuotationBuilder({
                 <Select className="h-9" disabled={!editable || !c.type || !!c.mcRecommend} value={c.sizeL}
                   onChange={(e) => applyIsolator(l.id, { sizeL: e.target.value, sizeW: "" })}>
                   <option value="">Capacity (kg)…</option>
-                  {ISO_CAPS.map((cap) => (
+                  {isoCapsFor(c.shape).map((cap) => (
                     <option key={cap} value={cap}>{cap} kg</option>
                   ))}
                 </Select>
