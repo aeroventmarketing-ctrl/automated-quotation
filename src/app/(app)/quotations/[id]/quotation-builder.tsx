@@ -781,10 +781,25 @@ function buildCanvassDescription(specs: LineSpecs): string {
   return lines.join("\n");
 }
 // Wind Driven Roof Ventilator (Other Products / Aerovent): throat diameter (in)
-// + material. Priced manually (no price table provided).
+// + material. Prices are VAT-EXCLUSIVE (net) per piece by material × diameter.
 const WIND_VENT_DIAMETERS = ["12", "15", "24", "27", "32", "36"];
 const WIND_VENT_MATERIALS = ["Galvanized Iron", "Aluminum", "Stainless Steel"];
+const WIND_VENT_PRICE: Record<string, Record<string, number>> = {
+  "Galvanized Iron": { "12": 5233, "15": 7475, "24": 11960, "27": 12708, "32": 14950, "36": 22425 },
+  Aluminum: { "12": 8896, "15": 12708, "24": 17193, "27": 21603, "32": 21678, "36": 27658 },
+  "Stainless Steel": { "12": 13082, "15": 17940, "24": 29900, "27": 31769, "32": 41860, "36": 53820 },
+};
 const isWindVent = (specs: { type: string }): boolean => specs.type === "Wind Driven Roof Ventilator";
+/** Net (VAT-exclusive) price for a roof ventilator by material × throat diameter, or null. */
+function windVentNet(specs: LineSpecs): number | null {
+  if (!WIND_VENT_MATERIALS.includes(specs.material) || !specs.sizeL) return null;
+  return WIND_VENT_PRICE[specs.material]?.[specs.sizeL] ?? null;
+}
+/** Auto unit price (VAT-inclusive, as stored) for a roof ventilator, or null. */
+function windVentUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = windVentNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
+}
 /** Description for a wind-driven roof ventilator: type + throat diameter + material. */
 function buildWindVentDescription(specs: LineSpecs): string {
   const lines: string[] = [];
@@ -1501,13 +1516,14 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
-        // Wind Driven Roof Ventilator: throat diameter + material, manually priced.
+        // Wind Driven Roof Ventilator: price by throat diameter × material.
         if (isWindVent(specs)) {
+          const price = windVentUnitPrice(specs, vatRate);
           return {
             ...l,
             specs,
             descriptionSnapshot: buildWindVentDescription(specs),
-            ...(resetPrice ? { unitPrice: 0 } : {}),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
         // Motorized dampers: keep a valid operation — default to the first one
@@ -2764,7 +2780,9 @@ export function QuotationBuilder({
                     <p className="text-xs text-muted-foreground">
                       {(() => {
                         if (isWindVent(l.specs)) {
-                          return "Pick throat diameter and material, then enter the unit price manually.";
+                          const net = windVentNet(l.specs);
+                          if (net == null) return "Pick throat diameter and material to auto-price.";
+                          return `₱${net.toLocaleString()} / pc (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isCanvass(l.specs)) {
                           const net = canvassNet(l.specs);
