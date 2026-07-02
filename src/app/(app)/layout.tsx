@@ -22,12 +22,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const layout = (
     <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 border-r bg-background md:block">
+      <aside className="hidden w-60 shrink-0 self-start border-r bg-background md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto">
         <AppNav role={user.role} name={user.name} />
       </aside>
       <main className="flex-1 overflow-x-hidden">
         {/* Mobile top bar */}
-        <div className="flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
+        <div className="sticky top-0 z-30 flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/aerovent-logo.jpg"
