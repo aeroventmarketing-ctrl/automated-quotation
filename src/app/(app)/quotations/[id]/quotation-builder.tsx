@@ -855,6 +855,31 @@ function buildAluDuctDescription(specs: LineSpecs): string {
   if (specs.sizeL) lines.push(aluDuctSizeLabel(specs.sizeL));
   return lines.join("\n");
 }
+// Jet Fan (Other Products, MAXAIR): pick a model; each carries its rating and a
+// VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel.
+const JET_FAN_MODELS = ["MA-250", "MA-300"];
+const JET_FAN: Record<string, { watt: number; cmh: number; pa: number; net: number }> = {
+  "MA-250": { watt: 300, cmh: 2000, pa: 24, net: 41870 },
+  "MA-300": { watt: 480, cmh: 3000, pa: 39, net: 67714 },
+};
+const isJetFan = (specs: { type: string }): boolean => specs.type === "Jet Fan";
+/** Net (VAT-exclusive) price for a jet fan by model, or null. */
+function jetFanNet(specs: LineSpecs): number | null {
+  return specs.blowerModel ? JET_FAN[specs.blowerModel]?.net ?? null : null;
+}
+/** Auto unit price (VAT-inclusive, as stored) for a jet fan, or null. */
+function jetFanUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = jetFanNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
+}
+/** Description for a jet fan: type + brand + model + rating. */
+function buildJetFanDescription(specs: LineSpecs): string {
+  const lines: string[] = ["Jet Fan", "MaxAir Brand"];
+  const m = specs.blowerModel ? JET_FAN[specs.blowerModel] : null;
+  if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}`);
+  if (m) lines.push(`${m.watt} W · ${m.cmh} CMH · ${m.pa} Pa`);
+  return lines.join("\n");
+}
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
   "Air Grille",
@@ -1588,6 +1613,16 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
+        // Jet Fan: price by model (MA-250 / MA-300).
+        if (isJetFan(specs)) {
+          const price = jetFanUnitPrice(specs, vatRate);
+          return {
+            ...l,
+            specs,
+            descriptionSnapshot: buildJetFanDescription(specs),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Motorized dampers: keep a valid operation — default to the first one
         // offered (open/close = spring return, 220 V) when unset or not available
         // for this type. Non-motorized accessories carry no operation.
@@ -2066,6 +2101,13 @@ export function QuotationBuilder({
                   { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
+              } else if (type === "Jet Fan") {
+                // Jet fan: model dropdown (MAXAIR), priced per model.
+                applyAccessory(
+                  l.id,
+                  { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (type === "Inline Duct Fan") {
                 // Seed the description now (type + brand); the model line is added
                 // when a CK model is chosen via Run selection.
@@ -2258,6 +2300,16 @@ export function QuotationBuilder({
               <option value="" disabled>Size…</option>
               {ALU_DUCT_SIZES.map((s) => (<option key={s} value={s}>{aluDuctSizeLabel(s)}</option>))}
             </Select>
+          ) : isJetFan(c) ? (
+            // Jet Fan: model dropdown (MAXAIR MA series).
+            <Select
+              value={c.blowerModel || ""}
+              disabled={!editable || !c.type}
+              onChange={(e) => applyAccessory(l.id, { blowerModel: e.target.value || null })}
+            >
+              <option value="" disabled>Model…</option>
+              {JET_FAN_MODELS.map((m) => (<option key={m} value={m}>{m}</option>))}
+            </Select>
           ) : c.category === "Ventilation Accessories" ? (
             <>
               <Select
@@ -2386,7 +2438,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isInlineFan(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -2607,7 +2659,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isJetFan(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -2711,7 +2763,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isJetFan(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -2891,7 +2943,7 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isJetFan(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex items-end md:col-span-3">
@@ -2906,6 +2958,11 @@ export function QuotationBuilder({
                           const net = aluDuctNet(l.specs);
                           if (net == null) return "Pick a size to auto-price.";
                           return `₱${net.toLocaleString()} / ${aluDuctSizeLabel(l.specs.sizeL)} (VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
+                        if (isJetFan(l.specs)) {
+                          const net = jetFanNet(l.specs);
+                          if (net == null) return "Pick a model to auto-price.";
+                          return `₱${net.toLocaleString()} / pc (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isCanvass(l.specs)) {
                           const net = canvassNet(l.specs);
@@ -3028,7 +3085,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isJetFan(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
