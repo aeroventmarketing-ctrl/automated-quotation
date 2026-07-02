@@ -327,6 +327,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Other Products", "brand": "Aerovent", "type": "Dust Collector", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Induction Motor (TECO)", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Induction Motor (Hyundai)", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Inline Duct Fan", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Jet Fan", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Motor Controller", "series": ["Motor Starter", "Variable Frequency Drive"], "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Portable Axial Blower", "bladeTypes": [], "drives": [] },
