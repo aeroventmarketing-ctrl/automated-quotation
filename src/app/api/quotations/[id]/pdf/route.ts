@@ -56,7 +56,10 @@ function lineSpecs(specs: Record<string, unknown>, index: number, motorUnit: Pow
         ? roundPower(convertPower(n(specs.power_w)!, "W", motorUnit), motorUnit)
         : null;
       const hp = n(specs.motorHp) ?? (typeof sel.motorHp === "number" ? sel.motorHp : null);
-      return hp != null ? roundPower(convertPower(hp, "HP", motorUnit), motorUnit) : null;
+      if (hp != null) return roundPower(convertPower(hp, "HP", motorUnit), motorUnit);
+      // Watt-rated units without an HP (Jet Fan, Inline Duct Fan) show watts.
+      const pw = n(specs.power_w);
+      return pw != null ? roundPower(convertPower(pw, "W", motorUnit), motorUnit) : null;
     })(),
     motorPh: isIso || isAcc ? null : n(specs.motorPh),
     motorVolts: isIso || isAcc ? null : n(specs.motorVolts),

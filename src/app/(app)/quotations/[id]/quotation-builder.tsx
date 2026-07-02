@@ -872,12 +872,10 @@ function jetFanUnitPrice(specs: LineSpecs, vatRate: number): number | null {
   const net = jetFanNet(specs);
   return net == null ? null : round2(net * (1 + vatRate));
 }
-/** Description for a jet fan: type + brand + model + rating. */
+/** Description for a jet fan: type + brand + model (rating goes in the columns). */
 function buildJetFanDescription(specs: LineSpecs): string {
   const lines: string[] = ["Jet Fan", "MaxAir Brand"];
-  const m = specs.blowerModel ? JET_FAN[specs.blowerModel] : null;
   if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}`);
-  if (m) lines.push(`${m.watt} W · ${m.cmh} CMH · ${m.pa} Pa`);
   return lines.join("\n");
 }
 /** Accessory types that offer the powder-coat finish option. */
@@ -1613,13 +1611,32 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
-        // Jet Fan: price by model (MA-250 / MA-300).
+        // Jet Fan: price by model (MA-250 / MA-300). The model's rating fills the
+        // Capacity / Static pressure / Motor columns (converted to the header
+        // units); the description carries only type / brand / model.
         if (isJetFan(specs)) {
-          const price = jetFanUnitPrice(specs, vatRate);
+          const m = specs.blowerModel ? JET_FAN[specs.blowerModel] : null;
+          let s2 = specs;
+          if (m) {
+            const capUnit = normalizeAirflowUnit(units.capacity) ?? "m3hr";
+            const pUnit = normalizePressureUnit(units.pressure) ?? "pa";
+            s2 = {
+              ...specs,
+              capacity_cfm: fmtFlow(convertAirflow(m.cmh, "m3hr", capUnit)),
+              staticPressure_pa: Math.round(convertPressure(m.pa, "pa", pUnit) * 100) / 100,
+              power_w: m.watt,
+              motorHp: null,
+              motorPole: null,
+              motorPh: null,
+              motorVolts: null,
+              inches: null,
+            };
+          }
+          const price = jetFanUnitPrice(s2, vatRate);
           return {
             ...l,
-            specs,
-            descriptionSnapshot: buildJetFanDescription(specs),
+            specs: s2,
+            descriptionSnapshot: buildJetFanDescription(s2),
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }

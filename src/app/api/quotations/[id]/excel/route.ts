@@ -56,6 +56,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       motorHp = roundPower(convertPower(s.motorHp, "HP", motorUnit), motorUnit);
     } else if (typeof s.motorHp === "string") {
       motorHp = s.motorHp;
+    } else if (typeof s.power_w === "number") {
+      // Watt-rated units without an HP (Jet Fan, Inline Duct Fan) show watts.
+      motorHp = roundPower(convertPower(s.power_w, "W", motorUnit), motorUnit);
     } else {
       motorHp = null;
     }
