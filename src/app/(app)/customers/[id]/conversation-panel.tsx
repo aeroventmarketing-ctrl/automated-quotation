@@ -114,7 +114,7 @@ function ConversationBox({
       </CardHeader>
       <CardContent className="space-y-5">
         {/* New entry */}
-        <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1">
             <Label>Date</Label>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -133,7 +133,7 @@ function ConversationBox({
             <Label>Next follow-up</Label>
             <Input type="date" value={nextFollowUp} onChange={(e) => setNextFollowUp(e.target.value)} />
           </div>
-          <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+          <div className="space-y-1 sm:col-span-2 lg:col-span-4">
             <Label>Message / notes</Label>
             <Textarea
               value={message}
@@ -142,7 +142,7 @@ function ConversationBox({
               placeholder="What was discussed, client response, next steps…"
             />
           </div>
-          <div className="flex items-center gap-3 sm:col-span-2 lg:col-span-3">
+          <div className="flex items-center gap-3 sm:col-span-2 lg:col-span-4">
             <Button size="sm" onClick={onAdd} disabled={busy}>
               <Plus className="h-4 w-4" />
               {busy ? "Saving…" : "Log conversation"}
