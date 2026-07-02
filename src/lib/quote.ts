@@ -62,3 +62,27 @@ export function computeTotals(
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
+
+/**
+ * The amount the client actually pays for a quotation — the stored gross total
+ * (VAT-inclusive sum of line totals) after applying the discount and the VAT
+ * presentation. This is the true "deal value": it drops when a quote is revised
+ * with a discount. Mirrors the quotation builder's on-screen grand total.
+ *
+ *  - INCLUSIVE       → gross − discount
+ *  - EXCLUSIVE (÷)   → (gross/1.12) − discount
+ *  - EXCLUSIVE_PLUS  → ((gross/1.12) − discount) + 12% VAT
+ */
+export function payableTotal(
+  q: { total: number | Prisma.Decimal; discountPct: number | Prisma.Decimal; vatMode: string },
+  vatRate = config.vatRate,
+): number {
+  const gross = Number(q.total);
+  const net = gross / (1 + vatRate);
+  const exclusive = q.vatMode !== "INCLUSIVE";
+  const displayedNet = exclusive ? net : gross;
+  const discountAmt = displayedNet * (Number(q.discountPct) / 100);
+  const finalNet = displayedNet - discountAmt;
+  const vatAmt = q.vatMode === "EXCLUSIVE_PLUS" ? finalNet * vatRate : 0;
+  return round2(finalNet + vatAmt);
+}

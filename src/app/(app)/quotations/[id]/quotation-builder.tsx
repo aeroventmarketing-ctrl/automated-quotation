@@ -2616,7 +2616,7 @@ export function QuotationBuilder({
         <SalePanel
           quotationId={quotation.id}
           currency={quotation.currency}
-          dealTotal={quotation.total}
+          dealTotal={totals.grandTotal}
           initialSale={quotation.sale}
           canEdit={(isPreparer || isAdmin) && quotation.status !== "DRAFT" && quotation.status !== "PENDING_APPROVAL"}
         />

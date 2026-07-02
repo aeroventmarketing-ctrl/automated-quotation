@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LABEL } from "@/lib/sale";
+import { payableTotal } from "@/lib/quote";
 import { Plus } from "lucide-react";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
 import { addQuotation } from "../actions";
@@ -55,6 +56,9 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           createdAt: q.createdAt,
           status: q.status,
           total: Number(q.total),
+          // The true deal value: gross after discount + VAT presentation, so a
+          // revised (discounted) quote updates the order/purchase amounts.
+          deal: payableTotal(q),
           currency: q.currency,
           preparedByName: q.preparedBy.name,
           projectName: q.projectName ?? inq.projectName ?? "",
@@ -67,7 +71,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   const orders = quotes.filter((q) => q.confirmed);
-  const purchaseAmount = orders.reduce((a, q) => a + q.total, 0);
+  const purchaseAmount = orders.reduce((a, q) => a + q.deal, 0);
   const collectedAmount = orders.reduce((a, q) => a + q.collected, 0);
   const currency = quotes[0]?.currency ?? "PHP";
 
@@ -230,7 +234,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                   </TableCell>
                   <TableCell>{q.projectName || "—"}</TableCell>
                   <TableCell>{q.arrangement ? ARRANGEMENT_LABEL[q.arrangement] : "—"}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(q.total, q.currency)}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(q.deal, q.currency)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(q.collected, q.currency)}</TableCell>
                   <TableCell>{formatDate(q.createdAt)}</TableCell>
                 </TableRow>

@@ -7,6 +7,7 @@ import { InquiryStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Award } from "lucide-react";
 import { saleFromClassification, isSaleConfirmed, type SaleRecord } from "@/lib/sale";
+import { payableTotal } from "@/lib/quote";
 import type { InquiryStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,8 @@ export default async function DashboardPage() {
       select: {
         createdAt: true,
         total: true,
+        discountPct: true,
+        vatMode: true,
         classification: true,
         preparedBy: { select: { name: true } },
         inquiry: { select: { customer: { select: { company: true } } } },
@@ -136,12 +139,15 @@ export default async function DashboardPage() {
     // records). Feeds the top-salesperson card, the 30-day chart and the MTD KPI.
     const sale = saleFromClassification(q.classification);
     if (sale && isSaleConfirmed(sale)) {
+      // Credit the true deal value — the discounted, VAT-adjusted amount the
+      // client pays — so a revised (e.g. discounted) PO updates sales figures.
+      const deal = payableTotal(q);
       const sd = saleDate(sale, at);
       const smk = monthKey(sd);
       const sms = monthSales.get(smk);
-      if (sms) sms.set(name, (sms.get(name) ?? 0) + total);
-      if (sd >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + total);
-      if (smk === currentMK) salesMTD += total;
+      if (sms) sms.set(name, (sms.get(name) ?? 0) + deal);
+      if (sd >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + deal);
+      if (smk === currentMK) salesMTD += deal;
     }
   }
 
