@@ -86,7 +86,7 @@ export async function ensureKdkTemplate(): Promise<void> {
 /**
  * Ensure the built-in "Air Terminals and Ducts" quotation template exists with
  * its terms and short note. Created once if missing; an existing template only
- * has missing terms backfilled (any admin-edited config is otherwise preserved).
+ * has its terms kept in sync with the code-defined terms (other config kept).
  */
 export async function ensureAirTerminalsTemplate(): Promise<void> {
   const baseConfig = {
@@ -103,8 +103,10 @@ export async function ensureAirTerminalsTemplate(): Promise<void> {
     });
     return;
   }
+  // Keep the Air Terminals terms in sync with the code-defined terms so updates
+  // here reach the live template (these terms are managed in config, not admin).
   const config = (existing.config as Record<string, unknown>) ?? {};
-  if (typeof config.terms !== "string" || !config.terms) {
+  if (config.terms !== COMPANY.airTerminalsTerms) {
     await prisma.quotationTemplate.update({
       where: { layoutKey: "air_terminals" },
       data: { config: { ...config, terms: COMPANY.airTerminalsTerms } as Prisma.InputJsonObject },
