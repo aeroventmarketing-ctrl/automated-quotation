@@ -780,6 +780,19 @@ function buildCanvassDescription(specs: LineSpecs): string {
   else if (specs.canvassUnit === "per meter") lines.push("Per meter");
   return lines.join("\n");
 }
+// Wind Driven Roof Ventilator (Other Products / Aerovent): throat diameter (in)
+// + material. Priced manually (no price table provided).
+const WIND_VENT_DIAMETERS = ["12", "15", "24", "27", "32", "36"];
+const WIND_VENT_MATERIALS = ["Galvanized Iron", "Aluminum", "Stainless Steel"];
+const isWindVent = (specs: { type: string }): boolean => specs.type === "Wind Driven Roof Ventilator";
+/** Description for a wind-driven roof ventilator: type + throat diameter + material. */
+function buildWindVentDescription(specs: LineSpecs): string {
+  const lines: string[] = [];
+  if (specs.type) lines.push(specs.type);
+  if (specs.sizeL) lines.push(`${specs.sizeL}" Throat Diameter`);
+  if (WIND_VENT_MATERIALS.includes(specs.material)) lines.push(`${accMaterialLabel(specs.material)} Material`);
+  return lines.join("\n");
+}
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
   "Air Grille",
@@ -1488,6 +1501,15 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
+        // Wind Driven Roof Ventilator: throat diameter + material, manually priced.
+        if (isWindVent(specs)) {
+          return {
+            ...l,
+            specs,
+            descriptionSnapshot: buildWindVentDescription(specs),
+            ...(resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Motorized dampers: keep a valid operation — default to the first one
         // offered (open/close = spring return, 220 V) when unset or not available
         // for this type. Non-motorized accessories carry no operation.
@@ -1927,6 +1949,13 @@ export function QuotationBuilder({
                   { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", material: "", canvassUnit: "per meter", powderCoated: false },
                   true,
                 );
+              } else if (type === "Wind Driven Roof Ventilator") {
+                // Roof ventilator: throat diameter + material (manual price).
+                applyAccessory(
+                  l.id,
+                  { type, shape: "Round", sizeUnit: "inches", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (c.category === "Ventilation Accessories") {
                 // Air Terminals / Dampers: reset shape/size/material/finish and
                 // clear any stale auto-price (recomputes once dimensions are set).
@@ -2075,6 +2104,26 @@ export function QuotationBuilder({
                 {CANVASS_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
               </Select>
             </>
+          ) : isWindVent(c) ? (
+            // Wind Driven Roof Ventilator: throat diameter + material.
+            <>
+              <Select
+                value={c.sizeL || ""}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { shape: "Round", sizeUnit: "inches", sizeL: e.target.value, sizeW: "" })}
+              >
+                <option value="" disabled>Throat Diameter…</option>
+                {WIND_VENT_DIAMETERS.map((d) => (<option key={d} value={d}>{d} in</option>))}
+              </Select>
+              <Select
+                value={WIND_VENT_MATERIALS.includes(c.material) ? c.material : ""}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
+              >
+                <option value="" disabled>Material…</option>
+                {WIND_VENT_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+              </Select>
+            </>
           ) : c.category === "Ventilation Accessories" ? (
             <>
               <Select
@@ -2203,7 +2252,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -2424,7 +2473,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -2528,7 +2577,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -2708,12 +2757,15 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) || isCanvass(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex items-end md:col-span-3">
                     <p className="text-xs text-muted-foreground">
                       {(() => {
+                        if (isWindVent(l.specs)) {
+                          return "Pick throat diameter and material, then enter the unit price manually.";
+                        }
                         if (isCanvass(l.specs)) {
                           const net = canvassNet(l.specs);
                           if (net == null) return "Pick a material and unit to auto-price.";
@@ -2835,7 +2887,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
