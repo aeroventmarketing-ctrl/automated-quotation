@@ -2066,6 +2066,20 @@ export function QuotationBuilder({
                   { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
+              } else if (type === "Inline Duct Fan") {
+                // Seed the description now (type + brand); the model line is added
+                // when a CK model is chosen via Run selection.
+                setLines((ls) =>
+                  ls.map((x) =>
+                    x.id === l.id
+                      ? {
+                          ...x,
+                          specs: { ...x.specs, type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null },
+                          descriptionSnapshot: buildInlineFanDescription(null),
+                        }
+                      : x,
+                  ),
+                );
               } else if (c.category === "Ventilation Accessories") {
                 // Air Terminals / Dampers: reset shape/size/material/finish and
                 // clear any stale auto-price (recomputes once dimensions are set).
