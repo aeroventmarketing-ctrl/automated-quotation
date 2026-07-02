@@ -977,14 +977,14 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   }
   if (ACC_MATERIALS.includes(specs.material) || VENT_CAP_MATERIALS.includes(specs.material)) {
     lines.push(`${accMaterialLabel(specs.material)} Material`);
-    // Finish follows the material — but any stainless grade carries no finish,
-    // and motorized dampers carry none either (the actuator line is shown above).
-    if (!isStainlessMaterial(specs.material) && !MOTORIZED_DAMPER_TYPES.has(specs.type)) {
-      if (POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated) {
+    // Finish follows the material. Powder coating can be applied to any material
+    // that offers it (incl. Vent Cap on stainless). Otherwise: air terminals
+    // carry oven-baked enamel, but stainless / dampers / motorized carry none.
+    const canPowder = POWDER_COAT_TYPES.has(specs.type) || specs.type === "Vent Cap";
+    if (!MOTORIZED_DAMPER_TYPES.has(specs.type)) {
+      if (canPowder && specs.powderCoated) {
         lines.push("Powder Coated White");
-      } else if (groupForType(specs.category, specs.type) === "Air Terminals") {
-        // Only air terminals carry the oven-baked-enamel finish; dampers and the
-        // plain Accessories (clips, cleats, corners) don't.
+      } else if (!isStainlessMaterial(specs.material) && groupForType(specs.category, specs.type) === "Air Terminals") {
         lines.push("Painted with Oven Baked Enamel");
       }
     }
@@ -1969,6 +1969,12 @@ export function QuotationBuilder({
                 <option value="" disabled>Material…</option>
                 {VENT_CAP_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
               </Select>
+              <label className="flex h-9 items-center gap-1.5 text-sm">
+                Powder Coated
+                <input type="checkbox" className="h-4 w-4" disabled={!editable}
+                  checked={!!c.powderCoated}
+                  onChange={(e) => applyAccessory(l.id, { powderCoated: e.target.checked })} />
+              </label>
             </>
           ) : c.category === "Ventilation Accessories" ? (
             <>
