@@ -11,6 +11,7 @@ import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LA
 import { Plus } from "lucide-react";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
 import { addQuotation } from "../actions";
+import { CustomerHeader } from "./customer-header";
 import { AccountPanel } from "./account-panel";
 import { ConversationPanel, type ConversationBoxData } from "./conversation-panel";
 
@@ -133,15 +134,17 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">{customer.company}</h1>
-          <p className="text-sm text-muted-foreground">Client profile</p>
-        </div>
-        <Button asChild variant="outline">
-          <Link href="/quotations">← Back to quotations</Link>
-        </Button>
-      </div>
+      <CustomerHeader
+        customer={{
+          id: customer.id,
+          company: customer.company,
+          contactName: customer.contactName ?? "",
+          email: customer.email ?? "",
+          phone: customer.phone ?? "",
+          address: customer.address ?? "",
+          notes: customer.notes ?? "",
+        }}
+      />
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -143,6 +143,36 @@ export async function addQuotation(customerId: string) {
   redirect(`/quotations/${quotation.id}`);
 }
 
+const customerSchema = z.object({
+  company: z.string().min(1, "Company is required"),
+  contactName: z.string().optional().default(""),
+  email: z.string().optional().default(""),
+  phone: z.string().optional().default(""),
+  address: z.string().optional().default(""),
+  notes: z.string().optional().default(""),
+});
+
+/** Update a client's details from the profile. Any signed-in user may edit. */
+export async function updateCustomer(customerId: string, input: z.infer<typeof customerSchema>) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const d = customerSchema.parse(input);
+  await prisma.customer.update({
+    where: { id: customerId },
+    data: {
+      company: d.company.trim(),
+      contactName: d.contactName.trim() || null,
+      email: d.email.trim() || null,
+      phone: d.phone.trim() || null,
+      address: d.address.trim() || null,
+      notes: d.notes.trim() || null,
+    },
+  });
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/quotations");
+  revalidatePath("/inquiries");
+}
+
 const conversationSchema = z.object({
   date: z.string().min(1),
   channel: z.string().min(1),
