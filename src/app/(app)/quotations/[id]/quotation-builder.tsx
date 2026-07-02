@@ -1627,8 +1627,8 @@ export function QuotationBuilder({
               power_w: m.watt,
               motorHp: null,
               motorPole: null,
-              motorPh: null,
-              motorVolts: null,
+              motorPh: 1, // MAXAIR jet fans are single-phase, 220 V
+              motorVolts: 220,
               inches: null,
             };
           }
