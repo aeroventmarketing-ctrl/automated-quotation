@@ -20,7 +20,7 @@ import {
   dynamicBalancingApplies,
   type Voltage,
 } from "@/lib/pricing/motors";
-import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw, ListPlus } from "lucide-react";
+import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw } from "lucide-react";
 import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
@@ -1370,31 +1370,28 @@ export function QuotationBuilder({
     setAcRan((m) => ({ ...m, [lineId]: false }));
   }
 
-  // Build a fresh, blank line item.
-  function blankLine(): Line {
+  // Add a fresh, blank line item (saved on "Save changes"; available while DRAFT).
+  function addLine() {
     const id = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    return {
-      id,
-      descriptionSnapshot: "",
-      qty: 1,
-      unitPrice: 0,
-      lineTotal: 0,
-      selectionNote: null,
-      specs: {
-        itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
-        motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
-        bodyPrice: null, power_w: null, blowerModel: null,
-        category: "", brand: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
-        acHeight: null, acHeightUnit: "meter", acWidth: null, acWidthUnit: "mm",
+    setLines((ls) => [
+      ...ls,
+      {
+        id,
+        descriptionSnapshot: "",
+        qty: 1,
+        unitPrice: 0,
+        lineTotal: 0,
+        selectionNote: null,
+        specs: {
+          itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
+          motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
+          bodyPrice: null, power_w: null, blowerModel: null,
+          category: "", brand: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
+          acHeight: null, acHeightUnit: "meter", acWidth: null, acWidthUnit: "mm",
+        },
+        rawSpecs: {},
       },
-      rawSpecs: {},
-    };
-  }
-  // Add a blank line item (saved on "Save changes"; available while DRAFT).
-  // "Add item" appends at the bottom; "Insert" adds a line at the top so a line
-  // can be inserted ahead of the existing ones when needed.
-  function addLine(position: "start" | "end" = "end") {
-    setLines((ls) => (position === "start" ? [blankLine(), ...ls] : [...ls, blankLine()]));
+    ]);
   }
   function removeLine(id: string) {
     setLines((ls) => ls.filter((l) => l.id !== id));
@@ -2552,14 +2549,9 @@ export function QuotationBuilder({
           ))}
 
           {editable && (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => addLine("end")}>
-                <Plus className="h-4 w-4" /> Add item
-              </Button>
-              <Button variant="outline" onClick={() => addLine("start")}>
-                <ListPlus className="h-4 w-4" /> Insert
-              </Button>
-            </div>
+            <Button variant="outline" onClick={addLine}>
+              <Plus className="h-4 w-4" /> Add item
+            </Button>
           )}
 
           {/* Totals */}
