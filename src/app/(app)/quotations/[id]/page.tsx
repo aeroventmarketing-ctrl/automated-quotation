@@ -137,6 +137,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               sizeUnit: typeof s.sizeUnit === "string" ? s.sizeUnit : "",
               gauge: typeof s.gauge === "string" ? s.gauge : "",
               cleatSize: typeof s.cleatSize === "string" ? s.cleatSize : "",
+              canvassUnit: typeof s.canvassUnit === "string" ? s.canvassUnit : "",
               powderCoated: s.powderCoated === true,
               movement: typeof s.movement === "string" ? s.movement : "",
               acHeight: num(s.acHeight),
