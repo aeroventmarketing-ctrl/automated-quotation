@@ -749,6 +749,30 @@ function ventCapUnitPrice(specs: LineSpecs, vatRate: number): number | null {
   const net = ventCapNet(specs);
   return net == null ? null : round2(net * (1 + vatRate));
 }
+// Duct Canvass Connector: priced per METER by material (VAT-exclusive net); the
+// line quantity is meters. Sold 25 m per box, less 2,500 (net) per full box.
+const CANVASS_MATERIALS = ["PVC", "Fiberglass Cloth", "Silicone"];
+const CANVASS_NET: Record<string, number> = { PVC: 500, "Fiberglass Cloth": 600, Silicone: 700 };
+const CANVASS_BOX_METERS = 25;
+const CANVASS_BOX_DISCOUNT = 2500; // net, per full box
+const isCanvass = (specs: { category: string; type: string }): boolean =>
+  specs.category === "Ventilation Accessories" && specs.type === "Duct Canvass Connector";
+/** Net (VAT-exclusive) per-meter price for a canvass connector, or null. */
+function canvassNet(specs: LineSpecs): number | null {
+  return CANVASS_MATERIALS.includes(specs.material) ? CANVASS_NET[specs.material] ?? null : null;
+}
+/** Auto unit price (VAT-inclusive, per meter) for a canvass connector, or null. */
+function canvassUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = canvassNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
+}
+/** Description for a canvass connector: type + material. */
+function buildCanvassDescription(specs: LineSpecs): string {
+  const lines: string[] = [];
+  if (specs.type) lines.push(specs.type);
+  if (CANVASS_MATERIALS.includes(specs.material)) lines.push(specs.material);
+  return lines.join("\n");
+}
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
   "Air Grille",
@@ -1216,6 +1240,14 @@ export function QuotationBuilder({
       const netUnit = round2(l.unitPrice / (1 + vatRate));
       return round2(round2(netUnit * l.qty) * (1 + vatRate));
     }
+    // Duct Canvass Connector: qty is meters; deduct the box discount per full box
+    // from the net line total, then apply VAT.
+    if (isCanvass(l.specs)) {
+      const netUnit = round2(l.unitPrice / (1 + vatRate));
+      const boxes = Math.floor(l.qty / CANVASS_BOX_METERS);
+      const netLine = Math.max(0, round2(round2(netUnit * l.qty) - boxes * CANVASS_BOX_DISCOUNT));
+      return round2(netLine * (1 + vatRate));
+    }
     return round2(l.qty * l.unitPrice);
   };
   const totals = useMemo(() => {
@@ -1443,6 +1475,17 @@ export function QuotationBuilder({
             ...l,
             specs,
             descriptionSnapshot: buildAccessoryDescription(specs),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
+        // Duct Canvass Connector: per-meter price by material (box discount is
+        // applied to the line total, not the unit).
+        if (isCanvass(specs)) {
+          const price = canvassUnitPrice(specs, vatRate);
+          return {
+            ...l,
+            specs,
+            descriptionSnapshot: buildCanvassDescription(specs),
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
@@ -1878,6 +1921,13 @@ export function QuotationBuilder({
                   { type, shape: "Round", sizeUnit: "inches", sizeL: "", sizeW: "", material: "", powderCoated: false },
                   true,
                 );
+              } else if (type === "Duct Canvass Connector") {
+                // Canvass connector: material only, priced per meter (qty = meters).
+                applyAccessory(
+                  l.id,
+                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (c.category === "Ventilation Accessories") {
                 // Air Terminals / Dampers: reset shape/size/material/finish and
                 // clear any stale auto-price (recomputes once dimensions are set).
@@ -2006,6 +2056,16 @@ export function QuotationBuilder({
                   onChange={(e) => applyAccessory(l.id, { powderCoated: e.target.checked })} />
               </label>
             </>
+          ) : c.category === "Ventilation Accessories" && isCanvass(c) ? (
+            // Duct Canvass Connector: material only, priced per meter (qty = meters).
+            <Select
+              value={CANVASS_MATERIALS.includes(c.material) ? c.material : ""}
+              disabled={!editable || !c.type}
+              onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
+            >
+              <option value="" disabled>Material…</option>
+              {CANVASS_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+            </Select>
           ) : c.category === "Ventilation Accessories" ? (
             <>
               <Select
@@ -2645,6 +2705,11 @@ export function QuotationBuilder({
                   <div className="flex items-end md:col-span-3">
                     <p className="text-xs text-muted-foreground">
                       {(() => {
+                        if (isCanvass(l.specs)) {
+                          const net = canvassNet(l.specs);
+                          if (net == null) return "Pick a material to auto-price.";
+                          return `₱${net} / meter (VAT ex) × 1.12 — 25 m/box, less ₱${CANVASS_BOX_DISCOUNT} per full box (qty = meters).`;
+                        }
                         if (isVentCap(l.specs)) {
                           const net = ventCapNet(l.specs);
                           if (net == null)
