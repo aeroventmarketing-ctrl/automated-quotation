@@ -994,10 +994,14 @@ const CLEAT_TYPES = new Set(["TDC Cleat", "S-clip", "C-clip"]); // gauge + lengt
 const HW_MATERIALS = ["Galvanized Iron"]; // duct hardware is galvanized iron only
 const HW_GAUGES = ["22", "20", "18"];
 const HW_GAUGE_THICKNESS: Record<string, string> = { "22": "0.7 mm", "20": "0.9 mm", "18": "1.1 mm" };
-const CLEAT_LENGTHS = ['6.5"', '48"'];
+// TDC Cleat uses a 6.5" short length; S-clip / C-clip use 6" (same price).
+function cleatLengthsFor(type: string): string[] {
+  return type === "TDC Cleat" ? ['6.5"', '48"'] : ['6"', '48"'];
+}
 const ANGLE_CORNER_PRICE: Record<string, number> = { "22": 6, "20": 7, "18": 8 };
 const CLEAT_PRICE: Record<string, Record<string, number>> = {
   '6.5"': { "22": 8, "20": 9, "18": 10 },
+  '6"': { "22": 8, "20": 9, "18": 10 }, // S-clip / C-clip — same price as 6.5"
   '48"': { "22": 50, "20": 55, "18": 60 },
 };
 const isDuctHardware = (specs: { category: string; type: string }): boolean =>
@@ -1921,7 +1925,7 @@ export function QuotationBuilder({
                 <Select value={c.cleatSize || ""} disabled={!editable || !c.type}
                   onChange={(e) => applyAccessory(l.id, { cleatSize: e.target.value })}>
                   <option value="" disabled>Length…</option>
-                  {CLEAT_LENGTHS.map((s) => (<option key={s} value={s}>{s}</option>))}
+                  {cleatLengthsFor(c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
                 </Select>
               )}
               <Select
