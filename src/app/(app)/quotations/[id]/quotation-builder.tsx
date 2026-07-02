@@ -991,6 +991,7 @@ function buildAccessoryDescription(specs: LineSpecs): string {
 // a length option (6.5" / 48"). All prices below are VAT-EXCLUSIVE (net) per pc.
 const DUCT_HARDWARE_TYPES = new Set(["Duct Angle corner", "TDC Cleat", "S-clip", "C-clip"]);
 const CLEAT_TYPES = new Set(["TDC Cleat", "S-clip", "C-clip"]); // gauge + length priced
+const HW_MATERIALS = ["Galvanized Iron"]; // duct hardware is galvanized iron only
 const HW_GAUGES = ["22", "20", "18"];
 const HW_GAUGE_THICKNESS: Record<string, string> = { "22": "0.7 mm", "20": "0.9 mm", "18": "1.1 mm" };
 const CLEAT_LENGTHS = ['6.5"', '48"'];
@@ -1879,12 +1880,12 @@ export function QuotationBuilder({
                 </Select>
               )}
               <Select
-                value={ACC_MATERIALS.includes(c.material) ? c.material : ""}
+                value={HW_MATERIALS.includes(c.material) ? c.material : ""}
                 disabled={!editable || !c.type}
                 onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
               >
                 <option value="" disabled>Material…</option>
-                {ACC_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                {HW_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
               </Select>
             </>
           ) : c.category === "Ventilation Accessories" ? (
