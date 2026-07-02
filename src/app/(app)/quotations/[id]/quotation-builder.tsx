@@ -2340,9 +2340,9 @@ export function QuotationBuilder({
                 </Select>
               )}
             </>
-          ) : isPrebuiltUnit(c) || isMotorController(c) ? (
-            // KDK pre-built units and Motor Controllers have no blade type /
-            // drive and aren't material-configurable.
+          ) : isPrebuiltUnit(c) || isMotorController(c) || isInlineFan(c) ? (
+            // KDK pre-built units, Motor Controllers, and the Inline Duct Fan
+            // (selected by duty) have no blade type / drive / material.
             null
           ) : (
             <>
@@ -2372,7 +2372,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isInlineFan(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
