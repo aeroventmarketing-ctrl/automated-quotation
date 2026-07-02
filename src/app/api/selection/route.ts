@@ -74,6 +74,8 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
       })),
     };
   }
+  // Östberg CK inline duct fans — model codes CK200 / CK250 / CK315.
+  if (t === "CK") return { modelCode: { in: ["CK200", "CK250", "CK315"] } };
   // KDK cabinet fans — model codes like 12NSB / 18NFB / 23NLB.
   if (t === "CABINETFAN") {
     return {

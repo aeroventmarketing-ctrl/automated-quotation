@@ -1,0 +1,13 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+CK200,TUBULAR_INLINE,"Östberg CK 200 B Inline Duct Fan","Inline Duct Fan
+Ostberg Brand
+Air Flow 1159 m³/hr · 220 W · 2730 rpm · 47 dB(A)
+Model: CK200",200,unit,11622,PHP,"{""category"":""Other Products"",""brand"":""Ostberg"",""type"":""Inline Duct Fan"",""tag"":""CK"",""fixedSpeed"":true,""rpm"":2730,""power_w"":220,""noise_db"":47,""airVolume_cmh"":1159,""maxStaticPressure_pa"":631,""catalogNo"":""1007000089""}"
+CK250,TUBULAR_INLINE,"Östberg CK 250 C Inline Duct Fan","Inline Duct Fan
+Ostberg Brand
+Air Flow 1120 m³/hr · 165 W · 2530 rpm · 50 dB(A)
+Model: CK250",250,unit,10482,PHP,"{""category"":""Other Products"",""brand"":""Ostberg"",""type"":""Inline Duct Fan"",""tag"":""CK"",""fixedSpeed"":true,""rpm"":2530,""power_w"":165,""noise_db"":50,""airVolume_cmh"":1120,""maxStaticPressure_pa"":554,""catalogNo"":""1007000065""}"
+CK315,TUBULAR_INLINE,"Östberg CK 315 C Inline Duct Fan","Inline Duct Fan
+Ostberg Brand
+Air Flow 1584 m³/hr · 305 W · 2655 rpm · 50 dB(A)
+Model: CK315",315,unit,13052,PHP,"{""category"":""Other Products"",""brand"":""Ostberg"",""type"":""Inline Duct Fan"",""tag"":""CK"",""fixedSpeed"":true,""rpm"":2655,""power_w"":305,""noise_db"":50,""airVolume_cmh"":1584,""maxStaticPressure_pa"":791,""catalogNo"":""1007000119""}"

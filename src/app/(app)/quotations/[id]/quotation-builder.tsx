@@ -204,6 +204,15 @@ const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
   specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";
 /** Air curtains are picked differently from the duty-selected fans. */
 const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air Curtain";
+/** Östberg CK Inline Duct Fan: a fixed-speed unit selected by duty (flow + SP),
+ *  priced as a whole unit from the catalogue (no separate motor). */
+const isInlineFan = (specs: { type: string }): boolean => specs.type === "Inline Duct Fan";
+/** Description for a selected inline duct fan: type / brand / model. */
+function buildInlineFanDescription(model: string | null): string {
+  return ["Inline Duct Fan", "Ostberg Brand", model ? `Model: ${model}` : ""]
+    .filter((l) => l.length > 0)
+    .join("\n");
+}
 /** Motor Controller is a simple sub-typed item (Motor Starter / VFD) — no fan
  *  fields (blade/drive/material/duty/size). The sub-type lives in bladeType. */
 const isMotorController = (specs: { type: string }): boolean => specs.type === "Motor Controller";
@@ -600,6 +609,8 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
 function selectionTag(type: string, bladeType: string, drive = "", category = ""): string {
   // KDK fixed-speed units query their own catalogue by type.
   if (KDK_TYPES.has(type)) return "CASSETTE";
+  // Östberg CK inline duct fans (fixed-speed) query the CK catalogue.
+  if (type === "Inline Duct Fan") return "CK";
   if (type === "Cabinet Fan") return "CABINETFAN";
   if (type === "Mini Sirocco") return "MINISIROCCO";
   // Wall Mounted Fan series (held in bladeType): High Pressure → GSC catalogue,
@@ -1814,6 +1825,31 @@ export function QuotationBuilder({
             // exactly the catalogue price (no ÷1.12 deduction).
             unitPrice: round2(base * (1 + vatRate)),
             descriptionSnapshot: buildKdkDescription(specs.type, model, specs.bladeType),
+          };
+        }
+        // Inline Duct Fan (Östberg CK): a whole unit selected by duty — take the
+        // catalogue price (× VAT, no motor add-on), record its watts (single-phase,
+        // 220 V), and build the Ostberg description. The entered flow / SP stay on
+        // the line as the duty point.
+        if (isInlineFan(l.specs)) {
+          const base = cat?.basePrice ?? 0;
+          const model = cat?.modelCode ?? l.specs.blowerModel;
+          const specs: LineSpecs = {
+            ...l.specs,
+            bodyPrice: base,
+            blowerModel: model,
+            power_w: r.power_kw ? Math.round(r.power_kw * 10000) / 10 : l.specs.power_w,
+            motorHp: null,
+            motorPole: null,
+            motorPh: 1,
+            motorVolts: 220,
+            inches: null,
+          };
+          return {
+            ...l,
+            specs,
+            unitPrice: round2(base * (1 + vatRate)),
+            descriptionSnapshot: buildInlineFanDescription(model),
           };
         }
         const chosenModel = cat?.modelCode ?? l.specs.blowerModel;
