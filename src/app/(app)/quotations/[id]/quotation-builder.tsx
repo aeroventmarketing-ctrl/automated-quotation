@@ -755,8 +755,8 @@ const CANVASS_MATERIALS = ["PVC", "Fiberglass Cloth", "Silicone"];
 const CANVASS_NET: Record<string, number> = { PVC: 500, "Fiberglass Cloth": 600, Silicone: 700 };
 const CANVASS_BOX_METERS = 25;
 const CANVASS_BOX_DISCOUNT = 2500; // net, per full box
-const isCanvass = (specs: { category: string; type: string }): boolean =>
-  specs.category === "Ventilation Accessories" && specs.type === "Duct Canvass Connector";
+// Matched by type — the canvass connector lives under Other Products (Aerovent).
+const isCanvass = (specs: { type: string }): boolean => specs.type === "Duct Canvass Connector";
 /** Net (VAT-exclusive) per-meter price for a canvass connector, or null. */
 function canvassNet(specs: LineSpecs): number | null {
   return CANVASS_MATERIALS.includes(specs.material) ? CANVASS_NET[specs.material] ?? null : null;
@@ -2056,7 +2056,7 @@ export function QuotationBuilder({
                   onChange={(e) => applyAccessory(l.id, { powderCoated: e.target.checked })} />
               </label>
             </>
-          ) : c.category === "Ventilation Accessories" && isCanvass(c) ? (
+          ) : isCanvass(c) ? (
             // Duct Canvass Connector: material only, priced per meter (qty = meters).
             <Select
               value={CANVASS_MATERIALS.includes(c.material) ? c.material : ""}
@@ -2193,8 +2193,8 @@ export function QuotationBuilder({
             </>
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
-              or Ventilation Accessories. */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && c.category !== "Ventilation Accessories" && (
+              Ventilation Accessories, or the canvass connector (its own material). */}
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -2415,7 +2415,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -2519,7 +2519,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -2699,7 +2699,7 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex items-end md:col-span-3">
@@ -2823,7 +2823,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
