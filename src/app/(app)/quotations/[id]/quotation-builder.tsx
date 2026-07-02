@@ -729,6 +729,21 @@ const isVentCap = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && specs.type === "Vent Cap";
 /** Any stainless grade — no paint/powder finish applies. */
 const isStainlessMaterial = (m: string): boolean => /stainless/i.test(m);
+// Vent Cap selling prices (VAT-inclusive) by diameter. Powder coated is a single
+// price per size (100 pcs minimum) that replaces the plain material price.
+const VENT_CAP_PRICE: Record<string, Record<string, number>> = {
+  "Stainless 201": { "4": 300, "6": 500, "8": 900 },
+  "Stainless 304": { "4": 400, "6": 650, "8": 1100 },
+};
+const VENT_CAP_POWDER_PRICE: Record<string, number> = { "4": 370, "6": 590, "8": 1010 };
+/** Auto unit price (VAT-inclusive) for a Vent Cap, or null until size/material set. */
+function ventCapUnitPrice(specs: LineSpecs): number | null {
+  const size = specs.sizeL;
+  if (!size) return null;
+  if (specs.powderCoated) return VENT_CAP_POWDER_PRICE[size] ?? null;
+  if (!VENT_CAP_MATERIALS.includes(specs.material)) return null;
+  return VENT_CAP_PRICE[specs.material]?.[size] ?? null;
+}
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
   "Air Grille",
@@ -1413,6 +1428,16 @@ export function QuotationBuilder({
             ...l,
             specs,
             descriptionSnapshot: buildDuctHardwareDescription(specs),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
+        // Vent Cap: price by diameter + material; powder-coated shows its own price.
+        if (isVentCap(specs)) {
+          const price = ventCapUnitPrice(specs);
+          return {
+            ...l,
+            specs,
+            descriptionSnapshot: buildAccessoryDescription(specs),
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
@@ -2615,6 +2640,15 @@ export function QuotationBuilder({
                   <div className="flex items-end md:col-span-3">
                     <p className="text-xs text-muted-foreground">
                       {(() => {
+                        if (isVentCap(l.specs)) {
+                          const price = ventCapUnitPrice(l.specs);
+                          if (price == null)
+                            return l.specs.powderCoated
+                              ? "Pick a diameter to auto-price."
+                              : "Pick a diameter and material to auto-price.";
+                          const min = l.specs.powderCoated ? " (powder coated, 100 pcs min)" : "";
+                          return `${formatCurrency(price, quotation.currency)} / pc${min} = auto-priced (editable).`;
+                        }
                         if (isDuctHardware(l.specs)) {
                           const net = ductHardwareNet(l.specs, l.qty);
                           if (net == null)
