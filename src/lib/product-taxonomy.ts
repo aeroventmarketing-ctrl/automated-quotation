@@ -323,6 +323,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "bladeTypes": [],
     "drives": []
   },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Aluminum Duct", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Dust Collector", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Induction Motor (TECO)", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Induction Motor (Hyundai)", "bladeTypes": [], "drives": [] },
