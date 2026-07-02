@@ -269,7 +269,6 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Perforated Air Grille", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Vent Cap", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Weather hood", "bladeTypes": [], "drives": [] },
-  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Wind Driven Roof Ventilator", "bladeTypes": [], "drives": [] },
   // Dampers
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Backdraft Damper", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Fire Damper", "bladeTypes": [], "drives": [] },
@@ -358,6 +357,12 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   {
     "category": "Other Products",
     "type": "Induction Motor",
+    "bladeTypes": [],
+    "drives": []
+  },
+  {
+    "category": "Other Products",
+    "type": "Wind Driven Roof Ventilator",
     "bladeTypes": [],
     "drives": []
   },

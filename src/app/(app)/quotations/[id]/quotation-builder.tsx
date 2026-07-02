@@ -812,7 +812,7 @@ function convertAccSize(value: string, from: string, to: string): string {
 // Body price = area(sq in) × rate × material factor (powder coat ×1.5). Area uses
 // the trade inch (25 mm = 1 inch); round = bounding square (D × D).
 const ACC_GRILLE_TYPES = new Set(["Air Grille", "Bar Grille", "Ceiling Diffuser", "Louvers"]);
-const ACC_DAMPER_TYPES = new Set(["Backdraft Damper", "Fire Damper", "Pressure Relief Damper", "Smoke Damper", "Volume Damper"]);
+const ACC_DAMPER_TYPES = new Set(["Backdraft Damper", "Fire Damper", "Gravity Shutter", "Pressure Relief Damper", "Smoke Damper", "Volume Damper"]);
 const ACC_MATERIAL_FACTOR: Record<string, number> = {
   "Galvanized Iron": 1,
   Aluminum: 3,
@@ -1107,7 +1107,7 @@ function buildDuctHardwareDescription(specs: LineSpecs): string {
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
-  if (type === "Jet Nozzle Diffuser" || type === "Vent Cap" || type === "Wind Driven Roof Ventilator") return ["Round"];
+  if (type === "Jet Nozzle Diffuser" || type === "Vent Cap") return ["Round"];
   if (type === "Spring Vibration Isolator") return ["Foot Mounted", "Ceiling Mounted"];
   // Air Terminals / Dampers: square and rectangle share the L×W size fields.
   return ["Round", "Square/Rectangle"];
