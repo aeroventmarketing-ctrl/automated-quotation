@@ -1,15 +1,20 @@
 import { prisma } from "@/lib/db";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuotationsTable } from "./quotations-table";
 
 export const dynamic = "force-dynamic";
 
 export default async function QuotationsPage() {
-  const quotations = await prisma.quotation.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { inquiry: { include: { customer: true } }, preparedBy: true },
-    take: 100,
-  });
+  const [quotations, user] = await Promise.all([
+    prisma.quotation.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { inquiry: { include: { customer: true } }, preparedBy: true },
+      take: 100,
+    }),
+    getCurrentUser(),
+  ]);
+  const admin = isAdmin(user);
 
   const rows = quotations.map((q) => ({
     id: q.id,
@@ -28,7 +33,7 @@ export default async function QuotationsPage() {
       <h1 className="text-2xl font-bold">Quotations</h1>
       <Card>
         <CardContent className="pt-6">
-          <QuotationsTable rows={rows} />
+          <QuotationsTable rows={rows} admin={admin} />
         </CardContent>
       </Card>
     </div>

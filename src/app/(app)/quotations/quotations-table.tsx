@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { ArrowUp, ArrowDown, Search } from "lucide-react";
+import { QuotationActions } from "./quotation-actions";
 
 export interface QuotationRow {
   id: string;
@@ -89,7 +90,7 @@ function Controls({
   );
 }
 
-export function QuotationsTable({ rows }: { rows: QuotationRow[] }) {
+export function QuotationsTable({ rows, admin = false }: { rows: QuotationRow[]; admin?: boolean }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("created");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -144,6 +145,7 @@ export function QuotationsTable({ rows }: { rows: QuotationRow[] }) {
             <TableHead className="text-right">Total</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Status</TableHead>
+            {admin && <TableHead className="text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -163,11 +165,16 @@ export function QuotationsTable({ rows }: { rows: QuotationRow[] }) {
               <TableCell className="text-right">{formatCurrency(q.total, q.currency)}</TableCell>
               <TableCell>{formatDate(new Date(q.createdISO))}</TableCell>
               <TableCell><QuotationStatusBadge status={q.status} /></TableCell>
+              {admin && (
+                <TableCell>
+                  <QuotationActions id={q.id} label={q.quoteNumber} />
+                </TableCell>
+              )}
             </TableRow>
           ))}
           {filtered.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={admin ? 7 : 6} className="text-center text-muted-foreground">
                 {rows.length === 0
                   ? "No quotations yet. Build one from an inquiry."
                   : "No quotations match your search."}

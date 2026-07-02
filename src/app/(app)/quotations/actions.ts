@@ -218,6 +218,15 @@ export async function updateQuotationLines(
   revalidatePath(`/quotations/${quotationId}`);
 }
 
+/** Delete a quotation (admin only). Its line items cascade; the inquiry stays. */
+export async function deleteQuotation(quotationId: string) {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Admin access required");
+  await prisma.quotation.delete({ where: { id: quotationId } });
+  revalidatePath("/quotations");
+  revalidatePath("/dashboard");
+}
+
 /** Workflow transitions: DRAFT -> PENDING_APPROVAL -> APPROVED -> SENT. */
 export async function transitionQuotation(quotationId: string, to: string) {
   const user = await getCurrentUser();
