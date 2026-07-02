@@ -722,6 +722,13 @@ const MOVEMENT_LABEL: Record<string, string> = {
 };
 /** Material options for Ventilation Accessories (Air Terminals / Dampers). */
 const ACC_MATERIALS = ["Galvanized Iron", "Aluminum", "Stainless Steel 304"];
+/** Vent Cap: fixed diameters (inches) and stainless-only material options. */
+const VENT_CAP_DIAMETERS = ["4", "6", "8"];
+const VENT_CAP_MATERIALS = ["Stainless 201", "Stainless 304"];
+const isVentCap = (specs: { category: string; type: string }): boolean =>
+  specs.category === "Ventilation Accessories" && specs.type === "Vent Cap";
+/** Any stainless grade — no paint/powder finish applies. */
+const isStainlessMaterial = (m: string): boolean => /stainless/i.test(m);
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
   "Air Grille",
@@ -729,7 +736,6 @@ const POWDER_COAT_TYPES = new Set([
   "Ceiling Diffuser",
   "Louvers",
   "Perforated Air Grille",
-  "Vent Cap",
   "Weather hood",
   "Backdraft Damper",
   "Fire Damper",
@@ -969,11 +975,11 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     const pcs = sections > 1 ? ` (${sections} pcs)` : "";
     lines.push(`${actuatorModelLabel(specs.movement)} / ${actuatorVoltage(specs.movement)}${pcs}`);
   }
-  if (ACC_MATERIALS.includes(specs.material)) {
+  if (ACC_MATERIALS.includes(specs.material) || VENT_CAP_MATERIALS.includes(specs.material)) {
     lines.push(`${accMaterialLabel(specs.material)} Material`);
-    // Finish follows the material — but stainless steel 304 carries no finish,
+    // Finish follows the material — but any stainless grade carries no finish,
     // and motorized dampers carry none either (the actuator line is shown above).
-    if (specs.material !== "Stainless Steel 304" && !MOTORIZED_DAMPER_TYPES.has(specs.type)) {
+    if (!isStainlessMaterial(specs.material) && !MOTORIZED_DAMPER_TYPES.has(specs.type)) {
       if (POWDER_COAT_TYPES.has(specs.type) && specs.powderCoated) {
         lines.push("Powder Coated White");
       } else if (groupForType(specs.category, specs.type) === "Air Terminals") {
@@ -1835,6 +1841,13 @@ export function QuotationBuilder({
                   { type, gauge: "", cleatSize: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "Galvanized Iron", powderCoated: false },
                   true,
                 );
+              } else if (type === "Vent Cap") {
+                // Vent Cap: fixed round diameters (inches) + stainless material.
+                applyAccessory(
+                  l.id,
+                  { type, shape: "Round", sizeUnit: "inches", sizeL: "", sizeW: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (c.category === "Ventilation Accessories") {
                 // Air Terminals / Dampers: reset shape/size/material/finish and
                 // clear any stale auto-price (recomputes once dimensions are set).
@@ -1935,6 +1948,26 @@ export function QuotationBuilder({
               >
                 <option value="" disabled>Material…</option>
                 {HW_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+              </Select>
+            </>
+          ) : c.category === "Ventilation Accessories" && isVentCap(c) ? (
+            // Vent Cap: fixed round diameter + stainless material (no shape/L/W).
+            <>
+              <Select
+                value={c.sizeL || ""}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { shape: "Round", sizeUnit: "inches", sizeL: e.target.value, sizeW: "" })}
+              >
+                <option value="" disabled>Diameter…</option>
+                {VENT_CAP_DIAMETERS.map((d) => (<option key={d} value={d}>{d} in. diameter</option>))}
+              </Select>
+              <Select
+                value={VENT_CAP_MATERIALS.includes(c.material) ? c.material : ""}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
+              >
+                <option value="" disabled>Material…</option>
+                {VENT_CAP_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
               </Select>
             </>
           ) : c.category === "Ventilation Accessories" ? (
