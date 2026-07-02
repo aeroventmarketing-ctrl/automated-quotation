@@ -822,6 +822,28 @@ function buildWindVentDescription(specs: LineSpecs): string {
   if (WIND_VENT_MATERIALS.includes(specs.material)) lines.push(`${accMaterialLabel(specs.material)} Material`);
   return lines.join("\n");
 }
+// Aluminum Duct (Other Products / Aerovent, MaxAir): sold per size × 10 m box.
+// Prices are VAT-EXCLUSIVE (net) per piece. Size key = diameter in inches.
+const ALU_DUCT_SIZES = ["4", "5", "6", "8"];
+const ALU_DUCT_PRICE: Record<string, number> = { "4": 579, "5": 696, "6": 812, "8": 1059 };
+const aluDuctSizeLabel = (n: string): string => `${n}" x 10 meters`;
+const isAluDuct = (specs: { type: string }): boolean => specs.type === "Aluminum Duct";
+/** Net (VAT-exclusive) price for an aluminum duct by size, or null. */
+function aluDuctNet(specs: LineSpecs): number | null {
+  return specs.sizeL ? ALU_DUCT_PRICE[specs.sizeL] ?? null : null;
+}
+/** Auto unit price (VAT-inclusive, as stored) for an aluminum duct, or null. */
+function aluDuctUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = aluDuctNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
+}
+/** Description for an aluminum duct: type + size. */
+function buildAluDuctDescription(specs: LineSpecs): string {
+  const lines: string[] = [];
+  if (specs.type) lines.push(specs.type);
+  if (specs.sizeL) lines.push(aluDuctSizeLabel(specs.sizeL));
+  return lines.join("\n");
+}
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
   "Air Grille",
@@ -1545,6 +1567,16 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
+        // Aluminum Duct: price by size (4/5/6/8 in × 10 m).
+        if (isAluDuct(specs)) {
+          const price = aluDuctUnitPrice(specs, vatRate);
+          return {
+            ...l,
+            specs,
+            descriptionSnapshot: buildAluDuctDescription(specs),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Motorized dampers: keep a valid operation — default to the first one
         // offered (open/close = spring return, 220 V) when unset or not available
         // for this type. Non-motorized accessories carry no operation.
@@ -1991,6 +2023,13 @@ export function QuotationBuilder({
                   { type, shape: "Round", sizeUnit: "inches", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
+              } else if (type === "Aluminum Duct") {
+                // Aluminum duct: size dropdown, priced per size.
+                applyAccessory(
+                  l.id,
+                  { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (c.category === "Ventilation Accessories") {
                 // Air Terminals / Dampers: reset shape/size/material/finish and
                 // clear any stale auto-price (recomputes once dimensions are set).
@@ -2159,6 +2198,16 @@ export function QuotationBuilder({
                 {WIND_VENT_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
               </Select>
             </>
+          ) : isAluDuct(c) ? (
+            // Aluminum Duct: size dropdown (per size × 10 m).
+            <Select
+              value={c.sizeL || ""}
+              disabled={!editable || !c.type}
+              onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })}
+            >
+              <option value="" disabled>Size…</option>
+              {ALU_DUCT_SIZES.map((s) => (<option key={s} value={s}>{aluDuctSizeLabel(s)}</option>))}
+            </Select>
           ) : c.category === "Ventilation Accessories" ? (
             <>
               <Select
@@ -2287,7 +2336,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -2508,7 +2557,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -2612,7 +2661,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -2792,7 +2841,7 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex items-end md:col-span-3">
@@ -2802,6 +2851,11 @@ export function QuotationBuilder({
                           const net = windVentNet(l.specs);
                           if (net == null) return "Pick throat diameter and material to auto-price.";
                           return `₱${net.toLocaleString()} / pc (VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
+                        if (isAluDuct(l.specs)) {
+                          const net = aluDuctNet(l.specs);
+                          if (net == null) return "Pick a size to auto-price.";
+                          return `₱${net.toLocaleString()} / ${aluDuctSizeLabel(l.specs.sizeL)} (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isCanvass(l.specs)) {
                           const net = canvassNet(l.specs);
@@ -2924,7 +2978,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
