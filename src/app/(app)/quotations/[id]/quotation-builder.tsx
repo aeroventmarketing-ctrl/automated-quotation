@@ -2963,7 +2963,12 @@ export function QuotationBuilder({
               ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isJetFan(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-                  <div className="flex items-end md:col-span-3">
+                  <div className="flex flex-col justify-end gap-1 md:col-span-3">
+                    {isJetFan(l.specs) && l.specs.blowerModel && JET_FAN[l.specs.blowerModel] && (
+                      <p className="text-xs font-medium text-foreground">
+                        Volume flow {JET_FAN[l.specs.blowerModel].cmh} CMH · Static pressure {JET_FAN[l.specs.blowerModel].pa} Pa · {JET_FAN[l.specs.blowerModel].watt} W
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {(() => {
                         if (isWindVent(l.specs)) {
