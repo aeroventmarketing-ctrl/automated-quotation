@@ -844,6 +844,33 @@ function buildAluDuctDescription(specs: LineSpecs): string {
   if (specs.sizeL) lines.push(aluDuctSizeLabel(specs.sizeL));
   return lines.join("\n");
 }
+// Inline Duct Fan (Other Products / Aerovent, OSTBERG): pick a model; each model
+// carries its rating (W / CMH / Pa) and a VAT-EXCLUSIVE (net) selling price.
+const INLINE_FAN_MODELS = ["CK200", "CK250", "CK315"];
+const INLINE_FAN: Record<string, { watt: number; cmh: number; pa: number; net: number }> = {
+  CK200: { watt: 220, cmh: 1159, pa: 631, net: 11622 },
+  CK250: { watt: 165, cmh: 1120, pa: 554, net: 10482 },
+  CK315: { watt: 305, cmh: 1584, pa: 791, net: 13052 },
+};
+const isInlineFan = (specs: { type: string }): boolean => specs.type === "Inline Duct Fan";
+/** Net (VAT-exclusive) price for an inline duct fan by model, or null. */
+function inlineFanNet(specs: LineSpecs): number | null {
+  return specs.blowerModel ? INLINE_FAN[specs.blowerModel]?.net ?? null : null;
+}
+/** Auto unit price (VAT-inclusive, as stored) for an inline duct fan, or null. */
+function inlineFanUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = inlineFanNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
+}
+/** Description for an inline duct fan: type + model + rating. */
+function buildInlineFanDescription(specs: LineSpecs): string {
+  const lines: string[] = [];
+  if (specs.type) lines.push(specs.type);
+  const m = specs.blowerModel ? INLINE_FAN[specs.blowerModel] : null;
+  if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}`);
+  if (m) lines.push(`${m.watt} W · ${m.cmh} CMH · ${m.pa} Pa`);
+  return lines.join("\n");
+}
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
   "Air Grille",
@@ -1577,6 +1604,16 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
+        // Inline Duct Fan: price by model (CK200 / CK250 / CK315).
+        if (isInlineFan(specs)) {
+          const price = inlineFanUnitPrice(specs, vatRate);
+          return {
+            ...l,
+            specs,
+            descriptionSnapshot: buildInlineFanDescription(specs),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Motorized dampers: keep a valid operation — default to the first one
         // offered (open/close = spring return, 220 V) when unset or not available
         // for this type. Non-motorized accessories carry no operation.
@@ -2030,6 +2067,13 @@ export function QuotationBuilder({
                   { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
+              } else if (type === "Inline Duct Fan") {
+                // Inline duct fan: model dropdown (OSTBERG CK series), priced per model.
+                applyAccessory(
+                  l.id,
+                  { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (c.category === "Ventilation Accessories") {
                 // Air Terminals / Dampers: reset shape/size/material/finish and
                 // clear any stale auto-price (recomputes once dimensions are set).
@@ -2208,6 +2252,16 @@ export function QuotationBuilder({
               <option value="" disabled>Size…</option>
               {ALU_DUCT_SIZES.map((s) => (<option key={s} value={s}>{aluDuctSizeLabel(s)}</option>))}
             </Select>
+          ) : isInlineFan(c) ? (
+            // Inline Duct Fan: model dropdown (OSTBERG CK series).
+            <Select
+              value={c.blowerModel || ""}
+              disabled={!editable || !c.type}
+              onChange={(e) => applyAccessory(l.id, { blowerModel: e.target.value || null })}
+            >
+              <option value="" disabled>Model…</option>
+              {INLINE_FAN_MODELS.map((m) => (<option key={m} value={m}>{m}</option>))}
+            </Select>
           ) : c.category === "Ventilation Accessories" ? (
             <>
               <Select
@@ -2336,7 +2390,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isInlineFan(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -2557,7 +2611,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isInlineFan(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -2661,7 +2715,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isInlineFan(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -2841,7 +2895,7 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isInlineFan(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex items-end md:col-span-3">
@@ -2856,6 +2910,11 @@ export function QuotationBuilder({
                           const net = aluDuctNet(l.specs);
                           if (net == null) return "Pick a size to auto-price.";
                           return `₱${net.toLocaleString()} / ${aluDuctSizeLabel(l.specs.sizeL)} (VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
+                        if (isInlineFan(l.specs)) {
+                          const net = inlineFanNet(l.specs);
+                          if (net == null) return "Pick a model to auto-price.";
+                          return `₱${net.toLocaleString()} / pc (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isCanvass(l.specs)) {
                           const net = canvassNet(l.specs);
@@ -2978,7 +3037,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isInlineFan(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
