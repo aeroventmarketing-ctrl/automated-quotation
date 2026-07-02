@@ -326,6 +326,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   {
     "category": "Other Products",
     "type": "Duct Canvass Connector",
+    "brand": "AlphaAir",
     "bladeTypes": [],
     "drives": []
   },
@@ -381,15 +382,27 @@ export const PRODUCT_CATEGORIES: string[] = Array.from(
 /** Default brand bucket for entries in a branded category that have no brand. */
 export const DEFAULT_BRAND = "Aerovent";
 
+/** Preferred brand display order per category (brands not listed fall to the end). */
+const BRAND_ORDER: Record<string, string[]> = {
+  "Other Products": ["Aerovent", "AlphaAir", "KDK"],
+};
+
 /**
  * Brands (makes) offered in a category — only when at least one entry carries a
  * brand. Entries without a brand fall under DEFAULT_BRAND, so the category still
  * exposes all its types via a brand level. Empty when the category isn't branded.
+ * Ordered by BRAND_ORDER when defined, else by first appearance.
  */
 export function brandsFor(category: string): string[] {
   const entries = PRODUCT_TAXONOMY.filter((e) => e.category === category);
   if (!entries.some((e) => e.brand)) return [];
-  return Array.from(new Set(entries.map((e) => e.brand || DEFAULT_BRAND)));
+  const brands = Array.from(new Set(entries.map((e) => e.brand || DEFAULT_BRAND)));
+  const order = BRAND_ORDER[category];
+  if (order) {
+    const rank = (b: string) => (order.indexOf(b) === -1 ? order.length : order.indexOf(b));
+    brands.sort((a, b) => rank(a) - rank(b));
+  }
+  return brands;
 }
 
 /**
