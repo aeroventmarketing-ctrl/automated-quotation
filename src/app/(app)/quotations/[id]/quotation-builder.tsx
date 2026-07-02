@@ -74,6 +74,8 @@ interface LineSpecs {
   sizeL: string;
   sizeW: string;
   sizeUnit?: string; // dimension unit (mm/cm/inches) for sized accessories
+  gauge?: string; // sheet gauge for duct hardware (22 / 20 / 18)
+  cleatSize?: string; // length option for TDC cleat / S-clip / C-clip (6.5" / 48")
   powderCoated?: boolean; // accessory powder-coat finish flag
   movement?: string; // motorized damper movement (open/close, modulating, adjustable)
   // Air-curtain client inputs (installation height + door width with units).
@@ -984,6 +986,45 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   return lines.join("\n");
 }
 
+// --- Duct hardware (clips, cleats, corners): priced per piece by sheet gauge --
+// Angle corner is priced by gauge alone; TDC Cleat / S-clip / C-clip also carry
+// a length option (6.5" / 48"). All prices below are VAT-EXCLUSIVE (net) per pc.
+const DUCT_HARDWARE_TYPES = new Set(["Duct Angle corner", "TDC Cleat", "S-clip", "C-clip"]);
+const CLEAT_TYPES = new Set(["TDC Cleat", "S-clip", "C-clip"]); // gauge + length priced
+const HW_GAUGES = ["22", "20", "18"];
+const HW_GAUGE_THICKNESS: Record<string, string> = { "22": "0.7 mm", "20": "0.9 mm", "18": "1.1 mm" };
+const CLEAT_LENGTHS = ['6.5"', '48"'];
+const ANGLE_CORNER_PRICE: Record<string, number> = { "22": 6, "20": 7, "18": 8 };
+const CLEAT_PRICE: Record<string, Record<string, number>> = {
+  '6.5"': { "22": 8, "20": 9, "18": 10 },
+  '48"': { "22": 50, "20": 55, "18": 60 },
+};
+const isDuctHardware = (specs: { category: string; type: string }): boolean =>
+  specs.category === "Ventilation Accessories" && DUCT_HARDWARE_TYPES.has(specs.type);
+/** Net (VAT-exclusive) per-piece price for a duct-hardware line, or null if incomplete. */
+function ductHardwareNet(specs: LineSpecs): number | null {
+  if (specs.type === "Duct Angle corner") return specs.gauge ? ANGLE_CORNER_PRICE[specs.gauge] ?? null : null;
+  if (CLEAT_TYPES.has(specs.type)) {
+    if (!specs.gauge || !specs.cleatSize) return null;
+    return CLEAT_PRICE[specs.cleatSize]?.[specs.gauge] ?? null;
+  }
+  return null;
+}
+/** Unit price (VAT-inclusive, as stored) for a duct-hardware line, or null. */
+function ductHardwareUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = ductHardwareNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
+}
+/** Description for a duct-hardware line: type, length (cleats), gauge, material. */
+function buildDuctHardwareDescription(specs: LineSpecs): string {
+  const lines: string[] = [];
+  if (specs.type) lines.push(specs.type);
+  if (CLEAT_TYPES.has(specs.type) && specs.cleatSize) lines.push(`${specs.cleatSize} Length`);
+  if (specs.gauge) lines.push(`Gauge ${specs.gauge} (${HW_GAUGE_THICKNESS[specs.gauge] ?? ""})`.trim());
+  if (ACC_MATERIALS.includes(specs.material)) lines.push(`${accMaterialLabel(specs.material)} Material`);
+  return lines.join("\n");
+}
+
 /** Shape / variant options for a Ventilation Accessory type. */
 function shapesFor(type: string): string[] {
   if (type === "Bar Grille") return ["Rectangle"];
@@ -1310,6 +1351,16 @@ export function QuotationBuilder({
         // Stainless steel 304 is never powder-coated — drop any stale flag so the
         // price and description don't carry the ×1.5 / "Powder Coated" finish.
         if (specs.material === "Stainless Steel 304") specs.powderCoated = false;
+        // Duct hardware (clips, cleats, corners): per-piece price by gauge (+ length).
+        if (isDuctHardware(specs)) {
+          const price = ductHardwareUnitPrice(specs, vatRate);
+          return {
+            ...l,
+            specs,
+            descriptionSnapshot: buildDuctHardwareDescription(specs),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Motorized dampers: keep a valid operation — default to the first one
         // offered (open/close = spring return, 220 V) when unset or not available
         // for this type. Non-motorized accessories carry no operation.
@@ -1726,6 +1777,14 @@ export function QuotationBuilder({
               } else if (type === "Spring Vibration Isolator") {
                 // Seed the description with the type; mounting/capacity add to it.
                 applyIsolator(l.id, { type, shape: "", sizeL: "", sizeW: "" });
+              } else if (DUCT_HARDWARE_TYPES.has(type)) {
+                // Clips / cleats / corners: priced per piece by gauge (+ length),
+                // galvanized iron by default; clear any area-based selections.
+                applyAccessory(
+                  l.id,
+                  { type, gauge: "", cleatSize: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "Galvanized Iron", powderCoated: false },
+                  true,
+                );
               } else if (c.category === "Ventilation Accessories") {
                 // Air Terminals / Dampers: reset shape/size/material/finish and
                 // clear any stale auto-price (recomputes once dimensions are set).
@@ -1802,7 +1861,33 @@ export function QuotationBuilder({
               Recommend?
             </label>
           )}
-          {c.category === "Ventilation Accessories" ? (
+          {c.category === "Ventilation Accessories" && isDuctHardware(c) ? (
+            // Duct hardware: gauge (+ length for cleats/clips) + material.
+            <>
+              <Select value={c.gauge || ""} disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { gauge: e.target.value })}>
+                <option value="" disabled>Gauge…</option>
+                {HW_GAUGES.map((g) => (
+                  <option key={g} value={g}>Gauge {g} ({HW_GAUGE_THICKNESS[g]})</option>
+                ))}
+              </Select>
+              {CLEAT_TYPES.has(c.type) && (
+                <Select value={c.cleatSize || ""} disabled={!editable || !c.type}
+                  onChange={(e) => applyAccessory(l.id, { cleatSize: e.target.value })}>
+                  <option value="" disabled>Length…</option>
+                  {CLEAT_LENGTHS.map((s) => (<option key={s} value={s}>{s}</option>))}
+                </Select>
+              )}
+              <Select
+                value={ACC_MATERIALS.includes(c.material) ? c.material : ""}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
+              >
+                <option value="" disabled>Material…</option>
+                {ACC_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+              </Select>
+            </>
+          ) : c.category === "Ventilation Accessories" ? (
             <>
               <Select
                 // Legacy lines stored "Square" before it became "Square/Rectangle".
@@ -2441,6 +2526,14 @@ export function QuotationBuilder({
                   <div className="flex items-end md:col-span-3">
                     <p className="text-xs text-muted-foreground">
                       {(() => {
+                        if (isDuctHardware(l.specs)) {
+                          const net = ductHardwareNet(l.specs);
+                          if (net == null)
+                            return CLEAT_TYPES.has(l.specs.type)
+                              ? "Pick gauge and length to auto-price."
+                              : "Pick a gauge to auto-price.";
+                          return `₱${net} / pc (VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
                         const rate = accessoryRate(l.specs.type, l.specs.shape);
                         const area = accBilledAreaSqIn(l.specs);
                         const mat = ACC_MATERIAL_FACTOR[l.specs.material];
