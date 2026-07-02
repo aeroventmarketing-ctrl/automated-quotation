@@ -1370,28 +1370,33 @@ export function QuotationBuilder({
     setAcRan((m) => ({ ...m, [lineId]: false }));
   }
 
-  // Add a fresh, blank line item (saved on "Save changes"; available while DRAFT).
-  function addLine() {
+  // Build a fresh, blank line item.
+  function blankLine(): Line {
     const id = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setLines((ls) => [
-      ...ls,
-      {
-        id,
-        descriptionSnapshot: "",
-        qty: 1,
-        unitPrice: 0,
-        lineTotal: 0,
-        selectionNote: null,
-        specs: {
-          itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
-          motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
-          bodyPrice: null, power_w: null, blowerModel: null,
-          category: "", brand: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
-          acHeight: null, acHeightUnit: "meter", acWidth: null, acWidthUnit: "mm",
-        },
-        rawSpecs: {},
+    return {
+      id,
+      descriptionSnapshot: "",
+      qty: 1,
+      unitPrice: 0,
+      lineTotal: 0,
+      selectionNote: null,
+      specs: {
+        itemLabel: "", capacity_cfm: null, staticPressure_pa: null, inches: null,
+        motorHp: null, motorPh: null, motorVolts: null, motorPole: null,
+        bodyPrice: null, power_w: null, blowerModel: null,
+        category: "", brand: "", type: "", bladeType: "", drive: "", material: "Black Iron Sheet", shape: "", sizeL: "", sizeW: "",
+        acHeight: null, acHeightUnit: "meter", acWidth: null, acWidthUnit: "mm",
       },
-    ]);
+      rawSpecs: {},
+    };
+  }
+  // Add a fresh, blank line item at the end (saved on "Save changes"; DRAFT only).
+  function addLine() {
+    setLines((ls) => [...ls, blankLine()]);
+  }
+  // Insert a fresh, blank line item at a given position (between existing items).
+  function insertLineAt(index: number) {
+    setLines((ls) => [...ls.slice(0, index), blankLine(), ...ls.slice(index)]);
   }
   function removeLine(id: string) {
     setLines((ls) => ls.filter((l) => l.id !== id));
@@ -2062,6 +2067,18 @@ export function QuotationBuilder({
                   : "bg-amber-50 dark:bg-amber-950/20"
               }`}
             >
+              {editable && idx > 0 && (
+                // Small insert control floating in the gap above this card, so it
+                // adds a line here without changing the cards' spacing.
+                <button
+                  type="button"
+                  title="Insert an item here"
+                  onClick={() => insertLineAt(idx)}
+                  className="absolute -top-3 left-1/2 z-20 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              )}
               {editable && (
                 <Button size="sm" variant="ghost"
                   className="absolute right-2 top-2 z-10 text-destructive hover:text-destructive"
