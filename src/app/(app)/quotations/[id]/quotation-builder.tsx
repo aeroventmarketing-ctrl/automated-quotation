@@ -194,10 +194,11 @@ const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
 // "KDK - Ceiling Cassette" alias covers quotes saved during the brief window
 // the brand was part of the type name.
 const KDK_TYPES = new Set(["Ceiling Cassette", "KDK - Ceiling Cassette"]);
-const NO_BLADE_DRIVE_TYPES = KDK_TYPES;
-/** KDK pre-built units (whole catalogue items) hide blade type / drive / material. */
+// KDK pre-built units (whole catalogue items) hide blade type / drive / material.
+// Only the KDK brand (or the legacy "KDK - Ceiling Cassette" alias) is a prebuilt
+// unit — a non-KDK "Ceiling Cassette" (e.g. AlphaAir) is a normal priced item.
 const isPrebuiltUnit = (specs: { brand: string; type: string }): boolean =>
-  specs.brand === "KDK" || NO_BLADE_DRIVE_TYPES.has(specs.type);
+  specs.brand === "KDK" || specs.type === "KDK - Ceiling Cassette";
 /** Shutter Series wall fans select on air volume only — static pressure is N/A. */
 const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
   specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";

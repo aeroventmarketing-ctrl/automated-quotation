@@ -323,56 +323,19 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "bladeTypes": [],
     "drives": []
   },
-  {
-    "category": "Other Products",
-    "type": "Duct Canvass Connector",
-    "brand": "AlphaAir",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Dust Collector",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Jet Fan",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Motor Controller",
-    "series": ["Motor Starter", "Variable Frequency Drive"],
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Poultry Fan",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Induction Motor",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Wind Driven Roof Ventilator",
-    "bladeTypes": [],
-    "drives": []
-  },
-  {
-    "category": "Other Products",
-    "type": "Variable Air Volume",
-    "bladeTypes": [],
-    "drives": []
-  }
+  { "category": "Other Products", "brand": "Aerovent", "type": "Dust Collector", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Induction Motor (TECO)", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Induction Motor (Hyundai)", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Jet Fan", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Motor Controller", "series": ["Motor Starter", "Variable Frequency Drive"], "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Portable Axial Blower", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Variable Air Volume", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Wind Driven Roof Ventilator", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "AlphaAir", "type": "Ceiling Cassette", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "AlphaAir", "type": "Duct Canvass Connector", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "AlphaAir", "type": "HVLS", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "AlphaAir", "type": "Jet Fan", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "AlphaAir", "type": "Poultry Fan", "bladeTypes": [], "drives": [] }
 ];
 
 export const PRODUCT_CATEGORIES: string[] = Array.from(
