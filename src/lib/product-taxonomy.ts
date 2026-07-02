@@ -283,7 +283,11 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Smoke Damper", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Volume Damper", "bladeTypes": [], "drives": [] },
   // Accessories
+  { "category": "Ventilation Accessories", "group": "Accessories", "type": "C-clip", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Accessories", "type": "Duct Angle corner", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Accessories", "type": "S-clip", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Accessories", "type": "Spring Vibration Isolator", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Accessories", "type": "TDC Cleat", "bladeTypes": [], "drives": [] },
   {
     "category": "Other Products",
     "type": "Ceiling Cassette",
