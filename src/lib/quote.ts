@@ -30,6 +30,8 @@ export async function nextQuoteNumber(
 export interface LineInput {
   qty: number;
   unitPrice: number;
+  /** Explicit gross line total; when omitted it's round2(qty × unitPrice). */
+  lineTotal?: number;
 }
 
 export interface Totals {
@@ -52,7 +54,7 @@ export function computeTotals(
   vatRate = config.vatRate,
 ): Totals {
   const total = round2(
-    lines.reduce((acc, l) => acc + round2(l.qty * l.unitPrice), 0),
+    lines.reduce((acc, l) => acc + (l.lineTotal ?? round2(l.qty * l.unitPrice)), 0),
   );
   const subtotal = round2(total / (1 + vatRate));
   const vat = round2(total - subtotal);

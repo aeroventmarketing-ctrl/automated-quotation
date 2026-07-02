@@ -123,6 +123,9 @@ const editLineSchema = z.object({
   descriptionSnapshot: z.string().default(""),
   qty: z.number().int().positive(),
   unitPrice: z.number().min(0),
+  // Explicit gross line total (VAT applied at the line level, e.g. Duct Angle
+  // corner). When omitted the line total is round2(unitPrice × qty).
+  lineTotal: z.number().min(0).optional(),
   selectionNote: z.string().nullable().optional(),
   specsSnapshot: z.record(z.unknown()).optional(),
 });
@@ -151,7 +154,9 @@ export async function updateQuotationLines(
   if (!quote) throw new Error("Quotation not found");
   if (quote.status !== "DRAFT") throw new Error("Only DRAFT quotations can be edited");
 
-  const totals = computeTotals(parsed.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })));
+  const totals = computeTotals(
+    parsed.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice, lineTotal: l.lineTotal })),
+  );
 
   // Sync the submitted lines against the DB: update existing, create new, delete removed.
   const existing = await prisma.quotationItem.findMany({
@@ -171,7 +176,7 @@ export async function updateQuotationLines(
               descriptionSnapshot: l.descriptionSnapshot,
               qty: l.qty,
               unitPrice: round2(l.unitPrice),
-              lineTotal: round2(l.unitPrice * l.qty),
+              lineTotal: round2(l.lineTotal ?? l.unitPrice * l.qty),
               selectionNote: l.selectionNote ?? null,
               sortOrder: i,
               ...(l.specsSnapshot ? { specsSnapshot: l.specsSnapshot as object } : {}),
@@ -183,7 +188,7 @@ export async function updateQuotationLines(
               descriptionSnapshot: l.descriptionSnapshot,
               qty: l.qty,
               unitPrice: round2(l.unitPrice),
-              lineTotal: round2(l.unitPrice * l.qty),
+              lineTotal: round2(l.lineTotal ?? l.unitPrice * l.qty),
               selectionNote: l.selectionNote ?? null,
               sortOrder: i,
               specsSnapshot: (l.specsSnapshot ?? {}) as object,
