@@ -241,24 +241,31 @@ export default async function DashboardPage() {
         </Button>
       </div>
 
+      {/* Each box drills into its details: the status boxes open the inquiries
+          list pre-filtered to that stage, and "Quotes drafted today" opens the
+          quotations created today. */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase text-muted-foreground">Quotes drafted today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{quotesToday}</div>
-          </CardContent>
-        </Card>
-        {STATUSES.map((s) => (
-          <Card key={s}>
+        <Link href="/quotations?today=1" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+          <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
             <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase text-muted-foreground">{s.replace("_", " ")}</CardTitle>
+              <CardTitle className="text-xs uppercase text-muted-foreground">Quotes drafted today</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{counts[s] ?? 0}</div>
+              <div className="text-3xl font-bold">{quotesToday}</div>
             </CardContent>
           </Card>
+        </Link>
+        {STATUSES.map((s) => (
+          <Link key={s} href={`/inquiries?status=${s}`} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs uppercase text-muted-foreground">{s.replace("_", " ")}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{counts[s] ?? 0}</div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 
