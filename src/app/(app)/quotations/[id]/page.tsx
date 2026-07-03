@@ -72,7 +72,18 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         return Array.isArray(r) ? (r as RevisionSnapshot[]) : [];
       })()}
       catalog={catalog}
-      templates={sortTemplatesByPickerOrder(templates).map((t) => ({ id: t.id, name: t.name, layoutKey: t.layoutKey }))}
+      templates={sortTemplatesByPickerOrder(templates).map((t) => {
+        // Carry each pattern's own spec note + terms so switching template resets
+        // those fields to the chosen pattern's defaults (never stale carry-over).
+        const cfg = (t.config as Record<string, unknown>) ?? {};
+        return {
+          id: t.id,
+          name: t.name,
+          layoutKey: t.layoutKey,
+          specNote: typeof cfg.specNote === "string" ? cfg.specNote : "",
+          terms: typeof cfg.terms === "string" ? cfg.terms : "",
+        };
+      })}
       quotation={{
         id: quotation.id,
         quoteNumber: quotation.quoteNumber,

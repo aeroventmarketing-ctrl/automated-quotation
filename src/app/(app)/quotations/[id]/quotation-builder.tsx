@@ -1251,7 +1251,7 @@ export function QuotationBuilder({
   catalog,
 }: {
   quotation: Quote;
-  templates: { id: string; name: string; layoutKey: string }[];
+  templates: { id: string; name: string; layoutKey: string; specNote: string; terms: string }[];
   canApprove: boolean;
   isAdmin?: boolean;
   isPreparer?: boolean;
@@ -1291,8 +1291,13 @@ export function QuotationBuilder({
     pressure: quotation.headerUnits.pressure || "in-w.g.",
     motor: quotation.headerUnits.motor || "HP",
   }));
-  const [notes, setNotes] = useState(quotation.notes ?? "");
-  const [terms, setTerms] = useState(quotation.terms ?? "");
+  // Spec note + terms always follow the selected pattern — seed them from the
+  // quote's current template (not any stale saved carry-over) so the quote
+  // strictly matches its chosen template. Falls back to the saved text only for
+  // a retired template that is no longer in the picker.
+  const initialTpl = templates.find((t) => t.id === quotation.templateId);
+  const [notes, setNotes] = useState(initialTpl ? initialTpl.specNote : quotation.notes ?? "");
+  const [terms, setTerms] = useState(initialTpl ? initialTpl.terms : quotation.terms ?? "");
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -2564,7 +2569,22 @@ export function QuotationBuilder({
           </div>
           <div className="space-y-1">
             <Label>Template (pattern)</Label>
-            <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)} disabled={!editable}>
+            <Select
+              value={templateId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setTemplateId(id);
+                // Switching pattern always resets the spec note + terms to the
+                // chosen pattern's own text, clearing any prior carry-over so the
+                // quote strictly follows the selected template.
+                const t = templates.find((tpl) => tpl.id === id);
+                if (t) {
+                  setNotes(t.specNote);
+                  setTerms(t.terms);
+                }
+              }}
+              disabled={!editable}
+            >
               {/* Keep a retired template visible on an existing quote that still uses it. */}
               {!templates.some((t) => t.id === templateId) && (
                 <option value={templateId}>{quotation.templateName}</option>
