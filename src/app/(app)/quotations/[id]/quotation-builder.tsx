@@ -855,6 +855,19 @@ function buildAluDuctDescription(specs: LineSpecs): string {
   if (specs.sizeL) lines.push(aluDuctSizeLabel(specs.sizeL));
   return lines.join("\n");
 }
+// Portable Axial Blower (Other Products / Aerovent): a portable blower picked by
+// fan size in inches. No blade type / drive / material and no supplied price list
+// — priced manually; the size fills the Size column and drives the description.
+const PORTABLE_BLOWER_SIZES = ["10", "12", "14", "16", "24"];
+const portableBlowerSizeLabel = (n: string): string => `${n} in`;
+const isPortableBlower = (specs: { type: string }): boolean => specs.type === "Portable Axial Blower";
+/** Description for a portable axial blower: type + size. */
+function buildPortableBlowerDescription(specs: LineSpecs): string {
+  const lines: string[] = [];
+  if (specs.type) lines.push(specs.type);
+  if (specs.sizeL) lines.push(portableBlowerSizeLabel(specs.sizeL));
+  return lines.join("\n");
+}
 // Jet Fan (Other Products, MAXAIR): pick a model; each carries its rating and a
 // VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel.
 const JET_FAN_MODELS = ["MA-250", "MA-300"];
@@ -1616,6 +1629,17 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
+        // Portable Axial Blower: pick by fan size (inches). No price list supplied,
+        // so the price is entered manually; the size fills the Size column.
+        if (isPortableBlower(specs)) {
+          const s2 = { ...specs, inches: specs.sizeL ? Number(specs.sizeL) : null };
+          return {
+            ...l,
+            specs: s2,
+            descriptionSnapshot: buildPortableBlowerDescription(s2),
+            ...(resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Jet Fan: price by model (MA-250 / MA-300). The model's rating fills the
         // Capacity / Static pressure / Motor columns (converted to the header
         // units); the description carries only type / brand / model.
@@ -2071,6 +2095,14 @@ export function QuotationBuilder({
               // single blade (Propeller), so pre-select it. Accessories keep set().
               if (PROPELLER_FAN_TYPES.has(type)) {
                 applyMotor(l.id, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
+              } else if (type === "Portable Axial Blower") {
+                // Portable Axial Blower: size dropdown (inches), no blade/drive/
+                // material; priced manually (no supplied price list).
+                applyAccessory(
+                  l.id,
+                  { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (MATERIAL_CATEGORIES.has(c.category)) {
                 applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               } else if (c.brand === "KDK") {
@@ -2322,6 +2354,16 @@ export function QuotationBuilder({
               <option value="" disabled>Size…</option>
               {ALU_DUCT_SIZES.map((s) => (<option key={s} value={s}>{aluDuctSizeLabel(s)}</option>))}
             </Select>
+          ) : isPortableBlower(c) ? (
+            // Portable Axial Blower: fan-size dropdown (inches).
+            <Select
+              value={c.sizeL || ""}
+              disabled={!editable || !c.type}
+              onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })}
+            >
+              <option value="" disabled>Size…</option>
+              {PORTABLE_BLOWER_SIZES.map((s) => (<option key={s} value={s}>{portableBlowerSizeLabel(s)}</option>))}
+            </Select>
           ) : isJetFan(c) ? (
             // Jet Fan: model dropdown (MAXAIR MA series).
             <Select
@@ -2460,7 +2502,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlower(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -2477,7 +2519,9 @@ export function QuotationBuilder({
               ? "Category · Brand · Type · Motor Starter / Variable Frequency Drive — enter the description and price."
               : isPrebuiltUnit(c)
                 ? "Category · Brand · Type — run the selection to pick a model by duty."
-                : "Product Category · Type · Blade Type · Drive (more details to follow)."}
+                : isPortableBlower(c)
+                  ? "Category · Brand · Type · Size (inches) — enter the price."
+                  : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
       </div>
     );
@@ -2800,7 +2844,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isJetFan(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlower(l.specs) && !isJetFan(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
