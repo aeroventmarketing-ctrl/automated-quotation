@@ -855,17 +855,50 @@ function buildAluDuctDescription(specs: LineSpecs): string {
   if (specs.sizeL) lines.push(aluDuctSizeLabel(specs.sizeL));
   return lines.join("\n");
 }
-// Portable Axial Blower (Other Products / Aerovent): a portable blower picked by
-// fan size in inches. No blade type / drive / material and no supplied price list
-// — priced manually; the size fills the Size column and drives the description.
+// Portable Axial Blower (Other Products, Pioneer): picked by fan size (inches) and
+// a duct type. "With Duct" is the complete fan (carries capacity / speed / static
+// pressure / motor watts / 220 V) and "Flexible Duct" is the bare flexible-duct
+// accessory (price only, no rating). Prices are VAT-EXCLUSIVE (net). The duct type
+// is held in the otherwise-unused bladeType field.
 const PORTABLE_BLOWER_SIZES = ["10", "12", "14", "16", "24"];
+const PORTABLE_BLOWER_DUCT_TYPES = ["With Duct", "Flexible Duct"];
 const portableBlowerSizeLabel = (n: string): string => `${n} in`;
+interface PortableBlowerRow { cfm: number; rpm: number; pa: number; watt: number; volts: number; net: number }
+const PORTABLE_BLOWER_WITH_DUCT: Record<string, PortableBlowerRow> = {
+  "10": { cfm: 1943, rpm: 3300, pa: 450, watt: 400, volts: 220, net: 8515 },
+  "12": { cfm: 2543, rpm: 3300, pa: 500, watt: 600, volts: 220, net: 9555 },
+  "14": { cfm: 3532, rpm: 3300, pa: 630, watt: 1000, volts: 220, net: 13163 },
+  "16": { cfm: 4238, rpm: 3300, pa: 780, watt: 1100, volts: 220, net: 24960 },
+  "24": { cfm: 8476, rpm: 1720, pa: 540, watt: 2000, volts: 220, net: 49010 },
+};
+const PORTABLE_BLOWER_FLEX_NET: Record<string, number> = {
+  "10": 2340, "12": 2470, "14": 2600, "16": 3900, "24": 5590,
+};
 const isPortableBlower = (specs: { type: string }): boolean => specs.type === "Portable Axial Blower";
-/** Description for a portable axial blower: type + size. */
+const portableBlowerIsFlex = (specs: LineSpecs): boolean => specs.bladeType === "Flexible Duct";
+/** Net (VAT-exclusive) price for a portable axial blower by size × duct type, or null. */
+function portableBlowerNet(specs: LineSpecs): number | null {
+  if (!specs.sizeL) return null;
+  return portableBlowerIsFlex(specs)
+    ? PORTABLE_BLOWER_FLEX_NET[specs.sizeL] ?? null
+    : PORTABLE_BLOWER_WITH_DUCT[specs.sizeL]?.net ?? null;
+}
+/** Auto unit price (VAT-inclusive, as stored) for a portable axial blower, or null. */
+function portableBlowerUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = portableBlowerNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
+}
+/** Description for a portable axial blower: type + brand + size + duct type (+ rpm). */
 function buildPortableBlowerDescription(specs: LineSpecs): string {
   const lines: string[] = [];
   if (specs.type) lines.push(specs.type);
-  if (specs.sizeL) lines.push(portableBlowerSizeLabel(specs.sizeL));
+  lines.push("Pioneer Brand");
+  if (specs.sizeL) {
+    const dt = portableBlowerIsFlex(specs) ? "Flexible Duct" : "With Duct";
+    lines.push(`${specs.sizeL}" — ${dt}`);
+    const row = PORTABLE_BLOWER_WITH_DUCT[specs.sizeL];
+    if (!portableBlowerIsFlex(specs) && row) lines.push(`${row.rpm} rpm`);
+  }
   return lines.join("\n");
 }
 // Jet Fan (Other Products, MAXAIR): pick a model; each carries its rating and a
@@ -1629,15 +1662,33 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
-        // Portable Axial Blower: pick by fan size (inches). No price list supplied,
-        // so the price is entered manually; the size fills the Size column.
+        // Portable Axial Blower: price by size × duct type. "With Duct" carries the
+        // fan rating (capacity / static pressure / motor watts / 220 V), filling the
+        // Capacity / S.P. / Motor columns; "Flexible Duct" is a bare accessory (no
+        // rating). The size sets the Size column.
         if (isPortableBlower(specs)) {
-          const s2 = { ...specs, inches: specs.sizeL ? Number(specs.sizeL) : null };
+          const flex = portableBlowerIsFlex(specs);
+          const row = specs.sizeL ? PORTABLE_BLOWER_WITH_DUCT[specs.sizeL] : null;
+          const withRating = !flex && row;
+          const capUnit = normalizeAirflowUnit(units.capacity) ?? "cfm";
+          const pUnit = normalizePressureUnit(units.pressure) ?? "pa";
+          const s2: LineSpecs = {
+            ...specs,
+            inches: specs.sizeL ? Number(specs.sizeL) : null,
+            capacity_cfm: withRating ? fmtFlow(convertAirflow(row!.cfm, "cfm", capUnit)) : null,
+            staticPressure_pa: withRating ? Math.round(convertPressure(row!.pa, "pa", pUnit) * 100) / 100 : null,
+            power_w: withRating ? row!.watt : null,
+            motorHp: null,
+            motorPole: null,
+            motorPh: withRating ? 1 : null, // single-phase, 220 V
+            motorVolts: withRating ? row!.volts : null,
+          };
+          const price = portableBlowerUnitPrice(s2, vatRate);
           return {
             ...l,
             specs: s2,
             descriptionSnapshot: buildPortableBlowerDescription(s2),
-            ...(resetPrice ? { unitPrice: 0 } : {}),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
         // Jet Fan: price by model (MA-250 / MA-300). The model's rating fills the
@@ -2096,11 +2147,11 @@ export function QuotationBuilder({
               if (PROPELLER_FAN_TYPES.has(type)) {
                 applyMotor(l.id, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
               } else if (type === "Portable Axial Blower") {
-                // Portable Axial Blower: size dropdown (inches), no blade/drive/
-                // material; priced manually (no supplied price list).
+                // Portable Axial Blower: size + duct type dropdowns, no blade/drive/
+                // material. Duct type defaults to "With Duct" (held in bladeType).
                 applyAccessory(
                   l.id,
-                  { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
+                  { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "With Duct", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
               } else if (MATERIAL_CATEGORIES.has(c.category)) {
@@ -2355,15 +2406,24 @@ export function QuotationBuilder({
               {ALU_DUCT_SIZES.map((s) => (<option key={s} value={s}>{aluDuctSizeLabel(s)}</option>))}
             </Select>
           ) : isPortableBlower(c) ? (
-            // Portable Axial Blower: fan-size dropdown (inches).
-            <Select
-              value={c.sizeL || ""}
-              disabled={!editable || !c.type}
-              onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })}
-            >
-              <option value="" disabled>Size…</option>
-              {PORTABLE_BLOWER_SIZES.map((s) => (<option key={s} value={s}>{portableBlowerSizeLabel(s)}</option>))}
-            </Select>
+            // Portable Axial Blower: fan-size dropdown (inches) + duct type.
+            <>
+              <Select
+                value={c.sizeL || ""}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })}
+              >
+                <option value="" disabled>Size…</option>
+                {PORTABLE_BLOWER_SIZES.map((s) => (<option key={s} value={s}>{portableBlowerSizeLabel(s)}</option>))}
+              </Select>
+              <Select
+                value={PORTABLE_BLOWER_DUCT_TYPES.includes(c.bladeType) ? c.bladeType : "With Duct"}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { bladeType: e.target.value })}
+              >
+                {PORTABLE_BLOWER_DUCT_TYPES.map((d) => (<option key={d} value={d}>{d}</option>))}
+              </Select>
+            </>
           ) : isJetFan(c) ? (
             // Jet Fan: model dropdown (MAXAIR MA series).
             <Select
@@ -2520,7 +2580,7 @@ export function QuotationBuilder({
               : isPrebuiltUnit(c)
                 ? "Category · Brand · Type — run the selection to pick a model by duty."
                 : isPortableBlower(c)
-                  ? "Category · Brand · Type · Size (inches) — enter the price."
+                  ? "Category · Brand · Type · Size (inches) · Duct type — auto-priced (editable)."
                   : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
       </div>
@@ -2740,7 +2800,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isJetFan(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlower(l.specs) || isJetFan(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -3024,13 +3084,18 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isJetFan(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlower(l.specs) || isJetFan(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex flex-col justify-end gap-1 md:col-span-3">
                     {isJetFan(l.specs) && l.specs.blowerModel && JET_FAN[l.specs.blowerModel] && (
                       <p className="text-xs font-medium text-foreground">
                         Volume flow {JET_FAN[l.specs.blowerModel].cmh} CMH · Static pressure {JET_FAN[l.specs.blowerModel].pa} Pa · {JET_FAN[l.specs.blowerModel].watt} W
+                      </p>
+                    )}
+                    {isPortableBlower(l.specs) && !portableBlowerIsFlex(l.specs) && l.specs.sizeL && PORTABLE_BLOWER_WITH_DUCT[l.specs.sizeL] && (
+                      <p className="text-xs font-medium text-foreground">
+                        Volume flow {PORTABLE_BLOWER_WITH_DUCT[l.specs.sizeL].cfm} cfm · Static pressure {PORTABLE_BLOWER_WITH_DUCT[l.specs.sizeL].pa} Pa · {PORTABLE_BLOWER_WITH_DUCT[l.specs.sizeL].watt} W · {PORTABLE_BLOWER_WITH_DUCT[l.specs.sizeL].rpm} rpm · 220 V
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
@@ -3044,6 +3109,12 @@ export function QuotationBuilder({
                           const net = aluDuctNet(l.specs);
                           if (net == null) return "Pick a size to auto-price.";
                           return `₱${net.toLocaleString()} / ${aluDuctSizeLabel(l.specs.sizeL)} (VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
+                        if (isPortableBlower(l.specs)) {
+                          const net = portableBlowerNet(l.specs);
+                          if (net == null) return "Pick a size to auto-price.";
+                          const dt = portableBlowerIsFlex(l.specs) ? "flexible duct" : "with duct";
+                          return `₱${net.toLocaleString()} / pc (${dt}, VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isJetFan(l.specs)) {
                           const net = jetFanNet(l.specs);
@@ -3171,7 +3242,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isJetFan(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlower(l.specs) && !isJetFan(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
