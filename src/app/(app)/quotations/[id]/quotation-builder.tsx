@@ -1603,9 +1603,9 @@ export function QuotationBuilder({
               ? ph === 1 ? null : vfdNetPrice(volts, hp)
               : starterNetPrice(drive, ph, volts, hp);
         const unitPrice = net != null ? round2(net * (1 + vatRate)) : 0;
-        // Qty = one controller per fan unit (match the fan's quantity), except for
-        // Power Roof Ventilator / Wall Fan (Propeller Type), which keep the manual qty.
-        const mcQty = src && src.category !== "Propeller Type" ? srcQty : l.qty;
+        // Qty = one controller per fan unit (match the fan's quantity) for every
+        // fan/blower, including Power Roof Ventilator and Wall Fan.
+        const mcQty = src ? srcQty : l.qty;
         if (
           l.specs.bladeType === bladeType && l.specs.drive === drive && l.specs.motorPh === ph &&
           l.specs.motorPole === pole && l.specs.motorHp === hp && l.specs.motorVolts === volts &&
@@ -1647,13 +1647,13 @@ export function QuotationBuilder({
   function updateSpec(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
   }
-  // A Motor Controller's Qty is auto-set (and locked) from the fan above only when
-  // Recommend? is on AND that fan is not a Propeller Type — Power Roof Ventilator /
-  // Wall Fan keep a manual, editable quantity.
+  // A Motor Controller's Qty is auto-set (and locked) from the fan above whenever
+  // Recommend? is on and there is a fan/blower above — including Power Roof
+  // Ventilator and Wall Fan.
   const mcQtyRecommended = (specs: LineSpecs, idx: number): boolean => {
     if (!isMotorController(specs) || !specs.mcRecommend) return false;
     for (let i = idx - 1; i >= 0; i--) {
-      if (BLOWER_CATEGORIES.has(lines[i].specs.category)) return lines[i].specs.category !== "Propeller Type";
+      if (BLOWER_CATEGORIES.has(lines[i].specs.category)) return true;
     }
     return false;
   };
