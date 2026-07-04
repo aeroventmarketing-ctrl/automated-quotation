@@ -36,16 +36,16 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
   if (!user) throw new Error("Unauthorized");
   const data = createSchema.parse(input);
 
-  // First-contact authority: a client is identified by (company + person).
-  // Whoever made first contact owns the right to assist them, so block a
-  // different salesperson from logging an inquiry against a matching pair.
-  // Admins are exempt (they arbitrate disputes).
+  // First-contact authority: a client is identified by the company name plus at
+  // least one of (contact person, number, email). Whoever made first contact
+  // owns the right to assist them, so block a different salesperson from logging
+  // an inquiry against a matching client. Admins are exempt (they arbitrate).
   const contactDetails = data.customerId
     ? await prisma.customer.findUnique({
         where: { id: data.customerId },
-        select: { company: true, contactName: true },
+        select: { company: true, contactName: true, phone: true, email: true },
       })
-    : { company: data.company, contactName: data.contactName };
+    : { company: data.company, contactName: data.contactName, phone: data.phone, email: data.email };
   if (contactDetails && !isAdmin(user)) {
     const owner = await findContactOwner(contactDetails);
     if (owner && owner.ownerId !== user.id) {

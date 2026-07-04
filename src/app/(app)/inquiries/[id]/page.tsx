@@ -49,6 +49,8 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
   const owner = await findContactOwner({
     company: inquiry.customer.company,
     contactName: inquiry.customer.contactName,
+    phone: inquiry.customer.phone,
+    email: inquiry.customer.email,
   });
 
   const catalogueLite = catalogue.map((c) => ({
