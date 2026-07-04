@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { QuoteNumberSetting } from "./quote-number-setting";
+import { PropellerLockSetting } from "./propeller-lock-setting";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter] = await Promise.all([
+  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock] = await Promise.all([
     prisma.user.count(),
     prisma.catalogueItem.count(),
     prisma.priceListEntry.count(),
@@ -15,6 +17,7 @@ export default async function AdminOverviewPage() {
     prisma.inquiry.count(),
     prisma.quotation.count(),
     prisma.quoteCounter.findUnique({ where: { year: 0 } }),
+    getPropellerSpLock(),
   ]);
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
 
@@ -45,6 +48,7 @@ export default async function AdminOverviewPage() {
         ))}
       </div>
       <QuoteNumberSetting current={nextQuoteSeq} />
+      <PropellerLockSetting enabled={propellerSpLock} />
     </div>
   );
 }

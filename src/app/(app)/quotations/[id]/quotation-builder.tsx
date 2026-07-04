@@ -207,6 +207,16 @@ const isPrebuiltUnit = (specs: { brand: string; type: string }): boolean =>
 /** Shutter Series wall fans select on air volume only — static pressure is N/A. */
 const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
   specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";
+/** Propeller Type static pressure (in the header unit) exceeds the 0.5" w.g. cap. */
+const propellerSpOverLimit = (
+  specs: { category: string; type: string; bladeType: string; staticPressure_pa: number | null },
+  pressureUnitStr: string,
+): boolean => {
+  if (specs.category !== "Propeller Type" || isFlowOnlyUnit(specs)) return false;
+  if (specs.staticPressure_pa == null) return false;
+  const pu = normalizePressureUnit(pressureUnitStr) ?? "inwg";
+  return convertPressure(specs.staticPressure_pa, pu, "inwg") > 0.5 + 1e-6;
+};
 /** Air curtains are picked differently from the duty-selected fans. */
 const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air Curtain";
 /** Östberg CK Inline Duct Fan: a fixed-speed unit selected by duty (flow + SP),
@@ -1418,6 +1428,7 @@ export function QuotationBuilder({
   isPreparer = false,
   revisionHistory = [],
   catalog,
+  propellerSpLock = true,
 }: {
   quotation: Quote;
   templates: { id: string; name: string; layoutKey: string; specNote: string; terms: string }[];
@@ -1426,6 +1437,7 @@ export function QuotationBuilder({
   isPreparer?: boolean;
   revisionHistory?: RevisionSnapshot[];
   catalog: Record<string, CatalogEntry>;
+  propellerSpLock?: boolean;
 }) {
   const router = useRouter();
   const editable = quotation.status === "DRAFT";
@@ -3126,19 +3138,16 @@ export function QuotationBuilder({
                 </div>
               )}
 
-              {/* Propeller Type is a low-pressure fan — cap static pressure at 0.5" w.g.
-                  (converted to the chosen unit) and warn when the entry exceeds it. */}
-              {l.specs.category === "Propeller Type" && !isFlowOnlyUnit(l.specs) && (() => {
+              {/* Propeller Type is a low-pressure fan — when the admin lock is on,
+                  cap static pressure at 0.5" w.g. (converted to the chosen unit) and
+                  warn when the entry exceeds it. */}
+              {propellerSpLock && propellerSpOverLimit(l.specs, units.pressure) && (() => {
                 const pu = normalizePressureUnit(units.pressure) ?? "inwg";
-                const sp = l.specs.staticPressure_pa;
-                if (sp == null) return null;
-                const spInWg = convertPressure(sp, pu, "inwg");
-                if (spInWg <= 0.5 + 1e-6) return null;
                 const maxInUnit = Math.round(convertPressure(0.5, "inwg", pu) * 100) / 100;
                 const label = pu === "inwg" ? "0.5 in-w.g." : `${maxInUnit} ${units.pressure} (0.5 in-w.g.)`;
                 return (
                   <p className="mt-1 text-xs text-destructive">
-                    Maximum static pressure for Propeller Type is {label}.
+                    Maximum static pressure for Propeller Type is {label}. Lower it to run the selection.
                   </p>
                 );
               })()}
@@ -3276,7 +3285,8 @@ export function QuotationBuilder({
                     <span className="text-xs font-medium text-muted-foreground">
                       Fan selector — uses {isFlowOnlyUnit(l.specs) ? "Capacity (volume flow only)" : "Capacity + S.P."} above
                     </span>
-                    <Button size="sm" variant="outline" onClick={() => runLineSelection(l)} disabled={sel[l.id]?.loading}>
+                    <Button size="sm" variant="outline" onClick={() => runLineSelection(l)}
+                      disabled={sel[l.id]?.loading || (propellerSpLock && propellerSpOverLimit(l.specs, units.pressure))}>
                       <Gauge className="h-3.5 w-3.5" /> {sel[l.id]?.loading ? "Selecting…" : "Run selection"}
                     </Button>
                   </div>

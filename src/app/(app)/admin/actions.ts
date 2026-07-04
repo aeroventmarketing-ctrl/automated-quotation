@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
 import { setUserSignatureValue } from "@/lib/signature";
+import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { createServiceClient } from "@/lib/supabase/server";
 
 async function assertAdmin() {
@@ -269,6 +270,21 @@ export async function saveGeofenceSetting(input: z.infer<typeof geofenceSchema>)
   // The gate lives in the (app) layout — refresh everything.
   revalidatePath("/", "layout");
   return d;
+}
+
+// --- Propeller Type static-pressure lock ------------------------------------
+export async function getPropellerSpLockSetting(): Promise<boolean> {
+  await assertAdmin();
+  return getPropellerSpLock();
+}
+
+const spLockSchema = z.object({ enabled: z.boolean() });
+export async function savePropellerSpLockSetting(input: z.infer<typeof spLockSchema>): Promise<boolean> {
+  await assertAdmin();
+  const d = spLockSchema.parse(input);
+  await setPropellerSpLock(d.enabled);
+  revalidatePath("/admin");
+  return d.enabled;
 }
 
 // --- Quotation numbering ----------------------------------------------------
