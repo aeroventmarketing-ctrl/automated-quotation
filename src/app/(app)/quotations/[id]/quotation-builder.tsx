@@ -863,6 +863,8 @@ function buildAluDuctDescription(specs: LineSpecs): string {
 // Duct" is the bare flexible-duct accessory (price only, no rating). Prices are
 // VAT-EXCLUSIVE (net). The duct type is held in the otherwise-unused bladeType.
 const PORTABLE_BLOWER_SIZES = ["10", "12", "14", "16", "24"];
+// XProof is not offered in 14" (no price for either unit or flexible duct).
+const PORTABLE_XPROOF_SIZES = ["10", "12", "16", "24"];
 const PORTABLE_BLOWER_DUCT_TYPES = ["With Duct", "Flexible Duct"];
 const PORTABLE_XPROOF_DUCT_TYPES = ["With-out Duct", "Flexible Duct"];
 const portableBlowerSizeLabel = (n: string): string => `${n} in`;
@@ -895,6 +897,9 @@ const portableBlowerIsFlex = (specs: LineSpecs): boolean => specs.bladeType === 
 /** Duct-type options for this variant (standard "With Duct" vs XProof "With-out Duct"). */
 const portableBlowerDuctTypes = (specs: { type: string }): string[] =>
   isPortableXproof(specs) ? PORTABLE_XPROOF_DUCT_TYPES : PORTABLE_BLOWER_DUCT_TYPES;
+/** Size options for this variant (XProof drops the un-priced 14"). */
+const portableBlowerSizes = (specs: { type: string }): string[] =>
+  isPortableXproof(specs) ? PORTABLE_XPROOF_SIZES : PORTABLE_BLOWER_SIZES;
 /** Fan-config rating row (the non-flex option) for this variant × size, or null. */
 function portableBlowerRow(specs: LineSpecs): PortableBlowerRow | null {
   if (!specs.sizeL) return null;
@@ -2449,7 +2454,7 @@ export function QuotationBuilder({
                 onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })}
               >
                 <option value="" disabled>Size…</option>
-                {PORTABLE_BLOWER_SIZES.map((s) => (<option key={s} value={s}>{portableBlowerSizeLabel(s)}</option>))}
+                {portableBlowerSizes(c).map((s) => (<option key={s} value={s}>{portableBlowerSizeLabel(s)}</option>))}
               </Select>
               <Select
                 value={portableBlowerDuctTypes(c).includes(c.bladeType) ? c.bladeType : portableBlowerDuctTypes(c)[0]}
