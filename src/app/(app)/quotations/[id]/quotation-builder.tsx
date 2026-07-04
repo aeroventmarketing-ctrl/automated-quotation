@@ -165,6 +165,13 @@ function effectiveBlowerModel(model: string | null, drive: string): string {
   if (/direct/i.test(drive) && !/DD$/i.test(model)) return `${model}DD`;
   return model;
 }
+/** Customized Jet Fan reuses the Tubeaxial (TAF) catalogue but is badged "JF". */
+const isCustomJetFan = (specs: { type: string }): boolean => specs.type === "Customized Jet Fan";
+/** Displayed model code — swaps the "TAF" tag for "JF" on a Customized Jet Fan. */
+function displayBlowerModel(specs: { blowerModel: string | null; drive: string; type: string }): string {
+  const m = effectiveBlowerModel(specs.blowerModel, specs.drive);
+  return isCustomJetFan(specs) ? m.replace(/TAF/i, "JF") : m;
+}
 /**
  * Reflect the drive in the description as "Belt Drive" / "Direct Drive". When a
  * drive is chosen the word is flipped to match; otherwise the existing Belt or
@@ -193,7 +200,7 @@ const PROPELLER_FAN_TYPES = new Set([
   "Power Roof Ventilator",
   "Panel Fan",
 ]);
-const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial"]);
+const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial", "Customized Jet Fan"]);
 // KDK pre-built units: selected by model (no blade type / drive / material).
 // They follow the quote's VAT presentation like any other product. The
 // "KDK - Ceiling Cassette" alias covers quotes saved during the brief window
@@ -614,7 +621,10 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
   // Axial fans: Tubeaxial = TAF, Vaneaxial = VAF (belt tag; the drive picks the
   // "…DD" direct variant in selectionTag). Gated on the Axial Type category so
   // the Tubular Inline Type tube-/vane-axial entries are unaffected.
-  if (category === "Axial Type") return type === "Vaneaxial" ? "VAF" : "TAF";
+  // Customized Jet Fan reuses the Tubeaxial (TAF) catalogue/selection but is
+  // priced ×3 and badged "JF" — its own pricing tag.
+  if (category === "Axial Type")
+    return type === "Vaneaxial" ? "VAF" : type === "Customized Jet Fan" ? "JF" : "TAF";
   // Propeller wall fans: Exhaust = EWF/EWFDD, Fresh Air = FAWF/FAWFDD. The belt
   // tag carries the ×1 price factor; the drive picks the direct variant in
   // selectionTag and via the model code from selection.
@@ -689,6 +699,8 @@ const TAG_FACTORS: Record<string, number> = {
   TAFDD: 1,
   VAF: 1,
   VAFDD: 1,
+  // Customized Jet Fan = Tubeaxial (TAF) body × 3.
+  JF: 3,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
@@ -1684,6 +1696,14 @@ export function QuotationBuilder({
   function updateSpec(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
   }
+  // Change the header pressure unit and re-lock any Customized Jet Fan line's
+  // static pressure to 0.5" w.g. expressed in the new unit.
+  function setPressureUnit(u: string) {
+    const pu = normalizePressureUnit(u) ?? "inwg";
+    const sp05 = Math.round(convertPressure(0.5, "inwg", pu) * 100) / 100;
+    setUnits((prev) => ({ ...prev, pressure: u }));
+    setLines((ls) => ls.map((l) => (isCustomJetFan(l.specs) ? { ...l, specs: { ...l.specs, staticPressure_pa: sp05 } } : l)));
+  }
   // A Motor Controller's Qty is auto-set (and locked) from the fan above whenever
   // Recommend? is on and there is a fan/blower above — including Power Roof
   // Ventilator and Wall Fan.
@@ -2067,7 +2087,7 @@ export function QuotationBuilder({
                 specs.bladeType,
                 specs.drive,
                 specs.material,
-                specs.blowerModel ? effectiveBlowerModel(specs.blowerModel, specs.drive) : null,
+                specs.blowerModel ? displayBlowerModel(specs) : null,
               )
             : rewriteProductNoun(
                 rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
@@ -2081,7 +2101,7 @@ export function QuotationBuilder({
         const net = computeUnitPrice(body, motor ? motorNetPrice(motor, exp) : 0, hp, phase);
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
-        const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
+        const combined = combinedModel(displayBlowerModel(specs), mModel);
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
@@ -2127,6 +2147,7 @@ export function QuotationBuilder({
     // pressure (e.g. left over from a previous product on this line).
     let sp = spVal && !isFlowOnlyUnit(line.specs) ? convertPressure(spVal, pUnit, "inwg") : 0;
     if (panel && sp <= 0) sp = 0.5; // Recommended 0.5" w.g. when not given.
+    if (isCustomJetFan(line.specs)) sp = 0.5; // Customized Jet Fan is locked to 0.5" w.g.
     setSel((s) => ({ ...s, [line.id]: { loading: true, error: null, results: null } }));
     try {
       const res = await fetch("/api/selection", {
@@ -2237,7 +2258,7 @@ export function QuotationBuilder({
         const net = computeUnitPrice(body, motor ? motorNetPrice(motor, exp) : 0, hp, phase);
         const gross = round2(net * (1 + vatRate));
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
-        const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
+        const combined = combinedModel(displayBlowerModel(specs), mModel);
         const descriptionSnapshot = MATERIAL_CATEGORIES.has(specs.category)
           ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined)
           : rewriteProductNoun(
@@ -2372,6 +2393,12 @@ export function QuotationBuilder({
               // single blade (Propeller), so pre-select it. Accessories keep set().
               if (PROPELLER_FAN_TYPES.has(type)) {
                 applyMotor(l.id, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
+              } else if (type === "Customized Jet Fan") {
+                // Customized Jet Fan: Tubeaxial catalogue, priced ×3, locked to
+                // 0.5" w.g. — seed the static pressure at 0.5" (in the header unit).
+                const pUnit = normalizePressureUnit(units.pressure) ?? "inwg";
+                const sp05 = Math.round(convertPressure(0.5, "inwg", pUnit) * 100) / 100;
+                applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", staticPressure_pa: sp05 });
               } else if (type === "Portable Axial Blower" || type === "Portable Axial Blower (XProof)") {
                 // Portable Axial Blower / XProof: size + duct type dropdowns, no
                 // blade/drive/material. Duct type defaults to the fan config (held
@@ -2958,7 +2985,7 @@ export function QuotationBuilder({
                 ))}
               </Select>
               <Select value={units.pressure} disabled={!editable}
-                onChange={(e) => setUnits({ ...units, pressure: e.target.value })}>
+                onChange={(e) => setPressureUnit(e.target.value)}>
                 <option value="" disabled hidden>Static Pressure</option>
                 {(units.pressure && !PRESSURE_UNITS.includes(units.pressure) ? [units.pressure, ...PRESSURE_UNITS] : PRESSURE_UNITS).map((u) => (
                   <option key={u} value={u}>{u}</option>
@@ -3136,9 +3163,9 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                   <div className="md:col-span-2">
-                    <Label className="text-[10px]">Static pressure{isFlowOnlyUnit(l.specs) ? " (N/A)" : ""}</Label>
+                    <Label className="text-[10px]">Static pressure{isFlowOnlyUnit(l.specs) ? " (N/A)" : isCustomJetFan(l.specs) ? " (locked 0.5\")" : ""}</Label>
                     <Input className="h-8 text-right" type="number" step="any"
-                      disabled={!editable || isFlowOnlyUnit(l.specs)}
+                      disabled={!editable || isFlowOnlyUnit(l.specs) || isCustomJetFan(l.specs)}
                       value={isFlowOnlyUnit(l.specs) ? "" : (l.specs.staticPressure_pa ?? "")}
                       onChange={(e) => updateSpec(l.id, { staticPressure_pa: numOrNull(e.target.value) })} />
                   </div>
@@ -3146,7 +3173,7 @@ export function QuotationBuilder({
                     <Label className="text-[10px]">Unit</Label>
                     <Select className="h-8" value={units.pressure}
                       disabled={!editable || isFlowOnlyUnit(l.specs)}
-                      onChange={(e) => setUnits({ ...units, pressure: e.target.value })}>
+                      onChange={(e) => setPressureUnit(e.target.value)}>
                       {(units.pressure && !PRESSURE_UNITS.includes(units.pressure) ? [units.pressure, ...PRESSURE_UNITS] : PRESSURE_UNITS).map((u) => (
                         <option key={u} value={u}>{u}</option>))}
                     </Select>
@@ -3727,7 +3754,7 @@ export function QuotationBuilder({
                             <span>Motor {mModel ?? "—"}{exp ? " (EX)" : ""}: {formatCurrency(motorNetPrice(motor, exp), quotation.currency)}</span>
                             {exp && !hasExproofPrice(hp) && <span className="text-amber-600">EX price N/A for {hp} HP — using standard</span>}
                             {db && <span className="text-amber-600">+10% dynamic balancing (3-ph &gt; 10 HP)</span>}
-                            {l.specs.blowerModel && <span>Model: <b>{combinedModel(effectiveBlowerModel(l.specs.blowerModel, l.specs.drive), mModel)}</b></span>}
+                            {l.specs.blowerModel && <span>Model: <b>{combinedModel(displayBlowerModel(l.specs), mModel)}</b></span>}
                           </>
                         ) : (
                           <span className="text-destructive">No motor priced for {hp} HP / {ph}-ph / {pole}-pole</span>

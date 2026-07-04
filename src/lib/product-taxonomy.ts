@@ -159,6 +159,17 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     ]
   },
   {
+    "category": "Axial Type",
+    "type": "Customized Jet Fan",
+    "bladeTypes": [
+      "Axial"
+    ],
+    "drives": [
+      "Belt",
+      "Direct"
+    ]
+  },
+  {
     "category": "Propeller Type",
     "type": "Exhaust Wall Fan",
     "bladeTypes": [
