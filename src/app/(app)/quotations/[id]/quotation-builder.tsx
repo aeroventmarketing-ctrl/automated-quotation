@@ -1791,8 +1791,8 @@ export function QuotationBuilder({
           s2.power_w = null;
           s2.motorHp = null;
           s2.motorPole = null;
-          s2.motorPh = null;
-          s2.motorVolts = null;
+          s2.motorPh = 1; // single-phase, 220 V (VAV actuator supply reference)
+          s2.motorVolts = 220;
           const row = vavRowForSize(s2.sizeL);
           const price = row ? row.price : null; // VAT-inclusive — stored as-is
           return {
@@ -3060,53 +3060,70 @@ export function QuotationBuilder({
 
               {/* VAV duct selector (by-Volume-Flow mode) — Run selection lists the
                   ducts whose airflow range covers the entered flow; the sales picks
-                  which model to quote. */}
-              {editable && isVav(l.specs) && l.specs.bladeType === "by Volume Flow" && (
-                <div className="mt-2 rounded-md border border-dashed p-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      VAV duct selector — units that can handle the entered volume flow
-                    </span>
-                    <Button size="sm" variant="outline"
-                      onClick={() => setVavRan((m) => ({ ...m, [l.id]: true }))}>
-                      <Gauge className="h-3.5 w-3.5" /> Run selection
-                    </Button>
+                  which model to quote. Collapses to a one-line summary once picked. */}
+              {editable && isVav(l.specs) && l.specs.bladeType === "by Volume Flow" && (() => {
+                const sel = vavRowForSize(l.specs.sizeL);
+                // Collapsed summary once a duct is picked (until Run selection re-opens it).
+                if (sel && !vavRan[l.id]) {
+                  return (
+                    <div className="mt-2 flex items-center justify-between rounded-md border border-dashed p-2">
+                      <span className="text-xs font-medium">
+                        Selected: Ø {sel.mm} mm ({sel.in} in) · {formatCurrency(round2(sel.price), quotation.currency)}
+                      </span>
+                      <Button size="sm" variant="outline"
+                        onClick={() => setVavRan((m) => ({ ...m, [l.id]: true }))}>
+                        <Gauge className="h-3.5 w-3.5" /> Run selection
+                      </Button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="mt-2 rounded-md border border-dashed p-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        VAV duct selector — units that can handle the entered volume flow
+                      </span>
+                      <Button size="sm" variant="outline"
+                        onClick={() => setVavRan((m) => ({ ...m, [l.id]: true }))}>
+                        <Gauge className="h-3.5 w-3.5" /> Run selection
+                      </Button>
+                    </div>
+                    {vavRan[l.id] && (() => {
+                      const val = l.specs.sizeW ? Number(l.specs.sizeW) : NaN;
+                      if (Number.isNaN(val) || val <= 0)
+                        return <p className="mt-1 text-xs text-muted-foreground">Enter a volume flow above.</p>;
+                      const picks = vavPicks(l.specs);
+                      if (picks.length === 0)
+                        return <p className="mt-1 text-xs text-destructive">Volume flow exceeds the largest duct (24 in).</p>;
+                      return (
+                        <div className="mt-2 space-y-1">
+                          {picks.map((r, i) => {
+                            const isRec = i === 0;
+                            const isSel = l.specs.sizeL === r.in;
+                            return (
+                              <button key={r.in} type="button"
+                                onClick={() => { applyAccessory(l.id, { sizeL: r.in }); setVavRan((m) => ({ ...m, [l.id]: false })); }}
+                                className={`w-full rounded-md border p-2 text-left text-xs hover:bg-accent ${isSel ? "border-primary ring-1 ring-primary" : isRec ? "border-primary/50" : ""}`}>
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium">
+                                    Ø {r.mm} mm ({r.in} in)
+                                    {isRec && <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">RECOMMENDED</span>}
+                                    {isSel && <span className="ml-2 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">SELECTED</span>}
+                                  </span>
+                                  <span className="font-medium">{formatCurrency(round2(r.price), quotation.currency)}</span>
+                                </div>
+                                <p className="text-muted-foreground">
+                                  Airflow {r.lpsMin}–{r.lpsMax} L/s · {r.cfmMin}–{r.cfmMax} CFM · {r.cmhMin}–{r.cmhMax} CMH
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
-                  {vavRan[l.id] && (() => {
-                    const val = l.specs.sizeW ? Number(l.specs.sizeW) : NaN;
-                    if (Number.isNaN(val) || val <= 0)
-                      return <p className="mt-1 text-xs text-muted-foreground">Enter a volume flow above.</p>;
-                    const picks = vavPicks(l.specs);
-                    if (picks.length === 0)
-                      return <p className="mt-1 text-xs text-destructive">Volume flow exceeds the largest duct (24 in).</p>;
-                    return (
-                      <div className="mt-2 space-y-1">
-                        {picks.map((r, i) => {
-                          const isRec = i === 0;
-                          const isSel = l.specs.sizeL === r.in;
-                          return (
-                            <button key={r.in} type="button"
-                              onClick={() => applyAccessory(l.id, { sizeL: r.in })}
-                              className={`w-full rounded-md border p-2 text-left text-xs hover:bg-accent ${isSel ? "border-primary ring-1 ring-primary" : isRec ? "border-primary/50" : ""}`}>
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium">
-                                  Ø {r.mm} mm ({r.in} in)
-                                  {isRec && <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">RECOMMENDED</span>}
-                                  {isSel && <span className="ml-2 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">SELECTED</span>}
-                                </span>
-                                <span className="font-medium">{formatCurrency(round2(r.price), quotation.currency)}</span>
-                              </div>
-                              <p className="text-muted-foreground">
-                                Airflow {r.lpsMin}–{r.lpsMax} L/s · {r.cfmMin}–{r.cfmMax} CFM · {r.cmhMin}–{r.cmhMax} CMH
-                              </p>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+                );
+              })()}
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
