@@ -915,16 +915,23 @@ function portableBlowerUnitPrice(specs: LineSpecs, vatRate: number): number | nu
   const net = portableBlowerNet(specs);
   return net == null ? null : round2(net * (1 + vatRate));
 }
-/** Description for a portable axial blower: type + brand + size + duct type (+ rpm). */
+/** Description for a portable axial blower. Flexible Duct is a standalone accessory
+ *  line (name · brand · diameter); the fan config shows type · brand · size · rpm. */
 function buildPortableBlowerDescription(specs: LineSpecs): string {
   const lines: string[] = [];
+  if (portableBlowerIsFlex(specs)) {
+    lines.push(isPortableXproof(specs) ? "Exproof Flexible Duct" : "Flexible Duct");
+    lines.push("Pioneer Brand");
+    if (specs.sizeL) lines.push(`${specs.sizeL}" diameter`);
+    return lines.join("\n");
+  }
   if (specs.type) lines.push(specs.type);
   lines.push("Pioneer Brand");
   if (specs.sizeL) {
-    const dt = specs.bladeType || (portableBlowerIsFlex(specs) ? "Flexible Duct" : portableBlowerDuctTypes(specs)[0]);
+    const dt = specs.bladeType || portableBlowerDuctTypes(specs)[0];
     lines.push(`${specs.sizeL}" — ${dt}`);
     const row = portableBlowerRow(specs);
-    if (!portableBlowerIsFlex(specs) && row) lines.push(`${row.rpm} rpm`);
+    if (row) lines.push(`${row.rpm} rpm`);
   }
   return lines.join("\n");
 }
