@@ -968,13 +968,14 @@ const VAV_THERMOSTAT_NOTE = "NEVD — HMI Thermostat for VAV actuators with Temp
 const isVav = (specs: { type: string }): boolean => specs.type === "Variable Air Volume";
 const vavDuctLabel = (r: VavRow): string => `${r.mm} mm (${r.in} in)`;
 const vavRowForSize = (sizeL: string): VavRow | null => VAV_ROWS.find((r) => r.in === sizeL) ?? null;
-/** Duct size resolved from a "by Volume Flow" duty — the smallest duct that covers it. */
-function vavResolveSizeFromFlow(specs: LineSpecs): string {
+/** Candidate ducts for a "by Volume Flow" duty — every duct that can handle the
+ *  flow (flow ≤ its max), smallest first; the first is the recommended pick. */
+function vavPicks(specs: LineSpecs): VavRow[] {
   const u = normalizeAirflowUnit(specs.sizeUnit) ?? "cfm";
   const val = specs.sizeW ? Number(specs.sizeW) : NaN;
-  if (Number.isNaN(val) || val <= 0) return "";
+  if (Number.isNaN(val) || val <= 0) return [];
   const cmh = convertAirflow(val, u, "m3hr");
-  return (VAV_ROWS.find((r) => cmh <= r.cmhMax) ?? null)?.in ?? "";
+  return VAV_ROWS.filter((r) => cmh <= r.cmhMax);
 }
 /** Description for a VAV: name + "complete with…" + duct size + airflow range. */
 function buildVavDescription(specs: LineSpecs): string {
@@ -1443,6 +1444,8 @@ export function QuotationBuilder({
   );
   // Air-curtain picks only show after the user clicks "Run selection" (per line).
   const [acRan, setAcRan] = useState<Record<string, boolean>>({});
+  // VAV duct picks only show after the user clicks "Run selection" (per line).
+  const [vavRan, setVavRan] = useState<Record<string, boolean>>({});
 
   // When every line is a fans-and-blowers product, prioritize the "Fans and
   // Blowers" (standard) pattern: switch to that template and reset the header
@@ -1776,13 +1779,12 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
-        // Variable Air Volume: resolve the duct size (from the entered volume flow
-        // or the picked duct), then price by duct. The SELLING PRICE is already
-        // VAT-INCLUSIVE, so it is stored as-is. Fan columns stay blank (VAV is
-        // described textually).
+        // Variable Air Volume: price by the chosen duct (picked directly in "by Duct
+        // Size" mode, or via Run selection in "by Volume Flow" mode). The SELLING
+        // PRICE is already VAT-INCLUSIVE, so it is stored as-is. Fan columns stay
+        // blank (VAV is described textually).
         if (isVav(specs)) {
           const s2: LineSpecs = { ...specs };
-          if (specs.bladeType === "by Volume Flow") s2.sizeL = vavResolveSizeFromFlow(specs);
           s2.capacity_cfm = null;
           s2.staticPressure_pa = null;
           s2.inches = null;
@@ -3056,6 +3058,56 @@ export function QuotationBuilder({
                 </div>
               ) : null}
 
+              {/* VAV duct selector (by-Volume-Flow mode) — Run selection lists the
+                  ducts whose airflow range covers the entered flow; the sales picks
+                  which model to quote. */}
+              {editable && isVav(l.specs) && l.specs.bladeType === "by Volume Flow" && (
+                <div className="mt-2 rounded-md border border-dashed p-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      VAV duct selector — units that can handle the entered volume flow
+                    </span>
+                    <Button size="sm" variant="outline"
+                      onClick={() => setVavRan((m) => ({ ...m, [l.id]: true }))}>
+                      <Gauge className="h-3.5 w-3.5" /> Run selection
+                    </Button>
+                  </div>
+                  {vavRan[l.id] && (() => {
+                    const val = l.specs.sizeW ? Number(l.specs.sizeW) : NaN;
+                    if (Number.isNaN(val) || val <= 0)
+                      return <p className="mt-1 text-xs text-muted-foreground">Enter a volume flow above.</p>;
+                    const picks = vavPicks(l.specs);
+                    if (picks.length === 0)
+                      return <p className="mt-1 text-xs text-destructive">Volume flow exceeds the largest duct (24 in).</p>;
+                    return (
+                      <div className="mt-2 space-y-1">
+                        {picks.map((r, i) => {
+                          const isRec = i === 0;
+                          const isSel = l.specs.sizeL === r.in;
+                          return (
+                            <button key={r.in} type="button"
+                              onClick={() => applyAccessory(l.id, { sizeL: r.in })}
+                              className={`w-full rounded-md border p-2 text-left text-xs hover:bg-accent ${isSel ? "border-primary ring-1 ring-primary" : isRec ? "border-primary/50" : ""}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">
+                                  Ø {r.mm} mm ({r.in} in)
+                                  {isRec && <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">RECOMMENDED</span>}
+                                  {isSel && <span className="ml-2 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">SELECTED</span>}
+                                </span>
+                                <span className="font-medium">{formatCurrency(round2(r.price), quotation.currency)}</span>
+                              </div>
+                              <p className="text-muted-foreground">
+                                Airflow {r.lpsMin}–{r.lpsMax} L/s · {r.cfmMin}–{r.cfmMax} CFM · {r.cmhMin}–{r.cmhMax} CMH
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
               {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isJetFan(l.specs) && (
@@ -3295,7 +3347,7 @@ export function QuotationBuilder({
                           if (row == null)
                             return l.specs.bladeType === "by Duct Size"
                               ? "Pick a duct size to auto-price."
-                              : "Enter a volume flow to match a duct size (or it exceeds the largest duct).";
+                              : "Enter a volume flow, then Run selection to choose a duct.";
                           return `₱${row.price.toLocaleString()} / unit — ${row.mm} mm (${row.in} in), VAT incl. = auto-priced (editable).`;
                         }
                         if (isJetFan(l.specs)) {
