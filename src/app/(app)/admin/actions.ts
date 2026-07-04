@@ -7,6 +7,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
 import { setUserSignatureValue } from "@/lib/signature";
 import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
+import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
 import { createServiceClient } from "@/lib/supabase/server";
 
 async function assertAdmin() {
@@ -283,6 +284,15 @@ export async function savePropellerSpLockSetting(input: z.infer<typeof spLockSch
   await assertAdmin();
   const d = spLockSchema.parse(input);
   await setPropellerSpLock(d.enabled);
+  revalidatePath("/admin");
+  return d.enabled;
+}
+
+// --- Axial Type static-pressure lock (Tubeaxial 1.5" / Vaneaxial 4" w.g.) -----
+export async function saveAxialSpLockSetting(input: z.infer<typeof spLockSchema>): Promise<boolean> {
+  await assertAdmin();
+  const d = spLockSchema.parse(input);
+  await setAxialSpLock(d.enabled);
   revalidatePath("/admin");
   return d.enabled;
 }

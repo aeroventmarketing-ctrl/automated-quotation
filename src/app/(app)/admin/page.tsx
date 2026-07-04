@@ -2,13 +2,15 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
+import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuoteNumberSetting } from "./quote-number-setting";
-import { PropellerLockSetting } from "./propeller-lock-setting";
+import { SpLockSetting } from "./sp-lock-setting";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock] = await Promise.all([
+  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock] = await Promise.all([
     prisma.user.count(),
     prisma.catalogueItem.count(),
     prisma.priceListEntry.count(),
@@ -18,6 +20,7 @@ export default async function AdminOverviewPage() {
     prisma.quotation.count(),
     prisma.quoteCounter.findUnique({ where: { year: 0 } }),
     getPropellerSpLock(),
+    getAxialSpLock(),
   ]);
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
 
@@ -48,7 +51,18 @@ export default async function AdminOverviewPage() {
         ))}
       </div>
       <QuoteNumberSetting current={nextQuoteSeq} />
-      <PropellerLockSetting enabled={propellerSpLock} />
+      <SpLockSetting
+        title="Propeller Type static-pressure lock"
+        description={'When enabled, Power Roof Ventilator and Wall Fan (Propeller Type) lines are capped at 0.5" w.g.: the builder warns above that and disables Run selection. Turn off to allow selecting these fans at any static pressure.'}
+        enabled={propellerSpLock}
+        onSave={savePropellerSpLockSetting}
+      />
+      <SpLockSetting
+        title="Axial Type static-pressure lock"
+        description={'When enabled, Tubeaxial is capped at 1.5" w.g. and Vaneaxial at 4" w.g.: the builder warns above that and disables Run selection. Turn off to allow selecting these fans at any static pressure.'}
+        enabled={axialSpLock}
+        onSave={saveAxialSpLockSetting}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
+import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { saleFromClassification } from "@/lib/sale";
 
@@ -15,7 +16,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const { id } = await params;
   // Make sure the built-in "KDK" template is available in the picker.
   await ensureBuiltinTemplates();
-  const [quotation, templates, user, catItems, propellerSpLock] = await Promise.all([
+  const [quotation, templates, user, catItems, propellerSpLock, axialSpLock] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: {
@@ -42,6 +43,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       },
     }),
     getPropellerSpLock(),
+    getAxialSpLock(),
   ]);
 
   if (!quotation) notFound();
@@ -70,6 +72,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       isAdmin={isAdmin(user)}
       isPreparer={!!user && user.id === quotation.preparedById}
       propellerSpLock={propellerSpLock}
+      axialSpLock={axialSpLock}
       revisionHistory={(() => {
         const r = (quotation.classification as Record<string, unknown> | null)?.revisions;
         return Array.isArray(r) ? (r as RevisionSnapshot[]) : [];

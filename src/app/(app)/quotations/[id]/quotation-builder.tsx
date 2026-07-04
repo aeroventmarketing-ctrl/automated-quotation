@@ -207,15 +207,30 @@ const isPrebuiltUnit = (specs: { brand: string; type: string }): boolean =>
 /** Shutter Series wall fans select on air volume only — static pressure is N/A. */
 const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
   specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";
-/** Propeller Type static pressure (in the header unit) exceeds the 0.5" w.g. cap. */
-const propellerSpOverLimit = (
+// Static-pressure caps (in-w.g.) for the low-pressure fan types, each governed by
+// an admin toggle: Propeller Type → 0.5, Tubeaxial → 1.5, Vaneaxial → 4. Axial caps
+// apply by type (both Axial Type and Tubular Inline Type Tubeaxial/Vaneaxial).
+const spCapInWg = (specs: { category: string; type: string }): number | null => {
+  if (specs.category === "Propeller Type") return 0.5;
+  if (specs.type === "Tubeaxial") return 1.5;
+  if (specs.type === "Vaneaxial") return 4;
+  return null;
+};
+/** Which admin lock governs this type's SP cap. */
+const spLockGroup = (specs: { category: string; type: string }): "propeller" | "axial" | null => {
+  if (specs.category === "Propeller Type") return "propeller";
+  if (specs.type === "Tubeaxial" || specs.type === "Vaneaxial") return "axial";
+  return null;
+};
+/** True when this line's static pressure (in the header unit) exceeds its type's cap. */
+const spOverCap = (
   specs: { category: string; type: string; bladeType: string; staticPressure_pa: number | null },
   pressureUnitStr: string,
 ): boolean => {
-  if (specs.category !== "Propeller Type" || isFlowOnlyUnit(specs)) return false;
-  if (specs.staticPressure_pa == null) return false;
+  const cap = spCapInWg(specs);
+  if (cap == null || isFlowOnlyUnit(specs) || specs.staticPressure_pa == null) return false;
   const pu = normalizePressureUnit(pressureUnitStr) ?? "inwg";
-  return convertPressure(specs.staticPressure_pa, pu, "inwg") > 0.5 + 1e-6;
+  return convertPressure(specs.staticPressure_pa, pu, "inwg") > cap + 1e-6;
 };
 /** Air curtains are picked differently from the duty-selected fans. */
 const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air Curtain";
@@ -1429,6 +1444,7 @@ export function QuotationBuilder({
   revisionHistory = [],
   catalog,
   propellerSpLock = true,
+  axialSpLock = true,
 }: {
   quotation: Quote;
   templates: { id: string; name: string; layoutKey: string; specNote: string; terms: string }[];
@@ -1438,6 +1454,7 @@ export function QuotationBuilder({
   revisionHistory?: RevisionSnapshot[];
   catalog: Record<string, CatalogEntry>;
   propellerSpLock?: boolean;
+  axialSpLock?: boolean;
 }) {
   const router = useRouter();
   const editable = quotation.status === "DRAFT";
@@ -1472,6 +1489,14 @@ export function QuotationBuilder({
     pressure: quotation.headerUnits.pressure || "in-w.g.",
     motor: quotation.headerUnits.motor || "HP",
   }));
+  // Static-pressure lock: the line's SP exceeds its type's cap AND the governing
+  // admin toggle (propeller / axial) is on. Blocks Run selection and shows a warning.
+  const isSpBlocked = (specs: LineSpecs): boolean => {
+    const group = spLockGroup(specs);
+    if (!group) return false;
+    const lockOn = group === "propeller" ? propellerSpLock : axialSpLock;
+    return lockOn && spOverCap(specs, units.pressure);
+  };
   // Spec note + terms always follow the selected pattern — seed them from the
   // quote's current template (not any stale saved carry-over) so the quote
   // strictly matches its chosen template. Falls back to the saved text only for
@@ -3138,16 +3163,17 @@ export function QuotationBuilder({
                 </div>
               )}
 
-              {/* Propeller Type is a low-pressure fan — when the admin lock is on,
-                  cap static pressure at 0.5" w.g. (converted to the chosen unit) and
-                  warn when the entry exceeds it. */}
-              {propellerSpLock && propellerSpOverLimit(l.specs, units.pressure) && (() => {
+              {/* Low-pressure fan cap (admin-gated): Propeller 0.5", Tubeaxial 1.5",
+                  Vaneaxial 4" w.g. Warn (in the chosen unit) when the entry exceeds it. */}
+              {isSpBlocked(l.specs) && (() => {
+                const cap = spCapInWg(l.specs) ?? 0.5;
                 const pu = normalizePressureUnit(units.pressure) ?? "inwg";
-                const maxInUnit = Math.round(convertPressure(0.5, "inwg", pu) * 100) / 100;
-                const label = pu === "inwg" ? "0.5 in-w.g." : `${maxInUnit} ${units.pressure} (0.5 in-w.g.)`;
+                const maxInUnit = Math.round(convertPressure(cap, "inwg", pu) * 100) / 100;
+                const label = pu === "inwg" ? `${cap} in-w.g.` : `${maxInUnit} ${units.pressure} (${cap} in-w.g.)`;
+                const name = l.specs.category === "Propeller Type" ? "Propeller Type" : l.specs.type;
                 return (
                   <p className="mt-1 text-xs text-destructive">
-                    Maximum static pressure for Propeller Type is {label}. Lower it to run the selection.
+                    Maximum static pressure for {name} is {label}. Lower it to run the selection.
                   </p>
                 );
               })()}
@@ -3286,7 +3312,7 @@ export function QuotationBuilder({
                       Fan selector — uses {isFlowOnlyUnit(l.specs) ? "Capacity (volume flow only)" : "Capacity + S.P."} above
                     </span>
                     <Button size="sm" variant="outline" onClick={() => runLineSelection(l)}
-                      disabled={sel[l.id]?.loading || (propellerSpLock && propellerSpOverLimit(l.specs, units.pressure))}>
+                      disabled={sel[l.id]?.loading || isSpBlocked(l.specs)}>
                       <Gauge className="h-3.5 w-3.5" /> {sel[l.id]?.loading ? "Selecting…" : "Run selection"}
                     </Button>
                   </div>
