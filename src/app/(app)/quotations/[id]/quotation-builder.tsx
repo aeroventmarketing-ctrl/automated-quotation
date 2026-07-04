@@ -1042,9 +1042,15 @@ const inductionPole = (specs: LineSpecs): number =>
   specs.motorPh === 1 || isInductionHyundai(specs) ? 4 : specs.motorPole ?? 4;
 /** Phase options — Hyundai is three-phase only. */
 const inductionPhaseOptions = (specs: LineSpecs): number[] => (isInductionHyundai(specs) ? [3] : [1, 3]);
-/** HP options for the current phase/pole (only priced HPs are listed). */
-const inductionHpOptions = (specs: LineSpecs): number[] =>
-  specs.motorPh ? hpOptions(specs.motorPh, inductionPole(specs)) : [];
+/** Explosion-proof is offered for 3-phase 4-pole induction motors only. */
+const inductionExEligible = (specs: LineSpecs): boolean =>
+  specs.motorPh === 3 && inductionPole(specs) === 4;
+/** HP options for the current phase/pole (only priced HPs; EX filters to EX-priced). */
+const inductionHpOptions = (specs: LineSpecs): number[] => {
+  if (!specs.motorPh) return [];
+  const opts = hpOptions(specs.motorPh, inductionPole(specs));
+  return specs.exproof && inductionExEligible(specs) ? opts.filter(hasExproofPrice) : opts;
+};
 /** The motor table row for the current phase/pole/HP, or undefined. */
 function inductionMotorRow(specs: LineSpecs): MotorRow | undefined {
   if (!specs.motorPh || specs.motorHp == null) return undefined;
@@ -1053,7 +1059,7 @@ function inductionMotorRow(specs: LineSpecs): MotorRow | undefined {
 /** Auto unit price (VAT-inclusive, as stored) for an induction-motor line, or null. */
 function inductionUnitPrice(specs: LineSpecs, vatRate: number): number | null {
   const m = inductionMotorRow(specs);
-  return m ? round2(m.price * (1 + vatRate)) : null;
+  return m ? round2(motorNetPrice(m, specs.exproof === true) * (1 + vatRate)) : null;
 }
 /** Description for an induction motor. For now only the type name shows; the
  *  full description lines will be supplied later (HP · phase · pole / model
@@ -1986,6 +1992,8 @@ export function QuotationBuilder({
           const s2: LineSpecs = { ...specs };
           if (isInductionHyundai(s2)) s2.motorPh = 3; // Hyundai is three-phase
           s2.motorPole = inductionPole(s2); // single / Hyundai → 4-pole
+          // Explosion-proof is 3-phase 4-pole only — drop the flag otherwise.
+          if (s2.exproof && !inductionExEligible(s2)) s2.exproof = false;
           if (s2.motorHp != null && !inductionHpOptions(s2).includes(s2.motorHp)) s2.motorHp = null;
           s2.motorVolts = 220;
           s2.capacity_cfm = null;
@@ -2860,6 +2868,19 @@ export function QuotationBuilder({
                 <option value="" disabled>HP…</option>
                 {inductionHpOptions(c).map((hp) => (<option key={hp} value={hp}>{hp} HP</option>))}
               </Select>
+              {/* Explosion-proof — 3-phase 4-pole only (uses the EX price list). */}
+              {inductionExEligible(c) && (
+                <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-xs">
+                  <input type="checkbox" className="h-4 w-4" disabled={!editable}
+                    checked={!!c.exproof}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      const dropHp = on && c.motorHp != null && !hasExproofPrice(c.motorHp);
+                      applyAccessory(l.id, { exproof: on, ...(dropHp ? { motorHp: null } : {}) });
+                    }} />
+                  Xproof
+                </label>
+              )}
             </>
           ) : isJetFan(c) ? (
             // Jet Fan: model dropdown (MAXAIR MA series).
@@ -3682,7 +3703,9 @@ export function QuotationBuilder({
                         if (isInductionMotor(l.specs)) {
                           const m = inductionMotorRow(l.specs);
                           if (m == null) return "Pick phase, pole and HP to auto-price.";
-                          return `₱${m.price.toLocaleString()} / unit (VAT ex) × 1.12 = auto-priced (editable).`;
+                          const exp = l.specs.exproof === true;
+                          const net = motorNetPrice(m, exp);
+                          return `₱${net.toLocaleString()} / unit${exp ? " (Xproof)" : ""} (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isJetFan(l.specs)) {
                           const net = jetFanNet(l.specs);
