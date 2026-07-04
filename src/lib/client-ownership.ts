@@ -24,17 +24,32 @@ export function normalizePerson(v?: string | null): string {
   return (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** Company matching ignores case, punctuation and spacing: "Acme Corp." == "acme corp". */
 export function normalizeCompany(v?: string | null): string {
-  return (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return (v ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ") // punctuation (., & etc.) -> space
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 export function normalizeEmail(v?: string | null): string {
   return (v ?? "").trim().toLowerCase();
 }
 
-/** Phone comparison ignores spaces, dashes, parens and other non-digits. */
+/** Digits only — ignores spaces, dashes, parens, "+" etc. */
 export function normalizePhone(v?: string | null): string {
   return (v ?? "").replace(/\D+/g, "");
+}
+
+/**
+ * Phone comparison key: the last 10 digits, so country-code / trunk-prefix
+ * differences don't split the same number ("+639175551234" == "09175551234").
+ * Shorter numbers (landlines) compare in full.
+ */
+export function phoneKey(v?: string | null): string {
+  const d = normalizePhone(v);
+  return d.length > 10 ? d.slice(-10) : d;
 }
 
 export type ContactDetails = {
@@ -64,7 +79,7 @@ export type ContactOwner = {
 export async function findContactOwner(input: ContactDetails): Promise<ContactOwner | null> {
   const company = normalizeCompany(input.company);
   const person = normalizePerson(input.contactName);
-  const phone = normalizePhone(input.phone);
+  const phone = phoneKey(input.phone);
   const email = normalizeEmail(input.email);
   // Company is mandatory, plus at least one other detail to compare against.
   if (!company || (!person && !phone && !email)) return null;
@@ -79,7 +94,7 @@ export async function findContactOwner(input: ContactDetails): Promise<ContactOw
     // Company already matches — now require at least one more detail to match.
     const on: string[] = [];
     if (person && normalizePerson(c.contactName) === person) on.push("contact person");
-    if (phone && normalizePhone(c.phone) === phone) on.push("contact number");
+    if (phone && phoneKey(c.phone) === phone) on.push("contact number");
     if (email && normalizeEmail(c.email) === email) on.push("email address");
     if (on.length === 0) continue;
     matched.set(c.id, {
