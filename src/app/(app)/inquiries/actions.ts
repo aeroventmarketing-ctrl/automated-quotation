@@ -36,21 +36,21 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
   if (!user) throw new Error("Unauthorized");
   const data = createSchema.parse(input);
 
-  // First-contact authority: the contact person / number / email identify a
-  // client. Whoever made first contact owns the right to assist them, so block
-  // a different salesperson from logging an inquiry against a matching contact.
+  // First-contact authority: a client is identified by (company + person).
+  // Whoever made first contact owns the right to assist them, so block a
+  // different salesperson from logging an inquiry against a matching pair.
   // Admins are exempt (they arbitrate disputes).
   const contactDetails = data.customerId
     ? await prisma.customer.findUnique({
         where: { id: data.customerId },
-        select: { contactName: true, email: true, phone: true },
+        select: { company: true, contactName: true },
       })
-    : { contactName: data.contactName, email: data.email, phone: data.phone };
+    : { company: data.company, contactName: data.contactName };
   if (contactDetails && !isAdmin(user)) {
     const owner = await findContactOwner(contactDetails);
     if (owner && owner.ownerId !== user.id) {
       throw new Error(
-        `This client is already handled by ${owner.ownerName}, who made first contact on ${formatOwnerDate(owner.at)} (matched ${owner.matchedOn}: ${owner.matchedValue}). Only ${owner.ownerName} or an admin can log inquiries for this contact.`,
+        `${owner.contactName} at ${owner.company} is already handled by ${owner.ownerName}, who made first contact on ${formatOwnerDate(owner.at)}. Only ${owner.ownerName} or an admin can log inquiries for this contact.`,
       );
     }
   }

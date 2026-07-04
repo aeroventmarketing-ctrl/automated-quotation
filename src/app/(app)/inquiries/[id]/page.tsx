@@ -47,9 +47,8 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
 
   // First-contact owner for this client's contact details (dispute authority).
   const owner = await findContactOwner({
+    company: inquiry.customer.company,
     contactName: inquiry.customer.contactName,
-    email: inquiry.customer.email,
-    phone: inquiry.customer.phone,
   });
 
   const catalogueLite = catalogue.map((c) => ({

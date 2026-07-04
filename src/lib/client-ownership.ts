@@ -3,75 +3,62 @@ import { prisma } from "@/lib/db";
 /**
  * Client ownership / "first contact wins" rules.
  *
- * Company name is NOT unique — many entries may share a company. What is
- * unique to a client contact are the three details: contact person, contact
- * number, and email address. A salesperson may log several contacts under one
- * company, but each of those three details identifies a single client.
+ * A client contact is identified by the pair (company name + contact person).
+ * Neither alone blocks — only the combination does:
+ *   - same company + same person   -> matched (blocked for a different owner)
+ *   - same company + different person -> not matched
+ *   - different company + same person -> not matched
+ *   - different company + different person -> not matched
  *
  * In case of dispute, whoever made the FIRST communication to that contact
- * (the earliest inquiry that touches the detail) holds the authority to assist
- * that client. Only that owner — or an admin — may log further inquiries
- * against a matching contact.
+ * (the earliest inquiry against the matching pair) holds the authority to
+ * assist that client. Only that owner — or an admin — may log further
+ * inquiries against a matching contact.
  */
 
 export function normalizePerson(v?: string | null): string {
   return (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export function normalizeEmail(v?: string | null): string {
-  return (v ?? "").trim().toLowerCase();
-}
-
-/** Phone comparison ignores spaces, dashes, parens and a leading +/0 country prefix noise. */
-export function normalizePhone(v?: string | null): string {
-  return (v ?? "").replace(/\D+/g, "");
+export function normalizeCompany(v?: string | null): string {
+  return (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 export type ContactDetails = {
+  company?: string | null;
   contactName?: string | null;
-  email?: string | null;
-  phone?: string | null;
 };
 
 export type ContactOwner = {
   ownerId: string;
   ownerName: string;
   at: Date;
-  /** Which detail matched: "email" | "phone" | "contact person". */
-  matchedOn: string;
-  matchedValue: string;
+  /** The matched company + person pair. */
+  company: string;
+  contactName: string;
   customerId: string;
 };
 
 /**
- * Find the first-contact owner for the given contact details, if any existing
- * contact in the system matches on email, phone, or contact person. Returns the
- * creator of the earliest inquiry across all customers that share a matching
- * detail, or null when the contact is brand new.
+ * Find the first-contact owner for the given (company + person) pair, if any
+ * existing contact matches on BOTH. Returns the creator of the earliest
+ * inquiry across all customers that share the pair, or null when the pair is
+ * incomplete or brand new.
  */
 export async function findContactOwner(input: ContactDetails): Promise<ContactOwner | null> {
-  const email = normalizeEmail(input.email);
-  const phone = normalizePhone(input.phone);
+  const company = normalizeCompany(input.company);
   const person = normalizePerson(input.contactName);
-  if (!email && !phone && !person) return null;
+  // Both parts of the pair are required — a lone company or a lone name never blocks.
+  if (!company || !person) return null;
 
   const customers = await prisma.customer.findMany({
-    select: { id: true, contactName: true, email: true, phone: true },
+    select: { id: true, company: true, contactName: true },
   });
 
-  // Each matched customer records why it matched (strongest key first).
-  const matched = new Map<string, { matchedOn: string; matchedValue: string }>();
+  const matched = new Map<string, { company: string; contactName: string }>();
   for (const c of customers) {
-    if (email && normalizeEmail(c.email) === email) {
-      matched.set(c.id, { matchedOn: "email", matchedValue: (c.email ?? "").trim() });
-      continue;
-    }
-    if (phone && normalizePhone(c.phone) === phone) {
-      matched.set(c.id, { matchedOn: "phone", matchedValue: (c.phone ?? "").trim() });
-      continue;
-    }
-    if (person && normalizePerson(c.contactName) === person) {
-      matched.set(c.id, { matchedOn: "contact person", matchedValue: (c.contactName ?? "").trim() });
+    if (normalizeCompany(c.company) === company && normalizePerson(c.contactName) === person) {
+      matched.set(c.id, { company: (c.company ?? "").trim(), contactName: (c.contactName ?? "").trim() });
     }
   }
   if (matched.size === 0) return null;
@@ -89,8 +76,8 @@ export async function findContactOwner(input: ContactDetails): Promise<ContactOw
     ownerId: first.createdBy.id,
     ownerName: first.createdBy.name,
     at: first.createdAt,
-    matchedOn: why.matchedOn,
-    matchedValue: why.matchedValue,
+    company: why.company,
+    contactName: why.contactName,
     customerId: first.customerId,
   };
 }
