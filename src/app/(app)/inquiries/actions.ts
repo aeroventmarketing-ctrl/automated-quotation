@@ -38,21 +38,21 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
 
   // First-contact authority: a client is identified by the company name plus at
   // least one of (contact person, number, email). Whoever made first contact
-  // owns the right to assist them, so block a different salesperson from logging
-  // an inquiry against a matching client. Admins are exempt (they arbitrate).
+  // owns the right to assist them.
   const contactDetails = data.customerId
     ? await prisma.customer.findUnique({
         where: { id: data.customerId },
         select: { company: true, contactName: true, phone: true, email: true },
       })
     : { company: data.company, contactName: data.contactName, phone: data.phone, email: data.email };
-  if (contactDetails && !isAdmin(user)) {
-    const owner = await findContactOwner(contactDetails);
-    if (owner && owner.ownerId !== user.id) {
-      throw new Error(
-        `${owner.contactName} at ${owner.company} is already handled by ${owner.ownerName}, who made first contact on ${formatOwnerDate(owner.at)}. Only ${owner.ownerName} or an admin can log inquiries for this contact.`,
-      );
-    }
+  const owner = contactDetails ? await findContactOwner(contactDetails) : null;
+
+  // Block a different salesperson from logging an inquiry against a matching
+  // client. Admins are exempt (they arbitrate disputes).
+  if (owner && owner.ownerId !== user.id && !isAdmin(user)) {
+    throw new Error(
+      `${owner.contactName} at ${owner.company} is already handled by ${owner.ownerName}, who made first contact on ${formatOwnerDate(owner.at)}. Only ${owner.ownerName} or an admin can log inquiries for this contact.`,
+    );
   }
 
   let customerId = data.customerId;
@@ -61,15 +61,21 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
     if (!data.contactName?.trim()) throw new Error("Contact name is required");
     if (!data.email?.trim() && !data.phone?.trim())
       throw new Error("A contact number or an email address is required");
-    const customer = await prisma.customer.create({
-      data: {
-        company: data.company,
-        contactName: data.contactName,
-        email: data.email,
-        phone: data.phone,
-      },
-    });
-    customerId = customer.id;
+    if (owner) {
+      // The typed company + contact already exists — attach this inquiry to the
+      // existing customer instead of creating a duplicate record.
+      customerId = owner.customerId;
+    } else {
+      const customer = await prisma.customer.create({
+        data: {
+          company: data.company,
+          contactName: data.contactName,
+          email: data.email,
+          phone: data.phone,
+        },
+      });
+      customerId = customer.id;
+    }
   }
 
   const inquiry = await prisma.inquiry.create({
