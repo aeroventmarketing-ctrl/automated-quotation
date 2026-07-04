@@ -446,18 +446,18 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const vtRow = r; // "Very Truly Yours," row — the signature image sits just below it
   ws.getCell(`B${r}`).value = "Very Truly Yours,";
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
-  r += 5; // extra signature space before the name (one row lower for the signature)
-  // Signature image (per sales representative), centred across B:E in the blank
-  // space above the name. Aspect-locked and bounded to the signature gap. Anchored
-  // one row below "Very Truly Yours," (sigRow) so it sits lower in the block.
+  r += 4; // signature space before the name (one row removed under "Very Truly Yours,")
+  // Signature image (per sales representative), centred across B:E and BOTTOM-aligned
+  // in the gap so it rests just above the sales name. Aspect-locked to the gap.
   if (data.signature) {
     const dim = imageDataUrlSize(data.signature) ?? { width: 320, height: 110 };
     const ext = /^data:image\/png/i.test(data.signature) ? "png" : "jpeg";
     const boxW = colPx.slice(1, 5).reduce((a, b) => a + b, 0); // B..E width (px)
-    const sigRow = vtRow + 1; // one row lower than "Very Truly Yours,"
-    for (let rr = sigRow + 1; rr <= vtRow + 4; rr++) ws.getRow(rr).height = 19; // ~57px tall gap
+    const ROW = 19; // px per gap row (consistent with the letterhead sizing)
+    const gapRows = 3; // blank rows between "Very Truly Yours," and the name
+    for (let rr = vtRow + 1; rr <= vtRow + gapRows; rr++) ws.getRow(rr).height = ROW;
     const maxW = Math.round(boxW * 0.9);
-    const maxH = 54;
+    const maxH = gapRows * ROW - 3;
     const scale = Math.min(maxW / dim.width, maxH / dim.height, 1);
     const w = Math.round(dim.width * scale);
     const h = Math.round(dim.height * scale);
@@ -470,8 +470,10 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       }
       return 1;
     })();
+    // Bottom-align: push the image down within the gap so its base meets the name.
+    const topOffsetRows = Math.max(0, (gapRows * ROW - h) / ROW);
     const sigId = wb.addImage({ base64: data.signature.split(",")[1], extension: ext });
-    ws.addImage(sigId, { tl: { col: startCol, row: sigRow }, ext: { width: w, height: h }, editAs: "oneCell" });
+    ws.addImage(sigId, { tl: { col: startCol, row: vtRow + topOffsetRows }, ext: { width: w, height: h }, editAs: "oneCell" });
   }
   // Signature lines centred across B:E (name varies by sales representative).
   ws.mergeCells(`B${r}:E${r}`);
