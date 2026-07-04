@@ -32,6 +32,20 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
 
   async function submit() {
     setError(null);
+    if (isNewCustomer) {
+      if (!company.trim()) {
+        setError("Company is required.");
+        return;
+      }
+      if (!contactName.trim()) {
+        setError("Contact name is required.");
+        return;
+      }
+      if (!email.trim() && !phone.trim()) {
+        setError("Enter a contact number or an email address (at least one is required).");
+        return;
+      }
+    }
     const cleanItems = items.filter((it) => it.rawText.trim() || it.parsedJson.description.trim());
     if (cleanItems.length === 0) {
       setError("Add at least one line item.");
@@ -86,7 +100,7 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
                   <Input value={company} onChange={(e) => setCompany(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <Label>Contact name</Label>
+                  <Label>Contact name *</Label>
                   <Input value={contactName} onChange={(e) => setContactName(e.target.value)} />
                 </div>
                 <div className="space-y-1">
@@ -97,6 +111,9 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
                   <Label>Phone</Label>
                   <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
                 </div>
+                <p className="text-xs text-muted-foreground md:col-span-2">
+                  Enter a contact number or an email address — at least one is required.
+                </p>
               </div>
             )}
             <div className="grid gap-3 md:grid-cols-2">

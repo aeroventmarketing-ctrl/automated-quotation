@@ -57,7 +57,10 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
 
   let customerId = data.customerId;
   if (!customerId) {
-    if (!data.company) throw new Error("Customer company is required");
+    if (!data.company?.trim()) throw new Error("Customer company is required");
+    if (!data.contactName?.trim()) throw new Error("Contact name is required");
+    if (!data.email?.trim() && !data.phone?.trim())
+      throw new Error("A contact number or an email address is required");
     const customer = await prisma.customer.create({
       data: {
         company: data.company,
