@@ -3439,7 +3439,7 @@ export function QuotationBuilder({
                   </div>
                 </div>
               ) : (
-              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-6">
+              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-7">
                 <div>
                   <Label className="text-[10px]">Body ₱ (net)</Label>
                   <Input className="h-8 text-right" type="number" step="0.01" disabled={!editable}
@@ -3449,29 +3449,58 @@ export function QuotationBuilder({
                 <div>
                   <Label className="text-[10px]">Phase</Label>
                   <Select className="h-8" disabled={!editable} value={l.specs.motorPh ?? ""}
-                    onChange={(e) => applyMotor(l.id, { motorPh: numOrNull(e.target.value) })}>
+                    onChange={(e) => {
+                      const ph = numOrNull(e.target.value);
+                      // Explosion-proof is 3-phase only — drop the EX flag off 3-phase.
+                      applyMotor(l.id, { motorPh: ph, ...(ph !== 3 ? { exproof: false } : {}) });
+                    }}>
                     <option value="">—</option>
                     <option value="1">1-phase</option>
                     <option value="3">3-phase</option>
                   </Select>
                 </div>
                 <div>
-                  {/* Pole is auto-selected from the fan rpm during selection (belt = 4-pole);
-                      this slot carries the Explosion-proof toggle instead. */}
+                  {/* Pole defaults to 4 and is auto-set from the fan rpm on selection
+                      (belt = 4-pole); the sales only changes it when necessary. */}
+                  <Label className="text-[10px]">Pole</Label>
+                  <Select className="h-8" disabled={!editable} value={l.specs.motorPole ?? 4}
+                    onChange={(e) => {
+                      const p = numOrNull(e.target.value);
+                      // Explosion-proof is 4-pole only — drop the EX flag off 4-pole.
+                      applyMotor(l.id, { motorPole: p, ...(p !== 4 ? { exproof: false } : {}) });
+                    }}>
+                    <option value="4">4-pole</option>
+                    <option value="2">2-pole</option>
+                    <option value="6">6-pole</option>
+                  </Select>
+                </div>
+                <div>
                   <Label className="text-[10px]">Explosion proof</Label>
-                  <label className="flex h-8 items-center gap-1.5 text-xs">
-                    <input type="checkbox" className="h-4 w-4" disabled={!editable}
-                      checked={!!l.specs.exproof}
-                      onChange={(e) => applyMotor(l.id, { exproof: e.target.checked })} />
-                    EX motor
-                  </label>
+                  {l.specs.motorPh === 3 && (l.specs.motorPole ?? 4) === 4 ? (
+                    <label className="flex h-8 items-center gap-1.5 text-xs">
+                      <input type="checkbox" className="h-4 w-4" disabled={!editable}
+                        checked={!!l.specs.exproof}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          // EX only lists HPs with a published EX price — drop a non-EX HP.
+                          const dropHp = on && l.specs.motorHp != null && !hasExproofPrice(l.specs.motorHp);
+                          applyMotor(l.id, { exproof: on, ...(dropHp ? { motorHp: null } : {}) });
+                        }} />
+                      EX motor
+                    </label>
+                  ) : (
+                    <div className="flex h-8 items-center text-[11px] text-muted-foreground">4-pole 3-ph only</div>
+                  )}
                 </div>
                 <div>
                   <Label className="text-[10px]">Motor HP</Label>
                   <Select className="h-8" disabled={!editable} value={l.specs.motorHp ?? ""}
                     onChange={(e) => applyMotor(l.id, { motorHp: numOrNull(e.target.value) })}>
                     <option value="">—</option>
-                    {hpOptions(l.specs.motorPh ?? 3, l.specs.motorPole ?? 4).map((hp) => (
+                    {(l.specs.exproof
+                      ? hpOptions(l.specs.motorPh ?? 3, 4).filter(hasExproofPrice)
+                      : hpOptions(l.specs.motorPh ?? 3, l.specs.motorPole ?? 4)
+                    ).map((hp) => (
                       <option key={hp} value={hp}>{hp} HP</option>
                     ))}
                   </Select>

@@ -83,16 +83,21 @@ export function lookupMotor(hp: number, phase: number, pole: number): MotorRow |
   return MOTORS.find((m) => m.hp === hp && m.phase === phase && m.pole === pole);
 }
 
+/** Explosion-proof is published for 3-phase 4-pole only (2-/6-pole EX prices TBD). */
+export function exproofApplies(m: MotorRow, exproof: boolean): boolean {
+  return exproof && m.phase === 3 && m.pole === 4;
+}
+
 export function motorModelCode(m: MotorRow, volts: Voltage, exproof = false): string | null {
   const code = volts === "220" ? m.m220 : volts === "380" ? m.m380 : m.m440;
   if (!code) return null;
   // Explosion-proof motors swap the trailing "T" (TEFC) indicator for "X".
-  return exproof ? code.replace(/T$/, "X") : code;
+  return exproofApplies(m, exproof) ? code.replace(/T$/, "X") : code;
 }
 
 /** Net motor price — the explosion-proof price when flagged (falls back to standard). */
 export function motorNetPrice(m: MotorRow, exproof = false): number {
-  return exproof ? EXPROOF_PRICE_BY_HP[m.hp] ?? m.price : m.price;
+  return exproofApplies(m, exproof) ? EXPROOF_PRICE_BY_HP[m.hp] ?? m.price : m.price;
 }
 
 /** True when the explosion-proof variant of this HP has a published price. */
