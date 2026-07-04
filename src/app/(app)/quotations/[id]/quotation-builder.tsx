@@ -1145,10 +1145,10 @@ function dustCollectorUnitPrice(specs: LineSpecs, vatRate: number): number | nul
   const net = dustCollectorNet(specs);
   return net == null ? null : round2(net * (1 + vatRate));
 }
-/** Description for a dust collector: the model's spec block (or the type placeholder). */
+/** Description for a dust collector: "Dust Collector" + the model's spec block. */
 function buildDustCollectorDescription(specs: LineSpecs): string {
   const m = specs.blowerModel ? DUST_COLLECTOR[specs.blowerModel] : null;
-  return m ? m.desc : "Dust Collector";
+  return m ? `Dust Collector\n${m.desc}` : "Dust Collector";
 }
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
