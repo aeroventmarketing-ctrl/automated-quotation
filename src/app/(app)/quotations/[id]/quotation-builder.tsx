@@ -23,6 +23,7 @@ import {
   type Voltage,
   type MotorRow,
 } from "@/lib/pricing/motors";
+import { TECO_MOTOR_DATA, TECO_KW_BY_HP } from "@/lib/teco-motor-data";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw } from "lucide-react";
 import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
@@ -1061,11 +1062,27 @@ function inductionUnitPrice(specs: LineSpecs, vatRate: number): number | null {
   const m = inductionMotorRow(specs);
   return m ? round2(motorNetPrice(m, specs.exproof === true) * (1 + vatRate)) : null;
 }
-/** Description for an induction motor. For now only the type name shows; the
- *  full description lines will be supplied later (HP · phase · pole / model
- *  removed at the client's request). Phase/pole/HP still drive the price. */
+/** Description for an induction motor, built from the TECO spec data by the
+ *  selected phase / pole / HP (and Xproof). kW / RPM / frame come from the file;
+ *  the type name shows until a phase + HP are picked. */
 function buildInductionDescription(specs: LineSpecs): string {
-  return specs.type;
+  const ph = specs.motorPh;
+  const hp = specs.motorHp;
+  if (!ph || hp == null) return specs.type; // nothing selected yet
+  const pole = inductionPole(specs);
+  const exp = specs.exproof === true && inductionExEligible(specs);
+  const section = ph === 1 ? "single" : exp ? "ex" : "three";
+  const row = TECO_MOTOR_DATA[`${section}|${hp}|${pole}`];
+  const kw = row?.kw ?? TECO_KW_BY_HP[String(hp)] ?? null;
+  const brand = isInductionHyundai(specs) ? "HYUNDAI" : "TECO";
+  const lines: string[] = [];
+  lines.push(`Induction Motor - ${exp ? "Ex. Proof" : "TEFC"}`);
+  lines.push(`${hp} Hp${kw != null ? `, ${kw} Kw` : ""}, ${ph === 1 ? "Single Phase" : "Three Phase"}`);
+  lines.push(`${ph === 1 ? "220v" : "220/380/440v"}, 60 Hz`);
+  lines.push(`${pole} Pole${row?.rpm ? ` - ${row.rpm} rpm` : ""}`);
+  if (row?.frame) lines.push(`Foot mounted - ${row.frame} Frame`);
+  lines.push(`${brand} Brand`);
+  return lines.join("\n");
 }
 // Jet Fan (Other Products, MAXAIR): pick a model; each carries its rating and a
 // VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel.
