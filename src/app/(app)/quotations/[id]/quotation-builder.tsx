@@ -1545,19 +1545,21 @@ export function QuotationBuilder({
       const next = ls.map((l, idx) => {
         if (!l.specs.mcRecommend || (!isMotorController(l.specs) && !isIsolator(l.specs))) return l;
         let src: LineSpecs | null = null;
+        let srcQty = 1; // the referenced fan/blower's quantity
         for (let i = idx - 1; i >= 0; i--) {
-          if (BLOWER_CATEGORIES.has(ls[i].specs.category)) { src = ls[i].specs; break; }
+          if (BLOWER_CATEGORIES.has(ls[i].specs.category)) { src = ls[i].specs; srcQty = ls[i].qty; break; }
         }
         // Isolator: recommend a spring set from the motor above. Number of springs
         // + per-spring capacity are computed per fan category; price is always the
-        // foot-mounted price for that capacity; Qty = number of springs.
+        // foot-mounted price for that capacity. Qty = springs-per-unit × the fan's
+        // quantity (e.g. 6 springs × 4 blowers = 24). Propeller types use no springs.
         if (isIsolator(l.specs)) {
           const motorKg = src?.motorHp != null ? MOTOR_WEIGHT_KG[src.motorHp] ?? null : null;
           const rec = src ? isolatorRecommend(src.category, src.type, motorKg) : null;
           const shape = "Foot Mounted"; // recommendation always uses the foot-mounted price
           const rated = rec && !rec.noSpring ? rec.rated : null;
           const sizeL = rated != null ? String(rated) : "";
-          const qty = rec && rec.springs > 0 ? rec.springs : l.qty;
+          const qty = rec && rec.springs > 0 ? rec.springs * srcQty : l.qty;
           const net = rated != null ? ISO_PRICE.foot[rated] ?? null : null;
           const unitPrice = net != null ? round2(net * (1 + vatRate)) : 0;
           const desc = rec?.noSpring
@@ -1601,16 +1603,20 @@ export function QuotationBuilder({
               ? ph === 1 ? null : vfdNetPrice(volts, hp)
               : starterNetPrice(drive, ph, volts, hp);
         const unitPrice = net != null ? round2(net * (1 + vatRate)) : 0;
+        // Qty = one controller per fan unit (match the fan's quantity), except for
+        // Power Roof Ventilator / Wall Fan (Propeller Type), which keep the manual qty.
+        const mcQty = src && src.category !== "Propeller Type" ? srcQty : l.qty;
         if (
           l.specs.bladeType === bladeType && l.specs.drive === drive && l.specs.motorPh === ph &&
           l.specs.motorPole === pole && l.specs.motorHp === hp && l.specs.motorVolts === volts &&
-          l.unitPrice === unitPrice
+          l.unitPrice === unitPrice && l.qty === mcQty
         ) return l; // already in sync
         changed = true;
         const specs = { ...l.specs, bladeType, drive, motorPh: ph, motorPole: pole, motorHp: hp, motorVolts: volts };
         if (net != null) specs.bodyPrice = net;
         return {
           ...l,
+          qty: mcQty,
           specs,
           descriptionSnapshot: buildMotorControllerDescription(bladeType, drive),
           unitPrice,
@@ -1641,6 +1647,16 @@ export function QuotationBuilder({
   function updateSpec(id: string, patch: Partial<LineSpecs>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, specs: { ...l.specs, ...patch } } : l)));
   }
+  // A Motor Controller's Qty is auto-set (and locked) from the fan above only when
+  // Recommend? is on AND that fan is not a Propeller Type — Power Roof Ventilator /
+  // Wall Fan keep a manual, editable quantity.
+  const mcQtyRecommended = (specs: LineSpecs, idx: number): boolean => {
+    if (!isMotorController(specs) || !specs.mcRecommend) return false;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (BLOWER_CATEGORIES.has(lines[i].specs.category)) return lines[i].specs.category !== "Propeller Type";
+    }
+    return false;
+  };
   // KDK pre-built units: merge the patch and rebuild the KDK description
   // (Type / KDK Brand / Model). KDK units are single-phase, 220 V (fixed).
   function applyKdk(id: string, patch: Partial<LineSpecs>) {
@@ -3011,9 +3027,10 @@ export function QuotationBuilder({
                 </div>
                 <div className="md:col-span-1">
                   <Label className="text-[10px]">Qty</Label>
-                  {/* Isolator recommend sets Qty = number of springs (locked). */}
+                  {/* Recommend? sets Qty from the fan above (isolator = springs × fan qty,
+                      motor controller = fan qty), so it is locked while recommend is on. */}
                   <Input className="h-8 text-right" type="number" min={1} value={l.qty}
-                    disabled={!editable || (isIsolator(l.specs) && !!l.specs.mcRecommend)}
+                    disabled={!editable || (isIsolator(l.specs) && !!l.specs.mcRecommend) || mcQtyRecommended(l.specs, idx)}
                     onChange={(e) => updateQty(l.id, Math.max(1, Number(e.target.value) || 1))} />
                 </div>
                 <div className="md:col-span-9">
