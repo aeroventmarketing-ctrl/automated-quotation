@@ -3109,6 +3109,23 @@ export function QuotationBuilder({
                 </div>
               )}
 
+              {/* Propeller Type is a low-pressure fan — cap static pressure at 0.5" w.g.
+                  (converted to the chosen unit) and warn when the entry exceeds it. */}
+              {l.specs.category === "Propeller Type" && !isFlowOnlyUnit(l.specs) && (() => {
+                const pu = normalizePressureUnit(units.pressure) ?? "inwg";
+                const sp = l.specs.staticPressure_pa;
+                if (sp == null) return null;
+                const spInWg = convertPressure(sp, pu, "inwg");
+                if (spInWg <= 0.5 + 1e-6) return null;
+                const maxInUnit = Math.round(convertPressure(0.5, "inwg", pu) * 100) / 100;
+                const label = pu === "inwg" ? "0.5 in-w.g." : `${maxInUnit} ${units.pressure} (0.5 in-w.g.)`;
+                return (
+                  <p className="mt-1 text-xs text-destructive">
+                    Maximum static pressure for Propeller Type is {label}.
+                  </p>
+                );
+              })()}
+
               {/* Air-curtain recommendation list (replaces the duty fan selector).
                   Collapses to a one-line summary once a unit is picked. */}
               {editable && isAirCurtain(l.specs) && acCollapsed[l.id] && l.specs.blowerModel ? (
