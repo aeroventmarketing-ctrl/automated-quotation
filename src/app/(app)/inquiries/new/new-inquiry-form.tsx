@@ -16,7 +16,8 @@ import { createInquiry } from "../actions";
 const SOURCES = ["EMAIL", "PHONE", "WALK_IN", "PHOTO", "OTHER"] as const;
 
 export function NewInquiryForm({ customers }: { customers: { id: string; company: string }[] }) {
-  const [customerId, setCustomerId] = useState<string>(customers[0]?.id ?? "__new");
+  const [customerId, setCustomerId] = useState<string>("__new");
+  const [customerSearch, setCustomerSearch] = useState("");
   const [company, setCompany] = useState("");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
@@ -29,6 +30,17 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
   const [error, setError] = useState<string | null>(null);
 
   const isNewCustomer = customerId === "__new";
+
+  const q = customerSearch.trim().toLowerCase();
+  const filteredCustomers = q
+    ? customers.filter((c) => c.company.toLowerCase().includes(q))
+    : customers;
+  // Keep the selected customer visible even if it falls outside the search.
+  const selected = customers.find((c) => c.id === customerId);
+  const listCustomers =
+    selected && !filteredCustomers.some((c) => c.id === selected.id)
+      ? [selected, ...filteredCustomers]
+      : filteredCustomers;
 
   async function submit() {
     setError(null);
@@ -85,13 +97,21 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1">
-              <Label>Existing customer</Label>
+              <Label>Customer</Label>
+              <Input
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                placeholder="Search client by name…"
+              />
               <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                {customers.map((c) => (
+                <option value="__new">+ New customer…</option>
+                {listCustomers.map((c) => (
                   <option key={c.id} value={c.id}>{c.company}</option>
                 ))}
-                <option value="__new">+ New customer…</option>
               </Select>
+              {q && listCustomers.length === 0 && (
+                <p className="text-xs text-muted-foreground">No client matches “{customerSearch}”. Choose “+ New customer…” to add one.</p>
+              )}
             </div>
             {isNewCustomer && (
               <div className="grid gap-3 md:grid-cols-2">
