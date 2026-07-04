@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { findContactOwner } from "@/lib/client-ownership";
 import type { InquirySource } from "@prisma/client";
+
+function formatOwnerDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 const itemSchema = z.object({
   rawText: z.string().min(1),
@@ -30,6 +35,25 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const data = createSchema.parse(input);
+
+  // First-contact authority: the contact person / number / email identify a
+  // client. Whoever made first contact owns the right to assist them, so block
+  // a different salesperson from logging an inquiry against a matching contact.
+  // Admins are exempt (they arbitrate disputes).
+  const contactDetails = data.customerId
+    ? await prisma.customer.findUnique({
+        where: { id: data.customerId },
+        select: { contactName: true, email: true, phone: true },
+      })
+    : { contactName: data.contactName, email: data.email, phone: data.phone };
+  if (contactDetails && !isAdmin(user)) {
+    const owner = await findContactOwner(contactDetails);
+    if (owner && owner.ownerId !== user.id) {
+      throw new Error(
+        `This client is already handled by ${owner.ownerName}, who made first contact on ${formatOwnerDate(owner.at)} (matched ${owner.matchedOn}: ${owner.matchedValue}). Only ${owner.ownerName} or an admin can log inquiries for this contact.`,
+      );
+    }
+  }
 
   let customerId = data.customerId;
   if (!customerId) {

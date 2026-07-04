@@ -6,6 +6,7 @@ import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-ba
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { InquiryWorkspace } from "./inquiry-workspace";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, ensureBuiltinTemplates, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
+import { findContactOwner } from "@/lib/client-ownership";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,13 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
 
   if (!inquiry) notFound();
 
+  // First-contact owner for this client's contact details (dispute authority).
+  const owner = await findContactOwner({
+    contactName: inquiry.customer.contactName,
+    email: inquiry.customer.email,
+    phone: inquiry.customer.phone,
+  });
+
   const catalogueLite = catalogue.map((c) => ({
     id: c.id,
     modelCode: c.modelCode,
@@ -68,12 +76,23 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
         <InquiryStatusBadge status={inquiry.status} />
       </div>
 
-      {inquiry.customer.contactName && (
+      {(inquiry.customer.contactName || owner) && (
         <Card>
-          <CardContent className="grid gap-2 pt-6 text-sm md:grid-cols-3">
-            <div><span className="text-muted-foreground">Contact: </span>{inquiry.customer.contactName}</div>
-            <div><span className="text-muted-foreground">Email: </span>{inquiry.customer.email ?? "—"}</div>
-            <div><span className="text-muted-foreground">Phone: </span>{inquiry.customer.phone ?? "—"}</div>
+          <CardContent className="space-y-3 pt-6 text-sm">
+            {inquiry.customer.contactName && (
+              <div className="grid gap-2 md:grid-cols-3">
+                <div><span className="text-muted-foreground">Contact: </span>{inquiry.customer.contactName}</div>
+                <div><span className="text-muted-foreground">Email: </span>{inquiry.customer.email ?? "—"}</div>
+                <div><span className="text-muted-foreground">Phone: </span>{inquiry.customer.phone ?? "—"}</div>
+              </div>
+            )}
+            {owner && (
+              <div className="rounded-md bg-muted px-3 py-2">
+                <span className="text-muted-foreground">Client authority: </span>
+                <span className="font-medium">{owner.ownerName}</span>
+                <span className="text-muted-foreground"> — first contact {formatDate(owner.at)}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
