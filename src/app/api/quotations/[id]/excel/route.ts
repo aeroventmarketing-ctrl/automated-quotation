@@ -84,7 +84,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     quoteNumber: ((r) => (typeof r === "number" && r > 0 ? `${q.quoteNumber} rev. ${r}` : q.quoteNumber))(
       (q.classification as Record<string, unknown> | null)?.revision,
     ),
-    dateStr: q.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+    dateStr: q.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" }),
     projectName: q.projectName,
     customerName: q.inquiry.customer.contactName || q.inquiry.customer.company,
     vatMode:

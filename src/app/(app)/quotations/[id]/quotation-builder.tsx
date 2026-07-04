@@ -3992,7 +3992,7 @@ export function QuotationBuilder({
             {[...revisionHistory].reverse().map((r) => (
               <details key={r.rev} className="rounded-md border">
                 <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium">
-                  rev. {r.rev} · {new Date(r.savedAt).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · {formatCurrency(round2(r.total), quotation.currency)}
+                  rev. {r.rev} · {new Date(r.savedAt).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })} · {formatCurrency(round2(r.total), quotation.currency)}
                 </summary>
                 <div className="border-t px-3 py-2">
                   <table className="w-full text-xs">

@@ -31,6 +31,9 @@ export function isNextControlFlowError(e: unknown): boolean {
   );
 }
 
+/** Philippine Standard Time — the business timezone for all displayed dates. */
+export const PH_TIME_ZONE = "Asia/Manila";
+
 export function formatDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
@@ -38,5 +41,6 @@ export function formatDate(d: Date | string | null | undefined): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: PH_TIME_ZONE,
   });
 }

@@ -111,6 +111,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "Asia/Manila",
     }),
     validUntil: quotation.validUntil ? quotation.validUntil.toISOString().slice(0, 10) : null,
     vatMode:
