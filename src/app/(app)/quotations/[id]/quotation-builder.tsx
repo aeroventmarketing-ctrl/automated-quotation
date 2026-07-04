@@ -2670,7 +2670,11 @@ export function QuotationBuilder({
                   {[2, 4, 6].map((p) => (<option key={p} value={p}>{p}-pole</option>))}
                 </Select>
               ) : (
-                <div className="flex h-9 items-center text-xs text-muted-foreground">4-pole</div>
+                // Single phase / Hyundai are 4-pole only — a disabled dropdown
+                // (matching the phase select) reads better than bare text.
+                <Select value={4} disabled>
+                  <option value={4}>4-pole</option>
+                </Select>
               )}
               <Select
                 value={c.motorHp ?? ""}
