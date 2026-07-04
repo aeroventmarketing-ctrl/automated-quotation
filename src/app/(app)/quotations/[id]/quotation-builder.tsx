@@ -940,6 +940,52 @@ function buildPortableBlowerDescription(specs: LineSpecs): string {
   }
   return lines.join("\n");
 }
+// Variable Air Volume (Other Products / Aerovent): a VAV box complete with a VAV
+// Actuator (NSVA 0200B) and Thermostat (NEVD). Selected either "by Volume Flow"
+// (the entered duty is matched to the smallest duct whose airflow range covers it)
+// or "by Duct Size" (pick the duct directly). Airflow ranges are stored in every
+// listed unit for the sales reference. SELLING PRICE is VAT-INCLUSIVE (gross), so
+// it is stored as-is (NOT ×1.12). Select mode → bladeType, duct size → sizeL,
+// entered flow → sizeW, flow unit → sizeUnit.
+const VAV_SELECT_MODES = ["by Volume Flow", "by Duct Size"];
+interface VavRow {
+  in: string; mm: number;
+  lpsMin: number; lpsMax: number; cfmMin: number; cfmMax: number; cmhMin: number; cmhMax: number;
+  price: number;
+}
+const VAV_ROWS: VavRow[] = [
+  { in: "4",  mm: 100, lpsMin: 12,   lpsMax: 106,  cfmMin: 26,   cfmMax: 225,  cmhMin: 44,   cmhMax: 382,   price: 39109 },
+  { in: "6",  mm: 150, lpsMin: 29,   lpsMax: 212,  cfmMin: 62,   cfmMax: 450,  cmhMin: 105,  cmhMax: 764,   price: 40162 },
+  { in: "8",  mm: 200, lpsMin: 52,   lpsMax: 378,  cfmMin: 110,  cfmMax: 800,  cmhMin: 187,  cmhMax: 1359,  price: 40207 },
+  { in: "10", mm: 250, lpsMin: 85,   lpsMax: 637,  cfmMin: 180,  cfmMax: 1350, cmhMin: 306,  cmhMax: 2294,  price: 41991 },
+  { in: "12", mm: 300, lpsMin: 127,  lpsMax: 991,  cfmMin: 270,  cfmMax: 2100, cmhMin: 459,  cmhMax: 3568,  price: 43500 },
+  { in: "14", mm: 350, lpsMin: 189,  lpsMax: 1510, cfmMin: 400,  cfmMax: 3200, cmhMin: 679,  cmhMax: 5436,  price: 47617 },
+  { in: "16", mm: 400, lpsMin: 269,  lpsMax: 1888, cfmMin: 570,  cfmMax: 4000, cmhMin: 968,  cmhMax: 6796,  price: 59144 },
+  { in: "24", mm: 600, lpsMin: 1800, lpsMax: 3775, cfmMin: 2500, cfmMax: 8000, cmhMin: 4247, cmhMax: 13593, price: 89440 },
+];
+const VAV_ACTUATOR_NOTE = "NSVA 0200B — VAV Actuator 5Nm, 24VAC with 2× Analog input, BacNET Communication";
+const VAV_THERMOSTAT_NOTE = "NEVD — HMI Thermostat for VAV actuators with Temperature Sensor and LED display, Modbus RTU";
+const isVav = (specs: { type: string }): boolean => specs.type === "Variable Air Volume";
+const vavDuctLabel = (r: VavRow): string => `${r.mm} mm (${r.in} in)`;
+const vavRowForSize = (sizeL: string): VavRow | null => VAV_ROWS.find((r) => r.in === sizeL) ?? null;
+/** Duct size resolved from a "by Volume Flow" duty — the smallest duct that covers it. */
+function vavResolveSizeFromFlow(specs: LineSpecs): string {
+  const u = normalizeAirflowUnit(specs.sizeUnit) ?? "cfm";
+  const val = specs.sizeW ? Number(specs.sizeW) : NaN;
+  if (Number.isNaN(val) || val <= 0) return "";
+  const cmh = convertAirflow(val, u, "m3hr");
+  return (VAV_ROWS.find((r) => cmh <= r.cmhMax) ?? null)?.in ?? "";
+}
+/** Description for a VAV: name + "complete with…" + duct size + airflow range. */
+function buildVavDescription(specs: LineSpecs): string {
+  const lines = ["Variable Air Volume", "Complete with VAV Actuator & Thermostat"];
+  const row = vavRowForSize(specs.sizeL);
+  if (row) {
+    lines.push(`Duct Diameter: ${row.mm} mm (${row.in} in)`);
+    lines.push(`Airflow Range: ${row.cmhMin} – ${row.cmhMax} CMH`);
+  }
+  return lines.join("\n");
+}
 // Jet Fan (Other Products, MAXAIR): pick a model; each carries its rating and a
 // VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel.
 const JET_FAN_MODELS = ["MA-250", "MA-300"];
@@ -1730,6 +1776,30 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
+        // Variable Air Volume: resolve the duct size (from the entered volume flow
+        // or the picked duct), then price by duct. The SELLING PRICE is already
+        // VAT-INCLUSIVE, so it is stored as-is. Fan columns stay blank (VAV is
+        // described textually).
+        if (isVav(specs)) {
+          const s2: LineSpecs = { ...specs };
+          if (specs.bladeType === "by Volume Flow") s2.sizeL = vavResolveSizeFromFlow(specs);
+          s2.capacity_cfm = null;
+          s2.staticPressure_pa = null;
+          s2.inches = null;
+          s2.power_w = null;
+          s2.motorHp = null;
+          s2.motorPole = null;
+          s2.motorPh = null;
+          s2.motorVolts = null;
+          const row = vavRowForSize(s2.sizeL);
+          const price = row ? row.price : null; // VAT-inclusive — stored as-is
+          return {
+            ...l,
+            specs: s2,
+            descriptionSnapshot: buildVavDescription(s2),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Jet Fan: price by model (MA-250 / MA-300). The model's rating fills the
         // Capacity / Static pressure / Motor columns (converted to the header
         // units); the description carries only type / brand / model.
@@ -2194,6 +2264,14 @@ export function QuotationBuilder({
                   { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: portableBlowerDuctTypes({ type })[0], drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
+              } else if (type === "Variable Air Volume") {
+                // VAV: select by volume flow (value + unit) or by duct size. No
+                // blade/drive/material. Defaults to selecting by volume flow in CFM.
+                applyAccessory(
+                  l.id,
+                  { type, bladeType: "by Volume Flow", sizeUnit: "cfm", sizeL: "", sizeW: "", shape: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (MATERIAL_CATEGORIES.has(c.category)) {
                 applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               } else if (c.brand === "KDK") {
@@ -2464,6 +2542,40 @@ export function QuotationBuilder({
                 {portableBlowerDuctTypes(c).map((d) => (<option key={d} value={d}>{d}</option>))}
               </Select>
             </>
+          ) : isVav(c) ? (
+            // Variable Air Volume: select by volume flow (value + unit) or by duct size.
+            <>
+              <Select
+                value={VAV_SELECT_MODES.includes(c.bladeType) ? c.bladeType : "by Volume Flow"}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { bladeType: e.target.value })}
+              >
+                {VAV_SELECT_MODES.map((m) => (<option key={m} value={m}>{m}</option>))}
+              </Select>
+              {c.bladeType === "by Duct Size" ? (
+                <Select
+                  value={c.sizeL || ""}
+                  disabled={!editable || !c.type}
+                  onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value })}
+                >
+                  <option value="" disabled>Duct size…</option>
+                  {VAV_ROWS.map((r) => (<option key={r.in} value={r.in}>{vavDuctLabel(r)}</option>))}
+                </Select>
+              ) : (
+                <>
+                  <Input type="number" step="any" placeholder="Volume flow…"
+                    disabled={!editable || !c.type} value={c.sizeW}
+                    onChange={(e) => applyAccessory(l.id, { sizeW: e.target.value })} />
+                  <Select
+                    value={c.sizeUnit || "cfm"}
+                    disabled={!editable || !c.type}
+                    onChange={(e) => applyAccessory(l.id, { sizeUnit: e.target.value })}
+                  >
+                    {CAPACITY_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
+                  </Select>
+                </>
+              )}
+            </>
           ) : isJetFan(c) ? (
             // Jet Fan: model dropdown (MAXAIR MA series).
             <Select
@@ -2602,7 +2714,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -2621,7 +2733,9 @@ export function QuotationBuilder({
                 ? "Category · Brand · Type — run the selection to pick a model by duty."
                 : isPortableBlowerFamily(c)
                   ? "Category · Brand · Type · Size (inches) · Duct type — auto-priced (editable)."
-                  : "Product Category · Type · Blade Type · Drive (more details to follow)."}
+                  : isVav(c)
+                    ? "Category · Brand · Type · select by volume flow or by duct size — auto-priced (VAT incl., editable)."
+                    : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
       </div>
     );
@@ -2840,7 +2954,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isJetFan(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isJetFan(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -2944,7 +3058,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isJetFan(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isJetFan(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -3124,7 +3238,7 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isJetFan(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isJetFan(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex flex-col justify-end gap-1 md:col-span-3">
@@ -3139,6 +3253,20 @@ export function QuotationBuilder({
                         <p className="text-xs font-medium text-foreground">
                           Volume flow {r.cfm} cfm · Static pressure {r.pa} Pa · {r.watt} W · {r.rpm} rpm · 220 V
                         </p>
+                      );
+                    })()}
+                    {isVav(l.specs) && (() => {
+                      const r = vavRowForSize(l.specs.sizeL);
+                      return (
+                        <>
+                          {r && (
+                            <p className="text-xs font-medium text-foreground">
+                              Duct Ø {r.mm} mm ({r.in} in) · Airflow {r.lpsMin}–{r.lpsMax} L/s · {r.cfmMin}–{r.cfmMax} CFM · {r.cmhMin}–{r.cmhMax} CMH
+                            </p>
+                          )}
+                          <p className="text-[11px] text-muted-foreground">{VAV_ACTUATOR_NOTE}</p>
+                          <p className="text-[11px] text-muted-foreground">{VAV_THERMOSTAT_NOTE}</p>
+                        </>
                       );
                     })()}
                     <p className="text-xs text-muted-foreground">
@@ -3161,6 +3289,14 @@ export function QuotationBuilder({
                               : "Pick a size to auto-price.";
                           const dt = (l.specs.bladeType || "").toLowerCase() || (portableBlowerIsFlex(l.specs) ? "flexible duct" : "with duct");
                           return `₱${net.toLocaleString()} / pc (${dt}, VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
+                        if (isVav(l.specs)) {
+                          const row = vavRowForSize(l.specs.sizeL);
+                          if (row == null)
+                            return l.specs.bladeType === "by Duct Size"
+                              ? "Pick a duct size to auto-price."
+                              : "Enter a volume flow to match a duct size (or it exceeds the largest duct).";
+                          return `₱${row.price.toLocaleString()} / unit — ${row.mm} mm (${row.in} in), VAT incl. = auto-priced (editable).`;
                         }
                         if (isJetFan(l.specs)) {
                           const net = jetFanNet(l.specs);
@@ -3288,7 +3424,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isJetFan(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isJetFan(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
