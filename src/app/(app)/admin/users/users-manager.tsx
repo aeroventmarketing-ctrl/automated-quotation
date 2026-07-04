@@ -9,11 +9,35 @@ import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { upsertUser, deleteUser, setUserPassword } from "../actions";
+import { upsertUser, deleteUser, setUserPassword, saveUserSignature } from "../actions";
 
 const ROLES = ["SALES", "ENGINEER", "ADMIN"];
 
-interface U { id: string; email: string; name: string; role: string; salesCode: string }
+interface U { id: string; email: string; name: string; role: string; salesCode: string; signature: string | null }
+
+/** Read an image file, downscale to ≤600px wide, and return a PNG data URL. */
+function fileToSignatureDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(png|jpe?g)$/i.test(file.type)) return reject(new Error("Please choose a PNG or JPEG image."));
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, 600 / img.width);
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("Canvas not supported in this browser."));
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read the image.")); };
+    img.src = url;
+  });
+}
 
 export function UsersManager({ users }: { users: U[] }) {
   const router = useRouter();
@@ -51,6 +75,37 @@ export function UsersManager({ users }: { users: U[] }) {
     if (!confirm("Delete this user record?")) return;
     await deleteUser(id);
     router.refresh();
+  }
+
+  // --- Signature upload ---
+  const [sigBusy, setSigBusy] = useState<string | null>(null);
+  const [sigErr, setSigErr] = useState<string | null>(null);
+
+  async function onSignatureFile(userId: string, file: File | null) {
+    if (!file) return;
+    setSigErr(null);
+    setSigBusy(userId);
+    try {
+      const dataUrl = await fileToSignatureDataUrl(file);
+      await saveUserSignature({ userId, dataUrl });
+      router.refresh();
+    } catch (e) {
+      setSigErr(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setSigBusy(null);
+    }
+  }
+  async function removeSignature(userId: string) {
+    setSigErr(null);
+    setSigBusy(userId);
+    try {
+      await saveUserSignature({ userId, dataUrl: null });
+      router.refresh();
+    } catch (e) {
+      setSigErr(e instanceof Error ? e.message : "Remove failed");
+    } finally {
+      setSigBusy(null);
+    }
   }
 
   // --- Password reset ---
@@ -153,9 +208,10 @@ export function UsersManager({ users }: { users: U[] }) {
 
       <Card>
         <CardContent className="pt-6">
+          {sigErr && <p className="mb-3 text-sm text-destructive">{sigErr}</p>}
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Letter</TableHead><TableHead></TableHead></TableRow>
+              <TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Letter</TableHead><TableHead>Signature</TableHead><TableHead></TableHead></TableRow>
             </TableHeader>
             <TableBody>
               {users.map((u) => (
@@ -164,6 +220,26 @@ export function UsersManager({ users }: { users: U[] }) {
                   <TableCell>{u.email}</TableCell>
                   <TableCell><Badge variant="secondary">{u.role}</Badge></TableCell>
                   <TableCell>{u.salesCode || "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {u.signature ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={u.signature} alt={`${u.name} signature`} className="h-8 max-w-[120px] rounded border bg-white object-contain" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">None</span>
+                      )}
+                      <label className={`cursor-pointer text-xs font-medium text-primary hover:underline ${sigBusy === u.id ? "pointer-events-none opacity-60" : ""}`}>
+                        {sigBusy === u.id ? "Saving…" : u.signature ? "Replace" : "Upload"}
+                        <input type="file" accept="image/png,image/jpeg" className="hidden"
+                          disabled={sigBusy === u.id}
+                          onChange={(e) => { onSignatureFile(u.id, e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                      </label>
+                      {u.signature && (
+                        <button type="button" className="text-xs text-destructive hover:underline disabled:opacity-60"
+                          disabled={sigBusy === u.id} onClick={() => removeSignature(u.id)}>Remove</button>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" variant="ghost" onClick={() => edit(u)}>Edit</Button>
                     <Button size="sm" variant="ghost" onClick={() => openPw(u)}>Password</Button>
@@ -173,6 +249,10 @@ export function UsersManager({ users }: { users: U[] }) {
               ))}
             </TableBody>
           </Table>
+          <p className="mt-3 text-xs text-muted-foreground">
+            The signature appears above the sales person&apos;s name on every quotation they generate
+            (Excel and PDF). PNG with a transparent background works best.
+          </p>
         </CardContent>
       </Card>
     </div>

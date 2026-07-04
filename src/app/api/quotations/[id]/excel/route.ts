@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
 import { buildQuotationXlsx, type XlsxLine, type XlsxData } from "@/lib/excel/quotation-xlsx";
+import { getUserSignature } from "@/lib/signature";
 import { normalizePowerUnit, convertPower, roundPower } from "@/lib/units";
 
 export const runtime = "nodejs";
@@ -96,6 +97,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // Signature reflects the currently logged-in sales user, not the original
     // preparer, so each sales person's downloads carry their own name.
     preparedBy: user.name,
+    // Their signature image (if uploaded in Admin → Users) above the name.
+    signature: await getUserSignature(user.id),
     // Quote note → template note (blank quote note falls through to the template).
     specNote: (q.notes && q.notes.trim()) || (typeof tpl.specNote === "string" ? tpl.specNote : null),
     // Quote terms → template terms → built-in standard terms (never blank).

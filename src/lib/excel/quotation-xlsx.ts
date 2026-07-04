@@ -9,6 +9,7 @@
  */
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
+import { imageDataUrlSize } from "@/lib/signature";
 import { HEADER_LOGO, HEADER_LOGO_RATIO } from "./header-logo";
 
 export interface XlsxLine {
@@ -39,6 +40,7 @@ export interface XlsxData {
   motorUnit?: string; // default "HP"
   preparedBy: string;
   preparedByTitle?: string; // default "Marketing Representative"
+  signature?: string | null; // sales person's signature image (PNG/JPEG data URL)
   specNote?: string | null;
   terms?: string | null;
   items: XlsxLine[];
@@ -441,9 +443,34 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   cl.alignment = { horizontal: "left", vertical: "top", wrapText: true };
   ws.getRow(r).height = 14.5;
   r += 2;
+  const vtRow = r; // "Very Truly Yours," row — the signature image sits just below it
   ws.getCell(`B${r}`).value = "Very Truly Yours,";
   ws.getCell(`B${r}`).font = { name: FONT, size: 10, color: BLACK };
   r += 4; // extra signature space before the name
+  // Signature image (per sales representative), centred across B:E in the blank
+  // space above the name. Aspect-locked and bounded to the signature gap.
+  if (data.signature) {
+    const dim = imageDataUrlSize(data.signature) ?? { width: 320, height: 110 };
+    const ext = /^data:image\/png/i.test(data.signature) ? "png" : "jpeg";
+    const boxW = colPx.slice(1, 5).reduce((a, b) => a + b, 0); // B..E width (px)
+    for (let rr = vtRow + 1; rr <= vtRow + 3; rr++) ws.getRow(rr).height = 19; // ~57px tall gap
+    const maxW = Math.round(boxW * 0.9);
+    const maxH = 54;
+    const scale = Math.min(maxW / dim.width, maxH / dim.height, 1);
+    const w = Math.round(dim.width * scale);
+    const h = Math.round(dim.height * scale);
+    const leftInset = Math.max(0, Math.round((boxW - w) / 2));
+    const startCol = (() => {
+      let acc = 0;
+      for (let c = 1; c < colPx.length; c++) {
+        if (acc + colPx[c] >= leftInset) return c + (leftInset - acc) / colPx[c];
+        acc += colPx[c];
+      }
+      return 1;
+    })();
+    const sigId = wb.addImage({ base64: data.signature.split(",")[1], extension: ext });
+    ws.addImage(sigId, { tl: { col: startCol, row: vtRow }, ext: { width: w, height: h }, editAs: "oneCell" });
+  }
   // Signature lines centred across B:E (name varies by sales representative).
   ws.mergeCells(`B${r}:E${r}`);
   ws.getCell(`B${r}`).value = data.preparedBy;

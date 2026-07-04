@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
+import { setUserSignatureValue } from "@/lib/signature";
 import { createServiceClient } from "@/lib/supabase/server";
 
 async function assertAdmin() {
@@ -121,6 +122,28 @@ export async function upsertUser(input: z.infer<typeof userSchema>) {
 export async function deleteUser(id: string) {
   await assertAdmin();
   await prisma.user.delete({ where: { id } });
+  revalidatePath("/admin/users");
+}
+
+// A user's signature image (PNG/JPEG data URL) shown on their quotation exports.
+const signatureSchema = z.object({
+  userId: z.string().min(1),
+  dataUrl: z.string().nullable(), // null clears the signature
+});
+
+export async function saveUserSignature(input: z.infer<typeof signatureSchema>) {
+  await assertAdmin();
+  const d = signatureSchema.parse(input);
+  if (d.dataUrl) {
+    if (!/^data:image\/(png|jpe?g);base64,/i.test(d.dataUrl)) {
+      throw new Error("Signature must be a PNG or JPEG image.");
+    }
+    // ~1.5 MB base64 cap (uploads are downscaled client-side well below this).
+    if (d.dataUrl.length > 1_600_000) {
+      throw new Error("Signature image is too large — please upload a smaller file.");
+    }
+  }
+  await setUserSignatureValue(d.userId, d.dataUrl);
   revalidatePath("/admin/users");
 }
 

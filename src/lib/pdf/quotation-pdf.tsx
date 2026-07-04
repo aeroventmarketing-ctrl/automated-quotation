@@ -32,6 +32,7 @@ export interface QuotationPdfData {
   projectName?: string | null;
   customer: { company: string; contactName?: string | null; address?: string | null };
   preparedBy: string;
+  signature?: string | null; // sales person's signature image (PNG/JPEG data URL)
   approvedBy?: string | null;
   status: string;
   specNote?: string | null;
@@ -233,7 +234,12 @@ export function QuotationPdf({ data }: { data: QuotationPdfData }) {
           <Text>{COMPANY.closing}</Text>
           <Text style={{ marginTop: 14 }}>{COMPANY.signoff}</Text>
           <Text style={s.bold}>{COMPANY.name}</Text>
-          <Text style={{ marginTop: 18 }}>{data.preparedBy}</Text>
+          {data.signature ? (
+            <Image src={data.signature} style={{ width: 120, marginTop: 6, marginBottom: 2 }} />
+          ) : (
+            <Text style={{ marginTop: 18 }}> </Text>
+          )}
+          <Text>{data.preparedBy}</Text>
           <Text>{COMPANY.signatory}</Text>
         </View>
         <Text style={s.footer} fixed>

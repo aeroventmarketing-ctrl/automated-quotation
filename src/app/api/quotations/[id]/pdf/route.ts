@@ -4,6 +4,7 @@ import React from "react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
+import { getUserSignature } from "@/lib/signature";
 import { convertAirflow, normalizePowerUnit, convertPower, roundPower, type PowerUnit } from "@/lib/units";
 import {
   QuotationPdf,
@@ -127,6 +128,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // Signature reflects the currently logged-in sales user, not the original
     // preparer, so each sales person's downloads carry their own name.
     preparedBy: user.name,
+    // Their signature image (if uploaded in Admin → Users) above the name.
+    signature: await getUserSignature(user.id),
     approvedBy: quotation.approvedBy?.name ?? null,
     status: quotation.status,
     specNote: (quotation.notes && quotation.notes.trim()) || (typeof tplConfig.specNote === "string" ? tplConfig.specNote : null),
