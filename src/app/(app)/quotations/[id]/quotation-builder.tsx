@@ -256,41 +256,6 @@ function buildInlineFanDescription(model: string | null): string {
 const isMotorController = (specs: { type: string }): boolean => specs.type === "Motor Controller";
 /** Spring Vibration Isolator: priced by mounting + rated capacity (no duty/motor). */
 const isIsolator = (specs: { type: string }): boolean => specs.type === "Spring Vibration Isolator";
-/** A "Recommend?"-driven sub-item (isolator / motor controller attached to a fan). */
-const isRecommendLine = (specs: { type: string; mcRecommend?: boolean }): boolean =>
-  !!specs.mcRecommend && (isIsolator(specs) || isMotorController(specs));
-/** Sub-item letter: 0→a, 1→b, … 25→z, 26→aa, … */
-function subLetter(i: number): string {
-  let s = "";
-  for (let n = i + 1; n > 0; ) {
-    n--;
-    s = String.fromCharCode(97 + (n % 26)) + s;
-    n = Math.floor(n / 26);
-  }
-  return s;
-}
-/**
- * Auto item labels: main lines count 1, 2, 3…; a "Recommend?" sub-item takes the
- * current main number with a letter (1a, 1b, …). A recommend before any numbered
- * main line (no parent number) is left blank.
- */
-function computeItemLabels<T extends { specs: { type: string; mcRecommend?: boolean } }>(lines: T[]): string[] {
-  let counter = 0; // last main item's number
-  let subIdx = 0; // next sub-letter index within the current group
-  let hasParent = false; // a numbered main line has appeared
-  return lines.map((l) => {
-    if (isRecommendLine(l.specs)) {
-      if (!hasParent) return "";
-      const label = `${counter}${subLetter(subIdx)}`;
-      subIdx++;
-      return label;
-    }
-    counter++;
-    subIdx = 0;
-    hasParent = true;
-    return String(counter);
-  });
-}
 /** Isolator mounting options. */
 const ISO_MOUNTINGS = ["Foot Mounted", "Ceiling Mounted", "Housed Spring"];
 /** Rated capacities (kg); price by mounting (foot/ceiling). */
@@ -1798,15 +1763,7 @@ export function QuotationBuilder({
           unitPrice,
         };
       });
-      // Auto item labels (1, 1a, 1b, 2, …) recomputed from position + recommend flag.
-      const labels = computeItemLabels(next);
-      let labelChanged = false;
-      const withLabels = next.map((l, i) => {
-        if (l.specs.itemLabel === labels[i]) return l;
-        labelChanged = true;
-        return { ...l, specs: { ...l.specs, itemLabel: labels[i] } };
-      });
-      return changed || labelChanged ? withLabels : ls;
+      return changed ? next : ls;
     });
   }, [lines, vatRate]);
 
@@ -3272,12 +3229,12 @@ export function QuotationBuilder({
               )}
               {renderProductSelection(l)}
               <div className="my-3 border-t" />
-              <div className="mb-1 text-xs font-medium text-muted-foreground">Item {l.specs.itemLabel || idx + 1}</div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">Item {idx + 1}</div>
               <div className="grid gap-2 md:grid-cols-12">
                 <div className="md:col-span-1">
                   <Label className="text-[10px]">Item</Label>
-                  {/* Auto-numbered: main lines 1, 2, 3…; recommended sub-items 1a, 1b… */}
-                  <Input className="h-8 text-center" value={l.specs.itemLabel} disabled readOnly />
+                  <Input className="h-8" value={l.specs.itemLabel} placeholder={String(idx + 1)} disabled={!editable}
+                    onChange={(e) => updateSpec(l.id, { itemLabel: e.target.value })} />
                 </div>
                 <div className="md:col-span-1">
                   <Label className="text-[10px]">Qty</Label>
