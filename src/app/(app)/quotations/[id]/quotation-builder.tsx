@@ -1076,7 +1076,8 @@ function buildInductionDescription(specs: LineSpecs): string {
   const kw = row?.kw ?? TECO_KW_BY_HP[String(hp)] ?? null;
   const brand = isInductionHyundai(specs) ? "HYUNDAI" : "TECO";
   const lines: string[] = [];
-  lines.push(`Induction Motor - ${exp ? "Explosion Proof" : "TEFC"}`);
+  lines.push("Induction Motor");
+  lines.push(exp ? "Explosion Proof" : "TEFC");
   lines.push(`${hp} Hp${kw != null ? `, ${kw} Kw` : ""}, ${ph === 1 ? "Single Phase" : "Three Phase"}`);
   lines.push(`${ph === 1 ? "220v" : "220/380/440v"}, 60 Hz`);
   lines.push(`${pole} Pole${row?.rpm ? ` - ${row.rpm} rpm` : ""}`);
