@@ -56,14 +56,48 @@ export const MOTORS: MotorRow[] = [
   { hp: 60.0, phase: 3, pole: 4, price: 148821, m220: "60K3F2T", m380: "60K3F3T", m440: "60K3F4T" },
   { hp: 75.0, phase: 3, pole: 4, price: 172752, m220: "75K3F2T", m380: "75K3F3T", m440: "75K3F4T" },
   { hp: 100.0, phase: 3, pole: 4, price: 255854, m220: "100K3F2T", m380: "100K3F3T", m440: "100K3F4T" },
+  // 3-phase 6-pole (direct-drive, ~1140–1260 rpm). Codes vary only by voltage
+  // (same convention as 2-/4-pole); the pole is not encoded in the model code.
+  { hp: 1.0, phase: 3, pole: 6, price: 15572, m220: "1K3F2T", m380: "1K3F3T", m440: "1K3F4T" },
+  { hp: 1.5, phase: 3, pole: 6, price: 20572, m220: "1A1HK3F2T", m380: "1A1HK3F3T", m440: "1A1HK3F4T" },
+  { hp: 2.0, phase: 3, pole: 6, price: 20572, m220: "2K3F2T", m380: "2K3F3T", m440: "2K3F4T" },
+  { hp: 3.0, phase: 3, pole: 6, price: 24573, m220: "3K3F2T", m380: "3K3F3T", m440: "3K3F4T" },
+  { hp: 5.0, phase: 3, pole: 6, price: 41718, m220: "5K3F2T", m380: "5K3F3T", m440: "5K3F4T" },
+  { hp: 7.5, phase: 3, pole: 6, price: 49717, m220: "7A1HK3F2T", m380: "7A1HK3F3T", m440: "7A1HK3F4T" },
+  { hp: 10.0, phase: 3, pole: 6, price: 62433, m220: "10K3F2T", m380: "10K3F3T", m440: "10K3F4T" },
+  { hp: 15.0, phase: 3, pole: 6, price: 83577, m220: "15K3F2T", m380: "15K3F3T", m440: "15K3F4T" },
 ];
+
+/**
+ * Explosion-proof (TEFC-EX) motor net prices by HP — the 4-pole explosion-proof
+ * list. Belt-drive fans use a 4-pole EX motor; direct-drive may use 2-/4-/6-pole,
+ * but only these (HP-keyed) prices are published, so they apply to any pole. When
+ * a HP has no EX price the standard price is used as a fallback. The 1 HP unit is
+ * flagged available June 2026. Model code swaps the trailing "T" (TEFC) for "X".
+ */
+export const EXPROOF_PRICE_BY_HP: Record<number, number> = {
+  1: 39590, 2: 47567, 3: 57200, 5: 59157, 7.5: 81134, 10: 91823, 15: 128098, 20: 153386, 25: 193276,
+};
 
 export function lookupMotor(hp: number, phase: number, pole: number): MotorRow | undefined {
   return MOTORS.find((m) => m.hp === hp && m.phase === phase && m.pole === pole);
 }
 
-export function motorModelCode(m: MotorRow, volts: Voltage): string | null {
-  return volts === "220" ? m.m220 : volts === "380" ? m.m380 : m.m440;
+export function motorModelCode(m: MotorRow, volts: Voltage, exproof = false): string | null {
+  const code = volts === "220" ? m.m220 : volts === "380" ? m.m380 : m.m440;
+  if (!code) return null;
+  // Explosion-proof motors swap the trailing "T" (TEFC) indicator for "X".
+  return exproof ? code.replace(/T$/, "X") : code;
+}
+
+/** Net motor price — the explosion-proof price when flagged (falls back to standard). */
+export function motorNetPrice(m: MotorRow, exproof = false): number {
+  return exproof ? EXPROOF_PRICE_BY_HP[m.hp] ?? m.price : m.price;
+}
+
+/** True when the explosion-proof variant of this HP has a published price. */
+export function hasExproofPrice(hp: number): boolean {
+  return EXPROOF_PRICE_BY_HP[hp] != null;
 }
 
 /** The dynamic-balancing-on-site charge (+10%) applies to 3-phase motors above 10 HP. */

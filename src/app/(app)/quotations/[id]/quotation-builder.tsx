@@ -14,6 +14,8 @@ import { config } from "@/lib/config";
 import {
   lookupMotor,
   motorModelCode,
+  motorNetPrice,
+  hasExproofPrice,
   computeUnitPrice,
   combinedModel,
   hpOptions,
@@ -86,6 +88,8 @@ interface LineSpecs {
   acWidthUnit?: string;
   // Motor Controller: pull phase/pole/HP/volts from the nearest fan line above.
   mcRecommend?: boolean;
+  // Explosion-proof motor: uses the EX price and swaps the model-code "T" for "X".
+  exproof?: boolean;
 }
 /** Fan/blower categories a Motor Controller can take its motor details from. */
 const BLOWER_CATEGORIES = new Set([
@@ -1964,9 +1968,10 @@ export function QuotationBuilder({
           return { ...l, specs, descriptionSnapshot: desc };
         }
         const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
-        const net = computeUnitPrice(body, motor?.price ?? 0, hp, phase);
+        const exp = specs.exproof === true;
+        const net = computeUnitPrice(body, motor ? motorNetPrice(motor, exp) : 0, hp, phase);
         const gross = round2(net * (1 + vatRate));
-        const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
+        const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
         const withModel = specs.blowerModel
           ? rewriteModelLine(l.descriptionSnapshot, combined)
@@ -2119,9 +2124,10 @@ export function QuotationBuilder({
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
         const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
-        const net = computeUnitPrice(body, motor?.price ?? 0, hp, phase);
+        const exp = specs.exproof === true;
+        const net = computeUnitPrice(body, motor ? motorNetPrice(motor, exp) : 0, hp, phase);
         const gross = round2(net * (1 + vatRate));
-        const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts)) : null;
+        const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(effectiveBlowerModel(specs.blowerModel, specs.drive), mModel);
         const descriptionSnapshot = MATERIAL_CATEGORIES.has(specs.category)
           ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined)
@@ -3450,12 +3456,15 @@ export function QuotationBuilder({
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-[10px]">Pole</Label>
-                  <Select className="h-8" disabled={!editable} value={l.specs.motorPole ?? 4}
-                    onChange={(e) => applyMotor(l.id, { motorPole: numOrNull(e.target.value) })}>
-                    <option value="4">4-pole</option>
-                    <option value="2">2-pole</option>
-                  </Select>
+                  {/* Pole is auto-selected from the fan rpm during selection (belt = 4-pole);
+                      this slot carries the Explosion-proof toggle instead. */}
+                  <Label className="text-[10px]">Explosion proof</Label>
+                  <label className="flex h-8 items-center gap-1.5 text-xs">
+                    <input type="checkbox" className="h-4 w-4" disabled={!editable}
+                      checked={!!l.specs.exproof}
+                      onChange={(e) => applyMotor(l.id, { exproof: e.target.checked })} />
+                    EX motor
+                  </label>
                 </div>
                 <div>
                   <Label className="text-[10px]">Motor HP</Label>
@@ -3497,8 +3506,9 @@ export function QuotationBuilder({
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
+                const exp = l.specs.exproof === true;
                 const motor = hp && ph ? lookupMotor(hp, ph, pole) : undefined;
-                const mModel = motor ? motorModelCode(motor, voltageKey(l.specs.motorVolts)) : null;
+                const mModel = motor ? motorModelCode(motor, voltageKey(l.specs.motorVolts), exp) : null;
                 const db = dynamicBalancingApplies(hp, ph);
                 const isBlower = !!(l.specs.bodyPrice && l.specs.bodyPrice > 0);
                 return (
@@ -3507,7 +3517,8 @@ export function QuotationBuilder({
                       (hp && ph ? (
                         motor ? (
                           <>
-                            <span>Motor {mModel ?? "—"}: {formatCurrency(motor.price, quotation.currency)}</span>
+                            <span>Motor {mModel ?? "—"}{exp ? " (EX)" : ""}: {formatCurrency(motorNetPrice(motor, exp), quotation.currency)}</span>
+                            {exp && !hasExproofPrice(hp) && <span className="text-amber-600">EX price N/A for {hp} HP — using standard</span>}
                             {db && <span className="text-amber-600">+10% dynamic balancing (3-ph &gt; 10 HP)</span>}
                             {l.specs.blowerModel && <span>Model: <b>{combinedModel(effectiveBlowerModel(l.specs.blowerModel, l.specs.drive), mModel)}</b></span>}
                           </>

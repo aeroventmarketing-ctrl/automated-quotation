@@ -156,6 +156,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               acWidth: num(s.acWidth),
               acWidthUnit: typeof s.acWidthUnit === "string" ? s.acWidthUnit : "mm",
               mcRecommend: s.mcRecommend === true,
+              exproof: s.exproof === true,
             },
             // keep any nested selection/requirement so it isn't lost on save
             rawSpecs: s,

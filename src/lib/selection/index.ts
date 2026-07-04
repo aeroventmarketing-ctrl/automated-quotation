@@ -75,8 +75,9 @@ export function didwCfabOvLimit(wheelDia_in: number | null): number {
  * disregarded for CEBDD.
  */
 export const DIRECT_DRIVE_BANDS = [
-  { pole: 4, minRpm: 1662, maxRpm: 1842 },
-  { pole: 2, minRpm: 3325, maxRpm: 3684 },
+  { pole: 6, minRpm: 1140, maxRpm: 1260 },
+  { pole: 4, minRpm: 1650, maxRpm: 1840 },
+  { pole: 2, minRpm: 3400, maxRpm: 3780 },
 ] as const;
 
 // Standard induction-motor sizes (kW) used for motor sizing after service factor.
