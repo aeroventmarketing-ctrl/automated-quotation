@@ -331,6 +331,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Other Products", "brand": "Aerovent", "type": "Jet Fan", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Motor Controller", "series": ["Motor Starter", "Variable Frequency Drive"], "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Portable Axial Blower", "bladeTypes": [], "drives": [] },
+  { "category": "Other Products", "brand": "Aerovent", "type": "Portable Axial Blower (XProof)", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Variable Air Volume", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "Aerovent", "type": "Wind Driven Roof Ventilator", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "AlphaAir", "type": "Ceiling Cassette", "bladeTypes": [], "drives": [] },
