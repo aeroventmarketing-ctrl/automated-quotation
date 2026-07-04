@@ -21,6 +21,7 @@ import {
   hpOptions,
   dynamicBalancingApplies,
   type Voltage,
+  type MotorRow,
 } from "@/lib/pricing/motors";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw } from "lucide-react";
 import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
@@ -991,6 +992,44 @@ function buildVavDescription(specs: LineSpecs): string {
   }
   return lines.join("\n");
 }
+// Induction Motor (TECO / Hyundai) sold as a standalone product: pick Phase, Pole
+// and HP; the price comes from the same TECO motor tables used for blower motors
+// (VAT-EXCLUSIVE net × 1.12). Single phase is always 4-pole; three phase offers
+// 2/4/6-pole. Hyundai shares TECO's prices but is 3-phase 4-pole only. Phase →
+// motorPh, pole → motorPole, HP → motorHp; volts default 220.
+const isInductionMotor = (specs: { type: string }): boolean =>
+  specs.type === "Induction Motor (TECO)" || specs.type === "Induction Motor (Hyundai)";
+const isInductionHyundai = (specs: { type: string }): boolean => specs.type === "Induction Motor (Hyundai)";
+/** Effective pole for the motor: single phase and Hyundai are 4-pole only. */
+const inductionPole = (specs: LineSpecs): number =>
+  specs.motorPh === 1 || isInductionHyundai(specs) ? 4 : specs.motorPole ?? 4;
+/** Phase options — Hyundai is three-phase only. */
+const inductionPhaseOptions = (specs: LineSpecs): number[] => (isInductionHyundai(specs) ? [3] : [1, 3]);
+/** HP options for the current phase/pole (only priced HPs are listed). */
+const inductionHpOptions = (specs: LineSpecs): number[] =>
+  specs.motorPh ? hpOptions(specs.motorPh, inductionPole(specs)) : [];
+/** The motor table row for the current phase/pole/HP, or undefined. */
+function inductionMotorRow(specs: LineSpecs): MotorRow | undefined {
+  if (!specs.motorPh || specs.motorHp == null) return undefined;
+  return lookupMotor(specs.motorHp, specs.motorPh, inductionPole(specs));
+}
+/** Auto unit price (VAT-inclusive, as stored) for an induction-motor line, or null. */
+function inductionUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const m = inductionMotorRow(specs);
+  return m ? round2(m.price * (1 + vatRate)) : null;
+}
+/** Description for an induction motor: type + HP · phase · pole + model code. */
+function buildInductionDescription(specs: LineSpecs): string {
+  const lines: string[] = [specs.type];
+  if (specs.motorPh && specs.motorHp != null) {
+    const phWord = specs.motorPh === 1 ? "Single Phase" : "Three Phase";
+    lines.push(`${specs.motorHp} HP · ${phWord} · ${inductionPole(specs)}-Pole`);
+    const m = inductionMotorRow(specs);
+    const code = m ? motorModelCode(m, "220") : null; // 220 V model code
+    if (code) lines.push(`Model: ${code}`);
+  }
+  return lines.join("\n");
+}
 // Jet Fan (Other Products, MAXAIR): pick a model; each carries its rating and a
 // VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel.
 const JET_FAN_MODELS = ["MA-250", "MA-300"];
@@ -1806,6 +1845,29 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
+        // Induction Motor (TECO / Hyundai): price by phase × pole × HP from the
+        // motor tables. Single phase and Hyundai are 4-pole only; drop an HP that
+        // isn't valid for the resolved phase/pole. The motor's HP/phase/volts fill
+        // the Motor columns; capacity / S.P. / size stay blank.
+        if (isInductionMotor(specs)) {
+          const s2: LineSpecs = { ...specs };
+          if (isInductionHyundai(s2)) s2.motorPh = 3; // Hyundai is three-phase
+          s2.motorPole = inductionPole(s2); // single / Hyundai → 4-pole
+          if (s2.motorHp != null && !inductionHpOptions(s2).includes(s2.motorHp)) s2.motorHp = null;
+          s2.motorVolts = 220;
+          s2.capacity_cfm = null;
+          s2.staticPressure_pa = null;
+          s2.inches = null;
+          s2.power_w = null;
+          s2.bodyPrice = null;
+          const price = inductionUnitPrice(s2, vatRate);
+          return {
+            ...l,
+            specs: s2,
+            descriptionSnapshot: buildInductionDescription(s2),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Jet Fan: price by model (MA-250 / MA-300). The model's rating fills the
         // Capacity / Static pressure / Motor columns (converted to the header
         // units); the description carries only type / brand / model.
@@ -2280,6 +2342,15 @@ export function QuotationBuilder({
                   { type, bladeType: "by Volume Flow", sizeUnit: "cfm", sizeL: "", sizeW: "", shape: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
+              } else if (type === "Induction Motor (TECO)" || type === "Induction Motor (Hyundai)") {
+                // Induction Motor: Phase / Pole / HP selectors, priced from the
+                // motor table. Defaults to three-phase, 4-pole (Hyundai is fixed
+                // three-phase 4-pole); no blade/drive/material.
+                applyAccessory(
+                  l.id,
+                  { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false, motorPh: 3, motorPole: 4, motorHp: null, motorVolts: 220 },
+                  true,
+                );
               } else if (MATERIAL_CATEGORIES.has(c.category)) {
                 applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               } else if (c.brand === "KDK") {
@@ -2584,6 +2655,38 @@ export function QuotationBuilder({
                 </>
               )}
             </>
+          ) : isInductionMotor(c) ? (
+            // Induction Motor: Phase, Pole (hidden when single-phase / Hyundai), HP.
+            <>
+              <Select
+                value={c.motorPh ?? 3}
+                disabled={!editable || !c.type || isInductionHyundai(c)}
+                onChange={(e) => applyAccessory(l.id, { motorPh: numOrNull(e.target.value) })}
+              >
+                {inductionPhaseOptions(c).map((p) => (
+                  <option key={p} value={p}>{p === 1 ? "Single phase" : "Three phase"}</option>
+                ))}
+              </Select>
+              {c.motorPh === 3 && !isInductionHyundai(c) ? (
+                <Select
+                  value={c.motorPole ?? 4}
+                  disabled={!editable || !c.type}
+                  onChange={(e) => applyAccessory(l.id, { motorPole: numOrNull(e.target.value) })}
+                >
+                  {[2, 4, 6].map((p) => (<option key={p} value={p}>{p}-pole</option>))}
+                </Select>
+              ) : (
+                <div className="flex h-9 items-center text-xs text-muted-foreground">4-pole</div>
+              )}
+              <Select
+                value={c.motorHp ?? ""}
+                disabled={!editable || !c.type || !c.motorPh}
+                onChange={(e) => applyAccessory(l.id, { motorHp: numOrNull(e.target.value) })}
+              >
+                <option value="" disabled>HP…</option>
+                {inductionHpOptions(c).map((hp) => (<option key={hp} value={hp}>{hp} HP</option>))}
+              </Select>
+            </>
           ) : isJetFan(c) ? (
             // Jet Fan: model dropdown (MAXAIR MA series).
             <Select
@@ -2722,7 +2825,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInductionMotor(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -2743,7 +2846,9 @@ export function QuotationBuilder({
                   ? "Category · Brand · Type · Size (inches) · Duct type — auto-priced (editable)."
                   : isVav(c)
                     ? "Category · Brand · Type · select by volume flow or by duct size — auto-priced (VAT incl., editable)."
-                    : "Product Category · Type · Blade Type · Drive (more details to follow)."}
+                    : isInductionMotor(c)
+                      ? "Category · Brand · Type · Phase · Pole · HP — auto-priced (editable)."
+                      : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
       </div>
     );
@@ -2962,7 +3067,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isJetFan(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isInductionMotor(l.specs) || isJetFan(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -3133,7 +3238,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isJetFan(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isJetFan(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -3313,7 +3418,7 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isJetFan(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isInductionMotor(l.specs) || isJetFan(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex flex-col justify-end gap-1 md:col-span-3">
@@ -3372,6 +3477,11 @@ export function QuotationBuilder({
                               ? "Pick a duct size to auto-price."
                               : "Enter a volume flow, then Run selection to choose a duct.";
                           return `₱${row.price.toLocaleString()} / unit — ${row.mm} mm (${row.in} in), VAT incl. = auto-priced (editable).`;
+                        }
+                        if (isInductionMotor(l.specs)) {
+                          const m = inductionMotorRow(l.specs);
+                          if (m == null) return "Pick phase, pole and HP to auto-price.";
+                          return `₱${m.price.toLocaleString()} / unit (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isJetFan(l.specs)) {
                           const net = jetFanNet(l.specs);
@@ -3531,7 +3641,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isJetFan(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isJetFan(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
