@@ -306,7 +306,9 @@ function isolatorRecommend(
   type: string,
   motorKg: number | null,
 ): { springs: number; rated: number | null; noSpring: boolean } | null {
-  if (category === "Propeller Type") return { springs: 0, rated: null, noSpring: true };
+  // Propeller types and the Customized Jet Fan aren't spring-mounted — no isolator.
+  if (category === "Propeller Type" || type === "Customized Jet Fan")
+    return { springs: 0, rated: null, noSpring: true };
   if (motorKg == null) return null;
   const t = (type || "").toLowerCase();
   let divisor: number;
@@ -1702,7 +1704,7 @@ export function QuotationBuilder({
           const net = rated != null ? ISO_PRICE.foot[rated] ?? null : null;
           const unitPrice = net != null ? round2(net * (1 + vatRate)) : 0;
           const desc = rec?.noSpring
-            ? "Spring Vibration Isolator\nNo spring required (propeller type)"
+            ? "Spring Vibration Isolator\nNo spring required (not spring-mounted)"
             : buildIsolatorDescription(shape, rated);
           if (
             l.specs.shape === shape && l.specs.sizeL === sizeL && l.qty === qty &&
