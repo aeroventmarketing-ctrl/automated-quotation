@@ -1018,17 +1018,11 @@ function inductionUnitPrice(specs: LineSpecs, vatRate: number): number | null {
   const m = inductionMotorRow(specs);
   return m ? round2(m.price * (1 + vatRate)) : null;
 }
-/** Description for an induction motor: type + HP · phase · pole + model code. */
+/** Description for an induction motor. For now only the type name shows; the
+ *  full description lines will be supplied later (HP · phase · pole / model
+ *  removed at the client's request). Phase/pole/HP still drive the price. */
 function buildInductionDescription(specs: LineSpecs): string {
-  const lines: string[] = [specs.type];
-  if (specs.motorPh && specs.motorHp != null) {
-    const phWord = specs.motorPh === 1 ? "Single Phase" : "Three Phase";
-    lines.push(`${specs.motorHp} HP · ${phWord} · ${inductionPole(specs)}-Pole`);
-    const m = inductionMotorRow(specs);
-    const code = m ? motorModelCode(m, "220") : null; // 220 V model code
-    if (code) lines.push(`Model: ${code}`);
-  }
-  return lines.join("\n");
+  return specs.type;
 }
 // Jet Fan (Other Products, MAXAIR): pick a model; each carries its rating and a
 // VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel.
