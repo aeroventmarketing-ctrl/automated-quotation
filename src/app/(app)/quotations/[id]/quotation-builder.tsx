@@ -1521,6 +1521,8 @@ const WEATHERHOOD_MIN = 10;
 const WEATHERHOOD_MAX = 36;
 /** Over-36" Weather hoods: this NET rate per square inch, then × VAT. */
 const WEATHERHOOD_OVER_RATE = 8.5;
+/** Powder-coated Weather hood: this finish factor on the Galvanized base. */
+const WEATHERHOOD_POWDER_FACTOR = 2.12;
 /** The size (next size ≥ √area, floored to 10) chosen for a Weather hood, or null. */
 function weatherhoodSize(specs: LineSpecs): number | null {
   if (specs.type !== "Weather hood") return null;
@@ -1531,7 +1533,7 @@ function weatherhoodSize(specs: LineSpecs): number | null {
 /**
  * VAT-inclusive Weather hood price. Base (Galvanized) is the list price ≤36",
  * else area × net rate × VAT. Material scales the base (GI×1 / Aluminum×3 /
- * Stainless×4). Powder-coated is instead a ×1.5 finish on the Galvanized base —
+ * Stainless×4). Powder-coated is instead a ×2.12 finish on the Galvanized base —
  * the material factor is not applied, so changing material won't change it.
  */
 function weatherhoodUnitPrice(specs: LineSpecs): number | null {
@@ -1545,7 +1547,7 @@ function weatherhoodUnitPrice(specs: LineSpecs): number | null {
     price = WEATHERHOOD_PRICE[size] ?? null;
   }
   if (price == null) return null;
-  price *= specs.powderCoated ? accPowderFactor(specs.type) : ACC_MATERIAL_FACTOR[specs.material] ?? 1;
+  price *= specs.powderCoated ? WEATHERHOOD_POWDER_FACTOR : ACC_MATERIAL_FACTOR[specs.material] ?? 1;
   return round2(price);
 }
 
@@ -4086,7 +4088,7 @@ export function QuotationBuilder({
                           if (wh == null || size == null) return "Enter L × W to auto-price.";
                           const matF = ACC_MATERIAL_FACTOR[l.specs.material] ?? 1;
                           const finish = l.specs.powderCoated
-                            ? " · powder coat ×1.5 (GI base)"
+                            ? ` · powder coat ×${WEATHERHOOD_POWDER_FACTOR} (GI base)`
                             : matF !== 1
                             ? ` · ${accMaterialLabel(l.specs.material)} ×${matF}`
                             : "";
