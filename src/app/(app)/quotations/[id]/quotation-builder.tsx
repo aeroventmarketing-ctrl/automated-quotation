@@ -3165,7 +3165,7 @@ export function QuotationBuilder({
           {/* Mark-up, Discount and VAT presentation, inline */}
           <div className="grid gap-4 md:col-span-3 md:grid-cols-3">
             <div className="space-y-1">
-              <Label>Mark-up</Label>
+              <Label>Mark-up <span className="font-normal text-muted-foreground">(internal only)</span></Label>
               <div className="flex gap-2">
                 <Select
                   className="w-28 shrink-0"
@@ -3993,8 +3993,8 @@ export function QuotationBuilder({
                 <span>{formatCurrency(totals.displayedNet, quotation.currency)}</span>
               </div>
               {pricing.markupValue > 0 && (
-                <div className="flex justify-between">
-                  <span>ADD {pricing.markupMode === "percent" ? `${pricing.markupValue}% MARK-UP` : "MARK-UP"}</span>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>ADD {pricing.markupMode === "percent" ? `${pricing.markupValue}% MARK-UP` : "MARK-UP"} <span className="italic">(internal)</span></span>
                   <span>{formatCurrency(totals.markupAmt, quotation.currency)}</span>
                 </div>
               )}

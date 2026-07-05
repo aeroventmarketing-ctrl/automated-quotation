@@ -238,6 +238,15 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Data rows ------------------------------------------------------------
   const f = data.vatMode !== "INCLUSIVE" ? 1 / (1 + data.vatRate) : 1;
+  // Mark-up is INTERNAL: it never appears as a line on the client's copy.
+  // Instead we fold it into every displayed price via `mFactor`, so the column
+  // still sums to the (marked-up) net and the client sees no mark-up row.
+  const pricing: PricingAdjust =
+    data.pricing ?? { markupMode: "percent", markupValue: 0, discountMode: "percent", discountValue: data.discountPct };
+  const baseNet = money(data.total * f);
+  const adj = applyPricing(baseNet, pricing);
+  const markedNet = money(adj.afterMarkup); // net incl. hidden mark-up
+  const mFactor = baseNet > 0 ? markedNet / baseNet : 1;
   let r = H3 + 1;
   const dash = (v: number | string | null | undefined) =>
     v === null || v === undefined || v === 0 || v === "" ? "--" : v;
@@ -299,9 +308,9 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     cellCfg(`L${r}`, dash(it.motorHp ?? null), 9);
     cellCfg(`M${r}`, dash(it.motorPh), 9);
     cellCfg(`N${r}`, dash(it.motorVolts), 9);
-    cellCfg(`O${r}`, money(it.unitPrice * f), 9);
+    cellCfg(`O${r}`, money(it.unitPrice * f * mFactor), 9);
     ws.getCell(`O${r}`).numFmt = "#,##0.00";
-    cellCfg(`P${r}`, money(it.lineTotal * f), 9);
+    cellCfg(`P${r}`, money(it.lineTotal * f * mFactor), 9);
     ws.getCell(`P${r}`).numFmt = "#,##0.00";
 
     ws.getRow(r).height = rowH;
@@ -310,11 +319,9 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   }
 
   // --- Totals ---------------------------------------------------------------
-  const displayedNet = money(data.total * f);
-  const pricing: PricingAdjust =
-    data.pricing ?? { markupMode: "percent", markupValue: 0, discountMode: "percent", discountValue: data.discountPct };
-  const adj = applyPricing(displayedNet, pricing);
-  const markupAmt = money(adj.markupAmt);
+  // Client-facing net already includes the hidden mark-up (folded into prices);
+  // only the discount is shown as its own line.
+  const displayedNet = markedNet;
   const discountAmt = money(adj.discountAmt);
   const finalNet = money(adj.finalNet);
   const netLabel =
@@ -344,13 +351,8 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     r++;
   }
   totalRow(netLabel, displayedNet, "RED");
-  if (pricing.markupValue > 0) {
-    totalRow(`ADD ${pricing.markupMode === "percent" ? `${pricing.markupValue}% MARK-UP` : "MARK-UP"}`, markupAmt, "BLACK");
-  }
   if (pricing.discountValue > 0) {
     totalRow(`LESS ${pricing.discountMode === "percent" ? `${pricing.discountValue}% DISCOUNT` : "DISCOUNT"}`, discountAmt, "BLACK");
-  }
-  if (pricing.markupValue > 0 || pricing.discountValue > 0) {
     totalRow("NET AMOUNT", finalNet, "BLACK");
   }
   if (data.vatMode === "EXCLUSIVE_PLUS") {
