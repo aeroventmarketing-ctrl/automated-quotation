@@ -616,7 +616,7 @@ const MATERIAL_OPTIONS = [
 const MATERIAL_FACTORS: Record<string, number> = {
   "Black Iron Sheet": 1,
   "Heavy Gauge Material": 1.25,
-  "Aluminum Material": 1, // provisional — awaiting the aluminum price multiplier
+  "Aluminum Material": 3,
   "Fiberglas Reinforced Metal": 5.5,
   "Stainless 304 Material": 4,
   "Stainless 316 Material": 5,
