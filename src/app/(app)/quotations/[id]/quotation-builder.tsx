@@ -1519,19 +1519,24 @@ const WEATHERHOOD_PRICE: Record<number, number> = {
 };
 const WEATHERHOOD_MIN = 10;
 const WEATHERHOOD_MAX = 36;
-/** The list size chosen for a Weather hood (next size ≥ √area), or null. */
+/** Over-36" Weather hoods are priced at this VAT-inclusive rate per square inch. */
+const WEATHERHOOD_OVER_RATE = 6.5;
+/** The size (next size ≥ √area, floored to 10) chosen for a Weather hood, or null. */
 function weatherhoodSize(specs: LineSpecs): number | null {
   if (specs.type !== "Weather hood") return null;
   const area = accAreaSqIn(specs); // trade sq inches (Round = D×D, else L×W)
   if (area == null || area <= 0) return null;
-  const size = Math.ceil(Math.sqrt(area));
-  if (size > WEATHERHOOD_MAX) return null; // beyond the pricelist
-  return Math.max(size, WEATHERHOOD_MIN);
+  return Math.max(Math.ceil(Math.sqrt(area)), WEATHERHOOD_MIN);
 }
-/** VAT-inclusive Weather hood price, or null if incomplete / out of range. */
+/** VAT-inclusive Weather hood price: list price ≤36", else area × ₱6.5. */
 function weatherhoodUnitPrice(specs: LineSpecs): number | null {
   const size = weatherhoodSize(specs);
-  return size == null ? null : WEATHERHOOD_PRICE[size] ?? null;
+  if (size == null) return null;
+  if (size > WEATHERHOOD_MAX) {
+    const area = accAreaSqIn(specs);
+    return area == null ? null : round2(area * WEATHERHOOD_OVER_RATE);
+  }
+  return WEATHERHOOD_PRICE[size] ?? null;
 }
 
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
@@ -4064,8 +4069,9 @@ export function QuotationBuilder({
                         if (l.specs.type === "Weather hood") {
                           const size = weatherhoodSize(l.specs);
                           const wh = weatherhoodUnitPrice(l.specs);
-                          if (wh == null)
-                            return "Enter L × W to auto-price; sizes over 36\" aren't in the list — enter it manually.";
+                          if (wh == null || size == null) return "Enter L × W to auto-price.";
+                          if (size > WEATHERHOOD_MAX)
+                            return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
                           return `√(area) → ${size}" size · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
                         }
                         const rate = accessoryRate(l.specs.type, l.specs.shape);
