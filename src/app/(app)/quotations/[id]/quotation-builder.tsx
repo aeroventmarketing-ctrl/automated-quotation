@@ -739,8 +739,8 @@ const TAG_FACTORS: Record<string, number> = {
   TAFDD: 1,
   VAF: 1,
   VAFDD: 1,
-  // Customized Jet Fan = Tubeaxial (TAF) body × 3.
-  JF: 3,
+  // Customized Jet Fan = Tubeaxial (TAF) body × 2.
+  JF: 2,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
@@ -2729,7 +2729,7 @@ export function QuotationBuilder({
               if (PROPELLER_FAN_TYPES.has(type)) {
                 applyMotor(l.id, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
               } else if (type === "Customized Jet Fan") {
-                // Customized Jet Fan: Tubeaxial catalogue, priced ×3, locked to
+                // Customized Jet Fan: Tubeaxial catalogue, priced ×2, locked to
                 // 0.5" w.g. — seed the static pressure at 0.5" (in the header unit).
                 const pUnit = normalizePressureUnit(units.pressure) ?? "inwg";
                 const sp05 = Math.round(convertPressure(0.5, "inwg", pUnit) * 100) / 100;
