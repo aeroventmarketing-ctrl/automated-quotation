@@ -165,6 +165,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               acWidthUnit: typeof s.acWidthUnit === "string" ? s.acWidthUnit : "mm",
               mcRecommend: s.mcRecommend === true,
               exproof: s.exproof === true,
+              customizedUnit: s.customizedUnit === true,
+              bladeMaterialOn: s.bladeMaterialOn === true,
+              bladeMaterial: typeof s.bladeMaterial === "string" ? s.bladeMaterial : "",
             },
             // keep any nested selection/requirement so it isn't lost on save
             rawSpecs: s,

@@ -93,6 +93,12 @@ interface LineSpecs {
   mcRecommend?: boolean;
   // Explosion-proof motor: uses the EX price and swaps the model-code "T" for "X".
   exproof?: boolean;
+  // Customized (bespoke) unit: body priced ×1.2 (a +20% uplift on the base body).
+  customizedUnit?: boolean;
+  // Separate blade material: when off the blade is standard Black Iron Sheet;
+  // when on, `bladeMaterial` scales the blade half of the body.
+  bladeMaterialOn?: boolean;
+  bladeMaterial?: string;
 }
 /** Fan/blower categories a Motor Controller can take its motor details from. */
 const BLOWER_CATEGORIES = new Set([
@@ -635,8 +641,6 @@ const MATERIAL_CATEGORIES = new Set([
   "Tubular Inline Type",
   "Cabinet Type",
 ]);
-const materialFactor = (specs: LineSpecs): number =>
-  MATERIAL_CATEGORIES.has(specs.category) ? MATERIAL_FACTORS[specs.material] ?? 1 : 1;
 
 /**
  * Model-code tag by product type and blade type. DIDW has its own catalogue
@@ -738,8 +742,25 @@ const TAG_FACTORS: Record<string, number> = {
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType, specs.category));
 /** Net body price after the tag (blade/type) factor and material factor. */
+/**
+ * Net body price. For the material-scaled fan categories the body splits into
+ * a housing half (top Material dropdown) and a blade half (blade material, or
+ * Black Iron when off): Body×0.5×bodyMat + Body×0.5×bladeMat. A customized unit
+ * adds a +20% uplift on the base body (×1.2). "Body" here is the catalogue body
+ * after its model-code (tag) factor. Other categories keep the plain factor.
+ */
+/** Apply material split + customized uplift to a model-adjusted base body. */
+const bodyNetFrom = (base: number, specs: LineSpecs): number => {
+  if (!MATERIAL_CATEGORIES.has(specs.category)) return base;
+  const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
+  const bladeMat = specs.bladeMaterialOn ? MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1 : 1;
+  const housing = base * 0.5 * bodyMat;
+  const blade = base * 0.5 * bladeMat;
+  const customized = specs.customizedUnit ? base * 0.2 : 0;
+  return housing + blade + customized;
+};
 const bodyPriceOf = (specs: LineSpecs): number =>
-  (specs.bodyPrice ?? 0) * bladeFactor(specs) * materialFactor(specs);
+  bodyNetFrom((specs.bodyPrice ?? 0) * bladeFactor(specs), specs);
 /**
  * Re-tag a blower model code to match the current type/blade/drive.
  *  - Centrifugal family (CEB/CFAB/DIDW…/CIEB/SIEB): swap the suffix in place.
@@ -3075,6 +3096,33 @@ export function QuotationBuilder({
                 <option value="">Blade type…</option>
                 {(entryFor(c.category, c.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
               </Select>
+              {/* Separate blade material — off = standard Black Iron Sheet. */}
+              {MATERIAL_CATEGORIES.has(c.category) && (
+                <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    disabled={!editable}
+                    checked={!!c.bladeMaterialOn}
+                    onChange={(e) =>
+                      applyMotor(l.id, {
+                        bladeMaterialOn: e.target.checked,
+                        ...(e.target.checked && !c.bladeMaterial ? { bladeMaterial: "Black Iron Sheet" } : {}),
+                      })
+                    }
+                  />
+                  Blade material
+                </label>
+              )}
+              {MATERIAL_CATEGORIES.has(c.category) && c.bladeMaterialOn && (
+                <Select
+                  value={c.bladeMaterial || "Black Iron Sheet"}
+                  disabled={!editable}
+                  onChange={(e) => applyMotor(l.id, { bladeMaterial: e.target.value })}
+                >
+                  {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                </Select>
+              )}
               <Select
                 value={c.drive}
                 disabled={!editable || !c.type}
@@ -3095,6 +3143,19 @@ export function QuotationBuilder({
             >
               {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
             </Select>
+          )}
+          {/* Customized (bespoke) unit — body priced ×1.2 (a +20% uplift). */}
+          {MATERIAL_CATEGORIES.has(c.category) && (
+            <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                disabled={!editable}
+                checked={!!c.customizedUnit}
+                onChange={(e) => applyMotor(l.id, { customizedUnit: e.target.checked })}
+              />
+              Customized unit
+            </label>
           )}
         </div>
         <p className="text-xs text-muted-foreground">
@@ -3589,7 +3650,7 @@ export function QuotationBuilder({
                         {w.list.map((r) => {
                           const cat = catalog[r.modelId];
                           const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
-                          const estBody = (cat?.basePrice ?? 0) * bladeFactor(l.specs) * materialFactor(l.specs);
+                          const estBody = bodyNetFrom((cat?.basePrice ?? 0) * bladeFactor(l.specs), l.specs);
                           // KDK catalogue prices are VAT-exclusive (net); store gross (no motor add-on).
                           const est = isPrebuiltUnit(l.specs)
                             ? round2((cat?.basePrice ?? 0) * (1 + vatRate))
