@@ -770,6 +770,40 @@ const bodyNetFrom = (base: number, specs: LineSpecs): number => {
 };
 const bodyPriceOf = (specs: LineSpecs): number =>
   bodyNetFrom((specs.bodyPrice ?? 0) * bladeFactor(specs), specs);
+
+/** Plain number with thousands separators (up to 2 decimals). */
+const fmtNum = (n: number): string => n.toLocaleString("en-PH", { maximumFractionDigits: 2 });
+
+/**
+ * Human-readable body computation showing the factors used, so the price
+ * change from each tick box is visible. E.g.
+ *   47,654 × 3 (Aluminum) = 142,962
+ *   47,654×0.5×1 (Black Iron Sheet) + 47,654×0.5×3 (blade Aluminum) + 47,654×0.2 (customized) = …
+ */
+const bodyComputation = (specs: LineSpecs): string => {
+  const B = specs.bodyPrice ?? 0;
+  if (!B) return "";
+  const tag = bladeFactor(specs);
+  const base = round2(B * tag);
+  const baseStr = tag === 1 ? fmtNum(B) : `(${fmtNum(B)}×${fmtNum(round2(tag))})`;
+  const total = bodyPriceOf(specs);
+  if (!MATERIAL_CATEGORIES.has(specs.category)) {
+    return tag === 1 ? fmtNum(B) : `${baseStr} = ${fmtNum(base)}`;
+  }
+  const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
+  const bladeMat = specs.bladeMaterialOn ? MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1 : bodyMat;
+  const bodyName = materialPhrase(specs.material || "Black Iron Sheet");
+  const bladeName = materialPhrase((specs.bladeMaterialOn ? specs.bladeMaterial : specs.material) || "Black Iron Sheet");
+  const parts: string[] = [];
+  if (!specs.customizedUnit && bodyMat === bladeMat) {
+    parts.push(`${baseStr} × ${fmtNum(bodyMat)} (${bodyName})`);
+  } else {
+    parts.push(`${baseStr}×0.5×${fmtNum(bodyMat)} (${bodyName})`);
+    parts.push(`${baseStr}×0.5×${fmtNum(bladeMat)} (blade ${bladeName})`);
+    if (specs.customizedUnit) parts.push(`${baseStr}×0.2 (customized)`);
+  }
+  return `${parts.join(" + ")} = ${fmtNum(total)}`;
+};
 /**
  * Re-tag a blower model code to match the current type/blade/drive.
  *  - Centrifugal family (CEB/CFAB/DIDW…/CIEB/SIEB): swap the suffix in place.
@@ -4048,9 +4082,7 @@ export function QuotationBuilder({
                 const isBlower = !!(l.specs.bodyPrice && l.specs.bodyPrice > 0);
                 return (
                   <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                    {isBlower && (
-                      <span>Body: {formatCurrency(bodyPriceOf(l.specs), quotation.currency)}</span>
-                    )}
+                    {isBlower && <span>Body: {bodyComputation(l.specs)}</span>}
                     {isBlower &&
                       (hp && ph ? (
                         motor ? (
