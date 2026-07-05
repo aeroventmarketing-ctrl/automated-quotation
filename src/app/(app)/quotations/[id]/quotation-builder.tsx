@@ -26,7 +26,7 @@ import {
 } from "@/lib/pricing/motors";
 import { TECO_MOTOR_DATA, TECO_KW_BY_HP } from "@/lib/teco-motor-data";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw } from "lucide-react";
-import { PRODUCT_CATEGORIES, typesFor, entryFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
+import { PRODUCT_CATEGORIES, typesFor, entryFor, bladeTypesFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
 import {
@@ -774,11 +774,12 @@ const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   }
   return specs.customizedUnit ? core * 1.2 : core;
 };
-/** Reversible-blade propellers cost ×1.5 of the body. */
-const reversibleFactor = (specs: LineSpecs): number => (specs.bladeType === "Reversible Blade" ? 1.5 : 1);
-/** Model-adjusted base body (catalogue price × tag factor × reversible factor). */
+/** Reversible-blade propellers and Airfoil blades both cost ×1.5 of the body. */
+const SPECIAL_BLADE_FACTOR: Record<string, number> = { "Reversible Blade": 1.5, Airfoil: 1.5 };
+const specialBladeFactor = (specs: LineSpecs): number => SPECIAL_BLADE_FACTOR[specs.bladeType] ?? 1;
+/** Model-adjusted base body (catalogue price × tag factor × special-blade factor). */
 const baseBodyOf = (bodyPrice: number, specs: LineSpecs): number =>
-  bodyPrice * bladeFactor(specs) * reversibleFactor(specs);
+  bodyPrice * bladeFactor(specs) * specialBladeFactor(specs);
 const bodyPriceOf = (specs: LineSpecs): number =>
   bodyNetFrom(baseBodyOf(specs.bodyPrice ?? 0, specs), specs);
 
@@ -795,11 +796,11 @@ const bodyComputation = (specs: LineSpecs): string => {
   const B = specs.bodyPrice ?? 0;
   if (!B) return "";
   const tag = bladeFactor(specs);
-  const rev = reversibleFactor(specs);
+  const special = specialBladeFactor(specs);
   const base = round2(baseBodyOf(B, specs));
   const factors = [
     ...(tag !== 1 ? [`×${fmtNum(round2(tag))}`] : []),
-    ...(rev !== 1 ? ["×1.5 (Reversible)"] : []),
+    ...(special !== 1 ? [`×${fmtNum(special)} (${specs.bladeType})`] : []),
   ];
   const baseStr = factors.length ? `(${fmtNum(B)}${factors.join("")})` : fmtNum(B);
   const total = bodyPriceOf(specs);
@@ -3158,7 +3159,7 @@ export function QuotationBuilder({
                 }}
               >
                 <option value="">Blade type…</option>
-                {(entryFor(c.category, c.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
+                {bladeTypesFor(c.category, c.type).map((b) => (<option key={b} value={b}>{b}</option>))}
               </Select>
               <Select
                 value={c.drive}

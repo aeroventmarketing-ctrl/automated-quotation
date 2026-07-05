@@ -422,6 +422,26 @@ export function entryFor(category: string, type: string): TaxonomyEntry | undefi
   return PRODUCT_TAXONOMY.find((e) => e.category === category && e.type === type);
 }
 
+/** Categories where "Airfoil" is offered as an extra blade type (×1.5 body). */
+const AIRFOIL_CATEGORIES = new Set([
+  "Centrifugal Type",
+  "Axial Type",
+  "Tubular Inline Type",
+  "Cabinet Type",
+]);
+
+/**
+ * Blade-type options for a type, with "Airfoil" appended for the categories
+ * that offer it (only when the type already has blade types).
+ */
+export function bladeTypesFor(category: string, type: string): string[] {
+  const base = entryFor(category, type)?.bladeTypes ?? [];
+  if (base.length > 0 && AIRFOIL_CATEGORIES.has(category) && !base.includes("Airfoil")) {
+    return [...base, "Airfoil"];
+  }
+  return base;
+}
+
 /** Series options for a type (e.g. Wall Mounted Fan → Shutter / High Pressure). */
 export function seriesFor(category: string, type: string): string[] {
   return entryFor(category, type)?.series ?? [];
