@@ -1528,8 +1528,12 @@ function weatherhoodSize(specs: LineSpecs): number | null {
   if (area == null || area <= 0) return null;
   return Math.max(Math.ceil(Math.sqrt(area)), WEATHERHOOD_MIN);
 }
-/** VAT-inclusive Weather hood price: list price ≤36", else area × net rate × VAT.
- * Powder-coated adds a ×1.5 finish factor. */
+/**
+ * VAT-inclusive Weather hood price. Base (Galvanized) is the list price ≤36",
+ * else area × net rate × VAT. Material scales the base (GI×1 / Aluminum×3 /
+ * Stainless×4). Powder-coated is instead a ×1.5 finish on the Galvanized base —
+ * the material factor is not applied, so changing material won't change it.
+ */
 function weatherhoodUnitPrice(specs: LineSpecs): number | null {
   const size = weatherhoodSize(specs);
   if (size == null) return null;
@@ -1541,7 +1545,7 @@ function weatherhoodUnitPrice(specs: LineSpecs): number | null {
     price = WEATHERHOOD_PRICE[size] ?? null;
   }
   if (price == null) return null;
-  if (specs.powderCoated) price *= 1.5;
+  price *= specs.powderCoated ? accPowderFactor(specs.type) : ACC_MATERIAL_FACTOR[specs.material] ?? 1;
   return round2(price);
 }
 
@@ -4080,10 +4084,15 @@ export function QuotationBuilder({
                           const size = weatherhoodSize(l.specs);
                           const wh = weatherhoodUnitPrice(l.specs);
                           if (wh == null || size == null) return "Enter L × W to auto-price.";
-                          const pc = l.specs.powderCoated ? " · powder coat ×1.5" : "";
+                          const matF = ACC_MATERIAL_FACTOR[l.specs.material] ?? 1;
+                          const finish = l.specs.powderCoated
+                            ? " · powder coat ×1.5 (GI base)"
+                            : matF !== 1
+                            ? ` · ${accMaterialLabel(l.specs.material)} ×${matF}`
+                            : "";
                           if (size > WEATHERHOOD_MAX)
-                            return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} × 1.12${pc} = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
-                          return `√(area) → ${size}" size${pc} · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
+                            return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} × 1.12${finish} = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
+                          return `√(area) → ${size}" size${finish} · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
                         }
                         const rate = accessoryRate(l.specs.type, l.specs.shape);
                         const area = accBilledAreaSqIn(l.specs);
