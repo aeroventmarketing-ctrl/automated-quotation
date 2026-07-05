@@ -480,6 +480,7 @@ function buildBlowerDescription(
   material: string,
   model?: string | null,
   bladeMaterial?: string | null,
+  paint: string = PAINT_PHRASE,
 ): string {
   const driveWord = /direct/i.test(drive) ? "Direct Drive" : "Belt Drive";
   const stainless = /stainless 3(?:04|16)/i.test(material);
@@ -491,7 +492,7 @@ function buildBlowerDescription(
       ? model
         ? `Model: ${model}`
         : ""
-      : `Painted with Epoxy Enamel Aqua Green${model ? ` / Model: ${model}` : ""}`,
+      : `${paint}${model ? ` / Model: ${model}` : ""}`,
   ];
   // Separate blade material (when chosen) prints just after the Model line.
   if (bladeMaterial && bladeMaterial !== "Black Iron Sheet") {
@@ -758,8 +759,15 @@ const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.typ
  * after its model-code (tag) factor. Other categories keep the plain factor.
  */
 /** Paint upgrade -> black-iron-base multiplier (added on top of the body). */
-const PAINT_FACTORS: Record<string, number> = { "Powder Coat Paint": 1.5, "High Temperature Paint": 1.3 };
-const BOTH_PAINTS = ["Powder Coat Paint", "High Temperature Paint"];
+const PAINT_FACTORS: Record<string, number> = { "Powder Coated Finish": 1.5, "High Temperature Paint": 1.3 };
+const BOTH_PAINTS = ["Powder Coated Finish", "High Temperature Paint"];
+/** Description line for the chosen paint (replaces the standard epoxy line). */
+const PAINT_DESC: Record<string, string> = {
+  "Powder Coated Finish": "Powder Coated Finish",
+  "High Temperature Paint": "Painted with High Temperature Paint",
+};
+const paintDescLine = (specs: LineSpecs): string =>
+  (specs.upgradePaint && PAINT_DESC[specs.paintType ?? ""]) || PAINT_PHRASE;
 /** Which paint upgrades a body material allows (empty = no upgrade offered). */
 const PAINT_BY_MATERIAL: Record<string, string[]> = {
   "Black Iron Sheet": BOTH_PAINTS,
@@ -2352,6 +2360,7 @@ export function QuotationBuilder({
                 specs.material,
                 specs.blowerModel ? displayBlowerModel(specs) : null,
                 specs.bladeMaterialOn ? specs.bladeMaterial : null,
+                paintDescLine(specs),
               )
             : rewriteProductNoun(
                 rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
@@ -2370,7 +2379,7 @@ export function QuotationBuilder({
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
         const descriptionSnapshot = isBlower
-          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null, specs.bladeMaterialOn ? specs.bladeMaterial : null)
+          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null, specs.bladeMaterialOn ? specs.bladeMaterial : null, paintDescLine(specs))
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
@@ -2524,7 +2533,7 @@ export function QuotationBuilder({
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(displayBlowerModel(specs), mModel);
         const descriptionSnapshot = MATERIAL_CATEGORIES.has(specs.category)
-          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined, specs.bladeMaterialOn ? specs.bladeMaterial : null)
+          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined, specs.bladeMaterialOn ? specs.bladeMaterial : null, paintDescLine(specs))
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),

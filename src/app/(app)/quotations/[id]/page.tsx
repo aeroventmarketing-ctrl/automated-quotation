@@ -169,7 +169,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               bladeMaterialOn: s.bladeMaterialOn === true,
               bladeMaterial: typeof s.bladeMaterial === "string" ? s.bladeMaterial : "",
               upgradePaint: s.upgradePaint === true,
-              paintType: typeof s.paintType === "string" ? s.paintType : "",
+              paintType:
+                s.paintType === "Powder Coat Paint"
+                  ? "Powder Coated Finish"
+                  : typeof s.paintType === "string"
+                  ? s.paintType
+                  : "",
             },
             // keep any nested selection/requirement so it isn't lost on save
             rawSpecs: s,
