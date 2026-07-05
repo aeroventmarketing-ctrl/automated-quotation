@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { normalizeCompany, normalizePerson, normalizeEmail, phoneKey } from "@/lib/client-ownership";
+import { DuplicateGroup, type DupRecord } from "./duplicate-group";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ type CustomerRow = {
   contactName: string | null;
   email: string | null;
   phone: string | null;
-  _count: { inquiries: number };
+  inquiries: { createdBy: { id: string; name: string } }[];
 };
 
 export default async function DuplicatesPage({
@@ -41,7 +41,7 @@ export default async function DuplicatesPage({
       contactName: true,
       email: true,
       phone: true,
-      _count: { select: { inquiries: true } },
+      inquiries: { select: { createdBy: { select: { id: true, name: true } } } },
     },
     orderBy: { company: "asc" },
   });
@@ -133,33 +133,30 @@ export default async function DuplicatesPage({
       </p>
 
       <div className="space-y-3">
-        {dupGroups.map((g) => (
-          <Card key={g.display || "—"}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">
-                {field.label}: <span className="font-bold">{g.display || "—"}</span>{" "}
-                <span className="font-normal text-muted-foreground">· {g.rows.length} records</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              {g.rows.map((r) => (
-                <Link
-                  key={r.id}
-                  href={`/customers/${r.id}`}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-md border p-2 text-sm hover:bg-accent"
-                >
-                  <span className="font-medium">{r.company}</span>
-                  <span className="text-muted-foreground">{r.contactName || "—"}</span>
-                  <span className="text-muted-foreground">{r.email || "—"}</span>
-                  <span className="text-muted-foreground">{r.phone || "—"}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {r._count.inquiries} inquir{r._count.inquiries === 1 ? "y" : "ies"}
-                  </span>
-                </Link>
-              ))}
-            </CardContent>
-          </Card>
-        ))}
+        {dupGroups.map((g) => {
+          const salesIds = new Set(g.rows.flatMap((r) => r.inquiries.map((i) => i.createdBy.id)));
+          const records: DupRecord[] = g.rows.map((r) => {
+            const names = [...new Map(r.inquiries.map((i) => [i.createdBy.id, i.createdBy.name])).values()];
+            return {
+              id: r.id,
+              company: r.company,
+              contactName: r.contactName,
+              email: r.email,
+              phone: r.phone,
+              inquiryCount: r.inquiries.length,
+              salesNames: names,
+            };
+          });
+          return (
+            <DuplicateGroup
+              key={g.display || "—"}
+              fieldLabel={field.label}
+              display={g.display}
+              records={records}
+              sameSalesperson={salesIds.size <= 1}
+            />
+          );
+        })}
       </div>
     </div>
   );
