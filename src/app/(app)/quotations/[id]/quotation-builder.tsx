@@ -2280,6 +2280,11 @@ export function QuotationBuilder({
         const specs = { ...l.specs, ...patch };
         // 1-phase motors are 220V only — snap voltage so the model code resolves.
         if (specs.motorPh === 1) specs.motorVolts = 220;
+        // Blade material can't repeat the body material (the body factor already
+        // covers the whole body) — pick the first different option when it would.
+        if (specs.bladeMaterialOn && (!specs.bladeMaterial || specs.bladeMaterial === specs.material)) {
+          specs.bladeMaterial = MATERIAL_OPTIONS.find((m) => m !== specs.material) ?? specs.bladeMaterial;
+        }
         // Keep the model tag in step with the type/blade/drive. Crossing product
         // families clears the model (and its stale price) — re-select to re-price.
         const retagged = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive, specs.category);
@@ -3175,23 +3180,19 @@ export function QuotationBuilder({
                 className="h-4 w-4"
                 disabled={!editable}
                 checked={!!c.bladeMaterialOn}
-                onChange={(e) =>
-                  applyMotor(l.id, {
-                    bladeMaterialOn: e.target.checked,
-                    ...(e.target.checked && !c.bladeMaterial ? { bladeMaterial: "Black Iron Sheet" } : {}),
-                  })
-                }
+                onChange={(e) => applyMotor(l.id, { bladeMaterialOn: e.target.checked })}
               />
               Blade material
             </label>
           )}
           {MATERIAL_CATEGORIES.has(c.category) && c.bladeMaterialOn && (
             <Select
-              value={c.bladeMaterial || "Black Iron Sheet"}
+              value={c.bladeMaterial || ""}
               disabled={!editable}
               onChange={(e) => applyMotor(l.id, { bladeMaterial: e.target.value })}
             >
-              {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
+              {/* The body material is excluded so its factor isn't applied twice. */}
+              {MATERIAL_OPTIONS.filter((m) => m !== c.material).map((m) => (<option key={m} value={m}>{m}</option>))}
             </Select>
           )}
           {/* Customized (bespoke) unit — body priced ×1.2 (a +20% uplift). */}
