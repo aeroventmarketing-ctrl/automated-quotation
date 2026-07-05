@@ -1508,8 +1508,35 @@ function actuatorSummary(specs: LineSpecs): {
   const model = actuatorModelCode(specs.movement, sectionAreaSqIn) ?? actuatorModelLabel(specs.movement);
   return { sections, nm, model, voltage: actuatorVoltage(specs.movement), unit: price, total: round2(price * sections) };
 }
+// --- Weather hood (GA20) ----------------------------------------------------
+// Priced by size (square side, inches) from a VAT-inclusive list. For an L×W
+// entry we take √(area) and round UP to the next listed size (10–36 in).
+const WEATHERHOOD_PRICE: Record<number, number> = {
+  10: 3419, 11: 3965, 12: 4513, 13: 5056, 14: 5585, 15: 6090, 16: 6565,
+  17: 6999, 18: 7385, 19: 7714, 20: 8548, 21: 9424, 22: 9653, 23: 9797,
+  24: 9847, 25: 10240, 26: 10834, 27: 11424, 28: 11728, 29: 11981,
+  30: 10257, 31: 10953, 32: 11306, 33: 11636, 34: 11940, 35: 12216, 36: 12001,
+};
+const WEATHERHOOD_MIN = 10;
+const WEATHERHOOD_MAX = 36;
+/** The list size chosen for a Weather hood (next size ≥ √area), or null. */
+function weatherhoodSize(specs: LineSpecs): number | null {
+  if (specs.type !== "Weather hood") return null;
+  const area = accAreaSqIn(specs); // trade sq inches (Round = D×D, else L×W)
+  if (area == null || area <= 0) return null;
+  const size = Math.ceil(Math.sqrt(area));
+  if (size > WEATHERHOOD_MAX) return null; // beyond the pricelist
+  return Math.max(size, WEATHERHOOD_MIN);
+}
+/** VAT-inclusive Weather hood price, or null if incomplete / out of range. */
+function weatherhoodUnitPrice(specs: LineSpecs): number | null {
+  const size = weatherhoodSize(specs);
+  return size == null ? null : WEATHERHOOD_PRICE[size] ?? null;
+}
+
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
 function accessoryUnitPrice(specs: LineSpecs): number | null {
+  if (specs.type === "Weather hood") return weatherhoodUnitPrice(specs);
   const rate = accessoryRate(specs.type, specs.shape);
   const area = accBilledAreaSqIn(specs);
   const mat = ACC_MATERIAL_FACTOR[specs.material];
@@ -4033,6 +4060,13 @@ export function QuotationBuilder({
                             if (f < 1) discNote = ` (−${+((1 - f) * 100).toFixed(1)}% at ${l.qty} pcs)`;
                           }
                           return `₱${net} / pc${discNote} (VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
+                        if (l.specs.type === "Weather hood") {
+                          const size = weatherhoodSize(l.specs);
+                          const wh = weatherhoodUnitPrice(l.specs);
+                          if (wh == null)
+                            return "Enter L × W to auto-price; sizes over 36\" aren't in the list — enter it manually.";
+                          return `√(area) → ${size}" size · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
                         }
                         const rate = accessoryRate(l.specs.type, l.specs.shape);
                         const area = accBilledAreaSqIn(l.specs);
