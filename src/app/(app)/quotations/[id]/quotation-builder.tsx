@@ -99,6 +99,9 @@ interface LineSpecs {
   // when on, `bladeMaterial` scales the blade half of the body.
   bladeMaterialOn?: boolean;
   bladeMaterial?: string;
+  // Paint upgrade: adds a black-iron-base charge (Powder Coat ×1.5 / High Temp ×1.3).
+  upgradePaint?: boolean;
+  paintType?: string;
 }
 /** Fan/blower categories a Motor Controller can take its motor details from. */
 const BLOWER_CATEGORIES = new Set([
@@ -754,13 +757,20 @@ const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.typ
  * adds a +20% uplift on the base body (×1.2). "Body" here is the catalogue body
  * after its model-code (tag) factor. Other categories keep the plain factor.
  */
+/** Paint upgrade -> black-iron-base multiplier (added on top of the body). */
+const PAINT_FACTORS: Record<string, number> = { "Powder Coat Paint": 1.5, "High Temperature Paint": 1.3 };
+const PAINT_OPTIONS = Object.keys(PAINT_FACTORS);
+const paintFactor = (specs: LineSpecs): number =>
+  specs.upgradePaint ? PAINT_FACTORS[specs.paintType ?? ""] ?? 0 : 0;
+
 /**
  * Apply material + customized to a model-adjusted base body. Each half carries
  * ONE material factor (base = Black Iron): the housing half the body material,
  * the blade half the blade material — never compounded together.
  *  - Blade material OFF: base × bodyMat.
  *  - Blade material ON:  base×0.5×bodyMat + base×0.5×bladeMat.
- *  - Customized: multiplies the whole body result × 1.2.
+ *  - Customized: multiplies the material body × 1.2.
+ *  - Upgrade paint: adds base × paintFactor (black-iron base, independent of material).
  */
 const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   if (!MATERIAL_CATEGORIES.has(specs.category)) return base;
@@ -772,7 +782,8 @@ const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   } else {
     core = base * bodyMat;
   }
-  return specs.customizedUnit ? core * 1.2 : core;
+  if (specs.customizedUnit) core *= 1.2;
+  return core + base * paintFactor(specs);
 };
 /** Reversible-blade propellers and Airfoil blades both cost ×1.5 of the body. */
 const SPECIAL_BLADE_FACTOR: Record<string, number> = { "Reversible Blade": 1.5, Airfoil: 1.5 };
@@ -817,7 +828,9 @@ const bodyComputation = (specs: LineSpecs): string => {
   } else {
     core = `${baseStr} × ${fmtNum(bodyMat)} (${bodyName})`;
   }
-  const expr = specs.customizedUnit ? `(${core}) × 1.2 (customized)` : core;
+  let expr = specs.customizedUnit ? `(${core}) × 1.2 (customized)` : core;
+  const paint = paintFactor(specs);
+  if (paint > 0) expr = `${expr} + ${baseStr}×${fmtNum(paint)} (${specs.paintType})`;
   return `${expr} = ${fmtNum(total)}`;
 };
 /**
@@ -2295,6 +2308,8 @@ export function QuotationBuilder({
         if (specs.bladeMaterialOn && (!specs.bladeMaterial || specs.bladeMaterial === specs.material)) {
           specs.bladeMaterial = MATERIAL_OPTIONS.find((m) => m !== specs.material) ?? specs.bladeMaterial;
         }
+        // Default the paint type when the upgrade is switched on.
+        if (specs.upgradePaint && !specs.paintType) specs.paintType = PAINT_OPTIONS[0];
         // Keep the model tag in step with the type/blade/drive. Crossing product
         // families clears the model (and its stale price) — re-select to re-price.
         const retagged = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive, specs.category);
@@ -3217,6 +3232,28 @@ export function QuotationBuilder({
               />
               Customized unit
             </label>
+          )}
+          {/* Paint upgrade — Powder Coat (×1.5) / High Temperature (×1.3) on the base. */}
+          {MATERIAL_CATEGORIES.has(c.category) && (
+            <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                disabled={!editable}
+                checked={!!c.upgradePaint}
+                onChange={(e) => applyMotor(l.id, { upgradePaint: e.target.checked })}
+              />
+              Upgrade Paint
+            </label>
+          )}
+          {MATERIAL_CATEGORIES.has(c.category) && c.upgradePaint && (
+            <Select
+              value={c.paintType || ""}
+              disabled={!editable}
+              onChange={(e) => applyMotor(l.id, { paintType: e.target.value })}
+            >
+              {PAINT_OPTIONS.map((p) => (<option key={p} value={p}>{p}</option>))}
+            </Select>
           )}
         </div>
         <p className="text-xs text-muted-foreground">
