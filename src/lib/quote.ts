@@ -106,12 +106,21 @@ export function readPricing(classification: unknown, legacyDiscountPct = 0): Pri
 /**
  * Apply mark-up then discount to a displayed net base:
  *   displayedNet → + mark-up → − discount → finalNet.
- * Percent modes are relative (mark-up on the base, discount on the marked-up
- * amount); amount modes are flat currency figures.
+ *
+ * Percent mark-up uses the MARGIN method — the mark-up is that percent of the
+ * FINAL price, so afterMarkup = net / (1 − pct) (e.g. 5% ⇒ net ÷ 0.95), not a
+ * simple net × (1 + pct). Percent discount is a straight cut off the marked-up
+ * amount (e.g. 10% ⇒ marked-up × 0.10). Amount modes are flat currency figures.
  */
 export function applyPricing(displayedNet: number, p: PricingAdjust) {
-  const markupAmt = p.markupMode === "percent" ? displayedNet * (p.markupValue / 100) : p.markupValue;
-  const afterMarkup = displayedNet + markupAmt;
+  let afterMarkup: number;
+  if (p.markupMode === "percent") {
+    const denom = 1 - p.markupValue / 100;
+    afterMarkup = denom > 0 ? displayedNet / denom : displayedNet;
+  } else {
+    afterMarkup = displayedNet + p.markupValue;
+  }
+  const markupAmt = afterMarkup - displayedNet;
   const discountAmt = p.discountMode === "percent" ? afterMarkup * (p.discountValue / 100) : p.discountValue;
   const finalNet = afterMarkup - discountAmt;
   return { markupAmt, afterMarkup, discountAmt, finalNet };
