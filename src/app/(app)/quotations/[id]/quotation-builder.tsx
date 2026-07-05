@@ -560,6 +560,10 @@ function drivesFor(category: string, type: string, bladeType: string): string[] 
 const PAINT_PHRASE = "Painted with Epoxy Enamel Aqua Green";
 /** Material phrase for the description (drops a redundant trailing "material"). */
 const MATERIAL_PHRASES: Record<string, string> = {
+  "Heavy Gauge Material": "Heavy Gauge Material",
+  "Stainless 304 Material": "Stainless Steel 304",
+  "Stainless 316 Material": "Stainless Steel 316",
+  // legacy spellings kept so existing quotes render the same phrase:
   "Heavy gauge material": "Heavy Gauge Material",
   "Stainless 304 material": "Stainless Steel 304",
   "Stainless 316 material": "Stainless Steel 316",
@@ -595,16 +599,34 @@ function rewritePaintLine(desc: string, material: string): string {
 const CAPACITY_UNITS = ["cfm", "m³/hr", "m³/min", "m³/sec", "l/s", "l/min"];
 const PRESSURE_UNITS = ["in-w.g.", "mm-w.g.", "Pa", "in-Hg", "mm-Hg", "psi", "atm"];
 const POWER_UNITS = ["HP", "kW", "W"];
-/** Material -> body-price multiplier (applied to the catalogue body price). */
+/** Dropdown options, in display order (exact capitalizations). */
+const MATERIAL_OPTIONS = [
+  "Black Iron Sheet",
+  "Heavy Gauge Material",
+  "Aluminum Material",
+  "Fiberglas Reinforced Metal",
+  "Stainless 304 Material",
+  "Stainless 316 Material",
+  "Boiler Plate",
+];
+/**
+ * Material -> body-price multiplier (applied to the catalogue body price).
+ * Legacy label spellings are kept as aliases so older saved quotes still price.
+ */
 const MATERIAL_FACTORS: Record<string, number> = {
   "Black Iron Sheet": 1,
+  "Heavy Gauge Material": 1.25,
+  "Aluminum Material": 1, // provisional — awaiting the aluminum price multiplier
+  "Fiberglas Reinforced Metal": 5.5,
+  "Stainless 304 Material": 4,
+  "Stainless 316 Material": 5,
+  "Boiler Plate": 8,
+  // legacy labels (pre-rename) — keep pricing correct on existing quotes:
   "Heavy gauge material": 1.25,
   "Fiberglass reinforced metal": 5.5,
   "Stainless 304 material": 4,
   "Stainless 316 material": 5,
-  "Boiler Plate": 8,
 };
-const MATERIAL_OPTIONS = Object.keys(MATERIAL_FACTORS);
 /** Categories whose body price is scaled by the material multiplier. */
 const MATERIAL_CATEGORIES = new Set([
   "Centrifugal Type",
