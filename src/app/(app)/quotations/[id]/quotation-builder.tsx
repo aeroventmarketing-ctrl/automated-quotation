@@ -759,9 +759,22 @@ const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.typ
  */
 /** Paint upgrade -> black-iron-base multiplier (added on top of the body). */
 const PAINT_FACTORS: Record<string, number> = { "Powder Coat Paint": 1.5, "High Temperature Paint": 1.3 };
-const PAINT_OPTIONS = Object.keys(PAINT_FACTORS);
-const paintFactor = (specs: LineSpecs): number =>
-  specs.upgradePaint ? PAINT_FACTORS[specs.paintType ?? ""] ?? 0 : 0;
+const BOTH_PAINTS = ["Powder Coat Paint", "High Temperature Paint"];
+/** Which paint upgrades a body material allows (empty = no upgrade offered). */
+const PAINT_BY_MATERIAL: Record<string, string[]> = {
+  "Black Iron Sheet": BOTH_PAINTS,
+  "Heavy Gauge Material": BOTH_PAINTS,
+  "Aluminum Material": BOTH_PAINTS,
+  "Fiberglas Reinforced Metal": ["High Temperature Paint"],
+  "Stainless 304 Material": [],
+  "Stainless 316 Material": [],
+  "Boiler Plate": BOTH_PAINTS,
+};
+const paintOptionsFor = (material: string): string[] => PAINT_BY_MATERIAL[material] ?? BOTH_PAINTS;
+const paintFactor = (specs: LineSpecs): number => {
+  if (!specs.upgradePaint || !paintOptionsFor(specs.material).includes(specs.paintType ?? "")) return 0;
+  return PAINT_FACTORS[specs.paintType ?? ""] ?? 0;
+};
 
 /**
  * Apply material + customized to a model-adjusted base body. Each half carries
@@ -2308,8 +2321,17 @@ export function QuotationBuilder({
         if (specs.bladeMaterialOn && (!specs.bladeMaterial || specs.bladeMaterial === specs.material)) {
           specs.bladeMaterial = MATERIAL_OPTIONS.find((m) => m !== specs.material) ?? specs.bladeMaterial;
         }
-        // Default the paint type when the upgrade is switched on.
-        if (specs.upgradePaint && !specs.paintType) specs.paintType = PAINT_OPTIONS[0];
+        // Keep the paint upgrade valid for the current material: drop it when the
+        // material allows none (stainless), else snap to an allowed paint type.
+        if (specs.upgradePaint) {
+          const allowed = paintOptionsFor(specs.material);
+          if (allowed.length === 0) {
+            specs.upgradePaint = false;
+            specs.paintType = "";
+          } else if (!allowed.includes(specs.paintType ?? "")) {
+            specs.paintType = allowed[0];
+          }
+        }
         // Keep the model tag in step with the type/blade/drive. Crossing product
         // families clears the model (and its stale price) — re-select to re-price.
         const retagged = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive, specs.category);
@@ -3233,8 +3255,9 @@ export function QuotationBuilder({
               Customized unit
             </label>
           )}
-          {/* Paint upgrade — Powder Coat (×1.5) / High Temperature (×1.3) on the base. */}
-          {MATERIAL_CATEGORIES.has(c.category) && (
+          {/* Paint upgrade — Powder Coat (×1.5) / High Temperature (×1.3) on the base.
+              Options depend on the body material; some materials offer none. */}
+          {MATERIAL_CATEGORIES.has(c.category) && paintOptionsFor(c.material).length > 0 && (
             <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
               <input
                 type="checkbox"
@@ -3246,13 +3269,13 @@ export function QuotationBuilder({
               Upgrade Paint
             </label>
           )}
-          {MATERIAL_CATEGORIES.has(c.category) && c.upgradePaint && (
+          {MATERIAL_CATEGORIES.has(c.category) && c.upgradePaint && paintOptionsFor(c.material).length > 0 && (
             <Select
               value={c.paintType || ""}
               disabled={!editable}
               onChange={(e) => applyMotor(l.id, { paintType: e.target.value })}
             >
-              {PAINT_OPTIONS.map((p) => (<option key={p} value={p}>{p}</option>))}
+              {paintOptionsFor(c.material).map((p) => (<option key={p} value={p}>{p}</option>))}
             </Select>
           )}
         </div>
