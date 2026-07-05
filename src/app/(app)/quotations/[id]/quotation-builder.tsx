@@ -755,18 +755,21 @@ const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.typ
  * after its model-code (tag) factor. Other categories keep the plain factor.
  */
 /**
- * Apply material split + customized uplift to a model-adjusted base body.
- * The blade half follows the body material until "Blade material" is ticked,
- * at which point it uses the chosen blade material instead.
+ * Apply material + customized to a model-adjusted base body:
+ *  - Blade material OFF: whole body uses the top material -> base × bodyMat.
+ *  - Blade material ON:  housing standard + blade scaled -> base×0.5 + base×0.5×bladeMat.
+ *  - Customized: multiplies the whole body result × 1.2.
  */
 const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   if (!MATERIAL_CATEGORIES.has(specs.category)) return base;
-  const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
-  const bladeMat = specs.bladeMaterialOn ? MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1 : bodyMat;
-  const housing = base * 0.5 * bodyMat;
-  const blade = base * 0.5 * bladeMat;
-  const customized = specs.customizedUnit ? base * 0.2 : 0;
-  return housing + blade + customized;
+  let core: number;
+  if (specs.bladeMaterialOn) {
+    const bladeMat = MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1;
+    core = base * 0.5 + base * 0.5 * bladeMat;
+  } else {
+    core = base * (MATERIAL_FACTORS[specs.material] ?? 1);
+  }
+  return specs.customizedUnit ? core * 1.2 : core;
 };
 const bodyPriceOf = (specs: LineSpecs): number =>
   bodyNetFrom((specs.bodyPrice ?? 0) * bladeFactor(specs), specs);
@@ -790,19 +793,18 @@ const bodyComputation = (specs: LineSpecs): string => {
   if (!MATERIAL_CATEGORIES.has(specs.category)) {
     return tag === 1 ? fmtNum(B) : `${baseStr} = ${fmtNum(base)}`;
   }
-  const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
-  const bladeMat = specs.bladeMaterialOn ? MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1 : bodyMat;
-  const bodyName = materialPhrase(specs.material || "Black Iron Sheet");
-  const bladeName = materialPhrase((specs.bladeMaterialOn ? specs.bladeMaterial : specs.material) || "Black Iron Sheet");
-  const parts: string[] = [];
-  if (!specs.customizedUnit && bodyMat === bladeMat) {
-    parts.push(`${baseStr} × ${fmtNum(bodyMat)} (${bodyName})`);
+  let core: string;
+  if (specs.bladeMaterialOn) {
+    const bladeMat = MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1;
+    const bladeName = materialPhrase(specs.bladeMaterial || "Black Iron Sheet");
+    core = `${baseStr}×0.5 + ${baseStr}×0.5×${fmtNum(bladeMat)} (blade ${bladeName})`;
   } else {
-    parts.push(`${baseStr}×0.5×${fmtNum(bodyMat)} (${bodyName})`);
-    parts.push(`${baseStr}×0.5×${fmtNum(bladeMat)} (blade ${bladeName})`);
-    if (specs.customizedUnit) parts.push(`${baseStr}×0.2 (customized)`);
+    const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
+    const bodyName = materialPhrase(specs.material || "Black Iron Sheet");
+    core = `${baseStr} × ${fmtNum(bodyMat)} (${bodyName})`;
   }
-  return `${parts.join(" + ")} = ${fmtNum(total)}`;
+  const expr = specs.customizedUnit ? `(${core}) × 1.2 (customized)` : core;
+  return `${expr} = ${fmtNum(total)}`;
 };
 /**
  * Re-tag a blower model code to match the current type/blade/drive.
