@@ -1601,7 +1601,11 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     if (!MOTORIZED_DAMPER_TYPES.has(specs.type)) {
       if (canPowder && specs.powderCoated) {
         lines.push("Powder Coated White");
-      } else if (!isStainlessMaterial(specs.material) && groupForType(specs.category, specs.type) === "Air Terminals") {
+      } else if (
+        !isStainlessMaterial(specs.material) &&
+        specs.type !== "Weather hood" &&
+        groupForType(specs.category, specs.type) === "Air Terminals"
+      ) {
         lines.push("Painted with Oven Baked Enamel");
       }
     }
