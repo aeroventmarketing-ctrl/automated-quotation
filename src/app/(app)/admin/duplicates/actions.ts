@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
 
 /** Distinct salespeople (inquiry creators) across a set of customers. */
 async function salespeopleFor(customerIds: string[]): Promise<Map<string, string>> {
@@ -31,6 +32,13 @@ export async function deleteCustomer(customerId: string) {
     prisma.inquiry.deleteMany({ where: { customerId } }),
     prisma.customer.delete({ where: { id: customerId } }),
   ]);
+
+  // Drop any orphaned account/conversation entry for the removed client.
+  const registry = await getAccountsRegistry();
+  if (registry[customerId]) {
+    delete registry[customerId];
+    await saveAccountsRegistry(registry);
+  }
 
   revalidatePath("/admin/duplicates");
   revalidatePath("/dashboard");
@@ -65,6 +73,29 @@ export async function mergeCustomers(keepId: string, duplicateIds: string[]) {
     prisma.inquiry.updateMany({ where: { customerId: { in: dups } }, data: { customerId: keepId } }),
     prisma.customer.deleteMany({ where: { id: { in: dups } } }),
   ]);
+
+  // Migrate account notes: fold the duplicates' conversation logs into the kept
+  // record (deduped by id), adopt their ownership history if the kept record has
+  // none, and drop the now-orphaned entries.
+  const registry = await getAccountsRegistry();
+  if (dups.some((id) => registry[id]) || registry[keepId]) {
+    const keeper = registry[keepId] ?? { history: [], conversations: [] };
+    const convById = new Map<string, ConversationEntry>();
+    for (const c of keeper.conversations ?? []) convById.set(c.id, c);
+    let history = keeper.history ?? [];
+    for (const id of dups) {
+      const d = registry[id];
+      if (!d) continue;
+      for (const c of d.conversations ?? []) convById.set(c.id, c);
+      if (history.length === 0 && d.history?.length) history = d.history;
+      delete registry[id];
+    }
+    registry[keepId] = {
+      history,
+      conversations: [...convById.values()].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)),
+    };
+    await saveAccountsRegistry(registry);
+  }
 
   revalidatePath("/admin/duplicates");
   revalidatePath("/dashboard");
