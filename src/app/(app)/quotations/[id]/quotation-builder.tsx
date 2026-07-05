@@ -1533,21 +1533,23 @@ function weatherhoodSize(specs: LineSpecs): number | null {
 /**
  * VAT-inclusive Weather hood price. Base (Galvanized) is the list price ≤36",
  * else area × net rate × VAT. Material scales the base (GI×1 / Aluminum×3 /
- * Stainless×4). Powder-coated is instead a ×2.12 finish on the Galvanized base —
- * the material factor is not applied, so changing material won't change it.
+ * Stainless×4). Powder-coated ADDS a ×2.12 charge on the Galvanized base on top
+ * of the material price, so changing material never changes the powder portion:
+ *   base × material + base × 2.12.
  */
 function weatherhoodUnitPrice(specs: LineSpecs): number | null {
   const size = weatherhoodSize(specs);
   if (size == null) return null;
-  let price: number | null;
+  let base: number | null;
   if (size > WEATHERHOOD_MAX) {
     const area = accAreaSqIn(specs);
-    price = area == null ? null : area * WEATHERHOOD_OVER_RATE * (1 + config.vatRate);
+    base = area == null ? null : area * WEATHERHOOD_OVER_RATE * (1 + config.vatRate);
   } else {
-    price = WEATHERHOOD_PRICE[size] ?? null;
+    base = WEATHERHOOD_PRICE[size] ?? null;
   }
-  if (price == null) return null;
-  price *= specs.powderCoated ? WEATHERHOOD_POWDER_FACTOR : ACC_MATERIAL_FACTOR[specs.material] ?? 1;
+  if (base == null) return null;
+  let price = base * (ACC_MATERIAL_FACTOR[specs.material] ?? 1);
+  if (specs.powderCoated) price += base * WEATHERHOOD_POWDER_FACTOR;
   return round2(price);
 }
 
@@ -4087,11 +4089,10 @@ export function QuotationBuilder({
                           const wh = weatherhoodUnitPrice(l.specs);
                           if (wh == null || size == null) return "Enter L × W to auto-price.";
                           const matF = ACC_MATERIAL_FACTOR[l.specs.material] ?? 1;
+                          const matNote = matF !== 1 ? ` · ${accMaterialLabel(l.specs.material)} ×${matF}` : "";
                           const finish = l.specs.powderCoated
-                            ? ` · powder coat ×${WEATHERHOOD_POWDER_FACTOR} (GI base)`
-                            : matF !== 1
-                            ? ` · ${accMaterialLabel(l.specs.material)} ×${matF}`
-                            : "";
+                            ? `${matNote} + powder coat ×${WEATHERHOOD_POWDER_FACTOR} (GI base)`
+                            : matNote;
                           if (size > WEATHERHOOD_MAX)
                             return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} × 1.12${finish} = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
                           return `√(area) → ${size}" size${finish} · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
