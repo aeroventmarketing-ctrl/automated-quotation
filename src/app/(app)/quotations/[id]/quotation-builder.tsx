@@ -4048,6 +4048,9 @@ export function QuotationBuilder({
                 const isBlower = !!(l.specs.bodyPrice && l.specs.bodyPrice > 0);
                 return (
                   <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    {isBlower && (
+                      <span>Body: {formatCurrency(bodyPriceOf(l.specs), quotation.currency)}</span>
+                    )}
                     {isBlower &&
                       (hp && ph ? (
                         motor ? (
