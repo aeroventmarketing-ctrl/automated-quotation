@@ -1519,8 +1519,8 @@ const WEATHERHOOD_PRICE: Record<number, number> = {
 };
 const WEATHERHOOD_MIN = 10;
 const WEATHERHOOD_MAX = 36;
-/** Over-36" Weather hoods are priced at this VAT-inclusive rate per square inch. */
-const WEATHERHOOD_OVER_RATE = 6.5;
+/** Over-36" Weather hoods: this NET rate per square inch, then × VAT. */
+const WEATHERHOOD_OVER_RATE = 8.5;
 /** The size (next size ≥ √area, floored to 10) chosen for a Weather hood, or null. */
 function weatherhoodSize(specs: LineSpecs): number | null {
   if (specs.type !== "Weather hood") return null;
@@ -1528,13 +1528,13 @@ function weatherhoodSize(specs: LineSpecs): number | null {
   if (area == null || area <= 0) return null;
   return Math.max(Math.ceil(Math.sqrt(area)), WEATHERHOOD_MIN);
 }
-/** VAT-inclusive Weather hood price: list price ≤36", else area × ₱6.5. */
+/** VAT-inclusive Weather hood price: list price ≤36", else area × net rate × VAT. */
 function weatherhoodUnitPrice(specs: LineSpecs): number | null {
   const size = weatherhoodSize(specs);
   if (size == null) return null;
   if (size > WEATHERHOOD_MAX) {
     const area = accAreaSqIn(specs);
-    return area == null ? null : round2(area * WEATHERHOOD_OVER_RATE);
+    return area == null ? null : round2(area * WEATHERHOOD_OVER_RATE * (1 + config.vatRate));
   }
   return WEATHERHOOD_PRICE[size] ?? null;
 }
@@ -4071,7 +4071,7 @@ export function QuotationBuilder({
                           const wh = weatherhoodUnitPrice(l.specs);
                           if (wh == null || size == null) return "Enter L × W to auto-price.";
                           if (size > WEATHERHOOD_MAX)
-                            return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
+                            return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} × 1.12 = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
                           return `√(area) → ${size}" size · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
                         }
                         const rate = accessoryRate(l.specs.type, l.specs.shape);
