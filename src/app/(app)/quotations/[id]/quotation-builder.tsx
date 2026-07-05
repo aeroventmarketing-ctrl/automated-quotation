@@ -476,6 +476,7 @@ function buildBlowerDescription(
   drive: string,
   material: string,
   model?: string | null,
+  bladeMaterial?: string | null,
 ): string {
   const driveWord = /direct/i.test(drive) ? "Direct Drive" : "Belt Drive";
   const stainless = /stainless 3(?:04|16)/i.test(material);
@@ -489,6 +490,10 @@ function buildBlowerDescription(
         : ""
       : `Painted with Epoxy Enamel Aqua Green${model ? ` / Model: ${model}` : ""}`,
   ];
+  // Separate blade material (when chosen) prints just after the Model line.
+  if (bladeMaterial && bladeMaterial !== "Black Iron Sheet") {
+    lines.push(`Blade made of ${materialPhrase(bladeMaterial)}`);
+  }
   return lines.filter((l) => l.length > 0).join("\n");
 }
 /**
@@ -749,11 +754,15 @@ const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.typ
  * adds a +20% uplift on the base body (×1.2). "Body" here is the catalogue body
  * after its model-code (tag) factor. Other categories keep the plain factor.
  */
-/** Apply material split + customized uplift to a model-adjusted base body. */
+/**
+ * Apply material split + customized uplift to a model-adjusted base body.
+ * The blade half follows the body material until "Blade material" is ticked,
+ * at which point it uses the chosen blade material instead.
+ */
 const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   if (!MATERIAL_CATEGORIES.has(specs.category)) return base;
   const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
-  const bladeMat = specs.bladeMaterialOn ? MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1 : 1;
+  const bladeMat = specs.bladeMaterialOn ? MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1 : bodyMat;
   const housing = base * 0.5 * bodyMat;
   const blade = base * 0.5 * bladeMat;
   const customized = specs.customizedUnit ? base * 0.2 : 0;
@@ -2250,6 +2259,7 @@ export function QuotationBuilder({
                 specs.drive,
                 specs.material,
                 specs.blowerModel ? displayBlowerModel(specs) : null,
+                specs.bladeMaterialOn ? specs.bladeMaterial : null,
               )
             : rewriteProductNoun(
                 rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
@@ -2268,7 +2278,7 @@ export function QuotationBuilder({
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
         const descriptionSnapshot = isBlower
-          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null)
+          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null, specs.bladeMaterialOn ? specs.bladeMaterial : null)
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
@@ -2422,7 +2432,7 @@ export function QuotationBuilder({
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(displayBlowerModel(specs), mModel);
         const descriptionSnapshot = MATERIAL_CATEGORIES.has(specs.category)
-          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined)
+          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined, specs.bladeMaterialOn ? specs.bladeMaterial : null)
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
