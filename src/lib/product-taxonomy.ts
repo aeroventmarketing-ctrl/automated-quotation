@@ -173,7 +173,8 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "category": "Propeller Type",
     "type": "Exhaust Wall Fan",
     "bladeTypes": [
-      "Propeller"
+      "Propeller",
+      "Reversible Blade"
     ],
     "drives": [
       "Belt",
@@ -184,7 +185,8 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "category": "Propeller Type",
     "type": "Fresh Air Wall Fan",
     "bladeTypes": [
-      "Propeller"
+      "Propeller",
+      "Reversible Blade"
     ],
     "drives": [
       "Belt",
@@ -195,7 +197,8 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "category": "Propeller Type",
     "type": "Power Roof Ventilator",
     "bladeTypes": [
-      "Propeller"
+      "Propeller",
+      "Reversible Blade"
     ],
     "drives": [
       "Belt",

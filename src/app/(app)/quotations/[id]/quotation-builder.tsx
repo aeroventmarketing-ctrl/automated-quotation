@@ -774,8 +774,13 @@ const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   }
   return specs.customizedUnit ? core * 1.2 : core;
 };
+/** Reversible-blade propellers cost ×1.5 of the body. */
+const reversibleFactor = (specs: LineSpecs): number => (specs.bladeType === "Reversible Blade" ? 1.5 : 1);
+/** Model-adjusted base body (catalogue price × tag factor × reversible factor). */
+const baseBodyOf = (bodyPrice: number, specs: LineSpecs): number =>
+  bodyPrice * bladeFactor(specs) * reversibleFactor(specs);
 const bodyPriceOf = (specs: LineSpecs): number =>
-  bodyNetFrom((specs.bodyPrice ?? 0) * bladeFactor(specs), specs);
+  bodyNetFrom(baseBodyOf(specs.bodyPrice ?? 0, specs), specs);
 
 /** Plain number with thousands separators (up to 2 decimals). */
 const fmtNum = (n: number): string => n.toLocaleString("en-PH", { maximumFractionDigits: 2 });
@@ -790,11 +795,16 @@ const bodyComputation = (specs: LineSpecs): string => {
   const B = specs.bodyPrice ?? 0;
   if (!B) return "";
   const tag = bladeFactor(specs);
-  const base = round2(B * tag);
-  const baseStr = tag === 1 ? fmtNum(B) : `(${fmtNum(B)}×${fmtNum(round2(tag))})`;
+  const rev = reversibleFactor(specs);
+  const base = round2(baseBodyOf(B, specs));
+  const factors = [
+    ...(tag !== 1 ? [`×${fmtNum(round2(tag))}`] : []),
+    ...(rev !== 1 ? ["×1.5 (Reversible)"] : []),
+  ];
+  const baseStr = factors.length ? `(${fmtNum(B)}${factors.join("")})` : fmtNum(B);
   const total = bodyPriceOf(specs);
   if (!MATERIAL_CATEGORIES.has(specs.category)) {
-    return tag === 1 ? fmtNum(B) : `${baseStr} = ${fmtNum(base)}`;
+    return factors.length ? `${baseStr} = ${fmtNum(base)}` : fmtNum(B);
   }
   const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
   const bodyName = materialPhrase(specs.material || "Black Iron Sheet");
@@ -3701,7 +3711,7 @@ export function QuotationBuilder({
                         {w.list.map((r) => {
                           const cat = catalog[r.modelId];
                           const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
-                          const estBody = bodyNetFrom((cat?.basePrice ?? 0) * bladeFactor(l.specs), l.specs);
+                          const estBody = bodyNetFrom(baseBodyOf(cat?.basePrice ?? 0, l.specs), l.specs);
                           // KDK catalogue prices are VAT-exclusive (net); store gross (no motor add-on).
                           const est = isPrebuiltUnit(l.specs)
                             ? round2((cat?.basePrice ?? 0) * (1 + vatRate))
