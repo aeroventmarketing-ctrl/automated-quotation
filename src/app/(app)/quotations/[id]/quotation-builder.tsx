@@ -1528,15 +1528,21 @@ function weatherhoodSize(specs: LineSpecs): number | null {
   if (area == null || area <= 0) return null;
   return Math.max(Math.ceil(Math.sqrt(area)), WEATHERHOOD_MIN);
 }
-/** VAT-inclusive Weather hood price: list price ≤36", else area × net rate × VAT. */
+/** VAT-inclusive Weather hood price: list price ≤36", else area × net rate × VAT.
+ * Powder-coated adds a ×1.5 finish factor. */
 function weatherhoodUnitPrice(specs: LineSpecs): number | null {
   const size = weatherhoodSize(specs);
   if (size == null) return null;
+  let price: number | null;
   if (size > WEATHERHOOD_MAX) {
     const area = accAreaSqIn(specs);
-    return area == null ? null : round2(area * WEATHERHOOD_OVER_RATE * (1 + config.vatRate));
+    price = area == null ? null : area * WEATHERHOOD_OVER_RATE * (1 + config.vatRate);
+  } else {
+    price = WEATHERHOOD_PRICE[size] ?? null;
   }
-  return WEATHERHOOD_PRICE[size] ?? null;
+  if (price == null) return null;
+  if (specs.powderCoated) price *= 1.5;
+  return round2(price);
 }
 
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
@@ -1600,7 +1606,7 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     const canPowder = POWDER_COAT_TYPES.has(specs.type) || specs.type === "Vent Cap";
     if (!MOTORIZED_DAMPER_TYPES.has(specs.type)) {
       if (canPowder && specs.powderCoated) {
-        lines.push("Powder Coated White");
+        lines.push("Powder Coated Finish");
       } else if (
         !isStainlessMaterial(specs.material) &&
         specs.type !== "Weather hood" &&
@@ -4074,9 +4080,10 @@ export function QuotationBuilder({
                           const size = weatherhoodSize(l.specs);
                           const wh = weatherhoodUnitPrice(l.specs);
                           if (wh == null || size == null) return "Enter L × W to auto-price.";
+                          const pc = l.specs.powderCoated ? " · powder coat ×1.5" : "";
                           if (size > WEATHERHOOD_MAX)
-                            return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} × 1.12 = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
-                          return `√(area) → ${size}" size · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
+                            return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} × 1.12${pc} = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
+                          return `√(area) → ${size}" size${pc} · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
                         }
                         const rate = accessoryRate(l.specs.type, l.specs.shape);
                         const area = accBilledAreaSqIn(l.specs);
