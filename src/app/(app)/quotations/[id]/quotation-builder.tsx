@@ -755,22 +755,22 @@ const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.typ
  * after its model-code (tag) factor. Other categories keep the plain factor.
  */
 /**
- * Apply material + customized to a model-adjusted base body. The top material
- * scales the whole body; the blade material multiplies just the blade half on
- * top of that.
- *  - Blade material OFF: matBody = base × bodyMat.
- *  - Blade material ON:  matBody×0.5 + matBody×0.5×bladeMat.
+ * Apply material + customized to a model-adjusted base body. Each half carries
+ * ONE material factor (base = Black Iron): the housing half the body material,
+ * the blade half the blade material — never compounded together.
+ *  - Blade material OFF: base × bodyMat.
+ *  - Blade material ON:  base×0.5×bodyMat + base×0.5×bladeMat.
  *  - Customized: multiplies the whole body result × 1.2.
  */
 const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   if (!MATERIAL_CATEGORIES.has(specs.category)) return base;
-  const matBody = base * (MATERIAL_FACTORS[specs.material] ?? 1);
+  const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
   let core: number;
   if (specs.bladeMaterialOn) {
     const bladeMat = MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1;
-    core = matBody * 0.5 + matBody * 0.5 * bladeMat;
+    core = base * 0.5 * bodyMat + base * 0.5 * bladeMat;
   } else {
-    core = matBody;
+    core = base * bodyMat;
   }
   return specs.customizedUnit ? core * 1.2 : core;
 };
@@ -808,12 +808,11 @@ const bodyComputation = (specs: LineSpecs): string => {
   }
   const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
   const bodyName = materialPhrase(specs.material || "Black Iron Sheet");
-  const matStr = `${baseStr}×${fmtNum(bodyMat)}`;
   let core: string;
   if (specs.bladeMaterialOn) {
     const bladeMat = MATERIAL_FACTORS[specs.bladeMaterial ?? ""] ?? 1;
     const bladeName = materialPhrase(specs.bladeMaterial || "Black Iron Sheet");
-    core = `${matStr}×0.5 (${bodyName}) + ${matStr}×0.5×${fmtNum(bladeMat)} (blade ${bladeName})`;
+    core = `${baseStr}×0.5×${fmtNum(bodyMat)} (${bodyName}) + ${baseStr}×0.5×${fmtNum(bladeMat)} (blade ${bladeName})`;
   } else {
     core = `${baseStr} × ${fmtNum(bodyMat)} (${bodyName})`;
   }
