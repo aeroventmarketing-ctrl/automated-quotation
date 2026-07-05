@@ -3142,33 +3142,6 @@ export function QuotationBuilder({
                 <option value="">Blade type…</option>
                 {(entryFor(c.category, c.type)?.bladeTypes ?? []).map((b) => (<option key={b} value={b}>{b}</option>))}
               </Select>
-              {/* Separate blade material — off = standard Black Iron Sheet. */}
-              {MATERIAL_CATEGORIES.has(c.category) && (
-                <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4"
-                    disabled={!editable}
-                    checked={!!c.bladeMaterialOn}
-                    onChange={(e) =>
-                      applyMotor(l.id, {
-                        bladeMaterialOn: e.target.checked,
-                        ...(e.target.checked && !c.bladeMaterial ? { bladeMaterial: "Black Iron Sheet" } : {}),
-                      })
-                    }
-                  />
-                  Blade material
-                </label>
-              )}
-              {MATERIAL_CATEGORIES.has(c.category) && c.bladeMaterialOn && (
-                <Select
-                  value={c.bladeMaterial || "Black Iron Sheet"}
-                  disabled={!editable}
-                  onChange={(e) => applyMotor(l.id, { bladeMaterial: e.target.value })}
-                >
-                  {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
-                </Select>
-              )}
               <Select
                 value={c.drive}
                 disabled={!editable || !c.type}
@@ -3186,6 +3159,33 @@ export function QuotationBuilder({
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
               onChange={(e) => applyMotor(l.id, { material: e.target.value })}
+            >
+              {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
+            </Select>
+          )}
+          {/* Separate blade material — off = standard Black Iron Sheet. */}
+          {MATERIAL_CATEGORIES.has(c.category) && (
+            <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                disabled={!editable}
+                checked={!!c.bladeMaterialOn}
+                onChange={(e) =>
+                  applyMotor(l.id, {
+                    bladeMaterialOn: e.target.checked,
+                    ...(e.target.checked && !c.bladeMaterial ? { bladeMaterial: "Black Iron Sheet" } : {}),
+                  })
+                }
+              />
+              Blade material
+            </label>
+          )}
+          {MATERIAL_CATEGORIES.has(c.category) && c.bladeMaterialOn && (
+            <Select
+              value={c.bladeMaterial || "Black Iron Sheet"}
+              disabled={!editable}
+              onChange={(e) => applyMotor(l.id, { bladeMaterial: e.target.value })}
             >
               {MATERIAL_OPTIONS.map((m) => (<option key={m} value={m}>{m}</option>))}
             </Select>
