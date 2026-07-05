@@ -9,6 +9,7 @@
  */
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
+import { applyPricing, type PricingAdjust } from "@/lib/quote";
 import { imageDataUrlSize } from "@/lib/signature";
 import { HEADER_LOGO, HEADER_LOGO_RATIO } from "./header-logo";
 
@@ -32,7 +33,8 @@ export interface XlsxData {
   projectName?: string | null;
   customerName: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
-  discountPct: number; // e.g. 3 for 3%
+  discountPct: number; // e.g. 3 for 3% (legacy; superseded by `pricing`)
+  pricing?: PricingAdjust; // header mark-up + discount (percent or amount)
   vatRate: number;
   // Variable (red) unit labels for the table header.
   capacityUnit?: string; // default "cfm"
@@ -309,8 +311,12 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
 
   // --- Totals ---------------------------------------------------------------
   const displayedNet = money(data.total * f);
-  const discountAmt = money(displayedNet * (data.discountPct / 100));
-  const finalNet = money(displayedNet - discountAmt);
+  const pricing: PricingAdjust =
+    data.pricing ?? { markupMode: "percent", markupValue: 0, discountMode: "percent", discountValue: data.discountPct };
+  const adj = applyPricing(displayedNet, pricing);
+  const markupAmt = money(adj.markupAmt);
+  const discountAmt = money(adj.discountAmt);
+  const finalNet = money(adj.finalNet);
   const netLabel =
     data.vatMode !== "INCLUSIVE"
       ? "NET AMOUNT (VAT exclusive price) =>"
@@ -338,8 +344,13 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     r++;
   }
   totalRow(netLabel, displayedNet, "RED");
-  if (data.discountPct > 0) {
-    totalRow(`LESS ${data.discountPct}% DISCOUNT`, discountAmt, "BLACK");
+  if (pricing.markupValue > 0) {
+    totalRow(`ADD ${pricing.markupMode === "percent" ? `${pricing.markupValue}% MARK-UP` : "MARK-UP"}`, markupAmt, "BLACK");
+  }
+  if (pricing.discountValue > 0) {
+    totalRow(`LESS ${pricing.discountMode === "percent" ? `${pricing.discountValue}% DISCOUNT` : "DISCOUNT"}`, discountAmt, "BLACK");
+  }
+  if (pricing.markupValue > 0 || pricing.discountValue > 0) {
     totalRow("NET AMOUNT", finalNet, "BLACK");
   }
   if (data.vatMode === "EXCLUSIVE_PLUS") {

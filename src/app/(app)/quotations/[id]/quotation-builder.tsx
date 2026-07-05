@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency } from "@/lib/utils";
 import { config } from "@/lib/config";
+import { applyPricing, DEFAULT_PRICING, type PricingAdjust, type AdjustMode } from "@/lib/quote";
 import {
   lookupMotor,
   motorModelCode,
@@ -131,6 +132,7 @@ interface Quote {
   currency: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
   discountPct: number;
+  pricing: PricingAdjust;
   headerUnits: { capacity: string; pressure: string; motor: string };
   projectName: string;
   subtotal: number;
@@ -1587,7 +1589,9 @@ export function QuotationBuilder({
   const [templateId, setTemplateId] = useState(quotation.templateId);
   const [projectName, setProjectName] = useState(quotation.projectName);
   const [vatMode, setVatMode] = useState(quotation.vatMode);
-  const [discountPct, setDiscountPct] = useState(quotation.discountPct);
+  const [pricing, setPricing] = useState<PricingAdjust>(quotation.pricing);
+  const setPricingField = <K extends keyof PricingAdjust>(k: K, v: PricingAdjust[K]) =>
+    setPricing((p) => ({ ...p, [k]: v }));
   const [units, setUnits] = useState(() => ({
     capacity: quotation.headerUnits.capacity || "cfm",
     pressure: quotation.headerUnits.pressure || "in-w.g.",
@@ -1669,13 +1673,12 @@ export function QuotationBuilder({
     const net = gross / (1 + vatRate);
     const exclusive = effectiveVatMode !== "INCLUSIVE";
     const displayedNet = exclusive ? net : gross;
-    const discountAmt = displayedNet * (discountPct / 100);
-    const finalNet = displayedNet - discountAmt;
+    const { markupAmt, afterMarkup, discountAmt, finalNet } = applyPricing(displayedNet, pricing);
     const addVat = effectiveVatMode === "EXCLUSIVE_PLUS";
     const vatAmt = addVat ? finalNet * vatRate : 0;
     const grandTotal = finalNet + vatAmt;
-    return { net, vat: gross - net, gross, exclusive, displayedNet, discountAmt, finalNet, addVat, vatAmt, grandTotal };
-  }, [lines, vatRate, effectiveVatMode, discountPct]);
+    return { net, vat: gross - net, gross, exclusive, displayedNet, markupAmt, afterMarkup, discountAmt, finalNet, addVat, vatAmt, grandTotal };
+  }, [lines, vatRate, effectiveVatMode, pricing]);
 
   // Keep "Recommend?" Motor Controller lines in sync with the nearest fan line
   // above: whenever any line changes, re-pull phase/pole/HP/volts and re-price.
@@ -2408,7 +2411,19 @@ export function QuotationBuilder({
           // merge edited flat specs back over anything nested (selection/requirement)
           specsSnapshot: { ...l.rawSpecs, ...l.specs },
         })),
-        { templateId, notes, terms, validUntil: validUntil || undefined, projectName, vatMode: effectiveVatMode, discountPct, headerUnits: units },
+        {
+          templateId,
+          notes,
+          terms,
+          validUntil: validUntil || undefined,
+          projectName,
+          vatMode: effectiveVatMode,
+          // Legacy column kept in sync for older readers: a percent discount maps
+          // through; an amount discount can't be expressed as a %, so store 0.
+          discountPct: pricing.discountMode === "percent" ? pricing.discountValue : 0,
+          pricing,
+          headerUnits: units,
+        },
       );
       setMsg("Saved.");
       router.refresh();
@@ -3147,12 +3162,51 @@ export function QuotationBuilder({
               </Select>
             </div>
           </div>
-          {/* Discount (left) and VAT presentation (right), inline */}
-          <div className="grid gap-4 md:col-span-3 md:grid-cols-2">
+          {/* Mark-up, Discount and VAT presentation, inline */}
+          <div className="grid gap-4 md:col-span-3 md:grid-cols-3">
             <div className="space-y-1">
-              <Label>Discount %</Label>
-              <Input type="number" step="0.01" min={0} max={100} value={discountPct} disabled={!editable}
-                onChange={(e) => setDiscountPct(Number(e.target.value) || 0)} />
+              <Label>Mark-up</Label>
+              <div className="flex gap-2">
+                <Select
+                  className="w-28 shrink-0"
+                  value={pricing.markupMode}
+                  disabled={!editable}
+                  onChange={(e) => setPricingField("markupMode", e.target.value as AdjustMode)}
+                >
+                  <option value="percent">% percent</option>
+                  <option value="amount">₱ amount</option>
+                </Select>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={pricing.markupValue}
+                  disabled={!editable}
+                  onChange={(e) => setPricingField("markupValue", Number(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Discount</Label>
+              <div className="flex gap-2">
+                <Select
+                  className="w-28 shrink-0"
+                  value={pricing.discountMode}
+                  disabled={!editable}
+                  onChange={(e) => setPricingField("discountMode", e.target.value as AdjustMode)}
+                >
+                  <option value="percent">% percent</option>
+                  <option value="amount">₱ amount</option>
+                </Select>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={pricing.discountValue}
+                  disabled={!editable}
+                  onChange={(e) => setPricingField("discountValue", Number(e.target.value) || 0)}
+                />
+              </div>
             </div>
             <div className="space-y-1">
               <Label>VAT presentation</Label>
@@ -3938,11 +3992,20 @@ export function QuotationBuilder({
                 <span>NET AMOUNT (VAT {totals.exclusive ? "exclusive" : "inclusive"})</span>
                 <span>{formatCurrency(totals.displayedNet, quotation.currency)}</span>
               </div>
-              {discountPct > 0 && (
-                <>
-                  <div className="flex justify-between"><span>LESS {discountPct}% DISCOUNT</span><span>{formatCurrency(totals.discountAmt, quotation.currency)}</span></div>
-                  <div className="flex justify-between"><span>NET AMOUNT</span><span>{formatCurrency(totals.finalNet, quotation.currency)}</span></div>
-                </>
+              {pricing.markupValue > 0 && (
+                <div className="flex justify-between">
+                  <span>ADD {pricing.markupMode === "percent" ? `${pricing.markupValue}% MARK-UP` : "MARK-UP"}</span>
+                  <span>{formatCurrency(totals.markupAmt, quotation.currency)}</span>
+                </div>
+              )}
+              {pricing.discountValue > 0 && (
+                <div className="flex justify-between">
+                  <span>LESS {pricing.discountMode === "percent" ? `${pricing.discountValue}% DISCOUNT` : "DISCOUNT"}</span>
+                  <span>−{formatCurrency(totals.discountAmt, quotation.currency)}</span>
+                </div>
+              )}
+              {(pricing.markupValue > 0 || pricing.discountValue > 0) && (
+                <div className="flex justify-between font-medium"><span>NET AMOUNT</span><span>{formatCurrency(totals.finalNet, quotation.currency)}</span></div>
               )}
               {totals.addVat && (
                 <>

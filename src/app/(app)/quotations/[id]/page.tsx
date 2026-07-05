@@ -6,6 +6,7 @@ import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { saleFromClassification } from "@/lib/sale";
+import { readPricing } from "@/lib/quote";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
             ? "EXCLUSIVE_PLUS"
             : "INCLUSIVE",
         discountPct: Number(quotation.discountPct ?? 0),
+        pricing: readPricing(quotation.classification, Number(quotation.discountPct ?? 0)),
         headerUnits: {
           capacity: (quotation.headerUnits as Record<string, string>)?.capacity || "cfm",
           pressure: (quotation.headerUnits as Record<string, string>)?.pressure || "in-w.g.",

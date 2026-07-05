@@ -65,6 +65,58 @@ export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+export type AdjustMode = "percent" | "amount";
+
+/** Header price adjustments: an optional mark-up (adds) and discount (subtracts). */
+export interface PricingAdjust {
+  markupMode: AdjustMode;
+  markupValue: number;
+  discountMode: AdjustMode;
+  discountValue: number;
+}
+
+export const DEFAULT_PRICING: PricingAdjust = {
+  markupMode: "percent",
+  markupValue: 0,
+  discountMode: "percent",
+  discountValue: 0,
+};
+
+const asMode = (v: unknown): AdjustMode => (v === "amount" ? "amount" : "percent");
+const asNum = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
+
+/**
+ * Read the pricing adjustments from a quotation's `classification.pricing`.
+ * Falls back to the legacy percent-discount column when no pricing block exists
+ * so older quotations keep rendering their discount.
+ */
+export function readPricing(classification: unknown, legacyDiscountPct = 0): PricingAdjust {
+  const p = (classification as Record<string, unknown> | null)?.pricing as Record<string, unknown> | undefined;
+  if (!p) {
+    return { ...DEFAULT_PRICING, discountMode: "percent", discountValue: asNum(legacyDiscountPct) };
+  }
+  return {
+    markupMode: asMode(p.markupMode),
+    markupValue: asNum(p.markupValue),
+    discountMode: asMode(p.discountMode),
+    discountValue: asNum(p.discountValue),
+  };
+}
+
+/**
+ * Apply mark-up then discount to a displayed net base:
+ *   displayedNet → + mark-up → − discount → finalNet.
+ * Percent modes are relative (mark-up on the base, discount on the marked-up
+ * amount); amount modes are flat currency figures.
+ */
+export function applyPricing(displayedNet: number, p: PricingAdjust) {
+  const markupAmt = p.markupMode === "percent" ? displayedNet * (p.markupValue / 100) : p.markupValue;
+  const afterMarkup = displayedNet + markupAmt;
+  const discountAmt = p.discountMode === "percent" ? afterMarkup * (p.discountValue / 100) : p.discountValue;
+  const finalNet = afterMarkup - discountAmt;
+  return { markupAmt, afterMarkup, discountAmt, finalNet };
+}
+
 /**
  * The amount the client actually pays for a quotation — the stored gross total
  * (VAT-inclusive sum of line totals) after applying the discount and the VAT
@@ -76,15 +128,20 @@ export function round2(n: number): number {
  *  - EXCLUSIVE_PLUS  → ((gross/1.12) − discount) + 12% VAT
  */
 export function payableTotal(
-  q: { total: number | Prisma.Decimal; discountPct: number | Prisma.Decimal; vatMode: string },
+  q: {
+    total: number | Prisma.Decimal;
+    discountPct: number | Prisma.Decimal;
+    vatMode: string;
+    classification?: unknown;
+  },
   vatRate = config.vatRate,
 ): number {
   const gross = Number(q.total);
   const net = gross / (1 + vatRate);
   const exclusive = q.vatMode !== "INCLUSIVE";
   const displayedNet = exclusive ? net : gross;
-  const discountAmt = displayedNet * (Number(q.discountPct) / 100);
-  const finalNet = displayedNet - discountAmt;
+  const pricing = readPricing(q.classification, Number(q.discountPct));
+  const { finalNet } = applyPricing(displayedNet, pricing);
   const vatAmt = q.vatMode === "EXCLUSIVE_PLUS" ? finalNet * vatRate : 0;
   return round2(finalNet + vatAmt);
 }

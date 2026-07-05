@@ -142,6 +142,12 @@ export async function updateQuotationLines(
     projectName?: string;
     vatMode?: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
     discountPct?: number;
+    pricing?: {
+      markupMode: "percent" | "amount";
+      markupValue: number;
+      discountMode: "percent" | "amount";
+      discountValue: number;
+    };
     headerUnits?: Record<string, string>;
     classification?: Record<string, string>;
   },
@@ -153,6 +159,17 @@ export async function updateQuotationLines(
   const quote = await prisma.quotation.findUnique({ where: { id: quotationId } });
   if (!quote) throw new Error("Quotation not found");
   if (quote.status !== "DRAFT") throw new Error("Only DRAFT quotations can be edited");
+
+  // Merge the pricing adjustments into the existing classification blob so we
+  // don't clobber sale/revision data that also lives there.
+  const mergedClassification =
+    meta?.pricing || meta?.classification
+      ? {
+          ...((quote.classification as Record<string, unknown> | null) ?? {}),
+          ...(meta?.classification ?? {}),
+          ...(meta?.pricing ? { pricing: meta.pricing } : {}),
+        }
+      : undefined;
 
   const totals = computeTotals(
     parsed.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice, lineTotal: l.lineTotal })),
@@ -209,7 +226,7 @@ export async function updateQuotationLines(
         vatMode: meta?.vatMode,
         discountPct: meta?.discountPct,
         headerUnits: meta?.headerUnits as object | undefined,
-        classification: meta?.classification as object | undefined,
+        classification: mergedClassification as object | undefined,
         validUntil: meta?.validUntil ? new Date(meta.validUntil) : undefined,
       },
     }),
