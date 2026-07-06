@@ -1289,13 +1289,13 @@ const isJetFan = (specs: { type: string }): boolean => specs.type === "Jet Fan";
 // model; each carries its rating and a VAT-EXCLUSIVE (net) selling price. The
 // pricelist model number is the fan's height (mm); the spec sheet labels it by
 // blade diameter, e.g. pricelist "ADH-900" = spec "ADH-750 (30")".
-const POULTRY_FAN: Record<string, { net: number; cmh: number; pa: number; watt: number; size: string; bladeMm: number }> = {
-  "ADH-500": { net: 11500, cmh: 5000, pa: 70, watt: 250, size: '16"', bladeMm: 400 },
-  "ADH-600": { net: 13500, cmh: 8000, pa: 70, watt: 250, size: '20"', bladeMm: 500 },
-  "ADH-700": { net: 16500, cmh: 10000, pa: 56, watt: 250, size: '24"', bladeMm: 600 },
-  "ADH-900": { net: 25000, cmh: 27000, pa: 70, watt: 370, size: '30"', bladeMm: 750 },
-  "ADH-1060": { net: 27000, cmh: 30000, pa: 70, watt: 550, size: '36"', bladeMm: 900 },
-  "ADH-1380": { net: 32000, cmh: 44500, pa: 56, watt: 1100, size: '50"', bladeMm: 1250 },
+const POULTRY_FAN: Record<string, { net: number; cmh: number; pa: number; watt: number; size: string; inch: number; bladeMm: number }> = {
+  "ADH-500": { net: 11500, cmh: 5000, pa: 70, watt: 250, size: '16"', inch: 16, bladeMm: 400 },
+  "ADH-600": { net: 13500, cmh: 8000, pa: 70, watt: 250, size: '20"', inch: 20, bladeMm: 500 },
+  "ADH-700": { net: 16500, cmh: 10000, pa: 56, watt: 250, size: '24"', inch: 24, bladeMm: 600 },
+  "ADH-900": { net: 25000, cmh: 27000, pa: 70, watt: 370, size: '30"', inch: 30, bladeMm: 750 },
+  "ADH-1060": { net: 27000, cmh: 30000, pa: 70, watt: 550, size: '36"', inch: 36, bladeMm: 900 },
+  "ADH-1380": { net: 32000, cmh: 44500, pa: 56, watt: 1100, size: '50"', inch: 50, bladeMm: 1250 },
 };
 const POULTRY_FAN_MODELS = Object.keys(POULTRY_FAN);
 const isPoultryFan = (specs: { type: string }): boolean => specs.type === "Poultry Fan";
@@ -1308,11 +1308,10 @@ function poultryFanUnitPrice(specs: LineSpecs, vatRate: number): number | null {
   const net = poultryFanNet(specs);
   return net == null ? null : round2(net * (1 + vatRate));
 }
-/** Description for a poultry fan: type + brand + model (size). Rating in columns. */
+/** Description for a poultry fan: type + brand + model. Size goes in the Inches column. */
 function buildPoultryFanDescription(specs: LineSpecs): string {
   const lines: string[] = ["Poultry Fan", "AlphaAir Brand"];
-  const m = specs.blowerModel ? POULTRY_FAN[specs.blowerModel] : null;
-  if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}${m ? ` (${m.size})` : ""}`);
+  if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}`);
   return lines.join("\n");
 }
 /** Net (VAT-exclusive) price for a jet fan by model, or null. */
@@ -2367,7 +2366,8 @@ export function QuotationBuilder({
               capacity_cfm: fmtFlow(convertAirflow(m.cmh, "m3hr", capUnit)),
               staticPressure_pa: Math.round(convertPressure(m.pa, "pa", pUnit) * 100) / 100,
               power_w: m.watt,
-              motorHp: null, motorPole: null, motorPh: 1, motorVolts: 220, inches: null,
+              inches: m.inch, // fan size (in) → Size column, not the description
+              motorHp: null, motorPole: null, motorPh: 1, motorVolts: 220,
             };
           }
           const price = poultryFanUnitPrice(s2, vatRate);
