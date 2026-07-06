@@ -256,8 +256,10 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 /** Östberg CK Inline Duct Fan: a fixed-speed unit selected by duty (flow + SP),
  *  priced as a whole unit from the catalogue (no separate motor). */
 const isInlineFan = (specs: { type: string }): boolean => specs.type === "Inline Duct Fan";
-/** A (non-KDK) Ceiling Cassette — priced manually, no blade type / drive / material. */
-const isCeilingCassette = (specs: { type: string }): boolean => specs.type === "Ceiling Cassette";
+/** A non-KDK Ceiling Cassette (e.g. AlphaAir) — priced manually, no blade type /
+ * drive / material and no fan selector (the KDK one stays a prebuilt unit). */
+const isCeilingCassette = (specs: { brand: string; type: string }): boolean =>
+  specs.type === "Ceiling Cassette" && !isPrebuiltUnit(specs);
 /** Description for a selected inline duct fan: type / brand / model. */
 function buildInlineFanDescription(model: string | null): string {
   return ["Inline Duct Fan", "Ostberg Brand", model ? `Model: ${model}` : ""]
@@ -3798,7 +3800,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isCeilingCassette(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -3952,7 +3954,19 @@ export function QuotationBuilder({
                     <p className="col-span-2 text-xs font-medium text-destructive md:col-span-4">No Single Phase Output Available</p>
                   )}
                 </div>
-              ) : isIsolator(l.specs) ? null : isPrebuiltUnit(l.specs) ? (
+              ) : isIsolator(l.specs) ? null : isCeilingCassette(l.specs) ? (
+                // Non-KDK Ceiling Cassette: manual unit price only.
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <div className="flex items-end md:col-span-3">
+                    <p className="text-xs text-muted-foreground">Enter the unit price manually.</p>
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Unit ₱ (incl. VAT)</Label>
+                    <Input className="h-8 text-right" type="number" step="0.01" value={l.unitPrice} disabled={!editable}
+                      onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
+                  </div>
+                </div>
+              ) : isPrebuiltUnit(l.specs) ? (
                 // KDK pre-built units: single-phase and 220 V (both fixed), the
                 // motor rating from the catalogue, and the unit price.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -4222,7 +4236,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isCeilingCassette(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
