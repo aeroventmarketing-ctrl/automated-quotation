@@ -1171,6 +1171,51 @@ function buildVavDescription(specs: LineSpecs): string {
   }
   return lines.join("\n");
 }
+// --- AlphaAir Ceiling Cassette (BPT series) — inline prebuilt catalogue --------
+// VAT-INCLUSIVE selling prices. Duty-based selection off the published fan curves
+// (static pressure Pa vs airflow m³/h). Only the stocked models are listed.
+interface AlphaCassette {
+  model: string;
+  duct: string; // e.g. '4" Ø duct'
+  price: number; // VAT-inclusive selling price
+  powerW: number;
+  airM3hr: number; // rated (max) air volume, m³/h
+  cfm: number;
+  rpm: number;
+  curve: [number, number][]; // [airflow m³/h, static pressure Pa], ascending flow
+}
+const ALPHAAIR_CASSETTES: AlphaCassette[] = [
+  { model: "BPT10-11", duct: '4" Ø duct', price: 3700, powerW: 15, airM3hr: 120, cfm: 71, rpm: 772,
+    curve: [[0, 65], [34, 55], [51, 44], [68, 41], [85, 37], [102, 31], [119, 26]] },
+  { model: "BPT12-34", duct: '5" Ø duct', price: 6100, powerW: 38, airM3hr: 270, cfm: 159, rpm: 804,
+    curve: [[0, 138], [70, 128], [140, 118], [175, 110], [210, 100], [245, 82], [280, 68]] },
+  { model: "BPT15-44B", duct: '6" Ø duct', price: 8200, powerW: 70, airM3hr: 500, cfm: 294, rpm: 1063,
+    curve: [[0, 186], [140, 178], [280, 165], [350, 150], [420, 130], [490, 100], [525, 78]] },
+  { model: "BPT20-54B", duct: '6" Ø duct', price: 12630, powerW: 205, airM3hr: 800, cfm: 471, rpm: 1003,
+    curve: [[0, 185], [180, 172], [360, 150], [450, 130], [540, 110], [630, 90], [720, 70], [810, 27]] },
+  { model: "BPT20-64B", duct: '6" Ø duct', price: 17000, powerW: 235, airM3hr: 1200, cfm: 706, rpm: 1089,
+    curve: [[0, 220], [240, 200], [480, 175], [600, 155], [720, 130], [840, 105], [960, 80], [1080, 55], [1200, 30]] },
+];
+const isAlphaAirCassette = (specs: { brand: string; type: string }): boolean =>
+  specs.type === "Ceiling Cassette" && specs.brand === "AlphaAir";
+/** Static pressure (Pa) a model delivers at airflow q (m³/h); null if q is beyond its curve. */
+function alphaCurveSpAt(curve: [number, number][], q: number): number | null {
+  if (q <= curve[0][0]) return curve[0][1];
+  for (let i = 1; i < curve.length; i++) {
+    if (q <= curve[i][0]) {
+      const [f0, s0] = curve[i - 1];
+      const [f1, s1] = curve[i];
+      return s0 + ((s1 - s0) * (q - f0)) / (f1 - f0);
+    }
+  }
+  return null; // beyond the model's max airflow
+}
+/** BPT models meeting the duty (deliver ≥ required SP at the required flow), smallest first. */
+function alphaAirCassettePicks(qM3hr: number, pPa: number): { c: AlphaCassette; sp: number }[] {
+  return ALPHAAIR_CASSETTES.map((c) => ({ c, sp: alphaCurveSpAt(c.curve, qM3hr) }))
+    .filter((x): x is { c: AlphaCassette; sp: number } => x.sp != null && x.sp >= pPa - 1e-6)
+    .sort((a, b) => a.c.airM3hr - b.c.airM3hr);
+}
 // Induction Motor (TECO / Hyundai) sold as a standalone product: pick Phase, Pole
 // and HP; the price comes from the same TECO motor tables used for blower motors
 // (VAT-EXCLUSIVE net × 1.12). Single phase is always 4-pole; three phase offers
@@ -1815,6 +1860,7 @@ export function QuotationBuilder({
   const [acRan, setAcRan] = useState<Record<string, boolean>>({});
   // VAV duct picks only show after the user clicks "Run selection" (per line).
   const [vavRan, setVavRan] = useState<Record<string, boolean>>({});
+  const [alphaRan, setAlphaRan] = useState<Record<string, boolean>>({});
 
   // When every line is a fans-and-blowers product, prioritize the "Fans and
   // Blowers" (standard) pattern: switch to that template and reset the header
@@ -2006,6 +2052,29 @@ export function QuotationBuilder({
         return { ...l, specs, descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel, specs.bladeType, specs.brand) };
       }),
     );
+  }
+  // Apply a chosen AlphaAir cassette: VAT-inclusive selling price, model + duct in
+  // the description, rated power; single-phase 220 V like other prebuilt units.
+  function applyAlphaCassette(lineId: string, c: AlphaCassette) {
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== lineId) return l;
+        const specs: LineSpecs = {
+          ...l.specs,
+          blowerModel: `${c.model} (${c.duct})`,
+          bodyPrice: round2(c.price / (1 + vatRate)),
+          power_w: c.powerW,
+          motorHp: null, motorPole: null, motorPh: 1, motorVolts: 220, inches: null,
+        };
+        return {
+          ...l,
+          specs,
+          unitPrice: round2(c.price), // pricelist is VAT-inclusive
+          descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel, specs.bladeType, specs.brand),
+        };
+      }),
+    );
+    setAlphaRan((m) => ({ ...m, [lineId]: false }));
   }
   // Air-curtain recommendation: from the client's installation height + door
   // width, the unit must reach the full height (effective height ≥ installation
@@ -3795,9 +3864,58 @@ export function QuotationBuilder({
                 );
               })()}
 
+              {/* AlphaAir Ceiling Cassette — duty-based BPT selector (own inline catalogue). */}
+              {editable && isAlphaAirCassette(l.specs) && (
+                <div className="mt-2 rounded-md border border-dashed p-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      AlphaAir cassette selector — uses Capacity + S.P. above
+                    </span>
+                    <Button size="sm" variant="outline" onClick={() => setAlphaRan((m) => ({ ...m, [l.id]: true }))}>
+                      <Gauge className="h-3.5 w-3.5" /> Run selection
+                    </Button>
+                  </div>
+                  {alphaRan[l.id] && (() => {
+                    const aUnit = normalizeAirflowUnit(units.capacity);
+                    const pUnit = normalizePressureUnit(units.pressure);
+                    const flow = l.specs.capacity_cfm;
+                    if (!flow || !aUnit) return <p className="mt-1 text-xs text-muted-foreground">Enter a volume flow above.</p>;
+                    const qM3hr = convertAirflow(flow, aUnit, "m3hr");
+                    const pPa = l.specs.staticPressure_pa && pUnit ? convertPressure(l.specs.staticPressure_pa, pUnit, "pa") : 0;
+                    const picks = alphaAirCassettePicks(qM3hr, pPa);
+                    if (picks.length === 0)
+                      return <p className="mt-1 text-xs text-destructive">No BPT cassette meets this duty (flow / static pressure too high).</p>;
+                    return (
+                      <div className="mt-2 space-y-1">
+                        {picks.map(({ c, sp }, i) => {
+                          const isRec = i === 0;
+                          const isSel = (l.specs.blowerModel ?? "").startsWith(c.model);
+                          return (
+                            <button key={c.model} type="button" onClick={() => applyAlphaCassette(l.id, c)}
+                              className={`w-full rounded-md border p-2 text-left text-xs hover:bg-accent ${isSel ? "border-primary ring-1 ring-primary" : isRec ? "border-primary/50" : ""}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">
+                                  {c.model} ({c.duct})
+                                  {isRec && <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">RECOMMENDED</span>}
+                                  {isSel && <span className="ml-2 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">SELECTED</span>}
+                                </span>
+                                <span className="font-medium">{formatCurrency(round2(c.price), quotation.currency)}</span>
+                              </div>
+                              <p className="text-muted-foreground">
+                                Max {c.airM3hr} m³/h ({c.cfm} CFM) · {Math.round(sp)} Pa at duty · {c.powerW} W · {c.rpm} rpm
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isAlphaAirCassette(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
