@@ -218,11 +218,12 @@ const AXIAL_FAN_TYPES = new Set(["Tubeaxial", "Vaneaxial", "Customized Jet Fan"]
 // "KDK - Ceiling Cassette" alias covers quotes saved during the brief window
 // the brand was part of the type name.
 const KDK_TYPES = new Set(["Ceiling Cassette", "KDK - Ceiling Cassette"]);
-// KDK pre-built units (whole catalogue items) hide blade type / drive / material.
-// Only the KDK brand (or the legacy "KDK - Ceiling Cassette" alias) is a prebuilt
-// unit — a non-KDK "Ceiling Cassette" (e.g. AlphaAir) is a normal priced item.
+// Pre-built units (whole catalogue items) hide blade type / drive / material and
+// are chosen by duty via the fan selector. This covers the KDK brand and every
+// Ceiling Cassette (KDK and AlphaAir share the same selection flow; only their
+// catalogue models / ratings / prices differ).
 const isPrebuiltUnit = (specs: { brand: string; type: string }): boolean =>
-  specs.brand === "KDK" || specs.type === "KDK - Ceiling Cassette";
+  specs.brand === "KDK" || specs.type === "Ceiling Cassette" || specs.type === "KDK - Ceiling Cassette";
 /** Shutter Series wall fans select on air volume only — static pressure is N/A. */
 const isFlowOnlyUnit = (specs: { type: string; bladeType: string }): boolean =>
   specs.type === "Wall Mounted Fan" && specs.bladeType === "Shutter Series";
@@ -256,10 +257,6 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 /** Östberg CK Inline Duct Fan: a fixed-speed unit selected by duty (flow + SP),
  *  priced as a whole unit from the catalogue (no separate motor). */
 const isInlineFan = (specs: { type: string }): boolean => specs.type === "Inline Duct Fan";
-/** A non-KDK Ceiling Cassette (e.g. AlphaAir) — priced manually, no blade type /
- * drive / material and no fan selector (the KDK one stays a prebuilt unit). */
-const isCeilingCassette = (specs: { brand: string; type: string }): boolean =>
-  specs.type === "Ceiling Cassette" && !isPrebuiltUnit(specs);
 /** Description for a selected inline duct fan: type / brand / model. */
 function buildInlineFanDescription(model: string | null): string {
   return ["Inline Duct Fan", "Ostberg Brand", model ? `Model: ${model}` : ""]
@@ -505,14 +502,14 @@ function buildBlowerDescription(
   return lines.filter((l) => l.length > 0).join("\n");
 }
 /**
- * KDK pre-built unit description, built from the selections (no blade/drive/
+ * Pre-built unit description, built from the selections (no blade/drive/
  * material/paint lines):
  *   line 1  <type>                  e.g. "Ceiling Cassette"
- *   line 2  KDK Brand
+ *   line 2  <brand> Brand           e.g. "KDK Brand" / "AlphaAir Brand"
  *   line 3  Model: <model>          once the salesperson picks a model
  */
-function buildKdkDescription(type: string, model?: string | null, series?: string | null): string {
-  return [series ? `${type} - ${series}` : type, "KDK Brand", model ? `Model: ${model}` : ""]
+function buildKdkDescription(type: string, model?: string | null, series?: string | null, brand = "KDK"): string {
+  return [series ? `${type} - ${series}` : type, `${brand || "KDK"} Brand`, model ? `Model: ${model}` : ""]
     .filter((l) => l.length > 0)
     .join("\n");
 }
@@ -2006,7 +2003,7 @@ export function QuotationBuilder({
       ls.map((l) => {
         if (l.id !== id) return l;
         const specs = { ...l.specs, ...patch, motorPh: 1, motorVolts: 220, inches: null };
-        return { ...l, specs, descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel, specs.bladeType) };
+        return { ...l, specs, descriptionSnapshot: buildKdkDescription(specs.type, specs.blowerModel, specs.bladeType, specs.brand) };
       }),
     );
   }
@@ -2529,7 +2526,7 @@ export function QuotationBuilder({
             // other catalogue price; store gross so the exclusive display shows
             // exactly the catalogue price (no ÷1.12 deduction).
             unitPrice: round2(base * (1 + vatRate)),
-            descriptionSnapshot: buildKdkDescription(specs.type, model, specs.bladeType),
+            descriptionSnapshot: buildKdkDescription(specs.type, model, specs.bladeType, specs.brand),
           };
         }
         // Inline Duct Fan (Östberg CK): a whole unit selected by duty — take the
@@ -2766,9 +2763,9 @@ export function QuotationBuilder({
                 );
               } else if (MATERIAL_CATEGORIES.has(c.category)) {
                 applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
-              } else if (c.brand === "KDK") {
-                // KDK pre-built unit: rebuild Type / KDK Brand / Model and clear
-                // any previously-picked model (the type changed).
+              } else if (c.brand === "KDK" || type === "Ceiling Cassette") {
+                // Pre-built unit (KDK, or any-brand Ceiling Cassette): rebuild
+                // Type / Brand / Model and clear any previously-picked model.
                 applyKdk(l.id, { type, blowerModel: null, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
               } else if (type === "Motor Controller") {
                 // Simple sub-typed item (Motor Starter / VFD) — no fan fields,
@@ -3241,7 +3238,7 @@ export function QuotationBuilder({
                 </Select>
               )}
             </>
-          ) : isPrebuiltUnit(c) || isMotorController(c) || isInlineFan(c) || isCeilingCassette(c) ? (
+          ) : isPrebuiltUnit(c) || isMotorController(c) || isInlineFan(c) ? (
             // KDK pre-built units, Motor Controllers, and the Inline Duct Fan
             // (selected by duty) have no blade type / drive / material.
             null
@@ -3273,7 +3270,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInductionMotor(c) && !isDustCollector(c) && !isInlineFan(c) && !isJetFan(c) && !isCeilingCassette(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInductionMotor(c) && !isDustCollector(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
@@ -3800,7 +3797,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isCeilingCassette(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -3954,19 +3951,7 @@ export function QuotationBuilder({
                     <p className="col-span-2 text-xs font-medium text-destructive md:col-span-4">No Single Phase Output Available</p>
                   )}
                 </div>
-              ) : isIsolator(l.specs) ? null : isCeilingCassette(l.specs) ? (
-                // Non-KDK Ceiling Cassette: manual unit price only.
-                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-                  <div className="flex items-end md:col-span-3">
-                    <p className="text-xs text-muted-foreground">Enter the unit price manually.</p>
-                  </div>
-                  <div>
-                    <Label className="text-[10px]">Unit ₱ (incl. VAT)</Label>
-                    <Input className="h-8 text-right" type="number" step="0.01" value={l.unitPrice} disabled={!editable}
-                      onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
-                  </div>
-                </div>
-              ) : isPrebuiltUnit(l.specs) ? (
+              ) : isIsolator(l.specs) ? null : isPrebuiltUnit(l.specs) ? (
                 // KDK pre-built units: single-phase and 220 V (both fixed), the
                 // motor rating from the catalogue, and the unit price.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -4236,7 +4221,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isCeilingCassette(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
