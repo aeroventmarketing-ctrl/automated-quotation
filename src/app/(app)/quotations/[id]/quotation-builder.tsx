@@ -1273,14 +1273,14 @@ function buildInductionDescription(specs: LineSpecs): string {
 }
 // Jet Fan (Other Products): pick a model; each carries its rating and a
 // VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel. Models
-// differ by brand — MaxAir (MA series) vs AlphaAir (AJF series). AJF ratings
-// aren't published yet, so their rating columns stay blank (cmh/pa/watt = 0).
+// differ by brand — MaxAir (MA series) vs AlphaAir (AJF series). Jet fans push
+// air with ~no static pressure (rated by air velocity), so AJF pa = 0.
 const JET_FAN: Record<string, { watt: number; cmh: number; pa: number; net: number; brand: string }> = {
   "MA-250": { watt: 300, cmh: 2000, pa: 24, net: 41870, brand: "MaxAir" },
   "MA-300": { watt: 480, cmh: 3000, pa: 39, net: 67714, brand: "MaxAir" },
-  "AJF-200": { watt: 0, cmh: 0, pa: 0, net: 23000, brand: "AlphaAir" },
-  "AJF-250": { watt: 0, cmh: 0, pa: 0, net: 29000, brand: "AlphaAir" },
-  "AJF-300": { watt: 0, cmh: 0, pa: 0, net: 47000, brand: "AlphaAir" },
+  "AJF-200": { watt: 190, cmh: 1400, pa: 0, net: 23000, brand: "AlphaAir" },
+  "AJF-250": { watt: 300, cmh: 2338, pa: 0, net: 29000, brand: "AlphaAir" },
+  "AJF-300": { watt: 480, cmh: 3624, pa: 0, net: 47000, brand: "AlphaAir" },
 };
 const jetFanModelsFor = (brand: string): string[] =>
   brand === "AlphaAir" ? ["AJF-200", "AJF-250", "AJF-300"] : ["MA-250", "MA-300"];
@@ -4109,7 +4109,9 @@ export function QuotationBuilder({
                   <div className="flex flex-col justify-end gap-1 md:col-span-3">
                     {isJetFan(l.specs) && l.specs.blowerModel && JET_FAN[l.specs.blowerModel]?.cmh > 0 && (
                       <p className="text-xs font-medium text-foreground">
-                        Volume flow {JET_FAN[l.specs.blowerModel].cmh} CMH · Static pressure {JET_FAN[l.specs.blowerModel].pa} Pa · {JET_FAN[l.specs.blowerModel].watt} W
+                        Volume flow {JET_FAN[l.specs.blowerModel].cmh} CMH
+                        {JET_FAN[l.specs.blowerModel].pa > 0 ? ` · Static pressure ${JET_FAN[l.specs.blowerModel].pa} Pa` : ""}
+                        {" · "}{JET_FAN[l.specs.blowerModel].watt} W
                       </p>
                     )}
                     {isPortableBlowerFamily(l.specs) && !portableBlowerIsFlex(l.specs) && portableBlowerRow(l.specs) && (() => {
