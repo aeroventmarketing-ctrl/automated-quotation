@@ -640,7 +640,7 @@ const MATERIAL_FACTORS: Record<string, number> = {
   "Heavy gauge material": 1.25,
   "Fiberglass reinforced metal": 5.5,
   "Stainless 304 material": 4,
-  "Stainless 316 material": 5,
+  "Stainless 316 material": 6,
 };
 /** Categories whose body price is scaled by the material multiplier. */
 const MATERIAL_CATEGORIES = new Set([
