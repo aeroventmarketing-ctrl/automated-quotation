@@ -278,7 +278,6 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Air Grille", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Bar Grille", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Ceiling Diffuser", "bladeTypes": [], "drives": [] },
-  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Jet Nozzle Diffuser", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Louvers", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Perforated Air Grille", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Vent Cap", "bladeTypes": [], "drives": [] },
