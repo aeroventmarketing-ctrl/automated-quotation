@@ -1271,13 +1271,19 @@ function buildInductionDescription(specs: LineSpecs): string {
   lines.push(`${brand} Brand`);
   return lines.join("\n");
 }
-// Jet Fan (Other Products, MAXAIR): pick a model; each carries its rating and a
-// VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel.
-const JET_FAN_MODELS = ["MA-250", "MA-300"];
-const JET_FAN: Record<string, { watt: number; cmh: number; pa: number; net: number }> = {
-  "MA-250": { watt: 300, cmh: 2000, pa: 24, net: 41870 },
-  "MA-300": { watt: 480, cmh: 3000, pa: 39, net: 67714 },
+// Jet Fan (Other Products): pick a model; each carries its rating and a
+// VAT-EXCLUSIVE (net) selling price. The model is stored in blowerModel. Models
+// differ by brand — MaxAir (MA series) vs AlphaAir (AJF series). AJF ratings
+// aren't published yet, so their rating columns stay blank (cmh/pa/watt = 0).
+const JET_FAN: Record<string, { watt: number; cmh: number; pa: number; net: number; brand: string }> = {
+  "MA-250": { watt: 300, cmh: 2000, pa: 24, net: 41870, brand: "MaxAir" },
+  "MA-300": { watt: 480, cmh: 3000, pa: 39, net: 67714, brand: "MaxAir" },
+  "AJF-200": { watt: 0, cmh: 0, pa: 0, net: 23000, brand: "AlphaAir" },
+  "AJF-250": { watt: 0, cmh: 0, pa: 0, net: 29000, brand: "AlphaAir" },
+  "AJF-300": { watt: 0, cmh: 0, pa: 0, net: 47000, brand: "AlphaAir" },
 };
+const jetFanModelsFor = (brand: string): string[] =>
+  brand === "AlphaAir" ? ["AJF-200", "AJF-250", "AJF-300"] : ["MA-250", "MA-300"];
 const isJetFan = (specs: { type: string }): boolean => specs.type === "Jet Fan";
 /** Net (VAT-exclusive) price for a jet fan by model, or null. */
 function jetFanNet(specs: LineSpecs): number | null {
@@ -1290,7 +1296,9 @@ function jetFanUnitPrice(specs: LineSpecs, vatRate: number): number | null {
 }
 /** Description for a jet fan: type + brand + model (rating goes in the columns). */
 function buildJetFanDescription(specs: LineSpecs): string {
-  const lines: string[] = ["Jet Fan", "MaxAir Brand"];
+  const brand =
+    (specs.blowerModel && JET_FAN[specs.blowerModel]?.brand) || (specs.brand === "AlphaAir" ? "AlphaAir" : "MaxAir");
+  const lines: string[] = ["Jet Fan", `${brand} Brand`];
   if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}`);
   return lines.join("\n");
 }
@@ -2297,17 +2305,16 @@ export function QuotationBuilder({
           if (m) {
             const capUnit = normalizeAirflowUnit(units.capacity) ?? "m3hr";
             const pUnit = normalizePressureUnit(units.pressure) ?? "pa";
-            s2 = {
-              ...specs,
-              capacity_cfm: fmtFlow(convertAirflow(m.cmh, "m3hr", capUnit)),
-              staticPressure_pa: Math.round(convertPressure(m.pa, "pa", pUnit) * 100) / 100,
-              power_w: m.watt,
-              motorHp: null,
-              motorPole: null,
-              motorPh: 1, // MAXAIR jet fans are single-phase, 220 V
-              motorVolts: 220,
-              inches: null,
-            };
+            s2 = { ...specs, motorHp: null, motorPole: null, motorPh: 1, motorVolts: 220, inches: null };
+            // Fill the rating columns only when the model publishes a rating.
+            if (m.cmh > 0) {
+              s2 = {
+                ...s2,
+                capacity_cfm: fmtFlow(convertAirflow(m.cmh, "m3hr", capUnit)),
+                staticPressure_pa: Math.round(convertPressure(m.pa, "pa", pUnit) * 100) / 100,
+                power_w: m.watt,
+              };
+            }
           }
           const price = jetFanUnitPrice(s2, vatRate);
           return {
@@ -3192,14 +3199,14 @@ export function QuotationBuilder({
               )}
             </>
           ) : isJetFan(c) ? (
-            // Jet Fan: model dropdown (MAXAIR MA series).
+            // Jet Fan: model dropdown — MaxAir (MA) or AlphaAir (AJF) by brand.
             <Select
               value={c.blowerModel || ""}
               disabled={!editable || !c.type}
               onChange={(e) => applyAccessory(l.id, { blowerModel: e.target.value || null })}
             >
               <option value="" disabled>Model…</option>
-              {JET_FAN_MODELS.map((m) => (<option key={m} value={m}>{m}</option>))}
+              {jetFanModelsFor(c.brand).map((m) => (<option key={m} value={m}>{m}</option>))}
             </Select>
           ) : isDustCollector(c) ? (
             // Dust Collector: model dropdown (META Taiwan CT series).
@@ -4100,7 +4107,7 @@ export function QuotationBuilder({
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex flex-col justify-end gap-1 md:col-span-3">
-                    {isJetFan(l.specs) && l.specs.blowerModel && JET_FAN[l.specs.blowerModel] && (
+                    {isJetFan(l.specs) && l.specs.blowerModel && JET_FAN[l.specs.blowerModel]?.cmh > 0 && (
                       <p className="text-xs font-medium text-foreground">
                         Volume flow {JET_FAN[l.specs.blowerModel].cmh} CMH · Static pressure {JET_FAN[l.specs.blowerModel].pa} Pa · {JET_FAN[l.specs.blowerModel].watt} W
                       </p>
