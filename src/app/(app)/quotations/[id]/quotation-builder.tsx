@@ -256,6 +256,8 @@ const isAirCurtain = (specs: { type: string }): boolean => specs.type === "Air C
 /** Östberg CK Inline Duct Fan: a fixed-speed unit selected by duty (flow + SP),
  *  priced as a whole unit from the catalogue (no separate motor). */
 const isInlineFan = (specs: { type: string }): boolean => specs.type === "Inline Duct Fan";
+/** A (non-KDK) Ceiling Cassette — priced manually, no blade type / drive / material. */
+const isCeilingCassette = (specs: { type: string }): boolean => specs.type === "Ceiling Cassette";
 /** Description for a selected inline duct fan: type / brand / model. */
 function buildInlineFanDescription(model: string | null): string {
   return ["Inline Duct Fan", "Ostberg Brand", model ? `Model: ${model}` : ""]
@@ -3237,7 +3239,7 @@ export function QuotationBuilder({
                 </Select>
               )}
             </>
-          ) : isPrebuiltUnit(c) || isMotorController(c) || isInlineFan(c) ? (
+          ) : isPrebuiltUnit(c) || isMotorController(c) || isInlineFan(c) || isCeilingCassette(c) ? (
             // KDK pre-built units, Motor Controllers, and the Inline Duct Fan
             // (selected by duty) have no blade type / drive / material.
             null
@@ -3269,7 +3271,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInductionMotor(c) && !isDustCollector(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInductionMotor(c) && !isDustCollector(c) && !isInlineFan(c) && !isJetFan(c) && !isCeilingCassette(c) && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
