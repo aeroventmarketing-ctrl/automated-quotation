@@ -3307,7 +3307,7 @@ export function QuotationBuilder({
                 </Select>
               )}
             </>
-          ) : isPrebuiltUnit(c) || isMotorController(c) || isInlineFan(c) ? (
+          ) : isPrebuiltUnit(c) || isMotorController(c) || isInlineFan(c) || c.brand === "AlphaAir" ? (
             // KDK pre-built units, Motor Controllers, and the Inline Duct Fan
             // (selected by duty) have no blade type / drive / material.
             null
@@ -3339,7 +3339,7 @@ export function QuotationBuilder({
           )}
           {/* Material applies to blowers — not pre-built units, Motor Controllers,
               Ventilation Accessories, or the canvass connector (its own material). */}
-          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInductionMotor(c) && !isDustCollector(c) && !isInlineFan(c) && !isJetFan(c) && c.category !== "Ventilation Accessories" && (
+          {!isPrebuiltUnit(c) && !isMotorController(c) && !isCanvass(c) && !isWindVent(c) && !isAluDuct(c) && !isPortableBlowerFamily(c) && !isVav(c) && !isInductionMotor(c) && !isDustCollector(c) && !isInlineFan(c) && !isJetFan(c) && c.brand !== "AlphaAir" && c.category !== "Ventilation Accessories" && (
             <Select
               value={c.material || "Black Iron Sheet"}
               disabled={!editable}
