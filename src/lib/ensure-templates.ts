@@ -16,19 +16,21 @@ export const RETAINED_TEMPLATE_LAYOUT_KEYS = [
   "power_roof_ventilator",
   "air_terminals",
   "kdk",
+  "services",
 ] as const;
 
 /**
  * Display order for the template picker: Fans and Blowers first (the default),
- * then Power Roof Ventilator, Air Terminals and Ducts, then KDK. Sorted by
- * layoutKey so admin-renamed display names keep their position; unknown keys
- * fall to the end.
+ * then Power Roof Ventilator, Air Terminals and Ducts, KDK, and Services last.
+ * Sorted by layoutKey so admin-renamed display names keep their position;
+ * unknown keys fall to the end.
  */
 export const TEMPLATE_PICKER_ORDER = [
   "standard",
   "power_roof_ventilator",
   "air_terminals",
   "kdk",
+  "services",
 ] as const;
 
 export function sortTemplatesByPickerOrder<T extends { layoutKey: string }>(templates: T[]): T[] {
@@ -192,10 +194,42 @@ export async function ensurePowerRoofVentilatorTemplate(): Promise<void> {
   }
 }
 
-/** Ensure all built-in templates (Fans and Blowers + Power Roof Ventilator + KDK + Air Terminals) exist. */
+/**
+ * Ensure the built-in "Services" quotation template exists with its terms (no
+ * spec footer note — it's a labour/service quote). Created once if missing; an
+ * existing template only has its terms kept in sync with the code-defined terms.
+ */
+export async function ensureServicesTemplate(): Promise<void> {
+  const baseConfig = {
+    accent: "#1d4ed8",
+    showSpecs: true,
+    showTerms: true,
+    terms: COMPANY.servicesTerms,
+    specNote: "",
+  };
+  const existing = await prisma.quotationTemplate.findUnique({ where: { layoutKey: "services" } });
+  if (!existing) {
+    await prisma.quotationTemplate.create({
+      data: { layoutKey: "services", name: "Services", config: baseConfig, active: true },
+    });
+    return;
+  }
+  // Keep the terms in sync with the code-defined terms so updates here reach the
+  // live template (these terms are managed in config, not admin).
+  const config = (existing.config as Record<string, unknown>) ?? {};
+  if (config.terms !== COMPANY.servicesTerms) {
+    await prisma.quotationTemplate.update({
+      where: { layoutKey: "services" },
+      data: { config: { ...config, terms: COMPANY.servicesTerms } as Prisma.InputJsonObject },
+    });
+  }
+}
+
+/** Ensure all built-in templates (Fans and Blowers + Power Roof Ventilator + KDK + Air Terminals + Services) exist. */
 export async function ensureBuiltinTemplates(): Promise<void> {
   await ensureStandardTemplate();
   await ensurePowerRoofVentilatorTemplate();
   await ensureKdkTemplate();
   await ensureAirTerminalsTemplate();
+  await ensureServicesTemplate();
 }
