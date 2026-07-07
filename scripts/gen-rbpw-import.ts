@@ -76,6 +76,32 @@ function parseSp(raw: string): number | null {
 const sizeLabelOf = (dia: number): string =>
   Number.isInteger(dia) ? String(dia) : String(Math.round(dia * 1000) / 1000);
 
+// Corrected performance grids supplied by the client where the source sheet is
+// wrong. AV5050CMH's block in the xlsx duplicated AV4512CMH's numbers; this is
+// the correct 50.5" table. SP levels (inWG): 1,2,4,6,8,12,16,20,24,28,32; each
+// row is [CFM, OV, then (RPM,BHP) per SP with null for blanks].
+const OVERRIDE_SP = [1, 2, 4, 6, 8, 12, 16, 20, 24, 28, 32];
+const OVERRIDES: Record<string, Array<Array<number | null>>> = {
+  AV5050CMH: [
+    [5544, 1200, 277, 1.46, 376, 2.79, 525, 5.71, 641, 8.81, null, null, null, null, null, null, null, null, null, null, null, null],
+    [7392, 1600, 296, 2.14, 387, 3.8, 530, 7.47, 644, 11.35, 741, 15.3, 904, 23.7, null, null, null, null, null, null, null, null],
+    [9240, 2000, 321, 3.11, 405, 5.09, 538, 9.32, 649, 13.96, 745, 18.8, 906, 28.5, 1043, 38.72, null, null, null, null, null, null],
+    [11088, 2400, 348, 4.34, 427, 6.67, 552, 11.53, 657, 16.72, 750, 22.23, 910, 33.74, 1046, 45.39, 1166, 57.35, 1274, 69.68, 1374, 82.65, null, null],
+    [12936, 2800, 377, 5.9, 452, 8.63, 571, 14.2, 670, 19.93, 759, 26.02, 915, 38.9, 1050, 52.36, 1169, 65.81, 1276, 79.32, 1375, 93.28, 1468, 107.82],
+    [14784, 3200, 408, 7.86, 478, 10.93, 592, 17.18, 688, 23.73, 772, 30.29, 922, 44.26, 1055, 59.24, 1173, 74.49, 1280, 89.73, 1378, 104.97, 1470, 120.63],
+    [16632, 3600, 442, 10.37, 506, 13.7, 615, 20.64, 707, 27.83, 789, 35.19, 932, 50.09, 1061, 66.19, 1178, 83.03, 1284, 100.05, 1382, 117.11, 1473, 134.15],
+    [18480, 4000, 477, 13.41, 535, 16.93, 640, 24.66, 729, 32.52, 808, 40.58, 947, 56.86, 1070, 73.74, 1184, 91.7, 1289, 110.21, 1386, 129.0, 1476, 147.65],
+    [20328, 4400, 513, 17.07, 567, 20.9, 667, 29.33, 752, 37.73, 828, 46.34, 964, 64.22, 1083, 82.21, 1193, 101.11, 1296, 120.87, 1391, 140.78, 1481, 161.33],
+    [22176, 4800, 550, 21.41, 599, 25.37, 694, 34.46, 777, 43.69, 851, 52.97, 982, 72.03, 1098, 91.33, 1204, 111.1, 1304, 131.85, 1398, 153.19, 1487, 175.11],
+    [24024, 5200, 588, 26.55, 634, 30.82, 722, 40.23, 803, 50.32, 875, 60.3, 1002, 80.53, 1116, 101.47, 1219, 122.39, 1315, 143.81, 1406, 165.96, 1493, 188.9],
+    [25872, 5600, 626, 32.42, 669, 36.94, 752, 46.91, 830, 57.67, 900, 68.37, 1024, 89.9, 1135, 112.21, 1236, 134.57, 1329, 156.93, 1418, 180.25, 1502, 203.87],
+    [27720, 6000, 665, 39.25, 705, 43.96, 782, 54.19, 858, 65.82, 926, 77.23, 1047, 100.06, 1155, 123.56, 1254, 147.41, 1345, 171.04, 1431, 195.12, 1513, 219.74],
+    [29568, 6400, 704, 46.95, 741, 51.79, 814, 62.54, 886, 74.62, 953, 86.97, 1071, 111.15, 1176, 135.64, 1273, 160.94, 1363, 186.26, 1447, 211.49, null, null],
+    [31416, 6800, 743, 55.58, 778, 60.68, 847, 71.89, 915, 84.33, 980, 97.37, 1096, 123.2, 1199, 149.0, 1293, 175.2, 1382, 202.29, 1464, 228.66, null, null],
+    [33264, 7200, 782, 65.18, 816, 70.76, 881, 82.31, 945, 95.03, 1008, 108.77, 1121, 135.91, 1222, 163.06, 1315, 190.79, 1401, 218.68, 1482, 246.69, null, null],
+  ],
+};
+
 interface Model {
   modelCode: string;
   code: string;
@@ -108,6 +134,37 @@ async function main() {
     const { row: startRow, code, dia } = blockStarts[i];
     const endRow = i + 1 < blockStarts.length ? blockStarts[i + 1].row - 1 : ws.rowCount;
     const modelCode = `AV${code}CMH`;
+
+    // Client-corrected grid overrides the sheet block where the source is wrong.
+    const override = OVERRIDES[modelCode];
+    if (override) {
+      const points: Model["points"] = [];
+      const areas: number[] = [];
+      let maxRpm = 0;
+      for (const row of override) {
+        const cfm = row[0];
+        const ov = row[1];
+        if (cfm == null) continue;
+        if (ov != null && ov > 0) areas.push(cfm / ov);
+        for (let s = 0; s < OVERRIDE_SP.length; s++) {
+          const rpm = row[2 + s * 2];
+          const bhp = row[3 + s * 2];
+          if (rpm != null && bhp != null && rpm > 0) {
+            points.push({ rpm, cfm, sp_in: OVERRIDE_SP[s], bhp });
+            if (rpm > maxRpm) maxRpm = rpm;
+          }
+        }
+      }
+      areas.sort((a, b) => a - b);
+      const outletArea = areas.length ? areas[Math.floor(areas.length / 2)] : 0;
+      const { cebDia, price } = nearestCebPrice(dia);
+      models.push({
+        modelCode, code, dia, sizeLabel: sizeLabelOf(dia),
+        outletArea_ft2: Math.round(outletArea * 1000) / 1000,
+        maxRpm, basePrice: price, cebDia, points,
+      });
+      continue;
+    }
 
     // Within the block, find the RPM/BHP header row (col 3 == "RPM"); the row
     // above it holds the SP labels.
