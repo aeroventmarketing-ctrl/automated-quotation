@@ -71,6 +71,8 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "HPB") return { AND: [{ modelCode: { endsWith: "HPB" } }, { modelCode: { not: "AV8900HPB" } }] };
   // Radial Blower "Paddle Wheel" — model codes like AV1281CMH.
   if (t === "CMH") return { modelCode: { endsWith: "CMH" } };
+  // Radial Blower "Ring Paddle Wheel" — model codes like AV1281CMA.
+  if (t === "CMA") return { modelCode: { endsWith: "CMA" } };
   // Ceiling-cassette ventilating fans — model codes like 17CUG / 24CDF / 38CHG.
   if (t === "CASSETTE") {
     return {

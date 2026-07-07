@@ -684,9 +684,10 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
   if (type === "Cabinet Blower (SISW)") return "CABSISW";
   // High Pressure Blower: own catalogue (HPB); price = CEB × 2.5 (÷0.4) via TAG_FACTORS.
   if (type === "High Pressure Blower") return "HPB";
-  // Radial Blower "Paddle Wheel": own catalogue (CMH); base = nearest CEB size's
-  // price, Radial-Blower factor applied via TAG_FACTORS["CMH"].
+  // Radial Blower blade catalogues: Paddle Wheel = CMH, Ring Paddle Wheel = CMA.
+  // Base = nearest CEB size's price; Radial-Blower factor applied via TAG_FACTORS.
   if (type === "Radial Blower" && bladeType === "Paddle Wheel") return "CMH";
+  if (type === "Radial Blower" && bladeType === "Ring Paddle Wheel") return "CMA";
   if (/forward/i.test(bladeType)) return "CFAB";
   return "CEB";
 }
@@ -755,6 +756,8 @@ const TAG_FACTORS: Record<string, number> = {
   // Radial Blower "Paddle Wheel" (CMH). Base = nearest CEB size's price; the
   // final price factor is PENDING (client to send prices) — ×1 placeholder.
   CMH: 1,
+  // Radial Blower "Ring Paddle Wheel" (CMA). Price factor PENDING — ×1 placeholder.
+  CMA: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
