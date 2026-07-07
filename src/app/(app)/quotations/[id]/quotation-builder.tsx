@@ -1315,6 +1315,44 @@ function buildPoultryFanDescription(specs: LineSpecs): string {
   if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}`);
   return lines.join("\n");
 }
+// HVLS (Other Products / AlphaAir, AAHVPM series — high-volume low-speed ceiling
+// fan). Pick a model; each carries its spec and a VAT-EXCLUSIVE (net) selling
+// price. PMSM motor, 220 V single phase, 50/60 Hz. No standard rating columns
+// fit, so the spec goes in the description.
+const HVLS_FAN: Record<string, { net: number; ft: number; dia: number; blades: number; kw: number; rpm: number; weight: number; airMin: number }> = {
+  "AAHVPM-6-25": { net: 115000, ft: 8, dia: 2500, blades: 6, kw: 0.3, rpm: 135, weight: 37, airMin: 6000 },
+  "AAHVPM-6-30": { net: 125000, ft: 10, dia: 3000, blades: 6, kw: 0.5, rpm: 120, weight: 46, airMin: 6800 },
+  "AAHVPM-6-36": { net: 135000, ft: 12, dia: 3600, blades: 6, kw: 0.5, rpm: 110, weight: 48, airMin: 7500 },
+  "AAHVPM-6-42": { net: 145000, ft: 14, dia: 4200, blades: 6, kw: 0.5, rpm: 95, weight: 50, airMin: 8800 },
+  "AAHVPM-6-49": { net: 160000, ft: 16, dia: 4900, blades: 6, kw: 1.1, rpm: 75, weight: 92, airMin: 13200 },
+  "AAHVPM-6-55": { net: 175000, ft: 18, dia: 5500, blades: 6, kw: 1.1, rpm: 65, weight: 90, airMin: 13800 },
+  "AAHVPM-6-61": { net: 200000, ft: 20, dia: 6100, blades: 6, kw: 1.1, rpm: 62, weight: 105, airMin: 14400 },
+  "AAHVPM-6-73": { net: 225000, ft: 24, dia: 7300, blades: 6, kw: 1.5, rpm: 60, weight: 118, airMin: 15800 },
+  "AAHVPM-5-79": { net: 250000, ft: 26, dia: 7900, blades: 5, kw: 1.8, rpm: 50, weight: 125, airMin: 17500 },
+};
+const HVLS_MODELS = Object.keys(HVLS_FAN);
+const isHvls = (specs: { type: string }): boolean => specs.type === "HVLS";
+/** Net (VAT-exclusive) price for an HVLS by model, or null. */
+function hvlsNet(specs: LineSpecs): number | null {
+  return specs.blowerModel ? HVLS_FAN[specs.blowerModel]?.net ?? null : null;
+}
+/** Auto unit price (VAT-inclusive, as stored) for an HVLS, or null. */
+function hvlsUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+  const net = hvlsNet(specs);
+  return net == null ? null : round2(net * (1 + vatRate));
+}
+/** Description for an HVLS: type / brand / model + the spec block (no columns fit). */
+function buildHvlsDescription(specs: LineSpecs): string {
+  const lines: string[] = ["HVLS", "AlphaAir Brand"];
+  const m = specs.blowerModel ? HVLS_FAN[specs.blowerModel] : null;
+  if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel} (${m ? `${m.ft} ft` : ""})`);
+  if (m) {
+    lines.push(`Diameter Ø ${m.dia.toLocaleString()} mm · ${m.blades} blades · PMSM motor`);
+    lines.push(`Air volume ${m.airMin.toLocaleString()} m³/min · ${m.kw} kW · ${m.rpm} rpm`);
+    lines.push("220 V, single phase, 50/60 Hz");
+  }
+  return lines.join("\n");
+}
 /** Net (VAT-exclusive) price for a jet fan by model, or null. */
 function jetFanNet(specs: LineSpecs): number | null {
   return specs.blowerModel ? JET_FAN[specs.blowerModel]?.net ?? null : null;
@@ -2379,6 +2417,27 @@ export function QuotationBuilder({
             ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
           };
         }
+        // HVLS (AAHVPM): price by model; spec lives in the description (no columns
+        // fit). PMSM motor, single-phase 220 V; power stored from the kW rating.
+        if (isHvls(specs)) {
+          const m = specs.blowerModel ? HVLS_FAN[specs.blowerModel] : null;
+          let s2 = specs;
+          if (m) {
+            s2 = {
+              ...specs,
+              capacity_cfm: null, staticPressure_pa: null, inches: null,
+              power_w: Math.round(m.kw * 1000),
+              motorHp: null, motorPole: null, motorPh: 1, motorVolts: 220,
+            };
+          }
+          const price = hvlsUnitPrice(s2, vatRate);
+          return {
+            ...l,
+            specs: s2,
+            descriptionSnapshot: buildHvlsDescription(s2),
+            ...(price != null ? { unitPrice: price } : resetPrice ? { unitPrice: 0 } : {}),
+          };
+        }
         // Dust Collector: price by model; the description is the model's full spec
         // block. No rating columns are populated (all specs live in the text).
         if (isDustCollector(specs)) {
@@ -2958,6 +3017,13 @@ export function QuotationBuilder({
                   { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
+              } else if (type === "HVLS") {
+                // HVLS: model dropdown (AlphaAir AAHVPM series), priced per model.
+                applyAccessory(
+                  l.id,
+                  { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
+                  true,
+                );
               } else if (type === "Dust Collector") {
                 // Dust Collector: model dropdown (META Taiwan CT series), priced per
                 // model; the model's spec block becomes the description.
@@ -3279,6 +3345,16 @@ export function QuotationBuilder({
             >
               <option value="" disabled>Model…</option>
               {POULTRY_FAN_MODELS.map((m) => (<option key={m} value={m}>{m} ({POULTRY_FAN[m].size})</option>))}
+            </Select>
+          ) : isHvls(c) ? (
+            // HVLS: model dropdown (AlphaAir AAHVPM series).
+            <Select
+              value={c.blowerModel || ""}
+              disabled={!editable || !c.type}
+              onChange={(e) => applyAccessory(l.id, { blowerModel: e.target.value || null })}
+            >
+              <option value="" disabled>Model…</option>
+              {HVLS_MODELS.map((m) => (<option key={m} value={m}>{m} ({HVLS_FAN[m].ft} ft)</option>))}
             </Select>
           ) : isDustCollector(c) ? (
             // Dust Collector: model dropdown (META Taiwan CT series).
@@ -3759,7 +3835,7 @@ export function QuotationBuilder({
                     </Select>
                   </div>
                 </div>
-              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isInductionMotor(l.specs) || isDustCollector(l.specs) || isJetFan(l.specs) || isPoultryFan(l.specs) ? null : (
+              ) : isMotorController(l.specs) || isIsolator(l.specs) || isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isInductionMotor(l.specs) || isDustCollector(l.specs) || isJetFan(l.specs) || isPoultryFan(l.specs) || isHvls(l.specs) ? null : (
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-9">
                   <div className="md:col-span-2">
                     <Label className="text-[10px]">Volume flow</Label>
@@ -3994,7 +4070,7 @@ export function QuotationBuilder({
 
               {/* Per-line fan selector — click a candidate to populate this item.
                   Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isPoultryFan(l.specs) && !isAlphaAirCassette(l.specs) && (
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isPoultryFan(l.specs) && !isHvls(l.specs) && !isAlphaAirCassette(l.specs) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -4175,7 +4251,7 @@ export function QuotationBuilder({
                       onChange={(e) => updateLine(l.id, { unitPrice: Number(e.target.value) || 0 })} />
                   </div>
                 </div>
-              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isInductionMotor(l.specs) || isDustCollector(l.specs) || isJetFan(l.specs) || isPoultryFan(l.specs) ? (
+              ) : isAccessory(l.specs) || isCanvass(l.specs) || isWindVent(l.specs) || isAluDuct(l.specs) || isPortableBlowerFamily(l.specs) || isVav(l.specs) || isInductionMotor(l.specs) || isDustCollector(l.specs) || isJetFan(l.specs) || isPoultryFan(l.specs) || isHvls(l.specs) ? (
                 // Air Terminals / Dampers: per-square-inch body price + manual override.
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div className="flex flex-col justify-end gap-1 md:col-span-3">
@@ -4259,6 +4335,11 @@ export function QuotationBuilder({
                         }
                         if (isPoultryFan(l.specs)) {
                           const net = poultryFanNet(l.specs);
+                          if (net == null) return "Pick a model to auto-price.";
+                          return `₱${net.toLocaleString()} / unit (VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
+                        if (isHvls(l.specs)) {
+                          const net = hvlsNet(l.specs);
                           if (net == null) return "Pick a model to auto-price.";
                           return `₱${net.toLocaleString()} / unit (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
@@ -4433,7 +4514,7 @@ export function QuotationBuilder({
               )}
 
               {/* Calculator readout (blower motor pricing — not for KDK / Motor Controller) */}
-              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isPoultryFan(l.specs) && (() => {
+              {!isPrebuiltUnit(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isPoultryFan(l.specs) && !isHvls(l.specs) && (() => {
                 const hp = l.specs.motorHp ?? 0;
                 const ph = l.specs.motorPh ?? 0;
                 const pole = l.specs.motorPole ?? 4;
