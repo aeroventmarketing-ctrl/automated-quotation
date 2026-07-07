@@ -4270,6 +4270,14 @@ export function QuotationBuilder({
                         </p>
                       );
                     })()}
+                    {isHvls(l.specs) && l.specs.blowerModel && HVLS_FAN[l.specs.blowerModel] && (() => {
+                      const h = HVLS_FAN[l.specs.blowerModel];
+                      return (
+                        <p className="text-xs font-medium text-foreground">
+                          Ø {h.dia.toLocaleString()} mm ({h.ft} ft) · {h.blades} blades · Air volume {h.airMin.toLocaleString()} m³/min · {h.kw} kW · {h.rpm} rpm · {h.weight} kg · 220 V single phase, 50/60 Hz · ≤38 dB · PMSM motor
+                        </p>
+                      );
+                    })()}
                     {isPortableBlowerFamily(l.specs) && !portableBlowerIsFlex(l.specs) && portableBlowerRow(l.specs) && (() => {
                       const r = portableBlowerRow(l.specs)!;
                       return (
