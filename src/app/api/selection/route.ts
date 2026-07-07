@@ -66,6 +66,8 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "VAFDD") return { modelCode: { endsWith: "VAFDD" } };
   if (t === "TAF") return { modelCode: { endsWith: "TAF" } };
   if (t === "VAF") return { modelCode: { endsWith: "VAF" } };
+  // High Pressure Blower — model codes like AV1650HPB.
+  if (t === "HPB") return { modelCode: { endsWith: "HPB" } };
   // Ceiling-cassette ventilating fans — model codes like 17CUG / 24CDF / 38CHG.
   if (t === "CASSETTE") {
     return {

@@ -1,0 +1,73 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+AV1650HPB,CENTRIFUGAL,"High Pressure Blower 16.5"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1650HPB",16.5,unit,26451,PHP,"{""bladeDia_in"":16.5,""outletArea_ft2"":1.57,""maxRpm"":3991,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV1825HPB,CENTRIFUGAL,"High Pressure Blower 18.25"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV1825HPB",18.25,unit,29506,PHP,"{""bladeDia_in"":18.25,""outletArea_ft2"":1.92,""maxRpm"":3975,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV2000HPB,CENTRIFUGAL,"High Pressure Blower 20"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2000HPB",20,unit,34977,PHP,"{""bladeDia_in"":20,""outletArea_ft2"":2.3,""maxRpm"":3625,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV2225HPB,CENTRIFUGAL,"High Pressure Blower 22.25"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2225HPB",22.25,unit,36654,PHP,"{""bladeDia_in"":22.25,""outletArea_ft2"":2.85,""maxRpm"":3777,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV2450HPB,CENTRIFUGAL,"High Pressure Blower 24.5"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2450HPB",24.5,unit,39349,PHP,"{""bladeDia_in"":24.5,""outletArea_ft2"":3.45,""maxRpm"":3550,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV2700HPB,CENTRIFUGAL,"High Pressure Blower 27"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV2700HPB",27,unit,47634,PHP,"{""bladeDia_in"":27,""outletArea_ft2"":4.19,""maxRpm"":3673,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV3000HPB,CENTRIFUGAL,"High Pressure Blower 30"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3000HPB",30,unit,52823,PHP,"{""bladeDia_in"":30,""outletArea_ft2"":5.17,""maxRpm"":3306,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV3300HPB,CENTRIFUGAL,"High Pressure Blower 33"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3300HPB",33,unit,65433,PHP,"{""bladeDia_in"":33,""outletArea_ft2"":6.26,""maxRpm"":3008,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV3650HPB,CENTRIFUGAL,"High Pressure Blower 36.5"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV3650HPB",36.5,unit,83827,PHP,"{""bladeDia_in"":36.5,""outletArea_ft2"":7.66,""maxRpm"":2718,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV4025HPB,CENTRIFUGAL,"High Pressure Blower 40.25"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV4025HPB",40.25,unit,99281,PHP,"{""bladeDia_in"":40.25,""outletArea_ft2"":9.31,""maxRpm"":2464,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV4450HPB,CENTRIFUGAL,"High Pressure Blower 44.5"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV4450HPB",44.5,unit,125775,PHP,"{""bladeDia_in"":44.5,""outletArea_ft2"":11.39,""maxRpm"":2231,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV4900HPB,CENTRIFUGAL,"High Pressure Blower 49"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV4900HPB",49,unit,146672,PHP,"{""bladeDia_in"":49,""outletArea_ft2"":13.8,""maxRpm"":2027,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV5450HPB,CENTRIFUGAL,"High Pressure Blower 54.5"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV5450HPB",54.5,unit,221496,PHP,"{""bladeDia_in"":54.5,""outletArea_ft2"":16.92,""maxRpm"":1831,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV6000HPB,CENTRIFUGAL,"High Pressure Blower 60"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV6000HPB",60,unit,253731,PHP,"{""bladeDia_in"":60,""outletArea_ft2"":20.7,""maxRpm"":1655,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV6600HPB,CENTRIFUGAL,"High Pressure Blower 66"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV6600HPB",66,unit,325385,PHP,"{""bladeDia_in"":66,""outletArea_ft2"":25.04,""maxRpm"":1502,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV7300HPB,CENTRIFUGAL,"High Pressure Blower 73"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV7300HPB",73,unit,359001,PHP,"{""bladeDia_in"":73,""outletArea_ft2"":30.63,""maxRpm"":1358,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV8075HPB,CENTRIFUGAL,"High Pressure Blower 80.75"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV8075HPB",80.75,unit,660691,PHP,"{""bladeDia_in"":80.75,""outletArea_ft2"":37.49,""maxRpm"":1230,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
+AV8900HPB,CENTRIFUGAL,"High Pressure Blower 89"" Backward Curved (HPB)","High Pressure Blower
+Backward Curved / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel Aqua Green / Model: AV8900HPB",89,unit,660691,PHP,"{""bladeDia_in"":89,""outletArea_ft2"":45.54,""maxRpm"":1116,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"

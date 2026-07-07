@@ -679,6 +679,8 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
   if (type === "Centrifugal Blower (DIDW)" || type === "Double Inlet Double Width (DIDW)")
     return /forward/i.test(bladeType) ? "DIDWCFAB" : "DIDWCEB";
   if (type === "Cabinet Blower (SISW)") return "CABSISW";
+  // High Pressure Blower: own catalogue (HPB); price = CEB × 2.5 (÷0.4) via TAG_FACTORS.
+  if (type === "High Pressure Blower") return "HPB";
   if (/forward/i.test(bladeType)) return "CFAB";
   return "CEB";
 }
@@ -742,6 +744,8 @@ const TAG_FACTORS: Record<string, number> = {
   VAFDD: 1,
   // Customized Jet Fan = Tubeaxial (TAF) body × 2.
   JF: 2,
+  // High Pressure Blower = its own catalogue, priced at CEB × 2.5 (÷0.4).
+  HPB: 1 / 0.4,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,
