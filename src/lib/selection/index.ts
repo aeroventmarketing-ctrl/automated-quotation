@@ -542,10 +542,35 @@ function directDriveBand(
   curve: RatingPoint[],
   referenceRpm: number,
   selectionPressure: number,
+  requestedFlow_m3hr = 0,
 ): Omit<DirectDriveResult, "meetsFlow"> | null {
-  const rpm = Math.round((band.minRpm + band.maxRpm) / 2);
-  const op = gridOperatingPoint(points, rpm, selectionPressure);
-  if (op) {
+  const nominal = Math.round((band.minRpm + band.maxRpm) / 2);
+  const nomOp = gridOperatingPoint(points, nominal, selectionPressure);
+  if (nomOp) {
+    // Prefer the nominal speed; if it's just short of the requested flow, raise
+    // the speed within the band (up to maxRpm) to meet it — a real motor of this
+    // pole runs anywhere in the band, so we shouldn't jump to the next pole for a
+    // small shortfall. Pick the lowest rpm in the band that meets the flow.
+    let rpm = nominal;
+    let op = nomOp;
+    if (op.q < requestedFlow_m3hr - 1 && band.maxRpm > nominal) {
+      const maxOp = gridOperatingPoint(points, band.maxRpm, selectionPressure);
+      if (maxOp && maxOp.q >= requestedFlow_m3hr - 1) {
+        let lo = nominal;
+        let hi = band.maxRpm;
+        while (hi - lo > 1) {
+          const mid = Math.round((lo + hi) / 2);
+          const g = gridOperatingPoint(points, mid, selectionPressure);
+          if (g && g.q >= requestedFlow_m3hr - 1) hi = mid;
+          else lo = mid;
+        }
+        rpm = hi;
+        op = gridOperatingPoint(points, rpm, selectionPressure) ?? maxOp;
+      } else if (maxOp && maxOp.q > op.q) {
+        rpm = band.maxRpm;
+        op = maxOp;
+      }
+    }
     return {
       rpm,
       pole: band.pole,
@@ -555,6 +580,7 @@ function directDriveBand(
       withinEnvelope: op.inRange,
     };
   }
+  const rpm = nominal;
   // Fallback: single rated curve scaled by fan laws.
   const ratio = rpm / referenceRpm;
   const refSp = selectionPressure / (ratio * ratio);
@@ -595,7 +621,7 @@ function selectDirectDrive(
 ): DirectDriveResult | null {
   let best: Omit<DirectDriveResult, "meetsFlow"> | null = null;
   for (const band of bands) {
-    const r = directDriveBand(band, points, curve, referenceRpm, selectionPressure);
+    const r = directDriveBand(band, points, curve, referenceRpm, selectionPressure, requestedFlow_m3hr);
     if (!r) continue;
     if (r.deliveredFlow_m3hr >= requestedFlow_m3hr - 1) return { ...r, meetsFlow: true };
     if (!best || r.deliveredFlow_m3hr > best.deliveredFlow_m3hr) best = r;
