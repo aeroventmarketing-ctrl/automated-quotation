@@ -83,6 +83,18 @@ export const COMPANY = {
     "12. Ownership : AFBM retains ownership of all merchandise until fully paid by Buyer. In case of payment default within the period of one (1) year. AFBM reserves the right to use the product for whatever purpose at its discretion.",
   ].join("\n"),
 
+  // Terms & conditions for the "Services" template — labour/service quotes with
+  // 100% payment before the schedule of services and no production/warranty.
+  servicesTerms: [
+    "1. Payment : 100% full payment before the schedule of services. VAT exclusive price.",
+    "We accept Cash, Dated Check, Credit Card, Debit Card and other online payments.",
+    "Subject for bank clearing for check payment.",
+    "2. Revisions : Any revision or alteration on the approved P.O. and/or quotation will be charged accordingly.",
+    "3. Validity : Valid for one (1) week only or please verify prevailing prices.",
+    "4. Cancellation : In the event of cancellation of Client's order/Purchase order for whatever reason/s not bound by AFBM. We serve the right not to refund the payment made to cover damages for materials and manpower.",
+    "5. Ownership : AFBM retains ownership of all merchandise until fully paid by Buyer. In case of payment default within the period of one (1) year. AFBM reserves the right to use the product for whatever purpose at its discretion.",
+  ].join("\n"),
+
   // Terms & conditions for KDK products (VAT-inclusive, 50/50 payment, shorter
   // production time and warranty). Used by the "KDK" quotation template.
   kdkTerms: [
