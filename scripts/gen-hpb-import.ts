@@ -93,11 +93,15 @@ async function main() {
   await wb.xlsx.readFile(SRC);
   const models: Model[] = [];
 
+  // Temporarily hidden models (e.g. AV8900HPB — 89", no matching CEB price yet).
+  const EXCLUDE = new Set(["8900"]);
+
   for (const ws of wb.worksheets) {
     const tab = ws.name.trim();
     const tm = tab.match(/^(\d+)HPB$/i);
     if (!tm) continue;
     const code = tm[1];
+    if (EXCLUDE.has(code)) continue;
     const dia = Number(code) / 100;
     const modelCode = `AV${code}HPB`;
 

@@ -67,7 +67,3 @@ AV8075HPB,CENTRIFUGAL,"High Pressure Blower 80.75"" Backward Curved (HPB)","High
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
 Painted with Epoxy Enamel Aqua Green / Model: AV8075HPB",80.75,unit,660691,PHP,"{""bladeDia_in"":80.75,""outletArea_ft2"":37.49,""maxRpm"":1230,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
-AV8900HPB,CENTRIFUGAL,"High Pressure Blower 89"" Backward Curved (HPB)","High Pressure Blower
-Backward Curved / Belt Driven
-Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV8900HPB",89,unit,660691,PHP,"{""bladeDia_in"":89,""outletArea_ft2"":45.54,""maxRpm"":1116,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""High Pressure Blower"",""tag"":""HPB""}"
