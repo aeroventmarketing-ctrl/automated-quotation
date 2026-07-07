@@ -25,6 +25,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
+import { RADIAL_PRICES } from "./radial-prices";
 
 const CFM_TO_M3HR = 1.69901082;
 const INWG_TO_PA = 249.0889;
@@ -32,24 +33,6 @@ const KW_PER_HP = 0.745699872;
 
 const SRC = join(process.cwd(), "Radial Blower Paddle Wheel Catalog.xlsx");
 const OUT_DIR = join(process.cwd(), "scripts", "out");
-
-// CEB catalogue (blade Ø in, price) — the price base (same table as HPB/CIEB).
-// Each Radial Blower size adopts the nearest CEB size's price; the Radial-Blower
-// factor is applied at quote time via TAG_FACTORS["CMH"].
-const CEB_PRICES: Array<[number, number]> = [
-  [9, 17575], [10.5, 17575], [12.25, 19563], [13.5, 22738], [15, 24390],
-  [16.5, 26451], [18.25, 29506], [20, 34977], [22.25, 36654], [24.5, 39349],
-  [27, 47634], [30, 52823], [33, 65433], [36.5, 83827], [40.25, 99281],
-  [44.5, 125775], [49, 146672], [54.5, 221496], [60, 253731], [66, 325385],
-  [73, 359001], [80.75, 660691],
-];
-function nearestCebPrice(dia: number): { cebDia: number; price: number } {
-  let best = CEB_PRICES[0];
-  for (const row of CEB_PRICES) {
-    if (Math.abs(row[0] - dia) < Math.abs(best[0] - dia)) best = row;
-  }
-  return { cebDia: best[0], price: best[1] };
-}
 
 const isNum = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
 const cellVal = (c: ExcelJS.Cell): unknown => {
@@ -110,7 +93,6 @@ interface Model {
   outletArea_ft2: number;
   maxRpm: number;
   basePrice: number;
-  cebDia: number;
   points: Array<{ rpm: number; cfm: number; sp_in: number; bhp: number }>;
 }
 
@@ -119,6 +101,9 @@ async function main() {
   await wb.xlsx.readFile(SRC);
   const ws = wb.worksheets[0];
   const models: Model[] = [];
+
+  // Sizes with no listed price (e.g. 8525 / 85.25") are held back until priced.
+  const EXCLUDE = new Set(["8525"]);
 
   // Locate each block by its col-1 header cell: `1281CMH   12.812"`.
   const headerRe = /^(\d+)\s*CMH\s+([\d.]+)"?/;
@@ -133,7 +118,10 @@ async function main() {
   for (let i = 0; i < blockStarts.length; i++) {
     const { row: startRow, code, dia } = blockStarts[i];
     const endRow = i + 1 < blockStarts.length ? blockStarts[i + 1].row - 1 : ws.rowCount;
+    if (EXCLUDE.has(code)) continue;
     const modelCode = `AV${code}CMH`;
+    const price = RADIAL_PRICES[code];
+    if (price == null) throw new Error(`${modelCode}: no price for size code ${code}`);
 
     // Client-corrected grid overrides the sheet block where the source is wrong.
     const override = OVERRIDES[modelCode];
@@ -157,11 +145,10 @@ async function main() {
       }
       areas.sort((a, b) => a - b);
       const outletArea = areas.length ? areas[Math.floor(areas.length / 2)] : 0;
-      const { cebDia, price } = nearestCebPrice(dia);
       models.push({
         modelCode, code, dia, sizeLabel: sizeLabelOf(dia),
         outletArea_ft2: Math.round(outletArea * 1000) / 1000,
-        maxRpm, basePrice: price, cebDia, points,
+        maxRpm, basePrice: price, points,
       });
       continue;
     }
@@ -209,7 +196,6 @@ async function main() {
 
     areas.sort((a, b) => a - b);
     const outletArea = areas.length ? areas[Math.floor(areas.length / 2)] : 0;
-    const { cebDia, price } = nearestCebPrice(dia);
 
     models.push({
       modelCode,
@@ -219,7 +205,6 @@ async function main() {
       outletArea_ft2: Math.round(outletArea * 1000) / 1000,
       maxRpm,
       basePrice: price,
-      cebDia,
       points,
     });
   }
@@ -283,7 +268,7 @@ async function main() {
   for (const m of models) {
     console.log(
       `  ${m.modelCode}  Ø${m.sizeLabel}"  area ${m.outletArea_ft2} ft²  maxRPM ${m.maxRpm}  ` +
-        `base ₱${m.basePrice} (CEB Ø${m.cebDia}")  ${m.points.length} pts`,
+        `price ₱${m.basePrice}  ${m.points.length} pts`,
     );
   }
   console.log(`\nModels: ${models.length}   Total rating points: ${total}`);
