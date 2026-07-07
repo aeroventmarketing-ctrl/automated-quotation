@@ -281,9 +281,11 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   for (const it of data.items) {
     // Row height = text height + a fixed ~9pt of vertical breathing room so a
     // short 2–3 line row (Motor Controller, isolator) gets the same space above
-    // and below its text as a tall multi-line blower row (estimate wrapped line
-    // count from the merged C:G width, ~25 chars at Times New Roman 10).
-    const descCharsPerLine = 25;
+    // and below its text as a tall multi-line blower row. Estimate the wrapped
+    // line count from the merged D:H width (~30 chars at Times New Roman 10 — the
+    // width Excel actually wraps at); under-counting the chars/line over-estimates
+    // the wraps and leaves a tall row with wide empty top/bottom allowance.
+    const descCharsPerLine = 30;
     const wrappedLines = String(it.descriptionSnapshot)
       .split("\n")
       .reduce((acc, seg) => acc + Math.max(1, Math.ceil(seg.length / descCharsPerLine)), 0);
