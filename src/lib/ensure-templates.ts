@@ -11,14 +11,25 @@ export const KDK_NOTE = "All units are made of high quality materials.";
  * Budgetary / Export layouts are retired — matched by layoutKey so
  * admin-renamed display names still resolve.
  */
-export const RETAINED_TEMPLATE_LAYOUT_KEYS = ["standard", "air_terminals", "kdk"] as const;
+export const RETAINED_TEMPLATE_LAYOUT_KEYS = [
+  "standard",
+  "power_roof_ventilator",
+  "air_terminals",
+  "kdk",
+] as const;
 
 /**
  * Display order for the template picker: Fans and Blowers first (the default),
- * then Air Terminals and Ducts, then KDK. Sorted by layoutKey so admin-renamed
- * display names keep their position; unknown keys fall to the end.
+ * then Power Roof Ventilator, Air Terminals and Ducts, then KDK. Sorted by
+ * layoutKey so admin-renamed display names keep their position; unknown keys
+ * fall to the end.
  */
-export const TEMPLATE_PICKER_ORDER = ["standard", "air_terminals", "kdk"] as const;
+export const TEMPLATE_PICKER_ORDER = [
+  "standard",
+  "power_roof_ventilator",
+  "air_terminals",
+  "kdk",
+] as const;
 
 export function sortTemplatesByPickerOrder<T extends { layoutKey: string }>(templates: T[]): T[] {
   const rank = (k: string) => {
@@ -147,9 +158,44 @@ export async function ensureStandardTemplate(): Promise<void> {
   }
 }
 
-/** Ensure all built-in templates (Fans and Blowers + KDK + Air Terminals) exist. */
+/**
+ * Ensure the built-in "Power Roof Ventilator" quotation template exists with its
+ * terms and the standard fan/blower note. Created once if missing; an existing
+ * template only has its terms kept in sync with the code-defined terms (other
+ * config, e.g. an admin-set note, is preserved).
+ */
+export async function ensurePowerRoofVentilatorTemplate(): Promise<void> {
+  const baseConfig = {
+    accent: "#1d4ed8",
+    showSpecs: true,
+    showTerms: true,
+    terms: COMPANY.powerRoofVentilatorTerms,
+    specNote: STANDARD_LONG_NOTE,
+  };
+  const existing = await prisma.quotationTemplate.findUnique({
+    where: { layoutKey: "power_roof_ventilator" },
+  });
+  if (!existing) {
+    await prisma.quotationTemplate.create({
+      data: { layoutKey: "power_roof_ventilator", name: "Power Roof Ventilator", config: baseConfig, active: true },
+    });
+    return;
+  }
+  // Keep the terms in sync with the code-defined terms so updates here reach the
+  // live template (these terms are managed in config, not admin).
+  const config = (existing.config as Record<string, unknown>) ?? {};
+  if (config.terms !== COMPANY.powerRoofVentilatorTerms) {
+    await prisma.quotationTemplate.update({
+      where: { layoutKey: "power_roof_ventilator" },
+      data: { config: { ...config, terms: COMPANY.powerRoofVentilatorTerms } as Prisma.InputJsonObject },
+    });
+  }
+}
+
+/** Ensure all built-in templates (Fans and Blowers + Power Roof Ventilator + KDK + Air Terminals) exist. */
 export async function ensureBuiltinTemplates(): Promise<void> {
   await ensureStandardTemplate();
+  await ensurePowerRoofVentilatorTemplate();
   await ensureKdkTemplate();
   await ensureAirTerminalsTemplate();
 }

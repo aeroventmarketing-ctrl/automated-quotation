@@ -55,6 +55,34 @@ export const COMPANY = {
     "12. Ownership : AFBM retains ownership of all merchandise until fully paid by Buyer. In case of payment default within the period of one (1) year. AFBM reserves the right to use the product for whatever purpose at its discretion.",
   ].join("\n"),
 
+  // Terms & conditions for the "Power Roof Ventilator" template. 50/50 payment
+  // (VAT exclusive), 25–30 day production, and a roof-specific warranty clause
+  // (c. leak responsibility within 2 m of the installed unit).
+  powerRoofVentilatorTerms: [
+    "1. Payment : 50% down payment, 50% before delivery of order. VAT exclusive price.",
+    "We accept Cash, Dated Check, Credit Card, Debit Card and other online payments.",
+    "Subject for bank clearing for check payment.",
+    "2. Production time : 25 to 30 working days upon confirmation of P.O. & down payment. Sundays and Holidays not included.",
+    "3. Delivery : Subject for bank clearing for check payment. Free delivery within Metro Manila.",
+    "4. Storage fee : 30 days free of charge. Orders that exceed 30 days after the last billing statement will be charged 0.1% of the purchase order amount multiplied by exceeding number of storage days.",
+    "5. Warranty :",
+    "a. Six (6) months on motor except damages due to power interruption, power failure, power surge and substandard motor protector, substandard electrical practice and other user negligence. Motor supplied by customer will not be included in the said warranty.",
+    "b. One (1) year on workmanship.",
+    "c. For installation made by AFBM. Leak within 2 meters from the installed unit will be AFBM's responsibility. More than 2 meter will be at client's expense.",
+    "d. Three (3) months for moving parts belts, pulley, shafting & bearing.",
+    "e. Client shall provide and overload protection device against power fluctuation.",
+    "f. Removing or altering any stickers and labels will void warranty.",
+    "g. Warranty can only be availed if the unit has undergone Testing and Commissioning by AFBM.",
+    "h. No warranty for Acts of Nature.",
+    "6. Upgrade : Epoxy Enamel Paint can be upgraded to Powder Coat / Oven Baked Paint at an additional cost.",
+    "7. Commissioning : Testing and Commissioning is compulsory and free of charge within Metro Manila.",
+    "8. Record : Dynamic Balancing Report and Vibration Analysis Data may be requested before scheduled delivery otherwise additional charge will apply to cover the setup and transportation cost for machine testing. Client is entitled for a one time on-site testing.",
+    "9. Revisions : Any revision or alteration on the approved P.O. and/or quotation will be charged accordingly.",
+    "10. Validity : Valid for one (1) week only or please verify prevailing prices.",
+    "11. Cancellation : In the event of cancellation of Client's order/Purchase order for whatever reason/s not bound by AFBM. We serve the right not to refund the payment made to cover damages for materials and manpower.",
+    "12. Ownership : AFBM retains ownership of all merchandise until fully paid by Buyer. In case of payment default within the period of one (1) year. AFBM reserves the right to use the product for whatever purpose at its discretion.",
+  ].join("\n"),
+
   // Terms & conditions for KDK products (VAT-inclusive, 50/50 payment, shorter
   // production time and warranty). Used by the "KDK" quotation template.
   kdkTerms: [
