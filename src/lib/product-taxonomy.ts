@@ -351,7 +351,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Other Products", "brand": "AlphaAir", "type": "Duct Canvass Connector", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "AlphaAir", "type": "HVLS", "bladeTypes": [], "drives": [] },
   { "category": "Other Products", "brand": "AlphaAir", "type": "Jet Fan", "bladeTypes": [], "drives": [] },
-  { "category": "Other Products", "brand": "AlphaAir", "type": "Poultry Fan", "bladeTypes": [], "drives": [] }
+  { "category": "Other Products", "brand": "AlphaAir", "type": "Commercial Type Exhaust Fan", "bladeTypes": [], "drives": [] }
 ];
 
 export const PRODUCT_CATEGORIES: string[] = Array.from(

@@ -1298,7 +1298,8 @@ const POULTRY_FAN: Record<string, { net: number; cmh: number; pa: number; watt: 
   "ADH-1380": { net: 32000, cmh: 44500, pa: 56, watt: 1100, size: '50"', inch: 50, bladeMm: 1250 },
 };
 const POULTRY_FAN_MODELS = Object.keys(POULTRY_FAN);
-const isPoultryFan = (specs: { type: string }): boolean => specs.type === "Poultry Fan";
+const isPoultryFan = (specs: { type: string }): boolean =>
+  specs.type === "Commercial Type Exhaust Fan" || specs.type === "Poultry Fan";
 /** Net (VAT-exclusive) price for a poultry fan by model, or null. */
 function poultryFanNet(specs: LineSpecs): number | null {
   return specs.blowerModel ? POULTRY_FAN[specs.blowerModel]?.net ?? null : null;
@@ -1310,7 +1311,7 @@ function poultryFanUnitPrice(specs: LineSpecs, vatRate: number): number | null {
 }
 /** Description for a poultry fan: type + brand + model. Size goes in the Inches column. */
 function buildPoultryFanDescription(specs: LineSpecs): string {
-  const lines: string[] = ["Poultry Fan", "AlphaAir Brand"];
+  const lines: string[] = ["Commercial Type Exhaust Fan", "AlphaAir Brand"];
   if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}`);
   return lines.join("\n");
 }
@@ -2950,8 +2951,8 @@ export function QuotationBuilder({
                   { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
                   true,
                 );
-              } else if (type === "Poultry Fan") {
-                // Poultry fan: model dropdown (AlphaAir ADH series), priced per model.
+              } else if (type === "Commercial Type Exhaust Fan") {
+                // Commercial exhaust fan: model dropdown (AlphaAir ADH series), priced per model.
                 applyAccessory(
                   l.id,
                   { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
