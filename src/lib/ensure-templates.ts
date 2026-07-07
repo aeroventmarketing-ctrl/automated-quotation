@@ -43,6 +43,15 @@ export function sortTemplatesByPickerOrder<T extends { layoutKey: string }>(temp
   return [...templates].sort((a, b) => rank(a.layoutKey) - rank(b.layoutKey));
 }
 
+/**
+ * Alphabetical (A→Z, case-insensitive) sort by display name for the template
+ * picker dropdown. Kept separate from sortTemplatesByPickerOrder, which the
+ * default-template callers use via [0] to keep Fans & Blowers as the default.
+ */
+export function sortTemplatesByName<T extends { name: string }>(templates: T[]): T[] {
+  return [...templates].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
 /** Short footer note for the Air Terminals and Ducts template. */
 export const AIR_TERMINALS_NOTE = "All units are made of high quality materials.";
 
