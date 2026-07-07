@@ -756,6 +756,16 @@ const TAG_FACTORS: Record<string, number> = {
   CFABCAB: 1 / (0.9 * 0.57 * 0.9),
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
+/**
+ * Motor pole options for a blower line. Single-phase motors are 4-pole only.
+ * Direct drive locks to the pole set by the selected fan (rpm ↔ pole is fixed);
+ * belt drive offers all poles.
+ */
+const poleOptions = (specs: LineSpecs): number[] => {
+  if (specs.motorPh === 1) return [4];
+  if (/direct/i.test(specs.drive) && specs.blowerModel && specs.motorPole != null) return [specs.motorPole];
+  return [4, 2, 6];
+};
 const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType, specs.category));
 /** Net body price after the tag (blade/type) factor and material factor. */
 /**
@@ -2569,8 +2579,11 @@ export function QuotationBuilder({
       ls.map((l) => {
         if (l.id !== id) return l;
         const specs = { ...l.specs, ...patch };
-        // 1-phase motors are 220V only — snap voltage so the model code resolves.
-        if (specs.motorPh === 1) specs.motorVolts = 220;
+        // 1-phase motors are 220V, 4-pole only — snap so the model code resolves.
+        if (specs.motorPh === 1) {
+          specs.motorVolts = 220;
+          specs.motorPole = 4;
+        }
         // Blade material can't repeat the body material (the body factor already
         // covers the whole body) — pick the first different option when it would.
         if (specs.bladeMaterialOn && (!specs.bladeMaterial || specs.bladeMaterial === specs.material)) {
@@ -4466,9 +4479,7 @@ export function QuotationBuilder({
                       // Explosion-proof is 4-pole only — drop the EX flag off 4-pole.
                       applyMotor(l.id, { motorPole: p, ...(p !== 4 ? { exproof: false } : {}) });
                     }}>
-                    <option value="4">4-pole</option>
-                    <option value="2">2-pole</option>
-                    <option value="6">6-pole</option>
+                    {poleOptions(l.specs).map((p) => (<option key={p} value={p}>{p}-pole</option>))}
                   </Select>
                 </div>
                 <div>
