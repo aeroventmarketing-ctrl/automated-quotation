@@ -113,51 +113,28 @@ const BLOWER_CATEGORIES = new Set([
 ]);
 // --- Auto template selection by product hierarchy ---------------------------
 // A quote's template follows the highest-priority product family present:
-// Standard Fans & Blowers > KDK > Air Terminals & Ducts. The Power Roof
-// Ventilator / Wind Driven Roof Vent / Services patterns are installation-service
-// quotes with no product trigger, so they stay manual-only. Neutral add-ons
-// (motor controller, isolator, clips, induction motor) don't trigger any family
-// — they follow whichever pattern wins.
+// Standard Fans & Blowers > KDK > Air Terminals & Ducts. The mapping is by
+// product category (per the client's template↔product list):
+//   • Standard      → the five blower categories (Centrifugal / Axial /
+//                      Propeller / Tubular Inline / Cabinet).
+//   • Air Terminals → the whole Ventilation Accessories category + Aluminum Duct.
+//   • KDK           → the whole Other Products category except Aluminum Duct
+//                      (Aerovent "Other Products" + AlphaAir + KDK-brand units).
+// The Power Roof Ventilator / Wind Driven Roof Vent / Services patterns are
+// installation-service quotes with no product trigger, so they stay manual-only.
 const TEMPLATE_FAMILY_PRIORITY = ["standard", "kdk", "air_terminals"] as const;
-/** KDK-brand + AlphaAir ventilation units (Jet Fan only when AlphaAir-branded). */
-const KDK_FAMILY_TYPES = new Set([
-  "Ceiling Cassette",
-  "KDK - Ceiling Cassette",
-  "Mini Sirocco",
-  "Cabinet Fan",
-  "Air Curtain",
-  "Wall Mounted Fan",
-  "HVLS",
-  "Commercial Type Exhaust Fan",
-]);
-/** Fabricated Aerovent fans catalogued outside the five blower categories. */
-const STANDARD_OTHER_TYPES = new Set([
-  "Dust Collector",
-  "Portable Axial Blower",
-  "Portable Axial Blower (XProof)",
-  "Inline Duct Fan",
-  "Jet Fan",
-]);
-/** The template family a single line belongs to (null = neutral add-on). */
-function templateFamilyForLine(specs: { category: string; type: string; brand?: string }): string | null {
+/** The template family a single line belongs to (null = no product match). */
+function templateFamilyForLine(specs: { category: string; type: string }): string | null {
   const { category, type } = specs;
-  // KDK / AlphaAir ventilation units → KDK (AlphaAir Jet Fan too; a MaxAir Jet
-  // Fan is a fabricated fan and falls through to Standard below).
-  if (KDK_FAMILY_TYPES.has(type)) return "kdk";
-  if (type === "Jet Fan" && specs.brand === "AlphaAir") return "kdk";
-  // Air Terminals & Ducts: ducts, VAV, and the Air Terminals / Dampers groups.
-  if (type === "Aluminum Duct" || type === "Duct Canvass Connector" || type === "Variable Air Volume") return "air_terminals";
-  if (category === "Ventilation Accessories") {
-    const g = groupForType(category, type);
-    // The "Accessories" group (clips, isolator, TDC) is a neutral add-on.
-    return g === "Air Terminals" || g === "Dampers" ? "air_terminals" : null;
-  }
-  // Fabricated Aerovent fans/blowers → Standard.
-  if (BLOWER_CATEGORIES.has(category) || STANDARD_OTHER_TYPES.has(type)) return "standard";
+  // Aluminum Duct is catalogued under Other Products but quotes under Air Terminals.
+  if (type === "Aluminum Duct") return "air_terminals";
+  if (category === "Ventilation Accessories") return "air_terminals";
+  if (category === "Other Products") return "kdk";
+  if (BLOWER_CATEGORIES.has(category)) return "standard";
   return null;
 }
 /** Highest-priority template layoutKey implied by the line mix (null if none). */
-function autoTemplateLayoutKey(specsList: { category: string; type: string; brand?: string }[]): string | null {
+function autoTemplateLayoutKey(specsList: { category: string; type: string }[]): string | null {
   const present = new Set(specsList.map(templateFamilyForLine).filter(Boolean) as string[]);
   return TEMPLATE_FAMILY_PRIORITY.find((k) => present.has(k)) ?? null;
 }
