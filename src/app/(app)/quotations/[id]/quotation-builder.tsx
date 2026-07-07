@@ -179,10 +179,18 @@ function effectiveBlowerModel(model: string | null, drive: string): string {
 }
 /** Customized Jet Fan reuses the Tubeaxial (TAF) catalogue but is badged "JF". */
 const isCustomJetFan = (specs: { type: string }): boolean => specs.type === "Customized Jet Fan";
+/**
+ * Sellable model code. Backplate Paddle Wheel is stored internally as …CMB so its
+ * selection list stays separate from Paddle Wheel's …CMH catalogue, but it shares
+ * AeroVent's real "CMH" model number — so show CMH wherever the code is
+ * user-facing (selection list, description, quote). CMB is unique to backplate,
+ * so the swap never touches another catalogue's code.
+ */
+const sellableModelCode = (code: string): string => code.replace(/CMB/i, "CMH");
 /** Displayed model code — swaps the "TAF" tag for "JF" on a Customized Jet Fan. */
 function displayBlowerModel(specs: { blowerModel: string | null; drive: string; type: string }): string {
   const m = effectiveBlowerModel(specs.blowerModel, specs.drive);
-  return isCustomJetFan(specs) ? m.replace(/TAF/i, "JF") : m;
+  return sellableModelCode(isCustomJetFan(specs) ? m.replace(/TAF/i, "JF") : m);
 }
 /**
  * Reflect the drive in the description as "Belt Drive" / "Direct Drive". When a
@@ -4156,7 +4164,7 @@ export function QuotationBuilder({
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-medium">
-                                  {r.modelCode}
+                                  {sellableModelCode(r.modelCode)}
                                   {isRec && <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">RECOMMENDED</span>}
                                 </span>
                                 <span className="flex items-center gap-2">
