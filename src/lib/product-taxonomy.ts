@@ -429,13 +429,21 @@ const AIRFOIL_CATEGORIES = new Set([
   "Cabinet Type",
 ]);
 
+/** Types within an Airfoil category that don't offer the Airfoil blade. */
+const AIRFOIL_EXCLUDED_TYPES = new Set(["High Pressure Blower"]);
+
 /**
  * Blade-type options for a type, with "Airfoil" appended for the categories
  * that offer it (only when the type already has blade types).
  */
 export function bladeTypesFor(category: string, type: string): string[] {
   const base = entryFor(category, type)?.bladeTypes ?? [];
-  if (base.length > 0 && AIRFOIL_CATEGORIES.has(category) && !base.includes("Airfoil")) {
+  if (
+    base.length > 0 &&
+    AIRFOIL_CATEGORIES.has(category) &&
+    !AIRFOIL_EXCLUDED_TYPES.has(type) &&
+    !base.includes("Airfoil")
+  ) {
     return [...base, "Airfoil"];
   }
   return base;
