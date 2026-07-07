@@ -333,7 +333,9 @@ function isolatorRecommend(
   else if (category === "Axial Type" || category === "Tubular Inline Type") { divisor = 4; springs = 4; }
   else if (category === "Centrifugal Type") { divisor = t.includes("didw") ? 5 : 6; springs = 6; }
   else return null;
-  return { springs, rated: isolatorRatedCap((motorKg * 9) / divisor), noSpring: false };
+  // High Pressure Blowers run heavier / higher-vibration — double the spring capacity.
+  const loadFactor = t.includes("high pressure") ? 2 : 1;
+  return { springs, rated: isolatorRatedCap((motorKg * 9 * loadFactor) / divisor), noSpring: false };
 }
 /** Isolator description: type / mounting / rated capacity + spring colour. */
 function buildIsolatorDescription(shape: string, capKg: number | null): string {
