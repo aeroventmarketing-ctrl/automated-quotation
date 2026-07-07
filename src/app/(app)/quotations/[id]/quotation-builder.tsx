@@ -111,6 +111,56 @@ const BLOWER_CATEGORIES = new Set([
   "Tubular Inline Type",
   "Cabinet Type",
 ]);
+// --- Auto template selection by product hierarchy ---------------------------
+// A quote's template follows the highest-priority product family present:
+// Standard Fans & Blowers > KDK > Air Terminals & Ducts. The Power Roof
+// Ventilator / Wind Driven Roof Vent / Services patterns are installation-service
+// quotes with no product trigger, so they stay manual-only. Neutral add-ons
+// (motor controller, isolator, clips, induction motor) don't trigger any family
+// — they follow whichever pattern wins.
+const TEMPLATE_FAMILY_PRIORITY = ["standard", "kdk", "air_terminals"] as const;
+/** KDK-brand + AlphaAir ventilation units (Jet Fan only when AlphaAir-branded). */
+const KDK_FAMILY_TYPES = new Set([
+  "Ceiling Cassette",
+  "KDK - Ceiling Cassette",
+  "Mini Sirocco",
+  "Cabinet Fan",
+  "Air Curtain",
+  "Wall Mounted Fan",
+  "HVLS",
+  "Commercial Type Exhaust Fan",
+]);
+/** Fabricated Aerovent fans catalogued outside the five blower categories. */
+const STANDARD_OTHER_TYPES = new Set([
+  "Dust Collector",
+  "Portable Axial Blower",
+  "Portable Axial Blower (XProof)",
+  "Inline Duct Fan",
+  "Jet Fan",
+]);
+/** The template family a single line belongs to (null = neutral add-on). */
+function templateFamilyForLine(specs: { category: string; type: string; brand?: string }): string | null {
+  const { category, type } = specs;
+  // KDK / AlphaAir ventilation units → KDK (AlphaAir Jet Fan too; a MaxAir Jet
+  // Fan is a fabricated fan and falls through to Standard below).
+  if (KDK_FAMILY_TYPES.has(type)) return "kdk";
+  if (type === "Jet Fan" && specs.brand === "AlphaAir") return "kdk";
+  // Air Terminals & Ducts: ducts, VAV, and the Air Terminals / Dampers groups.
+  if (type === "Aluminum Duct" || type === "Duct Canvass Connector" || type === "Variable Air Volume") return "air_terminals";
+  if (category === "Ventilation Accessories") {
+    const g = groupForType(category, type);
+    // The "Accessories" group (clips, isolator, TDC) is a neutral add-on.
+    return g === "Air Terminals" || g === "Dampers" ? "air_terminals" : null;
+  }
+  // Fabricated Aerovent fans/blowers → Standard.
+  if (BLOWER_CATEGORIES.has(category) || STANDARD_OTHER_TYPES.has(type)) return "standard";
+  return null;
+}
+/** Highest-priority template layoutKey implied by the line mix (null if none). */
+function autoTemplateLayoutKey(specsList: { category: string; type: string; brand?: string }[]): string | null {
+  const present = new Set(specsList.map(templateFamilyForLine).filter(Boolean) as string[]);
+  return TEMPLATE_FAMILY_PRIORITY.find((k) => present.has(k)) ?? null;
+}
 interface Line {
   id: string;
   descriptionSnapshot: string;
@@ -1967,28 +2017,30 @@ export function QuotationBuilder({
   const [vavRan, setVavRan] = useState<Record<string, boolean>>({});
   const [alphaRan, setAlphaRan] = useState<Record<string, boolean>>({});
 
-  // When every line is a fans-and-blowers product, prioritize the "Fans and
-  // Blowers" (standard) pattern: switch to that template and reset the header
-  // units to the fans-and-blowers defaults (cfm / in-w.g. / HP). Fires only when
-  // the quote *becomes* all-blowers while editing — never on mount, so a saved
-  // quote's chosen template/units are preserved, and the user can still override
-  // afterward until the line mix changes again.
-  const stdTemplateId = useMemo(
-    () => templates.find((t) => t.layoutKey === "standard")?.id ?? null,
-    [templates],
-  );
-  const allBlowers = useMemo(
-    () => lines.length > 0 && lines.every((l) => BLOWER_CATEGORIES.has(l.specs.category)),
-    [lines],
-  );
-  const prevAllBlowers = useRef(allBlowers);
+  // The quote's template follows the highest-priority product family present
+  // (Standard Fans & Blowers > KDK > Air Terminals & Ducts). Fires when that
+  // family *changes* while editing — never on mount, so a saved quote's template
+  // is preserved — and only when the current template is one of the auto-managed
+  // patterns, so a manually chosen Power Roof Ventilator / Wind Driven / Services
+  // pattern is respected. Switching resets the terms/note to the new pattern, and
+  // the header units to the blower defaults for a Standard switch. The salesperson
+  // can still override afterwards until the line mix changes again.
+  const AUTO_MANAGED_KEYS = useMemo(() => new Set(["standard", "kdk", "air_terminals"]), []);
+  const autoLayoutKey = useMemo(() => autoTemplateLayoutKey(lines.map((l) => l.specs)), [lines]);
+  const prevAutoKey = useRef(autoLayoutKey);
   useEffect(() => {
-    const became = allBlowers && !prevAllBlowers.current;
-    prevAllBlowers.current = allBlowers;
-    if (!became || !editable) return;
-    if (stdTemplateId) setTemplateId(stdTemplateId);
-    setUnits({ capacity: "cfm", pressure: "in-w.g.", motor: "HP" });
-  }, [allBlowers, stdTemplateId, editable]);
+    const changed = autoLayoutKey !== prevAutoKey.current;
+    prevAutoKey.current = autoLayoutKey;
+    if (!changed || !editable || !autoLayoutKey) return;
+    const currentKey = templates.find((t) => t.id === templateId)?.layoutKey ?? null;
+    if (currentKey && !AUTO_MANAGED_KEYS.has(currentKey)) return; // respect a manual-only pattern
+    const t = templates.find((x) => x.layoutKey === autoLayoutKey);
+    if (!t || t.id === templateId) return;
+    setTemplateId(t.id);
+    setNotes(t.specNote);
+    setTerms(t.terms);
+    if (autoLayoutKey === "standard") setUnits({ capacity: "cfm", pressure: "in-w.g.", motor: "HP" });
+  }, [autoLayoutKey, editable, templates, templateId, AUTO_MANAGED_KEYS]);
 
   const vatRate = config.vatRate;
   // KDK products follow the quote's VAT presentation like every other product
