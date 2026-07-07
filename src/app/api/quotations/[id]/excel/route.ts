@@ -96,6 +96,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     capacityUnit: (typeof units.capacity === "string" && units.capacity) || "cfm",
     pressureUnit: (typeof units.pressure === "string" && units.pressure) || "in-w.g.",
     motorUnit,
+    // HVLS fans are sized in feet; other products in inches.
+    sizeUnit: q.items.some((it) => ((it.specsSnapshot as Record<string, unknown>) ?? {}).type === "HVLS")
+      ? "ft"
+      : "Inches",
     // Signature reflects the currently logged-in sales user, not the original
     // preparer, so each sales person's downloads carry their own name.
     preparedBy: user.name,

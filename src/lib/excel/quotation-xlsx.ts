@@ -40,6 +40,7 @@ export interface XlsxData {
   capacityUnit?: string; // default "cfm"
   pressureUnit?: string; // default "in-w.g."
   motorUnit?: string; // default "HP"
+  sizeUnit?: string; // default "Inches" ("ft" for HVLS)
   preparedBy: string;
   preparedByTitle?: string; // default "Marketing Representative"
   signature?: string | null; // sales person's signature image (PNG/JPEG data URL)
@@ -228,7 +229,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   };
   hsetRed(`I${H3}`, data.capacityUnit || "cfm");
   hsetRed(`J${H3}`, data.pressureUnit || "in-w.g.");
-  hset(`K${H3}`, "Inches");
+  hset(`K${H3}`, data.sizeUnit || "Inches");
   hsetRed(`L${H3}`, data.motorUnit || "HP");
   hset(`M${H3}`, "Ph");
   hset(`N${H3}`, "Volts");

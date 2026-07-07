@@ -1341,16 +1341,13 @@ function hvlsUnitPrice(specs: LineSpecs, vatRate: number): number | null {
   const net = hvlsNet(specs);
   return net == null ? null : round2(net * (1 + vatRate));
 }
-/** Description for an HVLS: type / brand / model + the spec block (no columns fit). */
+/** Description for an HVLS: type / brand / model. Air volume, size, power, phase
+ *  and volts populate the quote columns, so they're not repeated here. */
 function buildHvlsDescription(specs: LineSpecs): string {
   const lines: string[] = ["HVLS", "AlphaAir Brand"];
   const m = specs.blowerModel ? HVLS_FAN[specs.blowerModel] : null;
-  if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel} (${m ? `${m.ft} ft` : ""})`);
-  if (m) {
-    lines.push(`Diameter Ø ${m.dia.toLocaleString()} mm · ${m.blades} blades · PMSM motor`);
-    lines.push(`Air volume ${m.airMin.toLocaleString()} m³/min · ${m.kw} kW · ${m.rpm} rpm`);
-    lines.push("220 V, single phase, 50/60 Hz");
-  }
+  if (specs.blowerModel) lines.push(`Model: ${specs.blowerModel}`);
+  if (m) lines.push(`${m.blades} blades · PMSM motor`);
   return lines.join("\n");
 }
 /** Net (VAT-exclusive) price for a jet fan by model, or null. */
@@ -2423,10 +2420,13 @@ export function QuotationBuilder({
           const m = specs.blowerModel ? HVLS_FAN[specs.blowerModel] : null;
           let s2 = specs;
           if (m) {
+            const capUnit = normalizeAirflowUnit(units.capacity) ?? "m3hr";
             s2 = {
               ...specs,
-              capacity_cfm: null, staticPressure_pa: null, inches: null,
-              power_w: Math.round(m.kw * 1000),
+              capacity_cfm: fmtFlow(convertAirflow(m.airMin, "m3min", capUnit)), // air volume → Capacity column
+              staticPressure_pa: null,
+              inches: m.ft, // fan diameter (ft) → Size column
+              power_w: Math.round(m.kw * 1000), // → motor column (W)
               motorHp: null, motorPole: null, motorPh: 1, motorVolts: 220,
             };
           }

@@ -141,6 +141,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     items,
     // Motor column label follows the header unit (values are converted to it).
     motorUnit,
+    // HVLS fans are sized in feet; other products in inches.
+    sizeUnit: quotation.items.some(
+      (it) => ((it.specsSnapshot as Record<string, unknown>) ?? {}).type === "HVLS",
+    )
+      ? "ft"
+      : "Inches",
     subtotal: Number(quotation.subtotal),
     vat: Number(quotation.vat),
     total: Number(quotation.total),
