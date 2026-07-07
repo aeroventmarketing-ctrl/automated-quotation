@@ -1995,29 +1995,32 @@ export function QuotationBuilder({
   const [alphaRan, setAlphaRan] = useState<Record<string, boolean>>({});
 
   // The quote's template follows the highest-priority product family present
-  // (Standard Fans & Blowers > KDK > Air Terminals & Ducts). Fires when that
-  // family *changes* while editing — never on mount, so a saved quote's template
-  // is preserved — and only when the current template is one of the auto-managed
-  // patterns, so a manually chosen Power Roof Ventilator / Wind Driven / Services
-  // pattern is respected. Switching resets the terms/note to the new pattern, and
-  // the header units to the blower defaults for a Standard switch. The salesperson
-  // can still override afterwards until the line mix changes again.
-  const AUTO_MANAGED_KEYS = useMemo(() => new Set(["standard", "kdk", "air_terminals"]), []);
+  // (Standard Fans & Blowers > KDK > Air Terminals & Ducts) — "the top product
+  // decides". This applies on load and whenever the product mix changes, and it
+  // overrides any current template (including a manually chosen Power Roof
+  // Ventilator / Wind Driven / Services), because those manual-only patterns are
+  // only meant to stand when NO fan / KDK / air-terminal product is present.
+  // Switching resets the terms/note to the new pattern, and the header units to
+  // the blower defaults for a Standard switch. The salesperson can still override
+  // in the dropdown; that override holds until the product family changes again.
   const autoLayoutKey = useMemo(() => autoTemplateLayoutKey(lines.map((l) => l.specs)), [lines]);
-  const prevAutoKey = useRef(autoLayoutKey);
+  const templateManual = useRef(false);
+  const prevAutoKey = useRef<string | null>(null);
   useEffect(() => {
-    const changed = autoLayoutKey !== prevAutoKey.current;
-    prevAutoKey.current = autoLayoutKey;
-    if (!changed || !editable || !autoLayoutKey) return;
+    if (autoLayoutKey !== prevAutoKey.current) {
+      prevAutoKey.current = autoLayoutKey;
+      templateManual.current = false; // product family changed → auto re-asserts
+    }
+    if (!editable || templateManual.current || !autoLayoutKey) return;
     const currentKey = templates.find((t) => t.id === templateId)?.layoutKey ?? null;
-    if (currentKey && !AUTO_MANAGED_KEYS.has(currentKey)) return; // respect a manual-only pattern
+    if (currentKey === autoLayoutKey) return; // already on the right pattern
     const t = templates.find((x) => x.layoutKey === autoLayoutKey);
-    if (!t || t.id === templateId) return;
+    if (!t) return;
     setTemplateId(t.id);
     setNotes(t.specNote);
     setTerms(t.terms);
     if (autoLayoutKey === "standard") setUnits({ capacity: "cfm", pressure: "in-w.g.", motor: "HP" });
-  }, [autoLayoutKey, editable, templates, templateId, AUTO_MANAGED_KEYS]);
+  }, [autoLayoutKey, editable, templates, templateId]);
 
   const vatRate = config.vatRate;
   // KDK products follow the quote's VAT presentation like every other product
@@ -3775,6 +3778,8 @@ export function QuotationBuilder({
               value={templateId}
               onChange={(e) => {
                 const id = e.target.value;
+                // Manual pick: hold this pattern until the product family changes.
+                templateManual.current = true;
                 setTemplateId(id);
                 // Switching pattern always resets the spec note + terms to the
                 // chosen pattern's own text, clearing any prior carry-over so the
