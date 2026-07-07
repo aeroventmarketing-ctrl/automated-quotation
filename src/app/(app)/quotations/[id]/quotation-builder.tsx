@@ -686,10 +686,10 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
   if (type === "High Pressure Blower") return "HPB";
   // Radial Blower blade catalogues, each priced from the client's Radial-Blower
   // price list (stored price is final, TAG_FACTORS ×1): Paddle Wheel = CMH,
-  // Ring Paddle Wheel = CMA, Backplate Paddel Wheel = CMB.
+  // Ring Paddle Wheel = CMA, Backplate Paddle Wheel = CMB.
   if (type === "Radial Blower" && bladeType === "Paddle Wheel") return "CMH";
   if (type === "Radial Blower" && bladeType === "Ring Paddle Wheel") return "CMA";
-  if (type === "Radial Blower" && bladeType === "Backplate Paddel Wheel") return "CMB";
+  if (type === "Radial Blower" && bladeType === "Backplate Paddle Wheel") return "CMB";
   if (/forward/i.test(bladeType)) return "CFAB";
   return "CEB";
 }
@@ -758,7 +758,7 @@ const TAG_FACTORS: Record<string, number> = {
   // Radial Blower blade catalogues. The stored catalogue price is the client's
   // final Radial-Blower selling price (shared across the three blade types by
   // size), so the body factor is ×1: Paddle Wheel (CMH), Ring Paddle Wheel
-  // (CMA), Backplate Paddel Wheel (CMB).
+  // (CMA), Backplate Paddle Wheel (CMB).
   CMH: 1,
   CMA: 1,
   CMB: 1,
@@ -4108,6 +4108,14 @@ export function QuotationBuilder({
                       <Gauge className="h-3.5 w-3.5" /> {sel[l.id]?.loading ? "Selecting…" : "Run selection"}
                     </Button>
                   </div>
+                  {/* Radial Blower blade-type application guide (sales reference). */}
+                  {l.specs.type === "Radial Blower" && (
+                    <div className="mt-1.5 rounded bg-muted/50 px-2 py-1 text-[11px] leading-snug text-muted-foreground">
+                      <div>Paddle Wheel — General Material</div>
+                      <div>Ring Paddle Wheel — Clean, Contaminant Air</div>
+                      <div>Backplate Paddle Wheel — Shredded Materials</div>
+                    </div>
+                  )}
                   {sel[l.id]?.error && <p className="mt-1 text-xs text-destructive">{sel[l.id]?.error}</p>}
                   {sel[l.id]?.results?.length === 0 && (
                     <p className="mt-1 text-xs text-muted-foreground">No matching fans for this duty.</p>
