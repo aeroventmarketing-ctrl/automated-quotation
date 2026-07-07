@@ -112,6 +112,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
       "Backplate Paddel Wheel"
     ],
     "drives": [
+      "Belt Drive",
       "Direct Drive"
     ]
   },
@@ -430,7 +431,7 @@ const AIRFOIL_CATEGORIES = new Set([
 ]);
 
 /** Types within an Airfoil category that don't offer the Airfoil blade. */
-const AIRFOIL_EXCLUDED_TYPES = new Set(["High Pressure Blower"]);
+const AIRFOIL_EXCLUDED_TYPES = new Set(["High Pressure Blower", "Radial Blower"]);
 
 /**
  * Blade-type options for a type, with "Airfoil" appended for the categories
