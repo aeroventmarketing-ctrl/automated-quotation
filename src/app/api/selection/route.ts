@@ -69,6 +69,11 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   // High Pressure Blower — model codes like AV1650HPB. AV8900HPB (89") is
   // hidden for now (no matching CEB price yet).
   if (t === "HPB") return { AND: [{ modelCode: { endsWith: "HPB" } }, { modelCode: { not: "AV8900HPB" } }] };
+  // Radial Blower blade catalogues — model codes like AV1281CMH / …CMA / …CMB.
+  // The 85.25" size (AV8525*) is hidden until the client supplies its price.
+  if (t === "CMH") return { AND: [{ modelCode: { endsWith: "CMH" } }, { modelCode: { not: "AV8525CMH" } }] };
+  if (t === "CMA") return { AND: [{ modelCode: { endsWith: "CMA" } }, { modelCode: { not: "AV8525CMA" } }] };
+  if (t === "CMB") return { AND: [{ modelCode: { endsWith: "CMB" } }, { modelCode: { not: "AV8525CMB" } }] };
   // Ceiling-cassette ventilating fans — model codes like 17CUG / 24CDF / 38CHG.
   if (t === "CASSETTE") {
     return {

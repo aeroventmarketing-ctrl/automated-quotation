@@ -684,6 +684,12 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
   if (type === "Cabinet Blower (SISW)") return "CABSISW";
   // High Pressure Blower: own catalogue (HPB); price = CEB × 2.5 (÷0.4) via TAG_FACTORS.
   if (type === "High Pressure Blower") return "HPB";
+  // Radial Blower blade catalogues, each priced from the client's Radial-Blower
+  // price list (stored price is final, TAG_FACTORS ×1): Paddle Wheel = CMH,
+  // Ring Paddle Wheel = CMA, Backplate Paddel Wheel = CMB.
+  if (type === "Radial Blower" && bladeType === "Paddle Wheel") return "CMH";
+  if (type === "Radial Blower" && bladeType === "Ring Paddle Wheel") return "CMA";
+  if (type === "Radial Blower" && bladeType === "Backplate Paddel Wheel") return "CMB";
   if (/forward/i.test(bladeType)) return "CFAB";
   return "CEB";
 }
@@ -749,6 +755,13 @@ const TAG_FACTORS: Record<string, number> = {
   JF: 2,
   // High Pressure Blower = its own catalogue, priced at CEB × 2.5 (÷0.4).
   HPB: 1 / 0.4,
+  // Radial Blower blade catalogues. The stored catalogue price is the client's
+  // final Radial-Blower selling price (shared across the three blade types by
+  // size), so the body factor is ×1: Paddle Wheel (CMH), Ring Paddle Wheel
+  // (CMA), Backplate Paddel Wheel (CMB).
+  CMH: 1,
+  CMA: 1,
+  CMB: 1,
   CFAB: 1 / 0.9,
   CABSISW: 1 / 0.54,
   DIDWCEB: 1 / 0.57,

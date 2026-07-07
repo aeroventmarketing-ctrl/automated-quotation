@@ -1,0 +1,61 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+AV1281CMB,CENTRIFUGAL,"Radial Blower 12.812"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV1281CMB",12.812,unit,58689,PHP,"{""bladeDia_in"":12.812,""outletArea_ft2"":0.27,""maxRpm"":5201,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV1562CMB,CENTRIFUGAL,"Radial Blower 15.625"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV1562CMB",15.625,unit,73170,PHP,"{""bladeDia_in"":15.625,""outletArea_ft2"":0.44,""maxRpm"":4079,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV1912CMB,CENTRIFUGAL,"Radial Blower 19.125"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV1912CMB",19.125,unit,104931,PHP,"{""bladeDia_in"":19.125,""outletArea_ft2"":0.66,""maxRpm"":4006,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV2262CMB,CENTRIFUGAL,"Radial Blower 22.625"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV2262CMB",22.625,unit,109962,PHP,"{""bladeDia_in"":22.625,""outletArea_ft2"":0.93,""maxRpm"":3359,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV2612CMB,CENTRIFUGAL,"Radial Blower 26.125"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV2612CMB",26.125,unit,142902,PHP,"{""bladeDia_in"":26.125,""outletArea_ft2"":1.24,""maxRpm"":2909,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV2962CMB,CENTRIFUGAL,"Radial Blower 29.625"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV2962CMB",29.625,unit,158469,PHP,"{""bladeDia_in"":29.625,""outletArea_ft2"":1.59,""maxRpm"":2565,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV3300CMB,CENTRIFUGAL,"Radial Blower 33"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV3300CMB",33,unit,196299,PHP,"{""bladeDia_in"":33,""outletArea_ft2"":1.97,""maxRpm"":2302,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV3650CMB,CENTRIFUGAL,"Radial Blower 36.5"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV3650CMB",36.5,unit,251481,PHP,"{""bladeDia_in"":36.5,""outletArea_ft2"":2.41,""maxRpm"":2086,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV4000CMB,CENTRIFUGAL,"Radial Blower 40"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV4000CMB",40,unit,297843,PHP,"{""bladeDia_in"":40,""outletArea_ft2"":2.9,""maxRpm"":1904,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV4512CMB,CENTRIFUGAL,"Radial Blower 45.125"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV4512CMB",45.125,unit,377325,PHP,"{""bladeDia_in"":45.125,""outletArea_ft2"":3.69,""maxRpm"":1696,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV5050CMB,CENTRIFUGAL,"Radial Blower 50.5"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV5050CMB",50.5,unit,440016,PHP,"{""bladeDia_in"":50.5,""outletArea_ft2"":4.62,""maxRpm"":1515,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV5750CMB,CENTRIFUGAL,"Radial Blower 57.5"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV5750CMB",57.5,unit,664488,PHP,"{""bladeDia_in"":57.5,""outletArea_ft2"":5.99,""maxRpm"":1324,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV6437CMB,CENTRIFUGAL,"Radial Blower 64.375"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV6437CMB",64.375,unit,977505,PHP,"{""bladeDia_in"":64.375,""outletArea_ft2"":7.51,""maxRpm"":1183,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV7125CMB,CENTRIFUGAL,"Radial Blower 71.25"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV7125CMB",71.25,unit,1077003,PHP,"{""bladeDia_in"":71.25,""outletArea_ft2"":9.2,""maxRpm"":1016,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"
+AV7825CMB,CENTRIFUGAL,"Radial Blower 78.25"" Backplate Paddel Wheel (CMB)","Radial Blower / Centrifugal Material Handling
+Backplate Paddel Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV7825CMB",78.25,unit,1982073,PHP,"{""bladeDia_in"":78.25,""outletArea_ft2"":11.1,""maxRpm"":978,""bladeType"":""Backplate Paddel Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMB""}"

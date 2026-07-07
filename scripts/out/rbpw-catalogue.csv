@@ -1,0 +1,61 @@
+modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
+AV1281CMH,CENTRIFUGAL,"Radial Blower 12.812"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV1281CMH",12.812,unit,58689,PHP,"{""bladeDia_in"":12.812,""outletArea_ft2"":0.27,""maxRpm"":5446,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV1562CMH,CENTRIFUGAL,"Radial Blower 15.625"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV1562CMH",15.625,unit,73170,PHP,"{""bladeDia_in"":15.625,""outletArea_ft2"":0.44,""maxRpm"":4179,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV1912CMH,CENTRIFUGAL,"Radial Blower 19.125"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV1912CMH",19.125,unit,104931,PHP,"{""bladeDia_in"":19.125,""outletArea_ft2"":0.66,""maxRpm"":3838,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV2262CMH,CENTRIFUGAL,"Radial Blower 22.625"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV2262CMH",22.625,unit,109962,PHP,"{""bladeDia_in"":22.625,""outletArea_ft2"":0.93,""maxRpm"":3369,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV2612CMH,CENTRIFUGAL,"Radial Blower 26.125"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV2612CMH",26.125,unit,142902,PHP,"{""bladeDia_in"":26.125,""outletArea_ft2"":1.24,""maxRpm"":2918,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV2962CMH,CENTRIFUGAL,"Radial Blower 29.625"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV2962CMH",29.625,unit,158469,PHP,"{""bladeDia_in"":29.625,""outletArea_ft2"":1.59,""maxRpm"":2573,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV3300CMH,CENTRIFUGAL,"Radial Blower 33"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV3300CMH",33,unit,196299,PHP,"{""bladeDia_in"":33,""outletArea_ft2"":1.97,""maxRpm"":2309,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV3650CMH,CENTRIFUGAL,"Radial Blower 36.5"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV3650CMH",36.5,unit,251481,PHP,"{""bladeDia_in"":36.5,""outletArea_ft2"":2.41,""maxRpm"":2078,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV4000CMH,CENTRIFUGAL,"Radial Blower 40"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV4000CMH",40,unit,297843,PHP,"{""bladeDia_in"":40,""outletArea_ft2"":2.9,""maxRpm"":1910,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV4512CMH,CENTRIFUGAL,"Radial Blower 45.125"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV4512CMH",45.125,unit,377325,PHP,"{""bladeDia_in"":45.125,""outletArea_ft2"":3.69,""maxRpm"":1693,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV5050CMH,CENTRIFUGAL,"Radial Blower 50.5"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV5050CMH",50.5,unit,440016,PHP,"{""bladeDia_in"":50.5,""outletArea_ft2"":4.62,""maxRpm"":1513,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV5750CMH,CENTRIFUGAL,"Radial Blower 57.5"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV5750CMH",57.5,unit,664488,PHP,"{""bladeDia_in"":57.5,""outletArea_ft2"":5.99,""maxRpm"":1329,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV6437CMH,CENTRIFUGAL,"Radial Blower 64.375"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV6437CMH",64.375,unit,977505,PHP,"{""bladeDia_in"":64.375,""outletArea_ft2"":7.51,""maxRpm"":1187,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV7125CMH,CENTRIFUGAL,"Radial Blower 71.25"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV7125CMH",71.25,unit,1077003,PHP,"{""bladeDia_in"":71.25,""outletArea_ft2"":9.2,""maxRpm"":1065,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
+AV7825CMH,CENTRIFUGAL,"Radial Blower 78.25"" Paddle Wheel (CMH)","Radial Blower / Centrifugal Material Handling
+Paddle Wheel / Belt Driven
+Made of Black Iron Sheet
+Painted with Epoxy Enamel / Model: AV7825CMH",78.25,unit,1982073,PHP,"{""bladeDia_in"":78.25,""outletArea_ft2"":11.1,""maxRpm"":967,""bladeType"":""Paddle Wheel"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Radial Blower"",""tag"":""CMH""}"
