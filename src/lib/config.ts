@@ -83,6 +83,26 @@ export const COMPANY = {
     "12. Ownership : AFBM retains ownership of all merchandise until fully paid by Buyer. In case of payment default within the period of one (1) year. AFBM reserves the right to use the product for whatever purpose at its discretion.",
   ].join("\n"),
 
+  // Terms & conditions for the "Wind Driven Roof Vent" template. 50/50 payment
+  // (VAT exclusive), 15–20 day production, delivery charge not included, and a
+  // no-motor warranty (workmanship, roof-leak clause, no Acts of Nature).
+  windDrivenRoofVentTerms: [
+    "1. Payment : 50% down payment, 50% before delivery of order. VAT exclusive price.",
+    "We accept Cash, Dated Check, Credit Card, Debit Card and other online payments.",
+    "Subject for bank clearing for check payment.",
+    "2. Production time : 15 to 20 working days upon confirmation of P.O. & down payment. Sundays and Holidays not included.",
+    "3. Delivery : Subject for bank clearing for check payment. Delivery charge not included.",
+    "4. Storage fee : 30 days free of charge. Orders that exceed 30 days after the last billing statement will be charged 0.1% of the purchase order amount multiplied by exceeding number of storage days.",
+    "5. Warranty :",
+    "a. One (1) year on workmanship.",
+    "b. For installation made by AFBM. Leak within 2 meters from the installed unit will be AFBM's responsibility. More than 2 meter will be at client's expense.",
+    "c. No warranty for Acts of Nature.",
+    "6. Revisions : Any revision or alteration on the approved P.O. and/or quotation will be charged accordingly.",
+    "7. Validity : Valid for one (1) week only or please verify prevailing prices.",
+    "8. Cancellation : In the event of cancellation of Client's order/Purchase order for whatever reason/s not bound by AFBM. We serve the right not to refund the payment made to cover damages for materials and manpower.",
+    "9. Ownership : AFBM retains ownership of all merchandise until fully paid by Buyer. In case of payment default within the period of one (1) year. AFBM reserves the right to use the product for whatever purpose at its discretion.",
+  ].join("\n"),
+
   // Terms & conditions for the "Services" template — labour/service quotes with
   // 100% payment before the schedule of services and no production/warranty.
   servicesTerms: [

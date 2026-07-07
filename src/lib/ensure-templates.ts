@@ -14,6 +14,7 @@ export const KDK_NOTE = "All units are made of high quality materials.";
 export const RETAINED_TEMPLATE_LAYOUT_KEYS = [
   "standard",
   "power_roof_ventilator",
+  "wind_driven_roof_vent",
   "air_terminals",
   "kdk",
   "services",
@@ -21,13 +22,14 @@ export const RETAINED_TEMPLATE_LAYOUT_KEYS = [
 
 /**
  * Display order for the template picker: Fans and Blowers first (the default),
- * then Power Roof Ventilator, Air Terminals and Ducts, KDK, and Services last.
- * Sorted by layoutKey so admin-renamed display names keep their position;
- * unknown keys fall to the end.
+ * then Power Roof Ventilator, Wind Driven Roof Vent, Air Terminals and Ducts,
+ * KDK, and Services last. Sorted by layoutKey so admin-renamed display names
+ * keep their position; unknown keys fall to the end.
  */
 export const TEMPLATE_PICKER_ORDER = [
   "standard",
   "power_roof_ventilator",
+  "wind_driven_roof_vent",
   "air_terminals",
   "kdk",
   "services",
@@ -225,10 +227,44 @@ export async function ensureServicesTemplate(): Promise<void> {
   }
 }
 
-/** Ensure all built-in templates (Fans and Blowers + Power Roof Ventilator + KDK + Air Terminals + Services) exist. */
+/**
+ * Ensure the built-in "Wind Driven Roof Vent" quotation template exists with its
+ * terms (no spec footer note — the unit has no motor). Created once if missing;
+ * an existing template only has its terms kept in sync with the code-defined terms.
+ */
+export async function ensureWindDrivenRoofVentTemplate(): Promise<void> {
+  const baseConfig = {
+    accent: "#1d4ed8",
+    showSpecs: true,
+    showTerms: true,
+    terms: COMPANY.windDrivenRoofVentTerms,
+    specNote: "",
+  };
+  const existing = await prisma.quotationTemplate.findUnique({
+    where: { layoutKey: "wind_driven_roof_vent" },
+  });
+  if (!existing) {
+    await prisma.quotationTemplate.create({
+      data: { layoutKey: "wind_driven_roof_vent", name: "Wind Driven Roof Vent", config: baseConfig, active: true },
+    });
+    return;
+  }
+  // Keep the terms in sync with the code-defined terms so updates here reach the
+  // live template (these terms are managed in config, not admin).
+  const config = (existing.config as Record<string, unknown>) ?? {};
+  if (config.terms !== COMPANY.windDrivenRoofVentTerms) {
+    await prisma.quotationTemplate.update({
+      where: { layoutKey: "wind_driven_roof_vent" },
+      data: { config: { ...config, terms: COMPANY.windDrivenRoofVentTerms } as Prisma.InputJsonObject },
+    });
+  }
+}
+
+/** Ensure all built-in templates (Fans and Blowers + Power Roof Ventilator + Wind Driven Roof Vent + KDK + Air Terminals + Services) exist. */
 export async function ensureBuiltinTemplates(): Promise<void> {
   await ensureStandardTemplate();
   await ensurePowerRoofVentilatorTemplate();
+  await ensureWindDrivenRoofVentTemplate();
   await ensureKdkTemplate();
   await ensureAirTerminalsTemplate();
   await ensureServicesTemplate();
