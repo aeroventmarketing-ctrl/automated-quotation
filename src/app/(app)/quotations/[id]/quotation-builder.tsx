@@ -844,18 +844,12 @@ const fmtNum = (n: number): string => n.toLocaleString("en-PH", { maximumFractio
 const bodyComputation = (specs: LineSpecs): string => {
   const B = specs.bodyPrice ?? 0;
   if (!B) return "";
-  const tag = bladeFactor(specs);
-  const special = specialBladeFactor(specs);
+  // Show the resolved base body (catalogue price × model/special factors already
+  // applied) rather than the long "(price×factor)" expression.
   const base = round2(baseBodyOf(B, specs));
-  const factors = [
-    ...(tag !== 1 ? [`×${fmtNum(round2(tag))}`] : []),
-    ...(special !== 1 ? [`×${fmtNum(special)} (${specs.bladeType})`] : []),
-  ];
-  const baseStr = factors.length ? `(${fmtNum(B)}${factors.join("")})` : fmtNum(B);
+  const baseStr = fmtNum(base);
   const total = bodyPriceOf(specs);
-  if (!MATERIAL_CATEGORIES.has(specs.category)) {
-    return factors.length ? `${baseStr} = ${fmtNum(base)}` : fmtNum(B);
-  }
+  if (!MATERIAL_CATEGORIES.has(specs.category)) return fmtNum(base);
   const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
   const bodyName = materialPhrase(specs.material || "Black Iron Sheet");
   let core: string;
