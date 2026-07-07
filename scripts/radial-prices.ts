@@ -1,7 +1,7 @@
 /**
  * Radial Blower selling prices (PHP), keyed by size code. Supplied by the client
  * and shared across all three blade catalogues — Paddle Wheel (CMH), Ring Paddle
- * Wheel (CMA), and Backplate Paddel Wheel (CMB). The stored price is the final
+ * Wheel (CMA), and Backplate Paddle Wheel (CMB). The stored price is the final
  * selling price, so TAG_FACTORS for CMH/CMA/CMB are ×1 in the quotation builder.
  *
  * Size code 8525 (85.25") is not yet priced and is held back from all three

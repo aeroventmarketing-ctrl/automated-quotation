@@ -109,7 +109,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     "bladeTypes": [
       "Paddle Wheel",
       "Ring Paddle Wheel",
-      "Backplate Paddel Wheel"
+      "Backplate Paddle Wheel"
     ],
     "drives": [
       "Belt Drive",

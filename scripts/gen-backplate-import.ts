@@ -1,5 +1,5 @@
 /**
- * Parse the Radial Blower "Backplate Paddel Wheel" (Centrifugal Material —
+ * Parse the Radial Blower "Backplate Paddle Wheel" (Centrifugal Material —
  * Shredding) catalog into the two CSVs the admin Import screen accepts:
  *   scripts/out/backplate-catalogue.csv  (import as "catalogue" FIRST)
  *   scripts/out/backplate-ratings.csv    (import as "ratings" AFTER the catalogue)
@@ -148,20 +148,20 @@ async function main() {
   const catRows = models.map((m) => {
     const description =
       "Radial Blower / Centrifugal Material Handling\n" +
-      "Backplate Paddel Wheel / Belt Driven\n" +
+      "Backplate Paddle Wheel / Belt Driven\n" +
       "Made of Black Iron Sheet\n" +
       `Painted with Epoxy Enamel / Model: ${m.modelCode}`;
     const specs = {
       bladeDia_in: m.dia,
       outletArea_ft2: m.outletArea_ft2,
       maxRpm: m.maxRpm,
-      bladeType: "Backplate Paddel Wheel",
+      bladeType: "Backplate Paddle Wheel",
       drive: "belt",
       category: "Centrifugal Type",
       type: "Radial Blower",
       tag: "CMB",
     };
-    const name = `Radial Blower ${m.sizeLabel}\" Backplate Paddel Wheel (CMB)`;
+    const name = `Radial Blower ${m.sizeLabel}\" Backplate Paddle Wheel (CMB)`;
     return [
       m.modelCode, "CENTRIFUGAL", csv(name), csv(description), m.sizeLabel,
       "unit", String(m.basePrice), "PHP", csv(JSON.stringify(specs)),
