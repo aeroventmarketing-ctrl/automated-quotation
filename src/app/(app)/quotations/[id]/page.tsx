@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
-import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
+import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByName } from "@/lib/ensure-templates";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
@@ -79,7 +79,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         return Array.isArray(r) ? (r as RevisionSnapshot[]) : [];
       })()}
       catalog={catalog}
-      templates={sortTemplatesByPickerOrder(templates).map((t) => {
+      templates={sortTemplatesByName(templates).map((t) => {
         // Carry each pattern's own spec note + terms so switching template resets
         // those fields to the chosen pattern's defaults (never stale carry-over).
         const cfg = (t.config as Record<string, unknown>) ?? {};
