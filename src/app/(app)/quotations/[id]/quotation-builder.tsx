@@ -1289,13 +1289,13 @@ const isJetFan = (specs: { type: string }): boolean => specs.type === "Jet Fan";
 // model; each carries its rating and a VAT-EXCLUSIVE (net) selling price. The
 // pricelist model number is the fan's height (mm); the spec sheet labels it by
 // blade diameter, e.g. pricelist "ADH-900" = spec "ADH-750 (30")".
-const POULTRY_FAN: Record<string, { net: number; cmh: number; pa: number; watt: number; size: string; inch: number; bladeMm: number }> = {
-  "ADH-500": { net: 11500, cmh: 5000, pa: 70, watt: 250, size: '16"', inch: 16, bladeMm: 400 },
-  "ADH-600": { net: 13500, cmh: 8000, pa: 70, watt: 250, size: '20"', inch: 20, bladeMm: 500 },
-  "ADH-700": { net: 16500, cmh: 10000, pa: 56, watt: 250, size: '24"', inch: 24, bladeMm: 600 },
-  "ADH-900": { net: 25000, cmh: 27000, pa: 70, watt: 370, size: '30"', inch: 30, bladeMm: 750 },
-  "ADH-1060": { net: 27000, cmh: 30000, pa: 70, watt: 550, size: '36"', inch: 36, bladeMm: 900 },
-  "ADH-1380": { net: 32000, cmh: 44500, pa: 56, watt: 1100, size: '50"', inch: 50, bladeMm: 1250 },
+const POULTRY_FAN: Record<string, { net: number; cmh: number; pa: number; watt: number; size: string; inch: number; bladeMm: number; h: number; w: number; t: number }> = {
+  "ADH-500": { net: 11500, cmh: 5000, pa: 70, watt: 250, size: '16"', inch: 16, bladeMm: 400, h: 500, w: 500, t: 300 },
+  "ADH-600": { net: 13500, cmh: 8000, pa: 70, watt: 250, size: '20"', inch: 20, bladeMm: 500, h: 600, w: 600, t: 300 },
+  "ADH-700": { net: 16500, cmh: 10000, pa: 56, watt: 250, size: '24"', inch: 24, bladeMm: 600, h: 700, w: 700, t: 300 },
+  "ADH-900": { net: 25000, cmh: 27000, pa: 70, watt: 370, size: '30"', inch: 30, bladeMm: 750, h: 900, w: 900, t: 400 },
+  "ADH-1060": { net: 27000, cmh: 30000, pa: 70, watt: 550, size: '36"', inch: 36, bladeMm: 900, h: 1060, w: 1060, t: 400 },
+  "ADH-1380": { net: 32000, cmh: 44500, pa: 56, watt: 1100, size: '50"', inch: 50, bladeMm: 1250, h: 1380, w: 1380, t: 400 },
 };
 const POULTRY_FAN_MODELS = Object.keys(POULTRY_FAN);
 const isPoultryFan = (specs: { type: string }): boolean =>
@@ -4186,11 +4186,14 @@ export function QuotationBuilder({
                         {" · "}{JET_FAN[l.specs.blowerModel].watt} W
                       </p>
                     )}
-                    {isPoultryFan(l.specs) && l.specs.blowerModel && POULTRY_FAN[l.specs.blowerModel] && (
-                      <p className="text-xs font-medium text-foreground">
-                        Airflow {POULTRY_FAN[l.specs.blowerModel].cmh.toLocaleString()} m³/h · Total pressure {POULTRY_FAN[l.specs.blowerModel].pa} Pa · {POULTRY_FAN[l.specs.blowerModel].watt} W · Ø {POULTRY_FAN[l.specs.blowerModel].bladeMm} mm
-                      </p>
-                    )}
+                    {isPoultryFan(l.specs) && l.specs.blowerModel && POULTRY_FAN[l.specs.blowerModel] && (() => {
+                      const p = POULTRY_FAN[l.specs.blowerModel];
+                      return (
+                        <p className="text-xs font-medium text-foreground">
+                          Airflow {p.cmh.toLocaleString()} m³/h · Total pressure {p.pa} Pa · {p.watt} W · Ø {p.bladeMm} mm · H×W×T {p.h}×{p.w}×{p.t} mm · 220 V, single phase
+                        </p>
+                      );
+                    })()}
                     {isPortableBlowerFamily(l.specs) && !portableBlowerIsFlex(l.specs) && portableBlowerRow(l.specs) && (() => {
                       const r = portableBlowerRow(l.specs)!;
                       return (
