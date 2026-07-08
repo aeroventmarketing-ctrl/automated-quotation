@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { X } from "lucide-react";
-import type { InquiryStatus } from "@prisma/client";
+import { Prisma, InquiryStatus, InquirySource } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -9,31 +9,71 @@ import { InquiriesTable } from "./inquiries-table";
 
 export const dynamic = "force-dynamic";
 
+const PAGE_SIZE = 50;
 const STATUS_VALUES: InquiryStatus[] = ["NEW", "DRAFTING", "QUOTED", "SENT", "WON", "LOST"];
+const SORT_KEYS = ["created", "customer", "sales", "source", "items", "quotes", "status"] as const;
+type SortKey = (typeof SORT_KEYS)[number];
+
+function orderByFor(sort: SortKey, dir: "asc" | "desc"): Prisma.InquiryOrderByWithRelationInput[] {
+  const tiebreak: Prisma.InquiryOrderByWithRelationInput = { id: "desc" };
+  switch (sort) {
+    case "customer": return [{ customer: { company: dir } }, tiebreak];
+    case "sales": return [{ createdBy: { name: dir } }, tiebreak];
+    case "source": return [{ source: dir }, tiebreak];
+    case "items": return [{ items: { _count: dir } }, tiebreak];
+    case "quotes": return [{ quotations: { _count: dir } }, tiebreak];
+    case "status": return [{ status: dir }, tiebreak];
+    case "created":
+    default: return [{ createdAt: dir }, tiebreak];
+  }
+}
 
 export default async function InquiriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; sort?: string; dir?: string; page?: string }>;
 }) {
-  const { status: statusParam } = await searchParams;
+  const sp = await searchParams;
   // A dashboard status box links here with ?status=<stage>; filter to it.
-  const status = STATUS_VALUES.includes(statusParam as InquiryStatus)
-    ? (statusParam as InquiryStatus)
+  const status = STATUS_VALUES.includes(sp.status as InquiryStatus)
+    ? (sp.status as InquiryStatus)
     : null;
 
-  const [inquiries, user] = await Promise.all([
+  const q = (sp.q ?? "").trim();
+  const sort: SortKey = (SORT_KEYS as readonly string[]).includes(sp.sort ?? "")
+    ? (sp.sort as SortKey)
+    : "created";
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
+  const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+
+  // Search across customer company, sales (createdBy) name, source, and status
+  // (enum values matched by substring). Combined with the status filter via AND.
+  const ql = q.toLowerCase();
+  const statusMatches = q ? Object.values(InquiryStatus).filter((s) => s.toLowerCase().includes(ql)) : [];
+  const sourceMatches = q ? Object.values(InquirySource).filter((s) => s.toLowerCase().includes(ql)) : [];
+  const searchOr: Prisma.InquiryWhereInput[] = [
+    { customer: { company: { contains: q, mode: Prisma.QueryMode.insensitive } } },
+    { createdBy: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
+    ...(statusMatches.length ? [{ status: { in: statusMatches } }] : []),
+    ...(sourceMatches.length ? [{ source: { in: sourceMatches } }] : []),
+  ];
+  const where: Prisma.InquiryWhereInput = {
+    AND: [status ? { status } : {}, q ? { OR: searchOr } : {}],
+  };
+
+  const [inquiries, total, user] = await Promise.all([
     prisma.inquiry.findMany({
-      where: status ? { status } : undefined,
-      orderBy: { createdAt: "desc" },
+      where,
+      orderBy: orderByFor(sort, dir),
       include: {
         customer: true,
         createdBy: true,
         _count: { select: { items: true, quotations: true } },
       },
-      // Load every inquiry: the table searches/sorts client-side, so a cap here
-      // would hide older inquiries from the list and the search entirely.
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     }),
+    prisma.inquiry.count({ where }),
     getCurrentUser(),
   ]);
   const admin = isAdmin(user);
@@ -72,7 +112,16 @@ export default async function InquiriesPage({
 
       <Card>
         <CardContent className="pt-6">
-          <InquiriesTable rows={rows} admin={admin} />
+          <InquiriesTable
+            rows={rows}
+            admin={admin}
+            total={total}
+            page={page}
+            pageSize={PAGE_SIZE}
+            query={q}
+            sort={sort}
+            dir={dir}
+          />
         </CardContent>
       </Card>
     </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { QuotationStatus } from "@prisma/client";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { ArrowUp, ArrowDown, Search } from "lucide-react";
+import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { QuotationActions } from "./quotation-actions";
 
 export interface QuotationRow {
@@ -36,40 +37,71 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "status", label: "Status" },
 ];
 
-/** Search box + sort controls shown above and below the table (shared state). */
-function Controls({
-  query,
-  setQuery,
-  sortKey,
-  setSortKey,
-  sortDir,
-  setSortDir,
-  count,
+export function QuotationsTable({
+  rows,
+  admin = false,
   total,
+  page,
+  pageSize,
+  query,
+  sort,
+  dir,
 }: {
-  query: string;
-  setQuery: (v: string) => void;
-  sortKey: SortKey;
-  setSortKey: (v: SortKey) => void;
-  sortDir: SortDir;
-  setSortDir: (v: SortDir) => void;
-  count: number;
+  rows: QuotationRow[];
+  admin?: boolean;
   total: number;
+  page: number;
+  pageSize: number;
+  query: string;
+  sort: SortKey;
+  dir: SortDir;
 }) {
-  return (
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+
+  // Local, debounced search box → the `q` URL param (server re-queries).
+  const [queryInput, setQueryInput] = useState(query);
+  useEffect(() => setQueryInput(query), [query]);
+
+  function setParams(updates: Record<string, string | null>) {
+    const sp = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(updates)) {
+      if (v == null || v === "") sp.delete(k);
+      else sp.set(k, v);
+    }
+    router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
+  }
+
+  useEffect(() => {
+    if (queryInput === query) return;
+    const t = setTimeout(() => setParams({ q: queryInput || null, page: null }), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryInput]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  const controls = (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative flex-1 min-w-[12rem]">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          value={queryInput}
+          onChange={(e) => setQueryInput(e.target.value)}
           placeholder="Search quote #, customer, prepared by, status…"
           className="pl-8"
         />
       </div>
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Sort by</span>
-        <Select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} className="w-40">
+        <Select
+          value={sort}
+          onChange={(e) => setParams({ sort: e.target.value, page: null })}
+          className="w-40"
+        >
           {SORT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -77,60 +109,35 @@ function Controls({
         <Button
           variant="outline"
           size="sm"
-          title={sortDir === "asc" ? "Ascending" : "Descending"}
-          onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+          title={dir === "asc" ? "Ascending" : "Descending"}
+          onClick={() => setParams({ dir: dir === "asc" ? "desc" : "asc", page: null })}
         >
-          {sortDir === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+          {dir === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
         </Button>
       </div>
-      <span className="ml-auto text-xs text-muted-foreground">
-        {count === total ? `${total} total` : `${count} of ${total}`}
-      </span>
+      <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+        <span>{total === 0 ? "0" : `${from.toLocaleString()}–${to.toLocaleString()}`} of {total.toLocaleString()}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page <= 1}
+          title="Previous page"
+          onClick={() => setParams({ page: String(page - 1) })}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="tabular-nums">{page} / {totalPages}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page >= totalPages}
+          title="Next page"
+          onClick={() => setParams({ page: String(page + 1) })}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
-  );
-}
-
-export function QuotationsTable({ rows, admin = false }: { rows: QuotationRow[]; admin?: boolean }) {
-  const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("created");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const matched = q
-      ? rows.filter((r) =>
-          `${r.quoteNumber} ${r.company} ${r.preparedByName} ${r.status}`.toLowerCase().includes(q),
-        )
-      : rows.slice();
-    const dir = sortDir === "asc" ? 1 : -1;
-    matched.sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "quote": cmp = a.quoteNumber.localeCompare(b.quoteNumber); break;
-        case "customer": cmp = a.company.localeCompare(b.company); break;
-        case "prepared": cmp = a.preparedByName.localeCompare(b.preparedByName); break;
-        case "total": cmp = a.total - b.total; break;
-        case "status": cmp = a.status.localeCompare(b.status); break;
-        case "created": cmp = a.createdISO.localeCompare(b.createdISO); break;
-      }
-      // Stable tiebreaker so equal keys keep a deterministic order.
-      if (cmp === 0) cmp = a.createdISO.localeCompare(b.createdISO);
-      return cmp * dir;
-    });
-    return matched;
-  }, [rows, query, sortKey, sortDir]);
-
-  const controls = (
-    <Controls
-      query={query}
-      setQuery={setQuery}
-      sortKey={sortKey}
-      setSortKey={setSortKey}
-      sortDir={sortDir}
-      setSortDir={setSortDir}
-      count={filtered.length}
-      total={rows.length}
-    />
   );
 
   return (
@@ -149,7 +156,7 @@ export function QuotationsTable({ rows, admin = false }: { rows: QuotationRow[];
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filtered.map((q) => (
+          {rows.map((q) => (
             <TableRow key={q.id}>
               <TableCell>
                 <Link href={`/quotations/${q.id}`} className="font-medium hover:underline">
@@ -172,10 +179,10 @@ export function QuotationsTable({ rows, admin = false }: { rows: QuotationRow[];
               )}
             </TableRow>
           ))}
-          {filtered.length === 0 && (
+          {rows.length === 0 && (
             <TableRow>
               <TableCell colSpan={admin ? 7 : 6} className="text-center text-muted-foreground">
-                {rows.length === 0
+                {total === 0 && !query
                   ? "No quotations yet. Build one from an inquiry."
                   : "No quotations match your search."}
               </TableCell>
