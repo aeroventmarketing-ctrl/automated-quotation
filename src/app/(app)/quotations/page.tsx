@@ -23,7 +23,8 @@ export default async function QuotationsPage({
       where: todayOnly ? { createdAt: { gte: startOfDay } } : undefined,
       orderBy: { createdAt: "desc" },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
-      take: 100,
+      // Load every quotation: the table searches/sorts client-side, so a cap here
+      // would hide older quotes from the list and the search entirely.
     }),
     getCurrentUser(),
   ]);
