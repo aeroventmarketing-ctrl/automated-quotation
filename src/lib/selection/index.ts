@@ -945,6 +945,12 @@ export function selectFan(
   // and the rpm/SP guards can step the selection up to a larger size.
   const isAxial = String(model.specs?.category ?? "") === "Axial Type";
 
+  // Plug fan (CPF): no scroll housing, so outlet area / outlet velocity are
+  // disregarded. It is sized on volume flow + static pressure only, with a belt
+  // speed cap of 1600 rpm (direct drive uses the standard pole bands like HPB).
+  const isPlugFan = /CPF$/i.test(model.modelCode);
+  const PLUG_FAN_BELT_MAX_RPM = 1600;
+
   // Static-pressure application cap (axial TAF 1.5"/VAF 4" w.g.): a duty whose
   // SP exceeds the product's rated ceiling drops it from the results entirely
   // (e.g. a 2" duty excludes TAF, leaving VAF), rather than extrapolating.
@@ -1165,7 +1171,7 @@ export function selectFan(
   let outletVelocity_fpm: number | null = null;
   let ovLimit_fpm: number | null = null;
   let ovWithinLimit: boolean | null = null;
-  if (outletArea && outletArea > 0) {
+  if (outletArea && outletArea > 0 && !isPlugFan) {
     outletVelocity_fpm = Math.round((flowCfm / outletArea) * (isCieb ? 2 : 1));
     if (isPropeller) {
       // Recommended OV limit 2200 fpm — applies to belt and direct.
@@ -1214,7 +1220,11 @@ export function selectFan(
   if (isAxial && !options.directDrive && !rpmWithinMax) return null;
   if (!rpmWithinMax) {
     warnings.push(`Required speed ${rpm} rpm exceeds the rated max ${maxRpm} rpm.`);
-  } else if (rpm > 1200 && !options.directDrive && !isAxial) {
+  } else if (isPlugFan && !options.directDrive && rpm > PLUG_FAN_BELT_MAX_RPM) {
+    warnings.push(
+      `Speed ${rpm} rpm is above the ${PLUG_FAN_BELT_MAX_RPM} rpm belt limit — fan is undersized for this airflow.`,
+    );
+  } else if (rpm > 1200 && !options.directDrive && !isAxial && !isPlugFan) {
     warnings.push(`Speed ${rpm} rpm is above the recommended ~1200 rpm.`);
   }
 
@@ -1247,8 +1257,20 @@ export function selectFan(
   // AFBM constraints (belt drive): undersized (OV over limit) or over-speed is
   // never a good pick; above the recommended ~1200 rpm drops HIGH to MEDIUM.
   if (!options.directDrive) {
-    if (ovWithinLimit === false || !rpmWithinMax) confidence = "LOW";
-    else if (confidence === "HIGH" && rpm > 1200 && !isAxial) confidence = "MEDIUM";
+    if (isPlugFan) {
+      // Plug fan (no housing): OV is disregarded and the fan is sized on volume
+      // flow + static pressure with a 1600 rpm belt cap. Any in-envelope pick at
+      // ≤1600 rpm is a valid selection (HIGH); above the cap it is undersized (LOW).
+      // The smallest valid size is the recommended one (first HIGH in the list).
+      confidence =
+        rpm <= PLUG_FAN_BELT_MAX_RPM && rpmWithinMax && withinEnvelope && !extrapolated
+          ? "HIGH"
+          : "LOW";
+    } else if (ovWithinLimit === false || !rpmWithinMax) {
+      confidence = "LOW";
+    } else if (confidence === "HIGH" && rpm > 1200 && !isAxial) {
+      confidence = "MEDIUM";
+    }
   }
 
   const requiresEngineerConfirmation =
