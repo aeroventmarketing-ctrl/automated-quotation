@@ -725,6 +725,9 @@ function resolveTag(type: string, bladeType: string, category = ""): string {
   if (type === "Radial Blower" && bladeType === "Paddle Wheel") return "CMH";
   if (type === "Radial Blower" && bladeType === "Ring Paddle Wheel") return "CMA";
   if (type === "Radial Blower" && bladeType === "Backplate Paddle Wheel") return "CMB";
+  // Plug Fan is a backward-curved centrifugal impeller (no scroll housing): it
+  // selects and prices from the Backward Curved (CEB) performance catalogue.
+  if (type === "Plug Fan") return "CEB";
   if (/forward/i.test(bladeType)) return "CFAB";
   return "CEB";
 }

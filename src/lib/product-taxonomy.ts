@@ -431,7 +431,7 @@ const AIRFOIL_CATEGORIES = new Set([
 ]);
 
 /** Types within an Airfoil category that don't offer the Airfoil blade. */
-const AIRFOIL_EXCLUDED_TYPES = new Set(["High Pressure Blower", "Radial Blower"]);
+const AIRFOIL_EXCLUDED_TYPES = new Set(["High Pressure Blower", "Radial Blower", "Plug Fan"]);
 
 /**
  * Blade-type options for a type, with "Airfoil" appended for the categories
