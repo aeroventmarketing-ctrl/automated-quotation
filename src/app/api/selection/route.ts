@@ -74,6 +74,8 @@ function catalogueWhere(tag: string | undefined, bladeType: string | undefined) 
   if (t === "CMH") return { AND: [{ modelCode: { endsWith: "CMH" } }, { modelCode: { not: "AV8525CMH" } }] };
   if (t === "CMA") return { AND: [{ modelCode: { endsWith: "CMA" } }, { modelCode: { not: "AV8525CMA" } }] };
   if (t === "CMB") return { AND: [{ modelCode: { endsWith: "CMB" } }, { modelCode: { not: "AV8525CMB" } }] };
+  // Plug Fan — own catalogue, model codes like AV1225CPF.
+  if (t === "CPF") return { modelCode: { endsWith: "CPF" } };
   // Ceiling-cassette ventilating fans — model codes like 17CUG / 24CDF / 38CHG.
   if (t === "CASSETTE") {
     return {
