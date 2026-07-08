@@ -31,7 +31,8 @@ export default async function InquiriesPage({
         createdBy: true,
         _count: { select: { items: true, quotations: true } },
       },
-      take: 100,
+      // Load every inquiry: the table searches/sorts client-side, so a cap here
+      // would hide older inquiries from the list and the search entirely.
     }),
     getCurrentUser(),
   ]);
