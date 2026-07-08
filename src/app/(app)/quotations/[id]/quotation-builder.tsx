@@ -1003,6 +1003,19 @@ const MOVEMENT_LABEL: Record<string, string> = {
 };
 /** Material options for Ventilation Accessories (Air Terminals / Dampers). */
 const ACC_MATERIALS = ["Galvanized Iron", "Aluminum", "Stainless Steel 304"];
+/** Air Duct group: its own type set + material options (shown right after Type). */
+const AIR_DUCT_TYPES = new Set([
+  "Duct Connector",
+  "Duct Reducer",
+  "Elbow Duct",
+  "Offset Duct",
+  "Straight Duct",
+  "Square to Round Duct",
+  "Y-Duct",
+]);
+const AIR_DUCT_MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless"];
+const isAirDuct = (specs: { category: string; type: string }): boolean =>
+  specs.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(specs.type);
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
 const VENT_CAP_DIAMETERS = ["4", "6", "8"];
 const VENT_CAP_MATERIALS = ["Stainless 201", "Stainless 304"];
@@ -1803,7 +1816,11 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     const pcs = sections > 1 ? ` (${sections} pcs)` : "";
     lines.push(`${actuatorModelLabel(specs.movement)} / ${actuatorVoltage(specs.movement)}${pcs}`);
   }
-  if (ACC_MATERIALS.includes(specs.material) || VENT_CAP_MATERIALS.includes(specs.material)) {
+  if (
+    ACC_MATERIALS.includes(specs.material) ||
+    VENT_CAP_MATERIALS.includes(specs.material) ||
+    AIR_DUCT_MATERIALS.includes(specs.material)
+  ) {
     lines.push(`${accMaterialLabel(specs.material)} Material`);
     // Finish follows the material. Powder coating can be applied to any material
     // that offers it (incl. Vent Cap on stainless). Otherwise: air terminals
@@ -3454,6 +3471,17 @@ export function QuotationBuilder({
             </Select>
           ) : c.category === "Ventilation Accessories" ? (
             <>
+              {/* Air Duct: Material sits right after Type (GI / Black Iron / Stainless). */}
+              {isAirDuct(c) && (
+                <Select
+                  value={AIR_DUCT_MATERIALS.includes(c.material) ? c.material : ""}
+                  disabled={!editable || !c.type}
+                  onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
+                >
+                  <option value="" disabled>Material…</option>
+                  {AIR_DUCT_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                </Select>
+              )}
               <Select
                 // Legacy lines stored "Square" before it became "Square/Rectangle".
                 value={c.shape === "Square" ? "Square/Rectangle" : c.shape}
@@ -3514,8 +3542,9 @@ export function QuotationBuilder({
                   Recommend?
                 </label>
               )}
-              {/* Material (Air Terminals / Dampers). */}
-              {!isIsolator(c) && (
+              {/* Material (Air Terminals / Dampers). Air Duct shows its own material
+                  dropdown right after Type, so it's skipped here. */}
+              {!isIsolator(c) && !isAirDuct(c) && (
                 <Select
                   value={ACC_MATERIALS.includes(c.material) ? c.material : ""}
                   disabled={!editable || !c.type}
@@ -3525,8 +3554,8 @@ export function QuotationBuilder({
                   {ACC_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
                 </Select>
               )}
-              {/* Powder-coat finish — supported types only; not for stainless steel. */}
-              {POWDER_COAT_TYPES.has(c.type) && c.material !== "Stainless Steel 304" && (
+              {/* Powder-coat finish — supported types only; not for any stainless. */}
+              {POWDER_COAT_TYPES.has(c.type) && !isStainlessMaterial(c.material) && (
                 <label className="flex h-9 items-center gap-1.5 text-sm">
                   Powder Coated
                   <input type="checkbox" className="h-4 w-4" disabled={!editable}
