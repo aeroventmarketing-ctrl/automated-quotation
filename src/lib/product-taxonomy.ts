@@ -284,7 +284,13 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Vent Cap", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Weather hood", "bladeTypes": [], "drives": [] },
   // Air Duct (its own group, below Air Terminals)
-  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Air Duct", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Duct Connector", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Duct Reducer", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Elbow Duct", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Offset Duct", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Straight Duct", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Square to Round Duct", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Y-Duct", "bladeTypes": [], "drives": [] },
   // Dampers
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Backdraft Damper", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Fire Damper", "bladeTypes": [], "drives": [] },
