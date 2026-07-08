@@ -1548,6 +1548,36 @@ function convertAccSize(value: string, from: string, to: string): string {
   return String(Math.round(out * 1000) / 1000); // trim float noise
 }
 
+// Recommended sheet gauge for a rectangular/round duct by its longest side
+// (Low-Pressure HVAC, 2" w.g. schedule): ≤300mm → 26ga, ≤750 → 24ga,
+// ≤1370 → 22ga, ≤2285 → 20ga, above → 18ga.
+const DUCT_GAUGE_SCHEDULE: Array<[number, string]> = [
+  [300, "26"],
+  [750, "24"],
+  [1370, "22"],
+  [2285, "20"],
+];
+/** Longest duct side (mm) → recommended gauge, or null if the size isn't set. */
+function recommendedDuctGauge(specs: LineSpecs): string | null {
+  const unit = specs.sizeUnit || "mm";
+  const toMm = (v: string): number | null => {
+    const n = parseFloat(v);
+    return !v || Number.isNaN(n) ? null : n * (ACC_MM_PER_UNIT[unit] ?? 1);
+  };
+  const l = toMm(specs.sizeL);
+  // Round = diameter (sizeL only); otherwise the longest of L × W.
+  const longest =
+    specs.shape === "Round"
+      ? l
+      : (() => {
+          const w = toMm(specs.sizeW);
+          return l != null && w != null ? Math.max(l, w) : null;
+        })();
+  if (longest == null) return null;
+  for (const [maxMm, ga] of DUCT_GAUGE_SCHEDULE) if (longest <= maxMm) return ga;
+  return "18";
+}
+
 // --- Air Terminals / Dampers body pricing (per square inch, VAT-inclusive) ----
 // Body price = area(sq in) × rate × material factor (powder coat ×1.5). Area uses
 // the trade inch (25 mm = 1 inch); round = bounding square (D × D).
@@ -1837,6 +1867,10 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   // Air Duct sealant brand (stored in bladeType).
   if (isAirDuct(specs) && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
     lines.push(`${specs.bladeType} Brand`);
+  }
+  // Air Duct recommended sheet gauge (from the longest-side thickness schedule).
+  if (isAirDuct(specs) && specs.gauge) {
+    lines.push(`${specs.gauge} ga`);
   }
   return lines.join("\n");
 }
@@ -2332,6 +2366,11 @@ export function QuotationBuilder({
         // Stainless steel 304 is never powder-coated — drop any stale flag so the
         // price and description don't carry the ×1.5 / "Powder Coated" finish.
         if (specs.material === "Stainless Steel 304") specs.powderCoated = false;
+        // Air Duct "Recommend": auto-pick the sheet gauge from the duct's longest
+        // side, recomputed on any dimension / shape / unit change (cleared when off).
+        if (isAirDuct(specs)) {
+          specs.gauge = specs.mcRecommend ? recommendedDuctGauge(specs) ?? "" : "";
+        }
         // Duct hardware (clips, cleats, corners): per-piece price by gauge (+ length),
         // with the Duct Angle corner volume discount applied by line quantity.
         if (isDuctHardware(specs)) {
@@ -3154,7 +3193,7 @@ export function QuotationBuilder({
                 // clear any stale auto-price (recomputes once dimensions are set).
                 applyAccessory(
                   l.id,
-                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "", powderCoated: false },
+                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false },
                   true,
                 );
               } else {
@@ -3550,6 +3589,15 @@ export function QuotationBuilder({
                     checked={!!c.mcRecommend}
                     onChange={(e) => updateSpec(l.id, { mcRecommend: e.target.checked })} />
                   Recommend?
+                </label>
+              )}
+              {/* Air Duct: auto-pick the sheet gauge from the duct's longest side. */}
+              {isAirDuct(c) && (
+                <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                  <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type}
+                    checked={!!c.mcRecommend}
+                    onChange={(e) => applyAccessory(l.id, { mcRecommend: e.target.checked })} />
+                  Recommend{c.mcRecommend && c.gauge ? ` (${c.gauge} ga)` : ""}
                 </label>
               )}
               {/* Material (Air Terminals / Dampers). Air Duct shows its own material
