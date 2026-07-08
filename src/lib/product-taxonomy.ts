@@ -276,7 +276,6 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
     ]
   },
   // Air Terminals
-  { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Air Duct", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Air Grille", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Bar Grille", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Ceiling Diffuser", "bladeTypes": [], "drives": [] },
@@ -284,6 +283,8 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Perforated Air Grille", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Vent Cap", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Terminals", "type": "Weather hood", "bladeTypes": [], "drives": [] },
+  // Air Duct (its own group, below Air Terminals)
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Air Duct", "bladeTypes": [], "drives": [] },
   // Dampers
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Backdraft Damper", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Dampers", "type": "Fire Damper", "bladeTypes": [], "drives": [] },
