@@ -2,60 +2,60 @@ modelCode,family,name,description,sizeLabel,uom,basePrice,currency,specsJson
 AV1225CPF,CENTRIFUGAL,"Plug Fan 12.25"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1225CPF",12.25,unit,19563,PHP,"{""bladeDia_in"":12.25,""outletArea_ft2"":0.86,""maxRpm"":4111,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1225CPF",12.25,unit,19563,PHP,"{""bladeDia_in"":12.25,""maxRpm"":4111,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV1350CPF,CENTRIFUGAL,"Plug Fan 13.5"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1350CPF",13.5,unit,22738,PHP,"{""bladeDia_in"":13.5,""outletArea_ft2"":1.05,""maxRpm"":3733,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1350CPF",13.5,unit,22738,PHP,"{""bladeDia_in"":13.5,""maxRpm"":3733,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV1500CPF,CENTRIFUGAL,"Plug Fan 15"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1500CPF",15,unit,24390,PHP,"{""bladeDia_in"":15,""outletArea_ft2"":1.29,""maxRpm"":3358,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1500CPF",15,unit,24390,PHP,"{""bladeDia_in"":15,""maxRpm"":3358,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV1650CPF,CENTRIFUGAL,"Plug Fan 16.5"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1650CPF",16.5,unit,26451,PHP,"{""bladeDia_in"":16.5,""outletArea_ft2"":1.57,""maxRpm"":3055,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1650CPF",16.5,unit,26451,PHP,"{""bladeDia_in"":16.5,""maxRpm"":3055,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV1825CPF,CENTRIFUGAL,"Plug Fan 18.25"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV1825CPF",18.25,unit,29506,PHP,"{""bladeDia_in"":18.25,""outletArea_ft2"":1.92,""maxRpm"":2722,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV1825CPF",18.25,unit,29506,PHP,"{""bladeDia_in"":18.25,""maxRpm"":2722,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV2000CPF,CENTRIFUGAL,"Plug Fan 20"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2000CPF",20,unit,34977,PHP,"{""bladeDia_in"":20,""outletArea_ft2"":2.3,""maxRpm"":2481,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2000CPF",20,unit,34977,PHP,"{""bladeDia_in"":20,""maxRpm"":2481,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV2225CPF,CENTRIFUGAL,"Plug Fan 22.25"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2225CPF",22.25,unit,36654,PHP,"{""bladeDia_in"":22.25,""outletArea_ft2"":2.85,""maxRpm"":2232,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2225CPF",22.25,unit,36654,PHP,"{""bladeDia_in"":22.25,""maxRpm"":2232,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV2450CPF,CENTRIFUGAL,"Plug Fan 24.5"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2450CPF",24.5,unit,39349,PHP,"{""bladeDia_in"":24.5,""outletArea_ft2"":3.45,""maxRpm"":2025,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2450CPF",24.5,unit,39349,PHP,"{""bladeDia_in"":24.5,""maxRpm"":2025,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV2700CPF,CENTRIFUGAL,"Plug Fan 27"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV2700CPF",27,unit,47634,PHP,"{""bladeDia_in"":27,""outletArea_ft2"":4.19,""maxRpm"":1795,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV2700CPF",27,unit,47634,PHP,"{""bladeDia_in"":27,""maxRpm"":1795,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV3000CPF,CENTRIFUGAL,"Plug Fan 30"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3000CPF",30,unit,52823,PHP,"{""bladeDia_in"":30,""outletArea_ft2"":5.17,""maxRpm"":1616,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3000CPF",30,unit,52823,PHP,"{""bladeDia_in"":30,""maxRpm"":1616,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV3300CPF,CENTRIFUGAL,"Plug Fan 33"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3300CPF",33,unit,65433,PHP,"{""bladeDia_in"":33,""outletArea_ft2"":6.26,""maxRpm"":1469,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3300CPF",33,unit,65433,PHP,"{""bladeDia_in"":33,""maxRpm"":1469,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV3650CPF,CENTRIFUGAL,"Plug Fan 36.5"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV3650CPF",36.5,unit,83827,PHP,"{""bladeDia_in"":36.5,""outletArea_ft2"":7.66,""maxRpm"":1274,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV3650CPF",36.5,unit,83827,PHP,"{""bladeDia_in"":36.5,""maxRpm"":1274,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV4025CPF,CENTRIFUGAL,"Plug Fan 40.25"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4025CPF",40.25,unit,99281,PHP,"{""bladeDia_in"":40.25,""outletArea_ft2"":9.31,""maxRpm"":1155,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4025CPF",40.25,unit,99281,PHP,"{""bladeDia_in"":40.25,""maxRpm"":1155,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV4450CPF,CENTRIFUGAL,"Plug Fan 44.5"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4450CPF",44.5,unit,125775,PHP,"{""bladeDia_in"":44.5,""outletArea_ft2"":11.39,""maxRpm"":1045,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4450CPF",44.5,unit,125775,PHP,"{""bladeDia_in"":44.5,""maxRpm"":1045,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
 AV4900CPF,CENTRIFUGAL,"Plug Fan 49"" Backward Curved (CPF)","Plug Fan
 Backward Curved / Belt Driven
 Made of Black Iron Sheet
-Painted with Epoxy Enamel Aqua Green / Model: AV4900CPF",49,unit,146672,PHP,"{""bladeDia_in"":49,""outletArea_ft2"":13.8,""maxRpm"":949,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
+Painted with Epoxy Enamel Aqua Green / Model: AV4900CPF",49,unit,146672,PHP,"{""bladeDia_in"":49,""maxRpm"":949,""bladeType"":""Backward Curved"",""drive"":""belt"",""category"":""Centrifugal Type"",""type"":""Plug Fan"",""tag"":""CPF""}"
