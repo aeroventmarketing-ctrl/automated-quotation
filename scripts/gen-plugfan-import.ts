@@ -49,6 +49,16 @@ function nearestCebPrice(dia: number): { cebDia: number; price: number } {
   return { cebDia: best[0], price: best[1] };
 }
 
+// Outlet area (ft²) by size code, taken from the CEB catalogue (same wheel
+// sizes). The selector computes outlet velocity = flow ÷ outletArea to size the
+// fan; giving Plug Fan the CEB outlet area makes its selection/recommendation
+// identical to CEB (which is what the client asked for).
+const CEB_OUTLET_AREA: Record<string, number> = {
+  "1225": 0.86, "1350": 1.05, "1500": 1.29, "1650": 1.57, "1825": 1.92,
+  "2000": 2.3, "2225": 2.85, "2450": 3.45, "2700": 4.19, "3000": 5.17,
+  "3300": 6.26, "3650": 7.66, "4025": 9.31, "4450": 11.39, "4900": 13.8,
+};
+
 const isNum = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
 const cellVal = (c: ExcelJS.Cell): unknown => {
   const v = c.value as unknown;
@@ -76,11 +86,13 @@ const sizeLabelOf = (dia: number): string =>
 
 interface Model {
   modelCode: string;
+  code: string;
   dia: number;
   sizeLabel: string;
   maxRpm: number;
   basePrice: number;
   cebDia: number;
+  outletArea_ft2: number;
   points: Array<{ rpm: number; cfm: number; sp_in: number; bhp: number }>;
 }
 
@@ -136,7 +148,9 @@ async function main() {
     if (!points.length) throw new Error(`${modelCode}: no rating points parsed`);
 
     const { cebDia, price } = nearestCebPrice(dia);
-    models.push({ modelCode, dia, sizeLabel: sizeLabelOf(dia), maxRpm, basePrice: price, cebDia, points });
+    const outletArea_ft2 = CEB_OUTLET_AREA[code];
+    if (outletArea_ft2 == null) throw new Error(`${modelCode}: no CEB outlet area for size ${code}`);
+    models.push({ modelCode, code, dia, sizeLabel: sizeLabelOf(dia), maxRpm, basePrice: price, cebDia, outletArea_ft2, points });
   }
   if (!models.length) throw new Error("No <size>CPF tabs found");
   models.sort((a, b) => a.dia - b.dia);
@@ -151,6 +165,7 @@ async function main() {
       `Painted with Epoxy Enamel Aqua Green / Model: ${m.modelCode}`;
     const specs = {
       bladeDia_in: m.dia,
+      outletArea_ft2: m.outletArea_ft2,
       maxRpm: m.maxRpm,
       bladeType: "Backward Curved",
       drive: "belt",
