@@ -1013,7 +1013,7 @@ const AIR_DUCT_TYPES = new Set([
   "Square to Round Duct",
   "Y-Duct",
 ]);
-const AIR_DUCT_MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless"];
+const AIR_DUCT_MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless Steel"];
 const isAirDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(specs.type);
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
