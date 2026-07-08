@@ -950,6 +950,7 @@ function retagModel(model: string | null, type: string, bladeType: string, drive
 
 /** Sized accessory types that carry a unit-of-measurement dropdown (mm/cm/inches). */
 const UOM_TYPES = new Set([
+  "Air Duct",
   "Air Grille",
   "Bar Grille",
   "Ceiling Diffuser",
@@ -1499,6 +1500,7 @@ function buildDustCollectorDescription(specs: LineSpecs): string {
 }
 /** Accessory types that offer the powder-coat finish option. */
 const POWDER_COAT_TYPES = new Set([
+  "Air Duct",
   "Air Grille",
   "Bar Grille",
   "Ceiling Diffuser",
