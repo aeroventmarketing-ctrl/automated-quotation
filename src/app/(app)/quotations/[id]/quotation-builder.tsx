@@ -1014,6 +1014,8 @@ const AIR_DUCT_TYPES = new Set([
   "Y-Duct",
 ]);
 const AIR_DUCT_MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless Steel"];
+/** Air Duct sealant/gasket brand (stored in the otherwise-unused bladeType). */
+const AIR_DUCT_SEALANTS = ["APO", "Nihonbond"];
 const isAirDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(specs.type);
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
@@ -1517,15 +1519,9 @@ function buildDustCollectorDescription(specs: LineSpecs): string {
   const m = specs.blowerModel ? DUST_COLLECTOR[specs.blowerModel] : null;
   return m ? `Dust Collector\n${m.desc}` : "Dust Collector";
 }
-/** Accessory types that offer the powder-coat finish option. */
+/** Accessory types that offer the powder-coat finish option. (Air Duct types
+ *  don't — they have no powder-coat checkbox.) */
 const POWDER_COAT_TYPES = new Set([
-  "Duct Connector",
-  "Duct Reducer",
-  "Elbow Duct",
-  "Offset Duct",
-  "Straight Duct",
-  "Square to Round Duct",
-  "Y-Duct",
   "Air Grille",
   "Bar Grille",
   "Ceiling Diffuser",
@@ -1837,6 +1833,10 @@ function buildAccessoryDescription(specs: LineSpecs): string {
         lines.push("Painted with Oven Baked Enamel");
       }
     }
+  }
+  // Air Duct sealant brand (stored in bladeType).
+  if (isAirDuct(specs) && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
+    lines.push(`${specs.bladeType} Sealant`);
   }
   return lines.join("\n");
 }
@@ -3471,16 +3471,26 @@ export function QuotationBuilder({
             </Select>
           ) : c.category === "Ventilation Accessories" ? (
             <>
-              {/* Air Duct: Material sits right after Type (GI / Black Iron / Stainless). */}
+              {/* Air Duct: Material then sealant brand sit right after Type. */}
               {isAirDuct(c) && (
-                <Select
-                  value={AIR_DUCT_MATERIALS.includes(c.material) ? c.material : ""}
-                  disabled={!editable || !c.type}
-                  onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
-                >
-                  <option value="" disabled>Material…</option>
-                  {AIR_DUCT_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
-                </Select>
+                <>
+                  <Select
+                    value={AIR_DUCT_MATERIALS.includes(c.material) ? c.material : ""}
+                    disabled={!editable || !c.type}
+                    onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
+                  >
+                    <option value="" disabled>Material…</option>
+                    {AIR_DUCT_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                  </Select>
+                  <Select
+                    value={AIR_DUCT_SEALANTS.includes(c.bladeType) ? c.bladeType : ""}
+                    disabled={!editable || !c.type}
+                    onChange={(e) => applyAccessory(l.id, { bladeType: e.target.value })}
+                  >
+                    <option value="" disabled>Sealant…</option>
+                    {AIR_DUCT_SEALANTS.map((s) => (<option key={s} value={s}>{s}</option>))}
+                  </Select>
+                </>
               )}
               <Select
                 // Legacy lines stored "Square" before it became "Square/Rectangle".
