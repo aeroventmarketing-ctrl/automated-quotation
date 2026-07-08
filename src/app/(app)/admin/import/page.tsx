@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +42,7 @@ export default function ImportPage() {
   const [error, setError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const [cleared, setCleared] = useState<number | null>(null);
+  const [clearPw, setClearPw] = useState("");
   const [loaded, setLoaded] = useState<{ name: string; rows: number } | null>(null);
 
   async function clearAll() {
@@ -54,8 +56,9 @@ export default function ImportPage() {
     setError(null);
     setCleared(null);
     try {
-      const count = await clearCatalogue();
+      const count = await clearCatalogue(clearPw);
       setCleared(count);
+      setClearPw("");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Clear failed");
@@ -162,9 +165,25 @@ export default function ImportPage() {
             Remove all catalogue items, prices, and rating points to start from a clean slate
             before importing your own catalog. Existing quotations are unaffected.
           </p>
-          <Button variant="destructive" onClick={clearAll} disabled={clearing}>
-            {clearing ? "Clearing…" : "Clear all catalogue data"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="password"
+              value={clearPw}
+              onChange={(e) => setClearPw(e.target.value)}
+              placeholder="Password"
+              autoComplete="off"
+              className="w-48"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && clearPw && !clearing) clearAll();
+              }}
+            />
+            <Button variant="destructive" onClick={clearAll} disabled={clearing || !clearPw}>
+              {clearing ? "Clearing…" : "Clear all catalogue data"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Requires the password set in the CLEAR_CATALOG_PASSWORD environment variable.
+          </p>
           {cleared != null && (
             <p className="text-sm text-emerald-700">Cleared {cleared} catalogue item(s). Ready for import.</p>
           )}

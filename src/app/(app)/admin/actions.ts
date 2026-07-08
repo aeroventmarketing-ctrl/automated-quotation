@@ -84,8 +84,20 @@ export async function deleteCatalogueItem(id: string) {
  * quotation line items keep their stored snapshots; we just detach the FK so
  * the delete can't be blocked.
  */
-export async function clearCatalogue() {
+export async function clearCatalogue(password?: string) {
   await assertAdmin();
+  // Password gate so the catalogue can't be wiped by an accidental click. The
+  // expected password is set by the operator via the CLEAR_CATALOG_PASSWORD
+  // environment variable (never stored in the repo). Locked until it is set.
+  const expected = process.env.CLEAR_CATALOG_PASSWORD;
+  if (!expected) {
+    throw new Error(
+      "Clearing is locked. Set the CLEAR_CATALOG_PASSWORD environment variable to your chosen password to enable it.",
+    );
+  }
+  if ((password ?? "") !== expected) {
+    throw new Error("Incorrect password — catalogue was not cleared.");
+  }
   await prisma.quotationItem.updateMany({
     where: { catalogueItemId: { not: null } },
     data: { catalogueItemId: null },
