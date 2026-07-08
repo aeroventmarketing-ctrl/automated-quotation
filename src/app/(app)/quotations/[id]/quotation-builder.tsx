@@ -1836,7 +1836,7 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   }
   // Air Duct sealant brand (stored in bladeType).
   if (isAirDuct(specs) && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
-    lines.push(`${specs.bladeType} Sealant`);
+    lines.push(`${specs.bladeType} Brand`);
   }
   return lines.join("\n");
 }
@@ -3487,7 +3487,7 @@ export function QuotationBuilder({
                     disabled={!editable || !c.type}
                     onChange={(e) => applyAccessory(l.id, { bladeType: e.target.value })}
                   >
-                    <option value="" disabled>Sealant…</option>
+                    <option value="" disabled>Brand…</option>
                     {AIR_DUCT_SEALANTS.map((s) => (<option key={s} value={s}>{s}</option>))}
                   </Select>
                 </>
