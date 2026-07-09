@@ -3969,9 +3969,10 @@ export function QuotationBuilder({
                   <marker id="ductArrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto-start-reverse">
                     <path d="M1,1 L7,4 L1,7 Z" fill="#334155" />
                   </marker>
-                  {/* Clip the interior so it only shows through the open end. */}
+                  {/* Clip the interior so it only shows through the open end.
+                      Opening enlarged (wall thickness halved). */}
                   <clipPath id="ductBore">
-                    <polygon points="68,90 157,101 157,190 68,178" />
+                    <polygon points="64,85 161,98 161,194 64,181" />
                   </clipPath>
                 </defs>
                 {/* Long tube: top and right long faces receding up-right. */}
@@ -3981,22 +3982,23 @@ export function QuotationBuilder({
                 <polygon points="60,80 165,94 165,199 60,185" fill="#35a5a5" stroke="#0f766e" strokeWidth="1.2" strokeLinejoin="round" />
                 {/* Hollow bore, seen through the opening (clipped to it). */}
                 <g clipPath="url(#ductBore)">
-                  <polygon points="97,80 186,91 186,180 97,168" fill="#1f7d7d" />
-                  <polygon points="68,90 97,80 97,168 68,178" fill="#268f8f" />
-                  <polygon points="68,90 157,101 186,91 97,80" fill="#2f9e9e" />
-                  <polygon points="68,178 157,190 186,180 97,168" fill="#6fdada" />
+                  <polygon points="93,75 190,88 190,184 93,171" fill="#1f7d7d" />
+                  <polygon points="64,85 93,75 93,171 64,181" fill="#268f8f" />
+                  <polygon points="64,85 161,98 190,88 93,75" fill="#2f9e9e" />
+                  <polygon points="64,181 161,194 190,184 93,171" fill="#6fdada" />
                 </g>
-                <polygon points="68,90 157,101 157,190 68,178" fill="none" stroke="#0f766e" strokeWidth="1" strokeLinejoin="round" />
+                <polygon points="64,85 161,98 161,194 64,181" fill="none" stroke="#0f766e" strokeWidth="1" strokeLinejoin="round" />
                 {/* Dimension B (height of the opening). */}
                 <line x1="60" y1="80" x2="40" y2="80" stroke="#334155" strokeWidth="0.8" />
                 <line x1="60" y1="185" x2="40" y2="185" stroke="#334155" strokeWidth="0.8" />
                 <line x1="44" y1="80" x2="44" y2="185" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
                 <text x="29" y="132" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">B</text>
-                {/* Dimension A (width of the opening). */}
-                <line x1="60" y1="185" x2="60" y2="223" stroke="#334155" strokeWidth="0.8" />
+                {/* Dimension A (width) — drawn like B: a straight line with witness
+                    lines dropping from the two bottom corners to a common baseline. */}
+                <line x1="60" y1="185" x2="60" y2="237" stroke="#334155" strokeWidth="0.8" />
                 <line x1="165" y1="199" x2="165" y2="237" stroke="#334155" strokeWidth="0.8" />
-                <line x1="60" y1="219" x2="165" y2="233" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
-                <text x="110" y="248" fontSize="14" fill="#334155" textAnchor="middle">A</text>
+                <line x1="60" y1="233" x2="165" y2="233" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
+                <text x="112" y="248" fontSize="14" fill="#334155" textAnchor="middle">A</text>
               </svg>
             </div>
           );
