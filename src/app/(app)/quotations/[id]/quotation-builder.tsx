@@ -1611,6 +1611,15 @@ const STRAIGHT_DUCT_MARKUP = 1.3;
 const STRAIGHT_DUCT_ANGLE_PRICE = 15; // ₱ per corner-angle piece (Air Duct only)
 const STRAIGHT_DUCT_ANGLE_COUNT = 8; // corner angles per duct
 
+// Labor is billed by "labor sheets" at a per-material rate (GI 450 / BI 900 /
+// SS 1350 per sheet). Up to and including 1 sheet it is proportional to the
+// sheets used; beyond 1 sheet it rounds UP to the next half sheet — e.g. 1.2 →
+// 1.5 sheets, 1.6 → 2 sheets — so the labor steps 1 → 1.5 → 2 (for GI:
+// 450 → 675 → 900).
+function straightDuctLaborSheets(sheets: number): number {
+  return sheets <= 1 ? sheets : Math.ceil(sheets * 2) / 2;
+}
+
 /** Gauge from the calculator's A/B cross-section (longest side, inches → mm). */
 function straightDuctGauge(specs: { ductCalcLength?: string; ductCalcWidth?: string }): string | null {
   const a = parseFloat(specs.ductCalcLength ?? "");
@@ -1645,7 +1654,7 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   return (
     sheetPrice * STRAIGHT_DUCT_MARKUP * sheets +
     STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT +
-    sheets * labor
+    straightDuctLaborSheets(sheets) * labor
   );
 }
 
