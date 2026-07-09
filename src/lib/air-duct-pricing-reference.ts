@@ -14,7 +14,6 @@
  *     brand-independent, or is that one brand's price?
  *  4. Gauge reconciliation: the "Recommend" size→gauge schedule produces
  *     26/24/22/20/18 ga, but these price tables use 24/22/20/18/16 ga.
- *  5. Black Iron 16 ga price is still blank in the source.
  */
 
 /** Actual sheet thickness (mm) by gauge, per the client's tables. */
@@ -37,14 +36,14 @@ export const GI_SHEET_PRICE: Record<string, { Nihonbond: number; APO: number }> 
 
 /**
  * Black Iron sheet price (PHP per sheet) by gauge — a single column in the
- * source (no APO/Nihonbond split; 16 ga not listed). Brand handling TBD.
+ * source (no APO/Nihonbond split). Brand handling TBD.
  */
 export const BLACK_IRON_SHEET_PRICE: Record<string, number> = {
   "24": 785,
   "22": 1000,
   "20": 1075,
   "18": 1472,
-  // "16": not provided
+  "16": 1796,
 };
 
 /** Stainless Steel sheet price (PHP per sheet) by gauge (single column). */
