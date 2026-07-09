@@ -1023,14 +1023,15 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(specs.type);
 const isStraightDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && specs.type === "Straight Duct";
-// One sheet = 4 ft × 8 ft = 48 in × 96 in = 4608 in². The Straight-Duct price
-// calculator's Number of Sheets Used = (flat blank Length × Width, in) ÷ 4608.
-const SHEET_AREA_IN2 = 48 * 96;
-function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string }): number | null {
-  const l = parseFloat(specs.ductCalcLength ?? "");
-  const w = parseFloat(specs.ductCalcWidth ?? "");
-  if (!Number.isFinite(l) || !Number.isFinite(w) || l <= 0 || w <= 0) return null;
-  return (l * w) / SHEET_AREA_IN2;
+// Straight Duct standard run length = 1.2 m (≈ 48" = the sheet's short side), so
+// one duct wraps a strip of the 48×96 in sheet: Number of Sheets Used =
+// ((A + B) × 2 + 2) ÷ 96, where A/B are the cross-section sides (inches) and the
+// +2 is the lock-seam allowance. (A = B = 0 → 2/96 ≈ 0.021, matching the sheet.)
+const STRAIGHT_DUCT_STD_LENGTH_M = 1.2;
+function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string }): number {
+  const a = parseFloat(specs.ductCalcLength ?? "") || 0;
+  const b = parseFloat(specs.ductCalcWidth ?? "") || 0;
+  return ((a + b) * 2 + 2) / 96;
 }
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
 const VENT_CAP_DIAMETERS = ["4", "6", "8"];
@@ -3783,9 +3784,12 @@ export function QuotationBuilder({
               {/* Duct Price Calculator (VAT exclusive). */}
               <div className="w-72 rounded-md border bg-sky-50 text-sm">
                 <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">Duct Price Calculator</div>
+                <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
+                  Standard length: {STRAIGHT_DUCT_STD_LENGTH_M} meter
+                </div>
                 <div className="flex items-center justify-between border-b px-3 py-1.5">
                   <span>Number of Sheets Used</span>
-                  <span className="tabular-nums font-medium">{sheets == null ? "—" : (Math.round(sheets * 1000) / 1000).toLocaleString()}</span>
+                  <span className="tabular-nums font-medium">{(Math.round(sheets * 1000) / 1000).toLocaleString()}</span>
                 </div>
                 <div className="flex items-center gap-2 border-b px-3 py-1.5">
                   <span className="flex-1">Length (input here)</span>
