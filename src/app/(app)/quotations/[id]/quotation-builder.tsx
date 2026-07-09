@@ -80,6 +80,9 @@ interface LineSpecs {
   sizeW: string;
   sizeUnit?: string; // dimension unit (mm/cm/inches) for sized accessories
   gauge?: string; // sheet gauge for duct hardware (22 / 20 / 18)
+  // Straight Duct price calculator: the flat sheet blank dimensions (inches).
+  ductCalcLength?: string;
+  ductCalcWidth?: string;
   cleatSize?: string; // length option for TDC cleat / S-clip / C-clip (6.5" / 48")
   canvassUnit?: string; // canvass connector pricing basis ("per meter" / "per box")
   powderCoated?: boolean; // accessory powder-coat finish flag
@@ -1018,6 +1021,17 @@ const AIR_DUCT_MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless Steel"];
 const AIR_DUCT_SEALANTS = ["APO", "Nihonbond"];
 const isAirDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(specs.type);
+const isStraightDuct = (specs: { category: string; type: string }): boolean =>
+  specs.category === "Ventilation Accessories" && specs.type === "Straight Duct";
+// One sheet = 4 ft × 8 ft = 48 in × 96 in = 4608 in². The Straight-Duct price
+// calculator's Number of Sheets Used = (flat blank Length × Width, in) ÷ 4608.
+const SHEET_AREA_IN2 = 48 * 96;
+function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string }): number | null {
+  const l = parseFloat(specs.ductCalcLength ?? "");
+  const w = parseFloat(specs.ductCalcWidth ?? "");
+  if (!Number.isFinite(l) || !Number.isFinite(w) || l <= 0 || w <= 0) return null;
+  return (l * w) / SHEET_AREA_IN2;
+}
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
 const VENT_CAP_DIAMETERS = ["4", "6", "8"];
 const VENT_CAP_MATERIALS = ["Stainless 201", "Stainless 304"];
@@ -3193,7 +3207,7 @@ export function QuotationBuilder({
                 // clear any stale auto-price (recomputes once dimensions are set).
                 applyAccessory(
                   l.id,
-                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false },
+                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "" },
                   true,
                 );
               } else {
@@ -3751,6 +3765,54 @@ export function QuotationBuilder({
                       ? "Category · Brand · Type · Phase · Pole · HP — auto-priced (editable)."
                       : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
+        {isStraightDuct(c) && (() => {
+          const sheets = ductSheetsUsed(c);
+          return (
+            <div className="mt-3 flex flex-wrap items-start gap-4">
+              {/* Duct geometry diagram (A = width, B = height, run length). */}
+              <svg viewBox="0 0 220 150" className="h-32 w-48 shrink-0" role="img" aria-label="Rectangular duct">
+                <polygon points="20,60 120,30 210,55 110,90" fill="#5ec8c8" stroke="#0f766e" strokeWidth="1.5" />
+                <polygon points="20,60 110,90 110,140 20,110" fill="#3aa8a8" stroke="#0f766e" strokeWidth="1.5" />
+                <polygon points="110,90 210,55 210,105 110,140" fill="#4fbcbc" stroke="#0f766e" strokeWidth="1.5" />
+                <line x1="10" y1="60" x2="10" y2="110" stroke="#334155" strokeWidth="1" />
+                <text x="2" y="88" fontSize="11" fill="#334155">B</text>
+                <line x1="20" y1="120" x2="110" y2="150" stroke="#334155" strokeWidth="1" />
+                <text x="60" y="140" fontSize="11" fill="#334155">A</text>
+                <text x="150" y="120" fontSize="10" fill="#334155">length</text>
+              </svg>
+              {/* Duct Price Calculator (VAT exclusive). */}
+              <div className="w-72 rounded-md border bg-sky-50 text-sm">
+                <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">Duct Price Calculator</div>
+                <div className="flex items-center justify-between border-b px-3 py-1.5">
+                  <span>Number of Sheets Used</span>
+                  <span className="tabular-nums font-medium">{sheets == null ? "—" : (Math.round(sheets * 1000) / 1000).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                  <span className="flex-1">Length (input here)</span>
+                  <Input
+                    type="number" step="any" className="h-8 w-20 text-right"
+                    disabled={!editable} value={c.ductCalcLength ?? ""}
+                    onChange={(e) => applyAccessory(l.id, { ductCalcLength: e.target.value })}
+                  />
+                  <span className="text-xs text-muted-foreground">inches</span>
+                </div>
+                <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                  <span className="flex-1">Width (input here)</span>
+                  <Input
+                    type="number" step="any" className="h-8 w-20 text-right"
+                    disabled={!editable} value={c.ductCalcWidth ?? ""}
+                    onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
+                  />
+                  <span className="text-xs text-muted-foreground">inches</span>
+                </div>
+                <div className="flex items-center justify-between bg-sky-200/60 px-3 py-1.5 font-semibold">
+                  <span>Duct Price <span className="text-[10px] font-normal text-rose-600">VAT EX</span></span>
+                  <span className="tabular-nums">—</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }
