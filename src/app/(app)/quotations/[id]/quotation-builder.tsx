@@ -1968,8 +1968,9 @@ function buildAccessoryDescription(specs: LineSpecs): string {
       }
     }
   }
-  // Air Duct sealant brand (stored in bladeType).
-  if (isAirDuct(specs) && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
+  // Air Duct sealant brand (stored in bladeType) — Galvanized Iron only; Black
+  // Iron and Stainless Steel use a single, brand-independent price.
+  if (isAirDuct(specs) && specs.material === "Galvanized Iron" && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
     lines.push(`${specs.bladeType} Brand`);
   }
   // Air Duct recommended sheet gauge (from the longest-side thickness schedule).
@@ -2470,6 +2471,9 @@ export function QuotationBuilder({
         // Stainless steel 304 is never powder-coated — drop any stale flag so the
         // price and description don't carry the ×1.5 / "Powder Coated" finish.
         if (specs.material === "Stainless Steel 304") specs.powderCoated = false;
+        // Air Duct brand (APO/Nihonbond) only applies to Galvanized Iron; drop a
+        // stale brand when the material is Black Iron / Stainless Steel.
+        if (isAirDuct(specs) && specs.material !== "Galvanized Iron") specs.bladeType = "";
         // Air Duct "Recommend": auto-pick the sheet gauge from the duct's longest
         // side, recomputed on any dimension / shape / unit change (cleared when
         // off). Straight Duct manages its own gauge (manual dropdown + Recommend)
@@ -3647,14 +3651,18 @@ export function QuotationBuilder({
                     <option value="" disabled>Material…</option>
                     {AIR_DUCT_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
                   </Select>
-                  <Select
-                    value={AIR_DUCT_SEALANTS.includes(c.bladeType) ? c.bladeType : ""}
-                    disabled={!editable || !c.type}
-                    onChange={(e) => applyAccessory(l.id, { bladeType: e.target.value })}
-                  >
-                    <option value="" disabled>Brand…</option>
-                    {AIR_DUCT_SEALANTS.map((s) => (<option key={s} value={s}>{s}</option>))}
-                  </Select>
+                  {/* Brand (sheet supplier) applies to Galvanized Iron only; Black
+                      Iron and Stainless Steel use a single, brand-independent price. */}
+                  {c.material === "Galvanized Iron" && (
+                    <Select
+                      value={AIR_DUCT_SEALANTS.includes(c.bladeType) ? c.bladeType : ""}
+                      disabled={!editable || !c.type}
+                      onChange={(e) => applyAccessory(l.id, { bladeType: e.target.value })}
+                    >
+                      <option value="" disabled>Brand…</option>
+                      {AIR_DUCT_SEALANTS.map((s) => (<option key={s} value={s}>{s}</option>))}
+                    </Select>
+                  )}
                 </>
               )}
               <Select
