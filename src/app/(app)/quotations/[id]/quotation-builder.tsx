@@ -89,6 +89,7 @@ interface LineSpecs {
   // Straight Duct price calculator: the flat sheet blank dimensions (inches).
   ductCalcLength?: string;
   ductCalcWidth?: string;
+  ductNoFlange?: boolean; // Straight Duct: no angle-iron flange (drops the 15×8 corner cost; body 1.2 m vs flanged 1.1 m)
   cleatSize?: string; // length option for TDC cleat / S-clip / C-clip (6.5" / 48")
   canvassUnit?: string; // canvass connector pricing basis ("per meter" / "per box")
   powderCoated?: boolean; // accessory powder-coat finish flag
@@ -1029,12 +1030,15 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(specs.type);
 const isStraightDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && specs.type === "Straight Duct";
-// Straight Duct standard run length = 1.2 m (≈ 48" = the sheet's short side), so
-// one duct wraps a strip of the 48×96 in sheet: Number of Sheets Used =
-// ((A + B) × 2 + 2) ÷ 96, where A/B are the cross-section sides in trade inches
-// (the calculator inputs are entered in the chosen unit and converted here) and
-// the +2 is the lock-seam allowance. (A = B = 0 → 2/96 ≈ 0.021, matching the sheet.)
-const STRAIGHT_DUCT_STD_LENGTH_M = 1.2;
+// Straight Duct: one duct wraps a strip of the 48 × 96 in sheet, so Number of
+// Sheets Used = ((A + B) × 2 + 2) ÷ 96, where A/B are the cross-section sides in
+// trade inches (the calculator inputs are entered in the chosen unit and
+// converted here) and the +2 is the lock-seam allowance. (A = B = 0 → 2/96 ≈
+// 0.021.) The material basis is fixed; the flanged/non-flanged standard length
+// below is shown for reference only and does not change the sheet count.
+function straightDuctStdLengthM(specs: { ductNoFlange?: boolean }): number {
+  return specs.ductNoFlange ? 1.2 : 1.1;
+}
 /** Calculator A/B (entered in sizeUnit) → mm (for the gauge) and trade inches (for sheets). */
 function ductCalcSides(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): {
   aMm: number;
@@ -1617,11 +1621,12 @@ function recommendedDuctGauge(specs: LineSpecs): string | null {
 // The calculator's A × B cross-section drives both the sheet count and the gauge
 // (longest side in mm → the gauge schedule). Duct Price is quoted
 // VAT-EXCLUSIVE and equals:
-//   sheetPrice × 1.3 markup × sheets  +  ₱15 corner angle × 8 pieces
-//                                     +  sheets × labor-per-sheet.
+//   sheetPrice × 1.3 markup × sheets  +  ₱15 corner angle × 8 pieces (flange)
+//                                     +  labor-sheets × labor-per-sheet.
+// A "No Flange" duct drops the ₱15 × 8 angle-iron flange cost.
 const STRAIGHT_DUCT_MARKUP = 1.3;
 const STRAIGHT_DUCT_ANGLE_PRICE = 15; // ₱ per corner-angle piece (Air Duct only)
-const STRAIGHT_DUCT_ANGLE_COUNT = 8; // corner angles per duct
+const STRAIGHT_DUCT_ANGLE_COUNT = 8; // corner angles per flanged duct
 
 // Labor is billed by "labor sheets" at a per-material rate (GI 450 / BI 900 /
 // SS 1350 per sheet). It carries a one-sheet minimum: anything under 1 sheet is
@@ -1662,9 +1667,11 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   const labor = AIR_DUCT_LABOR_PER_SHEET[specs.material];
   if (labor == null) return null;
   const sheets = ductSheetsUsed(specs);
+  // Angle-iron flange corners apply only to a flanged duct.
+  const angleCost = specs.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
   return (
     sheetPrice * STRAIGHT_DUCT_MARKUP * sheets +
-    STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT +
+    angleCost +
     straightDuctLaborSheets(sheets) * labor
   );
 }
@@ -3304,7 +3311,7 @@ export function QuotationBuilder({
                 // clear any stale auto-price (recomputes once dimensions are set).
                 applyAccessory(
                   l.id,
-                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: type === "Straight Duct" ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "" },
+                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: type === "Straight Duct" ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false },
                   true,
                 );
               } else {
@@ -3723,6 +3730,16 @@ export function QuotationBuilder({
                   Recommend{c.mcRecommend && c.gauge ? ` (${c.gauge} ga)` : ""}
                 </label>
               )}
+              {/* Straight Duct: No Flange drops the angle-iron flange (₱15 × 8)
+                  and makes the standard body a full 1.2 m (flanged = 1.1 m). */}
+              {isStraightDuct(c) && (
+                <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                  <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type}
+                    checked={!!c.ductNoFlange}
+                    onChange={(e) => applyAccessory(l.id, { ductNoFlange: e.target.checked })} />
+                  No Flange
+                </label>
+              )}
               {/* Material (Air Terminals / Dampers). Air Duct shows its own material
                   dropdown right after Type, so it's skipped here. */}
               {!isIsolator(c) && !isAirDuct(c) && (
@@ -3898,7 +3915,7 @@ export function QuotationBuilder({
               <div className="w-72 rounded-md border bg-sky-50 text-sm">
                 <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">Duct Price Calculator</div>
                 <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
-                  Standard length: {STRAIGHT_DUCT_STD_LENGTH_M} meter
+                  Standard length: {straightDuctStdLengthM(c)} meter{c.ductNoFlange ? " (No Flange)" : " (Flanged)"}
                 </div>
                 <div className="flex items-center justify-between border-b px-3 py-1.5">
                   <span>Number of Sheets Used</span>
