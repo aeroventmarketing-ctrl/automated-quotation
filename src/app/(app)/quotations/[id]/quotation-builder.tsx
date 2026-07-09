@@ -1627,6 +1627,8 @@ function recommendedDuctGauge(specs: LineSpecs): string | null {
 const STRAIGHT_DUCT_MARKUP = 1.3;
 const STRAIGHT_DUCT_ANGLE_PRICE = 15; // ₱ per corner-angle piece (Air Duct only)
 const STRAIGHT_DUCT_ANGLE_COUNT = 8; // corner angles per flanged duct
+// Selectable sheet gauges (match the sheet-price tables). Thicker = smaller number.
+const STRAIGHT_DUCT_GAUGES = ["24", "22", "20", "18", "16"];
 
 // Labor is billed by "labor sheets" at a per-material rate (GI 450 / BI 900 /
 // SS 1350 per sheet). It carries a one-sheet minimum: anything under 1 sheet is
@@ -1658,10 +1660,13 @@ function straightDuctSheetPrice(material: string, gauge: string, brand: string):
   return null;
 }
 
-/** Straight Duct price (VAT-EXCLUSIVE), or null when the inputs are incomplete. */
+/** Straight Duct price (VAT-EXCLUSIVE), or null when the inputs are incomplete.
+ *  Uses the line's effective gauge (recommended or manually selected). */
 function straightDuctPriceVatEx(specs: LineSpecs): number | null {
-  const gauge = straightDuctGauge(specs);
+  const gauge = specs.gauge;
   if (!gauge) return null;
+  const { aMm, bMm } = ductCalcSides(specs);
+  if (!(aMm > 0) || !(bMm > 0)) return null; // need the A × B cross-section entered
   const sheetPrice = straightDuctSheetPrice(specs.material, gauge, specs.bladeType);
   if (sheetPrice == null) return null;
   const labor = AIR_DUCT_LABOR_PER_SHEET[specs.material];
@@ -2465,17 +2470,19 @@ export function QuotationBuilder({
         // price and description don't carry the ×1.5 / "Powder Coated" finish.
         if (specs.material === "Stainless Steel 304") specs.powderCoated = false;
         // Air Duct "Recommend": auto-pick the sheet gauge from the duct's longest
-        // side, recomputed on any dimension / shape / unit change (cleared when off).
-        if (isAirDuct(specs)) {
+        // side, recomputed on any dimension / shape / unit change (cleared when
+        // off). Straight Duct manages its own gauge (manual dropdown + Recommend)
+        // in its branch below, so it's excluded here.
+        if (isAirDuct(specs) && !isStraightDuct(specs)) {
           specs.gauge = specs.mcRecommend ? recommendedDuctGauge(specs) ?? "" : "";
         }
         // Straight Duct: auto-priced from the calculator's A × B cross-section.
-        // Ticking "Recommend" picks the sheet gauge from those A/B inputs, which
-        // in turn drives the Duct Price; unticked → no gauge, no auto price. The
-        // gauge feeds the description too, so it always matches the price. Price
+        // The gauge is either recommended (ticking "Recommend" picks it from the
+        // A/B inputs and locks the dropdown) or chosen manually from the Gauge
+        // dropdown; that gauge drives the Duct Price and the description. Price
         // is VAT-ex → store VAT-inclusive.
         if (isStraightDuct(specs)) {
-          const gauge = specs.mcRecommend ? straightDuctGauge(specs) ?? "" : "";
+          const gauge = specs.mcRecommend ? straightDuctGauge(specs) ?? "" : specs.gauge ?? "";
           const s2: LineSpecs = { ...specs, gauge };
           const priceVatEx = gauge ? straightDuctPriceVatEx(s2) : null;
           return {
@@ -3658,6 +3665,18 @@ export function QuotationBuilder({
                 <option value="">{variantLabel(c.type)}…</option>
                 {shapesFor(c.type).map((s) => (<option key={s} value={s}>{s}</option>))}
               </Select>
+              {/* Straight Duct: sheet gauge. Manually selectable, or auto-picked
+                  and locked when Recommend is on (which sets c.gauge). */}
+              {isStraightDuct(c) && (
+                <Select
+                  value={STRAIGHT_DUCT_GAUGES.includes(c.gauge ?? "") ? c.gauge : ""}
+                  disabled={!editable || !c.type || !!c.mcRecommend}
+                  onChange={(e) => applyAccessory(l.id, { gauge: e.target.value })}
+                >
+                  <option value="" disabled>Gauge…</option>
+                  {STRAIGHT_DUCT_GAUGES.map((g) => (<option key={g} value={g}>{g} ga</option>))}
+                </Select>
+              )}
               {/* Unit of measurement for the dimensions (selected accessories). */}
               {UOM_TYPES.has(c.type) && (
                 <Select
@@ -3894,10 +3913,10 @@ export function QuotationBuilder({
         {isStraightDuct(c) && (() => {
           const sheets = ductSheetsUsed(c);
           const calcUnit = c.sizeUnit || "inches";
-          // Gauge and price follow the Recommend toggle (the gauge picks the sheet
-          // used for pricing).
-          const ductGauge = c.mcRecommend ? straightDuctGauge(c) : null;
-          const priceVatEx = c.mcRecommend ? straightDuctPriceVatEx(c) : null;
+          // Effective gauge: recommended (from A × B) when Recommend is on, else
+          // the manually selected Gauge dropdown value. It drives the Duct Price.
+          const ductGauge = c.mcRecommend ? straightDuctGauge(c) : c.gauge || null;
+          const priceVatEx = ductGauge ? straightDuctPriceVatEx({ ...c, gauge: ductGauge }) : null;
           return (
             <div className="mt-3 flex flex-wrap items-start gap-4">
               {/* Duct geometry diagram (A = width, B = height, run length). */}
