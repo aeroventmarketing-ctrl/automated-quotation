@@ -3964,7 +3964,7 @@ export function QuotationBuilder({
               </div>
               {/* Duct geometry diagram (A = width, B = height, run length) —
                   right, enlarged 50% and pushed farther right, vertically centered. */}
-              <svg viewBox="0 0 220 150" className="ml-12 h-96 w-[36rem] shrink-0" role="img" aria-label="Rectangular duct">
+              <svg viewBox="0 0 220 150" className="ml-12 h-[21.6rem] w-[32.4rem] shrink-0" role="img" aria-label="Rectangular duct">
                 <polygon points="20,60 120,30 210,55 110,90" fill="#5ec8c8" stroke="#0f766e" strokeWidth="1.5" />
                 <polygon points="20,60 110,90 110,140 20,110" fill="#3aa8a8" stroke="#0f766e" strokeWidth="1.5" />
                 <polygon points="110,90 210,55 210,105 110,140" fill="#4fbcbc" stroke="#0f766e" strokeWidth="1.5" />
