@@ -1929,6 +1929,21 @@ function accMaterialLabel(material: string): string {
  * material. Round uses Ø diameter; square/rectangle uses L x W.
  */
 function buildAccessoryDescription(specs: LineSpecs): string {
+  // Straight Duct uses a fixed line order:
+  //   1 type · 2 dimensions (A × B) · 3 material · 4 gauge · 5 brand (if any).
+  if (isStraightDuct(specs)) {
+    const dl: string[] = [specs.type || "Straight Duct"];
+    const unit = specs.sizeUnit || "inches";
+    const a = specs.ductCalcLength;
+    const b = specs.ductCalcWidth;
+    if (a && b) dl.push(`${a} x ${b} ${unit}`);
+    if (AIR_DUCT_MATERIALS.includes(specs.material)) dl.push(`${accMaterialLabel(specs.material)} Material`);
+    if (specs.gauge) dl.push(`${specs.gauge} ga`);
+    if (specs.material === "Galvanized Iron" && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
+      dl.push(`${specs.bladeType} Brand`);
+    }
+    return dl.join("\n");
+  }
   const lines: string[] = [];
   if (specs.type) lines.push(specs.type);
   const unit = specs.sizeUnit || "mm";
