@@ -3918,21 +3918,10 @@ export function QuotationBuilder({
           const ductGauge = c.mcRecommend ? straightDuctGauge(c) : c.gauge || null;
           const priceVatEx = ductGauge ? straightDuctPriceVatEx({ ...c, gauge: ductGauge }) : null;
           return (
-            <div className="mt-3 flex flex-wrap items-start gap-4">
-              {/* Duct geometry diagram (A = width, B = height, run length). */}
-              <svg viewBox="0 0 220 150" className="h-32 w-48 shrink-0" role="img" aria-label="Rectangular duct">
-                <polygon points="20,60 120,30 210,55 110,90" fill="#5ec8c8" stroke="#0f766e" strokeWidth="1.5" />
-                <polygon points="20,60 110,90 110,140 20,110" fill="#3aa8a8" stroke="#0f766e" strokeWidth="1.5" />
-                <polygon points="110,90 210,55 210,105 110,140" fill="#4fbcbc" stroke="#0f766e" strokeWidth="1.5" />
-                <line x1="10" y1="60" x2="10" y2="110" stroke="#334155" strokeWidth="1" />
-                <text x="2" y="88" fontSize="11" fill="#334155">B</text>
-                <line x1="20" y1="120" x2="110" y2="150" stroke="#334155" strokeWidth="1" />
-                <text x="60" y="140" fontSize="11" fill="#334155">A</text>
-                <text x="150" y="120" fontSize="10" fill="#334155">length</text>
-              </svg>
-              {/* Duct Price Calculator (VAT exclusive). */}
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+              {/* Straight Duct price panel (VAT exclusive) — left. */}
               <div className="w-72 rounded-md border bg-sky-50 text-sm">
-                <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">Duct Price Calculator</div>
+                <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">Straight Duct</div>
                 <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
                   Standard length: {straightDuctStdLengthM(c)} meter{c.ductNoFlange ? " (No Flange)" : " (Flanged)"}
                 </div>
@@ -3971,6 +3960,18 @@ export function QuotationBuilder({
                   </span>
                 </div>
               </div>
+              {/* Duct geometry diagram (A = width, B = height, run length) —
+                  right, double size, vertically centered against the panel. */}
+              <svg viewBox="0 0 220 150" className="h-64 w-96 shrink-0" role="img" aria-label="Rectangular duct">
+                <polygon points="20,60 120,30 210,55 110,90" fill="#5ec8c8" stroke="#0f766e" strokeWidth="1.5" />
+                <polygon points="20,60 110,90 110,140 20,110" fill="#3aa8a8" stroke="#0f766e" strokeWidth="1.5" />
+                <polygon points="110,90 210,55 210,105 110,140" fill="#4fbcbc" stroke="#0f766e" strokeWidth="1.5" />
+                <line x1="10" y1="60" x2="10" y2="110" stroke="#334155" strokeWidth="1" />
+                <text x="2" y="88" fontSize="11" fill="#334155">B</text>
+                <line x1="20" y1="120" x2="110" y2="150" stroke="#334155" strokeWidth="1" />
+                <text x="60" y="140" fontSize="11" fill="#334155">A</text>
+                <text x="150" y="120" fontSize="10" fill="#334155">length</text>
+              </svg>
             </div>
           );
         })()}
