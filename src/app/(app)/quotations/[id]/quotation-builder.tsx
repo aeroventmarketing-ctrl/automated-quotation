@@ -3971,8 +3971,12 @@ export function QuotationBuilder({
                 <line x1="10" y1="60" x2="10" y2="110" stroke="#334155" strokeWidth="1" />
                 <text x="2" y="88" fontSize="11" fill="#334155">B</text>
                 <line x1="20" y1="120" x2="110" y2="150" stroke="#334155" strokeWidth="1" />
-                <text x="60" y="140" fontSize="11" fill="#334155">A</text>
-                <text x="150" y="120" fontSize="10" fill="#334155">length</text>
+                {/* A: centered under (below) the dimension line's midpoint. */}
+                <text x="65" y="147" fontSize="11" fill="#334155" textAnchor="middle">A</text>
+                {/* length: centered on the right face — horizontally between its
+                    two vertical edges (x 110–210) and vertically between its top
+                    and bottom diagonal edges. */}
+                <text x="160" y="97.5" fontSize="10" fill="#334155" textAnchor="middle" dominantBaseline="middle">length</text>
               </svg>
             </div>
           );
