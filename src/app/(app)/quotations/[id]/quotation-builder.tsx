@@ -3994,14 +3994,15 @@ export function QuotationBuilder({
                 <line x1="44" y1="80" x2="44" y2="185" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
                 <text x="29" y="132" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">B</text>
                 {/* Dimension A (width) — the dimension line runs PARALLEL to the
-                    opening's bottom edge (FBL→FBR); witness lines drop perpendicular
-                    from the two bottom corners, and the line breaks around a centred
-                    "A" with the arrowheads pointing outward to the witness lines. */}
-                <line x1="60" y1="185" x2="54" y2="229" stroke="#334155" strokeWidth="0.8" />
-                <line x1="165" y1="199" x2="159" y2="243" stroke="#334155" strokeWidth="0.8" />
-                <line x1="55" y1="225" x2="99" y2="231" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" />
-                <line x1="116" y1="233" x2="160" y2="239" stroke="#334155" strokeWidth="1" markerEnd="url(#ductArrow)" />
-                <text x="108" y="231" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">A</text>
+                    opening's bottom edge (FBL→FBR), offset straight down, so the
+                    witness lines drop vertically from the two bottom corners. The
+                    line breaks around a centred "A" with the arrowheads pointing
+                    outward to the witness lines. */}
+                <line x1="60" y1="185" x2="60" y2="233" stroke="#334155" strokeWidth="0.8" />
+                <line x1="165" y1="199" x2="165" y2="247" stroke="#334155" strokeWidth="0.8" />
+                <line x1="60" y1="229" x2="104" y2="235" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" />
+                <line x1="121" y1="237" x2="165" y2="243" stroke="#334155" strokeWidth="1" markerEnd="url(#ductArrow)" />
+                <text x="112" y="236" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">A</text>
               </svg>
             </div>
           );
