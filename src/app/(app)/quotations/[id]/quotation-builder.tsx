@@ -3670,6 +3670,10 @@ export function QuotationBuilder({
                 <Input className="h-9" type="number" step="any" placeholder={`Diameter Ø (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                   disabled={!editable || !c.type} value={c.sizeL}
                   onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })} />
+              ) : isStraightDuct(c) ? (
+                // Straight Duct is sized in its own Duct Price Calculator (A × B
+                // inches), so the box's L/W dimensions are omitted here.
+                null
               ) : (
                 <>
                   <Input className="h-9" type="number" step="any" placeholder={`L (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
@@ -3689,8 +3693,10 @@ export function QuotationBuilder({
                   Recommend?
                 </label>
               )}
-              {/* Air Duct: auto-pick the sheet gauge from the duct's longest side. */}
-              {isAirDuct(c) && (
+              {/* Air Duct: auto-pick the sheet gauge from the duct's longest side.
+                  Straight Duct derives its gauge in the Duct Price Calculator
+                  instead, so no Recommend checkbox is shown for it. */}
+              {isAirDuct(c) && !isStraightDuct(c) && (
                 <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
                   <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type}
                     checked={!!c.mcRecommend}
