@@ -1031,13 +1031,25 @@ const isStraightDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && specs.type === "Straight Duct";
 // Straight Duct standard run length = 1.2 m (≈ 48" = the sheet's short side), so
 // one duct wraps a strip of the 48×96 in sheet: Number of Sheets Used =
-// ((A + B) × 2 + 2) ÷ 96, where A/B are the cross-section sides (inches) and the
-// +2 is the lock-seam allowance. (A = B = 0 → 2/96 ≈ 0.021, matching the sheet.)
+// ((A + B) × 2 + 2) ÷ 96, where A/B are the cross-section sides in trade inches
+// (the calculator inputs are entered in the chosen unit and converted here) and
+// the +2 is the lock-seam allowance. (A = B = 0 → 2/96 ≈ 0.021, matching the sheet.)
 const STRAIGHT_DUCT_STD_LENGTH_M = 1.2;
-function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string }): number {
-  const a = parseFloat(specs.ductCalcLength ?? "") || 0;
-  const b = parseFloat(specs.ductCalcWidth ?? "") || 0;
-  return ((a + b) * 2 + 2) / 96;
+/** Calculator A/B (entered in sizeUnit) → mm (for the gauge) and trade inches (for sheets). */
+function ductCalcSides(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): {
+  aMm: number;
+  bMm: number;
+  aIn: number;
+  bIn: number;
+} {
+  const perMm = ACC_MM_PER_UNIT[specs.sizeUnit || "inches"] ?? 25; // mm per 1 entered unit
+  const aMm = (parseFloat(specs.ductCalcLength ?? "") || 0) * perMm;
+  const bMm = (parseFloat(specs.ductCalcWidth ?? "") || 0) * perMm;
+  return { aMm, bMm, aIn: aMm / 25, bIn: bMm / 25 };
+}
+function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
+  const { aIn, bIn } = ductCalcSides(specs);
+  return ((aIn + bIn) * 2 + 2) / 96;
 }
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
 const VENT_CAP_DIAMETERS = ["4", "6", "8"];
@@ -1602,8 +1614,8 @@ function recommendedDuctGauge(specs: LineSpecs): string | null {
 }
 
 // --- Straight Duct auto-pricing (Air Duct group) -----------------------------
-// The calculator's A × B cross-section (inches) drives both the sheet count and
-// the gauge (longest side × 25 mm → the gauge schedule). Duct Price is quoted
+// The calculator's A × B cross-section drives both the sheet count and the gauge
+// (longest side in mm → the gauge schedule). Duct Price is quoted
 // VAT-EXCLUSIVE and equals:
 //   sheetPrice × 1.3 markup × sheets  +  ₱15 corner angle × 8 pieces
 //                                     +  sheets × labor-per-sheet.
@@ -1620,12 +1632,11 @@ function straightDuctLaborSheets(sheets: number): number {
   return Math.max(1, Math.ceil(sheets * 2) / 2);
 }
 
-/** Gauge from the calculator's A/B cross-section (longest side, inches → mm). */
-function straightDuctGauge(specs: { ductCalcLength?: string; ductCalcWidth?: string }): string | null {
-  const a = parseFloat(specs.ductCalcLength ?? "");
-  const b = parseFloat(specs.ductCalcWidth ?? "");
-  if (!(a > 0) || !(b > 0)) return null;
-  const longestMm = Math.max(a, b) * (ACC_MM_PER_UNIT.inches ?? 25); // trade inch = 25 mm
+/** Gauge from the calculator's A/B cross-section (longest side in mm → schedule). */
+function straightDuctGauge(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): string | null {
+  const { aMm, bMm } = ductCalcSides(specs);
+  if (!(aMm > 0) || !(bMm > 0)) return null;
+  const longestMm = Math.max(aMm, bMm);
   for (const [maxMm, ga] of DUCT_GAUGE_SCHEDULE) if (longestMm <= maxMm) return ga;
   return "18";
 }
@@ -2452,12 +2463,14 @@ export function QuotationBuilder({
           specs.gauge = specs.mcRecommend ? recommendedDuctGauge(specs) ?? "" : "";
         }
         // Straight Duct: auto-priced from the calculator's A × B cross-section.
-        // The pricing gauge (and the gauge shown on the quote) comes from those
-        // A/B inputs, not the box's Recommend widget, so the description and the
-        // computed Duct Price always agree. Price is VAT-ex → store VAT-inclusive.
+        // Ticking "Recommend" picks the sheet gauge from those A/B inputs, which
+        // in turn drives the Duct Price; unticked → no gauge, no auto price. The
+        // gauge feeds the description too, so it always matches the price. Price
+        // is VAT-ex → store VAT-inclusive.
         if (isStraightDuct(specs)) {
-          const s2: LineSpecs = { ...specs, gauge: straightDuctGauge(specs) ?? "" };
-          const priceVatEx = straightDuctPriceVatEx(s2);
+          const gauge = specs.mcRecommend ? straightDuctGauge(specs) ?? "" : "";
+          const s2: LineSpecs = { ...specs, gauge };
+          const priceVatEx = gauge ? straightDuctPriceVatEx(s2) : null;
           return {
             ...l,
             specs: s2,
@@ -3291,7 +3304,7 @@ export function QuotationBuilder({
                 // clear any stale auto-price (recomputes once dimensions are set).
                 applyAccessory(
                   l.id,
-                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "" },
+                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: type === "Straight Duct" ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "" },
                   true,
                 );
               } else {
@@ -3645,12 +3658,17 @@ export function QuotationBuilder({
                   disabled={!editable || !c.type}
                   onChange={(e) => {
                     const to = e.target.value;
-                    const from = c.sizeUnit || "mm";
-                    // Convert the entered dimensions to the new unit (trade ratio).
+                    // Straight Duct's dimensions live in the calculator and default
+                    // to inches; other accessories default to mm.
+                    const from = c.sizeUnit || (isStraightDuct(c) ? "inches" : "mm");
+                    // Convert the entered dimensions to the new unit (trade ratio) —
+                    // both the box L/W and the Straight Duct calculator's A/B.
                     applyAccessory(l.id, {
                       sizeUnit: to,
                       sizeL: convertAccSize(c.sizeL, from, to),
                       sizeW: convertAccSize(c.sizeW, from, to),
+                      ductCalcLength: convertAccSize(c.ductCalcLength ?? "", from, to),
+                      ductCalcWidth: convertAccSize(c.ductCalcWidth ?? "", from, to),
                     });
                   }}
                 >
@@ -3693,10 +3711,11 @@ export function QuotationBuilder({
                   Recommend?
                 </label>
               )}
-              {/* Air Duct: auto-pick the sheet gauge from the duct's longest side.
-                  Straight Duct derives its gauge in the Duct Price Calculator
-                  instead, so no Recommend checkbox is shown for it. */}
-              {isAirDuct(c) && !isStraightDuct(c) && (
+              {/* Air Duct: auto-pick the sheet gauge from the duct's dimensions
+                  (box L × W for most types; the Duct Price Calculator's A × B for
+                  Straight Duct). Ticking it fills the gauge and, for Straight
+                  Duct, the Duct Price. */}
+              {isAirDuct(c) && (
                 <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
                   <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type}
                     checked={!!c.mcRecommend}
@@ -3857,8 +3876,11 @@ export function QuotationBuilder({
         </p>
         {isStraightDuct(c) && (() => {
           const sheets = ductSheetsUsed(c);
-          const ductGauge = straightDuctGauge(c);
-          const priceVatEx = straightDuctPriceVatEx(c);
+          const calcUnit = c.sizeUnit || "inches";
+          // Gauge and price follow the Recommend toggle (the gauge picks the sheet
+          // used for pricing).
+          const ductGauge = c.mcRecommend ? straightDuctGauge(c) : null;
+          const priceVatEx = c.mcRecommend ? straightDuctPriceVatEx(c) : null;
           return (
             <div className="mt-3 flex flex-wrap items-start gap-4">
               {/* Duct geometry diagram (A = width, B = height, run length). */}
@@ -3893,7 +3915,7 @@ export function QuotationBuilder({
                     disabled={!editable} value={c.ductCalcLength ?? ""}
                     onChange={(e) => applyAccessory(l.id, { ductCalcLength: e.target.value })}
                   />
-                  <span className="text-xs text-muted-foreground">inches</span>
+                  <span className="text-xs text-muted-foreground">{calcUnit}</span>
                 </div>
                 <div className="flex items-center gap-2 border-b px-3 py-1.5">
                   <span className="flex-1">Width (input here)</span>
@@ -3902,7 +3924,7 @@ export function QuotationBuilder({
                     disabled={!editable} value={c.ductCalcWidth ?? ""}
                     onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
                   />
-                  <span className="text-xs text-muted-foreground">inches</span>
+                  <span className="text-xs text-muted-foreground">{calcUnit}</span>
                 </div>
                 <div className="flex items-center justify-between bg-sky-200/60 px-3 py-1.5 font-semibold">
                   <span>Duct Price <span className="text-[10px] font-normal text-rose-600">VAT EX</span></span>
