@@ -1586,15 +1586,16 @@ function convertAccSize(value: string, from: string, to: string): string {
 }
 
 // Recommended sheet gauge for a rectangular/round duct by its longest side
-// (Low-Pressure HVAC, 2" w.g. schedule): ≤300mm → 24ga, ≤750 → 24ga,
-// ≤1370 → 22ga, ≤2285 → 20ga, above → 18ga. (The client fabricates the ≤300 mm
-// band in 24 ga rather than 26, so the schedule aligns with the sheet-price
-// tables, which only carry 24/22/20/18/16.)
+// (Low-Pressure HVAC schedule): ≤300mm → 24ga, ≤750 → 24ga, ≤1370 → 22ga,
+// ≤2250 → 20ga, above → 18ga. The 20 ga band ends at 2250 mm (= 90 trade inches)
+// so that 91 inches (2275 mm) and above fall to 18 ga. (The client fabricates
+// the ≤300 mm band in 24 ga rather than 26, so the schedule aligns with the
+// sheet-price tables, which only carry 24/22/20/18/16.)
 const DUCT_GAUGE_SCHEDULE: Array<[number, string]> = [
   [300, "24"],
   [750, "24"],
   [1370, "22"],
-  [2285, "20"],
+  [2250, "20"],
 ];
 /** Longest duct side (mm) → recommended gauge, or null if the size isn't set. */
 function recommendedDuctGauge(specs: LineSpecs): string | null {
