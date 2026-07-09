@@ -3919,8 +3919,9 @@ export function QuotationBuilder({
           const priceVatEx = ductGauge ? straightDuctPriceVatEx({ ...c, gauge: ductGauge }) : null;
           return (
             <div className="mt-3 flex flex-wrap items-center gap-4">
-              {/* Straight Duct price panel (VAT exclusive) — left. */}
-              <div className="w-72 rounded-md border bg-sky-50 text-sm">
+              {/* Straight Duct price panel (VAT exclusive) — left, widened so its
+                  right edge reaches the "No Flange" label above. */}
+              <div className="w-[30rem] rounded-md border bg-sky-50 text-sm">
                 <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">Straight Duct</div>
                 <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
                   Standard length: {straightDuctStdLengthM(c)} meter{c.ductNoFlange ? " (No Flange)" : " (Flanged)"}
@@ -3961,8 +3962,8 @@ export function QuotationBuilder({
                 </div>
               </div>
               {/* Duct geometry diagram (A = width, B = height, run length) —
-                  right, double size, vertically centered against the panel. */}
-              <svg viewBox="0 0 220 150" className="h-64 w-96 shrink-0" role="img" aria-label="Rectangular duct">
+                  right, enlarged 50% and pushed farther right, vertically centered. */}
+              <svg viewBox="0 0 220 150" className="ml-12 h-96 w-[36rem] shrink-0" role="img" aria-label="Rectangular duct">
                 <polygon points="20,60 120,30 210,55 110,90" fill="#5ec8c8" stroke="#0f766e" strokeWidth="1.5" />
                 <polygon points="20,60 110,90 110,140 20,110" fill="#3aa8a8" stroke="#0f766e" strokeWidth="1.5" />
                 <polygon points="110,90 210,55 210,105 110,140" fill="#4fbcbc" stroke="#0f766e" strokeWidth="1.5" />
