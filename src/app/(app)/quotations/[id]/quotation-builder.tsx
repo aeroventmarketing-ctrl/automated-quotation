@@ -3993,12 +3993,14 @@ export function QuotationBuilder({
                 <line x1="60" y1="185" x2="40" y2="185" stroke="#334155" strokeWidth="0.8" />
                 <line x1="44" y1="80" x2="44" y2="185" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
                 <text x="29" y="132" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">B</text>
-                {/* Dimension A (width) — drawn like B: a straight line with witness
-                    lines dropping from the two bottom corners to a common baseline. */}
+                {/* Dimension A (width) — witness lines from the two bottom corners
+                    to a common baseline; the line breaks around a centred "A" with
+                    the arrowheads pointing outward to the witness lines. */}
                 <line x1="60" y1="185" x2="60" y2="237" stroke="#334155" strokeWidth="0.8" />
                 <line x1="165" y1="199" x2="165" y2="237" stroke="#334155" strokeWidth="0.8" />
-                <line x1="60" y1="233" x2="165" y2="233" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
-                <text x="112" y="248" fontSize="14" fill="#334155" textAnchor="middle">A</text>
+                <line x1="60" y1="233" x2="104" y2="233" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" />
+                <line x1="120" y1="233" x2="165" y2="233" stroke="#334155" strokeWidth="1" markerEnd="url(#ductArrow)" />
+                <text x="112" y="233" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">A</text>
               </svg>
             </div>
           );
