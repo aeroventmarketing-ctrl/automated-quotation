@@ -3964,19 +3964,39 @@ export function QuotationBuilder({
               </div>
               {/* Duct geometry diagram (A = width, B = height, run length) —
                   right, enlarged 50% and pushed farther right, vertically centered. */}
-              <svg viewBox="0 0 220 150" className="h-auto w-[32.4rem] min-w-0 flex-shrink" role="img" aria-label="Rectangular duct">
-                <polygon points="20,60 120,30 210,55 110,90" fill="#5ec8c8" stroke="#0f766e" strokeWidth="1.5" />
-                <polygon points="20,60 110,90 110,140 20,110" fill="#3aa8a8" stroke="#0f766e" strokeWidth="1.5" />
-                <polygon points="110,90 210,55 210,105 110,140" fill="#4fbcbc" stroke="#0f766e" strokeWidth="1.5" />
-                <line x1="10" y1="60" x2="10" y2="110" stroke="#334155" strokeWidth="1" />
-                <text x="2" y="88" fontSize="11" fill="#334155">B</text>
-                <line x1="20" y1="120" x2="110" y2="150" stroke="#334155" strokeWidth="1" />
-                {/* A: centered under (below) the dimension line's midpoint. */}
-                <text x="65" y="147" fontSize="11" fill="#334155" textAnchor="middle">A</text>
-                {/* length: centered on the right face — horizontally between its
-                    two vertical edges (x 110–210) and vertically between its top
-                    and bottom diagonal edges. */}
-                <text x="160" y="97.5" fontSize="10" fill="#334155" textAnchor="middle" dominantBaseline="middle">length</text>
+              <svg viewBox="0 0 380 252" className="h-auto w-[32.4rem] min-w-0 flex-shrink" role="img" aria-label="Square duct">
+                <defs>
+                  <marker id="ductArrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto-start-reverse">
+                    <path d="M1,1 L7,4 L1,7 Z" fill="#334155" />
+                  </marker>
+                  {/* Clip the interior so it only shows through the open end. */}
+                  <clipPath id="ductBore">
+                    <polygon points="68,90 157,101 157,190 68,178" />
+                  </clipPath>
+                </defs>
+                {/* Long tube: top and right long faces receding up-right. */}
+                <polygon points="60,80 165,94 325,39 220,25" fill="#5fd3d3" stroke="#0f766e" strokeWidth="1.2" strokeLinejoin="round" />
+                <polygon points="165,94 165,199 325,144 325,39" fill="#46bcbc" stroke="#0f766e" strokeWidth="1.2" strokeLinejoin="round" />
+                {/* Near end wall (the rim / sheet thickness around the opening). */}
+                <polygon points="60,80 165,94 165,199 60,185" fill="#35a5a5" stroke="#0f766e" strokeWidth="1.2" strokeLinejoin="round" />
+                {/* Hollow bore, seen through the opening (clipped to it). */}
+                <g clipPath="url(#ductBore)">
+                  <polygon points="97,80 186,91 186,180 97,168" fill="#1f7d7d" />
+                  <polygon points="68,90 97,80 97,168 68,178" fill="#268f8f" />
+                  <polygon points="68,90 157,101 186,91 97,80" fill="#2f9e9e" />
+                  <polygon points="68,178 157,190 186,180 97,168" fill="#6fdada" />
+                </g>
+                <polygon points="68,90 157,101 157,190 68,178" fill="none" stroke="#0f766e" strokeWidth="1" strokeLinejoin="round" />
+                {/* Dimension B (height of the opening). */}
+                <line x1="60" y1="80" x2="40" y2="80" stroke="#334155" strokeWidth="0.8" />
+                <line x1="60" y1="185" x2="40" y2="185" stroke="#334155" strokeWidth="0.8" />
+                <line x1="44" y1="80" x2="44" y2="185" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
+                <text x="29" y="132" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">B</text>
+                {/* Dimension A (width of the opening). */}
+                <line x1="60" y1="185" x2="60" y2="223" stroke="#334155" strokeWidth="0.8" />
+                <line x1="165" y1="199" x2="165" y2="237" stroke="#334155" strokeWidth="0.8" />
+                <line x1="60" y1="219" x2="165" y2="233" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
+                <text x="110" y="248" fontSize="14" fill="#334155" textAnchor="middle">A</text>
               </svg>
             </div>
           );
