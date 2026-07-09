@@ -3918,11 +3918,23 @@ export function QuotationBuilder({
           // the manually selected Gauge dropdown value. It drives the Duct Price.
           const ductGauge = c.mcRecommend ? straightDuctGauge(c) : c.gauge || null;
           const priceVatEx = ductGauge ? straightDuctPriceVatEx({ ...c, gauge: ductGauge }) : null;
+          // Duct price breakdown (each term of straightDuctPriceVatEx), shown below.
+          const sheetPrice = ductGauge ? straightDuctSheetPrice(c.material, ductGauge, c.bladeType) : null;
+          const laborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
+          const laborSheets = straightDuctLaborSheets(sheets);
+          const angleCost = c.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
+          const materialCost = sheetPrice != null ? sheetPrice * STRAIGHT_DUCT_MARKUP * sheets : null;
+          const laborCost = laborRate != null ? laborSheets * laborRate : null;
+          const sheetsRounded = Math.round(sheets * 1000) / 1000;
+          const peso = (n: number) =>
+            `₱${(Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           return (
             <div className="mt-3 flex items-center gap-4">
-              {/* Straight Duct price panel (VAT exclusive) — left, widened so its
-                  right edge reaches the "No Flange" label above. */}
-              <div className="w-[30rem] shrink-0 rounded-md border bg-sky-50 text-sm">
+              {/* Left column: price panel + the price computation beneath it. */}
+              <div className="shrink-0 space-y-2">
+              {/* Straight Duct price panel (VAT exclusive) — widened so its right
+                  edge reaches the "No Flange" label above. */}
+              <div className="w-[30rem] rounded-md border bg-sky-50 text-sm">
                 <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">Straight Duct</div>
                 <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
                   Standard length: {straightDuctStdLengthM(c)} meter{c.ductNoFlange ? " (No Flange)" : " (Flanged)"}
@@ -3961,6 +3973,32 @@ export function QuotationBuilder({
                       : "—"}
                   </span>
                 </div>
+              </div>
+              {/* Duct computation — the breakdown of the Duct Price (VAT-ex),
+                  shown below the price panel. Only when all inputs are set. */}
+              {priceVatEx != null && (
+                <div className="w-[30rem] rounded-md border bg-white/70 px-3 py-2 text-xs">
+                  <div className="mb-1 font-semibold">
+                    Duct Computation <span className="text-[10px] font-normal text-rose-600">VAT EX</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Material — {peso(sheetPrice!)} × 1.3 × {sheetsRounded} sheet</span>
+                    <span className="tabular-nums">{peso(materialCost!)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Angle corners — {c.ductNoFlange ? "none (No Flange)" : "₱15 × 8 pcs"}</span>
+                    <span className="tabular-nums">{peso(angleCost)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Labor — {laborSheets} sheet × {peso(laborRate!)}</span>
+                    <span className="tabular-nums">{peso(laborCost!)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between gap-2 border-t pt-1 font-semibold">
+                    <span>Total</span>
+                    <span className="tabular-nums">{peso(priceVatEx)}</span>
+                  </div>
+                </div>
+              )}
               </div>
               {/* Straight Duct illustration (client-supplied image, with its own
                   A × B dimensions), right — enlarged and vertically centered. */}
