@@ -38,6 +38,12 @@ import {
   convertPower,
   roundPower,
 } from "@/lib/units";
+import {
+  GI_SHEET_PRICE,
+  BLACK_IRON_SHEET_PRICE,
+  STAINLESS_SHEET_PRICE,
+  AIR_DUCT_LABOR_PER_SHEET,
+} from "@/lib/air-duct-pricing-reference";
 import { updateQuotationLines, transitionQuotation, reviseQuotation } from "../actions";
 import { SalePanel } from "./sale-panel";
 import { isSaleConfirmed, type SaleRecord } from "@/lib/sale";
@@ -1564,10 +1570,12 @@ function convertAccSize(value: string, from: string, to: string): string {
 }
 
 // Recommended sheet gauge for a rectangular/round duct by its longest side
-// (Low-Pressure HVAC, 2" w.g. schedule): ≤300mm → 26ga, ≤750 → 24ga,
-// ≤1370 → 22ga, ≤2285 → 20ga, above → 18ga.
+// (Low-Pressure HVAC, 2" w.g. schedule): ≤300mm → 24ga, ≤750 → 24ga,
+// ≤1370 → 22ga, ≤2285 → 20ga, above → 18ga. (The client fabricates the ≤300 mm
+// band in 24 ga rather than 26, so the schedule aligns with the sheet-price
+// tables, which only carry 24/22/20/18/16.)
 const DUCT_GAUGE_SCHEDULE: Array<[number, string]> = [
-  [300, "26"],
+  [300, "24"],
   [750, "24"],
   [1370, "22"],
   [2285, "20"],
@@ -1591,6 +1599,54 @@ function recommendedDuctGauge(specs: LineSpecs): string | null {
   if (longest == null) return null;
   for (const [maxMm, ga] of DUCT_GAUGE_SCHEDULE) if (longest <= maxMm) return ga;
   return "18";
+}
+
+// --- Straight Duct auto-pricing (Air Duct group) -----------------------------
+// The calculator's A × B cross-section (inches) drives both the sheet count and
+// the gauge (longest side × 25 mm → the gauge schedule). Duct Price is quoted
+// VAT-EXCLUSIVE and equals:
+//   sheetPrice × 1.3 markup × sheets  +  ₱15 corner angle × 8 pieces
+//                                     +  sheets × labor-per-sheet.
+const STRAIGHT_DUCT_MARKUP = 1.3;
+const STRAIGHT_DUCT_ANGLE_PRICE = 15; // ₱ per corner-angle piece (Air Duct only)
+const STRAIGHT_DUCT_ANGLE_COUNT = 8; // corner angles per duct
+
+/** Gauge from the calculator's A/B cross-section (longest side, inches → mm). */
+function straightDuctGauge(specs: { ductCalcLength?: string; ductCalcWidth?: string }): string | null {
+  const a = parseFloat(specs.ductCalcLength ?? "");
+  const b = parseFloat(specs.ductCalcWidth ?? "");
+  if (!(a > 0) || !(b > 0)) return null;
+  const longestMm = Math.max(a, b) * (ACC_MM_PER_UNIT.inches ?? 25); // trade inch = 25 mm
+  for (const [maxMm, ga] of DUCT_GAUGE_SCHEDULE) if (longestMm <= maxMm) return ga;
+  return "18";
+}
+
+/** Sheet price (PHP, VAT-ex) by material, gauge, and — for GI — brand. */
+function straightDuctSheetPrice(material: string, gauge: string, brand: string): number | null {
+  if (material === "Galvanized Iron") {
+    const row = GI_SHEET_PRICE[gauge];
+    if (!row || (brand !== "APO" && brand !== "Nihonbond")) return null;
+    return brand === "APO" ? row.APO : row.Nihonbond;
+  }
+  if (material === "Black Iron") return BLACK_IRON_SHEET_PRICE[gauge] ?? null;
+  if (material === "Stainless Steel") return STAINLESS_SHEET_PRICE[gauge] ?? null;
+  return null;
+}
+
+/** Straight Duct price (VAT-EXCLUSIVE), or null when the inputs are incomplete. */
+function straightDuctPriceVatEx(specs: LineSpecs): number | null {
+  const gauge = straightDuctGauge(specs);
+  if (!gauge) return null;
+  const sheetPrice = straightDuctSheetPrice(specs.material, gauge, specs.bladeType);
+  if (sheetPrice == null) return null;
+  const labor = AIR_DUCT_LABOR_PER_SHEET[specs.material];
+  if (labor == null) return null;
+  const sheets = ductSheetsUsed(specs);
+  return (
+    sheetPrice * STRAIGHT_DUCT_MARKUP * sheets +
+    STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT +
+    sheets * labor
+  );
 }
 
 // --- Air Terminals / Dampers body pricing (per square inch, VAT-inclusive) ----
@@ -2385,6 +2441,24 @@ export function QuotationBuilder({
         // side, recomputed on any dimension / shape / unit change (cleared when off).
         if (isAirDuct(specs)) {
           specs.gauge = specs.mcRecommend ? recommendedDuctGauge(specs) ?? "" : "";
+        }
+        // Straight Duct: auto-priced from the calculator's A × B cross-section.
+        // The pricing gauge (and the gauge shown on the quote) comes from those
+        // A/B inputs, not the box's Recommend widget, so the description and the
+        // computed Duct Price always agree. Price is VAT-ex → store VAT-inclusive.
+        if (isStraightDuct(specs)) {
+          const s2: LineSpecs = { ...specs, gauge: straightDuctGauge(specs) ?? "" };
+          const priceVatEx = straightDuctPriceVatEx(s2);
+          return {
+            ...l,
+            specs: s2,
+            descriptionSnapshot: buildAccessoryDescription(s2),
+            ...(priceVatEx != null
+              ? { unitPrice: round2(priceVatEx * (1 + vatRate)) }
+              : resetPrice
+                ? { unitPrice: 0 }
+                : {}),
+          };
         }
         // Duct hardware (clips, cleats, corners): per-piece price by gauge (+ length),
         // with the Duct Angle corner volume discount applied by line quantity.
@@ -3768,6 +3842,8 @@ export function QuotationBuilder({
         </p>
         {isStraightDuct(c) && (() => {
           const sheets = ductSheetsUsed(c);
+          const ductGauge = straightDuctGauge(c);
+          const priceVatEx = straightDuctPriceVatEx(c);
           return (
             <div className="mt-3 flex flex-wrap items-start gap-4">
               {/* Duct geometry diagram (A = width, B = height, run length). */}
@@ -3791,6 +3867,10 @@ export function QuotationBuilder({
                   <span>Number of Sheets Used</span>
                   <span className="tabular-nums font-medium">{(Math.round(sheets * 1000) / 1000).toLocaleString()}</span>
                 </div>
+                <div className="flex items-center justify-between border-b px-3 py-1.5">
+                  <span>Gauge</span>
+                  <span className="tabular-nums font-medium">{ductGauge ? `${ductGauge} ga` : "—"}</span>
+                </div>
                 <div className="flex items-center gap-2 border-b px-3 py-1.5">
                   <span className="flex-1">Length (input here)</span>
                   <Input
@@ -3811,7 +3891,11 @@ export function QuotationBuilder({
                 </div>
                 <div className="flex items-center justify-between bg-sky-200/60 px-3 py-1.5 font-semibold">
                   <span>Duct Price <span className="text-[10px] font-normal text-rose-600">VAT EX</span></span>
-                  <span className="tabular-nums">—</span>
+                  <span className="tabular-nums">
+                    {priceVatEx != null
+                      ? `₱${(Math.round(priceVatEx * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : "—"}
+                  </span>
                 </div>
               </div>
             </div>
