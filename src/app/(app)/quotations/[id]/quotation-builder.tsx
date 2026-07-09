@@ -1934,11 +1934,12 @@ function buildAccessoryDescription(specs: LineSpecs): string {
   if (isStraightDuct(specs)) {
     const dl: string[] = [specs.type || "Straight Duct"];
     const unit = specs.sizeUnit || "inches";
+    const unitAbbr = unit === "inches" ? "in" : unit;
     const a = specs.ductCalcLength;
     const b = specs.ductCalcWidth;
-    if (a && b) dl.push(`${a} x ${b} ${unit}`);
+    if (a && b) dl.push(`${a} ${unitAbbr} x ${b} ${unitAbbr}`);
     if (AIR_DUCT_MATERIALS.includes(specs.material)) dl.push(`${accMaterialLabel(specs.material)} Material`);
-    if (specs.gauge) dl.push(`${specs.gauge} ga`);
+    if (specs.gauge) dl.push(`Gauge ${specs.gauge}`);
     if (specs.material === "Galvanized Iron" && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
       dl.push(`${specs.bladeType} Brand`);
     }
