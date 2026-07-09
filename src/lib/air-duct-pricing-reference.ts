@@ -14,7 +14,7 @@
  *     brand-independent, or is that one brand's price?
  *  4. Gauge reconciliation: the "Recommend" size→gauge schedule produces
  *     26/24/22/20/18 ga, but these price tables use 24/22/20/18/16 ga.
- *  5. Stainless Steel sheet prices are not yet provided.
+ *  5. Black Iron 16 ga price is still blank in the source.
  */
 
 /** Actual sheet thickness (mm) by gauge, per the client's tables. */
@@ -47,9 +47,13 @@ export const BLACK_IRON_SHEET_PRICE: Record<string, number> = {
   // "16": not provided
 };
 
-/** Stainless Steel sheet price (PHP per sheet) by gauge — NOT yet provided. */
+/** Stainless Steel sheet price (PHP per sheet) by gauge (single column). */
 export const STAINLESS_SHEET_PRICE: Record<string, number> = {
-  // "24": ?, "22": ?, "20": ?, "18": ?, "16": ?
+  "24": 2470,
+  "22": 3170,
+  "20": 4410,
+  "18": 5410,
+  "16": 6924,
 };
 
 /** Labor cost (PHP per sheet) by Air Duct material. */
