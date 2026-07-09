@@ -3962,48 +3962,14 @@ export function QuotationBuilder({
                   </span>
                 </div>
               </div>
-              {/* Duct geometry diagram (A = width, B = height, run length) —
-                  right, enlarged 50% and pushed farther right, vertically centered. */}
-              <svg viewBox="0 0 380 252" className="h-auto w-[32.4rem] min-w-0 flex-shrink" role="img" aria-label="Square duct">
-                <defs>
-                  <marker id="ductArrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto-start-reverse">
-                    <path d="M1,1 L7,4 L1,7 Z" fill="#334155" />
-                  </marker>
-                  {/* Clip the interior so it only shows through the open end.
-                      Opening enlarged (wall thickness halved). */}
-                  <clipPath id="ductBore">
-                    <polygon points="64,85 161,98 161,194 64,181" />
-                  </clipPath>
-                </defs>
-                {/* Long tube: top and right long faces receding up-right. */}
-                <polygon points="60,80 165,94 325,39 220,25" fill="#5fd3d3" stroke="#0f766e" strokeWidth="1.2" strokeLinejoin="round" />
-                <polygon points="165,94 165,199 325,144 325,39" fill="#46bcbc" stroke="#0f766e" strokeWidth="1.2" strokeLinejoin="round" />
-                {/* Near end wall (the rim / sheet thickness around the opening). */}
-                <polygon points="60,80 165,94 165,199 60,185" fill="#35a5a5" stroke="#0f766e" strokeWidth="1.2" strokeLinejoin="round" />
-                {/* Hollow bore, seen through the opening (clipped to it). */}
-                <g clipPath="url(#ductBore)">
-                  <polygon points="93,75 190,88 190,184 93,171" fill="#1f7d7d" />
-                  <polygon points="64,85 93,75 93,171 64,181" fill="#268f8f" />
-                  <polygon points="64,85 161,98 190,88 93,75" fill="#2f9e9e" />
-                  <polygon points="64,181 161,194 190,184 93,171" fill="#6fdada" />
-                </g>
-                <polygon points="64,85 161,98 161,194 64,181" fill="none" stroke="#0f766e" strokeWidth="1" strokeLinejoin="round" />
-                {/* Dimension B (height of the opening). */}
-                <line x1="60" y1="80" x2="40" y2="80" stroke="#334155" strokeWidth="0.8" />
-                <line x1="60" y1="185" x2="40" y2="185" stroke="#334155" strokeWidth="0.8" />
-                <line x1="44" y1="80" x2="44" y2="185" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" markerEnd="url(#ductArrow)" />
-                <text x="29" y="132" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">B</text>
-                {/* Dimension A (width) — the dimension line runs PARALLEL to the
-                    opening's bottom edge (FBL→FBR), offset straight down, so the
-                    witness lines drop vertically from the two bottom corners. The
-                    line breaks around a centred "A" with the arrowheads pointing
-                    outward to the witness lines. */}
-                <line x1="60" y1="185" x2="60" y2="233" stroke="#334155" strokeWidth="0.8" />
-                <line x1="165" y1="199" x2="165" y2="247" stroke="#334155" strokeWidth="0.8" />
-                <line x1="60" y1="229" x2="104" y2="235" stroke="#334155" strokeWidth="1" markerStart="url(#ductArrow)" />
-                <line x1="121" y1="237" x2="165" y2="243" stroke="#334155" strokeWidth="1" markerEnd="url(#ductArrow)" />
-                <text x="112" y="236" fontSize="14" fill="#334155" textAnchor="middle" dominantBaseline="middle">A</text>
-              </svg>
+              {/* Straight Duct illustration (client-supplied image, with its own
+                  A × B dimensions), right — enlarged and vertically centered. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/straight-duct.png"
+                alt="Square duct with A (width) and B (height) dimensions"
+                className="h-auto w-[32.4rem] min-w-0 flex-shrink"
+              />
             </div>
           );
         })()}
