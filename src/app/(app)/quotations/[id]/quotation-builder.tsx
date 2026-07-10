@@ -2564,6 +2564,12 @@ export function QuotationBuilder({
         // Air Duct brand (APO/Nihonbond) only applies to Galvanized Iron; drop a
         // stale brand when the material is Black Iron / Stainless Steel.
         if (isAirDuct(specs) && specs.material !== "Galvanized Iron") specs.bladeType = "";
+        // Straight Duct in Black Iron / Stainless Steel is fabricated flange-less,
+        // so No Flange is forced on (the checkbox is locked in the UI). Only
+        // Galvanized Iron can be flanged.
+        if (isStraightDuct(specs) && (specs.material === "Black Iron" || specs.material === "Stainless Steel")) {
+          specs.ductNoFlange = true;
+        }
         // Air Duct "Recommend": auto-pick the sheet gauge from the duct's longest
         // side, recomputed on any dimension / shape / unit change (cleared when
         // off). Straight Duct manages its own gauge (manual dropdown + Recommend)
@@ -3774,15 +3780,20 @@ export function QuotationBuilder({
                 </label>
               )}
               {/* Straight Duct: No Flange drops the angle-iron flange (₱15 × 8)
-                  and makes the standard body a full 1.2 m (flanged = 1.1 m). */}
-              {isStraightDuct(c) && (
-                <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
-                  <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type}
-                    checked={!!c.ductNoFlange}
-                    onChange={(e) => applyAccessory(l.id, { ductNoFlange: e.target.checked })} />
-                  No Flange
-                </label>
-              )}
+                  and makes the standard body a full 1.2 m (flanged = 1.1 m).
+                  Black Iron / Stainless Steel are flange-less, so it's forced on
+                  and locked; only Galvanized Iron can be flanged. */}
+              {isStraightDuct(c) && (() => {
+                const flangeless = c.material === "Black Iron" || c.material === "Stainless Steel";
+                return (
+                  <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                    <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type || flangeless}
+                      checked={!!c.ductNoFlange}
+                      onChange={(e) => applyAccessory(l.id, { ductNoFlange: e.target.checked })} />
+                    No Flange
+                  </label>
+                );
+              })()}
               {/* Material (Air Terminals / Dampers). Air Duct shows its own material
                   dropdown right after Type, so it's skipped here. */}
               {!isIsolator(c) && !isAirDuct(c) && (
