@@ -1102,8 +1102,16 @@ const AIR_DUCT_MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless Steel"];
 const AIR_DUCT_SEALANTS = ["APO", "Nihonbond"];
 const isAirDuct = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(specs.type);
-const isStraightDuct = (specs: { category: string; type: string }): boolean =>
-  specs.category === "Ventilation Accessories" && specs.type === "Straight Duct";
+// Air Duct types that use the sheet-metal "duct calculator" (A × B cross-section
+// → sheets → auto price), with their own illustration. Straight Duct and Duct
+// Connector share the same calculator and pricing.
+const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector"]);
+const DUCT_CALC_IMAGE: Record<string, string> = {
+  "Straight Duct": "/straight-duct.png",
+  "Duct Connector": "/duct-connector.png",
+};
+const isDuctCalc = (specs: { category: string; type: string }): boolean =>
+  specs.category === "Ventilation Accessories" && DUCT_CALC_TYPES.has(specs.type);
 // Straight Duct: one duct wraps a strip of the 48 × 96 in sheet, so Number of
 // Sheets Used = ((A + B) × 2 + 2) ÷ 96, where A/B are the cross-section sides in
 // trade inches (the calculator inputs are entered in the chosen unit and
@@ -2005,7 +2013,7 @@ function accMaterialLabel(material: string): string {
 function buildAccessoryDescription(specs: LineSpecs): string {
   // Straight Duct uses a fixed line order:
   //   1 type · 2 dimensions (A × B) · 3 material · 4 gauge · 5 brand (if any).
-  if (isStraightDuct(specs)) {
+  if (isDuctCalc(specs)) {
     const dl: string[] = [specs.type || "Straight Duct"];
     const unit = specs.sizeUnit || "inches";
     const unitAbbr = unit === "inches" ? "in" : unit;
@@ -2567,14 +2575,14 @@ export function QuotationBuilder({
         // Straight Duct in Black Iron / Stainless Steel is fabricated flange-less,
         // so No Flange is forced on (the checkbox is locked in the UI). Only
         // Galvanized Iron can be flanged.
-        if (isStraightDuct(specs) && (specs.material === "Black Iron" || specs.material === "Stainless Steel")) {
+        if (isDuctCalc(specs) && (specs.material === "Black Iron" || specs.material === "Stainless Steel")) {
           specs.ductNoFlange = true;
         }
         // Air Duct "Recommend": auto-pick the sheet gauge from the duct's longest
         // side, recomputed on any dimension / shape / unit change (cleared when
         // off). Straight Duct manages its own gauge (manual dropdown + Recommend)
         // in its branch below, so it's excluded here.
-        if (isAirDuct(specs) && !isStraightDuct(specs)) {
+        if (isAirDuct(specs) && !isDuctCalc(specs)) {
           specs.gauge = specs.mcRecommend ? recommendedDuctGauge(specs) ?? "" : "";
         }
         // Straight Duct: auto-priced from the calculator's A × B cross-section.
@@ -2582,7 +2590,7 @@ export function QuotationBuilder({
         // A/B inputs and locks the dropdown) or chosen manually from the Gauge
         // dropdown; that gauge drives the Duct Price and the description. Price
         // is VAT-ex → store VAT-inclusive.
-        if (isStraightDuct(specs)) {
+        if (isDuctCalc(specs)) {
           const gauge = specs.mcRecommend ? straightDuctGauge(specs) ?? "" : specs.gauge ?? "";
           const s2: LineSpecs = { ...specs, gauge };
           const priceVatEx = gauge ? straightDuctPriceVatEx(s2) : null;
@@ -3274,7 +3282,7 @@ export function QuotationBuilder({
         ),
       );
     } else if (category === "Ventilation Accessories") {
-      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: type === "Straight Duct" ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false }, true);
+      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false }, true);
     } else {
       updateSpec(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
     }
@@ -3697,7 +3705,7 @@ export function QuotationBuilder({
               </Select>
               {/* Straight Duct: sheet gauge. Manually selectable, or auto-picked
                   and locked when Recommend is on (which sets c.gauge). */}
-              {isStraightDuct(c) && (
+              {isDuctCalc(c) && (
                 <Select
                   value={STRAIGHT_DUCT_GAUGES.includes(c.gauge ?? "") ? c.gauge : ""}
                   disabled={!editable || !c.type || !!c.mcRecommend}
@@ -3716,7 +3724,7 @@ export function QuotationBuilder({
                     const to = e.target.value;
                     // Straight Duct's dimensions live in the calculator and default
                     // to inches; other accessories default to mm.
-                    const from = c.sizeUnit || (isStraightDuct(c) ? "inches" : "mm");
+                    const from = c.sizeUnit || (isDuctCalc(c) ? "inches" : "mm");
                     // Convert the entered dimensions to the new unit (trade ratio) —
                     // both the box L/W and the Straight Duct calculator's A/B.
                     applyAccessory(l.id, {
@@ -3744,7 +3752,7 @@ export function QuotationBuilder({
                 <Input className="h-9" type="number" step="any" placeholder={`Diameter Ø (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                   disabled={!editable || !c.type} value={c.sizeL}
                   onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })} />
-              ) : isStraightDuct(c) ? (
+              ) : isDuctCalc(c) ? (
                 // Straight Duct is sized in its own Duct Price Calculator (A × B
                 // inches), so the box's L/W dimensions are omitted here.
                 null
@@ -3783,7 +3791,7 @@ export function QuotationBuilder({
                   and makes the standard body a full 1.2 m (flanged = 1.1 m).
                   Black Iron / Stainless Steel are flange-less, so it's forced on
                   and locked; only Galvanized Iron can be flanged. */}
-              {isStraightDuct(c) && (() => {
+              {isDuctCalc(c) && (() => {
                 const flangeless = c.material === "Black Iron" || c.material === "Stainless Steel";
                 return (
                   <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
@@ -3945,7 +3953,7 @@ export function QuotationBuilder({
                       ? "Category · Brand · Type · Phase · Pole · HP — auto-priced (editable)."
                       : "Product Category · Type · Blade Type · Drive (more details to follow)."}
         </p>
-        {isStraightDuct(c) && (() => {
+        {isDuctCalc(c) && (() => {
           const sheets = ductSheetsUsed(c);
           const calcUnit = c.sizeUnit || "inches";
           // Effective gauge: recommended (from A × B) when Recommend is on, else
@@ -3969,7 +3977,7 @@ export function QuotationBuilder({
               {/* Straight Duct price panel (VAT exclusive) — widened so its right
                   edge reaches the "No Flange" label above. */}
               <div className="w-[30rem] rounded-md border bg-sky-50 text-sm">
-                <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">Straight Duct</div>
+                <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">{c.type}</div>
                 <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
                   Standard length: {straightDuctStdLengthM(c)} meter{c.ductNoFlange ? " (No Flange)" : " (Flanged)"}
                 </div>
@@ -4034,12 +4042,12 @@ export function QuotationBuilder({
                 </div>
               )}
               </div>
-              {/* Straight Duct illustration (client-supplied image, with its own
-                  A × B dimensions), right — enlarged and vertically centered. */}
+              {/* Duct illustration for this calc type (client-supplied image with
+                  its own A × B dimensions), right — enlarged and vertically centered. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/straight-duct.png"
-                alt="Square duct with A (width) and B (height) dimensions"
+                src={DUCT_CALC_IMAGE[c.type] ?? "/straight-duct.png"}
+                alt={`${c.type} with A (width) and B (height) dimensions`}
                 className="h-auto w-[32.4rem] min-w-0 flex-shrink"
               />
             </div>
