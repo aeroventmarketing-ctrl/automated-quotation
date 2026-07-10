@@ -7,24 +7,29 @@ import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 
 /**
- * Duct Material Calculator — estimates how many sheets are consumed fabricating a
- * duct piece, from its developed (flat-pattern) area.
+ * Duct Material Calculator — estimates the sheets consumed fabricating a duct
+ * piece by (a) developing each piece into flat blank rectangles and (b) actually
+ * NESTING those blanks onto a 4 ft × 8 ft (48 × 96 in) sheet with a first-fit
+ * shelf packer (each blank tried in both orientations). The area-based estimate
+ * is shown alongside as a sanity check.
  *
- * Method (auto-selected by material — it sets the longitudinal seam allowance):
- *   - Galvanized Iron            → Lockformer + TDF flanged forming (Pittsburgh
- *                                   lock seam, wider allowance)
- *   - Black Iron / Stainless     → Welding (lap/butt weld, smaller allowance)
+ * Joining method (auto by material) sets the longitudinal seam allowance added to
+ * each blank's wrap dimension:
+ *   - Galvanized Iron         → Lockformer + TDF flanged forming (2 in)
+ *   - Black Iron / Stainless  → Welding (1 in)
  *
- * Per-piece developed area (real inches; 1 in = 25.4 mm):
- *   Straight (rect)   A = (2(W+H) + seam) · L
- *   Straight (round)  A = (πD + seam) · L
- *   Connector (rect)  A = (2(W+H) + seam) · Lc          (short collar length)
- *   Reducer (rect)    A = ((P₁+P₂)/2 + seam) · slant     slant = √(L² + max offset²)
- *   Square→Round      A = ((2(W+H)+πD)/2 + seam) · slant
- *   Elbow 90° (rect)  A = (2(W+H) + seam) · arc          arc = (π/2)·(throatR + W/2)
- *   Offset (rect)     A = (2(W+H) + seam) · √(L² + offset²)
- * Transitions/elbows use a centreline/average-perimeter approximation — good for
- * material estimating; confirm the allowances against your shop's practice.
+ * Blanks per piece (real inches; 1 in = 25.4 mm):
+ *   Straight/Connector (wrap) 1 × (2(W+H)+seam) × L
+ *                     (L-halves) 2 × (W+H+seam) × L
+ *                     (4 sides) 2 × (W+seam)×L, 2 × (H+seam)×L
+ *   Round             1 × (πD+seam) × L
+ *   Reducer           2 × (max(W₁,W₂)+seam)×slant, 2 × (max(H₁,H₂)+seam)×slant
+ *   Square→Round      1 × ((2(W+H)+πD)/2 + seam) × slant
+ *   Elbow 90°         1 × (2(W+H)+seam) × arc      arc = (π/2)(throatR + W/2)
+ *   Offset            1 × (2(W+H)+seam) × √(L²+offset²)
+ *   Y-Duct            main (2(W+H)+seam)×L + 2 × branch (2(Wb+Hb)+seam)×Lb
+ * Fitting blanks use the developed pattern's bounding strip — good for estimating
+ * sheet counts; confirm the allowances/cut method against your shop's practice.
  */
 
 const MM_PER_IN = 25.4;
@@ -56,36 +61,76 @@ const DUCT_TYPES: { value: DuctType; label: string }[] = [
   { value: "y_duct", label: "Y-Duct — two branches (45°)" },
 ];
 
-// Nesting/offcut waste default per type (%), auto-filled on type change and still
-// editable: straight/collar nest tight, transitions worse, elbows/branches worst.
-const WASTE_DEFAULT: Record<DuctType, number> = {
-  straight_rect: 8,
-  straight_round: 10,
-  connector: 8,
-  reducer: 15,
-  sq2round: 15,
-  elbow90: 20,
-  offset: 15,
-  y_duct: 20,
-};
+const RECT_WRAP_TYPES = new Set<DuctType>(["straight_rect", "connector"]);
 
 const MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless Steel"] as const;
 type Material = (typeof MATERIALS)[number];
 const methodFor = (m: Material) =>
   m === "Galvanized Iron" ? "Lockformer + TDF flanged forming" : "Welding";
-const seamDefaultFor = (m: Material) => (m === "Galvanized Iron" ? 2 : 1); // in, added to perimeter
+const seamDefaultFor = (m: Material) => (m === "Galvanized Iron" ? 2 : 1); // in, added to the wrap
+
+type Cut = "wrap" | "lhalf" | "sides";
+type Blank = { w: number; l: number }; // one flat rectangle to cut (inches)
+
+/** Shelf (guillotine) packing of blanks onto SW×SL sheets; both orientations tried. */
+function packSheets(blanks: Blank[], SW: number, SL: number) {
+  let usedArea = 0;
+  let oversized = 0;
+  const items: { across: number; along: number }[] = [];
+  for (const b of blanks) {
+    usedArea += b.w * b.l;
+    const s = Math.min(b.w, b.l);
+    const L = Math.max(b.w, b.l);
+    if (s <= SW && L <= SL) items.push({ across: s, along: L });
+    else if (b.w <= SW && b.l <= SL) items.push({ across: b.w, along: b.l });
+    else if (b.l <= SW && b.w <= SL) items.push({ across: b.l, along: b.w });
+    else oversized++; // won't fit on one sheet in any orientation → must be split/seamed
+  }
+  items.sort((a, b) => b.across - a.across); // first-fit decreasing by shelf height
+  const sheets: { shelves: { h: number; used: number }[]; freeH: number }[] = [];
+  for (const it of items) {
+    let placed = false;
+    for (const sh of sheets) {
+      for (const shelf of sh.shelves) {
+        if (it.across <= shelf.h && shelf.used + it.along <= SL) {
+          shelf.used += it.along;
+          placed = true;
+          break;
+        }
+      }
+      if (placed) break;
+      if (sh.freeH >= it.across) {
+        sh.shelves.push({ h: it.across, used: it.along });
+        sh.freeH -= it.across;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) sheets.push({ shelves: [{ h: it.across, used: it.along }], freeH: SW - it.across });
+  }
+  const packed = sheets.length;
+  const total = packed + oversized;
+  const utilization = packed > 0 ? usedArea / (packed * SW * SL) : 0;
+  return { total, packed, oversized, utilization, usedArea };
+}
+
+// Nesting/offcut waste default per type (%) for the AREA estimate only.
+const WASTE_DEFAULT: Record<DuctType, number> = {
+  straight_rect: 8, straight_round: 10, connector: 8, reducer: 15,
+  sq2round: 15, elbow90: 20, offset: 15, y_duct: 20,
+};
 
 export function DuctSheetCalculator() {
   const [ductType, setDuctType] = useState<DuctType>("straight_rect");
   const [unit, setUnit] = useState<"in" | "mm">("in");
   const [material, setMaterial] = useState<Material>("Galvanized Iron");
+  const [cut, setCut] = useState<Cut>("wrap");
   const [qty, setQty] = useState("1");
   const [seam, setSeam] = useState(String(seamDefaultFor("Galvanized Iron")));
   const [waste, setWaste] = useState(String(WASTE_DEFAULT.straight_rect));
   const [sheetW, setSheetW] = useState("48");
   const [sheetL, setSheetL] = useState("96");
 
-  // Dimension inputs (interpreted per duct type, in the chosen unit).
   const [w, setW] = useState("");
   const [h, setH] = useState("");
   const [l, setL] = useState("");
@@ -94,18 +139,18 @@ export function DuctSheetCalculator() {
   const [h2, setH2] = useState("");
   const [offset, setOffset] = useState("");
   const [throat, setThroat] = useState("");
-  const [lb, setLb] = useState(""); // Y-Duct branch length
+  const [lb, setLb] = useState("");
 
   const method = methodFor(material);
+  const showCut = RECT_WRAP_TYPES.has(ductType);
 
   function onMaterial(m: Material) {
     setMaterial(m);
-    setSeam(String(seamDefaultFor(m))); // reset the seam allowance to the method default
+    setSeam(String(seamDefaultFor(m)));
   }
-
   function onDuctType(t: DuctType) {
     setDuctType(t);
-    setWaste(String(WASTE_DEFAULT[t])); // reset the waste % to the type default
+    setWaste(String(WASTE_DEFAULT[t]));
   }
 
   const result = useMemo(() => {
@@ -113,88 +158,98 @@ export function DuctSheetCalculator() {
     const seamIn = Number(seam) || 0;
     const q = Math.max(1, Math.floor(Number(qty) || 1));
     const wf = Math.min(0.9, Math.max(0, (Number(waste) || 0) / 100));
-    const sW = num(sheetW);
-    const sL = num(sheetL);
-    if (sW == null || sL == null) return null;
-    const usableIn2 = sW * sL * (1 - wf); // sheet dims already in inches
+    const SW = num(sheetW);
+    const SL = num(sheetL);
+    if (SW == null || SL == null) return null;
 
-    // Developed area (in²) of one piece, by type.
-    let area: number | null = null;
-    let detail = "";
+    const P = (a: number, b: number) => 2 * (a + b);
     const W = num(w), H = num(h), L = num(l), D = num(d), W2 = num(w2), H2 = num(h2);
     const OFF = num(offset), TH = num(throat), LB = num(lb);
 
+    // Build the flat blank rectangles for ONE piece.
+    let blanks: Blank[] | null = null;
+    let detail = "";
     if (ductType === "straight_rect" || ductType === "connector") {
       if (W == null || H == null || L == null) return null;
-      const P = 2 * (toIn(W) + toIn(H));
-      area = (P + seamIn) * toIn(L);
-      detail = `perimeter ${r(P)} in × length ${r(toIn(L))} in`;
+      const a = toIn(W), b = toIn(H), len = toIn(L);
+      if (cut === "wrap") blanks = [{ w: P(a, b) + seamIn, l: len }];
+      else if (cut === "lhalf") blanks = [{ w: a + b + seamIn, l: len }, { w: a + b + seamIn, l: len }];
+      else blanks = [{ w: a + seamIn, l: len }, { w: a + seamIn, l: len }, { w: b + seamIn, l: len }, { w: b + seamIn, l: len }];
+      detail = `${blanks.length} blank(s), ${cut === "wrap" ? "one wrap" : cut === "lhalf" ? "two L-halves" : "four sides"}`;
     } else if (ductType === "straight_round") {
       if (D == null || L == null) return null;
-      const C = Math.PI * toIn(D);
-      area = (C + seamIn) * toIn(L);
-      detail = `circumference ${r(C)} in × length ${r(toIn(L))} in`;
+      blanks = [{ w: Math.PI * toIn(D) + seamIn, l: toIn(L) }];
+      detail = "1 wrap blank";
     } else if (ductType === "reducer") {
       if (W == null || H == null || W2 == null || H2 == null || L == null) return null;
-      const P1 = 2 * (toIn(W) + toIn(H));
-      const P2 = 2 * (toIn(W2) + toIn(H2));
-      const maxOff = Math.max(Math.abs(toIn(W) - toIn(W2)), Math.abs(toIn(H) - toIn(H2))) / 2;
-      const slant = Math.sqrt(toIn(L) ** 2 + maxOff ** 2);
-      area = ((P1 + P2) / 2 + seamIn) * slant;
-      detail = `avg perimeter ${r((P1 + P2) / 2)} in × slant ${r(slant)} in`;
+      const a1 = toIn(W), b1 = toIn(H), a2 = toIn(W2), b2 = toIn(H2), len = toIn(L);
+      const off = Math.max(Math.abs(a1 - a2), Math.abs(b1 - b2)) / 2;
+      const slant = Math.sqrt(len ** 2 + off ** 2);
+      blanks = [
+        { w: Math.max(a1, a2) + seamIn, l: slant }, { w: Math.max(a1, a2) + seamIn, l: slant },
+        { w: Math.max(b1, b2) + seamIn, l: slant }, { w: Math.max(b1, b2) + seamIn, l: slant },
+      ];
+      detail = `4 tapered side panels, slant ${r(slant)} in`;
     } else if (ductType === "sq2round") {
       if (W == null || H == null || D == null || L == null) return null;
-      const Pr = 2 * (toIn(W) + toIn(H));
-      const Cc = Math.PI * toIn(D);
-      const off = Math.max(toIn(W), toIn(H)) / 2;
-      const slant = Math.sqrt(toIn(L) ** 2 + off ** 2);
-      area = ((Pr + Cc) / 2 + seamIn) * slant;
-      detail = `avg perimeter ${r((Pr + Cc) / 2)} in × slant ${r(slant)} in`;
+      const a = toIn(W), b = toIn(H), dia = toIn(D), len = toIn(L);
+      const off = Math.max(a, b) / 2;
+      const slant = Math.sqrt(len ** 2 + off ** 2);
+      blanks = [{ w: (P(a, b) + Math.PI * dia) / 2 + seamIn, l: slant }];
+      detail = `1 transition blank, slant ${r(slant)} in`;
     } else if (ductType === "elbow90") {
       if (W == null || H == null) return null;
-      const P = 2 * (toIn(W) + toIn(H));
-      const throatR = TH != null ? toIn(TH) : toIn(W); // default throat radius = W
-      const arc = (Math.PI / 2) * (throatR + toIn(W) / 2); // 90° centreline arc
-      area = (P + seamIn) * arc;
-      detail = `perimeter ${r(P)} in × arc ${r(arc)} in (R throat ${r(throatR)} in)`;
+      const a = toIn(W), b = toIn(H);
+      const throatR = TH != null ? toIn(TH) : a;
+      const arc = (Math.PI / 2) * (throatR + a / 2);
+      blanks = [{ w: P(a, b) + seamIn, l: arc }];
+      detail = `1 blank, arc ${r(arc)} in (R throat ${r(throatR)} in)`;
     } else if (ductType === "offset") {
       if (W == null || H == null || L == null || OFF == null) return null;
-      const P = 2 * (toIn(W) + toIn(H));
+      const a = toIn(W), b = toIn(H);
       const path = Math.sqrt(toIn(L) ** 2 + toIn(OFF) ** 2);
-      area = (P + seamIn) * path;
-      detail = `perimeter ${r(P)} in × path ${r(path)} in`;
+      blanks = [{ w: P(a, b) + seamIn, l: path }];
+      detail = `1 blank, path ${r(path)} in`;
     } else if (ductType === "y_duct") {
-      // Two-branch rectangular Y (45°): sum of the main run + two branch runs, as
-      // developed straight panels. Crotch overlap is not deducted (conservative).
       if (W == null || H == null || L == null || W2 == null || H2 == null || LB == null) return null;
-      const Pmain = 2 * (toIn(W) + toIn(H));
-      const Pbr = 2 * (toIn(W2) + toIn(H2));
-      const mainA = (Pmain + seamIn) * toIn(L);
-      const brA = (Pbr + seamIn) * toIn(LB);
-      area = mainA + 2 * brA;
-      detail = `main ${r(mainA / 144)} ft² + 2 × branch ${r(brA / 144)} ft²`;
+      blanks = [
+        { w: P(toIn(W), toIn(H)) + seamIn, l: toIn(L) },
+        { w: P(toIn(W2), toIn(H2)) + seamIn, l: toIn(LB) },
+        { w: P(toIn(W2), toIn(H2)) + seamIn, l: toIn(LB) },
+      ];
+      detail = "main + 2 branch blanks";
     }
-    if (area == null || !Number.isFinite(area) || area <= 0) return null;
+    if (!blanks || blanks.length === 0) return null;
+    if (blanks.some((bl) => !(bl.w > 0) || !(bl.l > 0))) return null;
 
-    const totalArea = area * q;
-    const sheetsFrac = totalArea / usableIn2;
+    const perPieceArea = blanks.reduce((s, bl) => s + bl.w * bl.l, 0);
+    const allBlanks: Blank[] = [];
+    for (let i = 0; i < q; i++) allBlanks.push(...blanks);
+
+    const pack = packSheets(allBlanks, SW, SL);
+    const totalArea = perPieceArea * q;
+    const usableIn2 = SW * SL * (1 - wf);
+    const areaSheets = totalArea / usableIn2;
+
     return {
-      perPieceIn2: area,
-      perPieceFt2: area / 144,
+      perPieceFt2: perPieceArea / 144,
       totalFt2: totalArea / 144,
-      sheetsFrac,
-      sheetsToBuy: Math.ceil(sheetsFrac - 1e-9),
+      blanksPerPiece: blanks.length,
+      totalBlanks: allBlanks.length,
+      layoutSheets: pack.total,
+      utilization: pack.utilization,
+      oversized: pack.oversized,
+      areaSheets,
       detail,
       qty: q,
     };
-  }, [ductType, unit, qty, seam, waste, sheetW, sheetL, w, h, l, d, w2, h2, offset, throat, lb]);
+  }, [ductType, unit, qty, seam, waste, sheetW, sheetL, cut, w, h, l, d, w2, h2, offset, throat, lb]);
 
   const dimUnit = unit;
 
   return (
     <Card>
       <CardContent className="space-y-4 pt-6">
-        {/* Row 1: type, material (→ method), unit, qty */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <Label>Duct type / transition</Label>
@@ -208,6 +263,16 @@ export function DuctSheetCalculator() {
               {MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
             </Select>
           </div>
+          {showCut && (
+            <div className="space-y-1">
+              <Label>Cut as</Label>
+              <Select className="w-40" value={cut} onChange={(e) => setCut(e.target.value as Cut)}>
+                <option value="wrap">One wrap</option>
+                <option value="lhalf">Two L-halves</option>
+                <option value="sides">Four sides</option>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1">
             <Label>Unit</Label>
             <Select className="w-24" value={unit} onChange={(e) => setUnit(e.target.value as "in" | "mm")}>
@@ -225,7 +290,6 @@ export function DuctSheetCalculator() {
           Joining method: <b>{method}</b> ({material}). This sets the seam allowance below.
         </p>
 
-        {/* Row 2: dimensions (per type) */}
         <div className="flex flex-wrap items-end gap-3">
           {(ductType === "straight_rect" || ductType === "connector" || ductType === "elbow90" || ductType === "offset") && (
             <>
@@ -266,10 +330,9 @@ export function DuctSheetCalculator() {
           )}
         </div>
 
-        {/* Row 3: allowances (seam auto-fills by method, waste by type — editable) */}
         <div className="flex flex-wrap items-end gap-3 border-t pt-3">
           <Dim label="Seam allowance (in)" value={seam} onChange={setSeam} />
-          <Dim label="Waste % (auto)" value={waste} onChange={setWaste} />
+          <Dim label="Waste % (area est.)" value={waste} onChange={setWaste} />
           <Dim label="Sheet width (in)" value={sheetW} onChange={setSheetW} />
           <Dim label="Sheet length (in)" value={sheetL} onChange={setSheetL} />
         </div>
@@ -277,12 +340,21 @@ export function DuctSheetCalculator() {
         {result ? (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Developed / piece" value={`${r(result.perPieceFt2, 2)} ft²`} sub={`${Math.round(result.perPieceIn2)} in²`} />
-              <Stat label={`Total (${result.qty} pc)`} value={`${r(result.totalFt2, 2)} ft²`} sub="developed area" />
-              <Stat label="Sheets used" value={r(result.sheetsFrac, 3).toLocaleString()} sub="fractional" />
-              <Stat label="Sheets to buy" value={String(result.sheetsToBuy)} sub="rounded up (whole sheets)" />
+              <Stat label={`Sheets needed (${sheetW}×${sheetL} layout)`} value={String(result.layoutSheets)} sub="nested, rounded up" highlight />
+              <Stat label="Sheet utilization" value={`${Math.round(result.utilization * 100)}%`} sub={`${result.totalBlanks} blank(s) nested`} />
+              <Stat label="Developed area" value={`${r(result.totalFt2, 2)} ft²`} sub={`${result.qty} pc · ${r(result.perPieceFt2, 2)} ft²/pc`} />
+              <Stat label="Area estimate" value={r(result.areaSheets, 2).toLocaleString()} sub="developed ÷ usable sheet" />
             </div>
-            <p className="text-xs text-muted-foreground">{result.detail}. One sheet = {sheetW} × {sheetL} in.</p>
+            {result.oversized > 0 && (
+              <p className="text-xs text-amber-600">
+                ⚠ {result.oversized} blank(s) are larger than one {sheetW}×{sheetL} sheet — they must be split/seamed
+                (try a different cut method or a smaller standard length).
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {result.detail} per piece. Layout nests blanks on the sheet (both orientations); the area estimate divides
+              developed area by the usable sheet (after waste %).
+            </p>
           </>
         ) : (
           <p className="text-sm text-muted-foreground">Enter the dimensions to compute the sheets consumed.</p>
@@ -301,9 +373,9 @@ function Dim({ label, value, onChange, wide }: { label: string; value: string; o
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
+function Stat({ label, value, sub, highlight }: { label: string; value: string; sub: string; highlight?: boolean }) {
   return (
-    <div className="rounded-md border p-2">
+    <div className={`rounded-md border p-2 ${highlight ? "border-primary/40 bg-primary/5" : ""}`}>
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="font-semibold">{value}</div>
       <div className="text-xs text-muted-foreground">{sub}</div>
