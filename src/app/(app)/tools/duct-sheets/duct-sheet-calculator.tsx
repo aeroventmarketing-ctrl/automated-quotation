@@ -56,6 +56,19 @@ const DUCT_TYPES: { value: DuctType; label: string }[] = [
   { value: "y_duct", label: "Y-Duct — two branches (45°)" },
 ];
 
+// Nesting/offcut waste default per type (%), auto-filled on type change and still
+// editable: straight/collar nest tight, transitions worse, elbows/branches worst.
+const WASTE_DEFAULT: Record<DuctType, number> = {
+  straight_rect: 8,
+  straight_round: 10,
+  connector: 8,
+  reducer: 15,
+  sq2round: 15,
+  elbow90: 20,
+  offset: 15,
+  y_duct: 20,
+};
+
 const MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless Steel"] as const;
 type Material = (typeof MATERIALS)[number];
 const methodFor = (m: Material) =>
@@ -68,7 +81,7 @@ export function DuctSheetCalculator() {
   const [material, setMaterial] = useState<Material>("Galvanized Iron");
   const [qty, setQty] = useState("1");
   const [seam, setSeam] = useState(String(seamDefaultFor("Galvanized Iron")));
-  const [waste, setWaste] = useState("0");
+  const [waste, setWaste] = useState(String(WASTE_DEFAULT.straight_rect));
   const [sheetW, setSheetW] = useState("48");
   const [sheetL, setSheetL] = useState("96");
 
@@ -88,6 +101,11 @@ export function DuctSheetCalculator() {
   function onMaterial(m: Material) {
     setMaterial(m);
     setSeam(String(seamDefaultFor(m))); // reset the seam allowance to the method default
+  }
+
+  function onDuctType(t: DuctType) {
+    setDuctType(t);
+    setWaste(String(WASTE_DEFAULT[t])); // reset the waste % to the type default
   }
 
   const result = useMemo(() => {
@@ -180,7 +198,7 @@ export function DuctSheetCalculator() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <Label>Duct type / transition</Label>
-            <Select className="w-60" value={ductType} onChange={(e) => setDuctType(e.target.value as DuctType)}>
+            <Select className="w-60" value={ductType} onChange={(e) => onDuctType(e.target.value as DuctType)}>
               {DUCT_TYPES.map((t) => (<option key={t.value} value={t.value}>{t.label}</option>))}
             </Select>
           </div>
@@ -248,10 +266,10 @@ export function DuctSheetCalculator() {
           )}
         </div>
 
-        {/* Row 3: allowances */}
+        {/* Row 3: allowances (seam auto-fills by method, waste by type — editable) */}
         <div className="flex flex-wrap items-end gap-3 border-t pt-3">
           <Dim label="Seam allowance (in)" value={seam} onChange={setSeam} />
-          <Dim label="Waste (%)" value={waste} onChange={setWaste} />
+          <Dim label="Waste % (auto)" value={waste} onChange={setWaste} />
           <Dim label="Sheet width (in)" value={sheetW} onChange={setSheetW} />
           <Dim label="Sheet length (in)" value={sheetL} onChange={setSheetL} />
         </div>
