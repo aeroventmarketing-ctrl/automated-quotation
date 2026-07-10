@@ -4,6 +4,7 @@ import { Prisma, QuotationStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
+import { quoteSignature, type SigItem } from "@/lib/quote-signature";
 import { QuotationsTable } from "./quotations-table";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,32 @@ export default async function QuotationsPage({
   ]);
   const admin = isAdmin(user);
 
+  // Duplicate flags: for the quotes on this page, count other quotations with an
+  // identical line-item set (same subtotal is a cheap candidate filter; the exact
+  // signature confirms). Only quotes sharing a subtotal are loaded.
+  const dupCount = new Map<string, number>();
+  // Only non-zero subtotals (a 0 subtotal is an empty/unpriced draft — skip so we
+  // don't scan every draft, and they aren't flagged as look-alikes).
+  const subtotals = Array.from(new Set(quotations.map((q) => q.subtotal))).filter((s) => Number(s) > 0);
+  if (subtotals.length) {
+    const candidates = await prisma.quotation.findMany({
+      where: { subtotal: { in: subtotals } },
+      select: { id: true, items: { select: { specsSnapshot: true, qty: true, catalogueItemId: true } } },
+    });
+    const idToSig = new Map<string, string>();
+    const sigCount = new Map<string, number>();
+    for (const c of candidates) {
+      const sig = quoteSignature(c.items as SigItem[]);
+      idToSig.set(c.id, sig);
+      if (sig) sigCount.set(sig, (sigCount.get(sig) ?? 0) + 1);
+    }
+    for (const q of quotations) {
+      const sig = idToSig.get(q.id);
+      const n = sig ? (sigCount.get(sig) ?? 0) - 1 : 0;
+      if (n > 0) dupCount.set(q.id, n);
+    }
+  }
+
   const rows = quotations.map((quote) => ({
     id: quote.id,
     quoteNumber: quote.quoteNumber,
@@ -82,6 +109,7 @@ export default async function QuotationsPage({
     currency: quote.currency,
     createdISO: quote.createdAt.toISOString(),
     status: quote.status,
+    dupCount: dupCount.get(quote.id) ?? 0,
   }));
 
   return (

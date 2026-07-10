@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 import { QuotationActions } from "./quotation-actions";
 
 export interface QuotationRow {
@@ -23,6 +23,7 @@ export interface QuotationRow {
   currency: string;
   createdISO: string;
   status: QuotationStatus;
+  dupCount?: number;
 }
 
 type SortKey = "quote" | "customer" | "prepared" | "total" | "created" | "status";
@@ -162,6 +163,14 @@ export function QuotationsTable({
                 <Link href={`/quotations/${q.id}`} className="font-medium hover:underline">
                   {q.quoteNumber}
                 </Link>
+                {!!q.dupCount && (
+                  <span
+                    title={`${q.dupCount} other quote${q.dupCount > 1 ? "s have" : " has"} the same items`}
+                    className="ml-2 inline-flex items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                  >
+                    <Copy className="h-3 w-3" /> {q.dupCount}
+                  </span>
+                )}
               </TableCell>
               <TableCell>
                 <Link href={`/customers/${q.customerId}`} className="hover:underline" title="View client profile">
