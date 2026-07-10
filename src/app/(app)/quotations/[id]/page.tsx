@@ -164,6 +164,11 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               acWidth: num(s.acWidth),
               acWidthUnit: typeof s.acWidthUnit === "string" ? s.acWidthUnit : "mm",
               mcRecommend: s.mcRecommend === true,
+              // Straight Duct / Duct Connector calculator inputs — restore so the
+              // gauge, sheets, and Duct Price recompute after save/reload.
+              ductCalcLength: typeof s.ductCalcLength === "string" ? s.ductCalcLength : "",
+              ductCalcWidth: typeof s.ductCalcWidth === "string" ? s.ductCalcWidth : "",
+              ductNoFlange: s.ductNoFlange === true,
               exproof: s.exproof === true,
               customizedUnit: s.customizedUnit === true,
               bladeMaterialOn: s.bladeMaterialOn === true,
