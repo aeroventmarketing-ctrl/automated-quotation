@@ -34,11 +34,12 @@ export interface SigItem {
   catalogueItemId?: string | null;
 }
 
-/** Canonical fingerprint of one line (product + specs + qty). */
+/** Canonical fingerprint of one line (product + specs + qty). The chosen model
+ *  is captured by the `blowerModel` spec, so catalogueItemId is not used (it lets
+ *  a live builder compute the same signature as a saved quote). */
 export function lineFingerprint(item: SigItem): string {
   const s = (item.specsSnapshot ?? {}) as Record<string, unknown>;
   const parts = IDENTITY_KEYS.map((k) => `${k}=${norm(s[k])}`);
-  parts.push(`cat=${item.catalogueItemId ?? ""}`);
   parts.push(`qty=${item.qty}`);
   return parts.join("|");
 }

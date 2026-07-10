@@ -44,7 +44,9 @@ import {
   STAINLESS_SHEET_PRICE,
   AIR_DUCT_LABOR_PER_SHEET,
 } from "@/lib/air-duct-pricing-reference";
-import { updateQuotationLines, transitionQuotation, reviseQuotation } from "../actions";
+import { updateQuotationLines, transitionQuotation, reviseQuotation, checkDuplicateQuote } from "../actions";
+import type { DuplicateMatch } from "@/lib/quote-duplicates";
+import { SimilarQuotes } from "./similar-quotes";
 import { SalePanel } from "./sale-panel";
 import { isSaleConfirmed, type SaleRecord } from "@/lib/sale";
 import { updateQuoteNumber } from "../../admin/actions";
@@ -2223,6 +2225,8 @@ export function QuotationBuilder({
   }
 
   const [lines, setLines] = useState<Line[]>(quotation.items);
+  // Live duplicate detection: existing quotes with the identical current item set.
+  const [dupMatches, setDupMatches] = useState<DuplicateMatch[]>([]);
   const [templateId, setTemplateId] = useState(quotation.templateId);
   const [projectName, setProjectName] = useState(quotation.projectName);
   const [vatMode, setVatMode] = useState(quotation.vatMode);
@@ -2322,6 +2326,27 @@ export function QuotationBuilder({
     const grandTotal = finalNet + vatAmt;
     return { net, vat: gross - net, gross, exclusive, displayedNet, markupAmt, afterMarkup, discountAmt, finalNet, addVat, vatAmt, grandTotal };
   }, [lines, vatRate, effectiveVatMode, pricing]);
+
+  // Live "duplicate quote" check: as the line items change, look for existing
+  // quotes with the identical item set (debounced; DRAFT only).
+  useEffect(() => {
+    if (!editable) { setDupMatches([]); return; }
+    const items = lines
+      .filter((l) => l.specs.type)
+      .map((l) => ({
+        specsSnapshot: { ...l.rawSpecs, ...l.specs } as Record<string, unknown>,
+        qty: l.qty,
+        catalogueItemId: null,
+        unitPrice: l.unitPrice,
+        lineTotal: lineGross(l),
+      }));
+    if (!items.length) { setDupMatches([]); return; }
+    const t = setTimeout(() => {
+      checkDuplicateQuote(items, quotation.id).then(setDupMatches).catch(() => setDupMatches([]));
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, editable]);
 
   // Keep "Recommend?" Motor Controller lines in sync with the nearest fan line
   // above: whenever any line changes, re-pull phase/pole/HP/volts and re-price.
@@ -4059,6 +4084,7 @@ export function QuotationBuilder({
 
   return (
     <div className="space-y-6">
+      <SimilarQuotes matches={dupMatches} currentCompany={quotation.customer} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           {isAdmin && editingNo ? (

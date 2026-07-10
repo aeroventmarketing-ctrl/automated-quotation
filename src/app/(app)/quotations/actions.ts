@@ -10,6 +10,7 @@ import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
 import { isSaleConfirmed, saleFromClassification, type SaleRecord } from "@/lib/sale";
+import { findDuplicateQuotes, type DuplicateMatch } from "@/lib/quote-duplicates";
 
 const lineSchema = z.object({
   catalogueItemId: z.string().nullable().optional(),
@@ -345,6 +346,118 @@ export async function reviseQuotation(quotationId: string) {
   });
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
+}
+
+/** Search customers by company name for the "Duplicate to another client" picker. */
+export async function searchCustomers(query: string): Promise<{ id: string; company: string }[]> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const q = query.trim();
+  if (!q) return [];
+  const customers = await prisma.customer.findMany({
+    where: { company: { contains: q, mode: Prisma.QueryMode.insensitive } },
+    select: { id: true, company: true },
+    orderBy: { company: "asc" },
+    take: 10,
+  });
+  return customers;
+}
+
+/**
+ * Duplicate a quotation to another client: create a fresh inquiry + DRAFT
+ * quotation for the target customer, copying the line items (specs, qty, price)
+ * as-is. Sale state and revision history are not carried over. Redirects to the
+ * new draft, which can then be edited independently.
+ */
+export async function duplicateQuotationToCustomer(quotationId: string, customerId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const src = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    include: { items: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!src) throw new Error("Quotation not found");
+  const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+  if (!customer) throw new Error("Customer not found");
+
+  const totals = computeTotals(
+    src.items.map((it) => ({ qty: it.qty, unitPrice: Number(it.unitPrice), lineTotal: Number(it.lineTotal) })),
+  );
+  // Carry the product classification but not the sale state or revision history.
+  const classification = { ...((src.classification as Record<string, unknown>) ?? {}) };
+  delete classification.sale;
+  delete classification.revision;
+  delete classification.revisions;
+
+  const validUntil = new Date();
+  validUntil.setDate(validUntil.getDate() + 7);
+
+  const created = await prisma.$transaction(async (tx) => {
+    const inquiry = await tx.inquiry.create({
+      data: {
+        customerId,
+        source: "OTHER",
+        status: "QUOTED",
+        createdById: user.id,
+        projectName: src.projectName ?? null,
+        notes: `Duplicated from ${src.quoteNumber}`,
+      },
+    });
+    const quoteNumber = await nextQuoteNumber(tx, user.salesCode ?? "");
+    return tx.quotation.create({
+      data: {
+        inquiryId: inquiry.id,
+        quoteNumber,
+        templateId: src.templateId,
+        status: "DRAFT",
+        vatMode: src.vatMode,
+        discountPct: src.discountPct,
+        headerUnits: (src.headerUnits ?? {}) as object,
+        classification: classification as Prisma.InputJsonObject,
+        projectName: src.projectName,
+        subtotal: totals.subtotal,
+        vat: totals.vat,
+        total: totals.total,
+        currency: src.currency,
+        validUntil,
+        terms: src.terms,
+        preparedById: user.id,
+        items: {
+          create: src.items.map((it, i) => ({
+            catalogueItemId: it.catalogueItemId ?? null,
+            descriptionSnapshot: it.descriptionSnapshot,
+            specsSnapshot: (it.specsSnapshot ?? {}) as object,
+            qty: it.qty,
+            unitPrice: it.unitPrice,
+            lineTotal: it.lineTotal,
+            selectionNote: it.selectionNote ?? null,
+            sortOrder: it.sortOrder ?? i,
+          })),
+        },
+      },
+    });
+  });
+
+  revalidatePath("/quotations");
+  redirect(`/quotations/${created.id}`);
+}
+
+/**
+ * Given a set of line items (as being built), find existing quotations with the
+ * identical item set — used by the builder's live "duplicate" banner.
+ */
+export async function checkDuplicateQuote(
+  items: { specsSnapshot: Record<string, unknown>; qty: number; catalogueItemId: string | null; unitPrice: number; lineTotal?: number }[],
+  excludeQuotationId?: string,
+): Promise<DuplicateMatch[]> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const totals = computeTotals(items.map((i) => ({ qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal })));
+  return findDuplicateQuotes({
+    items: items.map((i) => ({ specsSnapshot: i.specsSnapshot, qty: i.qty, catalogueItemId: i.catalogueItemId })),
+    subtotal: totals.subtotal,
+    excludeQuotationId,
+  });
 }
 
 /**

@@ -7,8 +7,7 @@ import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { saleFromClassification } from "@/lib/sale";
 import { readPricing } from "@/lib/quote";
-import { findDuplicateQuotes } from "@/lib/quote-duplicates";
-import { SimilarQuotes } from "./similar-quotes";
+import { DuplicateToClient } from "./duplicate-to-client";
 
 export const dynamic = "force-dynamic";
 
@@ -51,17 +50,6 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
 
   if (!quotation) notFound();
 
-  // Duplicate detection: other quotations with an identical line-item set.
-  const duplicateMatches = await findDuplicateQuotes({
-    items: quotation.items.map((it) => ({
-      specsSnapshot: it.specsSnapshot,
-      qty: it.qty,
-      catalogueItemId: it.catalogueItemId,
-    })),
-    subtotal: Number(quotation.subtotal),
-    excludeQuotationId: quotation.id,
-  });
-
   const catalog = Object.fromEntries(
     catItems.map((i) => [
       i.id,
@@ -82,7 +70,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
 
   return (
     <div className="space-y-4">
-      <SimilarQuotes matches={duplicateMatches} currentCompany={quotation.inquiry.customer.company} />
+      <div className="flex justify-end">
+        <DuplicateToClient quotationId={quotation.id} />
+      </div>
       <QuotationBuilder
       canApprove={canApprove(user)}
       isAdmin={isAdmin(user)}
