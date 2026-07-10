@@ -25,8 +25,8 @@ import {
   type MotorRow,
 } from "@/lib/pricing/motors";
 import { TECO_MOTOR_DATA, TECO_KW_BY_HP } from "@/lib/teco-motor-data";
-import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw } from "lucide-react";
-import { PRODUCT_CATEGORIES, typesFor, entryFor, bladeTypesFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
+import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw, Search } from "lucide-react";
+import { PRODUCT_CATEGORIES, PRODUCT_TAXONOMY, typesFor, entryFor, bladeTypesFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
 import {
@@ -48,6 +48,80 @@ import { updateQuotationLines, transitionQuotation, reviseQuotation } from "../a
 import { SalePanel } from "./sale-panel";
 import { isSaleConfirmed, type SaleRecord } from "@/lib/sale";
 import { updateQuoteNumber } from "../../admin/actions";
+
+// --- Product search -----------------------------------------------------------
+// A flat, searchable index of every product (one per taxonomy entry). Selecting a
+// result pre-fills the leading dropdowns: category, then the brand/group field
+// (grouped categories store the group in `brand`; branded categories store the
+// brand there), then the Type — after which the remaining dropdowns are chosen
+// as usual.
+interface ProductSearchItem {
+  category: string;
+  brandField: string; // value for the `brand` spec field (group or brand, else "")
+  type: string;
+  label: string;
+  sublabel: string;
+  search: string;
+}
+const PRODUCT_SEARCH_INDEX: ProductSearchItem[] = PRODUCT_TAXONOMY.map((e) => {
+  const brandField = e.group ?? e.brand ?? "";
+  const context = [e.category, e.group, e.brand].filter(Boolean).join(" › ");
+  return {
+    category: e.category,
+    brandField,
+    type: e.type,
+    label: e.type,
+    sublabel: context,
+    search: `${e.type} ${e.category} ${e.group ?? ""} ${e.brand ?? ""}`.toLowerCase(),
+  };
+});
+
+/** Type-ahead product search. Calls onSelect with the chosen taxonomy entry. */
+function ProductSearch({ disabled, onSelect }: { disabled?: boolean; onSelect: (item: ProductSearchItem) => void }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const results = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return [];
+    const terms = query.split(/\s+/);
+    return PRODUCT_SEARCH_INDEX.filter((it) => terms.every((t) => it.search.includes(t))).slice(0, 12);
+  }, [q]);
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={q}
+        disabled={disabled}
+        placeholder="Search a product to auto-fill the selection…"
+        className="pl-8"
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && results.length > 0 && (
+        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-md border bg-background shadow-lg">
+          {results.map((it, i) => (
+            <button
+              key={`${it.category}|${it.brandField}|${it.type}|${i}`}
+              type="button"
+              className="flex w-full flex-col items-start gap-0.5 border-b px-3 py-1.5 text-left last:border-b-0 hover:bg-muted"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onSelect(it); setQ(""); setOpen(false); }}
+            >
+              <span className="text-sm font-medium">{it.label}</span>
+              <span className="text-xs text-muted-foreground">{it.sublabel}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {open && q.trim() && results.length === 0 && (
+        <div className="absolute z-20 mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground shadow-lg">
+          No product matches “{q.trim()}”.
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface CatalogEntry {
   modelCode: string;
@@ -3144,6 +3218,73 @@ export function QuotationBuilder({
     }
   }
 
+  // Apply a Type selection to a line, running the per-type initialisation (reset
+  // fields, seed the description, route to the right pricing handler). Category
+  // and the brand/group field are passed in, so this is driven both by the Type
+  // dropdown and by the product search (which pre-fills category + brand first).
+  function selectProductType(lineId: string, category: string, brand: string, type: string) {
+    if (PROPELLER_FAN_TYPES.has(type)) {
+      applyMotor(lineId, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
+    } else if (type === "Customized Jet Fan") {
+      const pUnit = normalizePressureUnit(units.pressure) ?? "inwg";
+      const sp05 = Math.round(convertPressure(0.5, "inwg", pUnit) * 100) / 100;
+      applyMotor(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", staticPressure_pa: sp05 });
+    } else if (type === "Portable Axial Blower" || type === "Portable Axial Blower (XProof)") {
+      applyAccessory(lineId, { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: portableBlowerDuctTypes({ type })[0], drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false }, true);
+    } else if (type === "Variable Air Volume") {
+      applyAccessory(lineId, { type, bladeType: "by Volume Flow", sizeUnit: "cfm", sizeL: "", sizeW: "", shape: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false }, true);
+    } else if (type === "Induction Motor (TECO)" || type === "Induction Motor (Hyundai)") {
+      applyAccessory(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false, motorPh: 3, motorPole: 4, motorHp: null, motorVolts: 220 }, true);
+    } else if (MATERIAL_CATEGORIES.has(category)) {
+      applyMotor(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
+    } else if (brand === "KDK" || type === "Ceiling Cassette") {
+      applyKdk(lineId, { type, blowerModel: null, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
+    } else if (type === "Motor Controller") {
+      applyMotorController(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null, capacity_cfm: null, staticPressure_pa: null, inches: null, power_w: null });
+    } else if (type === "Spring Vibration Isolator") {
+      applyIsolator(lineId, { type, shape: "", sizeL: "", sizeW: "" });
+    } else if (DUCT_HARDWARE_TYPES.has(type)) {
+      applyAccessory(lineId, { type, gauge: "", cleatSize: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "Galvanized Iron", powderCoated: false }, true);
+    } else if (type === "Vent Cap") {
+      applyAccessory(lineId, { type, shape: "Round", sizeUnit: "inches", sizeL: "", sizeW: "", material: "", powderCoated: false }, true);
+    } else if (type === "Duct Canvass Connector") {
+      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", material: "", canvassUnit: "per meter", powderCoated: false }, true);
+    } else if (type === "Wind Driven Roof Ventilator") {
+      applyAccessory(lineId, { type, shape: "Round", sizeUnit: "inches", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false }, true);
+    } else if (type === "Aluminum Duct") {
+      applyAccessory(lineId, { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false }, true);
+    } else if (type === "Jet Fan" || type === "Commercial Type Exhaust Fan" || type === "HVLS" || type === "Dust Collector") {
+      applyAccessory(lineId, { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false }, true);
+    } else if (type === "Inline Duct Fan") {
+      setLines((ls) =>
+        ls.map((x) =>
+          x.id === lineId
+            ? {
+                ...x,
+                specs: { ...x.specs, type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null },
+                descriptionSnapshot: buildInlineFanDescription(null),
+              }
+            : x,
+        ),
+      );
+    } else if (category === "Ventilation Accessories") {
+      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: type === "Straight Duct" ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false }, true);
+    } else {
+      updateSpec(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
+    }
+  }
+
+  // Product search selection: pre-fill category + brand/group, then apply the Type
+  // (which runs the per-type init above). The remaining dropdowns follow the Type.
+  function applyProductSearch(lineId: string, item: ProductSearchItem) {
+    updateSpec(lineId, {
+      category: item.category,
+      brand: item.brandField,
+      type: "", bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null,
+    });
+    selectProductType(lineId, item.category, item.brandField, item.type);
+  }
+
   // Product selection workflow, bound to one line item's specs.
   function renderProductSelection(l: Line) {
     const c = l.specs;
@@ -3160,6 +3301,9 @@ export function QuotationBuilder({
     return (
       <div className="space-y-1">
         <Label>Product selection</Label>
+        {/* Type-ahead product search — fills category + brand/group + type, then
+            the product-specific details/table appear and the rest is chosen below. */}
+        <ProductSearch disabled={!editable} onSelect={(item) => applyProductSearch(l.id, item)} />
         <div className={`grid grid-cols-2 gap-2 ${selCols}`}>
           <Select
             value={c.category}
@@ -3200,152 +3344,7 @@ export function QuotationBuilder({
           <Select
             value={c.type}
             disabled={!editable || !c.category || (brandsFor(c.category).length > 0 && !c.brand) || (hasGroups && !accGroup)}
-            onChange={(e) => {
-              const type = e.target.value;
-              // Blower/fan categories route through applyMotor so the description
-              // rebuilds field-by-field (and the model re-tags). Wall fans have a
-              // single blade (Propeller), so pre-select it. Accessories keep set().
-              if (PROPELLER_FAN_TYPES.has(type)) {
-                applyMotor(l.id, { type, bladeType: "Propeller", shape: "", sizeL: "", sizeW: "" });
-              } else if (type === "Customized Jet Fan") {
-                // Customized Jet Fan: Tubeaxial catalogue, priced ×2, locked to
-                // 0.5" w.g. — seed the static pressure at 0.5" (in the header unit).
-                const pUnit = normalizePressureUnit(units.pressure) ?? "inwg";
-                const sp05 = Math.round(convertPressure(0.5, "inwg", pUnit) * 100) / 100;
-                applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", staticPressure_pa: sp05 });
-              } else if (type === "Portable Axial Blower" || type === "Portable Axial Blower (XProof)") {
-                // Portable Axial Blower / XProof: size + duct type dropdowns, no
-                // blade/drive/material. Duct type defaults to the fan config (held
-                // in bladeType): standard "With Duct", XProof "With-out Duct".
-                applyAccessory(
-                  l.id,
-                  { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: portableBlowerDuctTypes({ type })[0], drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Variable Air Volume") {
-                // VAV: select by volume flow (value + unit) or by duct size. No
-                // blade/drive/material. Defaults to selecting by volume flow in CFM.
-                applyAccessory(
-                  l.id,
-                  { type, bladeType: "by Volume Flow", sizeUnit: "cfm", sizeL: "", sizeW: "", shape: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Induction Motor (TECO)" || type === "Induction Motor (Hyundai)") {
-                // Induction Motor: Phase / Pole / HP selectors, priced from the
-                // motor table. Defaults to three-phase, 4-pole (Hyundai is fixed
-                // three-phase 4-pole); no blade/drive/material.
-                applyAccessory(
-                  l.id,
-                  { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false, motorPh: 3, motorPole: 4, motorHp: null, motorVolts: 220 },
-                  true,
-                );
-              } else if (MATERIAL_CATEGORIES.has(c.category)) {
-                applyMotor(l.id, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
-              } else if (c.brand === "KDK" || type === "Ceiling Cassette") {
-                // Pre-built unit (KDK, or any-brand Ceiling Cassette): rebuild
-                // Type / Brand / Model and clear any previously-picked model.
-                applyKdk(l.id, { type, blowerModel: null, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
-              } else if (type === "Motor Controller") {
-                // Simple sub-typed item (Motor Starter / VFD) — no fan fields,
-                // no airflow / static pressure / size / watt rating.
-                applyMotorController(l.id, {
-                  type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null,
-                  capacity_cfm: null, staticPressure_pa: null, inches: null, power_w: null,
-                });
-              } else if (type === "Spring Vibration Isolator") {
-                // Seed the description with the type; mounting/capacity add to it.
-                applyIsolator(l.id, { type, shape: "", sizeL: "", sizeW: "" });
-              } else if (DUCT_HARDWARE_TYPES.has(type)) {
-                // Clips / cleats / corners: priced per piece by gauge (+ length),
-                // galvanized iron by default; clear any area-based selections.
-                applyAccessory(
-                  l.id,
-                  { type, gauge: "", cleatSize: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", material: "Galvanized Iron", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Vent Cap") {
-                // Vent Cap: fixed round diameters (inches) + stainless material.
-                applyAccessory(
-                  l.id,
-                  { type, shape: "Round", sizeUnit: "inches", sizeL: "", sizeW: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Duct Canvass Connector") {
-                // Canvass connector: material + per meter / per box pricing basis.
-                applyAccessory(
-                  l.id,
-                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", material: "", canvassUnit: "per meter", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Wind Driven Roof Ventilator") {
-                // Roof ventilator: throat diameter + material (manual price).
-                applyAccessory(
-                  l.id,
-                  { type, shape: "Round", sizeUnit: "inches", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Aluminum Duct") {
-                // Aluminum duct: size dropdown, priced per size.
-                applyAccessory(
-                  l.id,
-                  { type, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Jet Fan") {
-                // Jet fan: model dropdown (MAXAIR / AlphaAir), priced per model.
-                applyAccessory(
-                  l.id,
-                  { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Commercial Type Exhaust Fan") {
-                // Commercial exhaust fan: model dropdown (AlphaAir ADH series), priced per model.
-                applyAccessory(
-                  l.id,
-                  { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "HVLS") {
-                // HVLS: model dropdown (AlphaAir AAHVPM series), priced per model.
-                applyAccessory(
-                  l.id,
-                  { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Dust Collector") {
-                // Dust Collector: model dropdown (META Taiwan CT series), priced per
-                // model; the model's spec block becomes the description.
-                applyAccessory(
-                  l.id,
-                  { type, blowerModel: null, shape: "", sizeUnit: "", sizeL: "", sizeW: "", bladeType: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false },
-                  true,
-                );
-              } else if (type === "Inline Duct Fan") {
-                // Seed the description now (type + brand); the model line is added
-                // when a CK model is chosen via Run selection.
-                setLines((ls) =>
-                  ls.map((x) =>
-                    x.id === l.id
-                      ? {
-                          ...x,
-                          specs: { ...x.specs, type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", blowerModel: null },
-                          descriptionSnapshot: buildInlineFanDescription(null),
-                        }
-                      : x,
-                  ),
-                );
-              } else if (c.category === "Ventilation Accessories") {
-                // Air Terminals / Dampers: reset shape/size/material/finish and
-                // clear any stale auto-price (recomputes once dimensions are set).
-                applyAccessory(
-                  l.id,
-                  { type, shape: "", sizeL: "", sizeW: "", sizeUnit: type === "Straight Duct" ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false },
-                  true,
-                );
-              } else {
-                set({ type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
-              }
-            }}
+            onChange={(e) => selectProductType(l.id, c.category, c.brand, e.target.value)}
           >
             <option value="">Type…</option>
             {typesFor(
