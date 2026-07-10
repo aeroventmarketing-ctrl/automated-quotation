@@ -3982,7 +3982,7 @@ export function QuotationBuilder({
                   <span className="tabular-nums font-medium">{ductGauge ? `${ductGauge} ga` : "—"}</span>
                 </div>
                 <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                  <span className="flex-1">Length (input here)</span>
+                  <span className="flex-1">Height &quot;B&quot;</span>
                   <Input
                     type="number" step="any" className="h-8 w-20 text-right"
                     disabled={!editable} value={c.ductCalcLength ?? ""}
@@ -3991,7 +3991,7 @@ export function QuotationBuilder({
                   <span className="text-xs text-muted-foreground">{calcUnit}</span>
                 </div>
                 <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                  <span className="flex-1">Width (input here)</span>
+                  <span className="flex-1">Width &quot;A&quot;</span>
                   <Input
                     type="number" step="any" className="h-8 w-20 text-right"
                     disabled={!editable} value={c.ductCalcWidth ?? ""}
