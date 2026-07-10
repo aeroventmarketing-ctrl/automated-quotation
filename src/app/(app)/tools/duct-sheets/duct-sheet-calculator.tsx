@@ -42,7 +42,8 @@ type DuctType =
   | "reducer"
   | "sq2round"
   | "elbow90"
-  | "offset";
+  | "offset"
+  | "y_duct";
 
 const DUCT_TYPES: { value: DuctType; label: string }[] = [
   { value: "straight_rect", label: "Straight Duct — Rectangular" },
@@ -52,6 +53,7 @@ const DUCT_TYPES: { value: DuctType; label: string }[] = [
   { value: "sq2round", label: "Square to Round" },
   { value: "elbow90", label: "Elbow 90° — Rectangular" },
   { value: "offset", label: "Offset — Rectangular" },
+  { value: "y_duct", label: "Y-Duct — two branches (45°)" },
 ];
 
 const MATERIALS = ["Galvanized Iron", "Black Iron", "Stainless Steel"] as const;
@@ -79,6 +81,7 @@ export function DuctSheetCalculator() {
   const [h2, setH2] = useState("");
   const [offset, setOffset] = useState("");
   const [throat, setThroat] = useState("");
+  const [lb, setLb] = useState(""); // Y-Duct branch length
 
   const method = methodFor(material);
 
@@ -101,7 +104,7 @@ export function DuctSheetCalculator() {
     let area: number | null = null;
     let detail = "";
     const W = num(w), H = num(h), L = num(l), D = num(d), W2 = num(w2), H2 = num(h2);
-    const OFF = num(offset), TH = num(throat);
+    const OFF = num(offset), TH = num(throat), LB = num(lb);
 
     if (ductType === "straight_rect" || ductType === "connector") {
       if (W == null || H == null || L == null) return null;
@@ -142,6 +145,16 @@ export function DuctSheetCalculator() {
       const path = Math.sqrt(toIn(L) ** 2 + toIn(OFF) ** 2);
       area = (P + seamIn) * path;
       detail = `perimeter ${r(P)} in × path ${r(path)} in`;
+    } else if (ductType === "y_duct") {
+      // Two-branch rectangular Y (45°): sum of the main run + two branch runs, as
+      // developed straight panels. Crotch overlap is not deducted (conservative).
+      if (W == null || H == null || L == null || W2 == null || H2 == null || LB == null) return null;
+      const Pmain = 2 * (toIn(W) + toIn(H));
+      const Pbr = 2 * (toIn(W2) + toIn(H2));
+      const mainA = (Pmain + seamIn) * toIn(L);
+      const brA = (Pbr + seamIn) * toIn(LB);
+      area = mainA + 2 * brA;
+      detail = `main ${r(mainA / 144)} ft² + 2 × branch ${r(brA / 144)} ft²`;
     }
     if (area == null || !Number.isFinite(area) || area <= 0) return null;
 
@@ -156,7 +169,7 @@ export function DuctSheetCalculator() {
       detail,
       qty: q,
     };
-  }, [ductType, unit, qty, seam, waste, sheetW, sheetL, w, h, l, d, w2, h2, offset, throat]);
+  }, [ductType, unit, qty, seam, waste, sheetW, sheetL, w, h, l, d, w2, h2, offset, throat, lb]);
 
   const dimUnit = unit;
 
@@ -223,6 +236,16 @@ export function DuctSheetCalculator() {
           )}
           {ductType === "offset" && <Dim label={`Offset (${dimUnit})`} value={offset} onChange={setOffset} />}
           {ductType === "elbow90" && <Dim label={`Throat radius (${dimUnit}, blank = W)`} value={throat} onChange={setThroat} wide />}
+          {ductType === "y_duct" && (
+            <>
+              <Dim label={`Main W (${dimUnit})`} value={w} onChange={setW} />
+              <Dim label={`Main H (${dimUnit})`} value={h} onChange={setH} />
+              <Dim label={`Main length (${dimUnit})`} value={l} onChange={setL} />
+              <Dim label={`Branch W (${dimUnit})`} value={w2} onChange={setW2} />
+              <Dim label={`Branch H (${dimUnit})`} value={h2} onChange={setH2} />
+              <Dim label={`Branch length (${dimUnit})`} value={lb} onChange={setLb} />
+            </>
+          )}
         </div>
 
         {/* Row 3: allowances */}
