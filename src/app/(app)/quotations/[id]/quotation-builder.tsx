@@ -1127,17 +1127,30 @@ const isDuctCalc = (specs: { category: string; type: string }): boolean =>
 function straightDuctStdLengthM(specs: { ductNoFlange?: boolean }): number {
   return specs.ductNoFlange ? 1.2 : 1.1;
 }
-/** Calculator A/B (entered in sizeUnit) → mm (for the gauge) and trade inches (for sheets). */
-function ductCalcSides(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): {
+/** Calculator A/B (entered in sizeUnit) → mm (for the gauge) and trade inches (for
+ *  sheets). A Round duct carries a single diameter (stored in ductCalcWidth) that
+ *  fills BOTH sides, so the gauge (longest side) and reducer size (√(a·b)) both
+ *  resolve to the diameter; the circumference is handled by ductPerimeterIn. */
+function ductCalcSides(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string }): {
   aMm: number;
   bMm: number;
   aIn: number;
   bIn: number;
 } {
   const perMm = ACC_MM_PER_UNIT[specs.sizeUnit || "inches"] ?? 25; // mm per 1 entered unit
+  if (specs.shape === "Round") {
+    const dMm = (parseFloat(specs.ductCalcWidth ?? "") || 0) * perMm;
+    return { aMm: dMm, bMm: dMm, aIn: dMm / 25, bIn: dMm / 25 };
+  }
   const aMm = (parseFloat(specs.ductCalcLength ?? "") || 0) * perMm;
   const bMm = (parseFloat(specs.ductCalcWidth ?? "") || 0) * perMm;
   return { aMm, bMm, aIn: aMm / 25, bIn: bMm / 25 };
+}
+/** Duct perimeter/circumference (trade inches): Round = π·diameter, else 2·(A+B). */
+function ductPerimeterIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string }): number {
+  const { aIn, bIn } = ductCalcSides(specs);
+  if (specs.shape === "Round") return Math.PI * aIn; // aIn === diameter for round
+  return (aIn + bIn) * 2;
 }
 // Duct Reducer material used (square inches) by opening size (A = B, inches),
 // from AeroVent's reducer development table.
@@ -1168,10 +1181,10 @@ function reducerStandardHeightForSize(tabSize: number): number {
 }
 /** The reducer's equivalent tabulated (square) size (inches) for its A × B
  *  opening — a rectangular one uses √(A × B), rounded up to the table. */
-function reducerEquivSize(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
+function reducerEquivSize(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string }): number {
   const { aIn, bIn } = ductCalcSides(specs);
   if (!(aIn > 0) || !(bIn > 0)) return 0;
-  return reducerTabSize(Math.sqrt(aIn * bIn));
+  return reducerTabSize(Math.sqrt(aIn * bIn)); // round: aIn = bIn = diameter → size = diameter
 }
 /** Actual reducer height "H" in inches (0 when unset → treated as standard). */
 function reducerHeightIn(specs: { ductCalcHeight?: string; sizeUnit?: string }): number {
@@ -1206,9 +1219,8 @@ function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: s
 //   Duct Connector  = ((A + B) × 2 × 12) ÷ 4608       (12" collar, no seam)
 //   Duct Reducer    = material(A, B) ÷ 4608           (developed blank area)
 // where 4608 = 48 × 96 in² (one sheet).
-function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string }): number {
-  const { aIn, bIn } = ductCalcSides(specs);
-  const perimeter = (aIn + bIn) * 2;
+function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string }): number {
+  const perimeter = ductPerimeterIn(specs);
   if (specs.type === "Duct Connector") return (perimeter * 12) / (48 * 96);
   if (specs.type === "Duct Reducer") return reducerMaterialSqIn(specs) / (48 * 96);
   return (perimeter + 2) / 96;
@@ -1217,14 +1229,13 @@ function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string
 // wrap of the cross-section. A Duct Connector uses less metal for its 12"
 // collar (see ductSheetsUsed), but its production labour is billed like a full
 // straight-duct section, so labour is always computed from this count.
-function straightDuctSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
-  const { aIn, bIn } = ductCalcSides(specs);
-  return ((aIn + bIn) * 2 + 2) / 96;
+function straightDuctSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string }): number {
+  return (ductPerimeterIn(specs) + 2) / 96;
 }
 // Sheet count that production labour is billed from. Straight Duct and Duct
 // Connector both bill labour like a full duct section (the straight-duct wrap);
 // a Duct Reducer bills labour from its own developed-blank sheet count.
-function ductLaborSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string }): number {
+function ductLaborSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string }): number {
   if (specs.type === "Duct Reducer") return ductSheetsUsed(specs);
   return straightDuctSheetCount(specs);
 }
@@ -1813,8 +1824,9 @@ function straightDuctLaborSheets(sheets: number): number {
   return Math.max(1, Math.ceil(sheets * 2) / 2);
 }
 
-/** Gauge from the calculator's A/B cross-section (longest side in mm → schedule). */
-function straightDuctGauge(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): string | null {
+/** Gauge from the calculator's A/B cross-section (longest side in mm → schedule).
+ *  Round: both sides equal the diameter, so the schedule uses the diameter. */
+function straightDuctGauge(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string }): string | null {
   const { aMm, bMm } = ductCalcSides(specs);
   if (!(aMm > 0) || !(bMm > 0)) return null;
   const longestMm = Math.max(aMm, bMm);
@@ -1839,9 +1851,8 @@ function straightDuctSheetPrice(material: string, gauge: string, brand: string):
 // Silicone 700 PHP/m, VAT-ex). Shown in the user's order.
 const DUCT_CONNECTOR_FABRICS = ["Fiberglass Cloth", "PVC", "Silicone"];
 /** Fabric length used (metres) for a Duct Connector, from its A × B cross-section. */
-function ductConnectorFabricMeters(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
-  const { aIn, bIn } = ductCalcSides(specs);
-  const meters = ((2 * aIn + 2 * bIn + 2) * 25) / 1000; // inches → metres (25 mm = 1 in)
+function ductConnectorFabricMeters(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string }): number {
+  const meters = ((ductPerimeterIn(specs) + 2) * 25) / 1000; // perimeter + 2 in → metres (25 mm = 1 in)
   // Fabric is sold whole-metre only — round up (min 1 m when any is needed).
   return meters > 0 ? Math.ceil(meters) : 0;
 }
@@ -2137,9 +2148,13 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     const dl: string[] = [specs.type || "Straight Duct"];
     const unit = specs.sizeUnit || "inches";
     const unitAbbr = unit === "inches" ? "in" : unit;
-    const a = specs.ductCalcLength;
-    const b = specs.ductCalcWidth;
-    if (a && b) dl.push(`${a} ${unitAbbr} x ${b} ${unitAbbr}`);
+    if (specs.shape === "Round") {
+      if (specs.ductCalcWidth) dl.push(`Ø${specs.ductCalcWidth} ${unitAbbr}`);
+    } else {
+      const a = specs.ductCalcLength;
+      const b = specs.ductCalcWidth;
+      if (a && b) dl.push(`${a} ${unitAbbr} x ${b} ${unitAbbr}`);
+    }
     if (AIR_DUCT_MATERIALS.includes(specs.material)) dl.push(`${accMaterialLabel(specs.material)} Material`);
     if (specs.gauge) dl.push(`Gauge ${specs.gauge}`);
     if (specs.material === "Galvanized Iron" && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
@@ -2727,6 +2742,14 @@ export function QuotationBuilder({
         }
         // Painted finish is a Black Iron option only — drop a stale flag otherwise.
         if (specs.material !== "Black Iron") specs.ductPainted = false;
+        // Duct calc: switching shape (Round ↔ Square/Rectangle) swaps the size
+        // inputs (single diameter vs A × B), so clear the entered dimensions to
+        // avoid carrying a stale A/B into a diameter (or vice-versa).
+        if ("shape" in patch && isDuctCalc(specs)) {
+          specs.ductCalcLength = "";
+          specs.ductCalcWidth = "";
+          specs.ductCalcHeight = "";
+        }
         // A Duct Connector always carries a canvas fabric — if none is set yet,
         // default to the first fabric so its per-meter cost is always charged.
         if (specs.type === "Duct Connector" && !DUCT_CONNECTOR_FABRICS.includes(specs.fabricMaterial ?? "")) {
@@ -3932,14 +3955,16 @@ export function QuotationBuilder({
                     <option key={cap} value={cap}>{cap} kg</option>
                   ))}
                 </Select>
+              ) : isDuctCalc(c) ? (
+                // Straight Duct / Connector / Reducer are sized in their own
+                // calculator table (A × B, or a single Diameter when Round), so
+                // the box's top-row size input is omitted here — including the
+                // round diameter, which moves into the table.
+                null
               ) : sizeMode(c.type, c.shape) === "diameter" ? (
                 <Input className="h-9" type="number" step="any" placeholder={`Diameter Ø (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
                   disabled={!editable || !c.type} value={c.sizeL}
                   onChange={(e) => applyAccessory(l.id, { sizeL: e.target.value, sizeW: "" })} />
-              ) : isDuctCalc(c) ? (
-                // Straight Duct is sized in its own Duct Price Calculator (A × B
-                // inches), so the box's L/W dimensions are omitted here.
-                null
               ) : (
                 <>
                   <Input className="h-9" type="number" step="any" placeholder={`L (${UOM_TYPES.has(c.type) ? c.sizeUnit || "mm" : "mm"})`}
@@ -4155,6 +4180,8 @@ export function QuotationBuilder({
           const priceVatEx = ductGauge ? straightDuctPriceVatEx({ ...c, gauge: ductGauge }) : null;
           // Duct price breakdown (each term of straightDuctPriceVatEx), shown below.
           const sheetPrice = ductGauge ? straightDuctSheetPrice(c.material, ductGauge, c.bladeType) : null;
+          // Round duct: a single diameter (stored in ductCalcWidth) replaces A/B.
+          const isRound = c.shape === "Round";
           // Duct Reducer: developed-blank material area (sq in) from the table.
           const isReducer = c.type === "Duct Reducer";
           const reducerSqIn = isReducer ? reducerMaterialSqIn(c) : null;
@@ -4218,24 +4245,39 @@ export function QuotationBuilder({
                   <span>Gauge</span>
                   <span className="tabular-nums font-medium">{ductGauge ? `${ductGauge} ga` : "—"}</span>
                 </div>
-                <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                  <span className="flex-1">{isReducer ? "Length" : "Height"} &quot;B&quot;</span>
-                  <Input
-                    type="number" step="any" className="h-8 w-20 text-right"
-                    disabled={!editable} value={c.ductCalcLength ?? ""}
-                    onChange={(e) => applyAccessory(l.id, { ductCalcLength: e.target.value })}
-                  />
-                  <span className="text-xs text-muted-foreground">{calcUnit}</span>
-                </div>
-                <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                  <span className="flex-1">Width &quot;A&quot;</span>
-                  <Input
-                    type="number" step="any" className="h-8 w-20 text-right"
-                    disabled={!editable} value={c.ductCalcWidth ?? ""}
-                    onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
-                  />
-                  <span className="text-xs text-muted-foreground">{calcUnit}</span>
-                </div>
+                {isRound ? (
+                  // Round: a single Diameter Ø replaces A and B (stored in ductCalcWidth).
+                  <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                    <span className="flex-1">Diameter &quot;Ø&quot;</span>
+                    <Input
+                      type="number" step="any" className="h-8 w-20 text-right"
+                      disabled={!editable} value={c.ductCalcWidth ?? ""}
+                      onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
+                    />
+                    <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                      <span className="flex-1">{isReducer ? "Length" : "Height"} &quot;B&quot;</span>
+                      <Input
+                        type="number" step="any" className="h-8 w-20 text-right"
+                        disabled={!editable} value={c.ductCalcLength ?? ""}
+                        onChange={(e) => applyAccessory(l.id, { ductCalcLength: e.target.value })}
+                      />
+                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                    </div>
+                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                      <span className="flex-1">Width &quot;A&quot;</span>
+                      <Input
+                        type="number" step="any" className="h-8 w-20 text-right"
+                        disabled={!editable} value={c.ductCalcWidth ?? ""}
+                        onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
+                      />
+                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                    </div>
+                  </>
+                )}
                 {isReducer && (
                   <div className="flex items-center gap-2 border-b px-3 py-1.5">
                     <span className="flex-1">
