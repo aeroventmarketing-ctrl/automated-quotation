@@ -1226,6 +1226,31 @@ function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: s
   const overStandard = reducerHeightIn(specs) > reducerStandardHeightForSize(size);
   return base * (overStandard ? 2 : 1);
 }
+/** Elbow duct A (width), B (length) and R (radius) in trade inches. The third
+ *  calculator field (ductCalcHeight) holds the radius R for an elbow. */
+function elbowDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): {
+  aIn: number;
+  bIn: number;
+  rIn: number;
+} {
+  const perMm = ACC_MM_PER_UNIT[specs.sizeUnit || "inches"] ?? 25;
+  const toIn = (v?: string) => ((parseFloat(v ?? "") || 0) * perMm) / 25;
+  return { aIn: toIn(specs.ductCalcWidth), bIn: toIn(specs.ductCalcLength), rIn: toIn(specs.ductCalcHeight) };
+}
+/** Elbow Duct material used (sq in), from the developed pattern:
+ *  2·(B + R + 0.5)² + (2R + B)·0.7854·(A + 4). Needs A, B and R all set. */
+function elbowMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
+  const { aIn, bIn, rIn } = elbowDims(specs);
+  if (!(aIn > 0) || !(bIn > 0) || !(rIn > 0)) return 0;
+  const cheeks = Math.pow(bIn + rIn + 0.5, 2) * 2; // two side cheeks
+  const wrap = (2 * rIn + bIn) * 0.7854 * (aIn + 4); // curved throat/back wrap
+  return cheeks + wrap;
+}
+/** Material used (sq in) for a reducer-like type — Elbow uses its own A/B/R
+ *  formula; Duct Reducer and Square to Round use the reducer table. */
+function reducerLikeMaterialSqIn(specs: { type?: string; ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
+  return specs.type === "Elbow Duct" ? elbowMaterialSqIn(specs) : reducerMaterialSqIn(specs);
+}
 // Number of Sheets Used, from the A × B cross-section (trade inches):
 //   Straight Duct   = ((A + B) × 2 + 2) ÷ 96          (48" strip + lock seam)
 //   Duct Connector  = ((A + B) × 2 × 12) ÷ 4608       (12" collar, no seam)
@@ -1234,7 +1259,7 @@ function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: s
 function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string; material?: string }): number {
   const perimeter = ductPerimeterIn(specs);
   if (specs.type === "Duct Connector") return (perimeter * 12) / (48 * 96);
-  if (isReducerType(specs.type)) return reducerMaterialSqIn(specs) / (48 * 96);
+  if (isReducerType(specs.type)) return reducerLikeMaterialSqIn(specs) / (48 * 96);
   return (perimeter + ductSeamAllowanceIn(specs)) / 96;
 }
 // Straight-duct sheet count (labour basis) — the full ((A + B) × 2 + 2) ÷ 96
@@ -1900,6 +1925,8 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   if (!gauge) return null;
   const { aMm, bMm } = ductCalcSides(specs);
   if (!(aMm > 0) || !(bMm > 0)) return null; // need the A × B cross-section entered
+  // An Elbow needs its radius R too (its material formula uses A, B and R).
+  if (specs.type === "Elbow Duct" && !(elbowMaterialSqIn(specs) > 0)) return null;
   const sheetPrice = straightDuctSheetPrice(specs.material, gauge, specs.bladeType);
   if (sheetPrice == null) return null;
   const laborBase = AIR_DUCT_LABOR_PER_SHEET[specs.material];
@@ -2797,7 +2824,7 @@ export function QuotationBuilder({
           // changes (so changing dimensions always shows the current standard),
           // and fill it in when it's blank. A custom height the user types while
           // the size is unchanged is kept (to raise H above standard → doubles).
-          if (isReducerType(specs.type)) {
+          if (isReducerType(specs.type) && specs.type !== "Elbow Duct") {
             const dimsChanged =
               ("ductCalcLength" in patch || "ductCalcWidth" in patch) && !("sizeUnit" in patch);
             const newStd = reducerStandardHeightInUnit(specs);
@@ -4206,11 +4233,14 @@ export function QuotationBuilder({
           const sheetPrice = ductGauge ? straightDuctSheetPrice(c.material, ductGauge, c.bladeType) : null;
           // Round duct: a single diameter (stored in ductCalcWidth) replaces A/B.
           const isRound = c.shape === "Round";
-          // Duct Reducer: developed-blank material area (sq in) from the table.
+          // Reducer-like: developed-blank material area (sq in). Elbow uses A/B/R
+          // (third field = radius); Reducer / Square to Round use the table + H.
           const isReducer = isReducerType(c.type);
-          const reducerSqIn = isReducer ? reducerMaterialSqIn(c) : null;
-          // Standard height for this size, shown in the calc unit (H above it doubles material).
-          const reducerStdHIn = isReducer ? reducerStandardHeightIn(c) : 0;
+          const isElbow = c.type === "Elbow Duct";
+          const reducerSqIn = isReducer ? reducerLikeMaterialSqIn(c) : null;
+          // Standard height for this size, shown in the calc unit (H above it doubles
+          // material) — reducers only; an Elbow's radius R has no standard.
+          const reducerStdHIn = isReducer && !isElbow ? reducerStandardHeightIn(c) : 0;
           const reducerStdHDisp = reducerStdHIn > 0 ? (reducerStdHIn * 25) / (ACC_MM_PER_UNIT[calcUnit] ?? 25) : null;
           const baseLaborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
           // A Duct Reducer takes twice the labour per sheet.
@@ -4305,7 +4335,7 @@ export function QuotationBuilder({
                 {isReducer && (
                   <div className="flex items-center gap-2 border-b px-3 py-1.5">
                     <span className="flex-1">
-                      Height &quot;H&quot;
+                      {isElbow ? <>Radius &quot;R&quot;</> : <>Height &quot;H&quot;</>}
                       {reducerStdHDisp != null && (
                         <span className="ml-1 text-[11px] font-normal text-muted-foreground">
                           ({Math.round(reducerStdHDisp * 10) / 10} {calcUnit} maximum — above this doubles material)
