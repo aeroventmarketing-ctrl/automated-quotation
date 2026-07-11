@@ -1110,12 +1110,18 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
 // Air Duct types that use the sheet-metal "duct calculator" (A × B cross-section
 // → sheets → auto price), with their own illustration. Straight Duct and Duct
 // Connector share the same calculator and pricing.
-const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer"]);
+const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct"]);
 const DUCT_CALC_IMAGE: Record<string, string> = {
   "Straight Duct": "/straight-duct.png",
   "Duct Connector": "/duct-connector.jpg",
   "Duct Reducer": "/reducer.jpg",
+  "Square to Round Duct": "/square-to-round.jpg",
 };
+// Reducer-like types: A × B × H opening priced from the reducer material table
+// (double labour, height-based material doubling). Square to Round mirrors the
+// Duct Reducer exactly.
+const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct"]);
+const isReducerType = (type?: string): boolean => REDUCER_LIKE_TYPES.has(type ?? "");
 const isDuctCalc = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && DUCT_CALC_TYPES.has(specs.type);
 // Straight Duct: one duct wraps a strip of the 48 × 96 in sheet, so Number of
@@ -1227,7 +1233,7 @@ function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: s
 function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string; material?: string }): number {
   const perimeter = ductPerimeterIn(specs);
   if (specs.type === "Duct Connector") return (perimeter * 12) / (48 * 96);
-  if (specs.type === "Duct Reducer") return reducerMaterialSqIn(specs) / (48 * 96);
+  if (isReducerType(specs.type)) return reducerMaterialSqIn(specs) / (48 * 96);
   return (perimeter + ductSeamAllowanceIn(specs)) / 96;
 }
 // Straight-duct sheet count (labour basis) — the full ((A + B) × 2 + 2) ÷ 96
@@ -1241,7 +1247,7 @@ function straightDuctSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?
 // Connector both bill labour like a full duct section (the straight-duct wrap);
 // a Duct Reducer bills labour from its own developed-blank sheet count.
 function ductLaborSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string }): number {
-  if (specs.type === "Duct Reducer") return ductSheetsUsed(specs);
+  if (isReducerType(specs.type)) return ductSheetsUsed(specs);
   return straightDuctSheetCount(specs);
 }
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
@@ -1898,7 +1904,7 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   const laborBase = AIR_DUCT_LABOR_PER_SHEET[specs.material];
   if (laborBase == null) return null;
   // A Duct Reducer takes twice the labour per sheet of a straight duct.
-  const labor = specs.type === "Duct Reducer" ? laborBase * 2 : laborBase;
+  const labor = isReducerType(specs.type) ? laborBase * 2 : laborBase;
   const sheets = ductSheetsUsed(specs);
   // Labour is billed from the labour sheet count for the type (Duct Connector
   // matches a full duct section; Duct Reducer uses its own blank sheet count).
@@ -2790,7 +2796,7 @@ export function QuotationBuilder({
           // changes (so changing dimensions always shows the current standard),
           // and fill it in when it's blank. A custom height the user types while
           // the size is unchanged is kept (to raise H above standard → doubles).
-          if (specs.type === "Duct Reducer") {
+          if (isReducerType(specs.type)) {
             const dimsChanged =
               ("ductCalcLength" in patch || "ductCalcWidth" in patch) && !("sizeUnit" in patch);
             const newStd = reducerStandardHeightInUnit(specs);
@@ -4200,7 +4206,7 @@ export function QuotationBuilder({
           // Round duct: a single diameter (stored in ductCalcWidth) replaces A/B.
           const isRound = c.shape === "Round";
           // Duct Reducer: developed-blank material area (sq in) from the table.
-          const isReducer = c.type === "Duct Reducer";
+          const isReducer = isReducerType(c.type);
           const reducerSqIn = isReducer ? reducerMaterialSqIn(c) : null;
           // Standard height for this size, shown in the calc unit (H above it doubles material).
           const reducerStdHIn = isReducer ? reducerStandardHeightIn(c) : 0;
@@ -4238,8 +4244,8 @@ export function QuotationBuilder({
                 <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
                   {c.type === "Duct Connector"
                     ? `Collar length: 12"`
-                    : c.type === "Duct Reducer"
-                    ? `Reducer${c.ductNoFlange ? " (No Flange)" : " (Flanged)"}`
+                    : isReducer
+                    ? c.ductNoFlange ? "No Flange" : "Flanged"
                     : `Standard length: ${straightDuctStdLengthM(c)} meter${c.ductNoFlange ? " (No Flange)" : " (Flanged)"}`}
                 </div>
                 <div className="flex items-center justify-between border-b px-3 py-1.5">
