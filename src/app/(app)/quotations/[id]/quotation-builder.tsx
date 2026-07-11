@@ -1237,17 +1237,18 @@ function elbowDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; duc
   const toIn = (v?: string) => ((parseFloat(v ?? "") || 0) * perMm) / 25;
   return { aIn: toIn(specs.ductCalcWidth), bIn: toIn(specs.ductCalcLength), rIn: toIn(specs.ductCalcHeight) };
 }
-/** Elbow Duct material used (sq in), from the developed pattern:
- *  2·(B + R)² + 2R·0.7845·A + 2·(R + B)·0.7845·A. Needs A, B and R all set.
- *  The ×1.2 GI overlap allowance is applied by ductMaterialWasteFactor (GI only;
- *  welded Black Iron / Stainless keep the plain computation). */
+/** Elbow Duct material used (sq in), matching the reference sheet's formula:
+ *  2·(A + B)² + B·0.7854·C + (A + B)·0.7854·C   (0.7854 = 3.1416 × 0.25 = π/4).
+ *  Fields map A = Width, B = Length, C = the third field ("Radius R"). Needs all
+ *  three set. The GI overlap allowance (×1.2) is applied by ductMaterialWasteFactor
+ *  (GI only; welded Black Iron / Stainless keep the plain computation). */
 function elbowMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
-  const { aIn, bIn, rIn } = elbowDims(specs);
+  const { aIn, bIn, rIn } = elbowDims(specs); // aIn = A, bIn = B, rIn = C
   if (!(aIn > 0) || !(bIn > 0) || !(rIn > 0)) return 0;
-  const k = 0.7845;
-  const cheeks = Math.pow(bIn + rIn, 2) * 2; // two side cheeks
-  const throat = 2 * rIn * k * aIn; // throat curve
-  const back = 2 * (rIn + bIn) * k * aIn; // back curve
+  const k = 0.7854; // 3.1416 × 0.25 (π/4)
+  const cheeks = Math.pow(aIn + bIn, 2) * 2; // 2·(A + B)² — two side cheeks
+  const throat = bIn * k * rIn; // B · 0.7854 · C
+  const back = (aIn + bIn) * k * rIn; // (A + B) · 0.7854 · C
   return cheeks + throat + back;
 }
 /** Material used (sq in) for a reducer-like type — Elbow uses its own A/B/R
