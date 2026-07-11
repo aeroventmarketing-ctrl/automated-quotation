@@ -1110,7 +1110,7 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
 const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector"]);
 const DUCT_CALC_IMAGE: Record<string, string> = {
   "Straight Duct": "/straight-duct.png",
-  "Duct Connector": "/duct-connector.png",
+  "Duct Connector": "/duct-connector.jpg",
 };
 const isDuctCalc = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && DUCT_CALC_TYPES.has(specs.type);
