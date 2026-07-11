@@ -1138,32 +1138,26 @@ function ductCalcSides(specs: { ductCalcLength?: string; ductCalcWidth?: string;
   return { aMm, bMm, aIn: aMm / 25, bIn: bMm / 25 };
 }
 // Duct Reducer material used (square inches) by opening size (A = B, inches),
-// from AeroVent's reducer development table. Interpolated between rows and
-// scaled quadratically (material ∝ size²) beyond the tabulated range.
+// from AeroVent's reducer development table.
 const REDUCER_MATERIAL_TABLE: ReadonlyArray<readonly [number, number]> = [
   [4, 94], [6, 211], [8, 374], [10, 584], [12, 841], [14, 1144],
   [16, 1494], [18, 1891], [20, 2337], [22, 2825], [24, 3369], [26, 3945],
   [28, 4576], [30, 5251], [32, 5975], [34, 6745], [36, 7561],
 ];
-/** Reducer material (sq in) for an equivalent square opening of the given size. */
+/** Reducer material (sq in) for an equivalent square opening of the given size,
+ *  rounded UP to the next tabulated size (never interpolated). Above the table
+ *  it rounds up to the next even size and scales the top row (material ∝ size²). */
 function reducerMaterialForSize(size: number): number {
   if (!(size > 0)) return 0;
   const t = REDUCER_MATERIAL_TABLE;
-  const [firstSize, firstVal] = t[0];
+  for (const [s, v] of t) if (size <= s) return v; // smallest tabulated size ≥ the value
   const [lastSize, lastVal] = t[t.length - 1];
-  if (size <= firstSize) return (firstVal * size * size) / (firstSize * firstSize);
-  if (size >= lastSize) return (lastVal * size * size) / (lastSize * lastSize);
-  for (let i = 1; i < t.length; i++) {
-    const [s1, v1] = t[i];
-    if (size <= s1) {
-      const [s0, v0] = t[i - 1];
-      return v0 + ((v1 - v0) * (size - s0)) / (s1 - s0); // linear interpolation
-    }
-  }
-  return lastVal;
+  const stepUp = Math.ceil(size / 2) * 2; // next even size beyond the table
+  return (lastVal * stepUp * stepUp) / (lastSize * lastSize);
 }
-/** Duct Reducer material used (sq in) for an A × B opening — the table is keyed
- *  by a square opening, so a rectangular one uses its geometric-mean size. */
+/** Duct Reducer material used (sq in) for an A × B opening. The table is keyed
+ *  by a square opening, so a rectangular one uses √(A × B) — e.g. 10 × 12 →
+ *  √120 = 10.95 → rounds up to the 12" row (841 sq in). */
 function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
   const { aIn, bIn } = ductCalcSides(specs);
   if (!(aIn > 0) || !(bIn > 0)) return 0;
