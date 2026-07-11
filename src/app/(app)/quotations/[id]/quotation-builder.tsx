@@ -1787,8 +1787,10 @@ const DUCT_GAUGE_SCHEDULE: Array<[number, string]> = [
   [2250, "20"],
 ];
 // Standard round-duct thickness by diameter (mm) → gauge (else 18 ga above 2400).
+// The standard's 26 ga (≤300 mm) is upgraded to 24 ga — we never use 26 ga for
+// round or rectangular ducts.
 const ROUND_DUCT_GAUGE_SCHEDULE: Array<[number, string]> = [
-  [300, "26"],
+  [300, "24"],
   [750, "24"],
   [1500, "22"],
   [2400, "20"],
