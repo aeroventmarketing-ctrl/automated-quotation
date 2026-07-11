@@ -1110,17 +1110,18 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
 // Air Duct types that use the sheet-metal "duct calculator" (A × B cross-section
 // → sheets → auto price), with their own illustration. Straight Duct and Duct
 // Connector share the same calculator and pricing.
-const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct"]);
+const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct", "Elbow Duct"]);
 const DUCT_CALC_IMAGE: Record<string, string> = {
   "Straight Duct": "/straight-duct.png",
   "Duct Connector": "/duct-connector.jpg",
   "Duct Reducer": "/reducer.jpg",
   "Square to Round Duct": "/square-to-round.jpg",
+  "Elbow Duct": "/elbow.jpg",
 };
 // Reducer-like types: A × B × H opening priced from the reducer material table
-// (double labour, height-based material doubling). Square to Round mirrors the
-// Duct Reducer exactly.
-const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct"]);
+// (double labour, height-based material doubling). Square to Round and Elbow
+// Duct mirror the Duct Reducer exactly.
+const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct", "Elbow Duct"]);
 const isReducerType = (type?: string): boolean => REDUCER_LIKE_TYPES.has(type ?? "");
 const isDuctCalc = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && DUCT_CALC_TYPES.has(specs.type);
