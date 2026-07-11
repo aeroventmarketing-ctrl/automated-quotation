@@ -1759,7 +1759,9 @@ const DUCT_CONNECTOR_FABRICS = ["Fiberglass Cloth", "PVC", "Silicone"];
 /** Fabric length used (metres) for a Duct Connector, from its A × B cross-section. */
 function ductConnectorFabricMeters(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
   const { aIn, bIn } = ductCalcSides(specs);
-  return ((2 * aIn + 2 * bIn + 2) * 25) / 1000; // inches → metres (25 mm = 1 in)
+  const meters = ((2 * aIn + 2 * bIn + 2) * 25) / 1000; // inches → metres (25 mm = 1 in)
+  // Fabric is sold whole-metre only — round up (min 1 m when any is needed).
+  return meters > 0 ? Math.ceil(meters) : 0;
 }
 /** Fabric material cost (VAT-ex) for a Duct Connector, or null if none selected. */
 function ductConnectorFabricCost(specs: LineSpecs): number | null {
