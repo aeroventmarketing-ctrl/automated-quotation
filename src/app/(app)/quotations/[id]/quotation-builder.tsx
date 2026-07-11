@@ -167,6 +167,7 @@ interface LineSpecs {
   ductCalcWidth?: string;
   ductCalcHeight?: string; // Duct Reducer: reducer height "H" (standard 4"; material scales H ÷ 4)
   ductNoFlange?: boolean; // Straight Duct: no angle-iron flange (drops the 15×8 corner cost; body 1.2 m vs flanged 1.1 m)
+  ductPainted?: boolean; // Duct calc (Black Iron only): painted finish, +30% on the duct price
   fabricMaterial?: string; // Duct Connector: canvas fabric (Fiberglass Cloth / PVC / Silicone), priced per meter
   cleatSize?: string; // length option for TDC cleat / S-clip / C-clip (6.5" / 48")
   canvassUnit?: string; // canvass connector pricing basis ("per meter" / "per box")
@@ -1851,6 +1852,12 @@ function ductConnectorFabricCost(specs: LineSpecs): number | null {
   return ductConnectorFabricMeters(specs) * price;
 }
 
+// Painted finish (Black Iron only) adds 30% to the duct price.
+const DUCT_PAINT_SURCHARGE = 0.3;
+/** Whether the painted-finish surcharge applies (Black Iron with Painted ticked). */
+function ductCalcPainted(specs: { material?: string; ductPainted?: boolean }): boolean {
+  return specs.material === "Black Iron" && !!specs.ductPainted;
+}
 /** Straight Duct / Duct Connector price (VAT-EXCLUSIVE), or null when incomplete.
  *  Uses the line's effective gauge; Duct Connector adds the canvas fabric cost. */
 function straightDuctPriceVatEx(specs: LineSpecs): number | null {
@@ -1872,12 +1879,9 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   const angleCost = specs.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
   // Duct Connector also carries the canvas fabric (per-meter) cost, if chosen.
   const fabricCost = specs.type === "Duct Connector" ? ductConnectorFabricCost(specs) ?? 0 : 0;
-  return (
-    sheetPrice * STRAIGHT_DUCT_MARKUP * sheets +
-    angleCost +
-    laborSheets * labor +
-    fabricCost
-  );
+  const subtotal = sheetPrice * STRAIGHT_DUCT_MARKUP * sheets + angleCost + laborSheets * labor + fabricCost;
+  // Painted Black Iron adds 30% to the whole duct price.
+  return ductCalcPainted(specs) ? subtotal * (1 + DUCT_PAINT_SURCHARGE) : subtotal;
 }
 
 // --- Air Terminals / Dampers body pricing (per square inch, VAT-inclusive) ----
@@ -2144,6 +2148,7 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     if (specs.type === "Duct Connector" && DUCT_CONNECTOR_FABRICS.includes(specs.fabricMaterial ?? "")) {
       dl.push(`${specs.fabricMaterial} Fabric`);
     }
+    if (ductCalcPainted(specs)) dl.push("Painted");
     return dl.join("\n");
   }
   const lines: string[] = [];
@@ -2720,6 +2725,8 @@ export function QuotationBuilder({
         if (isDuctCalc(specs) && (specs.material === "Black Iron" || specs.material === "Stainless Steel")) {
           specs.ductNoFlange = true;
         }
+        // Painted finish is a Black Iron option only — drop a stale flag otherwise.
+        if (specs.material !== "Black Iron") specs.ductPainted = false;
         // A Duct Connector always carries a canvas fabric — if none is set yet,
         // default to the first fabric so its per-meter cost is always charged.
         if (specs.type === "Duct Connector" && !DUCT_CONNECTOR_FABRICS.includes(specs.fabricMaterial ?? "")) {
@@ -3442,7 +3449,7 @@ export function QuotationBuilder({
       // Duct Connector always carries a canvas fabric, so default to the first
       // fabric (Fiberglass Cloth) — its per-meter cost is charged straight away
       // and the user can switch fabrics from the dropdown.
-      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductCalcHeight: "", ductNoFlange: false, fabricMaterial: type === "Duct Connector" ? DUCT_CONNECTOR_FABRICS[0] : "" }, true);
+      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductCalcHeight: "", ductNoFlange: false, ductPainted: false, fabricMaterial: type === "Duct Connector" ? DUCT_CONNECTOR_FABRICS[0] : "" }, true);
     } else {
       updateSpec(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
     }
@@ -3975,6 +3982,15 @@ export function QuotationBuilder({
                   </label>
                 );
               })()}
+              {/* Painted finish — Black Iron only; adds 30% to the duct price. */}
+              {isDuctCalc(c) && c.material === "Black Iron" && (
+                <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                  <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type}
+                    checked={!!c.ductPainted}
+                    onChange={(e) => applyAccessory(l.id, { ductPainted: e.target.checked })} />
+                  Painted
+                </label>
+              )}
               {/* Material (Air Terminals / Dampers). Air Duct shows its own material
                   dropdown right after Type, so it's skipped here. */}
               {!isIsolator(c) && !isAirDuct(c) && (
@@ -4155,6 +4171,12 @@ export function QuotationBuilder({
           const fabricMeters = ductConnectorFabricMeters(c);
           const fabricRate = c.fabricMaterial ? CANVASS_METER_NET[c.fabricMaterial] ?? null : null;
           const fabricCost = isConnector ? ductConnectorFabricCost(c) : null;
+          // Painted Black Iron: +30% of the base (pre-paint) duct price.
+          const painted = ductCalcPainted(c);
+          const paintCost =
+            painted && materialCost != null && laborCost != null
+              ? (materialCost + angleCost + laborCost + (fabricCost ?? 0)) * DUCT_PAINT_SURCHARGE
+              : null;
           const peso = (n: number) =>
             `₱${(Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           return (
@@ -4261,6 +4283,12 @@ export function QuotationBuilder({
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Fabric — {c.fabricMaterial}, {Math.round(fabricMeters * 1000) / 1000} m × {peso(fabricRate)}</span>
                       <span className="tabular-nums">{peso(fabricCost)}</span>
+                    </div>
+                  )}
+                  {paintCost != null && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Paint — Black Iron painted (+30%)</span>
+                      <span className="tabular-nums">{peso(paintCost)}</span>
                     </div>
                   )}
                   <div className="mt-1 flex justify-between gap-2 border-t pt-1 font-semibold">
