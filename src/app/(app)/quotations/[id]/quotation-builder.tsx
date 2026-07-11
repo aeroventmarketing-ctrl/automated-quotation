@@ -1238,13 +1238,16 @@ function elbowDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; duc
   return { aIn: toIn(specs.ductCalcWidth), bIn: toIn(specs.ductCalcLength), rIn: toIn(specs.ductCalcHeight) };
 }
 /** Elbow Duct material used (sq in), from the developed pattern:
- *  2·(B + R + 0.5)² + (2R + B)·0.7854·(A + 4). Needs A, B and R all set. */
+ *  { 2·(B + R)² + 2R·(π/4)·A + 2·(R + B)·(π/4)·A } × 1.2.
+ *  Needs A, B and R all set. (π/4 = 0.7854.) */
 function elbowMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
   const { aIn, bIn, rIn } = elbowDims(specs);
   if (!(aIn > 0) || !(bIn > 0) || !(rIn > 0)) return 0;
-  const cheeks = Math.pow(bIn + rIn + 0.5, 2) * 2; // two side cheeks
-  const wrap = (2 * rIn + bIn) * 0.7854 * (aIn + 4); // curved throat/back wrap
-  return cheeks + wrap;
+  const k = 0.7854; // π/4
+  const cheeks = Math.pow(bIn + rIn, 2) * 2; // two side cheeks
+  const throat = 2 * rIn * k * aIn; // throat curve
+  const back = 2 * (rIn + bIn) * k * aIn; // back curve
+  return (cheeks + throat + back) * 1.2;
 }
 /** Material used (sq in) for a reducer-like type — Elbow uses its own A/B/R
  *  formula; Duct Reducer and Square to Round use the reducer table. */
