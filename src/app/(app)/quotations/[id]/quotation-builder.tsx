@@ -1256,11 +1256,23 @@ function reducerLikeMaterialSqIn(specs: { type?: string; ductCalcLength?: string
 //   Duct Connector  = ((A + B) × 2 × 12) ÷ 4608       (12" collar, no seam)
 //   Duct Reducer    = material(A, B) ÷ 4608           (developed blank area)
 // where 4608 = 48 × 96 in² (one sheet).
-function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string; material?: string }): number {
+function ductRawSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string; type?: string; shape?: string; material?: string }): number {
   const perimeter = ductPerimeterIn(specs);
   if (specs.type === "Duct Connector") return (perimeter * 12) / (48 * 96);
   if (isReducerType(specs.type)) return reducerLikeMaterialSqIn(specs) / (48 * 96);
   return (perimeter + ductSeamAllowanceIn(specs)) / 96;
+}
+// Galvanized Iron carries a 10% material allowance (overlap/waste) on the metal
+// used; Black Iron and Stainless Steel keep the plain computation.
+const GI_MATERIAL_WASTE = 0.1;
+function ductMaterialWasteFactor(specs: { material?: string }): number {
+  return specs.material === "Galvanized Iron" ? 1 + GI_MATERIAL_WASTE : 1;
+}
+/** Material (sheets) used — the metal quantity that drives material cost and the
+ *  "Number of Sheets Used" / "Material Used" display (GI +10%). Labour uses the
+ *  raw count (ductLaborSheetCount), not this factored one. */
+function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string; type?: string; shape?: string; material?: string }): number {
+  return ductRawSheetsUsed(specs) * ductMaterialWasteFactor(specs);
 }
 // Straight-duct sheet count (labour basis) — the full ((A + B) × 2 + 2) ÷ 96
 // wrap of the cross-section. A Duct Connector uses less metal for its 12"
@@ -1272,8 +1284,9 @@ function straightDuctSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?
 // Sheet count that production labour is billed from. Straight Duct and Duct
 // Connector both bill labour like a full duct section (the straight-duct wrap);
 // a Duct Reducer bills labour from its own developed-blank sheet count.
-function ductLaborSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string }): number {
-  if (isReducerType(specs.type)) return ductSheetsUsed(specs);
+function ductLaborSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string; type?: string; shape?: string; material?: string }): number {
+  // Labour is billed from the raw material count (no GI +10% material allowance).
+  if (isReducerType(specs.type)) return ductRawSheetsUsed(specs);
   return straightDuctSheetCount(specs);
 }
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
@@ -4237,7 +4250,8 @@ export function QuotationBuilder({
           // (third field = radius); Reducer / Square to Round use the table + H.
           const isReducer = isReducerType(c.type);
           const isElbow = c.type === "Elbow Duct";
-          const reducerSqIn = isReducer ? reducerLikeMaterialSqIn(c) : null;
+          // Material Used (sq in) includes the GI +10% material allowance.
+          const reducerSqIn = isReducer ? reducerLikeMaterialSqIn(c) * ductMaterialWasteFactor(c) : null;
           // Standard height for this size, shown in the calc unit (H above it doubles
           // material) — reducers only; an Elbow's radius R has no standard.
           const reducerStdHIn = isReducer && !isElbow ? reducerStandardHeightIn(c) : 0;
