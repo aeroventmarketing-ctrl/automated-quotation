@@ -1238,8 +1238,9 @@ function elbowDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; duc
   return { aIn: toIn(specs.ductCalcWidth), bIn: toIn(specs.ductCalcLength), rIn: toIn(specs.ductCalcHeight) };
 }
 /** Elbow Duct material used (sq in), from the developed pattern:
- *  { 2·(B + R)² + 2R·0.7845·A + 2·(R + B)·0.7845·A } × 1.2.
- *  Needs A, B and R all set. */
+ *  2·(B + R)² + 2R·0.7845·A + 2·(R + B)·0.7845·A. Needs A, B and R all set.
+ *  The ×1.2 GI overlap allowance is applied by ductMaterialWasteFactor (GI only;
+ *  welded Black Iron / Stainless keep the plain computation). */
 function elbowMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
   const { aIn, bIn, rIn } = elbowDims(specs);
   if (!(aIn > 0) || !(bIn > 0) || !(rIn > 0)) return 0;
@@ -1247,7 +1248,7 @@ function elbowMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: str
   const cheeks = Math.pow(bIn + rIn, 2) * 2; // two side cheeks
   const throat = 2 * rIn * k * aIn; // throat curve
   const back = 2 * (rIn + bIn) * k * aIn; // back curve
-  return (cheeks + throat + back) * 1.2;
+  return cheeks + throat + back;
 }
 /** Material used (sq in) for a reducer-like type — Elbow uses its own A/B/R
  *  formula; Duct Reducer and Square to Round use the reducer table. */
