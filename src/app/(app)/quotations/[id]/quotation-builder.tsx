@@ -2634,6 +2634,11 @@ export function QuotationBuilder({
         if (isDuctCalc(specs) && (specs.material === "Black Iron" || specs.material === "Stainless Steel")) {
           specs.ductNoFlange = true;
         }
+        // A Duct Connector always carries a canvas fabric — if none is set yet,
+        // default to the first fabric so its per-meter cost is always charged.
+        if (specs.type === "Duct Connector" && !DUCT_CONNECTOR_FABRICS.includes(specs.fabricMaterial ?? "")) {
+          specs.fabricMaterial = DUCT_CONNECTOR_FABRICS[0];
+        }
         // Air Duct "Recommend": auto-pick the sheet gauge from the duct's longest
         // side, recomputed on any dimension / shape / unit change (cleared when
         // off). Straight Duct manages its own gauge (manual dropdown + Recommend)
@@ -3338,7 +3343,10 @@ export function QuotationBuilder({
         ),
       );
     } else if (category === "Ventilation Accessories") {
-      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false, fabricMaterial: "" }, true);
+      // Duct Connector always carries a canvas fabric, so default to the first
+      // fabric (Fiberglass Cloth) — its per-meter cost is charged straight away
+      // and the user can switch fabrics from the dropdown.
+      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false, fabricMaterial: type === "Duct Connector" ? DUCT_CONNECTOR_FABRICS[0] : "" }, true);
     } else {
       updateSpec(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
     }
