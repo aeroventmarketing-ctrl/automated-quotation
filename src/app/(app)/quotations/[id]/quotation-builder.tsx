@@ -1152,6 +1152,11 @@ function ductPerimeterIn(specs: { ductCalcLength?: string; ductCalcWidth?: strin
   if (specs.shape === "Round") return Math.PI * aIn; // aIn === diameter for round
   return (aIn + bIn) * 2;
 }
+/** Seam allowance (trade inches) added to the developed perimeter: Galvanized
+ *  Iron is lock-seamed (+2" overlap); Black Iron / Stainless are welded (none). */
+function ductSeamAllowanceIn(specs: { material?: string }): number {
+  return specs.material === "Galvanized Iron" ? 2 : 0;
+}
 // Duct Reducer material used (square inches) by opening size (A = B, inches),
 // from AeroVent's reducer development table.
 const REDUCER_MATERIAL_TABLE: ReadonlyArray<readonly [number, number]> = [
@@ -1219,18 +1224,18 @@ function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: s
 //   Duct Connector  = ((A + B) × 2 × 12) ÷ 4608       (12" collar, no seam)
 //   Duct Reducer    = material(A, B) ÷ 4608           (developed blank area)
 // where 4608 = 48 × 96 in² (one sheet).
-function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string }): number {
+function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string; shape?: string; material?: string }): number {
   const perimeter = ductPerimeterIn(specs);
   if (specs.type === "Duct Connector") return (perimeter * 12) / (48 * 96);
   if (specs.type === "Duct Reducer") return reducerMaterialSqIn(specs) / (48 * 96);
-  return (perimeter + 2) / 96;
+  return (perimeter + ductSeamAllowanceIn(specs)) / 96;
 }
 // Straight-duct sheet count (labour basis) — the full ((A + B) × 2 + 2) ÷ 96
 // wrap of the cross-section. A Duct Connector uses less metal for its 12"
 // collar (see ductSheetsUsed), but its production labour is billed like a full
 // straight-duct section, so labour is always computed from this count.
-function straightDuctSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string }): number {
-  return (ductPerimeterIn(specs) + 2) / 96;
+function straightDuctSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string; material?: string }): number {
+  return (ductPerimeterIn(specs) + ductSeamAllowanceIn(specs)) / 96;
 }
 // Sheet count that production labour is billed from. Straight Duct and Duct
 // Connector both bill labour like a full duct section (the straight-duct wrap);
@@ -1781,6 +1786,13 @@ const DUCT_GAUGE_SCHEDULE: Array<[number, string]> = [
   [1370, "22"],
   [2250, "20"],
 ];
+// Standard round-duct thickness by diameter (mm) → gauge (else 18 ga above 2400).
+const ROUND_DUCT_GAUGE_SCHEDULE: Array<[number, string]> = [
+  [300, "26"],
+  [750, "24"],
+  [1500, "22"],
+  [2400, "20"],
+];
 /** Longest duct side (mm) → recommended gauge, or null if the size isn't set. */
 function recommendedDuctGauge(specs: LineSpecs): string | null {
   const unit = specs.sizeUnit || "mm";
@@ -1829,8 +1841,11 @@ function straightDuctLaborSheets(sheets: number): number {
 function straightDuctGauge(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; shape?: string }): string | null {
   const { aMm, bMm } = ductCalcSides(specs);
   if (!(aMm > 0) || !(bMm > 0)) return null;
+  // Round uses the round-duct thickness schedule (by diameter); rectangular uses
+  // the longest side. Both sides equal the diameter for a round duct.
+  const schedule = specs.shape === "Round" ? ROUND_DUCT_GAUGE_SCHEDULE : DUCT_GAUGE_SCHEDULE;
   const longestMm = Math.max(aMm, bMm);
-  for (const [maxMm, ga] of DUCT_GAUGE_SCHEDULE) if (longestMm <= maxMm) return ga;
+  for (const [maxMm, ga] of schedule) if (longestMm <= maxMm) return ga;
   return "18";
 }
 
