@@ -4010,7 +4010,9 @@ export function QuotationBuilder({
               <div className="w-[30rem] rounded-md border bg-sky-50 text-sm">
                 <div className="border-b bg-sky-200/60 px-3 py-1.5 text-center font-semibold">{c.type}</div>
                 <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
-                  Standard length: {straightDuctStdLengthM(c)} meter{c.ductNoFlange ? " (No Flange)" : " (Flanged)"}
+                  {c.type === "Duct Connector"
+                    ? `Collar length: 12"`
+                    : `Standard length: ${straightDuctStdLengthM(c)} meter${c.ductNoFlange ? " (No Flange)" : " (Flanged)"}`}
                 </div>
                 <div className="flex items-center justify-between border-b px-3 py-1.5">
                   <span>Number of Sheets Used</span>
