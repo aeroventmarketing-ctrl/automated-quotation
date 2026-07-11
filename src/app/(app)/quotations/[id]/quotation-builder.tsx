@@ -4307,7 +4307,7 @@ export function QuotationBuilder({
                       Height &quot;H&quot;
                       {reducerStdHDisp != null && (
                         <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                          (standard {Math.round(reducerStdHDisp * 10) / 10} {calcUnit} — above this doubles material)
+                          ({Math.round(reducerStdHDisp * 10) / 10} {calcUnit} maximum — above this doubles material)
                         </span>
                       )}
                     </span>
