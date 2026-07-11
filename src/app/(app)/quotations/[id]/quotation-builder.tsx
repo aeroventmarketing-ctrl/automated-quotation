@@ -1182,6 +1182,13 @@ function reducerHeightIn(specs: { ductCalcHeight?: string; sizeUnit?: string }):
 function reducerStandardHeightIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
   return reducerStandardHeightForSize(reducerEquivSize(specs));
 }
+/** Standard height in the line's current unit (null if the opening isn't sized). */
+function reducerStandardHeightInUnit(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number | null {
+  const stdIn = reducerStandardHeightIn(specs);
+  if (!(stdIn > 0)) return null;
+  const perMm = ACC_MM_PER_UNIT[specs.sizeUnit || "inches"] ?? 25;
+  return Math.round(((stdIn * 25) / perMm) * 100) / 100; // inches → current unit
+}
 /** Duct Reducer material used (sq in) for an A × B opening at height H. The table
  *  is keyed by a square opening, so a rectangular one uses √(A × B) — e.g.
  *  10 × 12 → √120 = 10.95 → the 12" row (841 sq in). Each size has a standard
@@ -2731,6 +2738,16 @@ export function QuotationBuilder({
         // dropdown; that gauge drives the Duct Price and the description. Price
         // is VAT-ex → store VAT-inclusive.
         if (isDuctCalc(specs)) {
+          // Duct Reducer: when no custom height is set, use the size's standard
+          // height. Keep it in sync as the opening changes (only while H is still
+          // the default) so resizing never silently pushes H past the standard.
+          if (specs.type === "Duct Reducer") {
+            const newStd = reducerStandardHeightInUnit(specs);
+            const oldStd = reducerStandardHeightInUnit(l.specs);
+            const curH = parseFloat(specs.ductCalcHeight ?? "");
+            const stillDefault = !(curH > 0) || (oldStd != null && Math.abs(curH - oldStd) < 0.01);
+            if (newStd != null && stillDefault) specs.ductCalcHeight = String(newStd);
+          }
           const gauge = specs.mcRecommend ? straightDuctGauge(specs) ?? "" : specs.gauge ?? "";
           const s2: LineSpecs = { ...specs, gauge };
           const priceVatEx = gauge ? straightDuctPriceVatEx(s2) : null;
