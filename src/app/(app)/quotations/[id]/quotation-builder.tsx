@@ -1238,12 +1238,12 @@ function elbowDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; duc
   return { aIn: toIn(specs.ductCalcWidth), bIn: toIn(specs.ductCalcLength), rIn: toIn(specs.ductCalcHeight) };
 }
 /** Elbow Duct material used (sq in), from the developed pattern:
- *  { 2·(B + R)² + 2R·(π/4)·A + 2·(R + B)·(π/4)·A } × 1.2.
- *  Needs A, B and R all set. (π/4 = 0.7854.) */
+ *  { 2·(B + R)² + 2R·0.7845·A + 2·(R + B)·0.7845·A } × 1.2.
+ *  Needs A, B and R all set. */
 function elbowMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
   const { aIn, bIn, rIn } = elbowDims(specs);
   if (!(aIn > 0) || !(bIn > 0) || !(rIn > 0)) return 0;
-  const k = 0.7854; // π/4
+  const k = 0.7845;
   const cheeks = Math.pow(bIn + rIn, 2) * 2; // two side cheeks
   const throat = 2 * rIn * k * aIn; // throat curve
   const back = 2 * (rIn + bIn) * k * aIn; // back curve
@@ -1265,9 +1265,9 @@ function ductRawSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: str
   if (isReducerType(specs.type)) return reducerLikeMaterialSqIn(specs) / (48 * 96);
   return (perimeter + ductSeamAllowanceIn(specs)) / 96;
 }
-// Galvanized Iron carries a 10% material allowance (overlap/waste) on the metal
+// Galvanized Iron carries a 20% material allowance (overlap/waste) on the metal
 // used; Black Iron and Stainless Steel keep the plain computation.
-const GI_MATERIAL_WASTE = 0.1;
+const GI_MATERIAL_WASTE = 0.2;
 function ductMaterialWasteFactor(specs: { material?: string }): number {
   return specs.material === "Galvanized Iron" ? 1 + GI_MATERIAL_WASTE : 1;
 }
