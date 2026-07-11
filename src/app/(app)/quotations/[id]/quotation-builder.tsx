@@ -1108,10 +1108,11 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
 // Air Duct types that use the sheet-metal "duct calculator" (A × B cross-section
 // → sheets → auto price), with their own illustration. Straight Duct and Duct
 // Connector share the same calculator and pricing.
-const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector"]);
+const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer"]);
 const DUCT_CALC_IMAGE: Record<string, string> = {
   "Straight Duct": "/straight-duct.png",
   "Duct Connector": "/duct-connector.jpg",
+  "Duct Reducer": "/reducer.jpg",
 };
 const isDuctCalc = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && DUCT_CALC_TYPES.has(specs.type);
@@ -1136,14 +1137,48 @@ function ductCalcSides(specs: { ductCalcLength?: string; ductCalcWidth?: string;
   const bMm = (parseFloat(specs.ductCalcWidth ?? "") || 0) * perMm;
   return { aMm, bMm, aIn: aMm / 25, bIn: bMm / 25 };
 }
+// Duct Reducer material used (square inches) by opening size (A = B, inches),
+// from AeroVent's reducer development table. Interpolated between rows and
+// scaled quadratically (material ∝ size²) beyond the tabulated range.
+const REDUCER_MATERIAL_TABLE: ReadonlyArray<readonly [number, number]> = [
+  [4, 94], [6, 211], [8, 374], [10, 584], [12, 841], [14, 1144],
+  [16, 1494], [18, 1891], [20, 2337], [22, 2825], [24, 3369], [26, 3945],
+  [28, 4576], [30, 5251], [32, 5975], [34, 6745], [36, 7561],
+];
+/** Reducer material (sq in) for an equivalent square opening of the given size. */
+function reducerMaterialForSize(size: number): number {
+  if (!(size > 0)) return 0;
+  const t = REDUCER_MATERIAL_TABLE;
+  const [firstSize, firstVal] = t[0];
+  const [lastSize, lastVal] = t[t.length - 1];
+  if (size <= firstSize) return (firstVal * size * size) / (firstSize * firstSize);
+  if (size >= lastSize) return (lastVal * size * size) / (lastSize * lastSize);
+  for (let i = 1; i < t.length; i++) {
+    const [s1, v1] = t[i];
+    if (size <= s1) {
+      const [s0, v0] = t[i - 1];
+      return v0 + ((v1 - v0) * (size - s0)) / (s1 - s0); // linear interpolation
+    }
+  }
+  return lastVal;
+}
+/** Duct Reducer material used (sq in) for an A × B opening — the table is keyed
+ *  by a square opening, so a rectangular one uses its geometric-mean size. */
+function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
+  const { aIn, bIn } = ductCalcSides(specs);
+  if (!(aIn > 0) || !(bIn > 0)) return 0;
+  return reducerMaterialForSize(Math.sqrt(aIn * bIn));
+}
 // Number of Sheets Used, from the A × B cross-section (trade inches):
 //   Straight Duct   = ((A + B) × 2 + 2) ÷ 96          (48" strip + lock seam)
 //   Duct Connector  = ((A + B) × 2 × 12) ÷ 4608       (12" collar, no seam)
+//   Duct Reducer    = material(A, B) ÷ 4608           (developed blank area)
 // where 4608 = 48 × 96 in² (one sheet).
 function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string }): number {
   const { aIn, bIn } = ductCalcSides(specs);
   const perimeter = (aIn + bIn) * 2;
   if (specs.type === "Duct Connector") return (perimeter * 12) / (48 * 96);
+  if (specs.type === "Duct Reducer") return reducerMaterialSqIn(specs) / (48 * 96);
   return (perimeter + 2) / 96;
 }
 // Straight-duct sheet count (labour basis) — the full ((A + B) × 2 + 2) ÷ 96
@@ -1153,6 +1188,13 @@ function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string
 function straightDuctSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
   const { aIn, bIn } = ductCalcSides(specs);
   return ((aIn + bIn) * 2 + 2) / 96;
+}
+// Sheet count that production labour is billed from. Straight Duct and Duct
+// Connector both bill labour like a full duct section (the straight-duct wrap);
+// a Duct Reducer bills labour from its own developed-blank sheet count.
+function ductLaborSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string }): number {
+  if (specs.type === "Duct Reducer") return ductSheetsUsed(specs);
+  return straightDuctSheetCount(specs);
 }
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
 const VENT_CAP_DIAMETERS = ["4", "6", "8"];
@@ -1790,9 +1832,9 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   const labor = AIR_DUCT_LABOR_PER_SHEET[specs.material];
   if (labor == null) return null;
   const sheets = ductSheetsUsed(specs);
-  // Labour is billed from the straight-duct sheet count (a Duct Connector's
-  // production labour matches a full duct section, not its small collar metal).
-  const laborSheets = straightDuctLaborSheets(straightDuctSheetCount(specs));
+  // Labour is billed from the labour sheet count for the type (Duct Connector
+  // matches a full duct section; Duct Reducer uses its own blank sheet count).
+  const laborSheets = straightDuctLaborSheets(ductLaborSheetCount(specs));
   // Angle-iron flange corners apply only to a flanged duct.
   const angleCost = specs.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
   // Duct Connector also carries the canvas fabric (per-meter) cost, if chosen.
@@ -4050,12 +4092,15 @@ export function QuotationBuilder({
           // Duct price breakdown (each term of straightDuctPriceVatEx), shown below.
           const sheetPrice = ductGauge ? straightDuctSheetPrice(c.material, ductGauge, c.bladeType) : null;
           const laborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
-          // Labour uses the straight-duct sheet count (connector included).
-          const laborSheets = straightDuctLaborSheets(straightDuctSheetCount(c));
+          // Labour uses the labour sheet count for the type (see ductLaborSheetCount).
+          const laborSheets = straightDuctLaborSheets(ductLaborSheetCount(c));
           const angleCost = c.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
           const materialCost = sheetPrice != null ? sheetPrice * STRAIGHT_DUCT_MARKUP * sheets : null;
           const laborCost = laborRate != null ? laborSheets * laborRate : null;
           const sheetsRounded = Math.round(sheets * 1000) / 1000;
+          // Duct Reducer: developed-blank material area (sq in) from the table.
+          const isReducer = c.type === "Duct Reducer";
+          const reducerSqIn = isReducer ? reducerMaterialSqIn(c) : null;
           // Duct Connector: canvas fabric length (m) + its cost/rate.
           const isConnector = c.type === "Duct Connector";
           const fabricMeters = ductConnectorFabricMeters(c);
@@ -4074,6 +4119,8 @@ export function QuotationBuilder({
                 <div className="border-b px-3 py-1 text-center text-[11px] text-muted-foreground">
                   {c.type === "Duct Connector"
                     ? `Collar length: 12"`
+                    : c.type === "Duct Reducer"
+                    ? `Reducer${c.ductNoFlange ? " (No Flange)" : " (Flanged)"}`
                     : `Standard length: ${straightDuctStdLengthM(c)} meter${c.ductNoFlange ? " (No Flange)" : " (Flanged)"}`}
                 </div>
                 <div className="flex items-center justify-between border-b px-3 py-1.5">
@@ -4086,12 +4133,18 @@ export function QuotationBuilder({
                     <span className="tabular-nums font-medium">{(Math.round(fabricMeters * 1000) / 1000).toLocaleString()} m</span>
                   </div>
                 )}
+                {isReducer && reducerSqIn != null && (
+                  <div className="flex items-center justify-between border-b px-3 py-1.5">
+                    <span>Material Used</span>
+                    <span className="tabular-nums font-medium">{Math.round(reducerSqIn).toLocaleString()} sq in</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-b px-3 py-1.5">
                   <span>Gauge</span>
                   <span className="tabular-nums font-medium">{ductGauge ? `${ductGauge} ga` : "—"}</span>
                 </div>
                 <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                  <span className="flex-1">Height &quot;B&quot;</span>
+                  <span className="flex-1">{isReducer ? "Length" : "Height"} &quot;B&quot;</span>
                   <Input
                     type="number" step="any" className="h-8 w-20 text-right"
                     disabled={!editable} value={c.ductCalcLength ?? ""}
@@ -4154,8 +4207,8 @@ export function QuotationBuilder({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={DUCT_CALC_IMAGE[c.type] ?? "/straight-duct.png"}
-                alt={`${c.type} with A (width) and B (height) dimensions`}
-                className="h-auto w-[32.4rem] min-w-0 flex-shrink"
+                alt={`${c.type} dimensions`}
+                className={isReducer ? "h-auto max-h-[26rem] w-auto min-w-0 flex-shrink" : "h-auto w-[32.4rem] min-w-0 flex-shrink"}
               />
             </div>
           );
