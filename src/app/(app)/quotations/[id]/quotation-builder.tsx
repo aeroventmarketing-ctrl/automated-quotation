@@ -166,6 +166,7 @@ interface LineSpecs {
   ductCalcLength?: string;
   ductCalcWidth?: string;
   ductNoFlange?: boolean; // Straight Duct: no angle-iron flange (drops the 15×8 corner cost; body 1.2 m vs flanged 1.1 m)
+  fabricMaterial?: string; // Duct Connector: canvas fabric (Fiberglass Cloth / PVC / Silicone), priced per meter
   cleatSize?: string; // length option for TDC cleat / S-clip / C-clip (6.5" / 48")
   canvassUnit?: string; // canvass connector pricing basis ("per meter" / "per box")
   powderCoated?: boolean; // accessory powder-coat finish flag
@@ -1751,8 +1752,24 @@ function straightDuctSheetPrice(material: string, gauge: string, brand: string):
   return null;
 }
 
-/** Straight Duct price (VAT-EXCLUSIVE), or null when the inputs are incomplete.
- *  Uses the line's effective gauge (recommended or manually selected). */
+// Duct Connector fabric (canvas) material — length used = 2A + 2B + 2 in, priced
+// per meter using the Duct Canvass Connector rates (Fiberglass 600 / PVC 500 /
+// Silicone 700 PHP/m, VAT-ex). Shown in the user's order.
+const DUCT_CONNECTOR_FABRICS = ["Fiberglass Cloth", "PVC", "Silicone"];
+/** Fabric length used (metres) for a Duct Connector, from its A × B cross-section. */
+function ductConnectorFabricMeters(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
+  const { aIn, bIn } = ductCalcSides(specs);
+  return ((2 * aIn + 2 * bIn + 2) * 25) / 1000; // inches → metres (25 mm = 1 in)
+}
+/** Fabric material cost (VAT-ex) for a Duct Connector, or null if none selected. */
+function ductConnectorFabricCost(specs: LineSpecs): number | null {
+  const price = CANVASS_METER_NET[specs.fabricMaterial ?? ""];
+  if (price == null) return null;
+  return ductConnectorFabricMeters(specs) * price;
+}
+
+/** Straight Duct / Duct Connector price (VAT-EXCLUSIVE), or null when incomplete.
+ *  Uses the line's effective gauge; Duct Connector adds the canvas fabric cost. */
 function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   const gauge = specs.gauge;
   if (!gauge) return null;
@@ -1765,10 +1782,13 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   const sheets = ductSheetsUsed(specs);
   // Angle-iron flange corners apply only to a flanged duct.
   const angleCost = specs.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
+  // Duct Connector also carries the canvas fabric (per-meter) cost, if chosen.
+  const fabricCost = specs.type === "Duct Connector" ? ductConnectorFabricCost(specs) ?? 0 : 0;
   return (
     sheetPrice * STRAIGHT_DUCT_MARKUP * sheets +
     angleCost +
-    straightDuctLaborSheets(sheets) * labor
+    straightDuctLaborSheets(sheets) * labor +
+    fabricCost
   );
 }
 
@@ -2032,6 +2052,9 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     if (specs.gauge) dl.push(`Gauge ${specs.gauge}`);
     if (specs.material === "Galvanized Iron" && AIR_DUCT_SEALANTS.includes(specs.bladeType)) {
       dl.push(`${specs.bladeType} Brand`);
+    }
+    if (specs.type === "Duct Connector" && DUCT_CONNECTOR_FABRICS.includes(specs.fabricMaterial ?? "")) {
+      dl.push(`${specs.fabricMaterial} Fabric`);
     }
     return dl.join("\n");
   }
@@ -3313,7 +3336,7 @@ export function QuotationBuilder({
         ),
       );
     } else if (category === "Ventilation Accessories") {
-      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false }, true);
+      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductNoFlange: false, fabricMaterial: "" }, true);
     } else {
       updateSpec(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
     }
@@ -3771,6 +3794,18 @@ export function QuotationBuilder({
                   {SIZE_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
                 </Select>
               )}
+              {/* Duct Connector: canvas fabric material (per-meter price). Sits
+                  after the unit and before the Recommend checkbox. */}
+              {c.type === "Duct Connector" && (
+                <Select
+                  value={DUCT_CONNECTOR_FABRICS.includes(c.fabricMaterial ?? "") ? c.fabricMaterial : ""}
+                  disabled={!editable || !c.type}
+                  onChange={(e) => applyAccessory(l.id, { fabricMaterial: e.target.value })}
+                >
+                  <option value="" disabled>Fabric Material…</option>
+                  {DUCT_CONNECTOR_FABRICS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                </Select>
+              )}
               {sizeMode(c.type, c.shape) === "capacity" ? (
                 <Select className="h-9" disabled={!editable || !c.type || !!c.mcRecommend} value={c.sizeL}
                   onChange={(e) => applyIsolator(l.id, { sizeL: e.target.value, sizeW: "" })}>
@@ -3999,6 +4034,11 @@ export function QuotationBuilder({
           const materialCost = sheetPrice != null ? sheetPrice * STRAIGHT_DUCT_MARKUP * sheets : null;
           const laborCost = laborRate != null ? laborSheets * laborRate : null;
           const sheetsRounded = Math.round(sheets * 1000) / 1000;
+          // Duct Connector: canvas fabric length (m) + its cost/rate.
+          const isConnector = c.type === "Duct Connector";
+          const fabricMeters = ductConnectorFabricMeters(c);
+          const fabricRate = c.fabricMaterial ? CANVASS_METER_NET[c.fabricMaterial] ?? null : null;
+          const fabricCost = isConnector ? ductConnectorFabricCost(c) : null;
           const peso = (n: number) =>
             `₱${(Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           return (
@@ -4018,6 +4058,12 @@ export function QuotationBuilder({
                   <span>Number of Sheets Used</span>
                   <span className="tabular-nums font-medium">{(Math.round(sheets * 1000) / 1000).toLocaleString()}</span>
                 </div>
+                {isConnector && (
+                  <div className="flex items-center justify-between border-b px-3 py-1.5">
+                    <span>Fabric Material Used</span>
+                    <span className="tabular-nums font-medium">{(Math.round(fabricMeters * 1000) / 1000).toLocaleString()} m</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-b px-3 py-1.5">
                   <span>Gauge</span>
                   <span className="tabular-nums font-medium">{ductGauge ? `${ductGauge} ga` : "—"}</span>
@@ -4068,6 +4114,12 @@ export function QuotationBuilder({
                     <span className="text-muted-foreground">Labor — {laborSheets} sheet × {peso(laborRate!)}</span>
                     <span className="tabular-nums">{peso(laborCost!)}</span>
                   </div>
+                  {isConnector && fabricCost != null && fabricRate != null && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Fabric — {c.fabricMaterial}, {Math.round(fabricMeters * 1000) / 1000} m × {peso(fabricRate)}</span>
+                      <span className="tabular-nums">{peso(fabricCost)}</span>
+                    </div>
+                  )}
                   <div className="mt-1 flex justify-between gap-2 border-t pt-1 font-semibold">
                     <span>Total</span>
                     <span className="tabular-nums">{peso(priceVatEx)}</span>

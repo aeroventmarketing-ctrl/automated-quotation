@@ -174,6 +174,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               ductCalcLength: typeof s.ductCalcLength === "string" ? s.ductCalcLength : "",
               ductCalcWidth: typeof s.ductCalcWidth === "string" ? s.ductCalcWidth : "",
               ductNoFlange: s.ductNoFlange === true,
+              fabricMaterial: typeof s.fabricMaterial === "string" ? s.fabricMaterial : "",
               exproof: s.exproof === true,
               customizedUnit: s.customizedUnit === true,
               bladeMaterialOn: s.bladeMaterialOn === true,
