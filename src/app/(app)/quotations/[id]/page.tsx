@@ -173,6 +173,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               // gauge, sheets, and Duct Price recompute after save/reload.
               ductCalcLength: typeof s.ductCalcLength === "string" ? s.ductCalcLength : "",
               ductCalcWidth: typeof s.ductCalcWidth === "string" ? s.ductCalcWidth : "",
+              ductCalcHeight: typeof s.ductCalcHeight === "string" ? s.ductCalcHeight : "",
               ductNoFlange: s.ductNoFlange === true,
               fabricMaterial: typeof s.fabricMaterial === "string" ? s.fabricMaterial : "",
               exproof: s.exproof === true,

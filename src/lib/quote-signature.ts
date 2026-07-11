@@ -16,7 +16,7 @@ const IDENTITY_KEYS = [
   "category", "brand", "type", "bladeType", "drive", "material", "shape",
   "sizeL", "sizeW", "sizeUnit", "gauge", "powderCoated", "movement", "blowerModel",
   "capacity_cfm", "staticPressure_pa", "inches", "motorHp", "motorPh", "motorPole", "motorVolts",
-  "ductCalcLength", "ductCalcWidth", "ductNoFlange", "fabricMaterial", "mcRecommend",
+  "ductCalcLength", "ductCalcWidth", "ductCalcHeight", "ductNoFlange", "fabricMaterial", "mcRecommend",
   "bladeMaterialOn", "bladeMaterial", "upgradePaint", "paintType", "exproof", "customizedUnit",
   "cleatSize", "canvassUnit", "acHeight", "acHeightUnit", "acWidth", "acWidthUnit",
 ] as const;
