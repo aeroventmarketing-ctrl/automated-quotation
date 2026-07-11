@@ -2745,15 +2745,19 @@ export function QuotationBuilder({
         // dropdown; that gauge drives the Duct Price and the description. Price
         // is VAT-ex → store VAT-inclusive.
         if (isDuctCalc(specs)) {
-          // Duct Reducer: when no custom height is set, use the size's standard
-          // height. Keep it in sync as the opening changes (only while H is still
-          // the default) so resizing never silently pushes H past the standard.
+          // Duct Reducer: the Height field shows the size's standard height by
+          // default. Refresh it to the new standard whenever the A/B opening
+          // changes (so changing dimensions always shows the current standard),
+          // and fill it in when it's blank. A custom height the user types while
+          // the size is unchanged is kept (to raise H above standard → doubles).
           if (specs.type === "Duct Reducer") {
+            const dimsChanged =
+              ("ductCalcLength" in patch || "ductCalcWidth" in patch) && !("sizeUnit" in patch);
             const newStd = reducerStandardHeightInUnit(specs);
-            const oldStd = reducerStandardHeightInUnit(l.specs);
             const curH = parseFloat(specs.ductCalcHeight ?? "");
-            const stillDefault = !(curH > 0) || (oldStd != null && Math.abs(curH - oldStd) < 0.01);
-            if (newStd != null && stillDefault) specs.ductCalcHeight = String(newStd);
+            if (newStd != null && (dimsChanged || !(curH > 0))) {
+              specs.ductCalcHeight = String(newStd);
+            }
           }
           const gauge = specs.mcRecommend ? straightDuctGauge(specs) ?? "" : specs.gauge ?? "";
           const s2: LineSpecs = { ...specs, gauge };
