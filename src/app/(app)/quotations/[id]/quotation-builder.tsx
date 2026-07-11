@@ -1145,34 +1145,53 @@ const REDUCER_MATERIAL_TABLE: ReadonlyArray<readonly [number, number]> = [
   [16, 1494], [18, 1891], [20, 2337], [22, 2825], [24, 3369], [26, 3945],
   [28, 4576], [30, 5251], [32, 5975], [34, 6745], [36, 7561],
 ];
-/** Reducer material (sq in) for an equivalent square opening of the given size,
- *  rounded UP to the next tabulated size (never interpolated). Above the table
- *  it rounds up to the next even size and scales the top row (material ∝ size²). */
-function reducerMaterialForSize(size: number): number {
+/** Smallest tabulated reducer size (inches) ≥ the given size — rounds UP (never
+ *  interpolated); the next even size beyond the table. */
+function reducerTabSize(size: number): number {
   if (!(size > 0)) return 0;
-  const t = REDUCER_MATERIAL_TABLE;
-  for (const [s, v] of t) if (size <= s) return v; // smallest tabulated size ≥ the value
-  const [lastSize, lastVal] = t[t.length - 1];
-  const stepUp = Math.ceil(size / 2) * 2; // next even size beyond the table
-  return (lastVal * stepUp * stepUp) / (lastSize * lastSize);
+  for (const [s] of REDUCER_MATERIAL_TABLE) if (size <= s) return s;
+  return Math.ceil(size / 2) * 2; // beyond the table
 }
-// Reducer standard height (inches) the material table is developed for; the
-// material scales linearly with height (H = 8" doubles it, per the pricelist).
-const REDUCER_STD_HEIGHT_IN = 4;
-/** Reducer height "H" in inches (defaults to the 4" standard when unset). */
+/** Base reducer material (sq in) at a tabulated size — table value, or the top
+ *  row scaled quadratically (material ∝ size²) above the table. */
+function reducerMaterialAtSize(tabSize: number): number {
+  if (!(tabSize > 0)) return 0;
+  for (const [s, v] of REDUCER_MATERIAL_TABLE) if (tabSize <= s) return v;
+  const [lastSize, lastVal] = REDUCER_MATERIAL_TABLE[REDUCER_MATERIAL_TABLE.length - 1];
+  return (lastVal * tabSize * tabSize) / (lastSize * lastSize);
+}
+/** Standard reducer height (inches) for a tabulated size — H_std = 2·size − 6
+ *  (matches the pricelist: 4→2, 6→6, 8→10, … 36→66). */
+function reducerStandardHeightForSize(tabSize: number): number {
+  return tabSize > 0 ? 2 * tabSize - 6 : 0;
+}
+/** The reducer's equivalent tabulated (square) size (inches) for its A × B
+ *  opening — a rectangular one uses √(A × B), rounded up to the table. */
+function reducerEquivSize(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
+  const { aIn, bIn } = ductCalcSides(specs);
+  if (!(aIn > 0) || !(bIn > 0)) return 0;
+  return reducerTabSize(Math.sqrt(aIn * bIn));
+}
+/** Actual reducer height "H" in inches (0 when unset → treated as standard). */
 function reducerHeightIn(specs: { ductCalcHeight?: string; sizeUnit?: string }): number {
   const perMm = ACC_MM_PER_UNIT[specs.sizeUnit || "inches"] ?? 25;
   const h = ((parseFloat(specs.ductCalcHeight ?? "") || 0) * perMm) / 25;
-  return h > 0 ? h : REDUCER_STD_HEIGHT_IN;
+  return h > 0 ? h : 0;
+}
+/** Standard height (inches) for the reducer's current A × B opening (0 if unsized). */
+function reducerStandardHeightIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
+  return reducerStandardHeightForSize(reducerEquivSize(specs));
 }
 /** Duct Reducer material used (sq in) for an A × B opening at height H. The table
  *  is keyed by a square opening, so a rectangular one uses √(A × B) — e.g.
- *  10 × 12 → √120 = 10.95 → rounds up to the 12" row (841 sq in) — then scales
- *  by H ÷ 4 (standard height 4"; 8" doubles the material). */
+ *  10 × 12 → √120 = 10.95 → the 12" row (841 sq in). Each size has a standard
+ *  height (2·size − 6); if the actual H exceeds it, the material is doubled. */
 function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
-  const { aIn, bIn } = ductCalcSides(specs);
-  if (!(aIn > 0) || !(bIn > 0)) return 0;
-  return reducerMaterialForSize(Math.sqrt(aIn * bIn)) * (reducerHeightIn(specs) / REDUCER_STD_HEIGHT_IN);
+  const size = reducerEquivSize(specs);
+  if (!(size > 0)) return 0;
+  const base = reducerMaterialAtSize(size);
+  const overStandard = reducerHeightIn(specs) > reducerStandardHeightForSize(size);
+  return base * (overStandard ? 2 : 1);
 }
 // Number of Sheets Used, from the A × B cross-section (trade inches):
 //   Straight Duct   = ((A + B) × 2 + 2) ÷ 96          (48" strip + lock seam)
@@ -2699,11 +2718,6 @@ export function QuotationBuilder({
         if (specs.type === "Duct Connector" && !DUCT_CONNECTOR_FABRICS.includes(specs.fabricMaterial ?? "")) {
           specs.fabricMaterial = DUCT_CONNECTOR_FABRICS[0];
         }
-        // A Duct Reducer always has a height — default to the 4" standard so the
-        // material (which scales with H) is never computed from a blank height.
-        if (specs.type === "Duct Reducer" && !(parseFloat(specs.ductCalcHeight ?? "") > 0)) {
-          specs.ductCalcHeight = String(REDUCER_STD_HEIGHT_IN);
-        }
         // Air Duct "Recommend": auto-pick the sheet gauge from the duct's longest
         // side, recomputed on any dimension / shape / unit change (cleared when
         // off). Straight Duct manages its own gauge (manual dropdown + Recommend)
@@ -3411,7 +3425,7 @@ export function QuotationBuilder({
       // Duct Connector always carries a canvas fabric, so default to the first
       // fabric (Fiberglass Cloth) — its per-meter cost is charged straight away
       // and the user can switch fabrics from the dropdown.
-      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductCalcHeight: type === "Duct Reducer" ? String(REDUCER_STD_HEIGHT_IN) : "", ductNoFlange: false, fabricMaterial: type === "Duct Connector" ? DUCT_CONNECTOR_FABRICS[0] : "" }, true);
+      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductCalcHeight: "", ductNoFlange: false, fabricMaterial: type === "Duct Connector" ? DUCT_CONNECTOR_FABRICS[0] : "" }, true);
     } else {
       updateSpec(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
     }
@@ -4107,6 +4121,9 @@ export function QuotationBuilder({
           // Duct Reducer: developed-blank material area (sq in) from the table.
           const isReducer = c.type === "Duct Reducer";
           const reducerSqIn = isReducer ? reducerMaterialSqIn(c) : null;
+          // Standard height for this size, shown in the calc unit (H above it doubles material).
+          const reducerStdHIn = isReducer ? reducerStandardHeightIn(c) : 0;
+          const reducerStdHDisp = reducerStdHIn > 0 ? (reducerStdHIn * 25) / (ACC_MM_PER_UNIT[calcUnit] ?? 25) : null;
           const baseLaborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
           // A Duct Reducer takes twice the labour per sheet.
           const laborRate = baseLaborRate != null ? (isReducer ? baseLaborRate * 2 : baseLaborRate) : null;
@@ -4178,9 +4195,17 @@ export function QuotationBuilder({
                 </div>
                 {isReducer && (
                   <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                    <span className="flex-1">Height &quot;H&quot;</span>
+                    <span className="flex-1">
+                      Height &quot;H&quot;
+                      {reducerStdHDisp != null && (
+                        <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                          (standard {Math.round(reducerStdHDisp * 10) / 10} {calcUnit} — above this doubles material)
+                        </span>
+                      )}
+                    </span>
                     <Input
                       type="number" step="any" className="h-8 w-20 text-right"
+                      placeholder={reducerStdHDisp != null ? String(Math.round(reducerStdHDisp * 10) / 10) : undefined}
                       disabled={!editable} value={c.ductCalcHeight ?? ""}
                       onChange={(e) => applyAccessory(l.id, { ductCalcHeight: e.target.value })}
                     />
