@@ -1161,10 +1161,10 @@ function reducerMaterialAtSize(tabSize: number): number {
   const [lastSize, lastVal] = REDUCER_MATERIAL_TABLE[REDUCER_MATERIAL_TABLE.length - 1];
   return (lastVal * tabSize * tabSize) / (lastSize * lastSize);
 }
-/** Standard reducer height (inches) for a tabulated size — H_std = 2·size − 6
- *  (matches the pricelist: 4→2, 6→6, 8→10, … 36→66). */
+/** Standard reducer height (inches) for a tabulated size — H_std = 1.5·size
+ *  (matches the pricelist: 4→6, 6→9, 8→12, … 36→54). */
 function reducerStandardHeightForSize(tabSize: number): number {
-  return tabSize > 0 ? 2 * tabSize - 6 : 0;
+  return tabSize > 0 ? 1.5 * tabSize : 0;
 }
 /** The reducer's equivalent tabulated (square) size (inches) for its A × B
  *  opening — a rectangular one uses √(A × B), rounded up to the table. */
