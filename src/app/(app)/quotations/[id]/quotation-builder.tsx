@@ -1135,9 +1135,15 @@ function ductCalcSides(specs: { ductCalcLength?: string; ductCalcWidth?: string;
   const bMm = (parseFloat(specs.ductCalcWidth ?? "") || 0) * perMm;
   return { aMm, bMm, aIn: aMm / 25, bIn: bMm / 25 };
 }
-function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
+// Number of Sheets Used, from the A × B cross-section (trade inches):
+//   Straight Duct   = ((A + B) × 2 + 2) ÷ 96          (48" strip + lock seam)
+//   Duct Connector  = ((A + B) × 2 × 12) ÷ 4608       (12" collar, no seam)
+// where 4608 = 48 × 96 in² (one sheet).
+function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string; type?: string }): number {
   const { aIn, bIn } = ductCalcSides(specs);
-  return ((aIn + bIn) * 2 + 2) / 96;
+  const perimeter = (aIn + bIn) * 2;
+  if (specs.type === "Duct Connector") return (perimeter * 12) / (48 * 96);
+  return (perimeter + 2) / 96;
 }
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
 const VENT_CAP_DIAMETERS = ["4", "6", "8"];
