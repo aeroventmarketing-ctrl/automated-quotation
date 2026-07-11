@@ -1146,6 +1146,14 @@ function ductSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: string
   if (specs.type === "Duct Connector") return (perimeter * 12) / (48 * 96);
   return (perimeter + 2) / 96;
 }
+// Straight-duct sheet count (labour basis) — the full ((A + B) × 2 + 2) ÷ 96
+// wrap of the cross-section. A Duct Connector uses less metal for its 12"
+// collar (see ductSheetsUsed), but its production labour is billed like a full
+// straight-duct section, so labour is always computed from this count.
+function straightDuctSheetCount(specs: { ductCalcLength?: string; ductCalcWidth?: string; sizeUnit?: string }): number {
+  const { aIn, bIn } = ductCalcSides(specs);
+  return ((aIn + bIn) * 2 + 2) / 96;
+}
 /** Vent Cap: fixed diameters (inches) and stainless-only material options. */
 const VENT_CAP_DIAMETERS = ["4", "6", "8"];
 const VENT_CAP_MATERIALS = ["Stainless 201", "Stainless 304"];
@@ -1782,6 +1790,9 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   const labor = AIR_DUCT_LABOR_PER_SHEET[specs.material];
   if (labor == null) return null;
   const sheets = ductSheetsUsed(specs);
+  // Labour is billed from the straight-duct sheet count (a Duct Connector's
+  // production labour matches a full duct section, not its small collar metal).
+  const laborSheets = straightDuctLaborSheets(straightDuctSheetCount(specs));
   // Angle-iron flange corners apply only to a flanged duct.
   const angleCost = specs.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
   // Duct Connector also carries the canvas fabric (per-meter) cost, if chosen.
@@ -1789,7 +1800,7 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   return (
     sheetPrice * STRAIGHT_DUCT_MARKUP * sheets +
     angleCost +
-    straightDuctLaborSheets(sheets) * labor +
+    laborSheets * labor +
     fabricCost
   );
 }
@@ -4039,7 +4050,8 @@ export function QuotationBuilder({
           // Duct price breakdown (each term of straightDuctPriceVatEx), shown below.
           const sheetPrice = ductGauge ? straightDuctSheetPrice(c.material, ductGauge, c.bladeType) : null;
           const laborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
-          const laborSheets = straightDuctLaborSheets(sheets);
+          // Labour uses the straight-duct sheet count (connector included).
+          const laborSheets = straightDuctLaborSheets(straightDuctSheetCount(c));
           const angleCost = c.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
           const materialCost = sheetPrice != null ? sheetPrice * STRAIGHT_DUCT_MARKUP * sheets : null;
           const laborCost = laborRate != null ? laborSheets * laborRate : null;
