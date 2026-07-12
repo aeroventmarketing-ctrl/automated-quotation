@@ -1283,7 +1283,7 @@ function elbowMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: str
 /** Offset Duct A (width), B (cross-section height), L (length) and O (offset) in
  *  trade inches. Fields: A = ductCalcWidth, B = ductCalcLength (so the gauge uses
  *  the A × B cross-section), L = ductCalcHeight, O = ductCalcOffset. */
-function offsetDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; ductCalcOffset?: string; sizeUnit?: string }): {
+function offsetDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; ductCalcOffset?: string; sizeUnit?: string; shape?: string }): {
   aIn: number;
   bIn: number;
   lIn: number;
@@ -1291,12 +1291,15 @@ function offsetDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; du
 } {
   const perMm = ACC_MM_PER_UNIT[specs.sizeUnit || "inches"] ?? 25;
   const toIn = (v?: string) => ((parseFloat(v ?? "") || 0) * perMm) / 25;
-  return {
-    aIn: toIn(specs.ductCalcWidth),
-    bIn: toIn(specs.ductCalcLength),
-    lIn: toIn(specs.ductCalcHeight),
-    oIn: toIn(specs.ductCalcOffset),
-  };
+  const lIn = toIn(specs.ductCalcHeight);
+  const oIn = toIn(specs.ductCalcOffset);
+  if (specs.shape === "Round") {
+    // Round: the diameter (ductCalcWidth) becomes the equal-area square side, so a
+    // round and a square/rectangle of the same cross-section give the same result.
+    const side = (toIn(specs.ductCalcWidth) * Math.sqrt(Math.PI)) / 2; // √(πD²/4)
+    return { aIn: side, bIn: side, lIn, oIn };
+  }
+  return { aIn: toIn(specs.ductCalcWidth), bIn: toIn(specs.ductCalcLength), lIn, oIn };
 }
 /** Offset Duct material used (sq in): (B + O)·L·2 + L·A·2·1.5. Needs A, B and L
  *  (the offset O may be 0). GI overlap allowance (×1.2) is applied separately. */
@@ -2873,7 +2876,7 @@ export function QuotationBuilder({
         // section by equal area, rounding UP to the next even number (20×20 → Ø24;
         // Ø24 → 22×22). The calc types use the A/B fields; other air ducts use the
         // box L/W. The reducer/elbow height (H/R) is left unchanged.
-        if ("shape" in patch && isAirDuct(specs) && specs.type !== "Offset Duct") {
+        if ("shape" in patch && isAirDuct(specs)) {
           if (isDuctCalc(specs)) {
             const r = convertDuctShape(l.specs.shape, specs.shape, specs.ductCalcWidth, specs.ductCalcLength);
             specs.ductCalcWidth = r.w;
@@ -4386,26 +4389,41 @@ export function QuotationBuilder({
                   <span className="tabular-nums font-medium">{ductGauge ? `${ductGauge} ga` : "—"}</span>
                 </div>
                 {isOffset ? (
-                  // Offset: four dimensions in order — Width A, Height B, Offset O, Length L.
+                  // Offset: Width A + Height B (or a single Diameter Ø when Round),
+                  // then Offset O and Length L.
                   <>
-                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                      <span className="flex-1">Width &quot;A&quot;</span>
-                      <Input
-                        type="number" step="any" className="h-8 w-20 text-right"
-                        disabled={!editable} value={c.ductCalcWidth ?? ""}
-                        onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
-                      />
-                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
-                    </div>
-                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                      <span className="flex-1">Height &quot;B&quot;</span>
-                      <Input
-                        type="number" step="any" className="h-8 w-20 text-right"
-                        disabled={!editable} value={c.ductCalcLength ?? ""}
-                        onChange={(e) => applyAccessory(l.id, { ductCalcLength: e.target.value })}
-                      />
-                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
-                    </div>
+                    {isRound ? (
+                      <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                        <span className="flex-1">Diameter &quot;Ø&quot;</span>
+                        <Input
+                          type="number" step="any" className="h-8 w-20 text-right"
+                          disabled={!editable} value={c.ductCalcWidth ?? ""}
+                          onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
+                        />
+                        <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                          <span className="flex-1">Width &quot;A&quot;</span>
+                          <Input
+                            type="number" step="any" className="h-8 w-20 text-right"
+                            disabled={!editable} value={c.ductCalcWidth ?? ""}
+                            onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
+                          />
+                          <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                        </div>
+                        <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                          <span className="flex-1">Height &quot;B&quot;</span>
+                          <Input
+                            type="number" step="any" className="h-8 w-20 text-right"
+                            disabled={!editable} value={c.ductCalcLength ?? ""}
+                            onChange={(e) => applyAccessory(l.id, { ductCalcLength: e.target.value })}
+                          />
+                          <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex items-center gap-2 border-b px-3 py-1.5">
                       <span className="flex-1">Offset &quot;O&quot;</span>
                       <Input
