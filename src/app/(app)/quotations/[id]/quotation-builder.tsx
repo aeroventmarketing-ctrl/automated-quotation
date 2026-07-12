@@ -4552,10 +4552,10 @@ export function QuotationBuilder({
                   alt={`${c.type} dimensions`}
                   className={isReducer ? "h-auto max-h-[26rem] w-auto min-w-0 flex-shrink" : "h-auto w-[32.4rem] min-w-0 flex-shrink"}
                 />
-                {isOffset && (
+                {(isOffset || isElbow) && (
                   <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-sm font-medium text-red-600">
                     <AlertTriangle className="h-4 w-4 shrink-0" />
-                    If &quot;A&quot; or &quot;B&quot; is unknown, put the biggest number in &quot;A&quot;.
+                    If &quot;A&quot; or &quot;B&quot; is unknown, put the biggest number in &quot;{isElbow ? "B" : "A"}&quot;.
                   </p>
                 )}
               </div>
