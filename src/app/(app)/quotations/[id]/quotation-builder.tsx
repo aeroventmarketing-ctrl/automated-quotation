@@ -1044,6 +1044,7 @@ const UOM_TYPES = new Set([
   "Duct Reducer",
   "Elbow Duct",
   "Offset Duct",
+  "R-Duct",
   "Straight Duct",
   "Square to Round Duct",
   "Y-Duct",
@@ -1112,7 +1113,7 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
 // Air Duct types that use the sheet-metal "duct calculator" (A × B cross-section
 // → sheets → auto price), with their own illustration. Straight Duct and Duct
 // Connector share the same calculator and pricing.
-const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct", "Y-Duct"]);
+const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct", "Y-Duct", "R-Duct"]);
 const DUCT_CALC_IMAGE: Record<string, string> = {
   "Straight Duct": "/straight-duct.png",
   "Duct Connector": "/duct-connector.jpg",
@@ -1121,11 +1122,12 @@ const DUCT_CALC_IMAGE: Record<string, string> = {
   "Elbow Duct": "/elbow.jpg",
   "Offset Duct": "/offset-duct.jpg",
   "Y-Duct": "/y-duct.jpg",
+  "R-Duct": "/r-duct.jpg",
 };
 // Reducer-like types: priced from a developed-blank material area ÷ 4608 sheet,
-// with double labour. Square to Round mirrors the Duct Reducer; Elbow, Offset and
-// Y-Duct carry their own material formulas and dimension fields.
-const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct", "Y-Duct"]);
+// with double labour. Square to Round mirrors the Duct Reducer; Elbow, Offset,
+// Y-Duct and R-Duct carry their own material formulas and dimension fields.
+const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct", "Y-Duct", "R-Duct"]);
 const isReducerType = (type?: string): boolean => REDUCER_LIKE_TYPES.has(type ?? "");
 const isDuctCalc = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && DUCT_CALC_TYPES.has(specs.type);
@@ -1324,7 +1326,8 @@ function yDuctMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: str
 function reducerLikeMaterialSqIn(specs: { type?: string; ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; ductCalcOffset?: string; sizeUnit?: string }): number {
   if (specs.type === "Elbow Duct") return elbowMaterialSqIn(specs);
   if (specs.type === "Offset Duct") return offsetMaterialSqIn(specs);
-  if (specs.type === "Y-Duct") return yDuctMaterialSqIn(specs);
+  // R-Duct shares the Y-Duct material formula (its GI allowance is 20%, not 30%).
+  if (specs.type === "Y-Duct" || specs.type === "R-Duct") return yDuctMaterialSqIn(specs);
   return reducerMaterialSqIn(specs);
 }
 // Number of Sheets Used, from the A × B cross-section (trade inches):
@@ -1346,6 +1349,13 @@ const GI_MATERIAL_WASTE_Y_DUCT = 0.3;
 function ductMaterialWasteFactor(specs: { material?: string; type?: string }): number {
   if (specs.material !== "Galvanized Iron") return 1;
   return 1 + (specs.type === "Y-Duct" ? GI_MATERIAL_WASTE_Y_DUCT : GI_MATERIAL_WASTE);
+}
+/** Extra labour factor on top of the reducer-like doubling (all materials):
+ *  Y-Duct +50%, R-Duct +25%. */
+function ductLaborExtraFactor(type?: string): number {
+  if (type === "Y-Duct") return 1.5;
+  if (type === "R-Duct") return 1.25;
+  return 1;
 }
 /** Material (sheets) used — the metal quantity that drives material cost and the
  *  "Number of Sheets Used" / "Material Used" display (GI +10%). Labour uses the
@@ -2021,15 +2031,15 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   if (specs.type === "Elbow Duct" && !(elbowMaterialSqIn(specs) > 0)) return null;
   // An Offset needs A, B and L (its material formula uses A, B, L and O).
   if (specs.type === "Offset Duct" && !(offsetMaterialSqIn(specs) > 0)) return null;
-  // A Y-Duct needs A, B and R.
-  if (specs.type === "Y-Duct" && !(yDuctMaterialSqIn(specs) > 0)) return null;
+  // A Y-Duct / R-Duct needs A, B and R.
+  if ((specs.type === "Y-Duct" || specs.type === "R-Duct") && !(yDuctMaterialSqIn(specs) > 0)) return null;
   const sheetPrice = straightDuctSheetPrice(specs.material, gauge, specs.bladeType);
   if (sheetPrice == null) return null;
   const laborBase = AIR_DUCT_LABOR_PER_SHEET[specs.material];
   if (laborBase == null) return null;
   // Reducer-like types take twice the labour per sheet of a straight duct; a
-  // Y-Duct adds a further 50% on top (all materials).
-  const labor = (isReducerType(specs.type) ? laborBase * 2 : laborBase) * (specs.type === "Y-Duct" ? 1.5 : 1);
+  // Y-Duct / R-Duct add a further +50% / +25% on top (all materials).
+  const labor = (isReducerType(specs.type) ? laborBase * 2 : laborBase) * ductLaborExtraFactor(specs.type);
   const sheets = ductSheetsUsed(specs);
   // Labour is billed from the labour sheet count for the type (Duct Connector
   // matches a full duct section; Duct Reducer uses its own blank sheet count).
@@ -2928,7 +2938,7 @@ export function QuotationBuilder({
           // changes (so changing dimensions always shows the current standard),
           // and fill it in when it's blank. A custom height the user types while
           // the size is unchanged is kept (to raise H above standard → doubles).
-          if (isReducerType(specs.type) && specs.type !== "Elbow Duct" && specs.type !== "Offset Duct" && specs.type !== "Y-Duct") {
+          if (isReducerType(specs.type) && specs.type !== "Elbow Duct" && specs.type !== "Offset Duct" && specs.type !== "Y-Duct" && specs.type !== "R-Duct") {
             const dimsChanged =
               ("ductCalcLength" in patch || "ductCalcWidth" in patch) && !("sizeUnit" in patch);
             const newStd = reducerStandardHeightInUnit(specs);
@@ -4343,7 +4353,8 @@ export function QuotationBuilder({
           const isReducer = isReducerType(c.type);
           const isElbow = c.type === "Elbow Duct";
           const isYDuct = c.type === "Y-Duct";
-          const usesRadius = isElbow || isYDuct; // third field is "Radius R"
+          const isRDuct = c.type === "R-Duct";
+          const usesRadius = isElbow || isYDuct || isRDuct; // third field is "Radius R"
           const isOffset = c.type === "Offset Duct"; // 4 inputs: L, A, B, O
           // Material Used (sq in) includes the GI +10% material allowance.
           const reducerSqIn = isReducer ? reducerLikeMaterialSqIn(c) * ductMaterialWasteFactor(c) : null;
@@ -4353,7 +4364,7 @@ export function QuotationBuilder({
           const reducerStdHDisp = reducerStdHIn > 0 ? (reducerStdHIn * 25) / (ACC_MM_PER_UNIT[calcUnit] ?? 25) : null;
           const baseLaborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
           // A Duct Reducer takes twice the labour per sheet.
-          const laborRate = baseLaborRate != null ? (isReducer ? baseLaborRate * 2 : baseLaborRate) * (isYDuct ? 1.5 : 1) : null;
+          const laborRate = baseLaborRate != null ? (isReducer ? baseLaborRate * 2 : baseLaborRate) * ductLaborExtraFactor(c.type) : null;
           // Labour uses the labour sheet count for the type (see ductLaborSheetCount).
           const laborSheets = straightDuctLaborSheets(ductLaborSheetCount(c));
           const angleCost = c.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
@@ -4572,10 +4583,10 @@ export function QuotationBuilder({
                   alt={`${c.type} dimensions`}
                   className={isReducer ? "h-auto max-h-[26rem] w-auto min-w-0 flex-shrink" : "h-auto w-[32.4rem] min-w-0 flex-shrink"}
                 />
-                {(isOffset || isElbow || isYDuct) && (
+                {(isOffset || usesRadius) && (
                   <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-sm font-medium text-red-600">
                     <AlertTriangle className="h-4 w-4 shrink-0" />
-                    If &quot;A&quot; or &quot;B&quot; is unknown, put the bigger number in &quot;{isElbow || isYDuct ? "B" : "A"}&quot;.
+                    If &quot;A&quot; or &quot;B&quot; is unknown, put the bigger number in &quot;{usesRadius ? "B" : "A"}&quot;.
                   </p>
                 )}
               </div>
