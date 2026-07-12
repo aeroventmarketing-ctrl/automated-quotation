@@ -288,6 +288,7 @@ export const PRODUCT_TAXONOMY: TaxonomyEntry[] = [
   { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Duct Reducer", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Elbow Duct", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Offset Duct", "bladeTypes": [], "drives": [] },
+  { "category": "Ventilation Accessories", "group": "Air Duct", "type": "R-Duct", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Straight Duct", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Square to Round Duct", "bladeTypes": [], "drives": [] },
   { "category": "Ventilation Accessories", "group": "Air Duct", "type": "Y-Duct", "bladeTypes": [], "drives": [] },

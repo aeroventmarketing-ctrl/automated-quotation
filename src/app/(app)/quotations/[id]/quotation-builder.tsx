@@ -1099,6 +1099,7 @@ const AIR_DUCT_TYPES = new Set([
   "Duct Reducer",
   "Elbow Duct",
   "Offset Duct",
+  "R-Duct",
   "Straight Duct",
   "Square to Round Duct",
   "Y-Duct",
