@@ -4555,7 +4555,7 @@ export function QuotationBuilder({
                 {(isOffset || isElbow) && (
                   <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-sm font-medium text-red-600">
                     <AlertTriangle className="h-4 w-4 shrink-0" />
-                    If &quot;A&quot; or &quot;B&quot; is unknown, put the biggest number in &quot;{isElbow ? "B" : "A"}&quot;.
+                    If &quot;A&quot; or &quot;B&quot; is unknown, put the bigger number in &quot;{isElbow ? "B" : "A"}&quot;.
                   </p>
                 )}
               </div>
