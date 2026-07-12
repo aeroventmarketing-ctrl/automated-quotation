@@ -1322,13 +1322,13 @@ function yDuctMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: str
   return (2 * rIn + bIn) * (rIn + bIn) * 2 + k * rIn * aIn * 2 + k * (bIn + rIn) * 2 * aIn;
 }
 /** R-Duct material used (sq in), using A, B and R (like the elbow's fields):
- *  (R + B)(R + B) + 1.5708·R·A·2 + 1.5708·(B + R)·2·A. Needs A, B and R all set.
+ *  (R + B)(R + B)·2 + 1.5708·R·A·2 + 1.5708·(B + R)·2·A. Needs A, B and R all set.
  *  (1.5708 = π/2.) The GI allowance (+20%) is applied by ductMaterialWasteFactor. */
 function rDuctMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
   const { aIn, bIn, rIn } = elbowDims(specs); // aIn = A, bIn = B, rIn = R
   if (!(aIn > 0) || !(bIn > 0) || !(rIn > 0)) return 0;
   const k = 1.5708; // π/2
-  return (rIn + bIn) * (rIn + bIn) + k * rIn * aIn * 2 + k * (bIn + rIn) * 2 * aIn;
+  return (rIn + bIn) * (rIn + bIn) * 2 + k * rIn * aIn * 2 + k * (bIn + rIn) * 2 * aIn;
 }
 /** Material used (sq in) for a reducer-like type — Elbow, Offset, Y-Duct and
  *  R-Duct use their own formulas; Duct Reducer and Square to Round use the table. */
