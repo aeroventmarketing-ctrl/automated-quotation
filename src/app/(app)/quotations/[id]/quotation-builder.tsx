@@ -1321,13 +1321,22 @@ function yDuctMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: str
   const k = 1.5708; // π/2
   return (2 * rIn + bIn) * (rIn + bIn) * 2 + k * rIn * aIn * 2 + k * (bIn + rIn) * 2 * aIn;
 }
-/** Material used (sq in) for a reducer-like type — Elbow, Offset and Y-Duct use
- *  their own formulas; Duct Reducer and Square to Round use the reducer table. */
+/** R-Duct material used (sq in), using A, B and R (like the elbow's fields):
+ *  (R + B)(R + B) + 1.5708·R·A·2 + 1.5708·(B + R)·2·A. Needs A, B and R all set.
+ *  (1.5708 = π/2.) The GI allowance (+20%) is applied by ductMaterialWasteFactor. */
+function rDuctMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
+  const { aIn, bIn, rIn } = elbowDims(specs); // aIn = A, bIn = B, rIn = R
+  if (!(aIn > 0) || !(bIn > 0) || !(rIn > 0)) return 0;
+  const k = 1.5708; // π/2
+  return (rIn + bIn) * (rIn + bIn) + k * rIn * aIn * 2 + k * (bIn + rIn) * 2 * aIn;
+}
+/** Material used (sq in) for a reducer-like type — Elbow, Offset, Y-Duct and
+ *  R-Duct use their own formulas; Duct Reducer and Square to Round use the table. */
 function reducerLikeMaterialSqIn(specs: { type?: string; ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; ductCalcOffset?: string; sizeUnit?: string }): number {
   if (specs.type === "Elbow Duct") return elbowMaterialSqIn(specs);
   if (specs.type === "Offset Duct") return offsetMaterialSqIn(specs);
-  // R-Duct shares the Y-Duct material formula (its GI allowance is 20%, not 30%).
-  if (specs.type === "Y-Duct" || specs.type === "R-Duct") return yDuctMaterialSqIn(specs);
+  if (specs.type === "Y-Duct") return yDuctMaterialSqIn(specs);
+  if (specs.type === "R-Duct") return rDuctMaterialSqIn(specs);
   return reducerMaterialSqIn(specs);
 }
 // Number of Sheets Used, from the A × B cross-section (trade inches):
@@ -2032,7 +2041,8 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   // An Offset needs A, B and L (its material formula uses A, B, L and O).
   if (specs.type === "Offset Duct" && !(offsetMaterialSqIn(specs) > 0)) return null;
   // A Y-Duct / R-Duct needs A, B and R.
-  if ((specs.type === "Y-Duct" || specs.type === "R-Duct") && !(yDuctMaterialSqIn(specs) > 0)) return null;
+  if (specs.type === "Y-Duct" && !(yDuctMaterialSqIn(specs) > 0)) return null;
+  if (specs.type === "R-Duct" && !(rDuctMaterialSqIn(specs) > 0)) return null;
   const sheetPrice = straightDuctSheetPrice(specs.material, gauge, specs.bladeType);
   if (sheetPrice == null) return null;
   const laborBase = AIR_DUCT_LABOR_PER_SHEET[specs.material];
