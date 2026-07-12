@@ -2025,6 +2025,8 @@ function ductConnectorFabricCost(specs: LineSpecs): number | null {
 
 // Painted finish (Black Iron only) adds 30% to the duct price.
 const DUCT_PAINT_SURCHARGE = 0.3;
+// 6% mark-up on all air duct — the duct price is the computed total ÷ 0.94.
+const AIR_DUCT_MARKUP_DIVISOR = 0.94;
 /** Whether the painted-finish surcharge applies (Black Iron with Painted ticked). */
 function ductCalcPainted(specs: { material?: string; ductPainted?: boolean }): boolean {
   return specs.material === "Black Iron" && !!specs.ductPainted;
@@ -2060,7 +2062,9 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   const fabricCost = specs.type === "Duct Connector" ? ductConnectorFabricCost(specs) ?? 0 : 0;
   const subtotal = sheetPrice * STRAIGHT_DUCT_MARKUP * sheets + angleCost + laborSheets * labor + fabricCost;
   // Painted Black Iron adds 30% to the whole duct price.
-  return ductCalcPainted(specs) ? subtotal * (1 + DUCT_PAINT_SURCHARGE) : subtotal;
+  const painted = ductCalcPainted(specs) ? subtotal * (1 + DUCT_PAINT_SURCHARGE) : subtotal;
+  // 6% mark-up on all air duct: price = total ÷ 0.94.
+  return painted / AIR_DUCT_MARKUP_DIVISOR;
 }
 
 // --- Air Terminals / Dampers body pricing (per square inch, VAT-inclusive) ----
@@ -4392,6 +4396,13 @@ export function QuotationBuilder({
             painted && materialCost != null && laborCost != null
               ? (materialCost + angleCost + laborCost + (fabricCost ?? 0)) * DUCT_PAINT_SURCHARGE
               : null;
+          // 6% mark-up (Total ÷ 0.94) — shown as its own line so items sum to Total.
+          const preMarkupTotal =
+            materialCost != null && laborCost != null
+              ? materialCost + angleCost + laborCost + (fabricCost ?? 0) + (paintCost ?? 0)
+              : null;
+          const markupCost =
+            preMarkupTotal != null && priceVatEx != null ? priceVatEx - preMarkupTotal : null;
           const peso = (n: number) =>
             `₱${(Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           return (
@@ -4574,6 +4585,12 @@ export function QuotationBuilder({
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Paint — Black Iron painted (+30%)</span>
                       <span className="tabular-nums">{peso(paintCost)}</span>
+                    </div>
+                  )}
+                  {markupCost != null && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Mark-up — 6% (÷ 0.94)</span>
+                      <span className="tabular-nums">{peso(markupCost)}</span>
                     </div>
                   )}
                   <div className="mt-1 flex justify-between gap-2 border-t pt-1 font-semibold">
