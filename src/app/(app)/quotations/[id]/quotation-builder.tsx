@@ -4386,17 +4386,8 @@ export function QuotationBuilder({
                   <span className="tabular-nums font-medium">{ductGauge ? `${ductGauge} ga` : "—"}</span>
                 </div>
                 {isOffset ? (
-                  // Offset: four dimensions — Length L, Width A, Height B, Offset O.
+                  // Offset: four dimensions in order — Width A, Height B, Offset O, Length L.
                   <>
-                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
-                      <span className="flex-1">Length &quot;L&quot;</span>
-                      <Input
-                        type="number" step="any" className="h-8 w-20 text-right"
-                        disabled={!editable} value={c.ductCalcHeight ?? ""}
-                        onChange={(e) => applyAccessory(l.id, { ductCalcHeight: e.target.value })}
-                      />
-                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
-                    </div>
                     <div className="flex items-center gap-2 border-b px-3 py-1.5">
                       <span className="flex-1">Width &quot;A&quot;</span>
                       <Input
@@ -4421,6 +4412,15 @@ export function QuotationBuilder({
                         type="number" step="any" className="h-8 w-20 text-right"
                         disabled={!editable} value={c.ductCalcOffset ?? ""}
                         onChange={(e) => applyAccessory(l.id, { ductCalcOffset: e.target.value })}
+                      />
+                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                    </div>
+                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                      <span className="flex-1">Length &quot;L&quot;</span>
+                      <Input
+                        type="number" step="any" className="h-8 w-20 text-right"
+                        disabled={!editable} value={c.ductCalcHeight ?? ""}
+                        onChange={(e) => applyAccessory(l.id, { ductCalcHeight: e.target.value })}
                       />
                       <span className="text-xs text-muted-foreground">{calcUnit}</span>
                     </div>
