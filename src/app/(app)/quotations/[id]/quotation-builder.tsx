@@ -1159,6 +1159,28 @@ function ductPerimeterIn(specs: { ductCalcLength?: string; ductCalcWidth?: strin
   if (specs.shape === "Round") return Math.PI * aIn; // aIn === diameter for round
   return (aIn + bIn) * 2;
 }
+/** Smallest even number ≥ x (0 for non-positive). */
+function nextEvenUp(x: number): number {
+  return x > 0 ? Math.ceil(x / 2) * 2 : 0;
+}
+/** Convert a duct cross-section between Square/Rectangle and Round by EQUAL area,
+ *  rounding the result UP to the next even number (e.g. 20×20 → Ø24, Ø24 → 22×22).
+ *  `w` = width (or diameter when round), `l` = length (empty when round). */
+function convertDuctShape(oldShape: string | undefined, newShape: string | undefined, w?: string, l?: string): { w: string; l: string } {
+  const num = (v?: string) => parseFloat(v ?? "") || 0;
+  const fmt = (n: number) => (n > 0 ? String(n) : "");
+  const wasRound = oldShape === "Round";
+  const isRound = newShape === "Round";
+  if (isRound && !wasRound) {
+    const area = num(w) * num(l); // L × W
+    return { w: fmt(nextEvenUp(2 * Math.sqrt(area / Math.PI))), l: "" }; // Ø of equal area
+  }
+  if (!isRound && wasRound) {
+    const side = nextEvenUp(num(w) * Math.sqrt(Math.PI) / 2); // square of equal area
+    return { w: fmt(side), l: fmt(side) };
+  }
+  return { w: w ?? "", l: l ?? "" };
+}
 /** Seam allowance (trade inches) added to the developed perimeter: Galvanized
  *  Iron is lock-seamed (+2" overlap); Black Iron / Stainless are welded (none). */
 function ductSeamAllowanceIn(specs: { material?: string }): number {
@@ -2816,13 +2838,20 @@ export function QuotationBuilder({
         }
         // Painted finish is a Black Iron option only — drop a stale flag otherwise.
         if (specs.material !== "Black Iron") specs.ductPainted = false;
-        // Duct calc: switching shape (Round ↔ Square/Rectangle) swaps the size
-        // inputs (single diameter vs A × B), so clear the entered dimensions to
-        // avoid carrying a stale A/B into a diameter (or vice-versa).
-        if ("shape" in patch && isDuctCalc(specs)) {
-          specs.ductCalcLength = "";
-          specs.ductCalcWidth = "";
-          specs.ductCalcHeight = "";
+        // Air Duct: switching shape (Round ↔ Square/Rectangle) converts the cross
+        // section by equal area, rounding UP to the next even number (20×20 → Ø24;
+        // Ø24 → 22×22). The calc types use the A/B fields; other air ducts use the
+        // box L/W. The reducer/elbow height (H/R) is left unchanged.
+        if ("shape" in patch && isAirDuct(specs)) {
+          if (isDuctCalc(specs)) {
+            const r = convertDuctShape(l.specs.shape, specs.shape, specs.ductCalcWidth, specs.ductCalcLength);
+            specs.ductCalcWidth = r.w;
+            specs.ductCalcLength = r.l;
+          } else {
+            const r = convertDuctShape(l.specs.shape, specs.shape, specs.sizeL, specs.sizeW);
+            specs.sizeL = r.w;
+            specs.sizeW = r.l;
+          }
         }
         // A Duct Connector always carries a canvas fabric — if none is set yet,
         // default to the first fabric so its per-meter cost is always charged.
