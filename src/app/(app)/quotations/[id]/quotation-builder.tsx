@@ -2026,8 +2026,9 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   if (sheetPrice == null) return null;
   const laborBase = AIR_DUCT_LABOR_PER_SHEET[specs.material];
   if (laborBase == null) return null;
-  // A Duct Reducer takes twice the labour per sheet of a straight duct.
-  const labor = isReducerType(specs.type) ? laborBase * 2 : laborBase;
+  // Reducer-like types take twice the labour per sheet of a straight duct; a
+  // Y-Duct adds a further 50% on top (all materials).
+  const labor = (isReducerType(specs.type) ? laborBase * 2 : laborBase) * (specs.type === "Y-Duct" ? 1.5 : 1);
   const sheets = ductSheetsUsed(specs);
   // Labour is billed from the labour sheet count for the type (Duct Connector
   // matches a full duct section; Duct Reducer uses its own blank sheet count).
@@ -4351,7 +4352,7 @@ export function QuotationBuilder({
           const reducerStdHDisp = reducerStdHIn > 0 ? (reducerStdHIn * 25) / (ACC_MM_PER_UNIT[calcUnit] ?? 25) : null;
           const baseLaborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
           // A Duct Reducer takes twice the labour per sheet.
-          const laborRate = baseLaborRate != null ? (isReducer ? baseLaborRate * 2 : baseLaborRate) : null;
+          const laborRate = baseLaborRate != null ? (isReducer ? baseLaborRate * 2 : baseLaborRate) * (isYDuct ? 1.5 : 1) : null;
           // Labour uses the labour sheet count for the type (see ductLaborSheetCount).
           const laborSheets = straightDuctLaborSheets(ductLaborSheetCount(c));
           const angleCost = c.ductNoFlange ? 0 : STRAIGHT_DUCT_ANGLE_PRICE * STRAIGHT_DUCT_ANGLE_COUNT;
