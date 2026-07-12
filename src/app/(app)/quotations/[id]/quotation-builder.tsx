@@ -1111,7 +1111,7 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
 // Air Duct types that use the sheet-metal "duct calculator" (A × B cross-section
 // → sheets → auto price), with their own illustration. Straight Duct and Duct
 // Connector share the same calculator and pricing.
-const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct"]);
+const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct", "Y-Duct"]);
 const DUCT_CALC_IMAGE: Record<string, string> = {
   "Straight Duct": "/straight-duct.png",
   "Duct Connector": "/duct-connector.jpg",
@@ -1119,11 +1119,12 @@ const DUCT_CALC_IMAGE: Record<string, string> = {
   "Square to Round Duct": "/square-to-round.jpg",
   "Elbow Duct": "/elbow.jpg",
   "Offset Duct": "/offset-duct.jpg",
+  "Y-Duct": "/y-duct.jpg",
 };
 // Reducer-like types: priced from a developed-blank material area ÷ 4608 sheet,
-// with double labour. Square to Round mirrors the Duct Reducer; Elbow and Offset
-// carry their own material formulas and dimension fields.
-const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct"]);
+// with double labour. Square to Round mirrors the Duct Reducer; Elbow, Offset and
+// Y-Duct carry their own material formulas and dimension fields.
+const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct", "Y-Duct"]);
 const isReducerType = (type?: string): boolean => REDUCER_LIKE_TYPES.has(type ?? "");
 const isDuctCalc = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && DUCT_CALC_TYPES.has(specs.type);
@@ -1308,11 +1309,21 @@ function offsetMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: st
   if (!(aIn > 0) || !(bIn > 0) || !(lIn > 0)) return 0;
   return (bIn + oIn) * lIn * 2 + lIn * aIn * 2 * 1.5;
 }
-/** Material used (sq in) for a reducer-like type — Elbow and Offset use their own
- *  formulas; Duct Reducer and Square to Round use the reducer table. */
+/** Y-Duct material used (sq in), using A, B and R (like the elbow's fields):
+ *  (2R + B)(R + B) + 1.5708·R·A·2 + 1.5708·(B + R)·2·A. Needs A, B and R all set.
+ *  (1.5708 = π/2.) The GI allowance (+30%) is applied by ductMaterialWasteFactor. */
+function yDuctMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
+  const { aIn, bIn, rIn } = elbowDims(specs); // aIn = A, bIn = B, rIn = R
+  if (!(aIn > 0) || !(bIn > 0) || !(rIn > 0)) return 0;
+  const k = 1.5708; // π/2
+  return (2 * rIn + bIn) * (rIn + bIn) + k * rIn * aIn * 2 + k * (bIn + rIn) * 2 * aIn;
+}
+/** Material used (sq in) for a reducer-like type — Elbow, Offset and Y-Duct use
+ *  their own formulas; Duct Reducer and Square to Round use the reducer table. */
 function reducerLikeMaterialSqIn(specs: { type?: string; ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; ductCalcOffset?: string; sizeUnit?: string }): number {
   if (specs.type === "Elbow Duct") return elbowMaterialSqIn(specs);
   if (specs.type === "Offset Duct") return offsetMaterialSqIn(specs);
+  if (specs.type === "Y-Duct") return yDuctMaterialSqIn(specs);
   return reducerMaterialSqIn(specs);
 }
 // Number of Sheets Used, from the A × B cross-section (trade inches):
@@ -1326,11 +1337,14 @@ function ductRawSheetsUsed(specs: { ductCalcLength?: string; ductCalcWidth?: str
   if (isReducerType(specs.type)) return reducerLikeMaterialSqIn(specs) / (48 * 96);
   return (perimeter + ductSeamAllowanceIn(specs)) / 96;
 }
-// Galvanized Iron carries a 20% material allowance (overlap/waste) on the metal
-// used; Black Iron and Stainless Steel keep the plain computation.
+// Galvanized Iron carries a material allowance (overlap/waste) on the metal used
+// — 30% for a Y-Duct, 20% for every other duct type. Black Iron and Stainless
+// Steel keep the plain computation.
 const GI_MATERIAL_WASTE = 0.2;
-function ductMaterialWasteFactor(specs: { material?: string }): number {
-  return specs.material === "Galvanized Iron" ? 1 + GI_MATERIAL_WASTE : 1;
+const GI_MATERIAL_WASTE_Y_DUCT = 0.3;
+function ductMaterialWasteFactor(specs: { material?: string; type?: string }): number {
+  if (specs.material !== "Galvanized Iron") return 1;
+  return 1 + (specs.type === "Y-Duct" ? GI_MATERIAL_WASTE_Y_DUCT : GI_MATERIAL_WASTE);
 }
 /** Material (sheets) used — the metal quantity that drives material cost and the
  *  "Number of Sheets Used" / "Material Used" display (GI +10%). Labour uses the
@@ -2006,6 +2020,8 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   if (specs.type === "Elbow Duct" && !(elbowMaterialSqIn(specs) > 0)) return null;
   // An Offset needs A, B and L (its material formula uses A, B, L and O).
   if (specs.type === "Offset Duct" && !(offsetMaterialSqIn(specs) > 0)) return null;
+  // A Y-Duct needs A, B and R.
+  if (specs.type === "Y-Duct" && !(yDuctMaterialSqIn(specs) > 0)) return null;
   const sheetPrice = straightDuctSheetPrice(specs.material, gauge, specs.bladeType);
   if (sheetPrice == null) return null;
   const laborBase = AIR_DUCT_LABOR_PER_SHEET[specs.material];
@@ -2910,7 +2926,7 @@ export function QuotationBuilder({
           // changes (so changing dimensions always shows the current standard),
           // and fill it in when it's blank. A custom height the user types while
           // the size is unchanged is kept (to raise H above standard → doubles).
-          if (isReducerType(specs.type) && specs.type !== "Elbow Duct" && specs.type !== "Offset Duct") {
+          if (isReducerType(specs.type) && specs.type !== "Elbow Duct" && specs.type !== "Offset Duct" && specs.type !== "Y-Duct") {
             const dimsChanged =
               ("ductCalcLength" in patch || "ductCalcWidth" in patch) && !("sizeUnit" in patch);
             const newStd = reducerStandardHeightInUnit(specs);
@@ -4324,12 +4340,14 @@ export function QuotationBuilder({
           // (third field = radius); Reducer / Square to Round use the table + H.
           const isReducer = isReducerType(c.type);
           const isElbow = c.type === "Elbow Duct";
+          const isYDuct = c.type === "Y-Duct";
+          const usesRadius = isElbow || isYDuct; // third field is "Radius R"
           const isOffset = c.type === "Offset Duct"; // 4 inputs: L, A, B, O
           // Material Used (sq in) includes the GI +10% material allowance.
           const reducerSqIn = isReducer ? reducerLikeMaterialSqIn(c) * ductMaterialWasteFactor(c) : null;
           // Standard height for this size, shown in the calc unit (H above it doubles
           // material) — reducers only; an Elbow's radius R has no standard.
-          const reducerStdHIn = isReducer && !isElbow && !isOffset ? reducerStandardHeightIn(c) : 0;
+          const reducerStdHIn = isReducer && !usesRadius && !isOffset ? reducerStandardHeightIn(c) : 0;
           const reducerStdHDisp = reducerStdHIn > 0 ? (reducerStdHIn * 25) / (ACC_MM_PER_UNIT[calcUnit] ?? 25) : null;
           const baseLaborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
           // A Duct Reducer takes twice the labour per sheet.
@@ -4479,7 +4497,7 @@ export function QuotationBuilder({
                 {isReducer && !isOffset && (
                   <div className="flex items-center gap-2 border-b px-3 py-1.5">
                     <span className="flex-1">
-                      {isElbow ? <>Radius &quot;R&quot;</> : <>Height &quot;H&quot;</>}
+                      {usesRadius ? <>Radius &quot;R&quot;</> : <>Height &quot;H&quot;</>}
                       {reducerStdHDisp != null && (
                         <span className="ml-1 text-[11px] font-normal text-muted-foreground">
                           ({Math.round(reducerStdHDisp * 10) / 10} {calcUnit} maximum — above this doubles material)
