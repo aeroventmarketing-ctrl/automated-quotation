@@ -25,7 +25,7 @@ import {
   type MotorRow,
 } from "@/lib/pricing/motors";
 import { TECO_MOTOR_DATA, TECO_KW_BY_HP } from "@/lib/teco-motor-data";
-import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw, Search } from "lucide-react";
+import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw, Search, AlertTriangle } from "lucide-react";
 import { PRODUCT_CATEGORIES, PRODUCT_TAXONOMY, typesFor, entryFor, bladeTypesFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
@@ -4543,13 +4543,22 @@ export function QuotationBuilder({
               )}
               </div>
               {/* Duct illustration for this calc type (client-supplied image with
-                  its own A × B dimensions), right — enlarged and vertically centered. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={DUCT_CALC_IMAGE[c.type] ?? "/straight-duct.png"}
-                alt={`${c.type} dimensions`}
-                className={isReducer ? "ml-12 h-auto max-h-[26rem] w-auto min-w-0 flex-shrink" : "h-auto w-[32.4rem] min-w-0 flex-shrink"}
-              />
+                  its own A × B dimensions), right — enlarged and vertically centered.
+                  Offset shows a red warning centered beneath the image. */}
+              <div className={isReducer ? "ml-12 flex flex-col items-center" : "flex flex-col items-center"}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={DUCT_CALC_IMAGE[c.type] ?? "/straight-duct.png"}
+                  alt={`${c.type} dimensions`}
+                  className={isReducer ? "h-auto max-h-[26rem] w-auto min-w-0 flex-shrink" : "h-auto w-[32.4rem] min-w-0 flex-shrink"}
+                />
+                {isOffset && (
+                  <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-sm font-medium text-red-600">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    If &quot;A&quot; or &quot;B&quot; is unknown, put the biggest number in &quot;A&quot;.
+                  </p>
+                )}
+              </div>
             </div>
           );
         })()}
