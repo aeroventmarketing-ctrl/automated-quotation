@@ -166,6 +166,7 @@ interface LineSpecs {
   ductCalcLength?: string;
   ductCalcWidth?: string;
   ductCalcHeight?: string; // Duct Reducer: reducer height "H" (standard 4"; material scales H ÷ 4)
+  ductCalcOffset?: string; // Offset Duct: the offset "O" (4th dimension)
   ductNoFlange?: boolean; // Straight Duct: no angle-iron flange (drops the 15×8 corner cost; body 1.2 m vs flanged 1.1 m)
   ductPainted?: boolean; // Duct calc (Black Iron only): painted finish, +30% on the duct price
   fabricMaterial?: string; // Duct Connector: canvas fabric (Fiberglass Cloth / PVC / Silicone), priced per meter
@@ -1110,18 +1111,19 @@ const isAirDuct = (specs: { category: string; type: string }): boolean =>
 // Air Duct types that use the sheet-metal "duct calculator" (A × B cross-section
 // → sheets → auto price), with their own illustration. Straight Duct and Duct
 // Connector share the same calculator and pricing.
-const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct", "Elbow Duct"]);
+const DUCT_CALC_TYPES = new Set(["Straight Duct", "Duct Connector", "Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct"]);
 const DUCT_CALC_IMAGE: Record<string, string> = {
   "Straight Duct": "/straight-duct.png",
   "Duct Connector": "/duct-connector.jpg",
   "Duct Reducer": "/reducer.jpg",
   "Square to Round Duct": "/square-to-round.jpg",
   "Elbow Duct": "/elbow.jpg",
+  "Offset Duct": "/offset-duct.jpg",
 };
-// Reducer-like types: A × B × H opening priced from the reducer material table
-// (double labour, height-based material doubling). Square to Round and Elbow
-// Duct mirror the Duct Reducer exactly.
-const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct", "Elbow Duct"]);
+// Reducer-like types: priced from a developed-blank material area ÷ 4608 sheet,
+// with double labour. Square to Round mirrors the Duct Reducer; Elbow and Offset
+// carry their own material formulas and dimension fields.
+const REDUCER_LIKE_TYPES = new Set(["Duct Reducer", "Square to Round Duct", "Elbow Duct", "Offset Duct"]);
 const isReducerType = (type?: string): boolean => REDUCER_LIKE_TYPES.has(type ?? "");
 const isDuctCalc = (specs: { category: string; type: string }): boolean =>
   specs.category === "Ventilation Accessories" && DUCT_CALC_TYPES.has(specs.type);
@@ -1278,10 +1280,37 @@ function elbowMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: str
   const back = 2 * (rIn + bIn) * k * aIn; // 2·(R + B) · 0.7854 · A
   return cheeks + throat + back;
 }
-/** Material used (sq in) for a reducer-like type — Elbow uses its own A/B/R
- *  formula; Duct Reducer and Square to Round use the reducer table. */
-function reducerLikeMaterialSqIn(specs: { type?: string; ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): number {
-  return specs.type === "Elbow Duct" ? elbowMaterialSqIn(specs) : reducerMaterialSqIn(specs);
+/** Offset Duct A (width), B (cross-section height), L (length) and O (offset) in
+ *  trade inches. Fields: A = ductCalcWidth, B = ductCalcLength (so the gauge uses
+ *  the A × B cross-section), L = ductCalcHeight, O = ductCalcOffset. */
+function offsetDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; ductCalcOffset?: string; sizeUnit?: string }): {
+  aIn: number;
+  bIn: number;
+  lIn: number;
+  oIn: number;
+} {
+  const perMm = ACC_MM_PER_UNIT[specs.sizeUnit || "inches"] ?? 25;
+  const toIn = (v?: string) => ((parseFloat(v ?? "") || 0) * perMm) / 25;
+  return {
+    aIn: toIn(specs.ductCalcWidth),
+    bIn: toIn(specs.ductCalcLength),
+    lIn: toIn(specs.ductCalcHeight),
+    oIn: toIn(specs.ductCalcOffset),
+  };
+}
+/** Offset Duct material used (sq in): (B + O)·L·2 + L·A·2·1.5. Needs A, B and L
+ *  (the offset O may be 0). GI overlap allowance (×1.2) is applied separately. */
+function offsetMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; ductCalcOffset?: string; sizeUnit?: string }): number {
+  const { aIn, bIn, lIn, oIn } = offsetDims(specs);
+  if (!(aIn > 0) || !(bIn > 0) || !(lIn > 0)) return 0;
+  return (bIn + oIn) * lIn * 2 + lIn * aIn * 2 * 1.5;
+}
+/** Material used (sq in) for a reducer-like type — Elbow and Offset use their own
+ *  formulas; Duct Reducer and Square to Round use the reducer table. */
+function reducerLikeMaterialSqIn(specs: { type?: string; ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; ductCalcOffset?: string; sizeUnit?: string }): number {
+  if (specs.type === "Elbow Duct") return elbowMaterialSqIn(specs);
+  if (specs.type === "Offset Duct") return offsetMaterialSqIn(specs);
+  return reducerMaterialSqIn(specs);
 }
 // Number of Sheets Used, from the A × B cross-section (trade inches):
 //   Straight Duct   = ((A + B) × 2 + 2) ÷ 96          (48" strip + lock seam)
@@ -1972,6 +2001,8 @@ function straightDuctPriceVatEx(specs: LineSpecs): number | null {
   if (!(aMm > 0) || !(bMm > 0)) return null; // need the A × B cross-section entered
   // An Elbow needs its radius R too (its material formula uses A, B and R).
   if (specs.type === "Elbow Duct" && !(elbowMaterialSqIn(specs) > 0)) return null;
+  // An Offset needs A, B and L (its material formula uses A, B, L and O).
+  if (specs.type === "Offset Duct" && !(offsetMaterialSqIn(specs) > 0)) return null;
   const sheetPrice = straightDuctSheetPrice(specs.material, gauge, specs.bladeType);
   if (sheetPrice == null) return null;
   const laborBase = AIR_DUCT_LABOR_PER_SHEET[specs.material];
@@ -2842,7 +2873,7 @@ export function QuotationBuilder({
         // section by equal area, rounding UP to the next even number (20×20 → Ø24;
         // Ø24 → 22×22). The calc types use the A/B fields; other air ducts use the
         // box L/W. The reducer/elbow height (H/R) is left unchanged.
-        if ("shape" in patch && isAirDuct(specs)) {
+        if ("shape" in patch && isAirDuct(specs) && specs.type !== "Offset Duct") {
           if (isDuctCalc(specs)) {
             const r = convertDuctShape(l.specs.shape, specs.shape, specs.ductCalcWidth, specs.ductCalcLength);
             specs.ductCalcWidth = r.w;
@@ -2876,7 +2907,7 @@ export function QuotationBuilder({
           // changes (so changing dimensions always shows the current standard),
           // and fill it in when it's blank. A custom height the user types while
           // the size is unchanged is kept (to raise H above standard → doubles).
-          if (isReducerType(specs.type) && specs.type !== "Elbow Duct") {
+          if (isReducerType(specs.type) && specs.type !== "Elbow Duct" && specs.type !== "Offset Duct") {
             const dimsChanged =
               ("ductCalcLength" in patch || "ductCalcWidth" in patch) && !("sizeUnit" in patch);
             const newStd = reducerStandardHeightInUnit(specs);
@@ -3579,7 +3610,7 @@ export function QuotationBuilder({
       // Duct Connector always carries a canvas fabric, so default to the first
       // fabric (Fiberglass Cloth) — its per-meter cost is charged straight away
       // and the user can switch fabrics from the dropdown.
-      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductCalcHeight: "", ductNoFlange: false, ductPainted: false, fabricMaterial: type === "Duct Connector" ? DUCT_CONNECTOR_FABRICS[0] : "" }, true);
+      applyAccessory(lineId, { type, shape: "", sizeL: "", sizeW: "", sizeUnit: DUCT_CALC_TYPES.has(type) ? "inches" : "", material: "", powderCoated: false, bladeType: "", gauge: "", mcRecommend: false, ductCalcLength: "", ductCalcWidth: "", ductCalcHeight: "", ductCalcOffset: "", ductNoFlange: false, ductPainted: false, fabricMaterial: type === "Duct Connector" ? DUCT_CONNECTOR_FABRICS[0] : "" }, true);
     } else {
       updateSpec(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
     }
@@ -4031,6 +4062,7 @@ export function QuotationBuilder({
                       ductCalcLength: convertAccSize(c.ductCalcLength ?? "", from, to),
                       ductCalcWidth: convertAccSize(c.ductCalcWidth ?? "", from, to),
                       ductCalcHeight: convertAccSize(c.ductCalcHeight ?? "", from, to),
+                      ductCalcOffset: convertAccSize(c.ductCalcOffset ?? "", from, to),
                     });
                   }}
                 >
@@ -4289,11 +4321,12 @@ export function QuotationBuilder({
           // (third field = radius); Reducer / Square to Round use the table + H.
           const isReducer = isReducerType(c.type);
           const isElbow = c.type === "Elbow Duct";
+          const isOffset = c.type === "Offset Duct"; // 4 inputs: L, A, B, O
           // Material Used (sq in) includes the GI +10% material allowance.
           const reducerSqIn = isReducer ? reducerLikeMaterialSqIn(c) * ductMaterialWasteFactor(c) : null;
           // Standard height for this size, shown in the calc unit (H above it doubles
           // material) — reducers only; an Elbow's radius R has no standard.
-          const reducerStdHIn = isReducer && !isElbow ? reducerStandardHeightIn(c) : 0;
+          const reducerStdHIn = isReducer && !isElbow && !isOffset ? reducerStandardHeightIn(c) : 0;
           const reducerStdHDisp = reducerStdHIn > 0 ? (reducerStdHIn * 25) / (ACC_MM_PER_UNIT[calcUnit] ?? 25) : null;
           const baseLaborRate = AIR_DUCT_LABOR_PER_SHEET[c.material] ?? null;
           // A Duct Reducer takes twice the labour per sheet.
@@ -4352,7 +4385,47 @@ export function QuotationBuilder({
                   <span>Gauge</span>
                   <span className="tabular-nums font-medium">{ductGauge ? `${ductGauge} ga` : "—"}</span>
                 </div>
-                {isRound ? (
+                {isOffset ? (
+                  // Offset: four dimensions — Length L, Width A, Height B, Offset O.
+                  <>
+                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                      <span className="flex-1">Length &quot;L&quot;</span>
+                      <Input
+                        type="number" step="any" className="h-8 w-20 text-right"
+                        disabled={!editable} value={c.ductCalcHeight ?? ""}
+                        onChange={(e) => applyAccessory(l.id, { ductCalcHeight: e.target.value })}
+                      />
+                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                    </div>
+                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                      <span className="flex-1">Width &quot;A&quot;</span>
+                      <Input
+                        type="number" step="any" className="h-8 w-20 text-right"
+                        disabled={!editable} value={c.ductCalcWidth ?? ""}
+                        onChange={(e) => applyAccessory(l.id, { ductCalcWidth: e.target.value })}
+                      />
+                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                    </div>
+                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                      <span className="flex-1">Height &quot;B&quot;</span>
+                      <Input
+                        type="number" step="any" className="h-8 w-20 text-right"
+                        disabled={!editable} value={c.ductCalcLength ?? ""}
+                        onChange={(e) => applyAccessory(l.id, { ductCalcLength: e.target.value })}
+                      />
+                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                    </div>
+                    <div className="flex items-center gap-2 border-b px-3 py-1.5">
+                      <span className="flex-1">Offset &quot;O&quot;</span>
+                      <Input
+                        type="number" step="any" className="h-8 w-20 text-right"
+                        disabled={!editable} value={c.ductCalcOffset ?? ""}
+                        onChange={(e) => applyAccessory(l.id, { ductCalcOffset: e.target.value })}
+                      />
+                      <span className="text-xs text-muted-foreground">{calcUnit}</span>
+                    </div>
+                  </>
+                ) : isRound ? (
                   // Round: a single Diameter Ø replaces A and B (stored in ductCalcWidth).
                   <div className="flex items-center gap-2 border-b px-3 py-1.5">
                     <span className="flex-1">Diameter &quot;Ø&quot;</span>
@@ -4385,7 +4458,7 @@ export function QuotationBuilder({
                     </div>
                   </>
                 )}
-                {isReducer && (
+                {isReducer && !isOffset && (
                   <div className="flex items-center gap-2 border-b px-3 py-1.5">
                     <span className="flex-1">
                       {isElbow ? <>Radius &quot;R&quot;</> : <>Height &quot;H&quot;</>}
