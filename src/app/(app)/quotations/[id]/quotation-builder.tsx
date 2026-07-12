@@ -1227,15 +1227,21 @@ function reducerMaterialSqIn(specs: { ductCalcLength?: string; ductCalcWidth?: s
   return base * (overStandard ? 2 : 1);
 }
 /** Elbow duct A (width), B (length) and R (radius) in trade inches. The third
- *  calculator field (ductCalcHeight) holds the radius R for an elbow. */
-function elbowDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string }): {
+ *  calculator field (ductCalcHeight) holds the radius R. A Round elbow has a
+ *  single diameter (ductCalcWidth) that fills both A and B. */
+function elbowDims(specs: { ductCalcLength?: string; ductCalcWidth?: string; ductCalcHeight?: string; sizeUnit?: string; shape?: string }): {
   aIn: number;
   bIn: number;
   rIn: number;
 } {
   const perMm = ACC_MM_PER_UNIT[specs.sizeUnit || "inches"] ?? 25;
   const toIn = (v?: string) => ((parseFloat(v ?? "") || 0) * perMm) / 25;
-  return { aIn: toIn(specs.ductCalcWidth), bIn: toIn(specs.ductCalcLength), rIn: toIn(specs.ductCalcHeight) };
+  const rIn = toIn(specs.ductCalcHeight);
+  if (specs.shape === "Round") {
+    const dIn = toIn(specs.ductCalcWidth); // single diameter → both A and B
+    return { aIn: dIn, bIn: dIn, rIn };
+  }
+  return { aIn: toIn(specs.ductCalcWidth), bIn: toIn(specs.ductCalcLength), rIn };
 }
 /** Elbow Duct material used (sq in):
  *  2·(B + R)² + 2R·0.7854·A + 2·(R + B)·0.7854·A. Needs A, B and R all set.
@@ -5162,6 +5168,18 @@ export function QuotationBuilder({
                     })()}
                     <p className="text-xs text-muted-foreground">
                       {(() => {
+                        if (isDuctCalc(l.specs)) {
+                          const ex = straightDuctPriceVatEx(
+                            l.specs.mcRecommend ? { ...l.specs, gauge: straightDuctGauge(l.specs) ?? "" } : l.specs,
+                          );
+                          if (ex == null) {
+                            const needsR = l.specs.type === "Elbow Duct";
+                            return l.specs.shape === "Round"
+                              ? `Enter the diameter${needsR ? " and radius" : ""} and pick a gauge to auto-price.`
+                              : `Enter the ${needsR ? "A, B and R" : "A × B"} and pick a gauge to auto-price.`;
+                          }
+                          return `Duct Price ₱${(Math.round(ex * 100) / 100).toLocaleString()} (VAT ex) × 1.12 = auto-priced (editable).`;
+                        }
                         if (isWindVent(l.specs)) {
                           const net = windVentNet(l.specs);
                           if (net == null) return "Pick throat diameter and material to auto-price.";
