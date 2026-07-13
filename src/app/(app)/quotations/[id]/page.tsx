@@ -181,6 +181,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               fabricMaterial: typeof s.fabricMaterial === "string" ? s.fabricMaterial : "",
               exproof: s.exproof === true,
               customizedUnit: s.customizedUnit === true,
+              doubleWall: s.doubleWall === true,
               bladeMaterialOn: s.bladeMaterialOn === true,
               bladeMaterial: typeof s.bladeMaterial === "string" ? s.bladeMaterial : "",
               upgradePaint: s.upgradePaint === true,
