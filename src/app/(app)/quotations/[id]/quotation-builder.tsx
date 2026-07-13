@@ -2569,13 +2569,20 @@ export function QuotationBuilder({
     const lockOn = group === "propeller" ? propellerSpLock : axialSpLock;
     return lockOn && spOverCap(specs, units.pressure);
   };
-  // Spec note + terms always follow the selected pattern — seed them from the
-  // quote's current template (not any stale saved carry-over) so the quote
-  // strictly matches its chosen template. Falls back to the saved text only for
-  // a retired template that is no longer in the picker.
+  // Spec note seeds from the quote's current template so the quote matches its
+  // chosen pattern (falls back to saved text for a retired template).
   const initialTpl = templates.find((t) => t.id === quotation.templateId);
   const [notes, setNotes] = useState(initialTpl ? initialTpl.specNote : quotation.notes ?? "");
-  const [terms, setTerms] = useState(initialTpl ? initialTpl.terms : quotation.terms ?? "");
+  // Terms & Conditions keep the quote's own saved text so manual edits survive a
+  // refresh (used as future reference). Only seed from the template when the quote
+  // has no saved terms yet (switching template still loads that pattern's terms).
+  const [terms, setTerms] = useState(
+    typeof quotation.terms === "string" && quotation.terms.trim() !== ""
+      ? quotation.terms
+      : initialTpl
+        ? initialTpl.terms
+        : "",
+  );
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -5697,7 +5704,7 @@ export function QuotationBuilder({
               placeholder="e.g. All units are made of high quality materials. Statically and Dynamically balanced…" />
           </div>
           <div className="space-y-1">
-            <Label>Terms &amp; Conditions (page 2) — defaults from the selected pattern</Label>
+            <Label>Terms &amp; Conditions (page 2) — defaults from the pattern; your edits are saved with the quote</Label>
             <Textarea className="font-mono text-xs" value={terms} onChange={(e) => setTerms(e.target.value)} disabled={!editable} rows={10} />
           </div>
         </CardContent>
