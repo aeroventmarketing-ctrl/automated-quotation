@@ -2299,18 +2299,24 @@ function insectScreenApplies(specs: { category: string; type: string }): boolean
 function hasInsectScreen(specs: LineSpecs): boolean {
   return !!specs.insectScreen && insectScreenApplies(specs);
 }
+// Insect screen adds 20% of the PLAIN body (material only, before any powder
+// coat), added on top — never compounded with the powder-coat upcharge.
+function insectScreenCost(specs: LineSpecs, plainBody: number): number {
+  return hasInsectScreen(specs) ? plainBody * INSECT_SCREEN_SURCHARGE : 0;
+}
 function accessoryUnitPrice(specs: LineSpecs): number | null {
-  const screen = hasInsectScreen(specs) ? 1 + INSECT_SCREEN_SURCHARGE : 1;
   if (specs.type === "Weather hood") {
     const wh = weatherhoodUnitPrice(specs);
-    return wh == null ? null : round2(wh * screen);
+    if (wh == null) return null;
+    const plain = weatherhoodUnitPrice({ ...specs, powderCoated: false }) ?? 0;
+    return round2(wh + insectScreenCost(specs, plain));
   }
   const rate = accessoryRate(specs.type, specs.shape);
   const area = accBilledAreaSqIn(specs);
   const mat = ACC_MATERIAL_FACTOR[specs.material];
   if (rate == null || area == null || mat == null) return null;
   const body = accessoryBody(specs, area, rate, mat);
-  return round2((body + accFlatAdd(specs.type) + accActuatorCost(specs)) * screen);
+  return round2(body + accFlatAdd(specs.type) + accActuatorCost(specs) + insectScreenCost(specs, area * rate * mat));
 }
 /**
  * Body price. Powder coating is applied on a GI base (area × rate × 1 × powder
@@ -5508,16 +5514,18 @@ export function QuotationBuilder({
                           }
                           return `₱${net} / pc${discNote} (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
-                        const screenNote = hasInsectScreen(l.specs) ? " + insect screen 20%" : "";
                         if (l.specs.type === "Weather hood") {
                           const size = weatherhoodSize(l.specs);
                           const wh = weatherhoodUnitPrice(l.specs);
                           if (wh == null || size == null) return "Enter L × W to auto-price.";
                           const matF = ACC_MATERIAL_FACTOR[l.specs.material] ?? 1;
                           const matNote = matF !== 1 ? ` · ${accMaterialLabel(l.specs.material)} ×${matF}` : "";
+                          const whScreen = hasInsectScreen(l.specs)
+                            ? ` + (${fmtNum(weatherhoodUnitPrice({ ...l.specs, powderCoated: false }) ?? 0)} × 20% insect screen)`
+                            : "";
                           const finish = (l.specs.powderCoated
                             ? `${matNote} + powder coat ×${WEATHERHOOD_POWDER_FACTOR} (GI base)`
-                            : matNote) + screenNote;
+                            : matNote) + whScreen;
                           if (size > WEATHERHOOD_MAX)
                             return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} × 1.12${finish} = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
                           return `√(area) → ${size}" size${finish} · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
@@ -5542,7 +5550,10 @@ export function QuotationBuilder({
                         const bodyDesc = l.specs.powderCoated
                           ? `${round2(area)} sq in${minNote} × ${rate} × ${pf} powder-coat (GI base)${l.specs.material === "Aluminum" ? ` + area × ${rate} × 2 aluminum` : ""}`
                           : `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})`;
-                        return `${bodyDesc}${flat ? ` + ${flat} fusible link` : ""}${actNote}${screenNote} = auto-priced (editable).`;
+                        const grilleScreen = hasInsectScreen(l.specs)
+                          ? ` + (${round2(area)} sq in × ${rate} × 20% insect screen)`
+                          : "";
+                        return `${bodyDesc}${flat ? ` + ${flat} fusible link` : ""}${actNote}${grilleScreen} = auto-priced (editable).`;
                       })()}
                     </p>
                   </div>
