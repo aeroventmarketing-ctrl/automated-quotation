@@ -974,8 +974,10 @@ const bodyNetFrom = (base: number, specs: LineSpecs): number => {
     core = base * bodyMat;
   }
   if (specs.customizedUnit) core *= 1.2;
-  if (doubleWallApplies(specs)) core *= 1 + DOUBLE_WALL_SURCHARGE; // +170% on body + blade (+customized)
-  return core + base * paintFactor(specs);
+  // Double wall: +170% (×2.7) on the body + blade (incl. customized) AND the paint.
+  const dwFactor = doubleWallApplies(specs) ? 1 + DOUBLE_WALL_SURCHARGE : 1;
+  core *= dwFactor;
+  return core + base * paintFactor(specs) * dwFactor;
 };
 /** Reversible-blade propellers and Airfoil blades both cost ×1.5 of the body. */
 const SPECIAL_BLADE_FACTOR: Record<string, number> = { "Reversible Blade": 1.5, Airfoil: 1.5 };
@@ -1015,9 +1017,10 @@ const bodyComputation = (specs: LineSpecs): string => {
     core = `${baseStr} × ${fmtNum(bodyMat)} (${bodyName})`;
   }
   let expr = specs.customizedUnit ? `(${core}) × 1.2 (customized)` : core;
-  if (doubleWallApplies(specs)) expr = `(${expr}) × 2.7 (double wall)`;
+  const dw = doubleWallApplies(specs);
+  if (dw) expr = `(${expr}) × 2.7 (double wall)`;
   const paint = paintFactor(specs);
-  if (paint > 0) expr = `${expr} + ${baseStr}×${fmtNum(paint)} (${specs.paintType})`;
+  if (paint > 0) expr = `${expr} + ${baseStr}${dw ? "×2.7 (double wall)" : ""}×${fmtNum(paint)} (${specs.paintType})`;
   return `${expr} = ${fmtNum(total)}`;
 };
 /**
