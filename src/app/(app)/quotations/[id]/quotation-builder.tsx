@@ -186,6 +186,9 @@ interface LineSpecs {
   exproof?: boolean;
   // Customized (bespoke) unit: body priced ×1.2 (a +20% uplift on the base body).
   customizedUnit?: boolean;
+  // Cabinet Type only: double-wall construction — +170% on the body + blade
+  // (including the customized-unit uplift), i.e. that portion ×2.7.
+  doubleWall?: boolean;
   // Separate blade material: when off the blade is standard Black Iron Sheet;
   // when on, `bladeMaterial` scales the blade half of the body.
   bladeMaterialOn?: boolean;
@@ -955,6 +958,11 @@ const paintFactor = (specs: LineSpecs): number => {
  *  - Customized: multiplies the material body × 1.2.
  *  - Upgrade paint: adds base × paintFactor (black-iron base, independent of material).
  */
+// Cabinet Type double-wall: +170% on the body + blade (incl. customized uplift).
+const DOUBLE_WALL_SURCHARGE = 1.7;
+function doubleWallApplies(specs: { category: string; doubleWall?: boolean }): boolean {
+  return !!specs.doubleWall && specs.category === "Cabinet Type";
+}
 const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   if (!MATERIAL_CATEGORIES.has(specs.category)) return base;
   const bodyMat = MATERIAL_FACTORS[specs.material] ?? 1;
@@ -966,6 +974,7 @@ const bodyNetFrom = (base: number, specs: LineSpecs): number => {
     core = base * bodyMat;
   }
   if (specs.customizedUnit) core *= 1.2;
+  if (doubleWallApplies(specs)) core *= 1 + DOUBLE_WALL_SURCHARGE; // +170% on body + blade (+customized)
   return core + base * paintFactor(specs);
 };
 /** Reversible-blade propellers and Airfoil blades both cost ×1.5 of the body. */
@@ -1006,6 +1015,7 @@ const bodyComputation = (specs: LineSpecs): string => {
     core = `${baseStr} × ${fmtNum(bodyMat)} (${bodyName})`;
   }
   let expr = specs.customizedUnit ? `(${core}) × 1.2 (customized)` : core;
+  if (doubleWallApplies(specs)) expr = `(${expr}) × 2.7 (double wall)`;
   const paint = paintFactor(specs);
   if (paint > 0) expr = `${expr} + ${baseStr}×${fmtNum(paint)} (${specs.paintType})`;
   return `${expr} = ${fmtNum(total)}`;
@@ -4343,6 +4353,20 @@ export function QuotationBuilder({
                 onChange={(e) => applyMotor(l.id, { customizedUnit: e.target.checked })}
               />
               Customized unit
+            </label>
+          )}
+          {/* Double Wall — Cabinet Type only; +170% on the body + blade (incl. the
+              customized-unit uplift), i.e. that portion ×2.7. */}
+          {c.category === "Cabinet Type" && (
+            <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                disabled={!editable}
+                checked={!!c.doubleWall}
+                onChange={(e) => applyMotor(l.id, { doubleWall: e.target.checked })}
+              />
+              Double Wall
             </label>
           )}
           {/* Paint upgrade — Powder Coat (×1.5) / High Temperature (×1.3) on the base.
