@@ -14,7 +14,7 @@ import { createHash } from "crypto";
 // bodyPrice, nested selection data) are intentionally excluded.
 const IDENTITY_KEYS = [
   "category", "brand", "type", "bladeType", "drive", "material", "shape",
-  "sizeL", "sizeW", "sizeUnit", "gauge", "powderCoated", "movement", "blowerModel",
+  "sizeL", "sizeW", "sizeUnit", "gauge", "powderCoated", "insectScreen", "movement", "blowerModel",
   "capacity_cfm", "staticPressure_pa", "inches", "motorHp", "motorPh", "motorPole", "motorVolts",
   "ductCalcLength", "ductCalcWidth", "ductCalcHeight", "ductCalcOffset", "ductNoFlange", "ductPainted", "fabricMaterial", "mcRecommend",
   "bladeMaterialOn", "bladeMaterial", "upgradePaint", "paintType", "exproof", "customizedUnit",
