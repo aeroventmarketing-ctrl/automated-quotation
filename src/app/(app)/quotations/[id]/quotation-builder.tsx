@@ -173,6 +173,7 @@ interface LineSpecs {
   cleatSize?: string; // length option for TDC cleat / S-clip / C-clip (6.5" / 48")
   canvassUnit?: string; // canvass connector pricing basis ("per meter" / "per box")
   powderCoated?: boolean; // accessory powder-coat finish flag
+  insectScreen?: boolean; // Air Terminals (except Vent Cap): insect screen, +20% on the price
   movement?: string; // motorized damper movement (open/close, modulating, adjustable)
   // Air-curtain client inputs (installation height + door width with units).
   acHeight?: number | null;
@@ -2279,14 +2280,27 @@ function weatherhoodUnitPrice(specs: LineSpecs): number | null {
 }
 
 /** Auto unit price (VAT-inclusive) for a sized accessory, or null if incomplete. */
+// Insect Screen: Air Terminals (grilles / diffusers / louvers / weather hood),
+// never a Vent Cap. Adds 20% to the price.
+const INSECT_SCREEN_SURCHARGE = 0.2;
+function insectScreenApplies(specs: { category: string; type: string }): boolean {
+  return groupForType(specs.category, specs.type) === "Air Terminals" && specs.type !== "Vent Cap";
+}
+function hasInsectScreen(specs: LineSpecs): boolean {
+  return !!specs.insectScreen && insectScreenApplies(specs);
+}
 function accessoryUnitPrice(specs: LineSpecs): number | null {
-  if (specs.type === "Weather hood") return weatherhoodUnitPrice(specs);
+  const screen = hasInsectScreen(specs) ? 1 + INSECT_SCREEN_SURCHARGE : 1;
+  if (specs.type === "Weather hood") {
+    const wh = weatherhoodUnitPrice(specs);
+    return wh == null ? null : round2(wh * screen);
+  }
   const rate = accessoryRate(specs.type, specs.shape);
   const area = accBilledAreaSqIn(specs);
   const mat = ACC_MATERIAL_FACTOR[specs.material];
   if (rate == null || area == null || mat == null) return null;
   const body = accessoryBody(specs, area, rate, mat);
-  return round2(body + accFlatAdd(specs.type) + accActuatorCost(specs));
+  return round2((body + accFlatAdd(specs.type) + accActuatorCost(specs)) * screen);
 }
 /**
  * Body price. Powder coating is applied on a GI base (area × rate × 1 × powder
@@ -2339,7 +2353,7 @@ function buildAccessoryDescription(specs: LineSpecs): string {
     return dl.join("\n");
   }
   const lines: string[] = [];
-  if (specs.type) lines.push(specs.type);
+  if (specs.type) lines.push(hasInsectScreen(specs) ? `${specs.type} with insect screen` : specs.type);
   const unit = specs.sizeUnit || "mm";
   if (specs.shape === "Round") {
     if (specs.sizeL) lines.push(`Ø${specs.sizeL} ${unit}`);
@@ -2914,6 +2928,8 @@ export function QuotationBuilder({
         }
         // Painted finish is a Black Iron option only — drop a stale flag otherwise.
         if (specs.material !== "Black Iron") specs.ductPainted = false;
+        // Insect Screen is an Air Terminals option (not Vent Cap) — drop when N/A.
+        if (!insectScreenApplies(specs)) specs.insectScreen = false;
         // Air Duct: switching shape (Round ↔ Square/Rectangle) converts the cross
         // section by equal area, rounding UP to the next even number (20×20 → Ø24;
         // Ø24 → 22×22). The calc types use the A/B fields; other air ducts use the
@@ -4212,6 +4228,16 @@ export function QuotationBuilder({
                   {ACC_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
                 </Select>
               )}
+              {/* Insect Screen — Air Terminals (grilles/diffusers/louvers/weather
+                  hood), never a Vent Cap; adds 20% to the price. */}
+              {insectScreenApplies(c) && (
+                <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                  Insect Screen
+                  <input type="checkbox" className="h-4 w-4" disabled={!editable}
+                    checked={!!c.insectScreen}
+                    onChange={(e) => applyAccessory(l.id, { insectScreen: e.target.checked })} />
+                </label>
+              )}
               {/* Powder-coat finish — supported types only; not for any stainless. */}
               {POWDER_COAT_TYPES.has(c.type) && !isStainlessMaterial(c.material) && (
                 <label className="flex h-9 items-center gap-1.5 text-sm">
@@ -5451,15 +5477,16 @@ export function QuotationBuilder({
                           }
                           return `₱${net} / pc${discNote} (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
+                        const screenNote = hasInsectScreen(l.specs) ? " + insect screen 20%" : "";
                         if (l.specs.type === "Weather hood") {
                           const size = weatherhoodSize(l.specs);
                           const wh = weatherhoodUnitPrice(l.specs);
                           if (wh == null || size == null) return "Enter L × W to auto-price.";
                           const matF = ACC_MATERIAL_FACTOR[l.specs.material] ?? 1;
                           const matNote = matF !== 1 ? ` · ${accMaterialLabel(l.specs.material)} ×${matF}` : "";
-                          const finish = l.specs.powderCoated
+                          const finish = (l.specs.powderCoated
                             ? `${matNote} + powder coat ×${WEATHERHOOD_POWDER_FACTOR} (GI base)`
-                            : matNote;
+                            : matNote) + screenNote;
                           if (size > WEATHERHOOD_MAX)
                             return `√(area) → ${size}" (over 36") · area × ₱${WEATHERHOOD_OVER_RATE} × 1.12${finish} = ₱${wh.toLocaleString()} (VAT incl.) auto-priced (editable).`;
                           return `√(area) → ${size}" size${finish} · ₱${wh.toLocaleString()} (VAT incl.) = auto-priced (editable).`;
@@ -5484,7 +5511,7 @@ export function QuotationBuilder({
                         const bodyDesc = l.specs.powderCoated
                           ? `${round2(area)} sq in${minNote} × ${rate} × ${pf} powder-coat (GI base)${l.specs.material === "Aluminum" ? ` + area × ${rate} × 2 aluminum` : ""}`
                           : `${round2(area)} sq in${minNote} × ${rate} × ${mat} (${l.specs.material})`;
-                        return `${bodyDesc}${flat ? ` + ${flat} fusible link` : ""}${actNote} = auto-priced (editable).`;
+                        return `${bodyDesc}${flat ? ` + ${flat} fusible link` : ""}${actNote}${screenNote} = auto-priced (editable).`;
                       })()}
                     </p>
                   </div>
