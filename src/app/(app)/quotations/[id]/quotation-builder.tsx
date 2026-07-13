@@ -187,7 +187,7 @@ interface LineSpecs {
   // Customized (bespoke) unit: body priced ×1.2 (a +20% uplift on the base body).
   customizedUnit?: boolean;
   // Cabinet Type only: double-wall construction — multiplies the body + blade
-  // (including the customized-unit uplift) and the paint by 1.852.
+  // (including the customized-unit uplift) and the paint by 1.46.
   doubleWall?: boolean;
   // Separate blade material: when off the blade is standard Black Iron Sheet;
   // when on, `bladeMaterial` scales the blade half of the body.
@@ -959,8 +959,8 @@ const paintFactor = (specs: LineSpecs): number => {
  *  - Upgrade paint: adds base × paintFactor (black-iron base, independent of material).
  */
 // Cabinet Type double-wall: multiplies the body + blade (incl. customized) and
-// the paint by 1.852.
-const DOUBLE_WALL_SURCHARGE = 0.852;
+// the paint by 1.46.
+const DOUBLE_WALL_SURCHARGE = 0.46;
 function doubleWallApplies(specs: { category: string; doubleWall?: boolean }): boolean {
   return !!specs.doubleWall && specs.category === "Cabinet Type";
 }
@@ -975,7 +975,7 @@ const bodyNetFrom = (base: number, specs: LineSpecs): number => {
     core = base * bodyMat;
   }
   if (specs.customizedUnit) core *= 1.2;
-  // Double wall: ×1.852 on the body + blade (incl. customized) AND the paint.
+  // Double wall: ×1.46 on the body + blade (incl. customized) AND the paint.
   const dwFactor = doubleWallApplies(specs) ? 1 + DOUBLE_WALL_SURCHARGE : 1;
   core *= dwFactor;
   return core + base * paintFactor(specs) * dwFactor;
@@ -1019,9 +1019,9 @@ const bodyComputation = (specs: LineSpecs): string => {
   }
   let expr = specs.customizedUnit ? `(${core}) × 1.2 (customized)` : core;
   const dw = doubleWallApplies(specs);
-  if (dw) expr = `(${expr}) × 1.852 (double wall)`;
+  if (dw) expr = `(${expr}) × 1.46 (double wall)`;
   const paint = paintFactor(specs);
-  if (paint > 0) expr = `${expr} + ${baseStr}${dw ? "×1.852 (double wall)" : ""}×${fmtNum(paint)} (${specs.paintType})`;
+  if (paint > 0) expr = `${expr} + ${baseStr}${dw ? "×1.46 (double wall)" : ""}×${fmtNum(paint)} (${specs.paintType})`;
   return `${expr} = ${fmtNum(total)}`;
 };
 /**
@@ -4365,7 +4365,7 @@ export function QuotationBuilder({
               Customized unit
             </label>
           )}
-          {/* Double Wall — Cabinet Type only; ×1.852 on the body + blade (incl. the
+          {/* Double Wall — Cabinet Type only; ×1.46 on the body + blade (incl. the
               customized-unit uplift) and the paint. */}
           {c.category === "Cabinet Type" && (
             <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
