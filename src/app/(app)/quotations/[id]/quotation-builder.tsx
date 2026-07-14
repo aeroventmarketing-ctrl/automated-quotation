@@ -1082,7 +1082,9 @@ const WALL_FAN_SUFFIX = /(AV\d+)(?:FAWFDD|EWFDD|PRVDD|FAWF|EWF|PRV)$/i;
 const AXIAL_SUFFIX = /(AV\d+)(?:VAFDD|TAFDD|VAF|TAF)$/i;
 function retagModel(model: string | null, type: string, bladeType: string, drive = "", category = ""): string | null {
   if (!model) return model;
-  if (category === "Axial Type") {
+  // Axial fans (Axial Type or Tubular Inline Type Tubeaxial/Vaneaxial) keep their
+  // TAF/VAF belt/direct code — keyed on the type so both categories retag correctly.
+  if (AXIAL_FAN_TYPES.has(type)) {
     const base = type === "Vaneaxial" ? "VAF" : "TAF";
     const suffix = base + (/direct/i.test(drive) ? "DD" : "");
     if (AXIAL_SUFFIX.test(model)) return model.replace(AXIAL_SUFFIX, `$1${suffix}`);
@@ -5329,7 +5331,17 @@ export function QuotationBuilder({
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-medium">
-                                  {sellableModelCode(r.modelCode)}
+                                  {/* Preview the sold model code, not the raw catalogue one: e.g. a
+                                      Square Inline Blower selects from the CIEB catalogue but sells as
+                                      SIEB (…SIEBDD for direct drive) — same re-tag applyCandidate uses. */}
+                                  {isPrebuiltUnit(l.specs)
+                                    ? sellableModelCode(r.modelCode)
+                                    : displayBlowerModel({
+                                        blowerModel:
+                                          retagModel(r.modelCode, l.specs.type, l.specs.bladeType, l.specs.drive, l.specs.category) ?? r.modelCode,
+                                        drive: l.specs.drive,
+                                        type: l.specs.type,
+                                      })}
                                   {isRec && <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">RECOMMENDED</span>}
                                 </span>
                                 <span className="flex items-center gap-2">
