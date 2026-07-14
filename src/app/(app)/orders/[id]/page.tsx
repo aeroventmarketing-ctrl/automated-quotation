@@ -5,9 +5,9 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { payableTotal } from "@/lib/quote";
-import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import {
   readOrderWorkflow,
   ORDER_STAGES,
@@ -15,6 +15,8 @@ import {
   deptRole,
   deptLabel,
   stageLabel,
+  stagePhase,
+  pendingStep,
   type OrderStage,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
@@ -39,11 +41,11 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   closed: "success",
 };
 
-const fmtWhen = (iso?: string) => (iso ? formatDate(new Date(iso)) : "");
+const fmtWhen = (iso?: string) => (iso ? formatDateTime(iso) : "");
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [quote, viewer, assignments, purchaseRequests, stockItemsRaw] = await Promise.all([
+  const [quote, viewer, assignments, purchaseRequests, stockItemsRaw, allUsers] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
@@ -52,6 +54,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     getWorkflowRoles(),
     prisma.purchaseRequest.findMany({ where: { quotationId: id }, orderBy: { createdAt: "asc" } }),
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
+    prisma.user.findMany({ select: { id: true, name: true } }),
   ]);
   if (!quote) notFound();
   const stockItems = stockItemsRaw;
@@ -59,6 +62,26 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const adminViewer = isAdmin(viewer);
   const wf = readOrderWorkflow(quote.classification);
   const value = payableTotal(quote);
+
+  // Resolve workflow roles → the people who hold them, so every viewer can see
+  // who the current approver is.
+  const userName = new Map(allUsers.map((u) => [u.id, u.name] as const));
+  const namesForRole = (role: WorkflowRoleKey): string[] =>
+    usersWithWorkflowRole(assignments, role).map((uid) => userName.get(uid)).filter((n): n is string => !!n);
+  const approverLabel = (role: WorkflowRoleKey): string => {
+    const names = namesForRole(role);
+    return `${workflowRoleLabel(role)}${names.length ? ` — ${names.join(", ")}` : " (unassigned)"}`;
+  };
+
+  // Live "who acts next" for the whole order.
+  const pend = pendingStep(wf);
+  const pendingApprovers: string[] = pend
+    ? pend.sales
+      ? [`Sales${quote.preparedBy?.name ? ` — ${quote.preparedBy.name}` : ""}`]
+      : pend.roles.length
+        ? pend.roles.map(approverLabel)
+        : []
+    : [];
 
   const canIssue =
     wf.stage === "released" &&
@@ -73,13 +96,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       nextTo != null &&
       wf.stage === "in_production" &&
       (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)));
+    const events: { label: string; who: string; when: string }[] = [];
+    if (jo.issuedByName) events.push({ label: "Issued", who: jo.issuedByName, when: fmtWhen(jo.issuedAt) });
+    if (jo.startedByName) events.push({ label: "Started", who: jo.startedByName, when: fmtWhen(jo.startedAt) });
+    if (jo.finishedByName) events.push({ label: "Finished", who: jo.finishedByName, when: fmtWhen(jo.finishedAt) });
     return {
       key: d.key,
       label: d.label,
       status: jo.status,
-      issuedByName: jo.issuedByName,
-      startedByName: jo.startedByName,
-      finishedByName: jo.finishedByName,
+      events,
       canAdvance,
       nextTo,
       nextLabel,
@@ -103,13 +128,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canFile: hasRole("accounting"),
   };
   const A = wf.approvals;
-  const fTrail: string[] = [];
-  if (A.client_notified) fTrail.push(`Client notified — ${A.client_notified.byName}`);
-  if (A.final_pay_checked) fTrail.push(`Final payment checked — ${A.final_pay_checked.byName}`);
-  if (A.final_pay_confirmed) fTrail.push(`Final payment confirmed — ${A.final_pay_confirmed.byName}`);
-  if (A.delivery_approved) fTrail.push(`Delivery approved — ${A.delivery_approved.byName}`);
-  if (A.delivered) fTrail.push(`Delivered — ${A.delivered.byName}`);
-  if (A.documents_filed) fTrail.push(`Documents filed — ${A.documents_filed.byName}`);
+  const fStamp = (label: string, a?: { byName: string; at: string }) =>
+    a ? `${label} — ${a.byName} · ${fmtWhen(a.at)}` : null;
+  const fTrail: string[] = [
+    fStamp("Client notified", A.client_notified),
+    fStamp("Final payment checked", A.final_pay_checked),
+    fStamp("Final payment confirmed", A.final_pay_confirmed),
+    fStamp("Delivery approved", A.delivery_approved),
+    fStamp("Delivered", A.delivered),
+    fStamp("Documents filed", A.documents_filed),
+  ].filter((s): s is string => s !== null);
   const fulfillmentStages = new Set([
     "production_finished", "final_pay_review", "final_pay_checked", "final_pay_cleared",
     "delivery_docs_ready", "delivered", "closed",
@@ -137,8 +165,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     note: m.note,
     status: m.status,
     raisedByName: m.raisedByName,
-    date: m.raisedAt ? formatDate(new Date(m.raisedAt)) : "",
+    date: m.raisedAt ? formatDateTime(m.raisedAt) : "",
     handledByName: m.handledByName,
+    handledWhen: m.handledAt ? formatDateTime(m.handledAt) : "",
     canHandle: canWarehouse && m.status === "requested",
   }));
   const showMaterials = wf.stage === "in_production" || wf.stage === "production_finished";
@@ -146,21 +175,28 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Purchasing chain (Phase 3, part 2) — real PurchaseRequest rows.
   const prVariant = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
     s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
+  const pStamp = (label: string, who?: string | null, at?: Date | null) =>
+    who ? `${label} — ${who} · ${formatDateTime(at ?? undefined)}` : null;
   const purchaseRows = purchaseRequests.map((pr) => {
     const status = pr.status as PRStatus;
-    const trail: string[] = [];
-    if (pr.decidedByName) trail.push(`${status === "REJECTED" ? "Rejected" : "Approved"} by ${pr.decidedByName}`);
-    if (pr.voucherByName) trail.push(`Voucher by ${pr.voucherByName}`);
-    if (pr.purchasedByName) trail.push(`Bought by ${pr.purchasedByName}`);
-    if (pr.checkedByName) trail.push(`Checked by ${pr.checkedByName}`);
-    if (pr.receivedByName) trail.push(`Received by ${pr.receivedByName}`);
-    if (pr.plantApprovedByName) trail.push(`Plant Mgr ${pr.plantApprovedByName}`);
-    const actions = purchaseStepsFrom(status).map((step) => ({
-      key: step.key,
-      label: step.label,
-      roleLabel: workflowRoleLabel(step.role),
-      canAct: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, step.role)),
-    }));
+    const trail: string[] = [
+      pStamp("Requested", pr.createdByName, pr.createdAt),
+      pStamp(status === "REJECTED" ? "Rejected" : "Approved", pr.decidedByName, pr.decidedAt),
+      pStamp("Voucher & check", pr.voucherByName, pr.voucherAt),
+      pStamp("Purchased", pr.purchasedByName, pr.purchasedAt),
+      pStamp("Checked", pr.checkedByName, pr.checkedAt),
+      pStamp("Received", pr.receivedByName, pr.receivedAt),
+      pStamp("Plant Manager approved", pr.plantApprovedByName, pr.plantApprovedAt),
+    ].filter((s): s is string => s !== null);
+    const actions = purchaseStepsFrom(status).map((step) => {
+      const names = namesForRole(step.role);
+      return {
+        key: step.key,
+        label: step.label,
+        roleLabel: `${workflowRoleLabel(step.role)}${names.length ? ` (${names.join(", ")})` : ""}`,
+        canAct: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, step.role)),
+      };
+    });
     return {
       id: pr.id,
       deptLabel: deptLabel(pr.dept as typeof PRODUCTION_DEPTS[number]["key"]),
@@ -210,6 +246,26 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           );
         })}
       </div>
+
+      {/* Live workflow status — who acts next, visible to everyone */}
+      <Card className={pend ? "border-primary/40 bg-primary/5" : "border-emerald-500/40 bg-emerald-500/5"}>
+        <CardContent className="py-3">
+          {pend ? (
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
+              <div>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">{stagePhase(wf.stage)} · Waiting for</span>
+                <div className="font-medium">{pend.action}</div>
+              </div>
+              <div className="text-right">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Approver{pendingApprovers.length > 1 ? "s" : ""}</span>
+                <div className="font-medium">{pendingApprovers.length ? pendingApprovers.join(" · ") : "—"}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm font-medium text-emerald-700">Order closed — all steps complete.</div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Phase 1 — approvals */}
       <Card>

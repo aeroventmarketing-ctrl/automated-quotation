@@ -20,6 +20,7 @@ interface ReqRow {
   raisedByName: string;
   date: string;
   handledByName?: string;
+  handledWhen?: string;
   canHandle: boolean;
 }
 
@@ -161,7 +162,8 @@ export function MaterialRequests({
               </div>
               {r.note && <p className="mt-1 text-xs text-muted-foreground">Note: {r.note}</p>}
               <p className="mt-1 text-xs text-muted-foreground">
-                Requested by {r.raisedByName} · {r.date}{r.handledByName ? ` · handled by ${r.handledByName}` : ""}
+                Requested by {r.raisedByName} · {r.date}
+                {r.handledByName ? ` · handled by ${r.handledByName}${r.handledWhen ? ` · ${r.handledWhen}` : ""}` : ""}
               </p>
               {r.status === "requested" && r.canHandle && (
                 issuingId === r.id ? (

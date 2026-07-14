@@ -14,7 +14,7 @@ import {
   type SaleRecord,
 } from "@/lib/sale";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/workflow-roles";
-import { readOrderWorkflow, nextOrderStep, stageLabel } from "@/lib/order-workflow";
+import { readOrderWorkflow, nextOrderStep, stageLabel, pendingStep } from "@/lib/order-workflow";
 import { OrderStageActions } from "./order-stage-actions";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +59,15 @@ export default async function OrdersPage() {
       const wf = readOrderWorkflow(q.classification);
       const next = nextOrderStep(wf.stage);
       const canAct = next != null && (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, next.requiredRole)));
+      // Who acts next across the whole order (all phases), for the "Awaiting" hint.
+      const pend = pendingStep(wf);
+      const awaitingAll = pend
+        ? pend.sales
+          ? "Sales"
+          : pend.roles.length
+            ? pend.roles.map(workflowRoleLabel).join(", ")
+            : null
+        : null;
 
       return {
         id: q.id,
@@ -78,7 +87,7 @@ export default async function OrdersPage() {
         nextStep: next?.key ?? null,
         nextLabel: next?.label ?? null,
         canAct,
-        awaiting: next ? workflowRoleLabel(next.requiredRole) : null,
+        awaiting: awaitingAll,
       };
     })
     .filter((o): o is NonNullable<typeof o> => o != null)

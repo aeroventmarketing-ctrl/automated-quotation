@@ -44,3 +44,18 @@ export function formatDate(d: Date | string | null | undefined): string {
     timeZone: PH_TIME_ZONE,
   });
 }
+
+/** Date + time in Philippine Standard Time, e.g. "Jul 14, 2026, 3:42 PM". */
+export function formatDateTime(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: PH_TIME_ZONE,
+  });
+}

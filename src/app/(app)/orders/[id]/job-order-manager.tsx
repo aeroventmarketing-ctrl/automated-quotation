@@ -10,9 +10,7 @@ interface JobRow {
   key: string;
   label: string;
   status: "issued" | "in_production" | "finished";
-  issuedByName?: string;
-  startedByName?: string;
-  finishedByName?: string;
+  events: { label: string; who: string; when: string }[];
   canAdvance: boolean;
   nextTo: "in_production" | "finished" | null;
   nextLabel: string | null;
@@ -103,13 +101,15 @@ export function JobOrderManager({
     <div className="space-y-2">
       {jobs.length === 0 && <p className="text-sm text-muted-foreground">No job orders on this order.</p>}
       {jobs.map((j) => (
-        <div key={j.key} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+        <div key={j.key} className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3">
           <div>
             <div className="text-sm font-medium">{j.label}</div>
-            <div className="text-xs text-muted-foreground">
-              {j.status === "finished" && j.finishedByName ? `Finished by ${j.finishedByName}`
-                : j.status === "in_production" && j.startedByName ? `Started by ${j.startedByName}`
-                : j.issuedByName ? `Issued by ${j.issuedByName}` : ""}
+            <div className="mt-0.5 space-y-0.5">
+              {j.events.map((e, i) => (
+                <div key={i} className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground/70">{e.label}</span> — {e.who} · {e.when}
+                </div>
+              ))}
             </div>
           </div>
           <div className="flex items-center gap-2">
