@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { raiseMaterialRequest, handleMaterialRequest } from "../actions";
+import { raiseMaterialRequest, handleMaterialRequest, issueMaterialRequestFromStock } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
+import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 
 interface ReqRow {
   id: string;
@@ -35,13 +36,16 @@ export function MaterialRequests({
   requesterName,
   raisableDepts,
   requests,
+  stockItems,
 }: {
   orderId: string;
   requesterName: string;
   raisableDepts: { key: string; label: string }[];
   requests: ReqRow[];
+  stockItems: StockOpt[];
 }) {
   const router = useRouter();
+  const [issuingId, setIssuingId] = useState<string | null>(null);
   const [dept, setDept] = useState(raisableDepts[0]?.key ?? "");
   const [rows, setRows] = useState<MRFItem[]>([emptyRow(), emptyRow(), emptyRow()]);
   const [note, setNote] = useState("");
@@ -160,10 +164,24 @@ export function MaterialRequests({
                 Requested by {r.raisedByName} · {r.date}{r.handledByName ? ` · handled by ${r.handledByName}` : ""}
               </p>
               {r.status === "requested" && r.canHandle && (
-                <div className="mt-2 flex gap-2">
-                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => run(() => handleMaterialRequest(orderId, r.id, "issue"))}>Issue from stock</Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => run(() => handleMaterialRequest(orderId, r.id, "purchase"))}>Request purchase</Button>
-                </div>
+                issuingId === r.id ? (
+                  <StockMatchPanel
+                    lines={r.items.map((it) => ({ label: `${it.description}${it.qty ? ` — ${it.qty} ${it.unit}` : ""}`, qtyDefault: it.qty }))}
+                    stockItems={stockItems}
+                    submitLabel="Issue & deduct stock"
+                    onCancel={() => setIssuingId(null)}
+                    onSubmit={async (matches) => {
+                      await issueMaterialRequestFromStock(orderId, r.id, matches);
+                      setIssuingId(null);
+                      router.refresh();
+                    }}
+                  />
+                ) : (
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Issue from stock</Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => run(() => handleMaterialRequest(orderId, r.id, "purchase"))}>Request purchase</Button>
+                  </div>
+                )
               )}
             </div>
           ))}

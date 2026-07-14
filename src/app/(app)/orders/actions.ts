@@ -26,6 +26,9 @@ import {
 } from "@/lib/order-workflow";
 import { purchaseStep } from "@/lib/purchasing";
 import { payableTotal, round2 } from "@/lib/quote";
+import { applyStockChange } from "@/lib/inventory";
+
+interface StockMatch { stockItemId: string; qty: number }
 
 const DEPT_KEY_SET = new Set(PRODUCTION_DEPTS.map((d) => d.key));
 const COMMISSION_RATE_PCT = 1.5;
@@ -439,4 +442,77 @@ export async function fileDocuments(quotationId: string): Promise<void> {
     // Commission table not set up yet — closing the order still succeeds.
   }
   revalidatePath("/commissions");
+}
+
+// --- Inventory integration --------------------------------------------------
+
+/**
+ * Warehouse issues a material request from stock — deducting the matched stock
+ * items (in one transaction) and marking the request issued. Lines left
+ * unmatched are simply not deducted, so issuing always succeeds.
+ */
+export async function issueMaterialRequestFromStock(
+  quotationId: string,
+  requestId: string,
+  matches: StockMatch[],
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can issue from stock.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  if (mrf.status !== "requested") throw new Error("This request has already been handled.");
+
+  const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
+
+  await prisma.$transaction(async (tx) => {
+    for (const m of clean) {
+      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "ISSUE", qty: Number(m.qty), reason: `MRF #${mrf.formNo}` }, user.name);
+    }
+    const materialRequests = wf.materialRequests.slice();
+    materialRequests[idx] = { ...mrf, status: "issued", handledAt: new Date().toISOString(), handledByName: user.name };
+    await tx.quotation.update({
+      where: { id: quotationId },
+      data: { classification: { ...cls, workflow: { ...wf, materialRequests } } as unknown as Prisma.InputJsonObject },
+    });
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/inventory");
+}
+
+/**
+ * Warehouse receives a purchased order into stock — adding the matched stock
+ * items and advancing the purchase request to RECEIVED (awaiting Plant Manager).
+ */
+export async function receivePurchaseRequest(
+  purchaseRequestId: string,
+  matches: StockMatch[],
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can receive purchases.");
+  }
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  if (pr.status !== "CHECKED") throw new Error("This purchase isn't ready to receive.");
+
+  const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
+
+  await prisma.$transaction(async (tx) => {
+    for (const m of clean) {
+      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: Number(m.qty), reason: "Purchase received" }, user.name);
+    }
+    await tx.purchaseRequest.update({
+      where: { id: purchaseRequestId },
+      data: { status: "RECEIVED", receivedByName: user.name, receivedAt: new Date() },
+    });
+  });
+  revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/inventory");
 }

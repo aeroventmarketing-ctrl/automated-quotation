@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { advancePurchaseRequest } from "../actions";
+import { advancePurchaseRequest, receivePurchaseRequest } from "../actions";
+import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 
 interface ActionOpt {
   key: string;
@@ -24,10 +25,11 @@ interface PRRow {
   actions: ActionOpt[];
 }
 
-export function PurchasingChain({ requests }: { requests: PRRow[] }) {
+export function PurchasingChain({ requests, stockItems }: { requests: PRRow[]; stockItems: StockOpt[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [receivingId, setReceivingId] = useState<string | null>(null);
 
   async function run(prId: string, stepKey: string) {
     setBusy(prId + stepKey);
@@ -63,7 +65,19 @@ export function PurchasingChain({ requests }: { requests: PRRow[] }) {
             {r.trail.length > 0 && (
               <div className="mt-1 text-xs text-muted-foreground">{r.trail.join(" · ")}</div>
             )}
-            {actionable.length > 0 ? (
+            {receivingId === r.id ? (
+              <StockMatchPanel
+                lines={r.items.map((it) => ({ label: it, qtyDefault: "" }))}
+                stockItems={stockItems}
+                submitLabel="Receive & add to stock"
+                onCancel={() => setReceivingId(null)}
+                onSubmit={async (matches) => {
+                  await receivePurchaseRequest(r.id, matches);
+                  setReceivingId(null);
+                  router.refresh();
+                }}
+              />
+            ) : actionable.length > 0 ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {actionable.map((a) => (
                   <Button
@@ -72,7 +86,7 @@ export function PurchasingChain({ requests }: { requests: PRRow[] }) {
                     variant={a.key === "reject" ? "outline" : "default"}
                     className="h-7 text-xs"
                     disabled={busy === r.id + a.key}
-                    onClick={() => run(r.id, a.key)}
+                    onClick={() => (a.key === "receive" ? setReceivingId(r.id) : run(r.id, a.key))}
                   >
                     {busy === r.id + a.key ? "Saving…" : a.label}
                   </Button>
