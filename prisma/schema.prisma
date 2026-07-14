@@ -218,6 +218,7 @@ model Quotation {
   approvedBy User?             @relation("QuotationApprovedBy", fields: [approvedById], references: [id])
   items      QuotationItem[]
   purchaseRequests PurchaseRequest[]
+  commission Commission?
 
   @@index([status])
   @@index([inquiryId])
@@ -334,4 +335,30 @@ model PurchaseRequest {
 
   @@index([quotationId])
   @@index([status])
+}
+
+/**
+ * Sales commission (Phase 7). One row per closed order: 1.5% of the order value,
+ * credited to the order's salesperson and attributed to the close month.
+ * Paid 15 days after that month ends.
+ */
+model Commission {
+  id              String   @id @default(cuid())
+  quotationId     String   @unique
+  salespersonId   String
+  salespersonName String
+  orderValue      Decimal  @db.Decimal(14, 2)
+  ratePct         Decimal  @db.Decimal(5, 2) @default(1.5)
+  amount          Decimal  @db.Decimal(14, 2)
+  salesMonth      String // "YYYY-MM" (close month)
+  computedAt      DateTime @default(now())
+  paid            Boolean  @default(false)
+  paidAt          DateTime?
+  paidByName      String?
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([salesMonth])
+  @@index([salespersonId])
+  @@index([paid])
 }
