@@ -5271,8 +5271,10 @@ export function QuotationBuilder({
               )}
 
               {/* Per-line fan selector — click a candidate to populate this item.
-                  Air curtains and Motor Controllers aren't duty-selected. */}
-              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isPoultryFan(l.specs) && !isHvls(l.specs) && !isAlphaAirCassette(l.specs) && (
+                  Air curtains and Motor Controllers aren't duty-selected. For the
+                  material-fabricated categories, hold the selector back until the
+                  full spec chain (Type · Blade Type · Drive) is chosen. */}
+              {editable && !isAirCurtain(l.specs) && !isMotorController(l.specs) && !isIsolator(l.specs) && !isAccessory(l.specs) && !isCanvass(l.specs) && !isWindVent(l.specs) && !isAluDuct(l.specs) && !isPortableBlowerFamily(l.specs) && !isVav(l.specs) && !isInductionMotor(l.specs) && !isDustCollector(l.specs) && !isJetFan(l.specs) && !isPoultryFan(l.specs) && !isHvls(l.specs) && !isAlphaAirCassette(l.specs) && (!MATERIAL_CATEGORIES.has(l.specs.category) || (!!l.specs.type && !!l.specs.bladeType && !!l.specs.drive)) && (
                 <div className="mt-2 rounded-md border border-dashed p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">
