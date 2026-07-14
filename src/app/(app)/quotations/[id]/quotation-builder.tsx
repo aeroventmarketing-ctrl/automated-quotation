@@ -933,13 +933,15 @@ const TAG_FACTORS: Record<string, number> = {
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 /**
  * Motor pole options for a blower line. Single-phase motors are 4-pole only.
- * Direct drive locks to the pole set by the selected fan (rpm ↔ pole is fixed);
- * belt drive offers all poles.
+ * Belt-drive fans/blowers are standard 4-pole. Direct drive uses the fan's speed
+ * band: 2/4/6 before a fan is picked, then locked to the selected fan's pole.
  */
 const poleOptions = (specs: LineSpecs): number[] => {
   if (specs.motorPh === 1) return [4];
-  if (/direct/i.test(specs.drive) && specs.blowerModel && specs.motorPole != null) return [specs.motorPole];
-  return [4, 2, 6];
+  if (/direct/i.test(specs.drive)) {
+    return specs.blowerModel && specs.motorPole != null ? [specs.motorPole] : [4, 2, 6];
+  }
+  return [4];
 };
 const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.type, specs.bladeType, specs.category));
 /** Net body price after the tag (blade/type) factor and material factor. */
@@ -3423,6 +3425,10 @@ export function QuotationBuilder({
           specs.motorVolts = 220;
           specs.motorPole = 4;
         }
+        // Belt-drive fans/blowers are standard 4-pole. Only direct drive uses the
+        // fan's own 2-/4-/6-pole speed band, so force 4-pole otherwise — this also
+        // corrects a stale pole carried over from a prior direct-drive pick.
+        if (!/direct/i.test(specs.drive)) specs.motorPole = 4;
         // Blade material can't repeat the body material (the body factor already
         // covers the whole body) — pick the first different option when it would.
         if (specs.bladeMaterialOn && (!specs.bladeMaterial || specs.bladeMaterial === specs.material)) {
@@ -3616,10 +3622,11 @@ export function QuotationBuilder({
           // the ÷0.9 body factor and CFAB description follow the selection.
           bladeType:
             chosenModel && /CFAB/i.test(chosenModel) ? "Forward Curved" : l.specs.bladeType,
-          // Direct-drive selections also fix the motor pole (2- or 4-pole band).
-          // The client's requested CFM is kept on the quote; the selection list
-          // shows the higher delivered flow for reference.
-          motorPole: r.motorPole ?? l.specs.motorPole,
+          // Belt-drive fans/blowers are standard 4-pole; only direct drive fixes the
+          // motor pole from the selected fan's speed band (2/4/6). The client's
+          // requested CFM is kept on the quote; the list shows the higher delivered
+          // flow for reference.
+          motorPole: /direct/i.test(l.specs.drive) ? (r.motorPole ?? l.specs.motorPole) : 4,
         };
         // Cabinet SISW reuses the CEB catalogue model, so re-tag it to CABSISW.
         specs.blowerModel = retagModel(specs.blowerModel, specs.type, specs.bladeType, specs.drive, specs.category);
