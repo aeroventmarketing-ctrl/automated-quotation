@@ -362,3 +362,41 @@ model Commission {
   @@index([salespersonId])
   @@index([paid])
 }
+
+/** Warehouse stock. Quantities are decimals so partial units (m, kg) work. */
+enum StockMovementKind {
+  RECEIPT    // stock in (e.g. purchased items received)
+  ISSUE      // stock out (e.g. issued to production)
+  ADJUSTMENT // manual correction / opening balance
+}
+
+model StockItem {
+  id           String   @id @default(cuid())
+  name         String
+  unit         String   @default("pcs")
+  category     String?
+  quantity     Decimal  @db.Decimal(14, 3) @default(0)
+  reorderLevel Decimal  @db.Decimal(14, 3) @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  movements StockMovement[]
+
+  @@index([name])
+}
+
+model StockMovement {
+  id           String            @id @default(cuid())
+  stockItemId  String
+  kind         StockMovementKind
+  delta        Decimal           @db.Decimal(14, 3)
+  balanceAfter Decimal           @db.Decimal(14, 3)
+  reason       String?
+  byName       String
+  createdAt    DateTime          @default(now())
+
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@index([stockItemId])
+}
