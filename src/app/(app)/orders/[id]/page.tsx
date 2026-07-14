@@ -43,7 +43,7 @@ const fmtWhen = (iso?: string) => (iso ? formatDate(new Date(iso)) : "");
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [quote, viewer, assignments, purchaseRequests] = await Promise.all([
+  const [quote, viewer, assignments, purchaseRequests, stockItemsRaw] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
@@ -51,8 +51,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     getCurrentUser(),
     getWorkflowRoles(),
     prisma.purchaseRequest.findMany({ where: { quotationId: id }, orderBy: { createdAt: "asc" } }),
+    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
   ]);
   if (!quote) notFound();
+  const stockItems = stockItemsRaw;
 
   const adminViewer = isAdmin(viewer);
   const wf = readOrderWorkflow(quote.classification);
@@ -250,7 +252,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
-            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} />
+            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} />
           </CardContent>
         </Card>
       )}
@@ -260,7 +262,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Purchasing</CardTitle></CardHeader>
           <CardContent>
-            <PurchasingChain requests={purchaseRows} />
+            <PurchasingChain requests={purchaseRows} stockItems={stockItems} />
           </CardContent>
         </Card>
       )}
