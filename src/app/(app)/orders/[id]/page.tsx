@@ -13,10 +13,12 @@ import {
   ORDER_STAGES,
   PRODUCTION_DEPTS,
   deptRole,
+  deptLabel,
   stageLabel,
   type OrderStage,
 } from "@/lib/order-workflow";
 import { JobOrderManager } from "./job-order-manager";
+import { MaterialRequests } from "./material-requests";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +76,31 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   const docCheck = wf.approvals.doc_check;
   const payCleared = wf.approvals.payment_cleared;
+
+  // Materials (Phase 3, part 1): raise MRFs (dept head, during production) and
+  // warehouse issue/escalate.
+  const canWarehouse =
+    adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey));
+  const raisableDepts =
+    wf.stage === "in_production"
+      ? PRODUCTION_DEPTS.filter(
+          (d) =>
+            wf.jobOrders[d.key] &&
+            (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey))),
+        ).map((d) => ({ key: d.key, label: d.label }))
+      : [];
+  const materialReqs = wf.materialRequests.map((m) => ({
+    id: m.id,
+    dept: m.dept,
+    deptLabel: deptLabel(m.dept),
+    items: m.items,
+    note: m.note,
+    status: m.status,
+    raisedByName: m.raisedByName,
+    handledByName: m.handledByName,
+    canHandle: canWarehouse && m.status === "requested",
+  }));
+  const showMaterials = wf.stage === "in_production" || wf.stage === "production_finished";
 
   return (
     <div className="space-y-5">
@@ -147,6 +174,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           )}
         </CardContent>
       </Card>
+
+      {/* Phase 3 — materials */}
+      {showMaterials && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
+          <CardContent>
+            <MaterialRequests orderId={quote.id} raisableDepts={raisableDepts} requests={materialReqs} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
