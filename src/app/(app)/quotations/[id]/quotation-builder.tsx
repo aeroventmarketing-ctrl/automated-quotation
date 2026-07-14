@@ -325,6 +325,19 @@ function displayBlowerModel(specs: { blowerModel: string | null; drive: string; 
   return sellableModelCode(isCustomJetFan(specs) ? m.replace(/TAF/i, "JF") : m);
 }
 /**
+ * The priced motor row for a blower line, or null when the motor details are
+ * incomplete — no HP/phase chosen, or an HP·phase·pole combo the catalogue can't
+ * price. Auto-pricing is gated on this: a line with missing motor details stays
+ * unpriced (₱0) instead of quoting a body-only figure.
+ */
+function blowerMotorRow(specs: { motorHp: number | null; motorPh: number | null; motorPole: number | null }) {
+  const hp = specs.motorHp ?? 0;
+  const phase = specs.motorPh ?? 0;
+  const pole = specs.motorPole ?? 4;
+  if (!hp || !phase) return null;
+  return lookupMotor(hp, phase, pole) ?? null;
+}
+/**
  * Reflect the drive in the description as "Belt Drive" / "Direct Drive". When a
  * drive is chosen the word is flipped to match; otherwise the existing Belt or
  * Direct word is kept and only "Driven" is normalised to "Drive".
@@ -3456,10 +3469,12 @@ export function QuotationBuilder({
               );
           return { ...l, specs, descriptionSnapshot: desc };
         }
-        const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
+        const motor = blowerMotorRow(specs) ?? undefined;
         const exp = specs.exproof === true;
-        const net = computeUnitPrice(body, motor ? motorNetPrice(motor, exp) : 0, hp, phase);
-        const gross = round2(net * (1 + vatRate));
+        // No unit price until the motor is fully specified: a body-only line (missing
+        // HP / phase, or an unpriceable combo) stays ₱0 rather than quoting body alone.
+        const net = motor ? computeUnitPrice(body, motorNetPrice(motor, exp), hp, phase) : 0;
+        const gross = motor ? round2(net * (1 + vatRate)) : 0;
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(displayBlowerModel(specs), mModel);
         const withModel = specs.blowerModel
@@ -3613,10 +3628,12 @@ export function QuotationBuilder({
         const hp = specs.motorHp ?? 0;
         const phase = specs.motorPh ?? 0;
         const pole = specs.motorPole ?? 4;
-        const motor = hp && phase ? lookupMotor(hp, phase, pole) : undefined;
+        const motor = blowerMotorRow(specs) ?? undefined;
         const exp = specs.exproof === true;
-        const net = computeUnitPrice(body, motor ? motorNetPrice(motor, exp) : 0, hp, phase);
-        const gross = round2(net * (1 + vatRate));
+        // No unit price until the motor is fully specified: a body-only line (missing
+        // HP / phase, or an unpriceable combo) stays ₱0 rather than quoting body alone.
+        const net = motor ? computeUnitPrice(body, motorNetPrice(motor, exp), hp, phase) : 0;
+        const gross = motor ? round2(net * (1 + vatRate)) : 0;
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(displayBlowerModel(specs), mModel);
         const descriptionSnapshot = MATERIAL_CATEGORIES.has(specs.category)
