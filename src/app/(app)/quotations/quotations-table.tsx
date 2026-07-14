@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { QuotationStatus } from "@prisma/client";
@@ -63,7 +63,14 @@ export function QuotationsTable({
 
   // Local, debounced search box → the `q` URL param (server re-queries).
   const [queryInput, setQueryInput] = useState(query);
-  useEffect(() => setQueryInput(query), [query]);
+  // While the box is focused the user is typing; the debounced push below round-
+  // trips through the server, which echoes back a (now stale) `query` prop. Adopting
+  // it mid-type would clobber the newer text and drop keystrokes — so only sync from
+  // the prop when the box is NOT focused (e.g. browser back/forward, cleared filter).
+  const focusedRef = useRef(false);
+  useEffect(() => {
+    if (!focusedRef.current) setQueryInput(query);
+  }, [query]);
 
   function setParams(updates: Record<string, string | null>) {
     const sp = new URLSearchParams(params.toString());
@@ -92,6 +99,8 @@ export function QuotationsTable({
         <Input
           value={queryInput}
           onChange={(e) => setQueryInput(e.target.value)}
+          onFocus={() => { focusedRef.current = true; }}
+          onBlur={() => { focusedRef.current = false; }}
           placeholder="Search quote #, customer, prepared by, status…"
           className="pl-8"
         />
