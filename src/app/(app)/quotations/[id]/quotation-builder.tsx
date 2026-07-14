@@ -805,11 +805,11 @@ const MATERIAL_CATEGORIES = new Set([
  */
 function resolveTag(type: string, bladeType: string, category = ""): string {
   // Axial fans: Tubeaxial = TAF, Vaneaxial = VAF (belt tag; the drive picks the
-  // "…DD" direct variant in selectionTag). Gated on the Axial Type category so
-  // the Tubular Inline Type tube-/vane-axial entries are unaffected.
-  // Customized Jet Fan reuses the Tubeaxial (TAF) catalogue/selection but is
-  // priced ×3 and badged "JF" — its own pricing tag.
-  if (category === "Axial Type")
+  // "…DD" direct variant in selectionTag). Keyed on the axial type itself so the
+  // Tubular Inline Type tube-/vane-axial entries map to TAF/VAF too — not just the
+  // Axial Type category. Customized Jet Fan reuses the Tubeaxial (TAF) catalogue/
+  // selection but is priced ×3 and badged "JF" — its own pricing tag.
+  if (AXIAL_FAN_TYPES.has(type))
     return type === "Vaneaxial" ? "VAF" : type === "Customized Jet Fan" ? "JF" : "TAF";
   // Propeller wall fans: Exhaust = EWF/EWFDD, Fresh Air = FAWF/FAWFDD. The belt
   // tag carries the ×1 price factor; the drive picks the direct variant in
@@ -857,8 +857,9 @@ function selectionTag(type: string, bladeType: string, drive = "", category = ""
     if (bladeType === "Shutter Series") return "WMFSHUTTER";
     return "";
   }
-  // Axial fans query their own belt/direct catalogue: TAF/TAFDD, VAF/VAFDD.
-  if (category === "Axial Type") {
+  // Axial fans query their own belt/direct catalogue: TAF/TAFDD, VAF/VAFDD. Keyed
+  // on the axial type so Tubular Inline Type Tubeaxial/Vaneaxial use it too.
+  if (AXIAL_FAN_TYPES.has(type)) {
     const base = type === "Vaneaxial" ? "VAF" : "TAF";
     return /direct/i.test(drive) ? `${base}DD` : base;
   }
