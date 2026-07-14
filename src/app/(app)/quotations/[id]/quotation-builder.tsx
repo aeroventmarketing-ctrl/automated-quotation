@@ -22,9 +22,14 @@ import {
   hpOptions,
   dynamicBalancingApplies,
   type Voltage,
-  type MotorRow,
 } from "@/lib/pricing/motors";
-import { TECO_MOTOR_DATA, TECO_KW_BY_HP } from "@/lib/teco-motor-data";
+import {
+  tecoSellingRow,
+  tecoHpOptions,
+  tecoNetPrice,
+  type TecoSection,
+  type TecoSellingRow,
+} from "@/lib/teco-induction-selling";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw, Search, AlertTriangle } from "lucide-react";
 import { PRODUCT_CATEGORIES, PRODUCT_TAXONOMY, typesFor, entryFor, bladeTypesFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
@@ -1743,23 +1748,26 @@ const inductionPhaseOptions = (specs: LineSpecs): number[] => (isInductionHyunda
 /** Explosion-proof is offered for 3-phase 4-pole induction motors only. */
 const inductionExEligible = (specs: LineSpecs): boolean =>
   specs.motorPh === 3 && inductionPole(specs) === 4;
-/** HP options for the current phase/pole (only priced HPs; EX filters to EX-priced). */
+/** Which TECO selling section applies to the current selection (single / ex / three). */
+const inductionSection = (specs: LineSpecs): TecoSection =>
+  specs.motorPh === 1 ? "single" : specs.exproof === true && inductionExEligible(specs) ? "ex" : "three";
+/** HP options for the current phase/pole from the TECO selling database. */
 const inductionHpOptions = (specs: LineSpecs): number[] => {
   if (!specs.motorPh) return [];
-  const opts = hpOptions(specs.motorPh, inductionPole(specs));
-  return specs.exproof && inductionExEligible(specs) ? opts.filter(hasExproofPrice) : opts;
+  return tecoHpOptions(inductionSection(specs), inductionPole(specs));
 };
-/** The motor table row for the current phase/pole/HP, or undefined. */
-function inductionMotorRow(specs: LineSpecs): MotorRow | undefined {
+/** The TECO selling row for the current phase/pole/HP, or undefined. */
+function inductionMotorRow(specs: LineSpecs): TecoSellingRow | undefined {
   if (!specs.motorPh || specs.motorHp == null) return undefined;
-  return lookupMotor(specs.motorHp, specs.motorPh, inductionPole(specs));
+  return tecoSellingRow(inductionSection(specs), specs.motorHp, inductionPole(specs));
 }
-/** Auto unit price (VAT-inclusive, as stored) for an induction-motor line, or null. */
+/** Auto unit price (VAT-inclusive, as stored) for an induction-motor line, or null.
+ *  Foot- vs flange-mounted price comes straight from the selling database. */
 function inductionUnitPrice(specs: LineSpecs, vatRate: number): number | null {
   const m = inductionMotorRow(specs);
-  return m ? round2(motorNetPrice(m, specs.exproof === true) * (1 + vatRate)) : null;
+  return m ? round2(tecoNetPrice(m, specs.motorMounting) * (1 + vatRate)) : null;
 }
-/** Description for an induction motor, built from the TECO spec data by the
+/** Description for an induction motor, built from the TECO selling database by the
  *  selected phase / pole / HP (and Xproof). kW / RPM / frame come from the file;
  *  the type name shows until a phase + HP are picked. */
 function buildInductionDescription(specs: LineSpecs): string {
@@ -1768,9 +1776,8 @@ function buildInductionDescription(specs: LineSpecs): string {
   if (!ph || hp == null) return specs.type; // nothing selected yet
   const pole = inductionPole(specs);
   const exp = specs.exproof === true && inductionExEligible(specs);
-  const section = ph === 1 ? "single" : exp ? "ex" : "three";
-  const row = TECO_MOTOR_DATA[`${section}|${hp}|${pole}`];
-  const kw = row?.kw ?? TECO_KW_BY_HP[String(hp)] ?? null;
+  const row = inductionMotorRow(specs);
+  const kw = row?.kw ?? null;
   const brand = isInductionHyundai(specs) ? "HYUNDAI" : "TECO";
   const lines: string[] = [];
   lines.push("Induction Motor");
@@ -5540,9 +5547,10 @@ export function QuotationBuilder({
                         if (isInductionMotor(l.specs)) {
                           const m = inductionMotorRow(l.specs);
                           if (m == null) return "Pick phase, pole and HP to auto-price.";
-                          const exp = l.specs.exproof === true;
-                          const net = motorNetPrice(m, exp);
-                          return `₱${net.toLocaleString()} / unit${exp ? " (Xproof)" : ""} (VAT ex) × 1.12 = auto-priced (editable).`;
+                          const exp = l.specs.exproof === true && inductionExEligible(l.specs);
+                          const flanged = l.specs.motorMounting === "Flanged Mounted" && m.flange != null;
+                          const net = tecoNetPrice(m, l.specs.motorMounting);
+                          return `₱${net.toLocaleString()} / unit${exp ? " (Xproof)" : ""}${flanged ? " (Flange)" : ""} (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isJetFan(l.specs)) {
                           const net = jetFanNet(l.specs);
