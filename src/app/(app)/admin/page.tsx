@@ -7,7 +7,7 @@ import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { QuoteNumberSetting } from "./quote-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveFollowUpSettingsAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +69,10 @@ export default async function AdminOverviewPage() {
       <FollowUpSetting
         offsetsDays={followUpSettings.offsetsDays}
         maxNudges={followUpSettings.maxNudges}
+        enabled={followUpSettings.enabled}
+        dryRun={followUpSettings.dryRun}
         onSave={saveFollowUpSettingsAction}
+        onPreview={runFollowUpPreviewAction}
       />
     </div>
   );
