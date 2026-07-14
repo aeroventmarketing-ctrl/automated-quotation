@@ -73,6 +73,11 @@ export function userHasWorkflowRole(
   return (assignments[userId] ?? []).includes(role);
 }
 
+/** Human label for a workflow role key. */
+export function workflowRoleLabel(key: string): string {
+  return WORKFLOW_ROLES.find((r) => r.key === key)?.label ?? key;
+}
+
 /** All user IDs holding a given workflow role. */
 export function usersWithWorkflowRole(
   assignments: WorkflowRoleAssignments,
