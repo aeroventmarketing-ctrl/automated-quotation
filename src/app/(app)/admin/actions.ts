@@ -10,6 +10,7 @@ import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
+import { setUserWorkflowRoles } from "@/lib/workflow-roles";
 import { createServiceClient } from "@/lib/supabase/server";
 
 async function assertAdmin() {
@@ -333,6 +334,18 @@ export async function saveFollowUpSettingsAction(
 export async function runFollowUpPreviewAction(): Promise<FollowUpRunResult> {
   await assertAdmin();
   return runFollowUps({ live: false });
+}
+
+// --- Workflow (ERP) roles ---------------------------------------------------
+const workflowRolesSchema = z.object({ userId: z.string(), roles: z.array(z.string()) });
+export async function setUserWorkflowRolesAction(
+  input: z.infer<typeof workflowRolesSchema>,
+): Promise<string[]> {
+  await assertAdmin();
+  const d = workflowRolesSchema.parse(input);
+  const saved = await setUserWorkflowRoles(d.userId, d.roles);
+  revalidatePath("/admin/workflow-roles");
+  return saved;
 }
 
 // --- Quotation numbering ----------------------------------------------------
