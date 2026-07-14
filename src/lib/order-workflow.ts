@@ -220,3 +220,52 @@ export function nextOrderStep(
 export function stageLabel(stage: OrderStage): string {
   return ORDER_STAGES.find((s) => s.key === stage)?.label ?? stage;
 }
+
+export function stagePhase(stage: OrderStage): string {
+  return ORDER_STAGES.find((s) => s.key === stage)?.phase ?? "";
+}
+
+/**
+ * Who must act next to move the order forward, given the current stage. Used to
+ * show every viewer "waiting for: <role(s)>" and the live workflow status.
+ * `sales` marks the step the salesperson owns (not a workflow role). Returns null
+ * when the order is closed.
+ */
+export interface PendingStep {
+  action: string;
+  roles: WorkflowRoleKey[];
+  sales?: boolean;
+}
+
+export function pendingStep(wf: OrderWorkflow): PendingStep | null {
+  switch (wf.stage) {
+    case "payment_review":
+      return { action: "Check order documents", roles: ["accounting"] };
+    case "docs_checked":
+      return { action: "Clear payment & release job orders", roles: ["payment_approver"] };
+    case "released":
+      return { action: "Issue job orders", roles: ["technical_head"] };
+    case "in_production": {
+      const roles = PRODUCTION_DEPTS.filter((d) => {
+        const jo = wf.jobOrders[d.key];
+        return jo && jo.status !== "finished";
+      }).map((d) => d.role as WorkflowRoleKey);
+      return { action: "Complete production", roles };
+    }
+    case "production_finished":
+      return { action: "Notify client the order is ready", roles: [], sales: true };
+    case "final_pay_review":
+      return { action: "Check final payment", roles: ["accounting"] };
+    case "final_pay_checked":
+      return { action: "Confirm final payment", roles: ["payment_approver"] };
+    case "final_pay_cleared":
+      return { action: "Prepare delivery documents", roles: ["accounting"] };
+    case "delivery_docs_ready":
+      return { action: "Deliver the order", roles: ["logistics"] };
+    case "delivered":
+      return { action: "File documents & close the order", roles: ["accounting"] };
+    case "closed":
+    default:
+      return null;
+  }
+}

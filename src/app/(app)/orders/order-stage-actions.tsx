@@ -67,7 +67,7 @@ export function OrderStageActions({
           </Button>
         </div>
       )}
-      {nextStep && !canAct && awaiting && (
+      {!(nextStep && canAct) && awaiting && (
         <div className="text-[11px] text-muted-foreground">Awaiting {awaiting}</div>
       )}
       <div>
