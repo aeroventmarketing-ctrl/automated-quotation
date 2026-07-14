@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   payment_review: "secondary",
   docs_checked: "warning",
   released: "success",
+  in_production: "warning",
+  production_finished: "success",
 };
 
 /** Order stage badge + the current Phase 1 approval action (role-gated server-side). */
@@ -61,6 +64,11 @@ export function OrderStageActions({
       {nextStep && !canAct && awaiting && (
         <div className="text-[11px] text-muted-foreground">Awaiting {awaiting}</div>
       )}
+      <div>
+        <Link href={`/orders/${orderId}`} className="text-[11px] text-primary hover:underline">
+          Workflow →
+        </Link>
+      </div>
       {err && <div className="text-[11px] text-destructive">{err}</div>}
     </div>
   );

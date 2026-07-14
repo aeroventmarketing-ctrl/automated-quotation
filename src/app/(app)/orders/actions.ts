@@ -4,8 +4,25 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/workflow-roles";
-import { ORDER_STEPS, readOrderWorkflow, type OrderStepKey } from "@/lib/order-workflow";
+import {
+  getWorkflowRoles,
+  userHasWorkflowRole,
+  workflowRoleLabel,
+  type WorkflowRoleKey,
+} from "@/lib/workflow-roles";
+import {
+  ORDER_STEPS,
+  readOrderWorkflow,
+  PRODUCTION_DEPTS,
+  deptRole,
+  deptLabel,
+  allJobOrdersFinished,
+  type OrderStepKey,
+  type ProductionDeptKey,
+  type JobOrder,
+} from "@/lib/order-workflow";
+
+const DEPT_KEY_SET = new Set(PRODUCTION_DEPTS.map((d) => d.key));
 
 /**
  * Advance an order through a Phase 1 approval step. The signed-in user must hold
@@ -51,4 +68,85 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
     data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },
   });
   revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+}
+
+async function loadWorkflow(quotationId: string) {
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, classification: true },
+  });
+  if (!quote) throw new Error("Order not found");
+  return { quote, cls: (quote.classification as Record<string, unknown>) ?? {}, wf: readOrderWorkflow(quote.classification) };
+}
+
+async function saveWorkflow(quotationId: string, cls: Record<string, unknown>, workflow: unknown) {
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+}
+
+/**
+ * Technical Head issues job orders to the relevant departments. The order must be
+ * released (Phase 1 complete); this moves it into production.
+ */
+export async function issueJobOrders(quotationId: string, deptKeys: string[]): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "technical_head" as WorkflowRoleKey))) {
+    throw new Error("Only the Technical Head or an admin can issue job orders.");
+  }
+  const depts = Array.from(new Set(deptKeys.filter((k) => DEPT_KEY_SET.has(k as ProductionDeptKey)))) as ProductionDeptKey[];
+  if (depts.length === 0) throw new Error("Select at least one department.");
+
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "released") throw new Error("Job orders can only be issued once the order is released.");
+
+  const now = new Date().toISOString();
+  const jobOrders = { ...wf.jobOrders };
+  for (const d of depts) jobOrders[d] = { status: "issued", issuedAt: now, issuedByName: user.name };
+
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "in_production", jobOrders });
+}
+
+/**
+ * A department's Head of Production advances its job order: issued → in_production
+ * → finished. When every issued job order is finished, the order moves to
+ * "production finished" (Sales can then coordinate delivery).
+ */
+export async function advanceJobOrder(
+  quotationId: string,
+  dept: string,
+  to: "in_production" | "finished",
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
+  const deptKey = dept as ProductionDeptKey;
+
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(deptKey) as WorkflowRoleKey))) {
+    throw new Error(`Only the ${deptLabel(deptKey)} head or an admin can update this job order.`);
+  }
+
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "in_production") throw new Error("This job order isn't in production.");
+  const jo = wf.jobOrders[deptKey];
+  if (!jo) throw new Error("No job order for this department.");
+
+  const valid = (to === "in_production" && jo.status === "issued") || (to === "finished" && jo.status === "in_production");
+  if (!valid) throw new Error("That job-order step isn't available right now.");
+
+  const now = new Date().toISOString();
+  const updated: JobOrder =
+    to === "in_production"
+      ? { ...jo, status: "in_production", startedAt: now, startedByName: user.name }
+      : { ...jo, status: "finished", finishedAt: now, finishedByName: user.name };
+
+  const nextWf = { ...wf, jobOrders: { ...wf.jobOrders, [deptKey]: updated } };
+  if (allJobOrdersFinished(nextWf)) nextWf.stage = "production_finished";
+
+  await saveWorkflow(quotationId, cls, nextWf);
 }
