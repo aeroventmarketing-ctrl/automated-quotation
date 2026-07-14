@@ -5,12 +5,8 @@ import { config } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import {
-  evaluateFollowUp,
-  sentAtFrom,
-  nudgesSentFrom,
-  FOLLOW_UP_DEFAULTS,
-} from "@/lib/follow-up";
+import { evaluateFollowUp, sentAtFrom, nudgesSentFrom } from "@/lib/follow-up";
+import { getFollowUpSettings } from "@/lib/follow-up-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +26,7 @@ const num = (v: number) =>
  */
 export default async function FollowUpsPage() {
   const now = new Date();
+  const settings = await getFollowUpSettings();
 
   // Sent quotes whose inquiry is still open (not won/lost).
   const quotes = await prisma.quotation.findMany({
@@ -50,14 +47,14 @@ export default async function FollowUpsPage() {
           nudgesSent: nudgesSentFrom(q.classification),
           now,
         },
-        FOLLOW_UP_DEFAULTS,
+        settings,
       );
       return { q, sentAt, result };
     })
     .filter((r) => r.result.state === "due")
     .sort((a, b) => b.result.daysSinceSent - a.result.daysSinceSent);
 
-  const cadence = FOLLOW_UP_DEFAULTS.offsetsDays.join(", ");
+  const cadence = settings.offsetsDays.join(", ");
 
   return (
     <div className="space-y-6">
@@ -79,7 +76,7 @@ export default async function FollowUpsPage() {
         <p className="text-muted-foreground">
           <span className="font-medium text-foreground">Dry run — nothing is sent automatically.</span>{" "}
           This list recommends who to follow up, on a day&nbsp;{cadence} cadence after a quote is sent
-          (max {FOLLOW_UP_DEFAULTS.maxNudges} nudges), and stops once a deal is won or the quote expires.
+          (max {settings.maxNudges} nudges), and stops once a deal is won or the quote expires.
           Automatic sending gets switched on later, once the email channel is connected.
         </p>
       </div>
@@ -134,7 +131,7 @@ export default async function FollowUpsPage() {
                         <TableCell className="whitespace-nowrap text-sm">{fmtDate(sentAt)}</TableCell>
                         <TableCell className="text-right tabular-nums">{result.daysSinceSent}</TableCell>
                         <TableCell>
-                          <Badge variant={result.nudgeNumber >= FOLLOW_UP_DEFAULTS.maxNudges ? "destructive" : "default"}>
+                          <Badge variant={result.nudgeNumber >= settings.maxNudges ? "destructive" : "default"}>
                             #{result.nudgeNumber}
                           </Badge>
                         </TableCell>
