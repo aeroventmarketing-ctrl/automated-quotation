@@ -924,7 +924,7 @@ const bladeFactor = (specs: LineSpecs): number => tagFactor(resolveTag(specs.typ
  * after its model-code (tag) factor. Other categories keep the plain factor.
  */
 /** Paint upgrade -> black-iron-base multiplier (added on top of the body). */
-const PAINT_FACTORS: Record<string, number> = { "Powder Coated Finish": 1.5, "High Temperature Paint": 0.3 };
+const PAINT_FACTORS: Record<string, number> = { "Powder Coated Finish": 0.5, "High Temperature Paint": 0.3 };
 const BOTH_PAINTS = ["Powder Coated Finish", "High Temperature Paint"];
 /** Description line for the chosen paint (replaces the standard epoxy line). */
 const PAINT_DESC: Record<string, string> = {
