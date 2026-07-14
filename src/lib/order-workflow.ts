@@ -69,16 +69,42 @@ export interface OrderApproval {
  */
 export type MaterialRequestStatus = "requested" | "issued" | "purchasing";
 
+/** One line of the Material Request Form (mirrors the paper form's columns). */
+export interface MRFItem {
+  description: string; // Articles / Description
+  qty: string;
+  unit: string;
+  remark?: string;
+}
+
 export interface MaterialRequest {
   id: string;
+  formNo: string; // running form number, e.g. "0173"
   dept: ProductionDeptKey;
-  items: string[]; // one material per line
+  items: MRFItem[];
   note?: string;
   status: MaterialRequestStatus;
   raisedAt: string;
   raisedByName: string;
   handledAt?: string;
   handledByName?: string;
+}
+
+/** Coerce raw JSON items to MRFItem[] (accepts legacy string[] entries). */
+export function coerceMrfItems(raw: unknown): MRFItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x): MRFItem => {
+      if (typeof x === "string") return { description: x, qty: "", unit: "", remark: undefined };
+      const o = (x ?? {}) as Record<string, unknown>;
+      return {
+        description: String(o.description ?? ""),
+        qty: String(o.qty ?? ""),
+        unit: String(o.unit ?? ""),
+        remark: o.remark ? String(o.remark) : undefined,
+      };
+    })
+    .filter((i) => i.description.trim() !== "");
 }
 
 /** Delivery-document reference numbers captured in Phase 6. */
@@ -160,10 +186,20 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   }
 
   const materialRequests: MaterialRequest[] = Array.isArray(wf?.materialRequests)
-    ? (wf.materialRequests as unknown[]).filter(
-        (m): m is MaterialRequest =>
-          !!m && typeof m === "object" && DEPT_KEYS.has((m as MaterialRequest).dept),
-      )
+    ? (wf.materialRequests as unknown[])
+        .filter((m): m is Record<string, unknown> => !!m && typeof m === "object" && DEPT_KEYS.has((m as MaterialRequest).dept))
+        .map((m) => ({
+          id: String(m.id ?? ""),
+          formNo: String(m.formNo ?? ""),
+          dept: m.dept as ProductionDeptKey,
+          items: coerceMrfItems(m.items),
+          note: m.note ? String(m.note) : undefined,
+          status: (m.status as MaterialRequestStatus) ?? "requested",
+          raisedAt: String(m.raisedAt ?? ""),
+          raisedByName: String(m.raisedByName ?? ""),
+          handledAt: m.handledAt ? String(m.handledAt) : undefined,
+          handledByName: m.handledByName ? String(m.handledByName) : undefined,
+        }))
     : [];
 
   return { stage, approvals, jobOrders, materialRequests, documents };

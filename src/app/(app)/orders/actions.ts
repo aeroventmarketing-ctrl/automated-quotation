@@ -22,6 +22,7 @@ import {
   type ProductionDeptKey,
   type JobOrder,
   type MaterialRequest,
+  type MRFItem,
 } from "@/lib/order-workflow";
 import { purchaseStep } from "@/lib/purchasing";
 import { payableTotal, round2 } from "@/lib/quote";
@@ -163,7 +164,7 @@ export async function advanceJobOrder(
 export async function raiseMaterialRequest(
   quotationId: string,
   dept: string,
-  items: string[],
+  items: MRFItem[],
   note: string,
 ): Promise<void> {
   const user = await getCurrentUser();
@@ -175,14 +176,22 @@ export async function raiseMaterialRequest(
     throw new Error(`Only the ${deptLabel(deptKey)} head or an admin can raise its material request.`);
   }
 
-  const cleanItems = items.map((s) => s.trim()).filter(Boolean);
-  if (cleanItems.length === 0) throw new Error("List at least one material.");
+  const cleanItems: MRFItem[] = (items ?? [])
+    .map((it) => ({
+      description: (it.description ?? "").trim(),
+      qty: (it.qty ?? "").trim(),
+      unit: (it.unit ?? "").trim(),
+      remark: (it.remark ?? "").trim() || undefined,
+    }))
+    .filter((it) => it.description !== "");
+  if (cleanItems.length === 0) throw new Error("List at least one item.");
 
   const { cls, wf } = await loadWorkflow(quotationId);
   if (!wf.jobOrders[deptKey]) throw new Error("This department has no job order on this order.");
 
   const req: MaterialRequest = {
     id: randomUUID(),
+    formNo: await nextMrfNo(),
     dept: deptKey,
     items: cleanItems,
     note: note.trim() || undefined,
@@ -191,6 +200,28 @@ export async function raiseMaterialRequest(
     raisedByName: user.name,
   };
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests: [...wf.materialRequests, req] });
+}
+
+/** Next running Material Request Form number, zero-padded (e.g. "0173"). */
+async function nextMrfNo(): Promise<string> {
+  const KEY = "mrf_counter";
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.appSetting.findUnique({ where: { key: KEY } });
+    const last = Number((row?.value as { last?: unknown } | null)?.last ?? 0) || 0;
+    const next = last + 1;
+    await tx.appSetting.upsert({
+      where: { key: KEY },
+      create: { key: KEY, value: { last: next } as Prisma.InputJsonValue },
+      update: { value: { last: next } as Prisma.InputJsonValue },
+    });
+    return String(next).padStart(4, "0");
+  });
+}
+
+/** Render one MRF item as a single display line for the purchasing chain. */
+function mrfItemLine(it: MRFItem): string {
+  const qtyUnit = [it.qty, it.unit].filter(Boolean).join(" ");
+  return [qtyUnit, it.description].filter(Boolean).join(" · ") + (it.remark ? ` (${it.remark})` : "");
 }
 
 /**
@@ -231,7 +262,7 @@ export async function handleMaterialRequest(
         quotationId,
         mrfId: mrf.id,
         dept: mrf.dept,
-        items: mrf.items as Prisma.InputJsonValue,
+        items: mrf.items.map(mrfItemLine) as Prisma.InputJsonValue,
         note: mrf.note ?? null,
         createdById: user.id,
         createdByName: user.name,
