@@ -276,11 +276,27 @@ export async function transitionQuotation(quotationId: string, to: string) {
   });
 
   if (to === "SENT") {
-    await prisma.inquiry.update({ where: { id: quote.inquiryId }, data: { status: "SENT" } });
+    // Stamp the send date into the classification JSON (no schema change) — it
+    // starts the follow-up clock for the Sales/CRM follow-up engine. Preserve an
+    // existing stamp so the original send date is never overwritten.
+    const cls = (quote.classification as Record<string, unknown>) ?? {};
+    await prisma.$transaction([
+      prisma.quotation.update({
+        where: { id: quotationId },
+        data: {
+          classification: {
+            ...cls,
+            sentAt: typeof cls.sentAt === "string" ? cls.sentAt : new Date().toISOString(),
+          } as Prisma.InputJsonObject,
+        },
+      }),
+      prisma.inquiry.update({ where: { id: quote.inquiryId }, data: { status: "SENT" } }),
+    ]);
   }
 
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
+  revalidatePath("/follow-ups");
 }
 
 /**
