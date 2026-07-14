@@ -618,6 +618,7 @@ function buildBlowerDescription(
   model?: string | null,
   bladeMaterial?: string | null,
   paint: string = PAINT_PHRASE,
+  cageStand: string = "",
 ): string {
   const driveWord = /direct/i.test(drive) ? "Direct Drive" : "Belt Drive";
   const stainless = /stainless 3(?:04|16)/i.test(material);
@@ -635,6 +636,7 @@ function buildBlowerDescription(
   if (bladeMaterial && bladeMaterial !== "Black Iron Sheet") {
     lines.push(`Blade made of ${materialPhrase(bladeMaterial)}`);
   }
+  if (cageStand) lines.push(cageStand);
   return lines.filter((l) => l.length > 0).join("\n");
 }
 /**
@@ -976,6 +978,14 @@ function wallFanAddon(specs: LineSpecs): number {
   if (!(dia > 0)) return 0;
   const count = (specs.caged ? 1 : 0) + (specs.fanStand ? 1 : 0);
   return count * CAGE_STAND_RATE * dia;
+}
+/** Description line for the wall-fan cage/stand options ("" when none). */
+function cageStandLine(specs: { type: string; caged?: boolean; fanStand?: boolean }): string {
+  if (!WALL_FAN_ADDON_TYPES.has(specs.type)) return "";
+  if (specs.caged && specs.fanStand) return "Caged / With Stand";
+  if (specs.caged) return "Caged";
+  if (specs.fanStand) return "With Stand";
+  return "";
 }
 function doubleWallApplies(specs: { category: string; doubleWall?: boolean }): boolean {
   return !!specs.doubleWall && specs.category === "Cabinet Type";
@@ -3420,6 +3430,7 @@ export function QuotationBuilder({
                 specs.blowerModel ? displayBlowerModel(specs) : null,
                 specs.bladeMaterialOn ? specs.bladeMaterial : null,
                 paintDescLine(specs),
+                cageStandLine(specs),
               )
             : rewriteProductNoun(
                 rewriteMaterialLine(rewriteDriveLine(l.descriptionSnapshot, specs.drive), specs.material),
@@ -3438,7 +3449,7 @@ export function QuotationBuilder({
           ? rewriteModelLine(l.descriptionSnapshot, combined)
           : l.descriptionSnapshot;
         const descriptionSnapshot = isBlower
-          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null, specs.bladeMaterialOn ? specs.bladeMaterial : null, paintDescLine(specs))
+          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, specs.blowerModel ? combined : null, specs.bladeMaterialOn ? specs.bladeMaterial : null, paintDescLine(specs), cageStandLine(specs))
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(withModel, specs.drive), specs.material),
@@ -3592,7 +3603,7 @@ export function QuotationBuilder({
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(displayBlowerModel(specs), mModel);
         const descriptionSnapshot = MATERIAL_CATEGORIES.has(specs.category)
-          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined, specs.bladeMaterialOn ? specs.bladeMaterial : null, paintDescLine(specs))
+          ? buildBlowerDescription(specs.type, specs.bladeType, specs.drive, specs.material, combined, specs.bladeMaterialOn ? specs.bladeMaterial : null, paintDescLine(specs), cageStandLine(specs))
           : rewriteProductNoun(
               rewriteMaterialLine(
                 rewritePaintLine(rewriteDriveLine(rewriteModelLine(baseDesc, combined), specs.drive), specs.material),
