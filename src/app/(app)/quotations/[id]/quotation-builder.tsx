@@ -30,6 +30,7 @@ import {
   type TecoSection,
   type TecoSellingRow,
 } from "@/lib/teco-induction-selling";
+import { hyundaiSellingRow, hyundaiHpOptions } from "@/lib/hyundai-induction-selling";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw, Search, AlertTriangle } from "lucide-react";
 import { PRODUCT_CATEGORIES, PRODUCT_TAXONOMY, typesFor, entryFor, bladeTypesFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
@@ -1732,34 +1733,38 @@ function alphaAirCassettePicks(qM3hr: number, pPa: number): { c: AlphaCassette; 
     .sort((a, b) => a.c.airM3hr - b.c.airM3hr);
 }
 // Induction Motor (TECO / Hyundai) sold as a standalone product: pick Phase, Pole
-// and HP; the price comes from the same TECO motor tables used for blower motors
-// (VAT-EXCLUSIVE net × 1.12). Single phase is always 4-pole; three phase offers
-// 2/4/6-pole. Hyundai shares TECO's prices but is 3-phase 4-pole only. Phase →
-// motorPh, pole → motorPole, HP → motorHp; volts default 220.
+// and HP; the price comes from the brand's own selling database (VAT-EXCLUSIVE net
+// × 1.12). TECO: single phase (4-pole), 3-phase Ex-Proof 4-pole, and 3-phase TEFC
+// 2/4/6-pole. Hyundai: 3-phase TEFC 2/4/6-pole only (no single phase, no Ex-Proof).
+// Phase → motorPh, pole → motorPole, HP → motorHp; volts default 220.
 const isInductionMotor = (specs: { type: string }): boolean =>
   specs.type === "Induction Motor (TECO)" || specs.type === "Induction Motor (Hyundai)";
 const MOTOR_MOUNTINGS = ["Foot Mounted", "Flanged Mounted"];
 const isInductionHyundai = (specs: { type: string }): boolean => specs.type === "Induction Motor (Hyundai)";
-/** Effective pole for the motor: single phase and Hyundai are 4-pole only. */
+/** Effective pole for the motor: single phase is 4-pole; three phase uses motorPole. */
 const inductionPole = (specs: LineSpecs): number =>
-  specs.motorPh === 1 || isInductionHyundai(specs) ? 4 : specs.motorPole ?? 4;
+  specs.motorPh === 1 ? 4 : specs.motorPole ?? 4;
 /** Phase options — Hyundai is three-phase only. */
 const inductionPhaseOptions = (specs: LineSpecs): number[] => (isInductionHyundai(specs) ? [3] : [1, 3]);
-/** Explosion-proof is offered for 3-phase 4-pole induction motors only. */
+/** Explosion-proof is offered for TECO 3-phase 4-pole induction motors only. */
 const inductionExEligible = (specs: LineSpecs): boolean =>
-  specs.motorPh === 3 && inductionPole(specs) === 4;
+  !isInductionHyundai(specs) && specs.motorPh === 3 && inductionPole(specs) === 4;
 /** Which TECO selling section applies to the current selection (single / ex / three). */
 const inductionSection = (specs: LineSpecs): TecoSection =>
   specs.motorPh === 1 ? "single" : specs.exproof === true && inductionExEligible(specs) ? "ex" : "three";
-/** HP options for the current phase/pole from the TECO selling database. */
+/** HP options for the current phase/pole from the brand's selling database. */
 const inductionHpOptions = (specs: LineSpecs): number[] => {
   if (!specs.motorPh) return [];
-  return tecoHpOptions(inductionSection(specs), inductionPole(specs));
+  return isInductionHyundai(specs)
+    ? hyundaiHpOptions(inductionPole(specs))
+    : tecoHpOptions(inductionSection(specs), inductionPole(specs));
 };
-/** The TECO selling row for the current phase/pole/HP, or undefined. */
+/** The brand's selling row for the current phase/pole/HP, or undefined. */
 function inductionMotorRow(specs: LineSpecs): TecoSellingRow | undefined {
   if (!specs.motorPh || specs.motorHp == null) return undefined;
-  return tecoSellingRow(inductionSection(specs), specs.motorHp, inductionPole(specs));
+  return isInductionHyundai(specs)
+    ? hyundaiSellingRow(specs.motorHp, inductionPole(specs))
+    : tecoSellingRow(inductionSection(specs), specs.motorHp, inductionPole(specs));
 }
 /** Auto unit price (VAT-inclusive, as stored) for an induction-motor line, or null.
  *  Foot- vs flange-mounted price comes straight from the selling database. */
@@ -4044,8 +4049,7 @@ export function QuotationBuilder({
               )}
             </>
           ) : isInductionMotor(c) ? (
-            // Induction Motor: Mounting, Phase, Pole (hidden when single-phase /
-            // Hyundai), HP.
+            // Induction Motor: Mounting, Phase, Pole (hidden when single-phase), HP.
             <>
               <Select
                 value={c.motorMounting || "Foot Mounted"}
@@ -4063,7 +4067,7 @@ export function QuotationBuilder({
                   <option key={p} value={p}>{p === 1 ? "Single phase" : "Three phase"}</option>
                 ))}
               </Select>
-              {c.motorPh === 3 && !isInductionHyundai(c) ? (
+              {c.motorPh === 3 ? (
                 <Select
                   value={c.motorPole ?? 4}
                   disabled={!editable || !c.type}
@@ -4072,8 +4076,8 @@ export function QuotationBuilder({
                   {[2, 4, 6].map((p) => (<option key={p} value={p}>{p}-pole</option>))}
                 </Select>
               ) : (
-                // Single phase / Hyundai are 4-pole only — a disabled dropdown
-                // (matching the phase select) reads better than bare text.
+                // Single phase is 4-pole only — a disabled dropdown (matching the
+                // phase select) reads better than bare text.
                 <Select value={4} disabled>
                   <option value={4}>4-pole</option>
                 </Select>
