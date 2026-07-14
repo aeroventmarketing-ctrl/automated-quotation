@@ -24,8 +24,10 @@ import {
   type MaterialRequest,
 } from "@/lib/order-workflow";
 import { purchaseStep } from "@/lib/purchasing";
+import { payableTotal, round2 } from "@/lib/quote";
 
 const DEPT_KEY_SET = new Set(PRODUCTION_DEPTS.map((d) => d.key));
+const COMMISSION_RATE_PCT = 1.5;
 
 /**
  * Advance an order through a Phase 1 approval step. The signed-in user must hold
@@ -378,4 +380,32 @@ export async function fileDocuments(quotationId: string): Promise<void> {
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "delivered") throw new Error("The order hasn't been delivered yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
+
+  // Phase 7 — compute the 1.5% sales commission for the close month. Guarded so a
+  // missing table (before the migration is applied) never blocks closing the order.
+  try {
+    const q = await prisma.quotation.findUnique({ where: { id: quotationId }, include: { preparedBy: true } });
+    if (q) {
+      const orderValue = payableTotal(q);
+      const amount = round2((orderValue * COMMISSION_RATE_PCT) / 100);
+      const now = new Date();
+      const salesMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      await prisma.commission.upsert({
+        where: { quotationId },
+        create: {
+          quotationId,
+          salespersonId: q.preparedById,
+          salespersonName: q.preparedBy.name,
+          orderValue,
+          ratePct: COMMISSION_RATE_PCT,
+          amount,
+          salesMonth,
+        },
+        update: {}, // never overwrite an existing commission (keeps paid state)
+      });
+    }
+  } catch {
+    // Commission table not set up yet — closing the order still succeeds.
+  }
+  revalidatePath("/commissions");
 }
