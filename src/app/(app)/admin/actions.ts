@@ -336,6 +336,22 @@ export async function runFollowUpPreviewAction(): Promise<FollowUpRunResult> {
   return runFollowUps({ live: false });
 }
 
+// --- Material Request Form numbering ----------------------------------------
+const MRF_COUNTER_KEY = "mrf_counter";
+const mrfNextSchema = z.object({ next: z.number().int().min(1) });
+/** Set the next Material Request Form number (stored as last = next - 1). */
+export async function setMrfNextNo(input: z.infer<typeof mrfNextSchema>): Promise<number> {
+  await assertAdmin();
+  const d = mrfNextSchema.parse(input);
+  await prisma.appSetting.upsert({
+    where: { key: MRF_COUNTER_KEY },
+    create: { key: MRF_COUNTER_KEY, value: { last: d.next - 1 } },
+    update: { value: { last: d.next - 1 } },
+  });
+  revalidatePath("/admin");
+  return d.next;
+}
+
 // --- Workflow (ERP) roles ---------------------------------------------------
 const workflowRolesSchema = z.object({ userId: z.string(), roles: z.array(z.string()) });
 export async function setUserWorkflowRolesAction(
