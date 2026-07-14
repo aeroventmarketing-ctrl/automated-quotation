@@ -147,6 +147,7 @@ interface LineSpecs {
   motorPh: number | null;
   motorVolts: number | null;
   motorPole: number | null;
+  motorMounting?: string; // Induction Motor: Foot Mounted / Flanged Mounted
   bodyPrice: number | null; // net blower-body price (before motor / VAT)
   power_w: number | null; // KDK unit rated consumption (W), from the catalog
   blowerModel: string | null; // base catalogue model code, e.g. AV1225CEB
@@ -1732,6 +1733,7 @@ function alphaAirCassettePicks(qM3hr: number, pPa: number): { c: AlphaCassette; 
 // motorPh, pole → motorPole, HP → motorHp; volts default 220.
 const isInductionMotor = (specs: { type: string }): boolean =>
   specs.type === "Induction Motor (TECO)" || specs.type === "Induction Motor (Hyundai)";
+const MOTOR_MOUNTINGS = ["Foot Mounted", "Flanged Mounted"];
 const isInductionHyundai = (specs: { type: string }): boolean => specs.type === "Induction Motor (Hyundai)";
 /** Effective pole for the motor: single phase and Hyundai are 4-pole only. */
 const inductionPole = (specs: LineSpecs): number =>
@@ -1776,7 +1778,7 @@ function buildInductionDescription(specs: LineSpecs): string {
   lines.push(`${hp} Hp${kw != null ? `, ${kw} Kw` : ""}, ${ph === 1 ? "Single Phase" : "Three Phase"}`);
   lines.push(`${ph === 1 ? "220v" : "220/380/440v"}, 60 Hz`);
   lines.push(`${pole} Pole${row?.rpm ? ` - ${row.rpm} rpm` : ""}`);
-  if (row?.frame) lines.push(`Foot mounted - ${row.frame} Frame`);
+  lines.push(`${specs.motorMounting || "Foot Mounted"}${row?.frame ? ` - ${row.frame} Frame` : ""}`);
   lines.push(`${brand} Brand`);
   return lines.join("\n");
 }
@@ -3701,7 +3703,7 @@ export function QuotationBuilder({
     } else if (type === "Variable Air Volume") {
       applyAccessory(lineId, { type, bladeType: "by Volume Flow", sizeUnit: "cfm", sizeL: "", sizeW: "", shape: "", drive: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false }, true);
     } else if (type === "Induction Motor (TECO)" || type === "Induction Motor (Hyundai)") {
-      applyAccessory(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false, motorPh: 3, motorPole: 4, motorHp: null, motorVolts: 220 }, true);
+      applyAccessory(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "", sizeUnit: "", gauge: "", cleatSize: "", canvassUnit: "", material: "", powderCoated: false, motorPh: 3, motorPole: 4, motorHp: null, motorVolts: 220, motorMounting: "Foot Mounted" }, true);
     } else if (MATERIAL_CATEGORIES.has(category)) {
       applyMotor(lineId, { type, bladeType: "", drive: "", shape: "", sizeL: "", sizeW: "" });
     } else if (brand === "KDK" || type === "Ceiling Cassette") {
@@ -4035,8 +4037,16 @@ export function QuotationBuilder({
               )}
             </>
           ) : isInductionMotor(c) ? (
-            // Induction Motor: Phase, Pole (hidden when single-phase / Hyundai), HP.
+            // Induction Motor: Mounting, Phase, Pole (hidden when single-phase /
+            // Hyundai), HP.
             <>
+              <Select
+                value={c.motorMounting || "Foot Mounted"}
+                disabled={!editable || !c.type}
+                onChange={(e) => applyAccessory(l.id, { motorMounting: e.target.value })}
+              >
+                {MOTOR_MOUNTINGS.map((m) => (<option key={m} value={m}>{m}</option>))}
+              </Select>
               <Select
                 value={c.motorPh ?? 3}
                 disabled={!editable || !c.type || isInductionHyundai(c)}
