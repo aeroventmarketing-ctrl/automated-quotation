@@ -23,6 +23,7 @@ import {
   type JobOrder,
   type MaterialRequest,
 } from "@/lib/order-workflow";
+import { purchaseStep } from "@/lib/purchasing";
 
 const DEPT_KEY_SET = new Set(PRODUCTION_DEPTS.map((d) => d.key));
 
@@ -210,8 +211,9 @@ export async function handleMaterialRequest(
   if (idx < 0) throw new Error("Material request not found.");
   if (wf.materialRequests[idx].status !== "requested") throw new Error("This request has already been handled.");
 
+  const mrf = wf.materialRequests[idx];
   const updated: MaterialRequest = {
-    ...wf.materialRequests[idx],
+    ...mrf,
     status: decision === "issue" ? "issued" : "purchasing",
     handledAt: new Date().toISOString(),
     handledByName: user.name,
@@ -219,4 +221,78 @@ export async function handleMaterialRequest(
   const materialRequests = wf.materialRequests.slice();
   materialRequests[idx] = updated;
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+
+  // Escalation → create a real PurchaseRequest that walks the purchasing chain.
+  if (decision === "purchase") {
+    await prisma.purchaseRequest.create({
+      data: {
+        quotationId,
+        mrfId: mrf.id,
+        dept: mrf.dept,
+        items: mrf.items as Prisma.InputJsonValue,
+        note: mrf.note ?? null,
+        createdById: user.id,
+        createdByName: user.name,
+        status: "PENDING_APPROVAL",
+      },
+    });
+  }
+}
+
+/**
+ * Advance a PurchaseRequest one step along the chain (approve/reject → voucher →
+ * buy → check → receive → final approval). Guarded by the step's workflow role.
+ */
+export async function advancePurchaseRequest(
+  purchaseRequestId: string,
+  stepKey: string,
+  note?: string,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const step = purchaseStep(stepKey);
+  if (!step) throw new Error("Unknown step");
+
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, step.role))) {
+    throw new Error(`Only ${workflowRoleLabel(step.role)} or an admin can do this.`);
+  }
+
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  if (pr.status !== step.from) throw new Error("That step isn't available at the current status.");
+
+  const now = new Date();
+  const data: Prisma.PurchaseRequestUpdateInput = { status: step.to };
+  switch (stepKey) {
+    case "approve":
+    case "reject":
+      data.decidedById = user.id;
+      data.decidedByName = user.name;
+      data.decidedAt = now;
+      if (note) data.decisionNote = note;
+      break;
+    case "voucher":
+      data.voucherByName = user.name;
+      data.voucherAt = now;
+      if (note) data.voucherRef = note;
+      break;
+    case "buy":
+      data.purchasedByName = user.name;
+      data.purchasedAt = now;
+      break;
+    case "check":
+      data.checkedByName = user.name;
+      data.checkedAt = now;
+      break;
+    case "receive":
+      data.receivedByName = user.name;
+      data.receivedAt = now;
+      break;
+    case "plant":
+      data.plantApprovedByName = user.name;
+      data.plantApprovedAt = now;
+      break;
+  }
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
+  revalidatePath(`/orders/${pr.quotationId}`);
 }
