@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { payableTotal } from "@/lib/quote";
-import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import {
   readOrderWorkflow,
   ORDER_STAGES,
@@ -17,8 +17,10 @@ import {
   stageLabel,
   type OrderStage,
 } from "@/lib/order-workflow";
+import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { JobOrderManager } from "./job-order-manager";
 import { MaterialRequests } from "./material-requests";
+import { PurchasingChain } from "./purchasing-chain";
 
 export const dynamic = "force-dynamic";
 
@@ -34,13 +36,14 @@ const fmtWhen = (iso?: string) => (iso ? formatDate(new Date(iso)) : "");
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [quote, viewer, assignments] = await Promise.all([
+  const [quote, viewer, assignments, purchaseRequests] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
     }),
     getCurrentUser(),
     getWorkflowRoles(),
+    prisma.purchaseRequest.findMany({ where: { quotationId: id }, orderBy: { createdAt: "asc" } }),
   ]);
   if (!quote) notFound();
 
@@ -101,6 +104,37 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canHandle: canWarehouse && m.status === "requested",
   }));
   const showMaterials = wf.stage === "in_production" || wf.stage === "production_finished";
+
+  // Purchasing chain (Phase 3, part 2) — real PurchaseRequest rows.
+  const prVariant = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
+    s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
+  const purchaseRows = purchaseRequests.map((pr) => {
+    const status = pr.status as PRStatus;
+    const trail: string[] = [];
+    if (pr.decidedByName) trail.push(`${status === "REJECTED" ? "Rejected" : "Approved"} by ${pr.decidedByName}`);
+    if (pr.voucherByName) trail.push(`Voucher by ${pr.voucherByName}`);
+    if (pr.purchasedByName) trail.push(`Bought by ${pr.purchasedByName}`);
+    if (pr.checkedByName) trail.push(`Checked by ${pr.checkedByName}`);
+    if (pr.receivedByName) trail.push(`Received by ${pr.receivedByName}`);
+    if (pr.plantApprovedByName) trail.push(`Plant Mgr ${pr.plantApprovedByName}`);
+    const actions = purchaseStepsFrom(status).map((step) => ({
+      key: step.key,
+      label: step.label,
+      roleLabel: workflowRoleLabel(step.role),
+      canAct: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, step.role)),
+    }));
+    return {
+      id: pr.id,
+      deptLabel: deptLabel(pr.dept as typeof PRODUCTION_DEPTS[number]["key"]),
+      items: Array.isArray(pr.items) ? (pr.items as string[]) : [],
+      note: pr.note,
+      status,
+      statusLabel: PR_STATUS_LABEL[status],
+      variant: prVariant(status),
+      trail,
+      actions,
+    };
+  });
 
   return (
     <div className="space-y-5">
@@ -181,6 +215,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
             <MaterialRequests orderId={quote.id} raisableDepts={raisableDepts} requests={materialReqs} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Phase 3 — purchasing chain (real records) */}
+      {(showMaterials || purchaseRows.length > 0) && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Purchasing</CardTitle></CardHeader>
+          <CardContent>
+            <PurchasingChain requests={purchaseRows} />
           </CardContent>
         </Card>
       )}
