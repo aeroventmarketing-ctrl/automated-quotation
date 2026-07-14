@@ -217,6 +217,7 @@ model Quotation {
   preparedBy User              @relation("QuotationPreparedBy", fields: [preparedById], references: [id])
   approvedBy User?             @relation("QuotationApprovedBy", fields: [approvedById], references: [id])
   items      QuotationItem[]
+  purchaseRequests PurchaseRequest[]
 
   @@index([status])
   @@index([inquiryId])
@@ -276,4 +277,61 @@ model AppSetting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+/**
+ * Purchasing chain for the order-to-delivery workflow (Phase 3, steps 8-13).
+ * One row per material request escalated to purchasing. The status walks the
+ * approval chain; each step stamps who did it and when.
+ */
+enum PurchaseRequestStatus {
+  PENDING_APPROVAL // 8: purchaser prepared the list, awaiting approver
+  REJECTED         // 8: approver rejected
+  APPROVED         // 8 done, awaiting voucher/check
+  VOUCHER_READY    // 9: voucher + check approved, awaiting buying
+  PURCHASED        // 10: bought, awaiting purchaser's item check
+  CHECKED          // 11: items checked, awaiting delivery to warehouse
+  RECEIVED         // 13: warehouse received, awaiting plant manager
+  COMPLETED        // 13: plant manager final approval
+}
+
+model PurchaseRequest {
+  id            String                @id @default(cuid())
+  quotationId   String
+  mrfId         String? // the JSON material-request id it was escalated from
+  dept          String // production department key
+  items         Json                  @default("[]") // ["GI sheet 24ga x 4", ...]
+  note          String?
+  status        PurchaseRequestStatus @default(PENDING_APPROVAL)
+
+  createdById   String
+  createdByName String
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  // 8 — approver decision
+  decidedById   String?
+  decidedByName String?
+  decisionNote  String?
+  decidedAt     DateTime?
+  // 9 — voucher / check
+  voucherRef    String?
+  voucherByName String?
+  voucherAt     DateTime?
+  // 10 — buying
+  purchasedByName String?
+  purchasedAt   DateTime?
+  // 11 — purchaser item check
+  checkedByName String?
+  checkedAt     DateTime?
+  // 13 — warehouse receive + plant manager final approval
+  receivedByName String?
+  receivedAt    DateTime?
+  plantApprovedByName String?
+  plantApprovedAt DateTime?
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@index([status])
 }
