@@ -189,6 +189,10 @@ interface LineSpecs {
   // Cabinet Type only: double-wall construction — multiplies the body + blade
   // (including the customized-unit uplift) and the paint by 1.46.
   doubleWall?: boolean;
+  // Fresh Air / Exhaust Wall Fan add-ons: cage / stand, each ₱300 per blade-
+  // diameter inch, added to the body (and included in the upgrade-paint base).
+  caged?: boolean;
+  fanStand?: boolean;
   // Separate blade material: when off the blade is standard Black Iron Sheet;
   // when on, `bladeMaterial` scales the blade half of the body.
   bladeMaterialOn?: boolean;
@@ -961,6 +965,18 @@ const paintFactor = (specs: LineSpecs): number => {
 // Cabinet Type double-wall: multiplies the body + blade (incl. customized) and
 // the paint by 1.46.
 const DOUBLE_WALL_SURCHARGE = 0.46;
+// Fresh Air / Exhaust Wall Fan: cage and/or stand, each ₱300 per blade-diameter
+// inch (blade Ø = specs.inches). Added to the body; the upgrade-paint base
+// includes it.
+const CAGE_STAND_RATE = 300;
+const WALL_FAN_ADDON_TYPES = new Set(["Fresh Air Wall Fan", "Exhaust Wall Fan"]);
+function wallFanAddon(specs: LineSpecs): number {
+  if (!WALL_FAN_ADDON_TYPES.has(specs.type)) return 0;
+  const dia = specs.inches ?? 0;
+  if (!(dia > 0)) return 0;
+  const count = (specs.caged ? 1 : 0) + (specs.fanStand ? 1 : 0);
+  return count * CAGE_STAND_RATE * dia;
+}
 function doubleWallApplies(specs: { category: string; doubleWall?: boolean }): boolean {
   return !!specs.doubleWall && specs.category === "Cabinet Type";
 }
@@ -978,7 +994,9 @@ const bodyNetFrom = (base: number, specs: LineSpecs): number => {
   // Double wall: ×1.46 on the body + blade (incl. customized) AND the paint.
   const dwFactor = doubleWallApplies(specs) ? 1 + DOUBLE_WALL_SURCHARGE : 1;
   core *= dwFactor;
-  return core + base * paintFactor(specs) * dwFactor;
+  // Wall-fan cage/stand add-on: added to the body and to the paint base.
+  const addon = wallFanAddon(specs);
+  return core + addon + (base + addon) * paintFactor(specs) * dwFactor;
 };
 /** Reversible-blade propellers and Airfoil blades both cost ×1.5 of the body. */
 const SPECIAL_BLADE_FACTOR: Record<string, number> = { "Reversible Blade": 1.5, Airfoil: 1.5 };
@@ -1020,8 +1038,19 @@ const bodyComputation = (specs: LineSpecs): string => {
   let expr = specs.customizedUnit ? `(${core}) × 1.2 (customized)` : core;
   const dw = doubleWallApplies(specs);
   if (dw) expr = `(${expr}) × 1.46 (double wall)`;
+  // Wall-fan cage/stand add-on (₱300 per blade-diameter inch, per option).
+  const addon = wallFanAddon(specs);
+  if (addon > 0) {
+    const dia = specs.inches ?? 0;
+    const cnt = (specs.caged ? 1 : 0) + (specs.fanStand ? 1 : 0);
+    const labels = [specs.caged && "cage", specs.fanStand && "stand"].filter(Boolean).join(" + ");
+    expr = `${expr} + 300×${fmtNum(dia)}${cnt > 1 ? `×${cnt}` : ""} (${labels})`;
+  }
   const paint = paintFactor(specs);
-  if (paint > 0) expr = `${expr} + ${baseStr}${dw ? "×1.46 (double wall)" : ""}×${fmtNum(paint)} (${specs.paintType})`;
+  if (paint > 0) {
+    const paintBase = addon > 0 ? `(${baseStr} + ${fmtNum(addon)})` : baseStr;
+    expr = `${expr} + ${paintBase}${dw ? "×1.46 (double wall)" : ""}×${fmtNum(paint)} (${specs.paintType})`;
+  }
   return `${expr} = ${fmtNum(total)}`;
 };
 /**
@@ -4378,6 +4407,32 @@ export function QuotationBuilder({
               />
               Double Wall
             </label>
+          )}
+          {/* Cage / Stand — Fresh Air / Exhaust Wall Fan; each ₱300 per blade-
+              diameter inch, added to the body (and to the upgrade-paint base). */}
+          {WALL_FAN_ADDON_TYPES.has(c.type) && (
+            <>
+              <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  disabled={!editable}
+                  checked={!!c.caged}
+                  onChange={(e) => applyMotor(l.id, { caged: e.target.checked })}
+                />
+                Caged
+              </label>
+              <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  disabled={!editable}
+                  checked={!!c.fanStand}
+                  onChange={(e) => applyMotor(l.id, { fanStand: e.target.checked })}
+                />
+                Stand
+              </label>
+            </>
           )}
           {/* Paint upgrade — Powder Coat (×1.5) / High Temperature (×1.3) on the base.
               Options depend on the body material; some materials offer none. */}
