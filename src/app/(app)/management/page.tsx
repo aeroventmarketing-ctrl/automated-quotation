@@ -58,7 +58,7 @@ export default async function ManagementPage() {
   const tiles = [
     { label: "Open orders", value: String(openOrders), href: "/orders" },
     { label: "Receivables", value: formatCurrency(outstanding, CURRENCY), href: "/orders" },
-    { label: "Low / out of stock", value: String(lowStock.length), href: "/inventory" },
+    { label: "Low / out of stock", value: String(lowStock.length), href: "/inventory/reorder" },
     { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), href: "/commissions" },
   ];
 
