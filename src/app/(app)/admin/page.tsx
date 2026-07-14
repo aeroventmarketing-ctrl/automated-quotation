@@ -3,14 +3,16 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
+import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { QuoteNumberSetting } from "./quote-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting } from "./actions";
+import { FollowUpSetting } from "./follow-up-setting";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveFollowUpSettingsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock] = await Promise.all([
+  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings] = await Promise.all([
     prisma.user.count(),
     prisma.catalogueItem.count(),
     prisma.priceListEntry.count(),
@@ -21,6 +23,7 @@ export default async function AdminOverviewPage() {
     prisma.quoteCounter.findUnique({ where: { year: 0 } }),
     getPropellerSpLock(),
     getAxialSpLock(),
+    getFollowUpSettings(),
   ]);
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
 
@@ -62,6 +65,11 @@ export default async function AdminOverviewPage() {
         description={'When enabled, Tubeaxial is capped at 1.5" w.g. and Vaneaxial at 4" w.g.: the builder warns above that and disables Run selection. Turn off to allow selecting these fans at any static pressure.'}
         enabled={axialSpLock}
         onSave={saveAxialSpLockSetting}
+      />
+      <FollowUpSetting
+        offsetsDays={followUpSettings.offsetsDays}
+        maxNudges={followUpSettings.maxNudges}
+        onSave={saveFollowUpSettingsAction}
       />
     </div>
   );

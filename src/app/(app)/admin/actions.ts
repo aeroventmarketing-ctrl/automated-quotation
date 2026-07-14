@@ -8,6 +8,8 @@ import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
 import { setUserSignatureValue } from "@/lib/signature";
 import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
+import { setFollowUpSettings } from "@/lib/follow-up-settings";
+import type { FollowUpSettings } from "@/lib/follow-up";
 import { createServiceClient } from "@/lib/supabase/server";
 
 async function assertAdmin() {
@@ -307,6 +309,22 @@ export async function saveAxialSpLockSetting(input: z.infer<typeof spLockSchema>
   await setAxialSpLock(d.enabled);
   revalidatePath("/admin");
   return d.enabled;
+}
+
+// --- Client follow-up cadence -----------------------------------------------
+const followUpSettingsSchema = z.object({
+  offsetsDays: z.array(z.number()),
+  maxNudges: z.number(),
+});
+export async function saveFollowUpSettingsAction(
+  input: z.infer<typeof followUpSettingsSchema>,
+): Promise<FollowUpSettings> {
+  await assertAdmin();
+  const d = followUpSettingsSchema.parse(input);
+  const saved = await setFollowUpSettings(d);
+  revalidatePath("/admin");
+  revalidatePath("/follow-ups");
+  return saved;
 }
 
 // --- Quotation numbering ----------------------------------------------------
