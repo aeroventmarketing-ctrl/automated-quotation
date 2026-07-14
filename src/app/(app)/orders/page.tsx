@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -12,6 +13,9 @@ import {
   ARRANGEMENT_LABEL,
   type SaleRecord,
 } from "@/lib/sale";
+import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/workflow-roles";
+import { readOrderWorkflow, nextOrderStep, stageLabel } from "@/lib/order-workflow";
+import { OrderStageActions } from "./order-stage-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +36,16 @@ function orderDate(sale: SaleRecord, fallback: Date): Date {
  * quotation; VAT invoice generation follows in the next increment.
  */
 export default async function OrdersPage() {
-  const quotes = await prisma.quotation.findMany({
-    where: { inquiry: { status: "WON" } },
-    include: { inquiry: { include: { customer: true } }, preparedBy: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const [quotes, viewer, assignments] = await Promise.all([
+    prisma.quotation.findMany({
+      where: { inquiry: { status: "WON" } },
+      include: { inquiry: { include: { customer: true } }, preparedBy: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    getCurrentUser(),
+    getWorkflowRoles(),
+  ]);
+  const adminViewer = isAdmin(viewer);
 
   const orders = quotes
     .map((q) => {
@@ -46,6 +55,11 @@ export default async function OrdersPage() {
       const collected = collectedTotal(sale);
       const balance = round2(value - collected);
       const status = collected <= 0 ? "PO received" : balance <= 0.005 ? "Paid" : "Partial";
+
+      const wf = readOrderWorkflow(q.classification);
+      const next = nextOrderStep(wf.stage);
+      const canAct = next != null && (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, next.requiredRole)));
+
       return {
         id: q.id,
         quoteNumber: q.quoteNumber,
@@ -59,6 +73,12 @@ export default async function OrdersPage() {
         arrangement: ARRANGEMENT_LABEL[sale.arrangement],
         status,
         sales: q.preparedBy.name,
+        stage: wf.stage,
+        stageText: stageLabel(wf.stage),
+        nextStep: next?.key ?? null,
+        nextLabel: next?.label ?? null,
+        canAct,
+        awaiting: next ? workflowRoleLabel(next.requiredRole) : null,
       };
     })
     .filter((o): o is NonNullable<typeof o> => o != null)
@@ -117,6 +137,7 @@ export default async function OrdersPage() {
                     <TableHead className="text-right">Collected</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Order stage</TableHead>
                     <TableHead>Sales</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -139,6 +160,17 @@ export default async function OrdersPage() {
                       <TableCell className="text-right tabular-nums">{formatCurrency(o.balance, o.currency)}</TableCell>
                       <TableCell>
                         <Badge variant={statusVariant(o.status)}>{o.status}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <OrderStageActions
+                          orderId={o.id}
+                          stage={o.stage}
+                          stageLabel={o.stageText}
+                          nextStep={o.nextStep}
+                          nextLabel={o.nextLabel}
+                          canAct={o.canAct}
+                          awaiting={o.awaiting}
+                        />
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{o.sales}</TableCell>
                     </TableRow>
