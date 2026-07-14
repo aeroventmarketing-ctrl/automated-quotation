@@ -15,7 +15,7 @@ import { createHash } from "crypto";
 const IDENTITY_KEYS = [
   "category", "brand", "type", "bladeType", "drive", "material", "shape",
   "sizeL", "sizeW", "sizeUnit", "gauge", "powderCoated", "insectScreen", "movement", "blowerModel",
-  "capacity_cfm", "staticPressure_pa", "inches", "motorHp", "motorPh", "motorPole", "motorVolts",
+  "capacity_cfm", "staticPressure_pa", "inches", "motorHp", "motorPh", "motorPole", "motorVolts", "motorMounting",
   "ductCalcLength", "ductCalcWidth", "ductCalcHeight", "ductCalcOffset", "ductNoFlange", "ductPainted", "fabricMaterial", "mcRecommend",
   "bladeMaterialOn", "bladeMaterial", "upgradePaint", "paintType", "exproof", "customizedUnit", "doubleWall", "caged", "fanStand",
   "cleatSize", "canvassUnit", "acHeight", "acHeightUnit", "acWidth", "acWidthUnit",
