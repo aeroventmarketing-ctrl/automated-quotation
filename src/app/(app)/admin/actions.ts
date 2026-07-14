@@ -8,8 +8,8 @@ import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
 import { setUserSignatureValue } from "@/lib/signature";
 import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
-import { setFollowUpSettings } from "@/lib/follow-up-settings";
-import type { FollowUpSettings } from "@/lib/follow-up";
+import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
+import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { createServiceClient } from "@/lib/supabase/server";
 
 async function assertAdmin() {
@@ -311,20 +311,28 @@ export async function saveAxialSpLockSetting(input: z.infer<typeof spLockSchema>
   return d.enabled;
 }
 
-// --- Client follow-up cadence -----------------------------------------------
+// --- Client follow-up cadence + delivery ------------------------------------
 const followUpSettingsSchema = z.object({
   offsetsDays: z.array(z.number()),
   maxNudges: z.number(),
+  enabled: z.boolean(),
+  dryRun: z.boolean(),
 });
 export async function saveFollowUpSettingsAction(
   input: z.infer<typeof followUpSettingsSchema>,
-): Promise<FollowUpSettings> {
+): Promise<FollowUpConfig> {
   await assertAdmin();
   const d = followUpSettingsSchema.parse(input);
   const saved = await setFollowUpSettings(d);
   revalidatePath("/admin");
   revalidatePath("/follow-ups");
   return saved;
+}
+
+/** Dry-run the follow-up pass now (never sends) and return the summary. */
+export async function runFollowUpPreviewAction(): Promise<FollowUpRunResult> {
+  await assertAdmin();
+  return runFollowUps({ live: false });
 }
 
 // --- Quotation numbering ----------------------------------------------------

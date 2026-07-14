@@ -3,5 +3,8 @@
   "framework": "nextjs",
   "regions": ["sin1"],
   "buildCommand": "prisma generate && next build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    { "path": "/api/cron/follow-ups", "schedule": "0 1 * * *" }
+  ]
 }

@@ -9,6 +9,10 @@ export const config = {
   // the bucket name invalid (Supabase rejects "  attachments"). Fall back to the
   // default when the variable is unset or only whitespace.
   storageBucket: (process.env.SUPABASE_STORAGE_BUCKET ?? "").trim() || "attachments",
+  // Automated client follow-up emails (Resend). The "from" must be an address on
+  // a domain verified in Resend (a Gmail address will not work).
+  followUpFromName: (process.env.FOLLOW_UP_FROM_NAME ?? "").trim() || "AEROVENT FBM",
+  followUpFromEmail: (process.env.FOLLOW_UP_FROM_EMAIL ?? "").trim(),
 };
 
 export const COMPANY = {
