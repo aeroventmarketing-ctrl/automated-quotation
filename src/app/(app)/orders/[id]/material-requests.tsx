@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { raiseMaterialRequest, handleMaterialRequest, issueMaterialRequestFromStock } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
-import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
+import type { StockOpt } from "./stock-match-panel";
+import { MrfTriagePanel } from "./mrf-triage-panel";
 
 interface ReqRow {
   id: string;
@@ -16,7 +17,7 @@ interface ReqRow {
   deptLabel: string;
   items: MRFItem[];
   note?: string | null;
-  status: "requested" | "issued" | "purchasing";
+  status: "requested" | "issued" | "purchasing" | "partial";
   raisedByName: string;
   date: string;
   handledByName?: string;
@@ -28,6 +29,7 @@ const STATUS: Record<ReqRow["status"], { label: string; variant: "secondary" | "
   requested: { label: "Requested", variant: "secondary" },
   issued: { label: "Issued from stock", variant: "success" },
   purchasing: { label: "For purchasing", variant: "warning" },
+  partial: { label: "Partly issued · purchasing", variant: "warning" },
 };
 
 const emptyRow = (): MRFItem => ({ description: "", qty: "", unit: "", remark: "" });
@@ -151,7 +153,14 @@ export function MaterialRequests({
                   <tbody>
                     {r.items.map((it, i) => (
                       <tr key={i} className="border-b last:border-0">
-                        <td className="py-1 pr-2">{it.description}</td>
+                        <td className="py-1 pr-2">
+                          {it.description}
+                          {it.disposition && (
+                            <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${it.disposition === "issue" ? "bg-emerald-600/15 text-emerald-700" : "bg-amber-500/15 text-amber-700"}`}>
+                              {it.disposition === "issue" ? "Issued" : "To purchase"}
+                            </span>
+                          )}
+                        </td>
                         <td className="py-1 px-2 text-right tabular-nums">{it.qty}</td>
                         <td className="py-1 px-2">{it.unit}</td>
                         <td className="py-1 pl-2 text-muted-foreground">{it.remark}</td>
@@ -167,21 +176,19 @@ export function MaterialRequests({
               </p>
               {r.status === "requested" && r.canHandle && (
                 issuingId === r.id ? (
-                  <StockMatchPanel
-                    lines={r.items.map((it) => ({ label: `${it.description}${it.qty ? ` — ${it.qty} ${it.unit}` : ""}`, qtyDefault: it.qty }))}
+                  <MrfTriagePanel
+                    lines={r.items.map((it) => ({ description: it.description, qty: it.qty, unit: it.unit, remark: it.remark }))}
                     stockItems={stockItems}
-                    submitLabel="Issue & deduct stock"
                     onCancel={() => setIssuingId(null)}
-                    onSubmit={async (matches) => {
-                      await issueMaterialRequestFromStock(orderId, r.id, matches);
+                    onSubmit={async (dispositions) => {
+                      await processMaterialRequest(orderId, r.id, dispositions);
                       setIssuingId(null);
                       router.refresh();
                     }}
                   />
                 ) : (
-                  <div className="mt-2 flex gap-2">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Issue from stock</Button>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => run(() => handleMaterialRequest(orderId, r.id, "purchase"))}>Request purchase</Button>
+                  <div className="mt-2">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Check availability &amp; process</Button>
                   </div>
                 )
               )}
