@@ -11,9 +11,10 @@ import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LA
 import { payableTotal } from "@/lib/quote";
 import { Plus } from "lucide-react";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
-import { addQuotation } from "../actions";
+import { addQuotation, setFollowUpOptOut } from "../actions";
 import { CustomerHeader } from "./customer-header";
 import { AccountPanel } from "./account-panel";
+import { FollowUpOptOut } from "./follow-up-optout";
 import { ConversationPanel, type ConversationBoxData } from "./conversation-panel";
 
 export const dynamic = "force-dynamic";
@@ -334,6 +335,13 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           </Table>
         </CardContent>
       </Card>
+
+      {/* Automatic follow-up opt-out for this client */}
+      <FollowUpOptOut
+        customerId={customer.id}
+        optOut={accountData?.optOutFollowUp === true}
+        onSave={setFollowUpOptOut}
+      />
 
       {/* Conversation history (follow-ups) — one box per quotation */}
       <ConversationPanel

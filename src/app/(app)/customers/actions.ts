@@ -212,6 +212,24 @@ export async function addConversation(customerId: string, input: z.infer<typeof 
   revalidatePath(`/customers/${customerId}`);
 }
 
+/**
+ * Pause or resume automatic follow-ups for one client. When paused (opt-out on),
+ * the scheduler and the Follow-ups list skip this customer entirely. Any signed-in
+ * user can change it; the flag rides in the account registry (no schema change).
+ */
+export async function setFollowUpOptOut(customerId: string, optOut: boolean): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const accounts = await getAccountsRegistry();
+  const data: AccountData = accounts[customerId] ?? { history: [], conversations: [] };
+  data.optOutFollowUp = optOut;
+  accounts[customerId] = data;
+  await saveAccountsRegistry(accounts);
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/follow-ups");
+  return optOut;
+}
+
 /** Remove a logged conversation. The person who logged it, or an admin, may delete it. */
 export async function deleteConversation(customerId: string, conversationId: string) {
   const user = await getCurrentUser();
