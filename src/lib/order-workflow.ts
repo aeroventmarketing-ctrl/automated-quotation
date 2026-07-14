@@ -14,7 +14,13 @@ export type OrderStage =
   | "docs_checked"
   | "released"
   | "in_production"
-  | "production_finished";
+  | "production_finished"
+  | "final_pay_review"
+  | "final_pay_checked"
+  | "final_pay_cleared"
+  | "delivery_docs_ready"
+  | "delivered"
+  | "closed";
 
 export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] = [
   { key: "payment_review", label: "Payment review", phase: "Phase 1" },
@@ -22,6 +28,12 @@ export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] =
   { key: "released", label: "Job orders released", phase: "Phase 1 done" },
   { key: "in_production", label: "In production", phase: "Phase 4" },
   { key: "production_finished", label: "Production finished", phase: "Phase 4 done" },
+  { key: "final_pay_review", label: "Awaiting final payment", phase: "Phase 5" },
+  { key: "final_pay_checked", label: "Final payment checked", phase: "Phase 5" },
+  { key: "final_pay_cleared", label: "Final payment confirmed", phase: "Phase 5 done" },
+  { key: "delivery_docs_ready", label: "Delivery docs ready", phase: "Phase 6" },
+  { key: "delivered", label: "Delivered", phase: "Phase 6" },
+  { key: "closed", label: "Closed", phase: "Phase 6 done" },
 ];
 
 /** The four production departments a job order can go to (relevant ones only). */
@@ -69,11 +81,21 @@ export interface MaterialRequest {
   handledByName?: string;
 }
 
+/** Delivery-document reference numbers captured in Phase 6. */
+export interface OrderDocuments {
+  dr?: string; // Delivery Receipt
+  si?: string; // Sales Invoice
+  or?: string; // Official Receipt
+  pod?: string; // Proof of Delivery
+}
+
 export interface OrderWorkflow {
   stage: OrderStage;
-  approvals: Partial<Record<OrderStepKey, OrderApproval>>;
+  // Keyed by step name (Phase 1 steps + Phase 5/6 fulfillment steps).
+  approvals: Record<string, OrderApproval>;
   jobOrders: Partial<Record<ProductionDeptKey, JobOrder>>;
   materialRequests: MaterialRequest[];
+  documents: OrderDocuments;
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -124,6 +146,10 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     ? (wf.approvals as OrderWorkflow["approvals"])
     : {}) as OrderWorkflow["approvals"];
 
+  const documents = (wf?.documents && typeof wf.documents === "object"
+    ? (wf.documents as OrderDocuments)
+    : {}) as OrderDocuments;
+
   const jobOrders: OrderWorkflow["jobOrders"] = {};
   if (wf?.jobOrders && typeof wf.jobOrders === "object") {
     for (const [k, v] of Object.entries(wf.jobOrders as Record<string, unknown>)) {
@@ -140,7 +166,7 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
       )
     : [];
 
-  return { stage, approvals, jobOrders, materialRequests };
+  return { stage, approvals, jobOrders, materialRequests, documents };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */

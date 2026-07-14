@@ -14,6 +14,12 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   released: "success",
   in_production: "warning",
   production_finished: "success",
+  final_pay_review: "secondary",
+  final_pay_checked: "warning",
+  final_pay_cleared: "warning",
+  delivery_docs_ready: "warning",
+  delivered: "warning",
+  closed: "success",
 };
 
 /** Order stage badge + the current Phase 1 approval action (role-gated server-side). */

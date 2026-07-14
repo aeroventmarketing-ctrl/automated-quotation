@@ -77,7 +77,7 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
 async function loadWorkflow(quotationId: string) {
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, classification: true },
+    select: { id: true, classification: true, preparedById: true },
   });
   if (!quote) throw new Error("Order not found");
   return { quote, cls: (quote.classification as Record<string, unknown>) ?? {}, wf: readOrderWorkflow(quote.classification) };
@@ -295,4 +295,87 @@ export async function advancePurchaseRequest(
   }
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
   revalidatePath(`/orders/${pr.quotationId}`);
+}
+
+// --- Phase 5 & 6: final payment + delivery documents -----------------------
+
+/** Record a fulfillment sign-off (who + when) under the given step key. */
+function stamp(wf: { approvals: Record<string, unknown> }, key: string, user: { id: string; name: string }) {
+  return { ...wf.approvals, [key]: { by: user.id, byName: user.name, at: new Date().toISOString() } };
+}
+
+/** Sales/preparer informs the client the order is ready (Phase 5, step 17). */
+export async function notifyClientReady(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
+  if (!isSales) throw new Error("Only Sales (the order's preparer) or an admin can do this.");
+  if (wf.stage !== "production_finished") throw new Error("The order isn't finished production yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_review", approvals: stamp(wf, "client_notified", user) });
+}
+
+/** Accounting checks the final payment (Phase 5, step 19a). */
+export async function checkFinalPayment(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
+    throw new Error("Only Accounting or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "final_pay_review") throw new Error("Final payment isn't awaiting a check.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_checked", approvals: stamp(wf, "final_pay_checked", user) });
+}
+
+/** Payment Approver confirms the final payment is cleared (Phase 5, step 19b). */
+export async function confirmFinalPayment(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "payment_approver" as WorkflowRoleKey)))
+    throw new Error("Only the Payment Approver or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "final_pay_checked") throw new Error("Final payment hasn't been checked yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_cleared", approvals: stamp(wf, "final_pay_confirmed", user) });
+}
+
+/** Accounting prepares the delivery documents and approves delivery (Phase 6, step 21). */
+export async function prepareDeliveryDocs(
+  quotationId: string,
+  docs: { dr: string; si: string; or: string },
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
+    throw new Error("Only Accounting or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "final_pay_cleared") throw new Error("The order isn't ready for delivery documents.");
+  const documents = {
+    ...wf.documents,
+    dr: docs.dr.trim() || undefined,
+    si: docs.si.trim() || undefined,
+    or: docs.or.trim() || undefined,
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "delivery_docs_ready", documents, approvals: stamp(wf, "delivery_approved", user) });
+}
+
+/** Logistics delivers and records the proof of delivery (Phase 6, steps 20/22). */
+export async function markDelivered(quotationId: string, pod: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "logistics" as WorkflowRoleKey)))
+    throw new Error("Only Logistics or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "delivery_docs_ready") throw new Error("Delivery documents aren't ready yet.");
+  const documents = { ...wf.documents, pod: pod.trim() || undefined };
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "delivered", documents, approvals: stamp(wf, "delivered", user) });
+}
+
+/** Accounting files the signed documents and closes the order (Phase 6, steps 23-24). */
+export async function fileDocuments(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
+    throw new Error("Only Accounting or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "delivered") throw new Error("The order hasn't been delivered yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
 }
