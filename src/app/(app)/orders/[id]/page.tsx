@@ -21,6 +21,7 @@ import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchas
 import { JobOrderManager } from "./job-order-manager";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
+import { FulfillmentActions } from "./fulfillment-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,12 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   released: "success",
   in_production: "warning",
   production_finished: "success",
+  final_pay_review: "secondary",
+  final_pay_checked: "warning",
+  final_pay_cleared: "warning",
+  delivery_docs_ready: "warning",
+  delivered: "warning",
+  closed: "success",
 };
 
 const fmtWhen = (iso?: string) => (iso ? formatDate(new Date(iso)) : "");
@@ -79,6 +86,33 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   const docCheck = wf.approvals.doc_check;
   const payCleared = wf.approvals.payment_cleared;
+
+  // Phase 5 & 6 — delivery & closeout permissions + trail.
+  const hasRole = (role: WorkflowRoleKey) =>
+    adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role));
+  const isSalesViewer =
+    adminViewer || (viewer != null && (viewer.id === quote.preparedById || viewer.role === "SALES" || viewer.role === "ENGINEER"));
+  const perms = {
+    canNotify: isSalesViewer,
+    canCheckPay: hasRole("accounting"),
+    canConfirmPay: hasRole("payment_approver"),
+    canPrepDocs: hasRole("accounting"),
+    canDeliver: hasRole("logistics"),
+    canFile: hasRole("accounting"),
+  };
+  const A = wf.approvals;
+  const fTrail: string[] = [];
+  if (A.client_notified) fTrail.push(`Client notified — ${A.client_notified.byName}`);
+  if (A.final_pay_checked) fTrail.push(`Final payment checked — ${A.final_pay_checked.byName}`);
+  if (A.final_pay_confirmed) fTrail.push(`Final payment confirmed — ${A.final_pay_confirmed.byName}`);
+  if (A.delivery_approved) fTrail.push(`Delivery approved — ${A.delivery_approved.byName}`);
+  if (A.delivered) fTrail.push(`Delivered — ${A.delivered.byName}`);
+  if (A.documents_filed) fTrail.push(`Documents filed — ${A.documents_filed.byName}`);
+  const fulfillmentStages = new Set([
+    "production_finished", "final_pay_review", "final_pay_checked", "final_pay_cleared",
+    "delivery_docs_ready", "delivered", "closed",
+  ]);
+  const showFulfillment = fulfillmentStages.has(wf.stage);
 
   // Materials (Phase 3, part 1): raise MRFs (dept head, during production) and
   // warehouse issue/escalate.
@@ -225,6 +259,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Purchasing</CardTitle></CardHeader>
           <CardContent>
             <PurchasingChain requests={purchaseRows} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Phase 5 & 6 — delivery & closeout */}
+      {showFulfillment && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 &amp; 6 · Final payment, delivery &amp; documents</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {fTrail.length > 0 && <div className="text-xs text-muted-foreground">{fTrail.join(" · ")}</div>}
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} />
           </CardContent>
         </Card>
       )}
