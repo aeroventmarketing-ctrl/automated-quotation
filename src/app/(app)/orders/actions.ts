@@ -227,14 +227,22 @@ function mrfItemLine(it: MRFItem): string {
   return [qtyUnit, it.description].filter(Boolean).join(" · ") + (it.remark ? ` (${it.remark})` : "");
 }
 
+interface LineDisposition {
+  action: "issue" | "purchase";
+  stockItemId?: string;
+  qty?: number;
+}
+
 /**
- * The warehouse handles a material request: "issue" (in stock) or "purchase"
- * (escalate to the purchasing chain).
+ * Warehouse triages a material request line by line: some items are issued from
+ * stock (deducted here), the rest are escalated to a single purchase request.
+ * All in one transaction. The MRF is marked issued / purchasing / partial to
+ * reflect the mix, and each line records its disposition.
  */
-export async function handleMaterialRequest(
+export async function processMaterialRequest(
   quotationId: string,
   requestId: string,
-  decision: "issue" | "purchase",
+  dispositions: LineDisposition[],
 ): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -245,34 +253,56 @@ export async function handleMaterialRequest(
   const { cls, wf } = await loadWorkflow(quotationId);
   const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
   if (idx < 0) throw new Error("Material request not found.");
-  if (wf.materialRequests[idx].status !== "requested") throw new Error("This request has already been handled.");
-
   const mrf = wf.materialRequests[idx];
-  const updated: MaterialRequest = {
-    ...mrf,
-    status: decision === "issue" ? "issued" : "purchasing",
-    handledAt: new Date().toISOString(),
-    handledByName: user.name,
-  };
-  const materialRequests = wf.materialRequests.slice();
-  materialRequests[idx] = updated;
-  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
-
-  // Escalation → create a real PurchaseRequest that walks the purchasing chain.
-  if (decision === "purchase") {
-    await prisma.purchaseRequest.create({
-      data: {
-        quotationId,
-        mrfId: mrf.id,
-        dept: mrf.dept,
-        items: mrf.items.map(mrfItemLine) as Prisma.InputJsonValue,
-        note: mrf.note ?? null,
-        createdById: user.id,
-        createdByName: user.name,
-        status: "PENDING_APPROVAL",
-      },
-    });
+  if (mrf.status !== "requested") throw new Error("This request has already been handled.");
+  if (!Array.isArray(dispositions) || dispositions.length !== mrf.items.length) {
+    throw new Error("Mark every line as issue-from-stock or purchase.");
   }
+
+  const items: MRFItem[] = mrf.items.map((it, i) => ({
+    ...it,
+    disposition: dispositions[i]?.action === "purchase" ? "purchase" : "issue",
+  }));
+  const issueMatches = dispositions
+    .map((d, i) => ({ d, i }))
+    .filter(({ d }) => d.action === "issue" && d.stockItemId && Number(d.qty) > 0)
+    .map(({ d }) => ({ stockItemId: d.stockItemId as string, qty: Number(d.qty) }));
+  const purchaseItems = items.filter((it) => it.disposition === "purchase");
+
+  const anyIssue = items.some((it) => it.disposition === "issue");
+  const anyPurchase = purchaseItems.length > 0;
+  if (!anyIssue && !anyPurchase) throw new Error("Nothing to process.");
+  const status: MaterialRequest["status"] = anyIssue && anyPurchase ? "partial" : anyPurchase ? "purchasing" : "issued";
+
+  await prisma.$transaction(async (tx) => {
+    for (const m of issueMatches) {
+      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "ISSUE", qty: m.qty, reason: `MRF #${mrf.formNo}` }, user.name);
+    }
+    const materialRequests = wf.materialRequests.slice();
+    materialRequests[idx] = { ...mrf, items, status, handledAt: new Date().toISOString(), handledByName: user.name };
+    await tx.quotation.update({
+      where: { id: quotationId },
+      data: { classification: { ...cls, workflow: { ...wf, materialRequests } } as unknown as Prisma.InputJsonObject },
+    });
+    if (anyPurchase) {
+      await tx.purchaseRequest.create({
+        data: {
+          quotationId,
+          mrfId: mrf.id,
+          dept: mrf.dept,
+          items: purchaseItems.map(mrfItemLine) as Prisma.InputJsonValue,
+          note: mrf.note ?? null,
+          createdById: user.id,
+          createdByName: user.name,
+          status: "PENDING_APPROVAL",
+        },
+      });
+    }
+  });
+
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/inventory");
 }
 
 /**
@@ -445,45 +475,6 @@ export async function fileDocuments(quotationId: string): Promise<void> {
 }
 
 // --- Inventory integration --------------------------------------------------
-
-/**
- * Warehouse issues a material request from stock — deducting the matched stock
- * items (in one transaction) and marking the request issued. Lines left
- * unmatched are simply not deducted, so issuing always succeeds.
- */
-export async function issueMaterialRequestFromStock(
-  quotationId: string,
-  requestId: string,
-  matches: StockMatch[],
-): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
-    throw new Error("Only the Warehouse or an admin can issue from stock.");
-  }
-  const { cls, wf } = await loadWorkflow(quotationId);
-  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
-  if (idx < 0) throw new Error("Material request not found.");
-  const mrf = wf.materialRequests[idx];
-  if (mrf.status !== "requested") throw new Error("This request has already been handled.");
-
-  const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
-
-  await prisma.$transaction(async (tx) => {
-    for (const m of clean) {
-      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "ISSUE", qty: Number(m.qty), reason: `MRF #${mrf.formNo}` }, user.name);
-    }
-    const materialRequests = wf.materialRequests.slice();
-    materialRequests[idx] = { ...mrf, status: "issued", handledAt: new Date().toISOString(), handledByName: user.name };
-    await tx.quotation.update({
-      where: { id: quotationId },
-      data: { classification: { ...cls, workflow: { ...wf, materialRequests } } as unknown as Prisma.InputJsonObject },
-    });
-  });
-  revalidatePath("/orders");
-  revalidatePath(`/orders/${quotationId}`);
-  revalidatePath("/inventory");
-}
 
 /**
  * Warehouse receives a purchased order into stock — adding the matched stock
