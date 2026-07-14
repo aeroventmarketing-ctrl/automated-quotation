@@ -128,12 +128,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       : [];
   const materialReqs = wf.materialRequests.map((m) => ({
     id: m.id,
-    dept: m.dept,
+    formNo: m.formNo,
+    orderId: quote.id,
     deptLabel: deptLabel(m.dept),
     items: m.items,
     note: m.note,
     status: m.status,
     raisedByName: m.raisedByName,
+    date: m.raisedAt ? formatDate(new Date(m.raisedAt)) : "",
     handledByName: m.handledByName,
     canHandle: canWarehouse && m.status === "requested",
   }));
@@ -248,7 +250,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
-            <MaterialRequests orderId={quote.id} raisableDepts={raisableDepts} requests={materialReqs} />
+            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} />
           </CardContent>
         </Card>
       )}
