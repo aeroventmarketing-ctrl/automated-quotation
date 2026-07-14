@@ -51,10 +51,29 @@ export interface OrderApproval {
   at: string;
 }
 
+/**
+ * A Material Request Form raised by a production department against the order.
+ * The warehouse either issues it (in stock) or escalates it to purchasing.
+ */
+export type MaterialRequestStatus = "requested" | "issued" | "purchasing";
+
+export interface MaterialRequest {
+  id: string;
+  dept: ProductionDeptKey;
+  items: string[]; // one material per line
+  note?: string;
+  status: MaterialRequestStatus;
+  raisedAt: string;
+  raisedByName: string;
+  handledAt?: string;
+  handledByName?: string;
+}
+
 export interface OrderWorkflow {
   stage: OrderStage;
   approvals: Partial<Record<OrderStepKey, OrderApproval>>;
   jobOrders: Partial<Record<ProductionDeptKey, JobOrder>>;
+  materialRequests: MaterialRequest[];
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -113,7 +132,15 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
       }
     }
   }
-  return { stage, approvals, jobOrders };
+
+  const materialRequests: MaterialRequest[] = Array.isArray(wf?.materialRequests)
+    ? (wf.materialRequests as unknown[]).filter(
+        (m): m is MaterialRequest =>
+          !!m && typeof m === "object" && DEPT_KEYS.has((m as MaterialRequest).dept),
+      )
+    : [];
+
+  return { stage, approvals, jobOrders, materialRequests };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */

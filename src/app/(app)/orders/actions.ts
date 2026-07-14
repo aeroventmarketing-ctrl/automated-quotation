@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -20,6 +21,7 @@ import {
   type OrderStepKey,
   type ProductionDeptKey,
   type JobOrder,
+  type MaterialRequest,
 } from "@/lib/order-workflow";
 
 const DEPT_KEY_SET = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -149,4 +151,72 @@ export async function advanceJobOrder(
   if (allJobOrdersFinished(nextWf)) nextWf.stage = "production_finished";
 
   await saveWorkflow(quotationId, cls, nextWf);
+}
+
+/**
+ * A production department's head raises a Material Request Form against the order
+ * (during production). The warehouse then issues or escalates it.
+ */
+export async function raiseMaterialRequest(
+  quotationId: string,
+  dept: string,
+  items: string[],
+  note: string,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
+  const deptKey = dept as ProductionDeptKey;
+
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(deptKey) as WorkflowRoleKey))) {
+    throw new Error(`Only the ${deptLabel(deptKey)} head or an admin can raise its material request.`);
+  }
+
+  const cleanItems = items.map((s) => s.trim()).filter(Boolean);
+  if (cleanItems.length === 0) throw new Error("List at least one material.");
+
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.jobOrders[deptKey]) throw new Error("This department has no job order on this order.");
+
+  const req: MaterialRequest = {
+    id: randomUUID(),
+    dept: deptKey,
+    items: cleanItems,
+    note: note.trim() || undefined,
+    status: "requested",
+    raisedAt: new Date().toISOString(),
+    raisedByName: user.name,
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests: [...wf.materialRequests, req] });
+}
+
+/**
+ * The warehouse handles a material request: "issue" (in stock) or "purchase"
+ * (escalate to the purchasing chain).
+ */
+export async function handleMaterialRequest(
+  quotationId: string,
+  requestId: string,
+  decision: "issue" | "purchase",
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can handle material requests.");
+  }
+
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  if (wf.materialRequests[idx].status !== "requested") throw new Error("This request has already been handled.");
+
+  const updated: MaterialRequest = {
+    ...wf.materialRequests[idx],
+    status: decision === "issue" ? "issued" : "purchasing",
+    handledAt: new Date().toISOString(),
+    handledByName: user.name,
+  };
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = updated;
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
 }
