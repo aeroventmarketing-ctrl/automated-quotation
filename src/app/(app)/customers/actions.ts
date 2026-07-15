@@ -82,6 +82,72 @@ export async function transferAccount(customerId: string, toUserId: string) {
 }
 
 /**
+ * Transfer a single quotation to a different client. Because a quotation reaches
+ * a client only through its inquiry, the quote is re-parented onto a fresh inquiry
+ * under the target client — carrying over the original inquiry's source, status
+ * (so a won order stays won) and project — leaving the source inquiry and its
+ * other quotations untouched. The quote's own follow-up conversation thread moves
+ * with it. Only the quote's preparer, the source account's sales in-charge, or an
+ * admin may do this.
+ */
+export async function transferQuotation(quotationId: string, targetCustomerId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!targetCustomerId) throw new Error("Choose a client to transfer to.");
+
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    include: { inquiry: true },
+  });
+  if (!quote) throw new Error("Quotation not found.");
+
+  const sourceCustomerId = quote.inquiry.customerId;
+  if (sourceCustomerId === targetCustomerId) throw new Error("The quotation already belongs to this client.");
+
+  const target = await prisma.customer.findUnique({ where: { id: targetCustomerId }, select: { id: true } });
+  if (!target) throw new Error("Target client not found.");
+
+  // Permission: admin, the quote's preparer, or the source account's sales in-charge.
+  const accounts = await getAccountsRegistry();
+  const srcData: AccountData | null = accounts[sourceCustomerId] ?? null;
+  const owner = srcData ? currentOwner(srcData) : null;
+  const allowed = isAdmin(user) || quote.preparedById === user.id || owner?.userId === user.id;
+  if (!allowed) throw new Error("Only the quotation's preparer, the account's sales in-charge, or an admin can transfer it.");
+
+  await prisma.$transaction(async (tx) => {
+    const inquiry = await tx.inquiry.create({
+      data: {
+        customerId: targetCustomerId,
+        source: quote.inquiry.source,
+        status: quote.inquiry.status,
+        createdById: quote.inquiry.createdById,
+        projectName: quote.projectName ?? quote.inquiry.projectName ?? null,
+        notes: quote.inquiry.notes ?? null,
+      },
+    });
+    await tx.quotation.update({ where: { id: quotationId }, data: { inquiryId: inquiry.id } });
+  });
+
+  // Move this quote's conversation thread to the target client's account log.
+  const moving = (srcData?.conversations ?? []).filter((c) => c.quoteNumber === quote.quoteNumber);
+  if (srcData && moving.length) {
+    srcData.conversations = (srcData.conversations ?? []).filter((c) => c.quoteNumber !== quote.quoteNumber);
+    const tgtData: AccountData = accounts[targetCustomerId] ?? { history: [], conversations: [] };
+    tgtData.conversations = [...(tgtData.conversations ?? []), ...moving];
+    accounts[sourceCustomerId] = srcData;
+    accounts[targetCustomerId] = tgtData;
+    await saveAccountsRegistry(accounts);
+  }
+
+  revalidatePath(`/customers/${sourceCustomerId}`);
+  revalidatePath(`/customers/${targetCustomerId}`);
+  revalidatePath("/quotations");
+  revalidatePath("/inquiries");
+  revalidatePath("/orders");
+  redirect(`/customers/${targetCustomerId}`);
+}
+
+/**
  * Start a new quotation for a client from the profile. Quotations attach to an
  * inquiry, so the newest inquiry is reused (or a fresh one is created if the
  * client has none). A blank DRAFT quote is created on the default Fans and
