@@ -225,7 +225,7 @@ const SEG_FIELDS: SegField[] = [
   { key: "periodTo", y: 1309706, cy: 236124, sz: 1000, nudge: 101590, centers: [5120710, 5294470, 5474139, 5647900, 5815755, 5989515, 6169184, 6342945] }, // +1.5px +½ column-width right
   { key: "payeeTin", y: 1757952, cy: 216193, sz: 1000, nudge: 43383, centers: TIN_CENTERS }, // +¼ column right
   { key: "payorTin", y: 3401328, cy: 227267, sz: 1000, nudge: 43383, centers: TIN_CENTERS }, // +¼ column right
-  { key: "payeeZip", y: 2544538, cy: 222358, sz: 1000, centers: [6989798, 7151590, 7313382, 7475174] },
+  { key: "payeeZip", y: 2544538, cy: 222358, sz: 1000, nudge: 161792, centers: [6989798, 7151590, 7313382, 7475174] }, // +1 column right
   { key: "payorZip", y: 4191002, cy: 272141, sz: 1000, centers: [7020710, 7228780, 7436849, 7644919] },
 ];
 
