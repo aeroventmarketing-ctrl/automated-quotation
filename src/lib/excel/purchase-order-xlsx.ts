@@ -76,14 +76,16 @@ export async function buildPurchaseOrderWorkbook(
   ws.pageSetup.printArea = `A1:J${31 + N}`;
 
   // --- BIR 2307 sheet ---------------------------------------------------------
-  // Match AeroVent's actual 2307 exactly: ONLY the amounts are filled (as plain
-  // values, since the template's formulas were linked to the PO sheet). Payee,
-  // Payor, TIN, address and period are left blank — those are prepared
-  // separately (eBIRForms). Income = VAT-exclusive; tax = income × 1% (ATC WI158).
-  const f = wb.getWorksheet("2307");
+  // The standard form is left exactly as AeroVent provided it; only the ATC and
+  // the amounts on the WI 158 line (Part III) are filled. Payee, Payor, TIN,
+  // address and period stay blank (prepared separately in eBIRForms). Income =
+  // VAT-exclusive amount; tax = income × 1%. The Tax Withheld total (AI48) is a
+  // SUM formula on the form and is left untouched.
+  const f = wb.worksheets.find((s) => /2307/i.test(s.name));
   if (f) {
     const income = round2(totals.total / (1 + (config.vatRate || 0.12)));
     const tax = round2(income * 0.01);
+    f.getCell("L38").value = "WI 158"; // ATC — top withholding agent, purchase of goods
     // Income Payments go in the month-of-quarter column matching the PO date
     // (1st→O, 2nd→T, 3rd→Y); the other two months are zero.
     const monthCols = ["O", "T", "Y"] as const;
@@ -92,14 +94,8 @@ export async function buildPurchaseOrderWorkbook(
     monthCols.forEach((col, i) => {
       f.getCell(`${col}38`).value = i === mq ? income : 0;
     });
-    f.getCell("AD38").value = income; // Total
+    f.getCell("AD38").value = income; // Total (Amount of Income Payments)
     f.getCell("AI38").value = tax; // Tax Withheld for the Quarter
-    f.getCell("AI48").value = tax; // Total
-    // Neutralize the off-print helper cells that carried the broken PO-sheet link.
-    f.getCell("AZ37").value = totals.total;
-    f.getCell("AZ38").value = income;
-    f.getCell("AZ39").value = tax;
-    f.getCell("AZ40").value = round2(totals.total - tax);
   }
 
   const out = await wb.xlsx.writeBuffer();
