@@ -425,7 +425,7 @@ function imageSize(bytes: Buffer, ext: string): { w: number; h: number } {
 
 // Signature placement on the 2307 (absolute EMU, measured from the form).
 const SIG_CENTER_X = 3609975; // horizontal centre of the merged A63:AN65 block (matches the centred name)
-const SIG_SHIFT_X = 778193; //   move right 4.3 column-widths (≈180,975 EMU each)
+const SIG_SHIFT_X = 398145; //   move right 2.2 column-widths (≈180,975 EMU each)
 const SIG_BASE_Y = 9540225; //   just below the declaration line, above the name
 const SIG_DROP_Y = 228600; //    move down 18 points so it sits over the printed name
 
