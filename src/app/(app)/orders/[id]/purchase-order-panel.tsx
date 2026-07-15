@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
@@ -225,7 +226,12 @@ export function PurchaseOrderPanel({
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" className="h-8" disabled={busy} onClick={save}>{busy ? "Saving…" : po ? "Save changes" : "Create purchase order"}</Button>
         {po && (
-          <a href={`/orders/${orderId}/po/${prId}/xlsx`} className="text-sm text-primary hover:underline">Print PO &amp; 2307 →</a>
+          <a
+            href={`/orders/${orderId}/po/${prId}/xlsx`}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED1C24]/40"
+          >
+            <Printer className="h-4 w-4" /> Print PO &amp; 2307
+          </a>
         )}
         <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={onDone}>Close</Button>
         {err && <span className="text-xs text-destructive">{err}</span>}

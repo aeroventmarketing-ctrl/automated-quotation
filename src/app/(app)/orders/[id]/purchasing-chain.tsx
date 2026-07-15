@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Printer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest } from "../actions";
@@ -138,7 +139,12 @@ export function PurchasingChain({
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge variant="success">PO {r.po.poNumber}</Badge>
                   {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
-                  <a href={`/orders/${orderId}/po/${r.id}/xlsx`} className="text-primary hover:underline">Print PO &amp; 2307</a>
+                  <a
+                    href={`/orders/${orderId}/po/${r.id}/xlsx`}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED1C24]/40"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
+                  </a>
                   {r.canManagePO && (
                     <button type="button" onClick={() => setPoEditId(r.id)} className="text-muted-foreground hover:text-foreground">Edit</button>
                   )}
