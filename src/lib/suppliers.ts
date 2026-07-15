@@ -16,7 +16,7 @@ export interface Supplier {
   contactPerson: string; // Contact Person
   contactNumber: string; // Contact Number
   email: string; // Email Address
-  paymentDetails: string; // Payment Details
+  paymentDetails: string; // Bank Details
 }
 
 /** The columns used for the import/export template (order matters). */
@@ -25,7 +25,7 @@ export const SUPPLIER_COLUMNS = [
   { key: "contactPerson", label: "Contact Person" },
   { key: "contactNumber", label: "Contact Number" },
   { key: "email", label: "Email Address" },
-  { key: "paymentDetails", label: "Payment Details" },
+  { key: "paymentDetails", label: "Bank Details" },
 ] as const;
 
 const norm = (s: string) => s.trim().toLowerCase();

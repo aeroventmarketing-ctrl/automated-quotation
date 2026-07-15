@@ -26,7 +26,7 @@ const ALIASES: Record<keyof Fields, string[]> = {
   contactPerson: ["contact person", "contact", "attention", "person", "contact name"],
   contactNumber: ["contact number", "contact no", "number", "phone", "mobile", "telephone", "tel"],
   email: ["email address", "email", "e-mail", "email add"],
-  paymentDetails: ["payment details", "payment", "payment terms", "terms", "bank details", "bank"],
+  paymentDetails: ["bank details", "bank", "payment details", "payment", "payment terms", "terms"],
 };
 
 function csvEscape(v: string) {
@@ -196,7 +196,7 @@ export function SuppliersManager({
           <Input className="h-8" placeholder="Contact Person" value={add.contactPerson} onChange={(e) => setAdd({ ...add, contactPerson: e.target.value })} />
           <Input className="h-8" placeholder="Contact Number" value={add.contactNumber} onChange={(e) => setAdd({ ...add, contactNumber: e.target.value })} />
           <Input className="h-8" placeholder="Email Address" value={add.email} onChange={(e) => setAdd({ ...add, email: e.target.value })} />
-          <Input className="h-8 sm:col-span-2 lg:col-span-2" placeholder="Payment Details" value={add.paymentDetails} onChange={(e) => setAdd({ ...add, paymentDetails: e.target.value })} />
+          <Input className="h-8 sm:col-span-2 lg:col-span-2" placeholder="Bank Details" value={add.paymentDetails} onChange={(e) => setAdd({ ...add, paymentDetails: e.target.value })} />
         </div>
         <Button size="sm" className="h-8" disabled={busy || !add.company.trim()} onClick={() => run(() => onSave(add), () => setAdd(blank))}>
           {busy ? "Saving…" : "Add supplier"}
@@ -215,7 +215,7 @@ export function SuppliersManager({
                 <th className="py-2 px-3 font-medium">Contact Person</th>
                 <th className="py-2 px-3 font-medium">Contact Number</th>
                 <th className="py-2 px-3 font-medium">Email Address</th>
-                <th className="py-2 px-3 font-medium">Payment Details</th>
+                <th className="py-2 px-3 font-medium">Bank Details</th>
                 <th className="py-2 px-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
