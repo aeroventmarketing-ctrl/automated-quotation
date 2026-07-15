@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { saveSupplier, deleteSupplier, type Supplier } from "@/lib/suppliers";
+import { saveSupplier, deleteSupplier, bulkUpsertSuppliers, type Supplier, type BulkResult } from "@/lib/suppliers";
 
 async function assertAdmin() {
   const user = await getCurrentUser();
@@ -13,8 +13,10 @@ async function assertAdmin() {
 const supplierSchema = z.object({
   id: z.string().optional(),
   company: z.string().trim().min(1, "Company name is required"),
-  attention: z.string().trim().optional().default(""),
-  address: z.string().trim().optional().default(""),
+  contactPerson: z.string().trim().optional().default(""),
+  contactNumber: z.string().trim().optional().default(""),
+  email: z.string().trim().optional().default(""),
+  paymentDetails: z.string().trim().optional().default(""),
 });
 
 export async function saveSupplierAction(input: z.infer<typeof supplierSchema>): Promise<Supplier[]> {
@@ -30,4 +32,24 @@ export async function deleteSupplierAction(id: string): Promise<Supplier[]> {
   const list = await deleteSupplier(id);
   revalidatePath("/admin/suppliers");
   return list;
+}
+
+const bulkSchema = z.object({
+  rows: z.array(
+    z.object({
+      company: z.string().trim().optional().default(""),
+      contactPerson: z.string().trim().optional().default(""),
+      contactNumber: z.string().trim().optional().default(""),
+      email: z.string().trim().optional().default(""),
+      paymentDetails: z.string().trim().optional().default(""),
+    }),
+  ),
+});
+
+export async function bulkImportSuppliersAction(input: z.infer<typeof bulkSchema>): Promise<BulkResult> {
+  await assertAdmin();
+  const d = bulkSchema.parse(input);
+  const result = await bulkUpsertSuppliers(d.rows);
+  revalidatePath("/admin/suppliers");
+  return result;
 }

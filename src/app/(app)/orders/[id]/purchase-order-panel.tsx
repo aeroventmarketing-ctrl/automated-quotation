@@ -50,8 +50,8 @@ export function PurchaseOrderPanel({
 
   function pickSupplier(s: Supplier) {
     setCompany(s.company);
-    setAttention(s.attention);
-    setAddress(s.address);
+    setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
+    if (s.paymentDetails) setRemarks(s.paymentDetails);
     setSupplierOpen(false);
   }
   const [date, setDate] = useState(po?.date ? po.date.slice(0, 10) : todayInput());
@@ -137,8 +137,8 @@ export function PurchaseOrderPanel({
                       className="block w-full px-2 py-1.5 text-left text-sm hover:bg-accent"
                     >
                       <div className="font-medium">{s.company}</div>
-                      {(s.attention || s.address) && (
-                        <div className="truncate text-xs text-muted-foreground">{[s.attention, s.address].filter(Boolean).join(" · ")}</div>
+                      {(s.contactPerson || s.contactNumber) && (
+                        <div className="truncate text-xs text-muted-foreground">{[s.contactPerson, s.contactNumber].filter(Boolean).join(" · ")}</div>
                       )}
                     </button>
                   </li>
