@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest } from "../actions";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
+import { PurchaseOrderPanel } from "./purchase-order-panel";
+import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
 
 interface ActionOpt {
   key: string;
@@ -23,13 +26,27 @@ interface PRRow {
   variant: "secondary" | "warning" | "success" | "destructive";
   trail: string[];
   actions: ActionOpt[];
+  po: PurchaseOrder | null;
+  poDefaultLines: POLine[];
+  canManagePO: boolean;
 }
 
-export function PurchasingChain({ requests, stockItems }: { requests: PRRow[]; stockItems: StockOpt[] }) {
+export function PurchasingChain({
+  requests,
+  stockItems,
+  orderId,
+  poDefaultRemarks,
+}: {
+  requests: PRRow[];
+  stockItems: StockOpt[];
+  orderId: string;
+  poDefaultRemarks: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [receivingId, setReceivingId] = useState<string | null>(null);
+  const [poEditId, setPoEditId] = useState<string | null>(null);
 
   async function run(prId: string, stepKey: string) {
     setBusy(prId + stepKey);
@@ -95,6 +112,33 @@ export function PurchasingChain({ requests, stockItems }: { requests: PRRow[]; s
             ) : awaiting ? (
               <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
             ) : null}
+
+            {/* Supplier Purchase Order */}
+            <div className="mt-2 border-t pt-2">
+              {poEditId === r.id ? (
+                <PurchaseOrderPanel
+                  prId={r.id}
+                  orderId={orderId}
+                  po={r.po}
+                  defaultLines={r.poDefaultLines}
+                  defaultRemarks={poDefaultRemarks}
+                  onDone={() => setPoEditId(null)}
+                />
+              ) : r.po ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Badge variant="success">PO {r.po.poNumber}</Badge>
+                  {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
+                  <Link href={`/orders/${orderId}/po/${r.id}`} target="_blank" className="text-primary hover:underline">Print PO</Link>
+                  {r.canManagePO && (
+                    <button type="button" onClick={() => setPoEditId(r.id)} className="text-muted-foreground hover:text-foreground">Edit</button>
+                  )}
+                </div>
+              ) : r.canManagePO ? (
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPoEditId(r.id)}>Create Purchase Order</Button>
+              ) : (
+                <span className="text-xs text-muted-foreground">No purchase order yet.</span>
+              )}
+            </div>
           </div>
         );
       })}

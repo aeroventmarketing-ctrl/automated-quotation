@@ -28,6 +28,11 @@ export const COMPANY = {
   website: "www.aeroventfbm.com",
   // Short code used as the AFBM quote-number prefix.
   quotePrefix: "AFBM",
+  // Supplier Purchase Order footer — AEROVENT's payee details and default remark.
+  poBank: { bank: "BDO", name: "RAMON F CHONG WING SAU", number: "002830007375" },
+  poGcash: { name: "RYANN CHONG", number: "09178305514" },
+  poDefaultRemarks: "Payment via Cash / GCASH / Online banking",
+  poSignatoryTitle: "Account Purchaser",
   closing:
     "Thank you for giving us the opportunity to quote in your requirement, we shall await your valued order with much interest.",
   signoff: "Very Truly Yours,",

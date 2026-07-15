@@ -2,9 +2,12 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { coercePurchaseOrder, formatPoNumber, type PurchaseOrder } from "@/lib/purchase-order";
 import {
   getWorkflowRoles,
   userHasWorkflowRole,
@@ -360,6 +363,88 @@ export async function advancePurchaseRequest(
       break;
   }
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
+  revalidatePath(`/orders/${pr.quotationId}`);
+}
+
+// --- Supplier Purchase Order ------------------------------------------------
+
+const poInputSchema = z.object({
+  supplier: z.object({
+    company: z.string().trim().default(""),
+    attention: z.string().trim().default(""),
+    address: z.string().trim().default(""),
+  }),
+  date: z.string().trim().default(""),
+  lines: z
+    .array(
+      z.object({
+        description: z.string().trim().default(""),
+        qty: z.string().trim().default(""),
+        unit: z.string().trim().default(""),
+        unitPrice: z.string().trim().default(""),
+      }),
+    )
+    .default([]),
+  ewtPct: z.number().min(0).max(100).default(1),
+  remarks: z.string().trim().default(""),
+});
+
+/** Next running Purchase Order number: PO-AFBM<year><7-digit seq>. */
+async function nextPoNo(): Promise<string> {
+  const KEY = "po_counter";
+  const year = new Date().getFullYear();
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.appSetting.findUnique({ where: { key: KEY } });
+    const last = Number((row?.value as { last?: unknown } | null)?.last ?? 0) || 0;
+    const next = last + 1;
+    await tx.appSetting.upsert({
+      where: { key: KEY },
+      create: { key: KEY, value: { last: next } as Prisma.InputJsonValue },
+      update: { value: { last: next } as Prisma.InputJsonValue },
+    });
+    return formatPoNumber(next, year);
+  });
+}
+
+/**
+ * The purchaser issues (or edits) the supplier Purchase Order on a purchase
+ * request: supplier details, priced lines, EWT % and remarks. The PO number is
+ * assigned once, on first save, and never changes afterwards. Purchaser/admin only.
+ */
+export async function savePurchaseOrder(
+  purchaseRequestId: string,
+  input: z.infer<typeof poInputSchema>,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey))) {
+    throw new Error("Only the Purchaser or an admin can issue a purchase order.");
+  }
+  const d = poInputSchema.parse(input);
+
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  if (pr.status === "REJECTED") throw new Error("This purchase request was rejected.");
+
+  const lines = d.lines.filter((l) => l.description.trim() !== "");
+  if (lines.length === 0) throw new Error("Add at least one line to the purchase order.");
+
+  const existing = coercePurchaseOrder(pr.po);
+  const po: PurchaseOrder = {
+    poNumber: existing?.poNumber ?? (await nextPoNo()),
+    date: d.date || new Date().toISOString(),
+    supplier: d.supplier,
+    lines,
+    ewtPct: d.ewtPct,
+    remarks: d.remarks || COMPANY.poDefaultRemarks,
+    createdByName: existing?.createdByName ?? user.name,
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+  };
+
+  await prisma.purchaseRequest.update({
+    where: { id: purchaseRequestId },
+    data: { po: po as unknown as Prisma.InputJsonObject },
+  });
   revalidatePath(`/orders/${pr.quotationId}`);
 }
 

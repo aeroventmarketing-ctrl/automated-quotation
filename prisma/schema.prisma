@@ -331,6 +331,10 @@ model PurchaseRequest {
   plantApprovedByName String?
   plantApprovedAt DateTime?
 
+  // Purchase Order sent to the supplier (number, supplier, priced lines, EWT,
+  // remarks). Null until the purchaser issues the PO.
+  po            Json?
+
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
   @@index([quotationId])

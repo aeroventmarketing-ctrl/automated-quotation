@@ -6,6 +6,7 @@ import { getAxialSpLock } from "@/lib/axial-lock";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { QuoteNumberSetting } from "./quote-number-setting";
 import { MrfNumberSetting } from "./mrf-number-setting";
+import { PoNumberSetting } from "./po-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
 import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
@@ -29,6 +30,8 @@ export default async function AdminOverviewPage() {
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
   const mrfNext = (Number((mrfRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
+  const poRow = await prisma.appSetting.findUnique({ where: { key: "po_counter" } });
+  const poNext = (Number((poRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
 
   const stats = [
     { label: "Users", value: users, href: "/admin/users" },
@@ -71,6 +74,7 @@ export default async function AdminOverviewPage() {
       </Link>
       <QuoteNumberSetting current={nextQuoteSeq} />
       <MrfNumberSetting current={mrfNext} />
+      <PoNumberSetting current={poNext} />
       <SpLockSetting
         title="Propeller Type static-pressure lock"
         description={'When enabled, Power Roof Ventilator and Wall Fan (Propeller Type) lines are capped at 0.5" w.g.: the builder warns above that and disables Run selection. Turn off to allow selecting these fans at any static pressure.'}

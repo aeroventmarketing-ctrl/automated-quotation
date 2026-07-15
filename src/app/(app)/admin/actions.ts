@@ -352,6 +352,22 @@ export async function setMrfNextNo(input: z.infer<typeof mrfNextSchema>): Promis
   return d.next;
 }
 
+// --- Purchase Order numbering -----------------------------------------------
+const PO_COUNTER_KEY = "po_counter";
+const poNextSchema = z.object({ next: z.number().int().min(1) });
+/** Set the next Purchase Order sequence number (stored as last = next - 1). */
+export async function setPoNextNo(input: z.infer<typeof poNextSchema>): Promise<number> {
+  await assertAdmin();
+  const d = poNextSchema.parse(input);
+  await prisma.appSetting.upsert({
+    where: { key: PO_COUNTER_KEY },
+    create: { key: PO_COUNTER_KEY, value: { last: d.next - 1 } },
+    update: { value: { last: d.next - 1 } },
+  });
+  revalidatePath("/admin");
+  return d.next;
+}
+
 // --- Workflow (ERP) roles ---------------------------------------------------
 const workflowRolesSchema = z.object({ userId: z.string(), roles: z.array(z.string()) });
 export async function setUserWorkflowRolesAction(

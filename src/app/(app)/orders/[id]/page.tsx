@@ -20,6 +20,8 @@ import {
   type OrderStage,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
+import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
+import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
@@ -175,10 +177,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Purchasing chain (Phase 3, part 2) — real PurchaseRequest rows.
   const prVariant = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
     s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
+  const canManagePO =
+    adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey));
   const pStamp = (label: string, who?: string | null, at?: Date | null) =>
     who ? `${label} — ${who} · ${formatDateTime(at ?? undefined)}` : null;
   const purchaseRows = purchaseRequests.map((pr) => {
     const status = pr.status as PRStatus;
+    const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
     const trail: string[] = [
       pStamp("Requested", pr.createdByName, pr.createdAt),
       pStamp(status === "REJECTED" ? "Rejected" : "Approved", pr.decidedByName, pr.decidedAt),
@@ -200,13 +205,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     return {
       id: pr.id,
       deptLabel: deptLabel(pr.dept as typeof PRODUCTION_DEPTS[number]["key"]),
-      items: Array.isArray(pr.items) ? (pr.items as string[]) : [],
+      items: prItems,
       note: pr.note,
       status,
       statusLabel: PR_STATUS_LABEL[status],
       variant: prVariant(status),
       trail,
       actions,
+      po: coercePurchaseOrder(pr.po),
+      poDefaultLines: prItems.map(poLineFromPRItem),
+      canManagePO,
     };
   });
 
@@ -318,7 +326,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Purchasing</CardTitle></CardHeader>
           <CardContent>
-            <PurchasingChain requests={purchaseRows} stockItems={stockItems} />
+            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} />
           </CardContent>
         </Card>
       )}
