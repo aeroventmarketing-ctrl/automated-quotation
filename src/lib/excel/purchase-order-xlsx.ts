@@ -221,7 +221,7 @@ const TIN_CENTERS = [2594777, 2768308, 2941839, 3274577, 3448108, 3621639, 39504
 
 const SEG_FIELDS: SegField[] = [
   { key: "periodFrom", y: 1325179, cy: 223372, sz: 1000, centers: [1844726, 2019499, 2198995, 2375555, 2539103, 2712696, 2892192, 3078367] },
-  { key: "periodTo", y: 1309706, cy: 236124, sz: 1000, nudge: 188893, centers: [5120710, 5294470, 5474139, 5647900, 5815755, 5989515, 6169184, 6342945] }, // +1.5px +1 column-width right
+  { key: "periodTo", y: 1309706, cy: 236124, sz: 1000, nudge: 101590, centers: [5120710, 5294470, 5474139, 5647900, 5815755, 5989515, 6169184, 6342945] }, // +1.5px +½ column-width right
   { key: "payeeTin", y: 1757952, cy: 216193, sz: 1000, centers: TIN_CENTERS },
   { key: "payorTin", y: 3401328, cy: 227267, sz: 1000, centers: TIN_CENTERS },
   { key: "payeeZip", y: 2544538, cy: 222358, sz: 1000, centers: [6989798, 7151590, 7313382, 7475174] },
