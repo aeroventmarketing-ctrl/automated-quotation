@@ -3,13 +3,17 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { coercePurchaseOrder, poLineAmount, poTotals } from "@/lib/purchase-order";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
 
-/** Printable supplier Purchase Order (mirrors AeroVent's PO template). */
+const peso = (n: number) => n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Printable supplier Purchase Order — a faithful reproduction of AeroVent's PO
+ *  template. Only the data (supplier, items, totals, remarks) is filled in; the
+ *  letterhead, layout and footer are fixed to match the standard form. */
 export default async function PurchaseOrderPrintPage({ params }: { params: Promise<{ id: string; prId: string }> }) {
   const { id, prId } = await params;
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: prId } });
@@ -18,14 +22,14 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
   if (!po) notFound();
 
   const totals = poTotals(po);
-  // Pad rows so the sheet always looks complete.
+  // Pad rows so the sheet always looks like the standard form.
   const rows = [...po.lines];
   while (rows.length < 6) rows.push({ description: "", qty: "", unit: "", unitPrice: "" });
 
-  const field = (label: string, value: string) => (
+  const supplierRow = (label: string, value: string) => (
     <tr>
-      <td className="w-40 border border-black bg-gray-100 px-2 py-1 font-medium">{label}</td>
-      <td className="border border-black px-2 py-1">{value}</td>
+      <td className="w-36 border border-black px-2 py-1 align-top font-medium">{label}</td>
+      <td className="border border-black px-2 py-1 align-top">{value}</td>
     </tr>
   );
 
@@ -35,7 +39,7 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
         @media print {
           body * { visibility: hidden !important; }
           #po-sheet, #po-sheet * { visibility: visible !important; }
-          #po-sheet { position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
+          #po-sheet { position: absolute; left: 0; top: 0; width: 100%; padding: 0; border: 0 !important; }
           .no-print { display: none !important; }
         }
       `}</style>
@@ -48,92 +52,91 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
       </div>
 
       <div id="po-sheet" className="mx-auto max-w-[800px] rounded-md border bg-white p-8 text-black">
-        {/* Letterhead */}
-        <div className="flex items-start gap-4 border-b-2 border-black pb-3">
+        {/* Letterhead — logo centered, contact details centered below */}
+        <div className="pb-2 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/aerovent-logo.jpg" alt="AeroVent" className="h-14 w-auto" />
-          <div className="flex-1 text-center text-[11px] leading-tight">
-            <div className="text-lg font-extrabold tracking-wide">{COMPANY.name}</div>
+          <img src="/aerovent-logo.jpg" alt="AEROVENT" className="mx-auto h-16 w-auto" />
+          <div className="mt-1 text-[11px] leading-tight">
             <div className="italic">{COMPANY.tagline}</div>
             <div>{COMPANY.manilaOffice}</div>
             <div>{COMPANY.landline}</div>
             <div>{COMPANY.mobile}</div>
             <div>{COMPANY.plantAddress}</div>
-            <div>Email: {COMPANY.email} · {COMPANY.website}</div>
+            <div>Email: {COMPANY.email} &nbsp;/&nbsp; Website: {COMPANY.website}</div>
           </div>
         </div>
 
-        <h1 className="mt-3 text-center text-base font-bold tracking-wide">Purchase Order</h1>
+        <h1 className="mb-1 mt-1 text-center text-[15px] font-bold">Purchase Order</h1>
 
-        {/* Supplier block */}
-        <table className="mt-3 w-full border-collapse text-sm">
+        {/* Supplier details */}
+        <table className="w-full border-collapse text-[13px]">
           <tbody>
-            {field("Company Name", po.supplier.company)}
-            {field("Attention", po.supplier.attention)}
-            {field("Address", po.supplier.address)}
-            {field("Date", po.date ? formatDate(new Date(po.date)) : "")}
-            {field("P.O. Number", po.poNumber)}
+            {supplierRow("Company Name", po.supplier.company)}
+            {supplierRow("Attention", po.supplier.attention)}
+            {supplierRow("Address", po.supplier.address)}
+            {supplierRow("Date", po.date ? formatDate(new Date(po.date)) : "")}
+            {supplierRow("P.O. Number", po.poNumber)}
           </tbody>
         </table>
 
-        {/* Line items */}
-        <table className="mt-3 w-full border-collapse text-sm">
+        {/* Line items + totals + remarks — one continuous ruled form */}
+        <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr>
-              <th className="w-12 border border-black bg-gray-100 px-2 py-1">Item</th>
-              <th className="border border-black bg-gray-100 px-2 py-1 text-left">Description</th>
-              <th className="w-14 border border-black bg-gray-100 px-2 py-1">Qty</th>
-              <th className="w-14 border border-black bg-gray-100 px-2 py-1">Unit</th>
-              <th className="w-24 border border-black bg-gray-100 px-2 py-1 text-right">Unit Price</th>
-              <th className="w-28 border border-black bg-gray-100 px-2 py-1 text-right">Gross Amount</th>
+              <th className="w-12 border border-black px-2 py-1 font-medium">Item</th>
+              <th className="border border-black px-2 py-1 font-medium">Description</th>
+              <th className="w-12 border border-black px-2 py-1 font-medium">Qty</th>
+              <th className="w-12 border border-black px-2 py-1 font-medium">Unit</th>
+              <th className="w-24 border border-black px-2 py-1 font-medium">Unit Price</th>
+              <th className="w-28 border border-black px-2 py-1 font-medium">Gross Amount</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((l, i) => (
               <tr key={i}>
-                <td className="border border-black px-2 py-1.5 text-center">{l.description ? i + 1 : ""}</td>
-                <td className="border border-black px-2 py-1.5">{l.description}</td>
-                <td className="border border-black px-2 py-1.5 text-center">{l.qty}</td>
-                <td className="border border-black px-2 py-1.5 text-center">{l.unit}</td>
-                <td className="border border-black px-2 py-1.5 text-right tabular-nums">{l.description ? Number(String(l.unitPrice).replace(/,/g, "")).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""}</td>
-                <td className="border border-black px-2 py-1.5 text-right tabular-nums">{l.description ? formatCurrency(poLineAmount(l), "PHP").replace("₱", "") : ""}</td>
+                <td className="h-9 border border-black px-2 text-center">{l.description ? i + 1 : ""}</td>
+                <td className="border border-black px-2 text-center">{l.description}</td>
+                <td className="border border-black px-2 text-center">{l.qty}</td>
+                <td className="border border-black px-2 text-center">{l.unit}</td>
+                <td className="border border-black px-2 text-right tabular-nums">{l.description ? peso(Number(String(l.unitPrice).replace(/,/g, "")) || 0) : ""}</td>
+                <td className="border border-black px-2 text-right tabular-nums">{l.description ? peso(poLineAmount(l)) : ""}</td>
               </tr>
             ))}
             <tr>
-              <td colSpan={5} className="border border-black px-2 py-1.5 text-center font-semibold">TOTAL AMOUNT</td>
-              <td className="border border-black px-2 py-1.5 text-right font-semibold tabular-nums">{totals.total.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">TOTAL AMOUNT</td>
+              <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">{peso(totals.total)}</td>
             </tr>
             <tr>
-              <td colSpan={5} className="border border-black px-2 py-1.5 text-center">LESS EWT {po.ewtPct}%</td>
-              <td className="border border-black px-2 py-1.5 text-right tabular-nums">{totals.ewt.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">LESS EWT {po.ewtPct}%</td>
+              <td className="border border-black px-2 py-1 text-right tabular-nums">{peso(totals.ewt)}</td>
             </tr>
             <tr>
-              <td colSpan={5} className="border border-black px-2 py-1.5 text-center font-semibold">NET AMOUNT =&gt;</td>
-              <td className="border border-black px-2 py-1.5 text-right font-semibold tabular-nums">{totals.net.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">NET AMOUNT =&gt;</td>
+              <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">{peso(totals.net)}</td>
+            </tr>
+            <tr>
+              <td colSpan={6} className="border border-black px-2 py-2 align-top">
+                <span className="italic">Remarks:</span>
+                <div className="mt-1 pl-6">{po.remarks}</div>
+              </td>
             </tr>
           </tbody>
         </table>
 
-        {/* Remarks */}
-        <div className="mt-2 text-sm">
-          <span className="italic">Remarks:</span>
-          <div className="mt-1 pl-4">{po.remarks}</div>
-        </div>
-
-        {/* Footer — purchaser signature + AeroVent payee details */}
-        <div className="mt-10 grid grid-cols-2 gap-8 text-sm">
+        {/* Footer — purchaser signature (left) + AeroVent payee details (right) */}
+        <div className="mt-8 grid grid-cols-2 gap-8 text-[12px]">
           <div>
-            <div className="h-10" />
-            <div className="border-t border-black pt-1 text-center text-[12px]">
+            <div className="h-12" />
+            <div className="w-60 border-t border-black pt-1 text-center">
               <div>{COMPANY.poSignatoryTitle}</div>
-              <div className="font-semibold">AEROVENT</div>
+              <div>AEROVENT</div>
             </div>
           </div>
-          <div className="text-[12px] leading-relaxed">
-            <div className="font-semibold">{COMPANY.poBank.bank}</div>
+          <div className="leading-relaxed">
+            <div>{COMPANY.poBank.bank}</div>
             <div>{COMPANY.poBank.name}</div>
             <div>{COMPANY.poBank.number}</div>
-            <div className="mt-2 font-semibold">GCASH</div>
+            <div className="mt-3">GCASH</div>
             <div>{COMPANY.poGcash.name}</div>
             <div>{COMPANY.poGcash.number}</div>
           </div>
