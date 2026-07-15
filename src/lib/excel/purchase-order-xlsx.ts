@@ -425,6 +425,7 @@ function imageSize(bytes: Buffer, ext: string): { w: number; h: number } {
 
 // Signature placement on the 2307 (absolute EMU, measured from the form).
 const SIG_CENTER_X = 3609975; // horizontal centre of the merged A63:AN65 block (matches the centred name)
+const SIG_SHIFT_X = 778193; //   move right 4.3 column-widths (≈180,975 EMU each)
 const SIG_BASE_Y = 9540225; //   just below the declaration line, above the name
 const SIG_DROP_Y = 228600; //    move down 18 points so it sits over the printed name
 
@@ -440,7 +441,7 @@ function signaturePicAnchor(relId: string, size: { w: number; h: number }): stri
   let cx = MAX_W;
   let cy = Math.round(cx / aspect);
   if (cy > MAX_H) { cy = MAX_H; cx = Math.round(cy * aspect); }
-  const x = Math.round(SIG_CENTER_X - cx / 2);
+  const x = Math.round(SIG_CENTER_X - cx / 2) + SIG_SHIFT_X;
   const y = SIG_BASE_Y + SIG_DROP_Y;
   return (
     `<xdr:absoluteAnchor>` +

@@ -18,6 +18,45 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Load a data URL into an HTMLImageElement. */
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Could not load the image."));
+    img.src = src;
+  });
+}
+
+/**
+ * Convert an uploaded signature to a PNG with a transparent background: draw it
+ * to a canvas (scaled down if huge) and knock out near-white pixels to alpha 0,
+ * so the signature sits cleanly over the printed name on the 2307.
+ */
+async function toTransparentPng(file: File): Promise<string> {
+  const img = await loadImage(await fileToDataUrl(file));
+  const maxW = 900;
+  const scale = img.naturalWidth > maxW ? maxW / img.naturalWidth : 1;
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is not available in this browser.");
+  ctx.drawImage(img, 0, 0, w, h);
+  const image = ctx.getImageData(0, 0, w, h);
+  const d = image.data;
+  for (let i = 0; i < d.length; i += 4) {
+    // Near-white → fully transparent; light grey → partially transparent (soft edge).
+    const min = Math.min(d[i], d[i + 1], d[i + 2]);
+    if (min > 240) d[i + 3] = 0;
+    else if (min > 200) d[i + 3] = Math.round(d[i + 3] * (1 - (min - 200) / 40));
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
 export function SignatoryManager({ signatory, onSave }: { signatory: Signatory; onSave: SaveFn }) {
   const [name, setName] = useState(signatory.name);
   const [designation, setDesignation] = useState(signatory.designation);
@@ -35,12 +74,12 @@ export function SignatoryManager({ signatory, onSave }: { signatory: Signatory; 
       setErr("Please choose an image file (PNG with a transparent background works best).");
       return;
     }
-    if (file.size > 1_400_000) {
-      setErr("Image is too large. Please use a signature image under ~1.4 MB.");
+    if (file.size > 5_000_000) {
+      setErr("Image is too large. Please use a signature image under ~5 MB.");
       return;
     }
     try {
-      setSignature(await fileToDataUrl(file));
+      setSignature(await toTransparentPng(file));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not read the image.");
     }
