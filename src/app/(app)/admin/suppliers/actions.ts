@@ -19,7 +19,8 @@ const supplierSchema = z.object({
   address: z.string().trim().optional().default(""),
   tin: z.string().trim().optional().default(""),
   zip: z.string().trim().optional().default(""),
-  paymentDetails: z.string().trim().optional().default(""),
+  bankName: z.string().trim().optional().default(""),
+  accountNumber: z.string().trim().optional().default(""),
 });
 
 export async function saveSupplierAction(input: z.infer<typeof supplierSchema>): Promise<Supplier[]> {
@@ -47,7 +48,8 @@ const bulkSchema = z.object({
       address: z.string().trim().optional().default(""),
       tin: z.string().trim().optional().default(""),
       zip: z.string().trim().optional().default(""),
-      paymentDetails: z.string().trim().optional().default(""),
+      bankName: z.string().trim().optional().default(""),
+      accountNumber: z.string().trim().optional().default(""),
     }),
   ),
 });

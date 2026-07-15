@@ -19,7 +19,8 @@ export interface Supplier {
   address: string; // Address (for filing; not shown on the PO)
   tin: string; // Taxpayer Identification Number (for BIR 2307)
   zip: string; // ZIP Code (for BIR 2307)
-  paymentDetails: string; // Bank Name and Account Number
+  bankName: string; // Bank Name
+  accountNumber: string; // Account Number
 }
 
 /** The columns used for the import/export template (order matters). */
@@ -31,7 +32,8 @@ export const SUPPLIER_COLUMNS = [
   { key: "address", label: "Address" },
   { key: "tin", label: "TIN" },
   { key: "zip", label: "ZIP Code" },
-  { key: "paymentDetails", label: "Bank Name and Account Number" },
+  { key: "bankName", label: "Bank Name" },
+  { key: "accountNumber", label: "Account Number" },
 ] as const;
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -52,7 +54,9 @@ function coerceOne(r: unknown): Supplier | null {
     address: String(o.address ?? "").trim(),
     tin: String(o.tin ?? "").trim(),
     zip: String(o.zip ?? "").trim(),
-    paymentDetails: String(o.paymentDetails ?? "").trim(),
+    // Legacy records stored the combined "paymentDetails" — carry it into Bank Name.
+    bankName: String(o.bankName ?? o.paymentDetails ?? "").trim(),
+    accountNumber: String(o.accountNumber ?? "").trim(),
   };
 }
 
@@ -89,7 +93,8 @@ export interface SupplierInput {
   address?: string;
   tin?: string;
   zip?: string;
-  paymentDetails?: string;
+  bankName?: string;
+  accountNumber?: string;
 }
 
 function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
@@ -101,7 +106,8 @@ function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
     address: (input.address ?? "").trim(),
     tin: (input.tin ?? "").trim(),
     zip: (input.zip ?? "").trim(),
-    paymentDetails: (input.paymentDetails ?? "").trim(),
+    bankName: (input.bankName ?? "").trim(),
+    accountNumber: (input.accountNumber ?? "").trim(),
   };
 }
 
@@ -168,7 +174,8 @@ export async function bulkUpsertSuppliers(rows: SupplierInput[]): Promise<BulkRe
         address: d.address || list[idx].address,
         tin: d.tin || list[idx].tin,
         zip: d.zip || list[idx].zip,
-        paymentDetails: d.paymentDetails || list[idx].paymentDetails,
+        bankName: d.bankName || list[idx].bankName,
+        accountNumber: d.accountNumber || list[idx].accountNumber,
       };
       updated++;
     } else {
@@ -200,7 +207,8 @@ export async function rememberSupplier(input: { company: string; attention?: str
     address: (input.address ?? "").trim(),
     tin: "",
     zip: "",
-    paymentDetails: "",
+    bankName: "",
+    accountNumber: "",
   });
   await writeSuppliers(list);
 }
