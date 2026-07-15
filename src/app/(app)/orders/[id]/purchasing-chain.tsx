@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Printer } from "lucide-react";
+import { Printer, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest } from "../actions";
@@ -146,7 +146,13 @@ export function PurchasingChain({
                     <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
                   </a>
                   {r.canManagePO && (
-                    <button type="button" onClick={() => setPoEditId(r.id)} className="text-muted-foreground hover:text-foreground">Edit</button>
+                    <button
+                      type="button"
+                      onClick={() => setPoEditId(r.id)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED1C24]/40"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </button>
                   )}
                 </div>
               ) : r.canManagePO ? (
