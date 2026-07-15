@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
-import { buildPurchaseOrderWorkbook, restore2307Shapes } from "@/lib/excel/purchase-order-xlsx";
+import { buildPurchaseOrderWorkbook, restore2307Shapes, build2307Fields } from "@/lib/excel/purchase-order-xlsx";
 
 export const dynamic = "force-dynamic";
 
@@ -25,15 +25,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const dir = path.join(process.cwd(), "public", "templates");
   const template = await fs.readFile(path.join(dir, "po-2307-template.xlsx"));
-  let buffer = await buildPurchaseOrderWorkbook(template, po, {
+  let buffer = await buildPurchaseOrderWorkbook(template, po);
+  // Restore the 2307 form's shapes (white input boxes) that exceljs strips, and
+  // paint the Part I/II values as overlay text boxes on top of those boxes.
+  // Payee name/address come from the PO; payee TIN/ZIP from the Supplier's List.
+  const fields = build2307Fields(po, {
     name: match?.company,
     address: match?.address,
     tin: match?.tin,
     zip: match?.zip,
   });
-  // Restore the 2307 form's shapes (white input boxes) that exceljs strips.
   const source = await fs.readFile(path.join(dir, "2307-source.xlsx")).catch(() => null);
-  if (source) buffer = await restore2307Shapes(buffer, source);
+  if (source) buffer = await restore2307Shapes(buffer, source, fields);
 
   const filename = `${(po.poNumber || "Purchase-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
   return new Response(new Uint8Array(buffer), {
