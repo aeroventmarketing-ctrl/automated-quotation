@@ -176,42 +176,63 @@ export async function buildPurchaseOrderWorkbook(
  * `seg` fields (dates, TINs, ZIPs) print their digits over the box's pre-drawn
  * segment separators, so the digits are spread out to land in the small cells.
  */
-type FieldGeom = {
-  key: keyof Fields2307;
+const TNR = `<a:latin typeface="Times New Roman" panose="02020603050405020304" pitchFamily="18" charset="0"/><a:cs typeface="Times New Roman" panose="02020603050405020304" pitchFamily="18" charset="0"/>`;
+
+/**
+ * Free-text fields (payee/payor name & address). These are simple boxes with no
+ * pre-drawn segments, so the value is painted as a single left-aligned overlay
+ * text box covering the whole white box.
+ */
+type TextField = {
+  key: "payeeName" | "payeeAddress" | "payorName" | "payorAddress";
   from: { c: number; co: number; r: number; ro: number };
   to: { c: number; co: number; r: number; ro: number };
   off: [number, number];
   ext: [number, number];
   sz: number;
-  seg: boolean;
 };
 
-const FIELD_GEOM: FieldGeom[] = [
-  { key: "periodFrom", from: { c: 9, co: 48374, r: 10, ro: 42933 }, to: { c: 16, co: 128788, r: 11, ro: 123430 }, off: [1759699, 1325179], ext: [1413914, 223372], sz: 1100, seg: true },
-  { key: "periodTo", from: { c: 26, co: 55387, r: 10, ro: 33810 }, to: { c: 33, co: 111975, r: 11, ro: 120709 }, off: [5035601, 1309706], ext: [1390088, 236124], sz: 1100, seg: true },
-  { key: "payeeTin", from: { c: 13, co: 28336, r: 13, ro: 57059 }, to: { c: 28, co: 150830, r: 14, ro: 126749 }, off: [2508011, 1757952], ext: [3004033, 216193], sz: 1100, seg: true },
-  { key: "payeeName", from: { c: 1, co: 19706, r: 16, ro: 0 }, to: { c: 39, co: 131378, r: 17, ro: 90482 }, off: [200681, 2143125], ext: [6969672, 223832], sz: 1100, seg: false },
-  { key: "payeeAddress", from: { c: 1, co: 26276, r: 19, ro: 0 }, to: { c: 35, co: 151086, r: 20, ro: 90483 }, off: [207251, 2543175], ext: [6306535, 223833], sz: 1000, seg: false },
-  { key: "payeeZip", from: { c: 36, co: 39414, r: 19, ro: 2 }, to: { c: 39, co: 125589, r: 20, ro: 89464 }, off: [6924628, 2544538], ext: [606875, 222358], sz: 1100, seg: true },
-  { key: "payorTin", from: { c: 12, co: 153106, r: 25, ro: 40364 }, to: { c: 28, co: 161114, r: 26, ro: 127931 }, off: [2439106, 3401328], ext: [3086397, 227267], sz: 1100, seg: true },
-  { key: "payorName", from: { c: 1, co: 19706, r: 28, ro: 0 }, to: { c: 39, co: 131378, r: 29, ro: 90482 }, off: [200681, 3762375], ext: [6969672, 223832], sz: 1100, seg: false },
-  { key: "payorAddress", from: { c: 1, co: 26276, r: 31, ro: 0 }, to: { c: 35, co: 65690, r: 32, ro: 90483 }, off: [207251, 4162425], ext: [6221139, 223833], sz: 1000, seg: false },
-  { key: "payorZip", from: { c: 35, co: 124813, r: 31, ro: 2 }, to: { c: 39, co: 133350, r: 33, ro: 0 }, off: [6816352, 4191002], ext: [726087, 272141], sz: 1100, seg: true },
+const TEXT_FIELDS: TextField[] = [
+  { key: "payeeName", from: { c: 1, co: 19706, r: 16, ro: 0 }, to: { c: 39, co: 131378, r: 17, ro: 90482 }, off: [200681, 2143125], ext: [6969672, 223832], sz: 1100 },
+  { key: "payeeAddress", from: { c: 1, co: 26276, r: 19, ro: 0 }, to: { c: 35, co: 151086, r: 20, ro: 90483 }, off: [207251, 2543175], ext: [6306535, 223833], sz: 1000 },
+  { key: "payorName", from: { c: 1, co: 19706, r: 28, ro: 0 }, to: { c: 39, co: 131378, r: 29, ro: 90482 }, off: [200681, 3762375], ext: [6969672, 223832], sz: 1100 },
+  { key: "payorAddress", from: { c: 1, co: 26276, r: 31, ro: 0 }, to: { c: 35, co: 65690, r: 32, ro: 90483 }, off: [207251, 4162425], ext: [6221139, 223833], sz: 1000 },
 ];
+
+/**
+ * Segmented fields (period dates, TINs, ZIPs). The form pre-draws a row of small
+ * boxes with separators; we place ONE centred digit box over each cell so the
+ * value reads one-number-per-box. `centers` are the absolute EMU x-centres of
+ * each cell (measured from AeroVent's blank form); `y`/`cy` are the row's EMU
+ * top/height. Digits fill cells left-to-right.
+ */
+type SegField = {
+  key: "periodFrom" | "periodTo" | "payeeTin" | "payorTin" | "payeeZip" | "payorZip";
+  centers: number[];
+  y: number;
+  cy: number;
+  sz: number;
+};
+
+const SEG_FIELDS: SegField[] = [
+  { key: "periodFrom", y: 1325179, cy: 223372, sz: 1100, centers: [1844726, 2019499, 2198995, 2375555, 2539103, 2712696, 2892192, 3078367] },
+  { key: "periodTo", y: 1309706, cy: 236124, sz: 1100, centers: [5120710, 5294470, 5474139, 5647900, 5815755, 5989515, 6169184, 6342945] },
+  { key: "payeeTin", y: 1757952, cy: 216193, sz: 1100, centers: [2594777, 2768308, 2941839, 3274577, 3448108, 3621639, 3950414, 4123945, 4297476, 4701199, 5025537, 5349875] },
+  { key: "payorTin", y: 3401328, cy: 227267, sz: 1100, centers: [2555661, 2788772, 3021882, 3230371, 3468720, 3707068, 3924986, 4149714, 4374441, 4710036, 5036223, 5362410] },
+  { key: "payeeZip", y: 2544538, cy: 222358, sz: 1100, centers: [6989798, 7151590, 7313382, 7475174] },
+  { key: "payorZip", y: 4191002, cy: 272141, sz: 1100, centers: [7020710, 7228780, 7436849, 7644919] },
+];
+
+const DIGIT_BOX_W = 150000; // EMU width of each centred digit box
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** Spread a segmented value's characters so they land over the form's boxes. */
-function spreadSegments(s: string): string {
-  return s.replace(/[^0-9A-Za-z]/g, "").split("").join("  ");
-}
-
-/** Build one overlay text-box anchor for a field, or "" if the value is blank. */
-function overlayAnchor(g: FieldGeom, value: string, id: number): string {
+/** A single left-aligned overlay text box spanning a free-text field's box. */
+function textOverlay(g: TextField, value: string, id: number): string {
   if (!value || !value.trim()) return "";
-  const text = escapeXml(g.seg ? spreadSegments(value) : value.trim());
+  const text = escapeXml(value.trim());
   const { from: a, to: b } = g;
   return (
     `<xdr:twoCellAnchor>` +
@@ -221,15 +242,42 @@ function overlayAnchor(g: FieldGeom, value: string, id: number): string {
     `<xdr:spPr><a:xfrm><a:off x="${g.off[0]}" y="${g.off[1]}"/><a:ext cx="${g.ext[0]}" cy="${g.ext[1]}"/></a:xfrm>` +
     `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln w="9525" cmpd="sng"><a:noFill/></a:ln></xdr:spPr>` +
     `<xdr:txBody><a:bodyPr vertOverflow="clip" horzOverflow="clip" wrap="square" rtlCol="0" anchor="ctr"/><a:lstStyle/>` +
-    `<a:p><a:r><a:rPr lang="en-US" sz="${g.sz}"><a:latin typeface="Times New Roman" panose="02020603050405020304" pitchFamily="18" charset="0"/><a:cs typeface="Times New Roman" panose="02020603050405020304" pitchFamily="18" charset="0"/></a:rPr>` +
-    `<a:t>${text}</a:t></a:r></a:p></xdr:txBody></xdr:sp><xdr:clientData/></xdr:twoCellAnchor>`
+    `<a:p><a:r><a:rPr lang="en-US" sz="${g.sz}">${TNR}</a:rPr><a:t>${text}</a:t></a:r></a:p></xdr:txBody></xdr:sp><xdr:clientData/></xdr:twoCellAnchor>`
   );
+}
+
+/** One centred digit box, absolutely positioned over a segment cell. */
+function digitBox(cx: number, y: number, cy: number, sz: number, ch: string, id: number): string {
+  const px = Math.round(cx - DIGIT_BOX_W / 2);
+  return (
+    `<xdr:absoluteAnchor><xdr:pos x="${px}" y="${y}"/><xdr:ext cx="${DIGIT_BOX_W}" cy="${cy}"/>` +
+    `<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="${id}" name="afd_${id}"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr>` +
+    `<xdr:spPr><a:xfrm><a:off x="${px}" y="${y}"/><a:ext cx="${DIGIT_BOX_W}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></xdr:spPr>` +
+    `<xdr:txBody><a:bodyPr vertOverflow="clip" horzOverflow="clip" wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="ctr" anchorCtr="1"/><a:lstStyle/>` +
+    `<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="${sz}">${TNR}</a:rPr><a:t>${escapeXml(ch)}</a:t></a:r></a:p></xdr:txBody></xdr:sp><xdr:clientData/></xdr:absoluteAnchor>`
+  );
+}
+
+/** Per-digit centred boxes for one segmented field (digits fill cells L→R). */
+function segOverlay(g: SegField, value: string, startId: number): { xml: string; nextId: number } {
+  const digits = (value ?? "").replace(/[^0-9A-Za-z]/g, "").split("");
+  let id = startId;
+  let xml = "";
+  digits.forEach((d, i) => {
+    if (i < g.centers.length) xml += digitBox(g.centers[i], g.y, g.cy, g.sz, d, id++);
+  });
+  return { xml, nextId: id };
 }
 
 /** Inject the Part I/II overlay text boxes into the 2307 drawing XML. */
 function injectFieldOverlays(drawingXml: string, fields: Fields2307): string {
   let id = 9001;
-  const anchors = FIELD_GEOM.map((g) => overlayAnchor(g, fields[g.key], id++)).join("");
+  let anchors = TEXT_FIELDS.map((g) => textOverlay(g, fields[g.key], id++)).join("");
+  for (const g of SEG_FIELDS) {
+    const r = segOverlay(g, fields[g.key], id);
+    anchors += r.xml;
+    id = r.nextId;
+  }
   if (!anchors) return drawingXml;
   return drawingXml.replace("</xdr:wsDr>", `${anchors}</xdr:wsDr>`);
 }
