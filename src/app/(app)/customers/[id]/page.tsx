@@ -16,12 +16,13 @@ import { CustomerHeader } from "./customer-header";
 import { AccountPanel } from "./account-panel";
 import { FollowUpOptOut } from "./follow-up-optout";
 import { ConversationPanel, type ConversationBoxData } from "./conversation-panel";
+import { TransferQuotation } from "./transfer-quotation";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [customer, viewer, users, accountData] = await Promise.all([
+  const [customer, viewer, users, accountData, allCustomers] = await Promise.all([
     prisma.customer.findUnique({
       where: { id },
       include: {
@@ -41,9 +42,13 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
     getCurrentUser(),
     prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     getAccountData(id),
+    prisma.customer.findMany({ orderBy: { company: "asc" }, select: { id: true, company: true } }),
   ]);
 
   if (!customer) notFound();
+
+  // Other clients a quotation can be transferred to.
+  const otherCustomers = allCustomers.filter((c) => c.id !== id);
 
   // Flatten every quotation across the customer's inquiries into an order/quote
   // history, tagging each with its sale state (confirmed order + collected).
@@ -61,6 +66,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           // revised (discounted) quote updates the order/purchase amounts.
           deal: payableTotal(q),
           currency: q.currency,
+          preparedById: q.preparedById,
           preparedByName: q.preparedBy.name,
           projectName: q.projectName ?? inq.projectName ?? "",
           confirmed: isSaleConfirmed(sale),
@@ -97,6 +103,10 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const ownerName = owner?.name ?? null;
   // The current sales in-charge, or an admin, may transfer the account.
   const canTransfer = isAdmin(viewer) || (!!owner && owner.userId === viewer?.id);
+  // A quotation may be moved to another client by an admin, the account's sales
+  // in-charge, or the quote's own preparer.
+  const canTransferQuote = (preparedById: string) =>
+    isAdmin(viewer) || owner?.userId === viewer?.id || preparedById === viewer?.id;
   const salespeople = users.filter((u) => u.id !== owner?.userId);
 
   // Conversation log split into one box per quotation. Each conversation is
@@ -270,6 +280,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -282,11 +293,18 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                   <TableCell className="text-right">{formatCurrency(q.total, q.currency)}</TableCell>
                   <TableCell>{formatDate(q.createdAt)}</TableCell>
                   <TableCell><QuotationStatusBadge status={q.status} /></TableCell>
+                  <TableCell className="text-right">
+                    {canTransferQuote(q.preparedById) && otherCustomers.length > 0 ? (
+                      <div className="flex justify-end">
+                        <TransferQuotation quotationId={q.id} customers={otherCustomers} />
+                      </div>
+                    ) : null}
+                  </TableCell>
                 </TableRow>
               ))}
               {quotes.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">No quotations yet.</TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">No quotations yet.</TableCell>
                 </TableRow>
               )}
             </TableBody>
