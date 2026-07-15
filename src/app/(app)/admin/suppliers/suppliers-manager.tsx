@@ -14,13 +14,14 @@ type SaveFn = (input: {
   address: string;
   tin: string;
   zip: string;
-  paymentDetails: string;
+  bankName: string;
+  accountNumber: string;
 }) => Promise<Supplier[]>;
 type DeleteFn = (id: string) => Promise<Supplier[]>;
 type BulkFn = (input: { rows: Array<Omit<Supplier, "id">> }) => Promise<BulkResult>;
 
 type Fields = Omit<Supplier, "id">;
-const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", tin: "", zip: "", paymentDetails: "" };
+const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", tin: "", zip: "", bankName: "", accountNumber: "" };
 const HEADERS = SUPPLIER_COLUMNS.map((c) => c.label);
 
 const nk = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -32,7 +33,8 @@ const ALIASES: Record<keyof Fields, string[]> = {
   address: ["address", "location", "company address"],
   tin: ["tin", "taxpayer identification number", "taxpayer id", "tax id"],
   zip: ["zip code", "zip", "postal code", "postal"],
-  paymentDetails: ["bank name and account number", "bank name & account number", "bank name", "account number", "bank details", "bank", "payment details", "payment"],
+  bankName: ["bank name", "bank", "bank details", "bank name and account number", "payment details"],
+  accountNumber: ["account number", "account no", "account #", "acct number", "acct no", "account"],
 };
 
 function csvEscape(v: string) {
@@ -97,7 +99,7 @@ export function SuppliersManager({
   }
 
   function downloadCsv() {
-    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.paymentDetails])];
+    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber])];
     const csv = rows.map((r) => r.map((c) => csvEscape(c ?? "")).join(",")).join("\r\n");
     download("suppliers-template.csv", new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
   }
@@ -111,7 +113,7 @@ export function SuppliersManager({
       const ws = wb.addWorksheet("Suppliers");
       ws.addRow(HEADERS);
       ws.getRow(1).font = { bold: true };
-      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.paymentDetails]));
+      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber]));
       ws.columns.forEach((c) => (c.width = 28));
       const buf = await wb.xlsx.writeBuffer();
       download("suppliers-template.xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -164,7 +166,8 @@ export function SuppliersManager({
         address: get(r, "address"),
         tin: get(r, "tin"),
         zip: get(r, "zip"),
-        paymentDetails: get(r, "paymentDetails"),
+        bankName: get(r, "bankName"),
+        accountNumber: get(r, "accountNumber"),
       }));
       const result = await onBulkImport({ rows: data });
       setList(result.list);
@@ -208,7 +211,8 @@ export function SuppliersManager({
           <Input className="h-8 sm:col-span-2 lg:col-span-3" placeholder="Address" value={add.address} onChange={(e) => setAdd({ ...add, address: e.target.value })} />
           <Input className="h-8" placeholder="TIN" value={add.tin} onChange={(e) => setAdd({ ...add, tin: e.target.value })} />
           <Input className="h-8" placeholder="ZIP Code" value={add.zip} onChange={(e) => setAdd({ ...add, zip: e.target.value })} />
-          <Input className="h-8 sm:col-span-2 lg:col-span-1" placeholder="Bank Name and Account Number" value={add.paymentDetails} onChange={(e) => setAdd({ ...add, paymentDetails: e.target.value })} />
+          <Input className="h-8" placeholder="Bank Name" value={add.bankName} onChange={(e) => setAdd({ ...add, bankName: e.target.value })} />
+          <Input className="h-8" placeholder="Account Number" value={add.accountNumber} onChange={(e) => setAdd({ ...add, accountNumber: e.target.value })} />
         </div>
         <Button size="sm" className="h-8" disabled={busy || !add.company.trim()} onClick={() => run(() => onSave(add), () => setAdd(blank))}>
           {busy ? "Saving…" : "Add supplier"}
@@ -220,7 +224,7 @@ export function SuppliersManager({
         <p className="text-sm text-muted-foreground">No suppliers yet. Add one above, import in bulk, or issue a Purchase Order to save one automatically.</p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[1200px] border-collapse text-sm">
+          <table className="w-full min-w-[1360px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                 <th className="py-2 px-3 font-medium">Company Name</th>
@@ -230,7 +234,8 @@ export function SuppliersManager({
                 <th className="py-2 px-3 font-medium">Address</th>
                 <th className="py-2 px-3 font-medium">TIN</th>
                 <th className="py-2 px-3 font-medium">ZIP</th>
-                <th className="py-2 px-3 font-medium">Bank Name and Account Number</th>
+                <th className="py-2 px-3 font-medium">Bank Name</th>
+                <th className="py-2 px-3 font-medium">Account Number</th>
                 <th className="py-2 px-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -245,7 +250,8 @@ export function SuppliersManager({
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.address} onChange={(e) => setEdit({ ...edit, address: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.tin} onChange={(e) => setEdit({ ...edit, tin: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.zip} onChange={(e) => setEdit({ ...edit, zip: e.target.value })} /></td>
-                    <td className="py-1.5 px-2"><Input className="h-8" value={edit.paymentDetails} onChange={(e) => setEdit({ ...edit, paymentDetails: e.target.value })} /></td>
+                    <td className="py-1.5 px-2"><Input className="h-8" value={edit.bankName} onChange={(e) => setEdit({ ...edit, bankName: e.target.value })} /></td>
+                    <td className="py-1.5 px-2"><Input className="h-8" value={edit.accountNumber} onChange={(e) => setEdit({ ...edit, accountNumber: e.target.value })} /></td>
                     <td className="py-1.5 px-3">
                       <div className="flex justify-end gap-1.5">
                         <Button size="sm" className="h-7 text-xs" disabled={busy || !edit.company.trim()} onClick={() => run(() => onSave({ id: s.id, ...edit }), () => setEditId(null))}>Save</Button>
@@ -262,10 +268,11 @@ export function SuppliersManager({
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.address)}</td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.tin)}</td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.zip)}</td>
-                    <td className="py-2 px-3 text-muted-foreground">{cell(s.paymentDetails)}</td>
+                    <td className="py-2 px-3 text-muted-foreground">{cell(s.bankName)}</td>
+                    <td className="py-2 px-3 text-muted-foreground">{cell(s.accountNumber)}</td>
                     <td className="py-2 px-3">
                       <div className="flex justify-end gap-1.5">
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, tin: s.tin, zip: s.zip, paymentDetails: s.paymentDetails }); }}>Edit</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, tin: s.tin, zip: s.zip, bankName: s.bankName, accountNumber: s.accountNumber }); }}>Edit</Button>
                         <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={() => run(() => onDelete(s.id))}>Remove</Button>
                       </div>
                     </td>

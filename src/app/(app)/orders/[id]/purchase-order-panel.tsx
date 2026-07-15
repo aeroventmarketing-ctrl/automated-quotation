@@ -52,7 +52,6 @@ export function PurchaseOrderPanel({
     setCompany(s.company);
     setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
     if (s.address) setAddress(s.address);
-    if (s.paymentDetails) setRemarks(s.paymentDetails);
     setSupplierOpen(false);
   }
   const [date, setDate] = useState(po?.date ? po.date.slice(0, 10) : todayInput());
