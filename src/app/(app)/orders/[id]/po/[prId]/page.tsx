@@ -5,7 +5,6 @@ import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { formatDate } from "@/lib/utils";
 import { coercePurchaseOrder, poLineAmount, poTotals } from "@/lib/purchase-order";
-import { AEROVENT_LOGO } from "@/lib/pdf/logo";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -53,20 +52,9 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
       </div>
 
       <div id="po-sheet" className="mx-auto max-w-[800px] rounded-md border bg-white p-8 text-black">
-        {/* Letterhead — identical to the quotation (same logo + text) */}
-        <div className="border-b border-black pb-1.5 text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={AEROVENT_LOGO} alt="AEROVENT" className="mx-auto h-[50px] w-auto object-contain" />
-          <div className="mt-0.5 text-[13px] font-bold leading-tight">FANS AND BLOWERS MANUFACTURING</div>
-          <div className="text-[10px] font-bold tracking-wide">VENTILATION, AIR MOVING &amp; ENGINEERING SPECIALISTS</div>
-          <div className="mt-0.5 text-[9px] leading-tight">
-            <div>{COMPANY.manilaOffice}</div>
-            <div>{COMPANY.landline}</div>
-            <div>{COMPANY.mobile}</div>
-            <div>{COMPANY.plantAddress}</div>
-            <div>Email: {COMPANY.email} &nbsp;/&nbsp; Website: {COMPANY.website}</div>
-          </div>
-        </div>
+        {/* Letterhead — the standard AeroVent header image (logo + company details) */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/aerovent-letterhead.png" alt="AEROVENT FANS & BLOWERS MANUFACTURING" className="mx-auto w-full max-w-[720px]" />
 
         <h1 className="mb-1 mt-2 text-center text-[15px] font-bold">Purchase Order</h1>
 
