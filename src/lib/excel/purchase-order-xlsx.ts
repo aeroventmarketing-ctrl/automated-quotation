@@ -44,6 +44,8 @@ function quarterPeriod(iso: string): { from: string; to: string; monthIndex: num
 }
 
 export interface Payee2307 {
+  name?: string;
+  address?: string;
   tin?: string;
   zip?: string;
 }
@@ -117,10 +119,10 @@ export async function buildPurchaseOrderWorkbook(
     // Part 1 — For the Period.
     f.getCell("J11").value = period.from; // From
     f.getCell("AB11").value = period.to; // To
-    // Part I — Payee (the supplier).
+    // Part I — Payee (from the Supplier's List; falls back to the PO's supplier).
     if (payee.tin) f.getCell("N14").value = payee.tin;
-    f.getCell("B17").value = po.supplier.company;
-    f.getCell("B20").value = po.supplier.address;
+    f.getCell("B17").value = payee.name || po.supplier.company;
+    f.getCell("B20").value = payee.address || po.supplier.address;
     if (payee.zip) f.getCell("AK20").value = payee.zip;
     // Part II — Payor (AeroVent).
     f.getCell("N26").value = `${PAYOR.tin}-${PAYOR.branch}`;
