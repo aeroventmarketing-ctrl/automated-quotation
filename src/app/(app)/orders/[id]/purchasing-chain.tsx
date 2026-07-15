@@ -10,6 +10,7 @@ import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
+import type { PaymentTerm } from "@/lib/payment-terms";
 
 interface ActionOpt {
   key: string;
@@ -38,12 +39,16 @@ export function PurchasingChain({
   orderId,
   poDefaultRemarks,
   suppliers,
+  paymentTerms,
+  canManagePO,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
   orderId: string;
   poDefaultRemarks: string;
   suppliers: Supplier[];
+  paymentTerms: PaymentTerm[];
+  canManagePO: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -126,6 +131,8 @@ export function PurchasingChain({
                   defaultLines={r.poDefaultLines}
                   defaultRemarks={poDefaultRemarks}
                   suppliers={suppliers}
+                  paymentTerms={paymentTerms}
+                  canManageTerms={canManagePO}
                   onDone={() => setPoEditId(null)}
                 />
               ) : r.po ? (

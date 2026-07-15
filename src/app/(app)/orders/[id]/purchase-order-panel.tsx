@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
-import { savePurchaseOrder } from "../actions";
+import type { PaymentTerm } from "@/lib/payment-terms";
+import { savePurchaseOrder, addPaymentTerm } from "../actions";
 
 function todayInput(): string {
   // yyyy-mm-dd for the date input, in PH time.
@@ -23,6 +24,8 @@ export function PurchaseOrderPanel({
   defaultLines,
   defaultRemarks,
   suppliers,
+  paymentTerms,
+  canManageTerms,
   onDone,
 }: {
   prId: string;
@@ -31,6 +34,8 @@ export function PurchaseOrderPanel({
   defaultLines: POLine[];
   defaultRemarks: string;
   suppliers: Supplier[];
+  paymentTerms: PaymentTerm[];
+  canManageTerms: boolean;
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -53,8 +58,25 @@ export function PurchaseOrderPanel({
   const [lines, setLines] = useState<POLine[]>(po?.lines?.length ? po.lines : defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }]);
   const [ewtPct, setEwtPct] = useState(String(po?.ewtPct ?? 1));
   const [remarks, setRemarks] = useState(po?.remarks ?? defaultRemarks);
+  const [terms, setTerms] = useState<PaymentTerm[]>(paymentTerms);
+  const [termBusy, setTermBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const termSaved = terms.some((t) => t.text.trim().toLowerCase() === remarks.trim().toLowerCase());
+  async function saveAsTerm() {
+    const text = remarks.trim();
+    if (!text) return;
+    setTermBusy(true);
+    setErr(null);
+    try {
+      setTerms(await addPaymentTerm(text));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setTermBusy(false);
+    }
+  }
 
   function setLine(i: number, key: keyof POLine, value: string) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
@@ -176,8 +198,30 @@ export function PurchaseOrderPanel({
         <div className="flex justify-between border-t pt-1 font-semibold"><span>Net amount</span><span className="tabular-nums">{formatCurrency(totals.net, "PHP")}</span></div>
       </div>
 
-      <label className="block space-y-1"><span className="text-xs text-muted-foreground">Remarks</span>
-        <Input className="h-8" value={remarks} onChange={(e) => setRemarks(e.target.value)} /></label>
+      <div className="space-y-1">
+        <span className="text-xs text-muted-foreground">Payment terms</span>
+        {terms.length > 0 && (
+          <select
+            className="h-8 w-full rounded-md border bg-background px-2 text-sm"
+            value=""
+            onChange={(e) => { if (e.target.value) setRemarks(e.target.value); }}
+          >
+            <option value="">— pick a saved payment term —</option>
+            {terms.map((t) => <option key={t.id} value={t.text}>{t.text}</option>)}
+          </select>
+        )}
+        <div className="flex items-center gap-2">
+          <Input className="h-8 flex-1" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Payment terms / remarks" />
+          {canManageTerms && (
+            <Button size="sm" variant="outline" className="h-8" disabled={termBusy || !remarks.trim() || termSaved} onClick={saveAsTerm}>
+              {termBusy ? "Saving…" : termSaved ? "Saved" : "Save as term"}
+            </Button>
+          )}
+        </div>
+        {canManageTerms && (
+          <p className="text-[11px] text-muted-foreground">Pick a saved term or type one and &ldquo;Save as term&rdquo; to reuse it. Manage the full list in Admin &rarr; Payment terms.</p>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" className="h-8" disabled={busy} onClick={save}>{busy ? "Saving…" : po ? "Save changes" : "Create purchase order"}</Button>

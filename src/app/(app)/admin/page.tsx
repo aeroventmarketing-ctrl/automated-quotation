@@ -85,6 +85,19 @@ export default async function AdminOverviewPage() {
           </CardContent>
         </Card>
       </Link>
+      <Link href="/admin/payment-terms">
+        <Card className="transition-colors hover:bg-accent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Payment terms →</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Manage the supplier payment terms offered on Purchase Orders. The Purchaser can also add
+              a term directly from the PO form.
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
       <QuoteNumberSetting current={nextQuoteSeq} />
       <MrfNumberSetting current={mrfNext} />
       <PoNumberSetting current={poNext} />

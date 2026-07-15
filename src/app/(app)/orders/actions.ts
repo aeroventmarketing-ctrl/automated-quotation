@@ -9,6 +9,7 @@ import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { coercePurchaseOrder, formatPoNumber, type PurchaseOrder } from "@/lib/purchase-order";
 import { rememberSupplier } from "@/lib/suppliers";
+import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
 import {
   getWorkflowRoles,
   userHasWorkflowRole,
@@ -449,6 +450,18 @@ export async function savePurchaseOrder(
   // Remember the supplier for next time (searchable in the PO form).
   await rememberSupplier(po.supplier);
   revalidatePath(`/orders/${pr.quotationId}`);
+}
+
+/** Purchaser/admin adds a reusable supplier payment term from the PO form. */
+export async function addPaymentTerm(text: string): Promise<PaymentTerm[]> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey))) {
+    throw new Error("Only the Purchaser or an admin can add payment terms.");
+  }
+  const list = await savePaymentTerm({ text });
+  revalidatePath("/admin/payment-terms");
+  return list;
 }
 
 // --- Phase 5 & 6: final payment + delivery documents -----------------------
