@@ -58,7 +58,7 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/aerovent-letterhead.png" alt="AEROVENT FANS & BLOWERS MANUFACTURING" className="mx-auto w-full max-w-[720px]" />
 
-        <h1 className="mb-1 mt-2 text-center text-[15px] font-bold">Purchase Order</h1>
+        <h1 className="mb-1 mt-2 text-center text-[23px] font-bold">Purchase Order</h1>
 
         {/* Supplier details */}
         <table className="w-full border-collapse text-[13px]">
