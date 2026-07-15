@@ -17,6 +17,7 @@ import { AccountPanel } from "./account-panel";
 import { FollowUpOptOut } from "./follow-up-optout";
 import { ConversationPanel, type ConversationBoxData } from "./conversation-panel";
 import { TransferQuotation } from "./transfer-quotation";
+import { DeleteInquiry } from "./delete-inquiry";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,6 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           // revised (discounted) quote updates the order/purchase amounts.
           deal: payableTotal(q),
           currency: q.currency,
-          preparedById: q.preparedById,
           preparedByName: q.preparedBy.name,
           projectName: q.projectName ?? inq.projectName ?? "",
           confirmed: isSaleConfirmed(sale),
@@ -103,10 +103,8 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const ownerName = owner?.name ?? null;
   // The current sales in-charge, or an admin, may transfer the account.
   const canTransfer = isAdmin(viewer) || (!!owner && owner.userId === viewer?.id);
-  // A quotation may be moved to another client by an admin, the account's sales
-  // in-charge, or the quote's own preparer.
-  const canTransferQuote = (preparedById: string) =>
-    isAdmin(viewer) || owner?.userId === viewer?.id || preparedById === viewer?.id;
+  // Quotation transfer and inquiry removal are admin-only.
+  const admin = isAdmin(viewer);
   const salespeople = users.filter((u) => u.id !== owner?.userId);
 
   // Conversation log split into one box per quotation. Each conversation is
@@ -294,7 +292,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                   <TableCell>{formatDate(q.createdAt)}</TableCell>
                   <TableCell><QuotationStatusBadge status={q.status} /></TableCell>
                   <TableCell className="text-right">
-                    {canTransferQuote(q.preparedById) && otherCustomers.length > 0 ? (
+                    {admin && otherCustomers.length > 0 ? (
                       <div className="flex justify-end">
                         <TransferQuotation quotationId={q.id} customers={otherCustomers} />
                       </div>
@@ -326,6 +324,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                 <TableHead>Quotes</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Status</TableHead>
+                {admin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -342,11 +341,18 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                   <TableCell>{inq._count.quotations}</TableCell>
                   <TableCell>{formatDate(inq.createdAt)}</TableCell>
                   <TableCell><InquiryStatusBadge status={inq.status} /></TableCell>
+                  {admin && (
+                    <TableCell className="text-right">
+                      <div className="flex justify-end">
+                        <DeleteInquiry inquiryId={inq.id} hasQuotes={inq._count.quotations > 0} />
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
               {customer.inquiries.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">No inquiries yet.</TableCell>
+                  <TableCell colSpan={admin ? 8 : 7} className="text-center text-muted-foreground">No inquiries yet.</TableCell>
                 </TableRow>
               )}
             </TableBody>

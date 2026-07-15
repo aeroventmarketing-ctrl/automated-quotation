@@ -87,12 +87,12 @@ export async function transferAccount(customerId: string, toUserId: string) {
  * under the target client — carrying over the original inquiry's source, status
  * (so a won order stays won) and project — leaving the source inquiry and its
  * other quotations untouched. The quote's own follow-up conversation thread moves
- * with it. Only the quote's preparer, the source account's sales in-charge, or an
- * admin may do this.
+ * with it. Admin only.
  */
 export async function transferQuotation(quotationId: string, targetCustomerId: string) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can transfer a quotation.");
   if (!targetCustomerId) throw new Error("Choose a client to transfer to.");
 
   const quote = await prisma.quotation.findUnique({
@@ -107,12 +107,8 @@ export async function transferQuotation(quotationId: string, targetCustomerId: s
   const target = await prisma.customer.findUnique({ where: { id: targetCustomerId }, select: { id: true } });
   if (!target) throw new Error("Target client not found.");
 
-  // Permission: admin, the quote's preparer, or the source account's sales in-charge.
   const accounts = await getAccountsRegistry();
   const srcData: AccountData | null = accounts[sourceCustomerId] ?? null;
-  const owner = srcData ? currentOwner(srcData) : null;
-  const allowed = isAdmin(user) || quote.preparedById === user.id || owner?.userId === user.id;
-  if (!allowed) throw new Error("Only the quotation's preparer, the account's sales in-charge, or an admin can transfer it.");
 
   await prisma.$transaction(async (tx) => {
     const inquiry = await tx.inquiry.create({
@@ -207,6 +203,29 @@ export async function addQuotation(customerId: string) {
 
   revalidatePath(`/customers/${customerId}`);
   redirect(`/quotations/${quotation.id}`);
+}
+
+/**
+ * Remove an inquiry from a client's history. Admin only. Refuses when the inquiry
+ * still has quotations (those are real records — transfer or delete them first);
+ * its items and attachments are removed with it.
+ */
+export async function deleteInquiry(inquiryId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can remove an inquiry.");
+
+  const inquiry = await prisma.inquiry.findUnique({
+    where: { id: inquiryId },
+    select: { id: true, customerId: true, _count: { select: { quotations: true } } },
+  });
+  if (!inquiry) throw new Error("Inquiry not found.");
+  if (inquiry._count.quotations > 0)
+    throw new Error("This inquiry has quotation(s). Move or remove them before deleting the inquiry.");
+
+  await prisma.inquiry.delete({ where: { id: inquiryId } });
+  revalidatePath(`/customers/${inquiry.customerId}`);
+  revalidatePath("/inquiries");
 }
 
 const customerSchema = z.object({
