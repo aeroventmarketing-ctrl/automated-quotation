@@ -14,7 +14,7 @@ import { config } from "@/lib/config";
 
 /** AeroVent's payor details for the BIR 2307 (Part II). */
 const PAYOR = {
-  tin: "201-616-600",
+  tin: "201-616-609",
   branch: "000",
   name: "AEROVENT FANS AND BLOWERS MANUFACTURING",
   address: "7635 NARRA ROAD, BAYAN-BAYANAN, BRGY. SAN VICENTE, SAN PEDRO, LAGUNA",
