@@ -23,6 +23,7 @@ import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchas
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
+import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { MaterialRequests } from "./material-requests";
@@ -49,7 +50,7 @@ const fmtWhen = (iso?: string) => (iso ? formatDateTime(iso) : "");
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [quote, viewer, assignments, purchaseRequests, stockItemsRaw, allUsers, suppliers, paymentTerms] = await Promise.all([
+  const [quote, viewer, assignments, purchaseRequests, stockItemsRaw, allUsers, suppliers, paymentTerms, hideOrderProgress] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
@@ -61,6 +62,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     prisma.user.findMany({ select: { id: true, name: true } }),
     getSuppliers().catch(() => []),
     getPaymentTerms().catch(() => []),
+    getHideOrderProgress().catch(() => false),
   ]);
   if (!quote) notFound();
   const stockItems = stockItemsRaw;
@@ -68,6 +70,35 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const adminViewer = isAdmin(viewer);
   const wf = readOrderWorkflow(quote.classification);
   const value = payableTotal(quote);
+
+  // Admin toggle: hide workflow progress from Sales & Engineer (who hold no
+  // workflow role). They still see the order header and financials.
+  const progressHidden = progressHiddenFor(hideOrderProgress, viewer, adminViewer, assignments);
+  if (progressHidden) {
+    return (
+      <div className="space-y-5">
+        <Link href="/orders" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" /> Orders
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold">{quote.inquiry.customer.company}</h1>
+          <p className="text-sm text-muted-foreground">
+            Order{" "}
+            <Link href={`/quotations/${quote.id}`} className="text-primary hover:underline">{quote.quoteNumber}</Link>
+            {(quote.projectName || quote.inquiry.projectName) && ` · ${quote.projectName ?? quote.inquiry.projectName}`}
+            {" · "}
+            {formatCurrency(value, quote.currency)}
+          </p>
+        </div>
+        <Card>
+          <CardContent className="py-10 text-center">
+            <p className="text-sm font-medium">Order processing is in progress.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Workflow details are managed by the production and finance teams.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Resolve workflow roles → the people who hold them, so every viewer can see
   // who the current approver is.

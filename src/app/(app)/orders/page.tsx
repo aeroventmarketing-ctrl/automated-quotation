@@ -15,6 +15,7 @@ import {
 } from "@/lib/sale";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/workflow-roles";
 import { readOrderWorkflow, nextOrderStep, stageLabel, pendingStep } from "@/lib/order-workflow";
+import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { OrderStageActions } from "./order-stage-actions";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ function orderDate(sale: SaleRecord, fallback: Date): Date {
  * quotation; VAT invoice generation follows in the next increment.
  */
 export default async function OrdersPage() {
-  const [quotes, viewer, assignments] = await Promise.all([
+  const [quotes, viewer, assignments, hideOrderProgress] = await Promise.all([
     prisma.quotation.findMany({
       where: { inquiry: { status: "WON" } },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
@@ -44,8 +45,10 @@ export default async function OrdersPage() {
     }),
     getCurrentUser(),
     getWorkflowRoles(),
+    getHideOrderProgress().catch(() => false),
   ]);
   const adminViewer = isAdmin(viewer);
+  const progressHidden = progressHiddenFor(hideOrderProgress, viewer, adminViewer, assignments);
 
   const orders = quotes
     .map((q) => {
@@ -179,6 +182,7 @@ export default async function OrdersPage() {
                           nextLabel={o.nextLabel}
                           canAct={o.canAct}
                           awaiting={o.awaiting}
+                          hideStage={progressHidden}
                         />
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{o.sales}</TableCell>

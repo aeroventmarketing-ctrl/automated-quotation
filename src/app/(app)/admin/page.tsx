@@ -4,17 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
+import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { QuoteNumberSetting } from "./quote-number-setting";
 import { MrfNumberSetting } from "./mrf-number-setting";
 import { PoNumberSetting } from "./po-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings] = await Promise.all([
+  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress] = await Promise.all([
     prisma.user.count(),
     prisma.catalogueItem.count(),
     prisma.priceListEntry.count(),
@@ -26,6 +27,7 @@ export default async function AdminOverviewPage() {
     getPropellerSpLock(),
     getAxialSpLock(),
     getFollowUpSettings(),
+    getHideOrderProgress(),
   ]);
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
@@ -112,6 +114,12 @@ export default async function AdminOverviewPage() {
         description={'When enabled, Tubeaxial is capped at 1.5" w.g. and Vaneaxial at 4" w.g.: the builder warns above that and disables Run selection. Turn off to allow selecting these fans at any static pressure.'}
         enabled={axialSpLock}
         onSave={saveAxialSpLockSetting}
+      />
+      <SpLockSetting
+        title="Hide order progress from Sales & Engineer"
+        description="When enabled, Sales and Engineer users no longer see an order's workflow progress (stages, approvals, job orders, materials, purchasing, delivery) — from Phase 1 onward. Admins and anyone assigned an ERP workflow role still see everything."
+        enabled={hideOrderProgress}
+        onSave={saveHideOrderProgressSetting}
       />
       <FollowUpSetting
         offsetsDays={followUpSettings.offsetsDays}

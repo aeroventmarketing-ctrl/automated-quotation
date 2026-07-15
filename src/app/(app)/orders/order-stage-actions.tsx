@@ -31,6 +31,7 @@ export function OrderStageActions({
   nextLabel,
   canAct,
   awaiting,
+  hideStage,
 }: {
   orderId: string;
   stage: OrderStage;
@@ -39,6 +40,7 @@ export function OrderStageActions({
   nextLabel: string | null;
   canAct: boolean;
   awaiting: string | null;
+  hideStage?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -55,6 +57,10 @@ export function OrderStageActions({
       setErr(e instanceof Error ? e.message : "Failed");
       setBusy(false);
     }
+  }
+
+  if (hideStage) {
+    return <span className="text-xs text-muted-foreground">In process</span>;
   }
 
   return (

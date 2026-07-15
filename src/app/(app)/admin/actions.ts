@@ -8,6 +8,7 @@ import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
 import { setUserSignatureValue } from "@/lib/signature";
 import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
+import { setHideOrderProgress } from "@/lib/order-progress-visibility";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
@@ -308,6 +309,15 @@ export async function saveAxialSpLockSetting(input: z.infer<typeof spLockSchema>
   await assertAdmin();
   const d = spLockSchema.parse(input);
   await setAxialSpLock(d.enabled);
+  revalidatePath("/admin");
+  return d.enabled;
+}
+
+// --- Hide order progress from Sales & Engineer ------------------------------
+export async function saveHideOrderProgressSetting(input: z.infer<typeof spLockSchema>): Promise<boolean> {
+  await assertAdmin();
+  const d = spLockSchema.parse(input);
+  await setHideOrderProgress(d.enabled);
   revalidatePath("/admin");
   return d.enabled;
 }
