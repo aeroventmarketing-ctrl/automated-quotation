@@ -217,8 +217,8 @@ type SegField = {
 
 // TIN cell centres (measured from the form's dividers). Payee item 2 and payor
 // item 6 use the identical box grid, so they share one set of x-centres.
-// Last group (branch code) shifted left one column (−173531) vs the measured centres.
-const TIN_CENTERS = [2594777, 2768308, 2941839, 3274577, 3448108, 3621639, 3950414, 4123945, 4297476, 4527668, 4852006, 5176344];
+// Last group (branch code) shifted left half a column (−86765) vs the measured centres.
+const TIN_CENTERS = [2594777, 2768308, 2941839, 3274577, 3448108, 3621639, 3950414, 4123945, 4297476, 4614434, 4938772, 5263110];
 
 const SEG_FIELDS: SegField[] = [
   { key: "periodFrom", y: 1325179, cy: 223372, sz: 1000, centers: [1844726, 2019499, 2198995, 2375555, 2539103, 2712696, 2892192, 3078367] },
