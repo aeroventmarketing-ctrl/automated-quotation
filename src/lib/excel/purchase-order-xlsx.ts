@@ -76,34 +76,32 @@ export async function buildPurchaseOrderWorkbook(
   ws.pageSetup.printArea = `A1:J${31 + N}`;
 
   // --- BIR 2307 sheet ---------------------------------------------------------
-  // The amounts were formula-linked to the PO sheet (#REF! once that sheet is
-  // rewritten), so we write plain values. Income = VAT-exclusive amount; tax =
-  // the creditable withholding (EWT). Payee = supplier, Payor = AeroVent.
+  // Match AeroVent's actual 2307 exactly: ONLY the amounts are filled (as plain
+  // values, since the template's formulas were linked to the PO sheet). Payee,
+  // Payor, TIN, address and period are left blank — those are prepared
+  // separately (eBIRForms). Income = VAT-exclusive; tax = income × 1% (ATC WI158).
   const f = wb.getWorksheet("2307");
   if (f) {
     const income = round2(totals.total / (1 + (config.vatRate || 0.12)));
-    const tax = totals.ewt;
-    // Amount of Income Payments (2nd-month column + Total) and Tax Withheld.
-    f.getCell("T38").value = income;
-    f.getCell("AD38").value = income;
-    f.getCell("AI38").value = tax;
-    f.getCell("AI48").value = tax;
-    // Off-print helper column that fed the form's formulas.
+    const tax = round2(income * 0.01);
+    // Income Payments go in the month-of-quarter column matching the PO date
+    // (1st→O, 2nd→T, 3rd→Y); the other two months are zero.
+    const monthCols = ["O", "T", "Y"] as const;
+    const d = po.date ? new Date(po.date) : null;
+    const mq = d && !Number.isNaN(d.getTime()) ? d.getMonth() % 3 : 1; // 0..2
+    monthCols.forEach((col, i) => {
+      f.getCell(`${col}38`).value = i === mq ? income : 0;
+    });
+    f.getCell("AD38").value = income; // Total
+    f.getCell("AI38").value = tax; // Tax Withheld for the Quarter
+    f.getCell("AI48").value = tax; // Total
+    // Neutralize the off-print helper cells that carried the broken PO-sheet link.
     f.getCell("AZ37").value = totals.total;
     f.getCell("AZ38").value = income;
     f.getCell("AZ39").value = tax;
     f.getCell("AZ40").value = round2(totals.total - tax);
-    // Part I — Payee (the supplier).
-    f.getCell("B17").value = po.supplier.company;
-    f.getCell("B20").value = po.supplier.address;
-    // Part II — Payor (AeroVent).
-    f.getCell("B29").value = PAYOR_NAME;
-    f.getCell("B32").value = PAYOR_ADDRESS;
   }
 
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
 }
-
-const PAYOR_NAME = "AEROVENT FANS AND BLOWERS MANUFACTURING";
-const PAYOR_ADDRESS = "7635 NARRA ROAD, BAYAN-BAYANAN, BRGY. SAN VICENTE, SAN PEDRO, LAGUNA";
