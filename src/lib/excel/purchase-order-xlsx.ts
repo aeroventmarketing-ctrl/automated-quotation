@@ -179,8 +179,8 @@ export async function buildPurchaseOrderWorkbook(
     const designation = (signatory.designation ?? "").trim();
     if (name || designation) {
       const runs: ExcelJS.RichText[] = [];
-      if (name) runs.push({ text: name, font: { name: "Arial", size: 11, bold: true, underline: true } });
-      if (designation) runs.push({ text: `${runs.length ? "\n" : ""}${designation}`, font: { name: "Arial", size: 10, bold: true } });
+      if (name) runs.push({ text: name, font: { name: "Arial", size: 8, bold: true } });
+      if (designation) runs.push({ text: `${runs.length ? "\n" : ""}${designation}`, font: { name: "Arial", size: 8, bold: true } });
       f.getCell("A63").value = { richText: runs };
       f.getCell("A63").alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
     }
