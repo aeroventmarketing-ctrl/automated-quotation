@@ -157,6 +157,7 @@ export async function buildPurchaseOrderWorkbook(
     // the month-of-quarter column (1st→O, 2nd→T, 3rd→Y); AI48 total is a formula.
     const income = round2(totals.total / (1 + (config.vatRate || 0.12)));
     const tax = round2(income * 0.01);
+    f.getCell("A38").value = "Income payments made by top 10,000 private corporations to";
     f.getCell("L38").value = "WI 158";
     (["O", "T", "Y"] as const).forEach((col, i) => {
       f.getCell(`${col}38`).value = i === period.monthIndex ? income : 0;
