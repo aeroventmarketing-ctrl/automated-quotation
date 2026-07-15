@@ -8,12 +8,6 @@
 import ExcelJS from "exceljs";
 import { poLineAmount, poTotals, type PurchaseOrder } from "@/lib/purchase-order";
 
-export interface POBankLines {
-  line1: string; // e.g. bank name
-  line2: string; // e.g. account name
-  line3: string; // e.g. account number
-}
-
 function fullDate(iso: string): string {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return "";
@@ -24,7 +18,6 @@ function fullDate(iso: string): string {
 export async function buildPurchaseOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   po: PurchaseOrder,
-  bank: POBankLines,
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuffer as ArrayBuffer);
@@ -75,23 +68,11 @@ export async function buildPurchaseOrderWorkbook(
   ws.getCell(`J${21 + N}`).value = totals.ewt;
   ws.getCell(`J${22 + N}`).value = totals.net;
 
-  // Remarks + supplier bank footer.
+  // Remarks. The footer bank details are left blank for now (filled in later).
   ws.getCell(`B${24 + N}`).value = po.remarks;
-  ws.getCell(`D${27 + N}`).value = bank.line1;
-  ws.getCell(`D${28 + N}`).value = bank.line2;
-  ws.getCell(`D${29 + N}`).value = bank.line3;
 
   ws.pageSetup.printArea = `A1:J${31 + N}`;
 
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
-}
-
-/** Split a free-text bank-details field into up to three footer lines. */
-export function bankLinesFromText(text: string): POBankLines {
-  const parts = String(text ?? "")
-    .split(/\r?\n|,\s*/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return { line1: parts[0] ?? "", line2: parts[1] ?? "", line3: parts[2] ?? "" };
 }
