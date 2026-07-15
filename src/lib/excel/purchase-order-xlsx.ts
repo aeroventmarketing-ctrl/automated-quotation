@@ -41,7 +41,7 @@ export async function buildPurchaseOrderWorkbook(
   for (const m of ["B20:F20", "A21:I21", "A22:I22", "A23:I23"]) {
     try { ws.unMergeCells(m); } catch { /* not merged */ }
   }
-  if (off > 0) ws.duplicateRow(20, off, true); // clones row 20's style, shifts the rest down
+  if (off > 0) ws.duplicateRow(20, off, true); // clones row 20's style, shifts the rest down (images shift on write)
   // Re-apply merges at their final positions.
   for (let i = 0; i < N; i++) {
     try { ws.mergeCells(`B${20 + i}:F${20 + i}`); } catch { /* already merged */ }
