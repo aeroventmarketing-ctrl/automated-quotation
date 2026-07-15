@@ -9,6 +9,7 @@ import { advancePurchaseRequest, receivePurchaseRequest } from "../actions";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
+import type { Supplier } from "@/lib/suppliers";
 
 interface ActionOpt {
   key: string;
@@ -36,11 +37,13 @@ export function PurchasingChain({
   stockItems,
   orderId,
   poDefaultRemarks,
+  suppliers,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
   orderId: string;
   poDefaultRemarks: string;
+  suppliers: Supplier[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -122,6 +125,7 @@ export function PurchasingChain({
                   po={r.po}
                   defaultLines={r.poDefaultLines}
                   defaultRemarks={poDefaultRemarks}
+                  suppliers={suppliers}
                   onDone={() => setPoEditId(null)}
                 />
               ) : r.po ? (

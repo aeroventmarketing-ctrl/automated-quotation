@@ -21,6 +21,7 @@ import {
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
+import { getSuppliers } from "@/lib/suppliers";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { MaterialRequests } from "./material-requests";
@@ -47,7 +48,7 @@ const fmtWhen = (iso?: string) => (iso ? formatDateTime(iso) : "");
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [quote, viewer, assignments, purchaseRequests, stockItemsRaw, allUsers] = await Promise.all([
+  const [quote, viewer, assignments, purchaseRequests, stockItemsRaw, allUsers, suppliers] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
@@ -57,6 +58,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     prisma.purchaseRequest.findMany({ where: { quotationId: id }, orderBy: { createdAt: "asc" } }),
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true } }),
+    getSuppliers().catch(() => []),
   ]);
   if (!quote) notFound();
   const stockItems = stockItemsRaw;
@@ -326,7 +328,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Purchasing</CardTitle></CardHeader>
           <CardContent>
-            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} />
+            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} />
           </CardContent>
         </Card>
       )}

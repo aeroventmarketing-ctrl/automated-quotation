@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import type { Supplier } from "@/lib/suppliers";
 import { savePurchaseOrder } from "../actions";
 
 function todayInput(): string {
@@ -21,6 +22,7 @@ export function PurchaseOrderPanel({
   po,
   defaultLines,
   defaultRemarks,
+  suppliers,
   onDone,
 }: {
   prId: string;
@@ -28,12 +30,25 @@ export function PurchaseOrderPanel({
   po: PurchaseOrder | null;
   defaultLines: POLine[];
   defaultRemarks: string;
+  suppliers: Supplier[];
   onDone: () => void;
 }) {
   const router = useRouter();
   const [company, setCompany] = useState(po?.supplier.company ?? "");
   const [attention, setAttention] = useState(po?.supplier.attention ?? "");
   const [address, setAddress] = useState(po?.supplier.address ?? "");
+  const [supplierOpen, setSupplierOpen] = useState(false);
+
+  const matches = company.trim()
+    ? suppliers.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
+    : suppliers;
+
+  function pickSupplier(s: Supplier) {
+    setCompany(s.company);
+    setAttention(s.attention);
+    setAddress(s.address);
+    setSupplierOpen(false);
+  }
   const [date, setDate] = useState(po?.date ? po.date.slice(0, 10) : todayInput());
   const [lines, setLines] = useState<POLine[]>(po?.lines?.length ? po.lines : defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }]);
   const [ewtPct, setEwtPct] = useState(String(po?.ewtPct ?? 1));
@@ -78,8 +93,38 @@ export function PurchaseOrderPanel({
 
       {/* Supplier */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="space-y-1"><span className="text-xs text-muted-foreground">Company name</span>
-          <Input className="h-8" value={company} onChange={(e) => setCompany(e.target.value)} /></label>
+        <div className="space-y-1">
+          <span className="text-xs text-muted-foreground">Company name</span>
+          <div className="relative">
+            <Input
+              className="h-8"
+              value={company}
+              placeholder={suppliers.length ? "Search or type supplier…" : "Type supplier…"}
+              onChange={(e) => { setCompany(e.target.value); setSupplierOpen(true); }}
+              onFocus={() => setSupplierOpen(true)}
+              onBlur={() => setTimeout(() => setSupplierOpen(false), 150)}
+            />
+            {supplierOpen && matches.length > 0 && (
+              <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-background shadow-md">
+                {matches.slice(0, 8).map((s) => (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => pickSupplier(s)}
+                      className="block w-full px-2 py-1.5 text-left text-sm hover:bg-accent"
+                    >
+                      <div className="font-medium">{s.company}</div>
+                      {(s.attention || s.address) && (
+                        <div className="truncate text-xs text-muted-foreground">{[s.attention, s.address].filter(Boolean).join(" · ")}</div>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
         <label className="space-y-1"><span className="text-xs text-muted-foreground">Attention</span>
           <Input className="h-8" value={attention} onChange={(e) => setAttention(e.target.value)} /></label>
         <label className="space-y-1 sm:col-span-2"><span className="text-xs text-muted-foreground">Address</span>

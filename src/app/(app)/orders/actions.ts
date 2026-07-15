@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { coercePurchaseOrder, formatPoNumber, type PurchaseOrder } from "@/lib/purchase-order";
+import { rememberSupplier } from "@/lib/suppliers";
 import {
   getWorkflowRoles,
   userHasWorkflowRole,
@@ -445,6 +446,8 @@ export async function savePurchaseOrder(
     where: { id: purchaseRequestId },
     data: { po: po as unknown as Prisma.InputJsonObject },
   });
+  // Remember the supplier for next time (searchable in the PO form).
+  await rememberSupplier(po.supplier);
   revalidatePath(`/orders/${pr.quotationId}`);
 }
 
