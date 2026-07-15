@@ -372,7 +372,7 @@ export async function restore2307Shapes(workbook: Buffer, source: Buffer, fields
         "</Relationships>",
         `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mediaName}"/></Relationships>`,
       );
-      srcXml = srcXml.replace("</xdr:wsDr>", `${signaturePicAnchor(relId)}</xdr:wsDr>`);
+      srcXml = srcXml.replace("</xdr:wsDr>", `${signaturePicAnchor(relId, imageSize(sig.bytes, sig.ext))}</xdr:wsDr>`);
     }
 
     out.file(outDraw, srcXml);
@@ -402,16 +402,46 @@ async function ensureContentType(zip: JSZip, ext: string, mime: string): Promise
   zip.file("[Content_Types].xml", ct.replace("</Types>", `<Default Extension="${ext}" ContentType="${mime}"/></Types>`));
 }
 
-/** A picture anchor for the payor signature, centred over the signature line. */
-function signaturePicAnchor(relId: string): string {
-  // Drawing rows are 0-indexed: spreadsheet rows 62–65 (the signature block) are
-  // drawing rows 61–64. Centred horizontally over the payor half.
+/** Read pixel dimensions from PNG/JPEG bytes (fallback 3:1 if unknown). */
+function imageSize(bytes: Buffer, ext: string): { w: number; h: number } {
+  try {
+    if (ext === "png" && bytes.length > 24 && bytes.readUInt32BE(12) === 0x49484452) {
+      return { w: bytes.readUInt32BE(16), h: bytes.readUInt32BE(20) };
+    }
+    if (ext === "jpg") {
+      let o = 2;
+      while (o + 9 < bytes.length) {
+        if (bytes[o] !== 0xff) { o++; continue; }
+        const marker = bytes[o + 1];
+        if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+          return { h: bytes.readUInt16BE(o + 5), w: bytes.readUInt16BE(o + 7) };
+        }
+        o += 2 + bytes.readUInt16BE(o + 2);
+      }
+    }
+  } catch { /* fall through */ }
+  return { w: 300, h: 100 };
+}
+
+/**
+ * A fixed-size picture anchor for the payor signature, sitting just above the
+ * printed name. Aspect ratio is preserved (no stretch) and the image is capped
+ * to a signature-sized box, anchored in the lower half of the tall declaration
+ * row (spreadsheet row 62 = drawing row 61) so it clears the name below.
+ */
+function signaturePicAnchor(relId: string, size: { w: number; h: number }): string {
+  const MAX_W = 1550000; // ~1.6"
+  const MAX_H = 430000; //  ~0.45"
+  const aspect = size.w > 0 && size.h > 0 ? size.w / size.h : 3;
+  let cx = MAX_W;
+  let cy = Math.round(cx / aspect);
+  if (cy > MAX_H) { cy = MAX_H; cx = Math.round(cy * aspect); }
   return (
-    `<xdr:twoCellAnchor editAs="oneCell">` +
-    `<xdr:from><xdr:col>16</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>60</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>` +
-    `<xdr:to><xdr:col>24</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>64</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` +
+    `<xdr:oneCellAnchor>` +
+    `<xdr:from><xdr:col>17</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>61</xdr:row><xdr:rowOff>120000</xdr:rowOff></xdr:from>` +
+    `<xdr:ext cx="${cx}" cy="${cy}"/>` +
     `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="9600" name="payor-signature"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
     `<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${relId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
-    `<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>`
+    `<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln><a:noFill/></a:ln></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`
   );
 }
