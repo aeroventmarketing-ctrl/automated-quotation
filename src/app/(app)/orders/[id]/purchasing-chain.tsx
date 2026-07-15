@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest } from "../actions";
@@ -139,8 +138,7 @@ export function PurchasingChain({
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge variant="success">PO {r.po.poNumber}</Badge>
                   {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
-                  <a href={`/orders/${orderId}/po/${r.id}/xlsx`} className="text-primary hover:underline">Excel</a>
-                  <Link href={`/orders/${orderId}/po/${r.id}`} target="_blank" className="text-primary hover:underline">Print PO</Link>
+                  <a href={`/orders/${orderId}/po/${r.id}/xlsx`} className="text-primary hover:underline">Print PO &amp; 2307</a>
                   {r.canManagePO && (
                     <button type="button" onClick={() => setPoEditId(r.id)} className="text-muted-foreground hover:text-foreground">Edit</button>
                   )}
