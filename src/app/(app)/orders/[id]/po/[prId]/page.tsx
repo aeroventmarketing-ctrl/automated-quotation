@@ -36,10 +36,12 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
   return (
     <div>
       <style>{`
+        @page { size: auto; margin: 0; }
         @media print {
+          html, body { margin: 0 !important; }
           body * { visibility: hidden !important; }
           #po-sheet, #po-sheet * { visibility: visible !important; }
-          #po-sheet { position: absolute; left: 0; top: 0; width: 100%; padding: 0; border: 0 !important; }
+          #po-sheet { position: absolute; left: 0; top: 0; width: 100%; padding: 12mm !important; border: 0 !important; }
           .no-print { display: none !important; }
         }
       `}</style>
