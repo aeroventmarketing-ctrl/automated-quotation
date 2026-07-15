@@ -19,7 +19,7 @@ export interface Supplier {
   address: string; // Address (for filing; not shown on the PO)
   tin: string; // Taxpayer Identification Number (for BIR 2307)
   zip: string; // ZIP Code (for BIR 2307)
-  paymentDetails: string; // Bank Details
+  paymentDetails: string; // Bank Name and Account Number
 }
 
 /** The columns used for the import/export template (order matters). */
@@ -31,7 +31,7 @@ export const SUPPLIER_COLUMNS = [
   { key: "address", label: "Address" },
   { key: "tin", label: "TIN" },
   { key: "zip", label: "ZIP Code" },
-  { key: "paymentDetails", label: "Bank Details" },
+  { key: "paymentDetails", label: "Bank Name and Account Number" },
 ] as const;
 
 const norm = (s: string) => s.trim().toLowerCase();

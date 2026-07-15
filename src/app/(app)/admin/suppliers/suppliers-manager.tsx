@@ -32,7 +32,7 @@ const ALIASES: Record<keyof Fields, string[]> = {
   address: ["address", "location", "company address"],
   tin: ["tin", "taxpayer identification number", "taxpayer id", "tax id"],
   zip: ["zip code", "zip", "postal code", "postal"],
-  paymentDetails: ["bank details", "bank", "payment details", "payment", "payment terms", "terms"],
+  paymentDetails: ["bank name and account number", "bank name & account number", "bank name", "account number", "bank details", "bank", "payment details", "payment"],
 };
 
 function csvEscape(v: string) {
@@ -208,7 +208,7 @@ export function SuppliersManager({
           <Input className="h-8 sm:col-span-2 lg:col-span-3" placeholder="Address" value={add.address} onChange={(e) => setAdd({ ...add, address: e.target.value })} />
           <Input className="h-8" placeholder="TIN" value={add.tin} onChange={(e) => setAdd({ ...add, tin: e.target.value })} />
           <Input className="h-8" placeholder="ZIP Code" value={add.zip} onChange={(e) => setAdd({ ...add, zip: e.target.value })} />
-          <Input className="h-8 sm:col-span-2 lg:col-span-1" placeholder="Bank Details" value={add.paymentDetails} onChange={(e) => setAdd({ ...add, paymentDetails: e.target.value })} />
+          <Input className="h-8 sm:col-span-2 lg:col-span-1" placeholder="Bank Name and Account Number" value={add.paymentDetails} onChange={(e) => setAdd({ ...add, paymentDetails: e.target.value })} />
         </div>
         <Button size="sm" className="h-8" disabled={busy || !add.company.trim()} onClick={() => run(() => onSave(add), () => setAdd(blank))}>
           {busy ? "Saving…" : "Add supplier"}
@@ -230,7 +230,7 @@ export function SuppliersManager({
                 <th className="py-2 px-3 font-medium">Address</th>
                 <th className="py-2 px-3 font-medium">TIN</th>
                 <th className="py-2 px-3 font-medium">ZIP</th>
-                <th className="py-2 px-3 font-medium">Bank Details</th>
+                <th className="py-2 px-3 font-medium">Bank Name and Account Number</th>
                 <th className="py-2 px-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
