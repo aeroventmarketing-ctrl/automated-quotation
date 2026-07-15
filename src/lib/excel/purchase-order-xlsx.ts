@@ -228,6 +228,7 @@ const SEG_FIELDS: SegField[] = [
 ];
 
 const DIGIT_BOX_W = 150000; // EMU width of each centred digit box
+const DIGIT_NUDGE_X = 9525; // shift every digit right by 1px (1px = 9525 EMU) for box alignment
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -252,7 +253,7 @@ function textOverlay(g: TextField, value: string, id: number): string {
 
 /** One centred digit box, absolutely positioned over a segment cell. */
 function digitBox(cx: number, y: number, cy: number, sz: number, ch: string, id: number): string {
-  const px = Math.round(cx - DIGIT_BOX_W / 2);
+  const px = Math.round(cx - DIGIT_BOX_W / 2 + DIGIT_NUDGE_X);
   return (
     `<xdr:absoluteAnchor><xdr:pos x="${px}" y="${y}"/><xdr:ext cx="${DIGIT_BOX_W}" cy="${cy}"/>` +
     `<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="${id}" name="afd_${id}"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr>` +
