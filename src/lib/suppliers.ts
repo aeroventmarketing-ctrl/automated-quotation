@@ -17,6 +17,8 @@ export interface Supplier {
   contactNumber: string; // Contact Number
   email: string; // Email Address
   address: string; // Address (for filing; not shown on the PO)
+  tin: string; // Taxpayer Identification Number (for BIR 2307)
+  zip: string; // ZIP Code (for BIR 2307)
   paymentDetails: string; // Bank Details
 }
 
@@ -27,6 +29,8 @@ export const SUPPLIER_COLUMNS = [
   { key: "contactNumber", label: "Contact Number" },
   { key: "email", label: "Email Address" },
   { key: "address", label: "Address" },
+  { key: "tin", label: "TIN" },
+  { key: "zip", label: "ZIP Code" },
   { key: "paymentDetails", label: "Bank Details" },
 ] as const;
 
@@ -46,6 +50,8 @@ function coerceOne(r: unknown): Supplier | null {
     contactNumber: String(o.contactNumber ?? "").trim(),
     email: String(o.email ?? "").trim(),
     address: String(o.address ?? "").trim(),
+    tin: String(o.tin ?? "").trim(),
+    zip: String(o.zip ?? "").trim(),
     paymentDetails: String(o.paymentDetails ?? "").trim(),
   };
 }
@@ -81,6 +87,8 @@ export interface SupplierInput {
   contactNumber?: string;
   email?: string;
   address?: string;
+  tin?: string;
+  zip?: string;
   paymentDetails?: string;
 }
 
@@ -91,6 +99,8 @@ function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
     contactNumber: (input.contactNumber ?? "").trim(),
     email: (input.email ?? "").trim(),
     address: (input.address ?? "").trim(),
+    tin: (input.tin ?? "").trim(),
+    zip: (input.zip ?? "").trim(),
     paymentDetails: (input.paymentDetails ?? "").trim(),
   };
 }
@@ -156,6 +166,8 @@ export async function bulkUpsertSuppliers(rows: SupplierInput[]): Promise<BulkRe
         contactNumber: d.contactNumber || list[idx].contactNumber,
         email: d.email || list[idx].email,
         address: d.address || list[idx].address,
+        tin: d.tin || list[idx].tin,
+        zip: d.zip || list[idx].zip,
         paymentDetails: d.paymentDetails || list[idx].paymentDetails,
       };
       updated++;
@@ -186,6 +198,8 @@ export async function rememberSupplier(input: { company: string; attention?: str
     contactNumber: "",
     email: "",
     address: (input.address ?? "").trim(),
+    tin: "",
+    zip: "",
     paymentDetails: "",
   });
   await writeSuppliers(list);
