@@ -25,7 +25,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const dir = path.join(process.cwd(), "public", "templates");
   const template = await fs.readFile(path.join(dir, "po-2307-template.xlsx"));
-  let buffer = await buildPurchaseOrderWorkbook(template, po, { tin: match?.tin, zip: match?.zip });
+  let buffer = await buildPurchaseOrderWorkbook(template, po, {
+    name: match?.company,
+    address: match?.address,
+    tin: match?.tin,
+    zip: match?.zip,
+  });
   // Restore the 2307 form's shapes (white input boxes) that exceljs strips.
   const source = await fs.readFile(path.join(dir, "2307-source.xlsx")).catch(() => null);
   if (source) buffer = await restore2307Shapes(buffer, source);
