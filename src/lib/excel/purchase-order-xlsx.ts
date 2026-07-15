@@ -1,14 +1,13 @@
 /**
- * Fills the AeroVent Purchase Order + BIR 2307 Excel template with an order's PO
- * data. The template (public/templates/po-2307-template.xlsx) preserves the exact
- * letterhead, formatting and print setup (PO = Letter 8.5×11, 2307 = Folio); we
- * only write the data cells. Item rows are expanded as needed without disturbing
- * the merged totals/footer below.
+ * Fills the AeroVent Purchase Order sheet of the PO + BIR 2307 Excel template
+ * with an order's PO data. The template (public/templates/po-2307-template.xlsx)
+ * preserves the exact letterhead, formatting and print setup (PO = Letter 8.5×11,
+ * 2307 = Folio). Only the Purchase Order sheet is filled — the 2307 sheet is left
+ * exactly as AeroVent's standard blank form (white input boxes intact) for the
+ * team to complete themselves.
  */
 import ExcelJS from "exceljs";
 import { poLineAmount, poTotals, type PurchaseOrder } from "@/lib/purchase-order";
-import { round2 } from "@/lib/quote";
-import { config } from "@/lib/config";
 
 function fullDate(iso: string): string {
   const d = iso ? new Date(iso) : null;
@@ -75,28 +74,8 @@ export async function buildPurchaseOrderWorkbook(
 
   ws.pageSetup.printArea = `A1:J${31 + N}`;
 
-  // --- BIR 2307 sheet ---------------------------------------------------------
-  // The standard form is left exactly as AeroVent provided it; only the ATC and
-  // the amounts on the WI 158 line (Part III) are filled. Payee, Payor, TIN,
-  // address and period stay blank (prepared separately in eBIRForms). Income =
-  // VAT-exclusive amount; tax = income × 1%. The Tax Withheld total (AI48) is a
-  // SUM formula on the form and is left untouched.
-  const f = wb.worksheets.find((s) => /2307/i.test(s.name));
-  if (f) {
-    const income = round2(totals.total / (1 + (config.vatRate || 0.12)));
-    const tax = round2(income * 0.01);
-    f.getCell("L38").value = "WI 158"; // ATC — top withholding agent, purchase of goods
-    // Income Payments go in the month-of-quarter column matching the PO date
-    // (1st→O, 2nd→T, 3rd→Y); the other two months are zero.
-    const monthCols = ["O", "T", "Y"] as const;
-    const d = po.date ? new Date(po.date) : null;
-    const mq = d && !Number.isNaN(d.getTime()) ? d.getMonth() % 3 : 1; // 0..2
-    monthCols.forEach((col, i) => {
-      f.getCell(`${col}38`).value = i === mq ? income : 0;
-    });
-    f.getCell("AD38").value = income; // Total (Amount of Income Payments)
-    f.getCell("AI38").value = tax; // Tax Withheld for the Quarter
-  }
+  // The 2307 sheet is intentionally left blank — AeroVent completes it (period,
+  // TIN, names, addresses, amounts) themselves. Do not write anything to it.
 
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
