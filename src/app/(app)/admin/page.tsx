@@ -72,6 +72,19 @@ export default async function AdminOverviewPage() {
           </CardContent>
         </Card>
       </Link>
+      <Link href="/admin/suppliers">
+        <Card className="transition-colors hover:bg-accent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Suppliers →</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Maintain the supplier directory (company, attention, address) used when issuing supplier
+              Purchase Orders. Suppliers are also saved automatically each time a PO is issued.
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
       <QuoteNumberSetting current={nextQuoteSeq} />
       <MrfNumberSetting current={mrfNext} />
       <PoNumberSetting current={poNext} />

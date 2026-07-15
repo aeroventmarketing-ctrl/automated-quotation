@@ -45,6 +45,47 @@ export async function getSuppliers(): Promise<Supplier[]> {
   return coerceSuppliers(row?.value);
 }
 
+async function writeSuppliers(list: Supplier[]): Promise<void> {
+  await prisma.appSetting.upsert({
+    where: { key: SUPPLIERS_KEY },
+    create: { key: SUPPLIERS_KEY, value: { list } as unknown as Prisma.InputJsonValue },
+    update: { value: { list } as unknown as Prisma.InputJsonValue },
+  });
+}
+
+/** Add or edit a supplier by id (or dedup by company when adding a new one). */
+export async function saveSupplier(input: {
+  id?: string;
+  company: string;
+  attention?: string;
+  address?: string;
+}): Promise<Supplier[]> {
+  const company = (input.company ?? "").trim();
+  if (!company) throw new Error("Company name is required.");
+  const attention = (input.attention ?? "").trim();
+  const address = (input.address ?? "").trim();
+
+  const list = await getSuppliers();
+  if (input.id) {
+    const idx = list.findIndex((s) => s.id === input.id);
+    if (idx >= 0) list[idx] = { id: input.id, company, attention, address };
+    else list.push({ id: input.id, company, attention, address });
+  } else {
+    const idx = list.findIndex((s) => norm(s.company) === norm(company));
+    if (idx >= 0) list[idx] = { ...list[idx], company, attention, address };
+    else list.push({ id: randomUUID(), company, attention, address });
+  }
+  await writeSuppliers(list);
+  return coerceSuppliers({ list });
+}
+
+/** Remove a supplier from the directory. */
+export async function deleteSupplier(id: string): Promise<Supplier[]> {
+  const list = (await getSuppliers()).filter((s) => s.id !== id);
+  await writeSuppliers(list);
+  return list;
+}
+
 /**
  * Remember a supplier from a saved PO. Matches an existing entry by company name
  * (case-insensitive) and refreshes its attention/address; otherwise adds it.
@@ -63,10 +104,5 @@ export async function rememberSupplier(input: { company: string; attention?: str
   } else {
     list.push({ id: randomUUID(), company, attention, address });
   }
-
-  await prisma.appSetting.upsert({
-    where: { key: SUPPLIERS_KEY },
-    create: { key: SUPPLIERS_KEY, value: { list } as unknown as Prisma.InputJsonValue },
-    update: { value: { list } as unknown as Prisma.InputJsonValue },
-  });
+  await writeSuppliers(list);
 }
