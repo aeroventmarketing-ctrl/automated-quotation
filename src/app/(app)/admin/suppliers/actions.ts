@@ -16,6 +16,7 @@ const supplierSchema = z.object({
   contactPerson: z.string().trim().optional().default(""),
   contactNumber: z.string().trim().optional().default(""),
   email: z.string().trim().optional().default(""),
+  address: z.string().trim().optional().default(""),
   paymentDetails: z.string().trim().optional().default(""),
 });
 
@@ -41,6 +42,7 @@ const bulkSchema = z.object({
       contactPerson: z.string().trim().optional().default(""),
       contactNumber: z.string().trim().optional().default(""),
       email: z.string().trim().optional().default(""),
+      address: z.string().trim().optional().default(""),
       paymentDetails: z.string().trim().optional().default(""),
     }),
   ),

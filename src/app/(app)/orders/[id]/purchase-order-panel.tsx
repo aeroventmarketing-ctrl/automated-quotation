@@ -51,6 +51,7 @@ export function PurchaseOrderPanel({
   function pickSupplier(s: Supplier) {
     setCompany(s.company);
     setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
+    if (s.address) setAddress(s.address);
     if (s.paymentDetails) setRemarks(s.paymentDetails);
     setSupplierOpen(false);
   }

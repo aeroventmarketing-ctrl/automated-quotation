@@ -11,13 +11,14 @@ type SaveFn = (input: {
   contactPerson: string;
   contactNumber: string;
   email: string;
+  address: string;
   paymentDetails: string;
 }) => Promise<Supplier[]>;
 type DeleteFn = (id: string) => Promise<Supplier[]>;
 type BulkFn = (input: { rows: Array<Omit<Supplier, "id">> }) => Promise<BulkResult>;
 
 type Fields = Omit<Supplier, "id">;
-const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", paymentDetails: "" };
+const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", paymentDetails: "" };
 const HEADERS = SUPPLIER_COLUMNS.map((c) => c.label);
 
 const nk = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -26,6 +27,7 @@ const ALIASES: Record<keyof Fields, string[]> = {
   contactPerson: ["contact person", "contact", "attention", "person", "contact name"],
   contactNumber: ["contact number", "contact no", "number", "phone", "mobile", "telephone", "tel"],
   email: ["email address", "email", "e-mail", "email add"],
+  address: ["address", "location", "company address"],
   paymentDetails: ["bank details", "bank", "payment details", "payment", "payment terms", "terms"],
 };
 
@@ -91,7 +93,7 @@ export function SuppliersManager({
   }
 
   function downloadCsv() {
-    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.paymentDetails])];
+    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.paymentDetails])];
     const csv = rows.map((r) => r.map((c) => csvEscape(c ?? "")).join(",")).join("\r\n");
     download("suppliers-template.csv", new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
   }
@@ -105,7 +107,7 @@ export function SuppliersManager({
       const ws = wb.addWorksheet("Suppliers");
       ws.addRow(HEADERS);
       ws.getRow(1).font = { bold: true };
-      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.paymentDetails]));
+      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.paymentDetails]));
       ws.columns.forEach((c) => (c.width = 28));
       const buf = await wb.xlsx.writeBuffer();
       download("suppliers-template.xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -155,6 +157,7 @@ export function SuppliersManager({
         contactPerson: get(r, "contactPerson"),
         contactNumber: get(r, "contactNumber"),
         email: get(r, "email"),
+        address: get(r, "address"),
         paymentDetails: get(r, "paymentDetails"),
       }));
       const result = await onBulkImport({ rows: data });
@@ -196,7 +199,8 @@ export function SuppliersManager({
           <Input className="h-8" placeholder="Contact Person" value={add.contactPerson} onChange={(e) => setAdd({ ...add, contactPerson: e.target.value })} />
           <Input className="h-8" placeholder="Contact Number" value={add.contactNumber} onChange={(e) => setAdd({ ...add, contactNumber: e.target.value })} />
           <Input className="h-8" placeholder="Email Address" value={add.email} onChange={(e) => setAdd({ ...add, email: e.target.value })} />
-          <Input className="h-8 sm:col-span-2 lg:col-span-2" placeholder="Bank Details" value={add.paymentDetails} onChange={(e) => setAdd({ ...add, paymentDetails: e.target.value })} />
+          <Input className="h-8 sm:col-span-2 lg:col-span-3" placeholder="Address" value={add.address} onChange={(e) => setAdd({ ...add, address: e.target.value })} />
+          <Input className="h-8 sm:col-span-2 lg:col-span-3" placeholder="Bank Details" value={add.paymentDetails} onChange={(e) => setAdd({ ...add, paymentDetails: e.target.value })} />
         </div>
         <Button size="sm" className="h-8" disabled={busy || !add.company.trim()} onClick={() => run(() => onSave(add), () => setAdd(blank))}>
           {busy ? "Saving…" : "Add supplier"}
@@ -208,13 +212,14 @@ export function SuppliersManager({
         <p className="text-sm text-muted-foreground">No suppliers yet. Add one above, import in bulk, or issue a Purchase Order to save one automatically.</p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[860px] border-collapse text-sm">
+          <table className="w-full min-w-[1000px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                 <th className="py-2 px-3 font-medium">Company Name</th>
                 <th className="py-2 px-3 font-medium">Contact Person</th>
                 <th className="py-2 px-3 font-medium">Contact Number</th>
                 <th className="py-2 px-3 font-medium">Email Address</th>
+                <th className="py-2 px-3 font-medium">Address</th>
                 <th className="py-2 px-3 font-medium">Bank Details</th>
                 <th className="py-2 px-3 font-medium text-right">Actions</th>
               </tr>
@@ -227,6 +232,7 @@ export function SuppliersManager({
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.contactPerson} onChange={(e) => setEdit({ ...edit, contactPerson: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.contactNumber} onChange={(e) => setEdit({ ...edit, contactNumber: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></td>
+                    <td className="py-1.5 px-2"><Input className="h-8" value={edit.address} onChange={(e) => setEdit({ ...edit, address: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.paymentDetails} onChange={(e) => setEdit({ ...edit, paymentDetails: e.target.value })} /></td>
                     <td className="py-1.5 px-3">
                       <div className="flex justify-end gap-1.5">
@@ -241,10 +247,11 @@ export function SuppliersManager({
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.contactPerson)}</td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.contactNumber)}</td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.email)}</td>
+                    <td className="py-2 px-3 text-muted-foreground">{cell(s.address)}</td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.paymentDetails)}</td>
                     <td className="py-2 px-3">
                       <div className="flex justify-end gap-1.5">
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, paymentDetails: s.paymentDetails }); }}>Edit</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, paymentDetails: s.paymentDetails }); }}>Edit</Button>
                         <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={() => run(() => onDelete(s.id))}>Remove</Button>
                       </div>
                     </td>

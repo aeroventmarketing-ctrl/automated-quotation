@@ -16,6 +16,7 @@ export interface Supplier {
   contactPerson: string; // Contact Person
   contactNumber: string; // Contact Number
   email: string; // Email Address
+  address: string; // Address (for filing; not shown on the PO)
   paymentDetails: string; // Bank Details
 }
 
@@ -25,6 +26,7 @@ export const SUPPLIER_COLUMNS = [
   { key: "contactPerson", label: "Contact Person" },
   { key: "contactNumber", label: "Contact Number" },
   { key: "email", label: "Email Address" },
+  { key: "address", label: "Address" },
   { key: "paymentDetails", label: "Bank Details" },
 ] as const;
 
@@ -43,6 +45,7 @@ function coerceOne(r: unknown): Supplier | null {
     contactPerson: String(o.contactPerson ?? o.attention ?? "").trim(),
     contactNumber: String(o.contactNumber ?? "").trim(),
     email: String(o.email ?? "").trim(),
+    address: String(o.address ?? "").trim(),
     paymentDetails: String(o.paymentDetails ?? "").trim(),
   };
 }
@@ -77,6 +80,7 @@ export interface SupplierInput {
   contactPerson?: string;
   contactNumber?: string;
   email?: string;
+  address?: string;
   paymentDetails?: string;
 }
 
@@ -86,6 +90,7 @@ function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
     contactPerson: (input.contactPerson ?? "").trim(),
     contactNumber: (input.contactNumber ?? "").trim(),
     email: (input.email ?? "").trim(),
+    address: (input.address ?? "").trim(),
     paymentDetails: (input.paymentDetails ?? "").trim(),
   };
 }
@@ -150,6 +155,7 @@ export async function bulkUpsertSuppliers(rows: SupplierInput[]): Promise<BulkRe
         contactPerson: d.contactPerson || list[idx].contactPerson,
         contactNumber: d.contactNumber || list[idx].contactNumber,
         email: d.email || list[idx].email,
+        address: d.address || list[idx].address,
         paymentDetails: d.paymentDetails || list[idx].paymentDetails,
       };
       updated++;
@@ -168,7 +174,7 @@ export async function bulkUpsertSuppliers(rows: SupplierInput[]): Promise<BulkRe
  * PO's "Attention" into Contact Person); never overwrites an existing record, so
  * details entered on the Suppliers page are preserved.
  */
-export async function rememberSupplier(input: { company: string; attention?: string }): Promise<void> {
+export async function rememberSupplier(input: { company: string; attention?: string; address?: string }): Promise<void> {
   const company = (input.company ?? "").trim();
   if (!company) return;
   const list = await getSuppliers();
@@ -179,6 +185,7 @@ export async function rememberSupplier(input: { company: string; attention?: str
     contactPerson: (input.attention ?? "").trim(),
     contactNumber: "",
     email: "",
+    address: (input.address ?? "").trim(),
     paymentDetails: "",
   });
   await writeSuppliers(list);
