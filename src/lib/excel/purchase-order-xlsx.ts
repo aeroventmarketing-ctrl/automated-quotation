@@ -423,11 +423,15 @@ function imageSize(bytes: Buffer, ext: string): { w: number; h: number } {
   return { w: 300, h: 100 };
 }
 
+// Signature placement on the 2307 (absolute EMU, measured from the form).
+const SIG_CENTER_X = 4562475; // horizontal centre of the payor block (matches the centred name)
+const SIG_BASE_Y = 9540225; //   just below the declaration line, above the name
+const SIG_DROP_Y = 228600; //    move down 18 points so it sits over the printed name
+
 /**
- * A fixed-size picture anchor for the payor signature, sitting just above the
- * printed name. Aspect ratio is preserved (no stretch) and the image is capped
- * to a signature-sized box, anchored in the lower half of the tall declaration
- * row (spreadsheet row 62 = drawing row 61) so it clears the name below.
+ * A fixed-size picture anchor for the payor signature. Aspect ratio is preserved
+ * (no stretch), the image is capped to a signature-sized box, and it is centred
+ * horizontally over the printed name and dropped onto it.
  */
 function signaturePicAnchor(relId: string, size: { w: number; h: number }): string {
   const MAX_W = 1550000; // ~1.6"
@@ -436,12 +440,14 @@ function signaturePicAnchor(relId: string, size: { w: number; h: number }): stri
   let cx = MAX_W;
   let cy = Math.round(cx / aspect);
   if (cy > MAX_H) { cy = MAX_H; cx = Math.round(cy * aspect); }
+  const x = Math.round(SIG_CENTER_X - cx / 2);
+  const y = SIG_BASE_Y + SIG_DROP_Y;
   return (
-    `<xdr:oneCellAnchor>` +
-    `<xdr:from><xdr:col>17</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>61</xdr:row><xdr:rowOff>120000</xdr:rowOff></xdr:from>` +
+    `<xdr:absoluteAnchor>` +
+    `<xdr:pos x="${x}" y="${y}"/>` +
     `<xdr:ext cx="${cx}" cy="${cy}"/>` +
     `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="9600" name="payor-signature"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
     `<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${relId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
-    `<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln><a:noFill/></a:ln></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`
+    `<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln><a:noFill/></a:ln></xdr:spPr></xdr:pic><xdr:clientData/></xdr:absoluteAnchor>`
   );
 }
