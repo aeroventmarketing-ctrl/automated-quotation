@@ -100,6 +100,18 @@ export default async function AdminOverviewPage() {
           </CardContent>
         </Card>
       </Link>
+      <Link href="/admin/signatory">
+        <Card className="transition-colors hover:bg-accent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">2307 Signatory →</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Set the payor&rsquo;s name, designation and signature image printed on the BIR 2307.
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
       <QuoteNumberSetting current={nextQuoteSeq} />
       <MrfNumberSetting current={mrfNext} />
       <PoNumberSetting current={poNext} />

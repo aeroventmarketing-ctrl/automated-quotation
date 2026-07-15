@@ -85,10 +85,16 @@ export function build2307Fields(po: PurchaseOrder, payee: Payee2307 = {}): Field
   };
 }
 
+export interface Signatory2307 {
+  name?: string;
+  designation?: string;
+}
+
 /** Fill the PO sheet and return the whole workbook (PO + 2307) as a Buffer. */
 export async function buildPurchaseOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   po: PurchaseOrder,
+  signatory: Signatory2307 = {},
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuffer as ArrayBuffer);
@@ -164,6 +170,20 @@ export async function buildPurchaseOrderWorkbook(
     });
     f.getCell("AD38").value = income;
     f.getCell("AI38").value = tax;
+
+    // Payor signatory — printed name + designation in the merged block A63:AN65,
+    // bottom-aligned so it sits just above the "Signature over Printed Name" line
+    // (row 66). The signature image is added in restore2307Shapes (exceljs would
+    // otherwise strip it when it re-writes the drawing).
+    const name = (signatory.name ?? "").trim();
+    const designation = (signatory.designation ?? "").trim();
+    if (name || designation) {
+      const runs: ExcelJS.RichText[] = [];
+      if (name) runs.push({ text: name, font: { name: "Arial", size: 11, bold: true, underline: true } });
+      if (designation) runs.push({ text: `${runs.length ? "\n" : ""}${designation}`, font: { name: "Arial", size: 10, bold: true } });
+      f.getCell("A63").value = { richText: runs };
+      f.getCell("A63").alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
+    }
   }
 
   const out = await wb.xlsx.writeBuffer();
@@ -317,7 +337,7 @@ async function find2307DrawingPath(zip: JSZip): Promise<string | null> {
  * all shapes) and its images from the pristine source file back into the
  * generated workbook, so the standard form prints exactly as provided.
  */
-export async function restore2307Shapes(workbook: Buffer, source: Buffer, fields?: Fields2307): Promise<Buffer> {
+export async function restore2307Shapes(workbook: Buffer, source: Buffer, fields?: Fields2307, signature?: string): Promise<Buffer> {
   try {
     const out = await JSZip.loadAsync(workbook);
     const src = await JSZip.loadAsync(source);
@@ -341,6 +361,20 @@ export async function restore2307Shapes(workbook: Buffer, source: Buffer, fields
       srcRels = srcRels.replace(m[1], `../media/${newName}`);
     }
 
+    // Payor signature image — placed over the "Signature over Printed Name" line.
+    const sig = parseDataUrl(signature);
+    if (sig) {
+      const mediaName = `signature.${sig.ext}`;
+      out.file(`xl/media/${mediaName}`, sig.bytes);
+      await ensureContentType(out, sig.ext, sig.mime);
+      const relId = "rIdSignature";
+      srcRels = srcRels.replace(
+        "</Relationships>",
+        `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mediaName}"/></Relationships>`,
+      );
+      srcXml = srcXml.replace("</xdr:wsDr>", `${signaturePicAnchor(relId)}</xdr:wsDr>`);
+    }
+
     out.file(outDraw, srcXml);
     out.file(outDraw.replace("drawings/", "drawings/_rels/") + ".rels", srcRels);
     return await out.generateAsync({ type: "nodebuffer" });
@@ -348,4 +382,36 @@ export async function restore2307Shapes(workbook: Buffer, source: Buffer, fields
     // Never break the download — fall back to the exceljs output.
     return workbook;
   }
+}
+
+/** Parse a data URL into image bytes + extension/mime, or null if unusable. */
+function parseDataUrl(dataUrl?: string): { bytes: Buffer; ext: string; mime: string } | null {
+  if (!dataUrl) return null;
+  const m = /^data:(image\/(png|jpe?g|gif));base64,(.+)$/i.exec(dataUrl.trim());
+  if (!m) return null;
+  const mime = m[1].toLowerCase();
+  const ext = m[2].toLowerCase() === "jpeg" ? "jpg" : m[2].toLowerCase();
+  return { bytes: Buffer.from(m[3], "base64"), ext, mime };
+}
+
+/** Ensure [Content_Types].xml declares a Default for the image extension. */
+async function ensureContentType(zip: JSZip, ext: string, mime: string): Promise<void> {
+  const ct = await zip.file("[Content_Types].xml")?.async("string");
+  if (!ct) return;
+  if (new RegExp(`Extension="${ext}"`, "i").test(ct)) return;
+  zip.file("[Content_Types].xml", ct.replace("</Types>", `<Default Extension="${ext}" ContentType="${mime}"/></Types>`));
+}
+
+/** A picture anchor for the payor signature, centred over the signature line. */
+function signaturePicAnchor(relId: string): string {
+  // Drawing rows are 0-indexed: spreadsheet rows 62–65 (the signature block) are
+  // drawing rows 61–64. Centred horizontally over the payor half.
+  return (
+    `<xdr:twoCellAnchor editAs="oneCell">` +
+    `<xdr:from><xdr:col>16</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>60</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>` +
+    `<xdr:to><xdr:col>24</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>64</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` +
+    `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="9600" name="payor-signature"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+    `<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${relId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+    `<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>`
+  );
 }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
+import { getSignatory } from "@/lib/signatory";
 import { buildPurchaseOrderWorkbook, restore2307Shapes, build2307Fields } from "@/lib/excel/purchase-order-xlsx";
 
 export const dynamic = "force-dynamic";
@@ -23,9 +24,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const suppliers = await getSuppliers().catch(() => []);
   const match = suppliers.find((s) => s.company.trim().toLowerCase() === po.supplier.company.trim().toLowerCase());
 
+  // The payor signatory (name/designation/signature) printed on the 2307.
+  const signatory = await getSignatory().catch(() => null);
+
   const dir = path.join(process.cwd(), "public", "templates");
   const template = await fs.readFile(path.join(dir, "po-2307-template.xlsx"));
-  let buffer = await buildPurchaseOrderWorkbook(template, po);
+  let buffer = await buildPurchaseOrderWorkbook(template, po, {
+    name: signatory?.name,
+    designation: signatory?.designation,
+  });
   // Restore the 2307 form's shapes (white input boxes) that exceljs strips, and
   // paint the Part I/II values as overlay text boxes on top of those boxes.
   // Payee name/address come from the PO; payee TIN/ZIP from the Supplier's List.
@@ -36,7 +43,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     zip: match?.zip,
   });
   const source = await fs.readFile(path.join(dir, "2307-source.xlsx")).catch(() => null);
-  if (source) buffer = await restore2307Shapes(buffer, source, fields);
+  if (source) buffer = await restore2307Shapes(buffer, source, fields, signatory?.signature);
 
   const filename = `${(po.poNumber || "Purchase-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
   return new Response(new Uint8Array(buffer), {
