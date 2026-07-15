@@ -18,7 +18,7 @@ const PAYOR = {
   branch: "000",
   name: "AEROVENT FANS AND BLOWERS MANUFACTURING",
   address: "7635 NARRA ROAD, BAYAN-BAYANAN, BRGY. SAN VICENTE, SAN PEDRO, LAGUNA",
-  zip: "4009",
+  zip: "4023",
 };
 
 function fullDate(iso: string): string {
@@ -214,13 +214,17 @@ type SegField = {
   sz: number;
 };
 
+// TIN cell centres (measured from the form's dividers). Payee item 2 and payor
+// item 6 use the identical box grid, so they share one set of x-centres.
+const TIN_CENTERS = [2594777, 2768308, 2941839, 3274577, 3448108, 3621639, 3950414, 4123945, 4297476, 4701199, 5025537, 5349875];
+
 const SEG_FIELDS: SegField[] = [
-  { key: "periodFrom", y: 1325179, cy: 223372, sz: 1100, centers: [1844726, 2019499, 2198995, 2375555, 2539103, 2712696, 2892192, 3078367] },
-  { key: "periodTo", y: 1309706, cy: 236124, sz: 1100, centers: [5120710, 5294470, 5474139, 5647900, 5815755, 5989515, 6169184, 6342945] },
-  { key: "payeeTin", y: 1757952, cy: 216193, sz: 1100, centers: [2594777, 2768308, 2941839, 3274577, 3448108, 3621639, 3950414, 4123945, 4297476, 4701199, 5025537, 5349875] },
-  { key: "payorTin", y: 3401328, cy: 227267, sz: 1100, centers: [2555661, 2788772, 3021882, 3230371, 3468720, 3707068, 3924986, 4149714, 4374441, 4710036, 5036223, 5362410] },
-  { key: "payeeZip", y: 2544538, cy: 222358, sz: 1100, centers: [6989798, 7151590, 7313382, 7475174] },
-  { key: "payorZip", y: 4191002, cy: 272141, sz: 1100, centers: [7020710, 7228780, 7436849, 7644919] },
+  { key: "periodFrom", y: 1325179, cy: 223372, sz: 1000, centers: [1844726, 2019499, 2198995, 2375555, 2539103, 2712696, 2892192, 3078367] },
+  { key: "periodTo", y: 1309706, cy: 236124, sz: 1000, centers: [5120710, 5294470, 5474139, 5647900, 5815755, 5989515, 6169184, 6342945] },
+  { key: "payeeTin", y: 1757952, cy: 216193, sz: 1000, centers: TIN_CENTERS },
+  { key: "payorTin", y: 3401328, cy: 227267, sz: 1000, centers: TIN_CENTERS },
+  { key: "payeeZip", y: 2544538, cy: 222358, sz: 1000, centers: [6989798, 7151590, 7313382, 7475174] },
+  { key: "payorZip", y: 4191002, cy: 272141, sz: 1000, centers: [7020710, 7228780, 7436849, 7644919] },
 ];
 
 const DIGIT_BOX_W = 150000; // EMU width of each centred digit box
