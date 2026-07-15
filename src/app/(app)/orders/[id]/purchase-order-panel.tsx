@@ -227,6 +227,9 @@ export function PurchaseOrderPanel({
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" className="h-8" disabled={busy} onClick={save}>{busy ? "Saving…" : po ? "Save changes" : "Create purchase order"}</Button>
         {po && (
+          <a href={`/orders/${orderId}/po/${prId}/xlsx`} className="text-sm text-primary hover:underline">Download Excel (PO + 2307) →</a>
+        )}
+        {po && (
           <Link href={`/orders/${orderId}/po/${prId}`} target="_blank" className="text-sm text-primary hover:underline">Print PO →</Link>
         )}
         <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={onDone}>Close</Button>

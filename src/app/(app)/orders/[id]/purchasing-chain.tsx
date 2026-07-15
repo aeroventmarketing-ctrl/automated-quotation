@@ -139,6 +139,7 @@ export function PurchasingChain({
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge variant="success">PO {r.po.poNumber}</Badge>
                   {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
+                  <a href={`/orders/${orderId}/po/${r.id}/xlsx`} className="text-primary hover:underline">Excel</a>
                   <Link href={`/orders/${orderId}/po/${r.id}`} target="_blank" className="text-primary hover:underline">Print PO</Link>
                   {r.canManagePO && (
                     <button type="button" onClick={() => setPoEditId(r.id)} className="text-muted-foreground hover:text-foreground">Edit</button>
