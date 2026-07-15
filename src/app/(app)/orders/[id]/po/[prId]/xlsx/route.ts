@@ -3,6 +3,7 @@ import path from "path";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
+import { getSuppliers } from "@/lib/suppliers";
 import { buildPurchaseOrderWorkbook, restore2307Shapes } from "@/lib/excel/purchase-order-xlsx";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +19,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const po = coercePurchaseOrder(pr.po);
   if (!po) return new Response("No purchase order issued yet", { status: 404 });
 
+  // Payee TIN/ZIP from the matched supplier record (for the 2307).
+  const suppliers = await getSuppliers().catch(() => []);
+  const match = suppliers.find((s) => s.company.trim().toLowerCase() === po.supplier.company.trim().toLowerCase());
+
   const dir = path.join(process.cwd(), "public", "templates");
   const template = await fs.readFile(path.join(dir, "po-2307-template.xlsx"));
-  let buffer = await buildPurchaseOrderWorkbook(template, po);
+  let buffer = await buildPurchaseOrderWorkbook(template, po, { tin: match?.tin, zip: match?.zip });
   // Restore the 2307 form's shapes (white input boxes) that exceljs strips.
   const source = await fs.readFile(path.join(dir, "2307-source.xlsx")).catch(() => null);
   if (source) buffer = await restore2307Shapes(buffer, source);

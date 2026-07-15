@@ -9,6 +9,17 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { poLineAmount, poTotals, type PurchaseOrder } from "@/lib/purchase-order";
+import { round2 } from "@/lib/quote";
+import { config } from "@/lib/config";
+
+/** AeroVent's payor details for the BIR 2307 (Part II). */
+const PAYOR = {
+  tin: "201-616-600",
+  branch: "000",
+  name: "AEROVENT FANS AND BLOWERS MANUFACTURING",
+  address: "7635 NARRA ROAD, BAYAN-BAYANAN, BRGY. SAN VICENTE, SAN PEDRO, LAGUNA",
+  zip: "4009",
+};
 
 function fullDate(iso: string): string {
   const d = iso ? new Date(iso) : null;
@@ -16,10 +27,32 @@ function fullDate(iso: string): string {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" });
 }
 
+/** The calendar quarter (From/To dates, MM/DD/YYYY) containing a PO date. */
+function quarterPeriod(iso: string): { from: string; to: string; monthIndex: number } {
+  const d = iso ? new Date(iso) : new Date(NaN);
+  const safe = Number.isNaN(d.getTime()) ? new Date() : d;
+  const y = safe.getFullYear();
+  const q = Math.floor(safe.getMonth() / 3); // 0..3
+  const startMonth = q * 3; // 0,3,6,9 (0-indexed)
+  const endLast = new Date(y, startMonth + 3, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    from: `${pad(startMonth + 1)}/01/${y}`,
+    to: `${pad(startMonth + 3)}/${pad(endLast)}/${y}`,
+    monthIndex: safe.getMonth() % 3, // 0..2 within the quarter
+  };
+}
+
+export interface Payee2307 {
+  tin?: string;
+  zip?: string;
+}
+
 /** Fill the PO sheet and return the whole workbook (PO + 2307) as a Buffer. */
 export async function buildPurchaseOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   po: PurchaseOrder,
+  payee: Payee2307 = {},
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuffer as ArrayBuffer);
@@ -75,8 +108,36 @@ export async function buildPurchaseOrderWorkbook(
 
   ws.pageSetup.printArea = `A1:J${31 + N}`;
 
-  // The 2307 sheet is intentionally left blank — AeroVent completes it (period,
-  // TIN, names, addresses, amounts) themselves. Do not write anything to it.
+  // --- BIR 2307 ---------------------------------------------------------------
+  // Each field is written to the top-left cell of its input box; the value flows
+  // across the box. Cell map derived from the form's box shapes.
+  const f = wb.worksheets.find((s) => /2307/i.test(s.name));
+  if (f) {
+    const period = quarterPeriod(po.date);
+    // Part 1 — For the Period.
+    f.getCell("J11").value = period.from; // From
+    f.getCell("AB11").value = period.to; // To
+    // Part I — Payee (the supplier).
+    if (payee.tin) f.getCell("N14").value = payee.tin;
+    f.getCell("B17").value = po.supplier.company;
+    f.getCell("B20").value = po.supplier.address;
+    if (payee.zip) f.getCell("AK20").value = payee.zip;
+    // Part II — Payor (AeroVent).
+    f.getCell("N26").value = `${PAYOR.tin}-${PAYOR.branch}`;
+    f.getCell("B29").value = PAYOR.name;
+    f.getCell("B32").value = PAYOR.address;
+    f.getCell("AJ32").value = PAYOR.zip;
+    // Part III — ATC + amounts (income = VAT-exclusive; tax = 1%). Amount goes in
+    // the month-of-quarter column (1st→O, 2nd→T, 3rd→Y); AI48 total is a formula.
+    const income = round2(totals.total / (1 + (config.vatRate || 0.12)));
+    const tax = round2(income * 0.01);
+    f.getCell("L38").value = "WI 158";
+    (["O", "T", "Y"] as const).forEach((col, i) => {
+      f.getCell(`${col}38`).value = i === period.monthIndex ? income : 0;
+    });
+    f.getCell("AD38").value = income;
+    f.getCell("AI38").value = tax;
+  }
 
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
