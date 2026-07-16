@@ -220,7 +220,7 @@ function JobOrderForm({
         {fld("Date", "date", { type: "date" })}
         {fld("Target date", "targetDate", { type: "date" })}
         {fld("Quantity", "quantity")}
-        {fld("UOM", "uom", { list: ["pcs.", "set", "unit"] })}
+        {fld("UOM", "uom", { list: ["pc", "pcs", "set"] })}
         {fld("Body lead time (days)", "bodyLeadTime")}
         {fld("Blade lead time (days)", "bladeLeadTime")}
       </div>
