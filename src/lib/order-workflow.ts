@@ -166,7 +166,7 @@ export const ORDER_STEPS = {
     requiredRole: "payment_approver" as WorkflowRoleKey,
     from: "docs_checked" as OrderStage,
     to: "released" as OrderStage,
-    label: "Clear payment & release job orders",
+    label: "Clear payment & create JO",
   },
 } as const;
 
