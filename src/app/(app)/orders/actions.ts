@@ -128,8 +128,24 @@ export async function issueJobOrders(quotationId: string, deptKeys: string[]): P
 }
 
 /**
+ * The Plant Manager receives the released job orders before production can begin.
+ * Moves the order from "JO released" (in_production) to "JO Received" (jo_received).
+ */
+export async function receiveJobOrders(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "plant_manager" as WorkflowRoleKey))) {
+    throw new Error("Only the Plant Manager or an admin can receive job orders.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "in_production") throw new Error("Job orders can only be received once they are released.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "jo_received", approvals: stamp(wf, "jo_received", user) });
+}
+
+/**
  * A department's Head of Production advances its job order: issued → in_production
- * → finished. When every issued job order is finished, the order moves to
+ * → finished. Production runs once the Plant Manager has received the job orders
+ * (jo_received). When every issued job order is finished, the order moves to
  * "production finished" (Sales can then coordinate delivery).
  */
 export async function advanceJobOrder(
@@ -147,7 +163,7 @@ export async function advanceJobOrder(
   }
 
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "in_production") throw new Error("This job order isn't in production.");
+  if (wf.stage !== "jo_received") throw new Error("Production can start only after the Plant Manager receives the job orders.");
   const jo = wf.jobOrders[deptKey];
   if (!jo) throw new Error("No job order for this department.");
 

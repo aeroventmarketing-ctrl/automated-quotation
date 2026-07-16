@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { issueJobOrders, advanceJobOrder } from "../actions";
+import { issueJobOrders, advanceJobOrder, receiveJobOrders } from "../actions";
 
 interface JobRow {
   key: string;
@@ -31,12 +31,14 @@ export function JobOrderManager({
   orderId,
   stage,
   canIssue,
+  canReceive,
   allDepts,
   jobs,
 }: {
   orderId: string;
   stage: string;
   canIssue: boolean;
+  canReceive: boolean;
   allDepts: { key: string; label: string }[];
   jobs: JobRow[];
 }) {
@@ -100,6 +102,20 @@ export function JobOrderManager({
   // Phase 4 — production tracking.
   return (
     <div className="space-y-2">
+      {/* JO released → the Plant Manager must receive the JO before production. */}
+      {stage === "in_production" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+          <span className="text-amber-800 dark:text-amber-300">
+            Job orders released. Awaiting the Plant Manager to receive them before production starts.
+          </span>
+          {canReceive && (
+            <Button size="sm" className="h-7 text-xs" disabled={busy}
+              onClick={() => run(() => receiveJobOrders(orderId))}>
+              {busy ? "Receiving…" : "Receive job orders"}
+            </Button>
+          )}
+        </div>
+      )}
       {jobs.length === 0 && <p className="text-sm text-muted-foreground">No job orders on this order.</p>}
       {jobs.map((j) => (
         <div key={j.key} className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3">

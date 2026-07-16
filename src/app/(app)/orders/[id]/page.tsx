@@ -38,6 +38,7 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   docs_checked: "warning",
   released: "success",
   in_production: "warning",
+  jo_received: "warning",
   production_finished: "success",
   final_pay_review: "secondary",
   final_pay_checked: "warning",
@@ -125,6 +126,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     wf.stage === "released" &&
     (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey)));
 
+  // The Plant Manager receives the released job orders before production begins.
+  const canReceive =
+    wf.stage === "in_production" &&
+    (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey)));
+
   // The Engineer (or admin) makes the Fans & Blowers job order.
   const canManageJO = adminViewer || viewer?.role === "ENGINEER";
 
@@ -135,7 +141,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const nextLabel = nextTo === "in_production" ? "Start production" : nextTo === "finished" ? "Mark finished" : null;
     const canAdvance =
       nextTo != null &&
-      wf.stage === "in_production" &&
+      wf.stage === "jo_received" &&
       (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)));
     const events: { label: string; who: string; when: string }[] = [];
     if (jo.issuedByName) events.push({ label: "Issued", who: jo.issuedByName, when: fmtWhen(jo.issuedAt) });
@@ -344,6 +350,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 orderId={quote.id}
                 stage={wf.stage}
                 canIssue={canIssue}
+                canReceive={canReceive}
                 allDepts={PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))}
                 jobs={jobs}
               />

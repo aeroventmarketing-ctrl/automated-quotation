@@ -40,7 +40,7 @@ export default async function ManagementPage() {
     const balance = round2(payableTotal(q) - collectedTotal(sale));
     if (balance > 0.005) outstanding = round2(outstanding + balance);
 
-    if (wf.stage === "in_production") {
+    if (wf.stage === "in_production" || wf.stage === "jo_received") {
       for (const d of PRODUCTION_DEPTS) {
         const jo = wf.jobOrders[d.key];
         if (jo && jo.status !== "finished") prodActive.set(d.key, (prodActive.get(d.key) ?? 0) + 1);

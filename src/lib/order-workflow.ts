@@ -15,6 +15,7 @@ export type OrderStage =
   | "docs_checked"
   | "released"
   | "in_production"
+  | "jo_received"
   | "production_finished"
   | "final_pay_review"
   | "final_pay_checked"
@@ -28,6 +29,7 @@ export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] =
   { key: "docs_checked", label: "Docs checked", phase: "Phase 1" },
   { key: "released", label: "For JO creation", phase: "Phase 1 done" },
   { key: "in_production", label: "JO released", phase: "Phase 4" },
+  { key: "jo_received", label: "JO Received", phase: "Phase 4" },
   { key: "production_finished", label: "Production finished", phase: "Phase 4 done" },
   { key: "final_pay_review", label: "Awaiting final payment", phase: "Phase 5" },
   { key: "final_pay_checked", label: "Final payment checked", phase: "Phase 5" },
@@ -265,7 +267,9 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
       return { action: "Clear payment & create JO", roles: ["payment_approver"] };
     case "released":
       return { action: "Issue job orders", roles: ["technical_head"] };
-    case "in_production": {
+    case "in_production":
+      return { action: "Receive job order", roles: ["plant_manager"] };
+    case "jo_received": {
       const roles = PRODUCTION_DEPTS.filter((d) => {
         const jo = wf.jobOrders[d.key];
         return jo && jo.status !== "finished";
