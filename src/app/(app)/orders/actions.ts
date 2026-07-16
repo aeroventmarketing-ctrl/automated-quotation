@@ -18,11 +18,15 @@ import {
 } from "@/lib/workflow-roles";
 import {
   ORDER_STEPS,
+  ORDER_STAGES,
+  APPROVAL_STEPS,
+  stageIndex,
   readOrderWorkflow,
   PRODUCTION_DEPTS,
   deptRole,
   deptLabel,
   allJobOrdersFinished,
+  type OrderStage,
   type OrderStepKey,
   type ProductionDeptKey,
   type JobOrder,
@@ -584,6 +588,60 @@ export async function addPaymentTerm(text: string): Promise<PaymentTerm[]> {
 /** Record a fulfillment sign-off (who + when) under the given step key. */
 function stamp(wf: { approvals: Record<string, unknown> }, key: string, user: { id: string; name: string }) {
   return { ...wf.approvals, [key]: { by: user.id, byName: user.name, at: new Date().toISOString() } };
+}
+
+// --- Admin: roll back the workflow / an approver's approval -----------------
+
+/**
+ * Admin-only: roll the order back to an earlier stage. Any sign-offs recorded for
+ * steps after the target are cleared, and job-order progress is reset to match
+ * the target stage (cleared before issuance; reset to "issued" before production
+ * completes). The Engineer's Fans & Blowers JO documents are preserved.
+ */
+export async function adminRollbackStage(quotationId: string, toStage: OrderStage): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can roll back the workflow.");
+  if (!ORDER_STAGES.some((s) => s.key === toStage)) throw new Error("Unknown stage.");
+
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const curIdx = stageIndex(wf.stage);
+  const tgtIdx = stageIndex(toStage);
+  if (tgtIdx < 0 || tgtIdx >= curIdx) throw new Error("Choose an earlier stage to roll back to.");
+
+  // Drop approvals whose step advanced INTO a stage after the target.
+  const approvals: typeof wf.approvals = {};
+  for (const [k, v] of Object.entries(wf.approvals)) {
+    const st = APPROVAL_STEPS[k]?.to;
+    if (!st || stageIndex(st) <= tgtIdx) approvals[k] = v;
+  }
+
+  // Reset job-order progress to be consistent with the target stage.
+  let jobOrders = wf.jobOrders;
+  if (tgtIdx < stageIndex("in_production")) {
+    jobOrders = {}; // job orders aren't issued until production
+  } else if (tgtIdx <= stageIndex("jo_received")) {
+    jobOrders = Object.fromEntries(
+      Object.entries(wf.jobOrders).map(([k, jo]) => [
+        k,
+        { status: "issued" as const, issuedAt: jo!.issuedAt, issuedByName: jo!.issuedByName },
+      ]),
+    ) as typeof wf.jobOrders;
+  }
+
+  await saveWorkflow(quotationId, cls, { ...wf, stage: toStage, approvals, jobOrders });
+}
+
+/**
+ * Admin-only: roll back a single approver's approval. The recorded sign-off is
+ * removed and the order returns to the stage just before that step (i.e. waiting
+ * for that approval again).
+ */
+export async function adminRollbackApproval(quotationId: string, key: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can roll back an approval.");
+  const step = APPROVAL_STEPS[key];
+  if (!step) throw new Error("Unknown approval.");
+  await adminRollbackStage(quotationId, step.from);
 }
 
 /** Sales/preparer informs the client the order is ready (Phase 5, step 17). */

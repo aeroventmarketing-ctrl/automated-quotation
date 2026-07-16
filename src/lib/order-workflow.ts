@@ -174,6 +174,28 @@ export const ORDER_STEPS = {
 
 export type OrderStepKey = keyof typeof ORDER_STEPS;
 
+/**
+ * Every approval key that can be recorded on an order → a human label and the
+ * stage transition it represents (from → to). Used by the admin rollback to undo
+ * a sign-off and return the order to the stage just before it.
+ */
+export const APPROVAL_STEPS: Record<string, { label: string; from: OrderStage; to: OrderStage }> = {
+  doc_check: { label: "Documents checked", from: "payment_review", to: "docs_checked" },
+  payment_cleared: { label: "Payment cleared & JO created", from: "docs_checked", to: "released" },
+  jo_received: { label: "Job orders received", from: "in_production", to: "jo_received" },
+  client_notified: { label: "Client notified (order ready)", from: "production_finished", to: "final_pay_review" },
+  final_pay_checked: { label: "Final payment checked", from: "final_pay_review", to: "final_pay_checked" },
+  final_pay_confirmed: { label: "Final payment confirmed", from: "final_pay_checked", to: "final_pay_cleared" },
+  delivery_approved: { label: "Delivery documents ready", from: "final_pay_cleared", to: "delivery_docs_ready" },
+  delivered: { label: "Delivered", from: "delivery_docs_ready", to: "delivered" },
+  documents_filed: { label: "Documents filed (order closed)", from: "delivered", to: "closed" },
+};
+
+/** Position of a stage in the linear workflow (−1 if unknown). */
+export function stageIndex(stage: OrderStage): number {
+  return ORDER_STAGES.findIndex((s) => s.key === stage);
+}
+
 const STAGE_KEYS = new Set(ORDER_STAGES.map((s) => s.key));
 
 /** Read the workflow state from a quotation's classification (defaults to start). */

@@ -11,6 +11,8 @@ import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowR
 import {
   readOrderWorkflow,
   ORDER_STAGES,
+  APPROVAL_STEPS,
+  stageIndex,
   PRODUCTION_DEPTS,
   deptRole,
   deptLabel,
@@ -27,6 +29,7 @@ import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-vi
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
+import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { FulfillmentActions } from "./fulfillment-actions";
@@ -130,6 +133,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canReceive =
     wf.stage === "in_production" &&
     (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey)));
+
+  // Admin rollback: earlier stages to return to + the sign-offs on record.
+  const curStageIdx = stageIndex(wf.stage);
+  const priorStages = ORDER_STAGES.filter((_, i) => i < curStageIdx).map((s) => ({ key: s.key, label: s.label }));
+  const rollbackApprovals = Object.entries(wf.approvals)
+    .filter(([k]) => APPROVAL_STEPS[k])
+    .map(([k, a]) => ({ key: k, label: APPROVAL_STEPS[k].label, byName: a.byName, at: fmtWhen(a.at) }))
+    .sort((x, y) => stageIndex(APPROVAL_STEPS[x.key].to) - stageIndex(APPROVAL_STEPS[y.key].to));
 
   // The Engineer (or admin) makes the Fans & Blowers job order.
   const canManageJO = adminViewer || viewer?.role === "ENGINEER";
@@ -396,6 +407,18 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <CardContent className="space-y-3">
             {fTrail.length > 0 && <div className="text-xs text-muted-foreground">{fTrail.join(" · ")}</div>}
             <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Admin-only: roll back the workflow / an approver's approval */}
+      {adminViewer && (
+        <Card className="border-destructive/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-destructive">Admin override</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AdminWorkflowOverride orderId={quote.id} priorStages={priorStages} approvals={rollbackApprovals} />
           </CardContent>
         </Card>
       )}
