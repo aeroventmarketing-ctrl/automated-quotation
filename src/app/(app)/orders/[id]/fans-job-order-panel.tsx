@@ -21,7 +21,25 @@ const ENCLOSURES = ["TEFC", "ODP", "Explosion Proof"];
 const PROJECTS = ["CEB", "CFAB", "CAB", "CEBCAB", "CFABCAB", "CABSISW"];
 const MAKES = ["Standard", "Customized", "Client Design"];
 const MOTOR_BRANDS = ["TECO", "Hyundai"];
-const MOTOR_PHASES = ["Single Phase", "Three Phase"];
+
+// Motor selection is cascading: Brand → Phase → HP. Each MOTOR_HP entry is
+// "<hp>, <1PH|3PH>, <brand>"; the HP dropdown shows just the HP but stores the
+// full key (the template's VLOOKUP needs it).
+const MOTOR_ENTRIES = MOTOR_HP.map((full) => {
+  const [hp, phase, brand] = full.split(",").map((s) => s.trim());
+  return { full, hp, phase, brand };
+});
+const phaseLabel = (tok: string) => (tok === "1PH" ? "Single Phase" : "Three Phase");
+const phaseToken = (label: string) => (label === "Single Phase" ? "1PH" : "3PH");
+function phasesForBrand(brand: string): string[] {
+  const toks = new Set(MOTOR_ENTRIES.filter((e) => e.brand === brand).map((e) => e.phase));
+  return ["1PH", "3PH"].filter((t) => toks.has(t)).map(phaseLabel);
+}
+function hpForBrandPhase(brand: string, phaseLbl: string) {
+  const tok = phaseToken(phaseLbl);
+  return MOTOR_ENTRIES.filter((e) => e.brand === brand && e.phase === tok);
+}
+const SELECT_CLS = "h-8 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-50";
 
 /** Derive the template's motor brand + phase alias from a "HP, PH, Brand" string. */
 function deriveMotor(hp: string): { brand: string; alias: string } {
@@ -241,9 +259,27 @@ function JobOrderForm({
 
       <div className="text-xs font-semibold text-muted-foreground">Motor details</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {fld("Motor Brand", "motorBrand", { list: MOTOR_BRANDS })}
-        {fld("Motor PH", "motorPhAlias", { list: MOTOR_PHASES })}
-        <div className="sm:col-span-2">{fld("Motor HP", "motorHp", { list: MOTOR_HP, placeholder: "15 HP, 3PH, Hyundai" })}</div>
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">Motor Brand</span>
+          <select className={SELECT_CLS} value={f.motorBrand} onChange={(e) => setF((p) => ({ ...p, motorBrand: e.target.value, motorPhAlias: "", motorHp: "" }))}>
+            <option value="">— select —</option>
+            {MOTOR_BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">Motor PH</span>
+          <select className={SELECT_CLS} value={f.motorPhAlias} disabled={!f.motorBrand} onChange={(e) => setF((p) => ({ ...p, motorPhAlias: e.target.value, motorHp: "" }))}>
+            <option value="">— select —</option>
+            {phasesForBrand(f.motorBrand).map((ph) => <option key={ph} value={ph}>{ph}</option>)}
+          </select>
+        </label>
+        <label className="space-y-1 sm:col-span-2">
+          <span className="text-[11px] text-muted-foreground">Motor HP</span>
+          <select className={SELECT_CLS} value={f.motorHp} disabled={!f.motorBrand || !f.motorPhAlias} onChange={(e) => setF((p) => ({ ...p, motorHp: e.target.value }))}>
+            <option value="">— select —</option>
+            {hpForBrandPhase(f.motorBrand, f.motorPhAlias).map((e) => <option key={e.full} value={e.full}>{e.hp}</option>)}
+          </select>
+        </label>
         {fld("Voltage", "voltage")}
         {fld("Frequency (Hz)", "frequency")}
         {fld("Mounting", "mounting", { list: MOUNTINGS })}
