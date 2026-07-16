@@ -31,6 +31,12 @@ const MOTOR_ENTRIES = MOTOR_HP.map((full) => {
   const [hp, phase, brand] = full.split(",").map((s) => s.trim());
   return { full, hp, phase, brand };
 });
+// Motor RPM per selection (from the template's motor table) — used to preview
+// the computed Fan RPM = roundup(motorRpm × motorPulley ÷ fanPulley).
+const MOTOR_RPM: Record<string, number> = {
+  "1/4 HP, 1PH, TECO": 1715, "1/2 HP, 1PH, TECO": 1750, "3 /4 HP, 1PH, TECO": 1750, "1 HP, 1PH, TECO": 1750, "1.5 HP, 1PH, TECO": 1750, "2 HP, 1PH, TECO": 1750, "3 HP, 1PH, TECO": 1750, "5 HP, 1PH, TECO": 1750, "1/2 HP, 3PH, TECO": 1680, "1 HP, 3PH, TECO": 1710, "1 1/2 HP, 3PH, TECO": 1720, "2 HP, 3PH, TECO": 1715, "3 HP, 3PH, TECO": 1735, "5 HP, 3PH, TECO": 1745, "7 1/2 HP, 3PH, TECO": 1750, "10 HP, 3PH, TECO": 1750, "15 HP, 3PH, TECO": 1760, "20 HP, 3PH, TECO": 1760, "25 HP, 3PH, TECO": 1760, "30 HP, 3PH, TECO": 1765, "40 HP, 3PH, TECO": 1760, "50 HP, 3PH, TECO": 1770, "60 HP, 3PH, TECO": 1765, "75 HP, 3PH, TECO": 1775, "100 HP, 3PH, TECO": 1775, "125 HP, 3PH, TECO": 1770, "150 HP, 3PH, TECO": 1770, "175 HP, 3PH, TECO": 1770, "200 HP, 3PH, TECO": 1775, "250 HP, 3PH, TECO": 1775, "300 HP, 3PH, TECO": 1775,
+  "1/2 HP, 3PH, Hyundai": 1660, "1 HP, 3PH, Hyundai": 1668, "1 1/2 HP, 3PH, Hyundai": 1680, "2 HP, 3PH, Hyundai": 1680, "3 HP, 3PH, Hyundai": 1716, "5.5 HP, 3PH, Hyundai": 1728, "7 1/2 HP, 3PH, Hyundai": 1728, "10 HP, 3PH, Hyundai": 1728, "15 HP, 3PH, Hyundai": 1728, "20 HP, 3PH, Hyundai": 1752, "25 HP, 3PH, Hyundai": 1752, "30 HP, 3PH, Hyundai": 1764, "40 HP, 3PH, Hyundai": 1764, "50 HP, 3PH, Hyundai": 1764, "60 HP, 3PH, Hyundai": 1770, "75 HP, 3PH, Hyundai": 1770, "100 HP, 3PH, Hyundai": 1776, "125 HP, 3PH, Hyundai": 1776, "150 HP, 3PH, Hyundai": 1776, "180 HP, 3PH, Hyundai": 1776, "200 HP, 3PH, Hyundai": 1776, "270 HP, 3PH, Hyundai": 1776, "340 HP, 3PH, Hyundai": 1788,
+};
 const phaseLabel = (tok: string) => (tok === "1PH" ? "Single Phase" : "Three Phase");
 const phaseToken = (label: string) => (label === "Single Phase" ? "1PH" : "3PH");
 function phasesForBrand(brand: string): string[] {
@@ -204,6 +210,12 @@ function JobOrderForm({
     <Field label={label} k={k} value={String(f[k] ?? "")} onSet={set} type={opts?.type} list={opts?.list} placeholder={opts?.placeholder} />
   );
 
+  // Live-computed Fan RPM = roundup(motorRpm × motorPulley ÷ fanPulley).
+  const motorRpm = MOTOR_RPM[f.motorHp];
+  const mP = Number(String(f.motorPulley).replace(/,/g, ""));
+  const fP = Number(String(f.fanPulley).replace(/,/g, ""));
+  const fanRpm = motorRpm && mP > 0 && fP > 0 ? Math.ceil((motorRpm * mP) / fP) : null;
+
   async function save() {
     setBusy(true);
     setErr(null);
@@ -288,6 +300,10 @@ function JobOrderForm({
         {fld("Enclosure", "enclosure", { list: ENCLOSURES })}
         {fld("Motor pulley (Ø)", "motorPulley")}
         {fld("Fan pulley (Ø)", "fanPulley")}
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">RPM (auto)</span>
+          <Input className="h-8 bg-muted/50 font-medium" readOnly value={fanRpm != null ? String(fanRpm) : ""} placeholder="—" title="Computed Fan RPM = roundup(Motor RPM × Motor Pulley ÷ Fan Pulley)" />
+        </label>
       </div>
 
       <div className="text-xs font-semibold text-muted-foreground">Assignment</div>
