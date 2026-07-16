@@ -262,7 +262,7 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
     case "payment_review":
       return { action: "Check order documents", roles: ["accounting"] };
     case "docs_checked":
-      return { action: "Clear payment & release job orders", roles: ["payment_approver"] };
+      return { action: "Clear payment & create JO", roles: ["payment_approver"] };
     case "released":
       return { action: "Issue job orders", roles: ["technical_head"] };
     case "in_production": {
