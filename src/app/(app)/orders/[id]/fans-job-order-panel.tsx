@@ -16,8 +16,10 @@ const MOTOR_HP = ["1/4 HP, 1PH, TECO", "1/2 HP, 1PH, TECO", "3 /4 HP, 1PH, TECO"
 const ORIENTATIONS = ["Top Horizontal", "Bottom Horizontal", "Upblast", "Downblast", "Top Angular Up", "Top Angular Down", "Bottom Angular Up", "Bottom Angular Down", "Flange Mounted"];
 const BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Forward Curved", "Airfoil", "Radial"];
 const DRIVE_TYPES = ["Belt", "Direct"];
-const MOUNTINGS = ["Foot Mounted", "Flange Mounted", "Face Mounted"];
-const ENCLOSURES = ["TEFC", "ODP", "Explosion Proof"];
+const MOUNTINGS = ["Foot Mounted", "Flange Mounted"];
+const ENCLOSURES = ["TEFC", "Explosion Proof"];
+const VOLTAGES = ["220", "380", "440"];
+const FREQUENCIES = ["60", "50"];
 const PROJECTS = ["CEB", "CFAB", "CAB", "CEBCAB", "CFABCAB", "CABSISW"];
 const MAKES = ["Standard", "Customized", "Client Design"];
 const MOTOR_BRANDS = ["TECO", "Hyundai"];
@@ -280,8 +282,8 @@ function JobOrderForm({
             {hpForBrandPhase(f.motorBrand, f.motorPhAlias).map((e) => <option key={e.full} value={e.full}>{e.hp}</option>)}
           </select>
         </label>
-        {fld("Voltage", "voltage")}
-        {fld("Frequency (Hz)", "frequency")}
+        {fld("Voltage", "voltage", { list: VOLTAGES })}
+        {fld("Frequency (Hz)", "frequency", { list: FREQUENCIES })}
         {fld("Mounting", "mounting", { list: MOUNTINGS })}
         {fld("Enclosure", "enclosure", { list: ENCLOSURES })}
         {fld("Motor pulley (Ø)", "motorPulley")}
