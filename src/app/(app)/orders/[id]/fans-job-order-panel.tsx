@@ -144,10 +144,15 @@ function Field({
     <label className="space-y-1">
       <span className="text-[11px] text-muted-foreground">{label}</span>
       {list ? (
-        <>
-          <Input className="h-8" list={`dl-${String(k)}`} value={value} placeholder={placeholder} onChange={(e) => onSet(k, e.target.value)} />
-          <datalist id={`dl-${String(k)}`}>{list.map((o) => <option key={o} value={o} />)}</datalist>
-        </>
+        <select
+          className="h-8 w-full rounded-md border bg-background px-2 text-sm"
+          value={value}
+          onChange={(e) => onSet(k, e.target.value)}
+        >
+          <option value="">— select —</option>
+          {value && !list.includes(value) && <option value={value}>{value}</option>}
+          {list.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
       ) : (
         <Input className="h-8" type={type} value={value} placeholder={placeholder} onChange={(e) => onSet(k, e.target.value)} />
       )}
