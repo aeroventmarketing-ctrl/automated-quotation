@@ -142,7 +142,9 @@ export async function buildFansJobOrderWorkbook(
   wbXml = wbXml.replace(/(<workbookView\b[^>]*?)\sactiveTab="\d+"/, "$1 activeTab=\"0\"");
   zip.file(wbPath, wbXml);
 
-  // 3) Print the production sheet on Letter (8.5×11).
+  // 3) Print the production sheet on Letter (8.5×11) and always open it in
+  //    Page Break Preview at 120% zoom, so the printable layout is what the
+  //    production line sees.
   const cbPath = await sheetPath(zip, /centrifugal|blower/i);
   if (cbPath) {
     const cbFile = zip.file(cbPath);
@@ -153,6 +155,15 @@ export async function buildFansJobOrderWorkbook(
           ? cbXml.replace(/(<pageSetup\b[^>]*?\bpaperSize=")\d+(")/, `$11$2`)
           : cbXml.replace(/<pageSetup\b/, '<pageSetup paperSize="1"');
       }
+      // Force Page Break Preview at 120% on the sheet's view.
+      cbXml = cbXml.replace(/<sheetView\b([^>]*?)(\/?)>/, (_m, attrs, selfClose) => {
+        let a = attrs
+          .replace(/\s*\bview="[^"]*"/g, "")
+          .replace(/\s*\bzoomScale="[^"]*"/g, "")
+          .replace(/\s*\bzoomScaleSheetLayoutView="[^"]*"/g, "");
+        a = ` view="pageBreakPreview" zoomScale="120" zoomScaleSheetLayoutView="120"${a}`;
+        return `<sheetView${a}${selfClose}>`;
+      });
       zip.file(cbPath, cbXml);
     }
   }
