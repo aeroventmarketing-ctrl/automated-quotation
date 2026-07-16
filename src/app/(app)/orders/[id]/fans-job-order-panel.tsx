@@ -20,6 +20,8 @@ const MOUNTINGS = ["Foot Mounted", "Flange Mounted", "Face Mounted"];
 const ENCLOSURES = ["TEFC", "ODP", "Explosion Proof"];
 const PROJECTS = ["CEB", "CFAB", "CAB", "CEBCAB", "CFABCAB", "CABSISW"];
 const MAKES = ["Standard", "Customized", "Client Design"];
+const MOTOR_BRANDS = ["TECO", "Hyundai"];
+const MOTOR_PHASES = ["Single Phase", "Three Phase"];
 
 /** Derive the template's motor brand + phase alias from a "HP, PH, Brand" string. */
 function deriveMotor(hp: string): { brand: string; alias: string } {
@@ -186,9 +188,10 @@ function JobOrderForm({
     setBusy(true);
     setErr(null);
     try {
-      // Keep the template's brand/alias in step with the chosen motor HP.
-      const { brand, alias } = deriveMotor(f.motorHp);
-      await saveFansJobOrder(orderId, index, { ...f, motorBrand: brand || f.motorBrand, motorPhAlias: alias || f.motorPhAlias });
+      // Fall back to the motor HP's brand only when Motor Brand was left blank;
+      // the engineer's explicit Brand / PH selections win.
+      const { brand } = deriveMotor(f.motorHp);
+      await saveFansJobOrder(orderId, index, { ...f, motorBrand: f.motorBrand || brand });
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -238,6 +241,8 @@ function JobOrderForm({
 
       <div className="text-xs font-semibold text-muted-foreground">Motor details</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {fld("Motor Brand", "motorBrand", { list: MOTOR_BRANDS })}
+        {fld("Motor PH", "motorPhAlias", { list: MOTOR_PHASES })}
         <div className="sm:col-span-2">{fld("Motor HP", "motorHp", { list: MOTOR_HP, placeholder: "15 HP, 3PH, Hyundai" })}</div>
         {fld("Voltage", "voltage")}
         {fld("Frequency (Hz)", "frequency")}
