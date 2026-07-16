@@ -1,88 +1,149 @@
 /**
- * Fills the Source sheet of the Centrifugal Blower Job Order template with a
- * FansJobOrder's inputs and returns the whole workbook (Source + the printable
- * "Centrifugal Blower" sheet) as a Buffer.
+ * Fills the Centrifugal Blower Job Order template with a FansJobOrder's inputs
+ * and returns the workbook as a Buffer.
  *
- * Only the Source "Red - Editable" input cells are written; the Centrifugal
- * Blower sheet is 100% VLOOKUP formulas over Source, so we set fullCalcOnLoad so
- * Excel/LibreOffice recompute the production sheet when the file is opened.
+ * We do NOT re-save the workbook through exceljs — that distorts the template's
+ * embedded reference images and can alter the printable sheet's appearance.
+ * Instead we edit ONLY the Source sheet's "Red - Editable" input cells directly
+ * in the XML (preserving each cell's style), leaving every drawing, image and
+ * format byte-for-byte identical. The printable "Centrifugal Blower" sheet is
+ * 100% VLOOKUP formulas over Source, so we set fullCalcOnLoad so Excel/
+ * LibreOffice recompute it when the file is opened.
  */
-import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import type { FansJobOrder } from "@/lib/job-order";
 
-/** Parse a possibly-formatted numeric string ("21,338" → 21338); "" → undefined. */
-function num(v: string): number | undefined {
-  const t = (v ?? "").replace(/,/g, "").trim();
-  if (t === "") return undefined;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : undefined;
+type CellKind = "text" | "num" | "date";
+
+/** Input-cell map: Source cell → (FansJobOrder field, value kind). */
+const CELL_MAP: Array<{ cell: string; key: keyof FansJobOrder; kind: CellKind }> = [
+  { cell: "B65", key: "date", kind: "date" },
+  { cell: "B66", key: "joNumber", kind: "text" },
+  { cell: "B67", key: "project", kind: "text" },
+  { cell: "B68", key: "make", kind: "text" },
+  { cell: "B69", key: "targetDate", kind: "date" },
+  { cell: "B70", key: "quantity", kind: "num" },
+  { cell: "B71", key: "uom", kind: "text" },
+  { cell: "B72", key: "bodyLeadTime", kind: "num" },
+  { cell: "B73", key: "bladeLeadTime", kind: "num" },
+  { cell: "B77", key: "bladeDiameter", kind: "num" },
+  { cell: "B78", key: "orientation", kind: "text" },
+  { cell: "B79", key: "rotation", kind: "text" },
+  { cell: "B80", key: "bladeType", kind: "text" },
+  { cell: "B81", key: "driveType", kind: "text" },
+  { cell: "B82", key: "capacity", kind: "text" },
+  { cell: "B83", key: "capacityAt0", kind: "text" },
+  { cell: "B84", key: "rpmCatalogue", kind: "num" },
+  { cell: "B87", key: "motorBrand", kind: "text" },
+  { cell: "B88", key: "motorPhAlias", kind: "text" },
+  { cell: "B89", key: "motorHp", kind: "text" },
+  { cell: "B90", key: "voltage", kind: "num" },
+  { cell: "B91", key: "frequency", kind: "num" },
+  { cell: "B92", key: "mounting", kind: "text" },
+  { cell: "B93", key: "enclosure", kind: "text" },
+  { cell: "B96", key: "motorPulley", kind: "num" },
+  { cell: "B97", key: "fanPulley", kind: "num" },
+];
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** A valid Date or undefined. */
-function asDate(iso: string): Date | undefined {
-  if (!iso) return undefined;
+/** Days since the Excel 1900 epoch (1899-12-30) for an ISO date, or null. */
+function excelSerial(iso: string): number | null {
+  if (!iso) return null;
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? undefined : d;
+  if (Number.isNaN(d.getTime())) return null;
+  const epoch = Date.UTC(1899, 11, 30);
+  const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return Math.round((day - epoch) / 86400000);
+}
+
+/** Replace one cell's value in a worksheet XML, preserving its style attribute. */
+function replaceCell(xml: string, addr: string, kind: CellKind, raw: string): string {
+  const value = (raw ?? "").trim();
+  if (value === "") return xml; // leave the template default for blanks
+  // Match an existing <c r="ADDR" ...>…</c> or self-closing <c r="ADDR" .../>.
+  const re = new RegExp(`<c r="${addr}"([^>]*?)(?:/>|>[\\s\\S]*?</c>)`);
+  const m = re.exec(xml);
+  if (!m) return xml; // cell not present in the template — skip
+  const attrs = m[1] || "";
+  const s = /\bs="(\d+)"/.exec(attrs);
+  const style = s ? ` s="${s[1]}"` : "";
+  let cell: string;
+  if (kind === "num") {
+    const n = Number(value.replace(/,/g, ""));
+    if (!Number.isFinite(n)) return xml;
+    cell = `<c r="${addr}"${style}><v>${n}</v></c>`;
+  } else if (kind === "date") {
+    const serial = excelSerial(value);
+    if (serial == null) return xml;
+    cell = `<c r="${addr}"${style}><v>${serial}</v></c>`;
+  } else {
+    cell = `<c r="${addr}"${style} t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+  }
+  return xml.slice(0, m.index) + cell + xml.slice(m.index + m[0].length);
+}
+
+/** Resolve a sheet's XML path inside the workbook zip by its display name. */
+async function sheetPath(zip: JSZip, name: RegExp): Promise<string | null> {
+  const wbXml = await zip.file("xl/workbook.xml")?.async("string");
+  const rels = await zip.file("xl/_rels/workbook.xml.rels")?.async("string");
+  if (!wbXml || !rels) return null;
+  let rid: string | null = null;
+  for (const tag of wbXml.match(/<sheet [^>]*\/>/g) ?? []) {
+    const n = /name="([^"]+)"/.exec(tag);
+    const r = /r:id="(rId\d+)"/.exec(tag);
+    if (n && r && name.test(n[1])) rid = r[1];
+  }
+  if (!rid) return null;
+  const rel = new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`).exec(rels);
+  if (!rel) return null;
+  return `xl/${rel[1].replace(/^\/?xl\//, "")}`;
 }
 
 export async function buildFansJobOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   jo: FansJobOrder,
 ): Promise<Buffer> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(templateBuffer as ArrayBuffer);
-  const src = wb.getWorksheet("Source");
-  if (!src) throw new Error("Job order template 'Source' sheet missing");
+  const zip = await JSZip.loadAsync(templateBuffer as ArrayBuffer);
 
-  // Set a cell only when a value is provided, so blanks keep the template default.
-  const setText = (addr: string, v: string) => {
-    if (v != null && String(v).trim() !== "") src.getCell(addr).value = v;
-  };
-  const setNum = (addr: string, v: string) => {
-    const n = num(v);
-    if (n !== undefined) src.getCell(addr).value = n;
-  };
-  const setDate = (addr: string, v: string) => {
-    const d = asDate(v);
-    if (d) src.getCell(addr).value = d;
-  };
+  // 1) Write the Source input cells.
+  const srcPath = (await sheetPath(zip, /source/i)) ?? "xl/worksheets/sheet2.xml";
+  const srcFile = zip.file(srcPath);
+  if (!srcFile) throw new Error("Job order template 'Source' sheet missing");
+  let srcXml = await srcFile.async("string");
+  for (const { cell, key, kind } of CELL_MAP) {
+    srcXml = replaceCell(srcXml, cell, kind, jo[key]);
+  }
+  zip.file(srcPath, srcXml);
 
-  // Header details
-  setDate("B65", jo.date);
-  setText("B66", jo.joNumber);
-  setText("B67", jo.project);
-  setText("B68", jo.make);
-  setDate("B69", jo.targetDate);
-  setNum("B70", jo.quantity);
-  setText("B71", jo.uom);
-  setNum("B72", jo.bodyLeadTime);
-  setNum("B73", jo.bladeLeadTime);
-  // Fan / blower details
-  setNum("B77", jo.bladeDiameter);
-  setText("B78", jo.orientation);
-  setText("B79", jo.rotation);
-  setText("B80", jo.bladeType);
-  setText("B81", jo.driveType);
-  setText("B82", jo.capacity);
-  setText("B83", jo.capacityAt0);
-  setNum("B84", jo.rpmCatalogue);
-  // Motor details
-  setText("B87", jo.motorBrand);
-  setText("B88", jo.motorPhAlias);
-  setText("B89", jo.motorHp);
-  setNum("B90", jo.voltage);
-  setNum("B91", jo.frequency);
-  setText("B92", jo.mounting);
-  setText("B93", jo.enclosure);
-  setNum("B96", jo.motorPulley);
-  setNum("B97", jo.fanPulley);
+  // 2) Force Excel to recalculate the formula-driven printable sheet on open.
+  const wbPath = "xl/workbook.xml";
+  let wbXml = await zip.file(wbPath)!.async("string");
+  if (/<calcPr\b/.test(wbXml)) {
+    if (!/fullCalcOnLoad=/.test(wbXml)) {
+      wbXml = wbXml.replace(/<calcPr\b([^>]*?)\/>/, '<calcPr$1 fullCalcOnLoad="1"/>');
+    }
+  } else {
+    wbXml = wbXml.replace(/<\/workbook>/, '<calcPr fullCalcOnLoad="1"/></workbook>');
+  }
+  zip.file(wbPath, wbXml);
 
-  // The printable sheet prints on Letter (8.5×11); force a recalc on open so its
-  // VLOOKUP formulas reflect the inputs we just wrote.
-  const cb = wb.getWorksheet("Centrifugal Blower");
-  if (cb) cb.pageSetup = { ...cb.pageSetup, paperSize: 1 };
-  wb.calcProperties = { ...(wb.calcProperties ?? {}), fullCalcOnLoad: true };
+  // 3) Print the production sheet on Letter (8.5×11).
+  const cbPath = await sheetPath(zip, /centrifugal|blower/i);
+  if (cbPath) {
+    const cbFile = zip.file(cbPath);
+    if (cbFile) {
+      let cbXml = await cbFile.async("string");
+      if (/<pageSetup\b/.test(cbXml)) {
+        cbXml = /paperSize=/.test(cbXml)
+          ? cbXml.replace(/(<pageSetup\b[^>]*?\bpaperSize=")\d+(")/, `$11$2`)
+          : cbXml.replace(/<pageSetup\b/, '<pageSetup paperSize="1"');
+      }
+      zip.file(cbPath, cbXml);
+    }
+  }
 
-  const out = await wb.xlsx.writeBuffer();
-  return Buffer.from(out);
+  return await zip.generateAsync({ type: "nodebuffer" });
 }
