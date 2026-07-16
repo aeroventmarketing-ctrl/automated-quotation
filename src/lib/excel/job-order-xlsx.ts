@@ -118,7 +118,10 @@ export async function buildFansJobOrderWorkbook(
   }
   zip.file(srcPath, srcXml);
 
-  // 2) Force Excel to recalculate the formula-driven printable sheet on open.
+  // 2) Force Excel to recalculate the formula-driven printable sheet on open,
+  //    and hide the Source sheet so the production copy shows only the
+  //    Centrifugal Blower. (Source can't be deleted — the Centrifugal Blower is
+  //    100% formulas over it — so it stays hidden and drives the calculations.)
   const wbPath = "xl/workbook.xml";
   let wbXml = await zip.file(wbPath)!.async("string");
   if (/<calcPr\b/.test(wbXml)) {
@@ -128,6 +131,13 @@ export async function buildFansJobOrderWorkbook(
   } else {
     wbXml = wbXml.replace(/<\/workbook>/, '<calcPr fullCalcOnLoad="1"/></workbook>');
   }
+  wbXml = wbXml.replace(/<sheet\b[^>]*\/>/g, (tag) =>
+    /name="[^"]*[Ss]ource[^"]*"/.test(tag) && !/\bstate=/.test(tag)
+      ? tag.replace(/\/>$/, ' state="hidden"/>')
+      : tag,
+  );
+  // A hidden sheet can't be the active tab — activate the Centrifugal Blower (0).
+  wbXml = wbXml.replace(/(<workbookView\b[^>]*?)\sactiveTab="\d+"/, "$1 activeTab=\"0\"");
   zip.file(wbPath, wbXml);
 
   // 3) Print the production sheet on Letter (8.5×11).
