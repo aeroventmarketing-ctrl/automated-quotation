@@ -50,6 +50,7 @@ export function FulfillmentActions({
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
+    } finally {
       setBusy(false);
     }
   }

@@ -53,6 +53,7 @@ export function JobOrderManager({
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
+    } finally {
       setBusy(false);
     }
   }
