@@ -132,11 +132,12 @@ export async function buildFansJobOrderWorkbook(
   } else {
     wbXml = wbXml.replace(/<\/workbook>/, '<calcPr fullCalcOnLoad="1"/></workbook>');
   }
-  wbXml = wbXml.replace(/<sheet\b[^>]*\/>/g, (tag) =>
-    /name="[^"]*[Ss]ource[^"]*"/.test(tag) && !/\bstate=/.test(tag)
-      ? tag.replace(/\/>$/, ' state="hidden"/>')
-      : tag,
-  );
+  wbXml = wbXml.replace(/<sheet\b[^>]*\/>/g, (tag) => {
+    if (!/name="[^"]*[Ss]ource[^"]*"/.test(tag)) return tag;
+    return /\bstate="[^"]*"/.test(tag)
+      ? tag.replace(/\bstate="[^"]*"/, 'state="hidden"')
+      : tag.replace(/\/>$/, ' state="hidden"/>');
+  });
   // A hidden sheet can't be the active tab — activate the Centrifugal Blower (0).
   wbXml = wbXml.replace(/(<workbookView\b[^>]*?)\sactiveTab="\d+"/, "$1 activeTab=\"0\"");
   zip.file(wbPath, wbXml);
