@@ -160,7 +160,8 @@ export async function buildFansJobOrderWorkbook(
         let a = attrs
           .replace(/\s*\bview="[^"]*"/g, "")
           .replace(/\s*\bzoomScale="[^"]*"/g, "")
-          .replace(/\s*\bzoomScaleSheetLayoutView="[^"]*"/g, "");
+          .replace(/\s*\bzoomScaleSheetLayoutView="[^"]*"/g, "")
+          .replace(/\s*\btopLeftCell="[^"]*"/g, ""); // always open at the top of the form
         a = ` view="pageBreakPreview" zoomScale="120" zoomScaleSheetLayoutView="120"${a}`;
         return `<sheetView${a}${selfClose}>`;
       });

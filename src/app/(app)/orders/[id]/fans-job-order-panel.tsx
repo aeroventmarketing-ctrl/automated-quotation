@@ -24,6 +24,69 @@ const PROJECTS = ["CEB", "CFAB", "CAB", "CEBCAB", "CFABCAB", "CABSISW"];
 const MAKES = ["Standard", "Customized", "Client Design"];
 const MOTOR_BRANDS = ["TECO", "Hyundai"];
 
+// Centrifugal Inline option lists (from the Inline template's data validations).
+const INLINE_PROJECTS = ["CIEB"];
+const INLINE_ORIENTATIONS = ["Foot Mounted", "Ceiling Hung", "Dual Mounted", "Flange Mounted", "With Stand"];
+const MOTOR_LOCATIONS = ["12 o'clock facing discharge", "9 o'clock facing discharge", "6 o'clock facing discharge", "3 o'clock facing discharge"];
+const INLINE_BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Airfoil"];
+const INLINE_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
+const INLINE_ENCLOSURES = ["TEFC", "Exproof"];
+
+// A belt-drive JO form is driven by a per-type config so the Centrifugal Blower
+// can serve as the reference for every belt-drive type. `fieldC` is the Source
+// B79 field — the Centrifugal Blower labels it "Rotation", the Inline labels it
+// "Motor Location"; both store into the `rotation` field. Everything shared
+// (motor cascade, computed Fan RPM, header) stays common.
+type BeltDriveConfig = {
+  projects: string[];
+  makes: string[];
+  uoms: string[];
+  bladeDiameters: string[];
+  orientations: string[];
+  fieldC: { label: string; options: string[] };
+  bladeTypes: string[];
+  driveTypes: string[];
+  voltages: string[];
+  frequencies: string[];
+  mountings: string[];
+  enclosures: string[];
+  directCheckbox: boolean;
+};
+
+const BELT_DRIVE_CONFIGS: Record<string, BeltDriveConfig> = {
+  centrifugal_blower: {
+    projects: PROJECTS,
+    makes: MAKES,
+    uoms: ["pc", "pcs", "set"],
+    bladeDiameters: BLADE_DIAMETERS,
+    orientations: ORIENTATIONS,
+    fieldC: { label: "Rotation", options: ROTATIONS },
+    bladeTypes: BLADE_TYPES,
+    driveTypes: DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: ENCLOSURES,
+    directCheckbox: true,
+  },
+  centrifugal_inline_blower: {
+    projects: INLINE_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: BLADE_DIAMETERS,
+    orientations: INLINE_ORIENTATIONS,
+    fieldC: { label: "Motor Location", options: MOTOR_LOCATIONS },
+    bladeTypes: INLINE_BLADE_TYPES,
+    driveTypes: INLINE_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    directCheckbox: true,
+  },
+};
+const DEFAULT_BELT_CONFIG = BELT_DRIVE_CONFIGS.centrifugal_blower;
+
 // Motor selection is cascading: Brand → Phase → HP. Each MOTOR_HP entry is
 // "<hp>, <1PH|3PH>, <brand>"; the HP dropdown shows just the HP but stores the
 // full key (the template's VLOOKUP needs it).
@@ -254,8 +317,10 @@ function JobOrderForm({
     <Field label={label} k={k} value={String(f[k] ?? "")} onSet={set} type={opts?.type} list={opts?.list} placeholder={opts?.placeholder} />
   );
 
+  const cfg = BELT_DRIVE_CONFIGS[f.type] ?? DEFAULT_BELT_CONFIG;
+
   // Direct-drive units carry a "DD" suffix on their project/unit code.
-  const projectOptions = f.directDrive ? PROJECTS.map((p) => `${p}DD`) : PROJECTS;
+  const projectOptions = f.directDrive ? cfg.projects.map((p) => `${p}DD`) : cfg.projects;
   function toggleDirect(checked: boolean) {
     setF((p) => {
       let project = p.project;
@@ -295,34 +360,36 @@ function JobOrderForm({
       <div className="text-xs font-semibold text-muted-foreground">Header</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {fld("Project", "project", { list: projectOptions })}
-        <div className="space-y-1">
-          <span className="text-[11px] text-muted-foreground">Drive type</span>
-          <label className="flex h-8 items-center gap-2">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-[#ED1C24]"
-              checked={f.directDrive}
-              onChange={(e) => toggleDirect(e.target.checked)}
-            />
-            <span className="text-sm font-medium">Direct</span>
-          </label>
-        </div>
-        {fld("Make", "make", { list: MAKES })}
+        {cfg.directCheckbox && (
+          <div className="space-y-1">
+            <span className="text-[11px] text-muted-foreground">Drive type</span>
+            <label className="flex h-8 items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[#ED1C24]"
+                checked={f.directDrive}
+                onChange={(e) => toggleDirect(e.target.checked)}
+              />
+              <span className="text-sm font-medium">Direct</span>
+            </label>
+          </div>
+        )}
+        {fld("Make", "make", { list: cfg.makes })}
         {fld("Date", "date", { type: "date" })}
         {fld("Target date", "targetDate", { type: "date" })}
         {fld("Quantity", "quantity")}
-        {fld("UOM", "uom", { list: ["pc", "pcs", "set"] })}
+        {fld("UOM", "uom", { list: cfg.uoms })}
         {fld("Body lead time (days)", "bodyLeadTime")}
         {fld("Blade lead time (days)", "bladeLeadTime")}
       </div>
 
       <div className="text-xs font-semibold text-muted-foreground">Fan / Blower details</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {fld("Blade diameter (Ø)", "bladeDiameter", { list: BLADE_DIAMETERS })}
-        {fld("Orientation", "orientation", { list: ORIENTATIONS })}
-        {fld("Rotation", "rotation", { list: ROTATIONS })}
-        {fld("Impeller / blade type", "bladeType", { list: BLADE_TYPES })}
-        {fld("Drive", "driveType", { list: DRIVE_TYPES })}
+        {fld("Blade diameter (Ø)", "bladeDiameter", { list: cfg.bladeDiameters })}
+        {fld("Orientation", "orientation", { list: cfg.orientations })}
+        {fld(cfg.fieldC.label, "rotation", { list: cfg.fieldC.options })}
+        {fld("Impeller / blade type", "bladeType", { list: cfg.bladeTypes })}
+        {fld("Drive", "driveType", { list: cfg.driveTypes })}
         {fld("Capacity (@ w.g.)", "capacity", { placeholder: '21,338 cfm @ 2" w.g.' })}
         {fld('Test @ 0" w.g.', "capacityAt0", { placeholder: '29,087 cfm @ 0" w.g.' })}
         {fld("RPM (catalogue)", "rpmCatalogue")}
@@ -351,10 +418,10 @@ function JobOrderForm({
             {hpForBrandPhase(f.motorBrand, f.motorPhAlias).map((e) => <option key={e.full} value={e.full}>{e.hp}</option>)}
           </select>
         </label>
-        {fld("Voltage", "voltage", { list: VOLTAGES })}
-        {fld("Frequency (Hz)", "frequency", { list: FREQUENCIES })}
-        {fld("Mounting", "mounting", { list: MOUNTINGS })}
-        {fld("Enclosure", "enclosure", { list: ENCLOSURES })}
+        {fld("Voltage", "voltage", { list: cfg.voltages })}
+        {fld("Frequency (Hz)", "frequency", { list: cfg.frequencies })}
+        {fld("Mounting", "mounting", { list: cfg.mountings })}
+        {fld("Enclosure", "enclosure", { list: cfg.enclosures })}
         {fld("Motor pulley (Ø)", "motorPulley")}
         {fld("Fan pulley (Ø)", "fanPulley")}
         <label className="space-y-1">
