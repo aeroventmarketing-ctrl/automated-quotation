@@ -3,6 +3,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { AppNav } from "@/components/app-nav";
 import { MobileNav } from "@/components/mobile-nav";
 import { GeofenceGate } from "@/components/geofence-gate";
+import { ApproverAlarm } from "@/components/approver-alarm";
 import { getGeofence } from "@/lib/geofence";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <div className="mx-auto max-w-6xl p-4 md:p-8">{children}</div>
       </main>
+      <ApproverAlarm />
     </div>
   );
 
