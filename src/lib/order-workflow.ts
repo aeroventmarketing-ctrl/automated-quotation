@@ -26,8 +26,8 @@ export type OrderStage =
 export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] = [
   { key: "payment_review", label: "Payment review", phase: "Phase 1" },
   { key: "docs_checked", label: "Docs checked", phase: "Phase 1" },
-  { key: "released", label: "Job orders released", phase: "Phase 1 done" },
-  { key: "in_production", label: "In production", phase: "Phase 4" },
+  { key: "released", label: "For JO creation", phase: "Phase 1 done" },
+  { key: "in_production", label: "JO released", phase: "Phase 4" },
   { key: "production_finished", label: "Production finished", phase: "Phase 4 done" },
   { key: "final_pay_review", label: "Awaiting final payment", phase: "Phase 5" },
   { key: "final_pay_checked", label: "Final payment checked", phase: "Phase 5" },
