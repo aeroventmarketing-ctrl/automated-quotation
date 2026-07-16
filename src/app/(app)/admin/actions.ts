@@ -9,6 +9,7 @@ import { setUserSignatureValue } from "@/lib/signature";
 import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
 import { setHideOrderProgress } from "@/lib/order-progress-visibility";
+import { setNotificationsEnabled } from "@/lib/notification-settings";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
@@ -318,6 +319,15 @@ export async function saveHideOrderProgressSetting(input: z.infer<typeof spLockS
   await assertAdmin();
   const d = spLockSchema.parse(input);
   await setHideOrderProgress(d.enabled);
+  revalidatePath("/admin");
+  return d.enabled;
+}
+
+// --- Approver notification alarm --------------------------------------------
+export async function saveNotificationsSetting(input: z.infer<typeof spLockSchema>): Promise<boolean> {
+  await assertAdmin();
+  const d = spLockSchema.parse(input);
+  await setNotificationsEnabled(d.enabled);
   revalidatePath("/admin");
   return d.enabled;
 }

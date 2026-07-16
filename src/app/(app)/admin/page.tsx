@@ -5,18 +5,19 @@ import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getHideOrderProgress } from "@/lib/order-progress-visibility";
+import { getNotificationsEnabled } from "@/lib/notification-settings";
 import { QuoteNumberSetting } from "./quote-number-setting";
 import { MrfNumberSetting } from "./mrf-number-setting";
 import { PoNumberSetting } from "./po-number-setting";
 import { JoNumberSetting } from "./jo-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress] = await Promise.all([
+  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress, notificationsEnabled] = await Promise.all([
     prisma.user.count(),
     prisma.catalogueItem.count(),
     prisma.priceListEntry.count(),
@@ -29,6 +30,7 @@ export default async function AdminOverviewPage() {
     getAxialSpLock(),
     getFollowUpSettings(),
     getHideOrderProgress(),
+    getNotificationsEnabled(),
   ]);
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
@@ -136,6 +138,12 @@ export default async function AdminOverviewPage() {
         description="When enabled, Sales and Engineer users no longer see an order's workflow progress (stages, approvals, job orders, materials, purchasing, delivery) — from Phase 1 onward. Admins and anyone assigned an ERP workflow role still see everything."
         enabled={hideOrderProgress}
         onSave={saveHideOrderProgressSetting}
+      />
+      <SpLockSetting
+        title="Approver notification alarm"
+        description="When enabled, an approver hears a loud 20-second alarm and sees a flashing pop-up whenever an order is waiting on their approval. Turn off to silence the alarm for everyone (the order workflow is unaffected)."
+        enabled={notificationsEnabled}
+        onSave={saveNotificationsSetting}
       />
       <FollowUpSetting
         offsetsDays={followUpSettings.offsetsDays}
