@@ -12,55 +12,65 @@ interface Pending {
 const POLL_MS = 30_000; // re-check for new approvals every 30s
 const ALARM_MS = 20_000; // sound + flashing window last 20s
 
-// One shared AudioContext, unlocked on the first user gesture so later alarms
-// can play without a fresh interaction (browsers block audio before a gesture).
+// One shared AudioContext, unlocked (resumed) on any user interaction so alarms
+// can play — browsers block audio until the page has a user gesture.
 let sharedCtx: AudioContext | null = null;
-function unlockAudio() {
-  try {
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!sharedCtx) sharedCtx = new AC();
-    if (sharedCtx.state === "suspended") void sharedCtx.resume();
-  } catch {
-    /* ignore */
+function getCtx(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  if (!sharedCtx) {
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return null;
+    try {
+      sharedCtx = new AC();
+    } catch {
+      return null;
+    }
   }
+  return sharedCtx;
+}
+/** Best-effort resume; returns true once the context is running. */
+function unlockAudio(): boolean {
+  const ctx = getCtx();
+  if (!ctx) return false;
+  if (ctx.state !== "running") void ctx.resume().catch(() => {});
+  return ctx.state === "running";
 }
 
-/** Start a loud pulsing two-tone alarm; returns a stopper. */
+/** Start a loud two-tone siren; returns a stopper. */
 function startSound(): () => void {
-  unlockAudio();
-  const ctx = sharedCtx;
+  const ctx = getCtx();
   if (!ctx) return () => {};
-  const gain = ctx.createGain();
-  gain.gain.value = 0.0001;
-  gain.connect(ctx.destination);
+  void ctx.resume().catch(() => {});
+  const master = ctx.createGain();
+  master.gain.value = 0.6; // loud, steady (no fragile envelope)
+  master.connect(ctx.destination);
   const osc = ctx.createOscillator();
   osc.type = "square";
-  osc.connect(gain);
+  osc.frequency.value = 880;
+  osc.connect(master);
   try {
     osc.start();
   } catch {
     /* already started */
   }
+  // Two-tone siren by sweeping the pitch; keep retrying resume in case the
+  // context was still suspended when the alarm began.
   let hi = true;
-  const beep = () => {
-    const t = ctx.currentTime;
-    osc.frequency.setValueAtTime(hi ? 1040 : 760, t);
-    // loud on for ~0.28s, then near-silent
-    gain.gain.cancelScheduledValues(t);
-    gain.gain.setValueAtTime(0.45, t);
-    gain.gain.setValueAtTime(0.45, t + 0.28);
-    gain.gain.linearRampToValueAtTime(0.0001, t + 0.34);
+  const iv = window.setInterval(() => {
+    if (ctx.state !== "running") void ctx.resume().catch(() => {});
+    osc.frequency.setValueAtTime(hi ? 1046 : 660, ctx.currentTime);
     hi = !hi;
-  };
-  beep();
-  const iv = window.setInterval(beep, 400);
+  }, 330);
   return () => {
     window.clearInterval(iv);
     try {
-      const t = ctx.currentTime;
-      gain.gain.cancelScheduledValues(t);
-      gain.gain.setValueAtTime(0.0001, t);
-      osc.stop(t + 0.02);
+      osc.stop();
+    } catch {
+      /* ignore */
+    }
+    try {
+      osc.disconnect();
+      master.disconnect();
     } catch {
       /* ignore */
     }
@@ -105,15 +115,16 @@ export function ApproverAlarm() {
     timerRef.current = window.setTimeout(stop, ALARM_MS);
   }, [stop]);
 
-  // Unlock audio on the first interaction anywhere in the app.
+  // Keep trying to unlock audio on any interaction until the context is running,
+  // so an alarm that fires later can actually sound.
   useEffect(() => {
-    const on = () => unlockAudio();
-    window.addEventListener("pointerdown", on, { once: true });
-    window.addEventListener("keydown", on, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", on);
-      window.removeEventListener("keydown", on);
+    const events: (keyof WindowEventMap)[] = ["pointerdown", "touchstart", "keydown", "click"];
+    const tryUnlock = () => {
+      if (unlockAudio()) detach();
     };
+    const detach = () => events.forEach((e) => window.removeEventListener(e, tryUnlock));
+    events.forEach((e) => window.addEventListener(e, tryUnlock, { passive: true }));
+    return detach;
   }, []);
 
   // Poll for orders awaiting this viewer; ring when a new one appears.
@@ -131,8 +142,12 @@ export function ApproverAlarm() {
         for (const id of alarmedRef.current) if (!currentIds.has(id)) alarmedRef.current.delete(id);
         const fresh = orders.filter((o) => !alarmedRef.current.has(o.id));
         if (fresh.length > 0 && !stopSoundRef.current) {
-          orders.forEach((o) => alarmedRef.current.add(o.id));
+          // Only "remember" these once audio can actually play; if it's still
+          // locked (no interaction yet), leave them so the next poll re-rings
+          // with sound after the user has tapped once.
+          const soundReady = unlockAudio();
           ring(orders);
+          if (soundReady) orders.forEach((o) => alarmedRef.current.add(o.id));
         }
       } catch {
         /* ignore network hiccups */
