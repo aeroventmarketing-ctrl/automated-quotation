@@ -3,7 +3,7 @@ import path from "path";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { readOrderWorkflow } from "@/lib/order-workflow";
-import { formatJoNumber } from "@/lib/job-order";
+import { formatJoNumber, joTypeDef, joTypeLabel } from "@/lib/job-order";
 import { buildFansJobOrderWorkbook } from "@/lib/excel/job-order-xlsx";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +26,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const year = wf.joBaseYear ?? new Date().getFullYear();
   const joNumber = wf.joBaseNo != null ? formatJoNumber(wf.joBaseNo, year, i, wf.fansJobOrders.length) : "";
 
+  // Resolve the template for this JO's type. All six Fans & Blowers types share
+  // one number series but each has its own template.
+  const def = joTypeDef(jo.type);
+  if (!def?.template) {
+    return new Response(`The "${joTypeLabel(jo.type)}" job order template is not set up yet.`, { status: 409 });
+  }
   const dir = path.join(process.cwd(), "public", "templates");
-  const template = await fs.readFile(path.join(dir, "fans-jo-template.xlsx"));
+  const template = await fs.readFile(path.join(dir, def.template));
   const buffer = await buildFansJobOrderWorkbook(template, { ...jo, joNumber });
 
   const filename = `${(joNumber || "Job-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;

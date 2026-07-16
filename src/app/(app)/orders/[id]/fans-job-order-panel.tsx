@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Printer, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatJoNumber, EMPTY_FANS_JO, type FansJobOrder } from "@/lib/job-order";
+import { formatJoNumber, EMPTY_FANS_JO, JO_TYPES, joTypeLabel, joTypeReady, type FansJobOrder } from "@/lib/job-order";
 import { saveFansJobOrder, deleteFansJobOrder } from "../actions";
 
 // Option lists taken straight from the template's lookup tables so selections
@@ -77,6 +77,7 @@ export function FansJobOrderPanel({
 }) {
   const router = useRouter();
   const [editIndex, setEditIndex] = useState<number | null>(null); // null = list view; -1 = new
+  const [newType, setNewType] = useState<string | null>(null); // type chosen for a new JO
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -84,14 +85,22 @@ export function FansJobOrderPanel({
   const total = jobOrders.length;
   const numberFor = (i: number) => (baseNo != null ? formatJoNumber(baseNo, year, i, total) : "—");
 
+  // New JO: first pick the type, then fill its form.
+  if (editIndex === -1 && newType === null) {
+    return <JoTypeChooser onPick={(key) => setNewType(key)} onCancel={() => setEditIndex(null)} />;
+  }
   if (editIndex !== null) {
+    const editing = editIndex >= 0;
+    const initial = editing
+      ? jobOrders[editIndex]
+      : { ...EMPTY_FANS_JO, type: newType ?? EMPTY_FANS_JO.type, date: todayISO() };
     return (
       <JobOrderForm
         orderId={orderId}
-        index={editIndex >= 0 ? editIndex : null}
-        initial={editIndex >= 0 ? jobOrders[editIndex] : { ...EMPTY_FANS_JO, date: todayISO() }}
-        onDone={() => { setEditIndex(null); router.refresh(); }}
-        onCancel={() => setEditIndex(null)}
+        index={editing ? editIndex : null}
+        initial={initial}
+        onDone={() => { setEditIndex(null); setNewType(null); router.refresh(); }}
+        onCancel={() => { setEditIndex(null); setNewType(null); }}
       />
     );
   }
@@ -119,6 +128,7 @@ export function FansJobOrderPanel({
           {jobOrders.map((jo, i) => (
             <li key={i} className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-2 text-xs">
               <span className="font-mono font-semibold">{numberFor(i)}</span>
+              <span className="rounded-full bg-[#ED1C24]/10 px-2 py-0.5 font-medium text-[#ED1C24]">{joTypeLabel(jo.type)}</span>
               <span className="text-muted-foreground">
                 {[jo.bladeDiameter && `${jo.bladeDiameter}"Ø`, jo.project, jo.quantity && `${jo.quantity} ${jo.uom}`].filter(Boolean).join(" · ")}
               </span>
@@ -143,11 +153,45 @@ export function FansJobOrderPanel({
         </ul>
       )}
       {canManage && (
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditIndex(-1)}>
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setEditIndex(-1); setNewType(null); }}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Add Fans &amp; Blowers job order
         </Button>
       )}
       {err && <p className="text-xs text-destructive">{err}</p>}
+    </div>
+  );
+}
+
+/** Step 1 of creating a JO: pick which of the six Fans & Blowers types it is. */
+function JoTypeChooser({ onPick, onCancel }: { onPick: (key: string) => void; onCancel: () => void }) {
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+      <div className="text-sm font-medium">Select the job order type</div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {JO_TYPES.map((t) => {
+          const ready = joTypeReady(t.key);
+          return (
+            <button
+              key={t.key}
+              type="button"
+              disabled={!ready}
+              onClick={() => ready && onPick(t.key)}
+              className={
+                ready
+                  ? "flex items-center justify-between gap-2 rounded-md border border-[#ED1C24] px-3 py-2 text-left text-sm font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10"
+                  : "flex items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-left text-sm text-muted-foreground opacity-70"
+              }
+            >
+              <span>{t.label}</span>
+              {!ready && <span className="text-[10px] uppercase tracking-wide">Awaiting template</span>}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Only Centrifugal Blower is set up so far. Send the Excel template for any other type and it will be enabled here.
+      </p>
+      <Button size="sm" variant="outline" className="h-8" onClick={onCancel}>Cancel</Button>
     </div>
   );
 }
@@ -244,7 +288,9 @@ function JobOrderForm({
 
   return (
     <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-      <div className="text-sm font-medium">{index != null ? "Edit" : "New"} Fans &amp; Blowers Job Order</div>
+      <div className="text-sm font-medium">
+        {index != null ? "Edit" : "New"} {joTypeLabel(f.type)} Job Order
+      </div>
 
       <div className="text-xs font-semibold text-muted-foreground">Header</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

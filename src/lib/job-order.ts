@@ -11,7 +11,45 @@
  * several Fans & Blowers JOs (suffixed a, b, c … on the base number).
  */
 
+/**
+ * The Fans & Blowers department issues six kinds of job order, each with its own
+ * Excel template and (eventually) its own field set. They all share one running
+ * AFBM-JO number series. A type is "ready" once its template is registered here;
+ * until then it shows in the picker but can't be created. Wire a new type by
+ * dropping its template into public/templates and filling in `template`.
+ */
+export interface JoTypeDef {
+  key: string;
+  label: string;
+  /** Template filename under public/templates, or null until it's uploaded. */
+  template: string | null;
+}
+
+export const JO_TYPES: JoTypeDef[] = [
+  { key: "centrifugal_blower", label: "Centrifugal Blower", template: "fans-jo-template.xlsx" },
+  { key: "centrifugal_inline_blower", label: "Centrifugal Inline Blower", template: null },
+  { key: "panel_fan", label: "Panel Fan", template: null },
+  { key: "power_roof", label: "Power Roof", template: null },
+  { key: "tubeaxial_vaneaxial", label: "Tubeaxial / Vaneaxial", template: null },
+  { key: "centrifugal_blower_didw", label: "Centrifugal Blower DIDW", template: null },
+];
+
+export const DEFAULT_JO_TYPE = "centrifugal_blower";
+
+export function joTypeDef(key: string): JoTypeDef | undefined {
+  return JO_TYPES.find((t) => t.key === key);
+}
+export function joTypeLabel(key: string): string {
+  return joTypeDef(key)?.label ?? key;
+}
+/** A type is ready to be created once its template has been registered. */
+export function joTypeReady(key: string): boolean {
+  return !!joTypeDef(key)?.template;
+}
+
 export interface FansJobOrder {
+  // Which of the six Fans & Blowers JO types this is (drives template + form).
+  type: string;
   // Header details
   joNumber: string; // AFBM-JO2600054(a) — auto-generated
   date: string; // ISO date the JO was made
@@ -48,6 +86,7 @@ export interface FansJobOrder {
 }
 
 export const EMPTY_FANS_JO: FansJobOrder = {
+  type: DEFAULT_JO_TYPE,
   joNumber: "",
   date: "",
   project: "",
@@ -97,6 +136,7 @@ export function coerceFansJobOrder(value: unknown): FansJobOrder | null {
   const o = value as Record<string, unknown>;
   const s = (k: keyof FansJobOrder) => (o[k] == null ? "" : String(o[k]));
   return {
+    type: s("type") || DEFAULT_JO_TYPE,
     joNumber: s("joNumber"),
     date: s("date"),
     project: s("project"),

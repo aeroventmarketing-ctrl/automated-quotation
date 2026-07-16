@@ -32,7 +32,7 @@ import {
 import { purchaseStep } from "@/lib/purchasing";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
-import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
+import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
 
 interface StockMatch { stockItemId: string; qty: number }
 
@@ -185,6 +185,7 @@ async function nextJoBaseNo(): Promise<number> {
 }
 
 const fansJoSchema = z.object({
+  type: z.string().trim().default("centrifugal_blower"),
   date: z.string().trim().default(""),
   project: z.string().trim().default(""),
   make: z.string().trim().default(""),
@@ -235,6 +236,9 @@ export async function saveFansJobOrder(
 ): Promise<void> {
   await assertEngineer();
   const d = fansJoSchema.parse(input);
+  if (!joTypeReady(d.type)) {
+    throw new Error(`The "${joTypeLabel(d.type)}" job order template is not set up yet.`);
+  }
   const { cls, wf } = await loadWorkflow(quotationId);
 
   let joBaseNo = wf.joBaseNo;
