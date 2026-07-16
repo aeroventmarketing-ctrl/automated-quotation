@@ -18,6 +18,8 @@ const BLADE_TYPES = ["Backwardly Inclined", "Forward Curved", "Radial", "Airfoil
 const DRIVE_TYPES = ["Belt", "Direct"];
 const MOUNTINGS = ["Foot Mounted", "Flange Mounted", "Face Mounted"];
 const ENCLOSURES = ["TEFC", "ODP", "Explosion Proof"];
+const PROJECTS = ["CEB", "CFAB", "CAB", "CEBCAB", "CFABCAB", "CABSISW"];
+const MAKES = ["Standard", "Customized", "Client Design"];
 
 /** Derive the template's motor brand + phase alias from a "HP, PH, Brand" string. */
 function deriveMotor(hp: string): { brand: string; alias: string } {
@@ -201,8 +203,8 @@ function JobOrderForm({
 
       <div className="text-xs font-semibold text-muted-foreground">Header</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {fld("Project", "project")}
-        {fld("Make", "make", { list: ["Standard", "Heavy Duty"] })}
+        {fld("Project", "project", { list: PROJECTS })}
+        {fld("Make", "make", { list: MAKES })}
         {fld("Date", "date", { type: "date" })}
         {fld("Target date", "targetDate", { type: "date" })}
         {fld("Quantity", "quantity")}
