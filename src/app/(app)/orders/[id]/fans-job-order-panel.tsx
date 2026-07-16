@@ -277,9 +277,9 @@ function JobOrderForm({
         {fld("Rotation", "rotation", { list: ROTATIONS })}
         {fld("Impeller / blade type", "bladeType", { list: BLADE_TYPES })}
         {fld("Drive", "driveType", { list: DRIVE_TYPES })}
-        {fld("RPM (catalogue)", "rpmCatalogue")}
         {fld("Capacity (@ w.g.)", "capacity", { placeholder: '21,338 cfm @ 2" w.g.' })}
         {fld('Test @ 0" w.g.', "capacityAt0", { placeholder: '29,087 cfm @ 0" w.g.' })}
+        {fld("RPM (catalogue)", "rpmCatalogue")}
       </div>
 
       <div className="text-xs font-semibold text-muted-foreground">Motor details</div>
