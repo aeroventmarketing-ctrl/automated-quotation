@@ -210,6 +210,17 @@ function JobOrderForm({
     <Field label={label} k={k} value={String(f[k] ?? "")} onSet={set} type={opts?.type} list={opts?.list} placeholder={opts?.placeholder} />
   );
 
+  // Direct-drive units carry a "DD" suffix on their project/unit code.
+  const projectOptions = f.directDrive ? PROJECTS.map((p) => `${p}DD`) : PROJECTS;
+  function toggleDirect(checked: boolean) {
+    setF((p) => {
+      let project = p.project;
+      if (checked && project && !project.endsWith("DD")) project = `${project}DD`;
+      else if (!checked && project.endsWith("DD")) project = project.slice(0, -2);
+      return { ...p, directDrive: checked, project };
+    });
+  }
+
   // Live-computed Fan RPM = roundup(motorRpm × motorPulley ÷ fanPulley).
   const motorRpm = MOTOR_RPM[f.motorHp];
   const mP = Number(String(f.motorPulley).replace(/,/g, ""));
@@ -237,7 +248,7 @@ function JobOrderForm({
 
       <div className="text-xs font-semibold text-muted-foreground">Header</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {fld("Project", "project", { list: PROJECTS })}
+        {fld("Project", "project", { list: projectOptions })}
         <div className="space-y-1">
           <span className="text-[11px] text-muted-foreground">Drive type</span>
           <label className="flex h-8 items-center gap-2">
@@ -245,7 +256,7 @@ function JobOrderForm({
               type="checkbox"
               className="h-4 w-4 accent-[#ED1C24]"
               checked={f.directDrive}
-              onChange={(e) => setF((p) => ({ ...p, directDrive: e.target.checked }))}
+              onChange={(e) => toggleDirect(e.target.checked)}
             />
             <span className="text-sm font-medium">Direct</span>
           </label>
