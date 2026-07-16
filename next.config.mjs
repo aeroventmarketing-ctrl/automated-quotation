@@ -10,6 +10,9 @@ const nextConfig = {
       "./public/templates/po-2307-template.xlsx",
       "./public/templates/2307-source.xlsx",
     ],
+    "/(app)/orders/[id]/jo/[index]/xlsx": [
+      "./public/templates/fans-jo-template.xlsx",
+    ],
   },
   experimental: {
     serverActions: {

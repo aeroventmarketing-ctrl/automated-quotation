@@ -41,6 +41,8 @@ export interface FansJobOrder {
   enclosure: string; // e.g. "TEFC"
   motorPulley: string; // inches
   fanPulley: string; // inches
+  // App-only (NOT written to the JO Excel — the template has no cell for it).
+  assignedPersonnel: string;
 }
 
 export const EMPTY_FANS_JO: FansJobOrder = {
@@ -70,7 +72,21 @@ export const EMPTY_FANS_JO: FansJobOrder = {
   enclosure: "",
   motorPulley: "",
   fanPulley: "",
+  assignedPersonnel: "",
 };
+
+/**
+ * The JO number for the JO at `index` of an order that carries `total` JOs.
+ * Format: AFBM-JO<YY><5-digit base seq>. The a/b/c suffix appears ONLY when the
+ * order has more than one JO. Example: base 54, year 2026 → "AFBM-JO2600054";
+ * with 3 JOs → "AFBM-JO2600054a", "…b", "…c".
+ */
+export function formatJoNumber(baseSeq: number, year: number, index: number, total: number): string {
+  const yy = String(year % 100).padStart(2, "0");
+  const seq = String(baseSeq).padStart(5, "0");
+  const suffix = total > 1 ? String.fromCharCode(97 + index) : "";
+  return `AFBM-JO${yy}${seq}${suffix}`;
+}
 
 /** Defensively coerce raw JSON into a FansJobOrder. */
 export function coerceFansJobOrder(value: unknown): FansJobOrder | null {
@@ -104,5 +120,6 @@ export function coerceFansJobOrder(value: unknown): FansJobOrder | null {
     enclosure: s("enclosure"),
     motorPulley: s("motorPulley"),
     fanPulley: s("fanPulley"),
+    assignedPersonnel: s("assignedPersonnel"),
   };
 }

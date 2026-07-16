@@ -32,6 +32,7 @@ import {
 import { purchaseStep } from "@/lib/purchasing";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
+import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 
 interface StockMatch { stockItemId: string; qty: number }
 
@@ -163,6 +164,99 @@ export async function advanceJobOrder(
   if (allJobOrdersFinished(nextWf)) nextWf.stage = "production_finished";
 
   await saveWorkflow(quotationId, cls, nextWf);
+}
+
+// --- Fans & Blowers Job Orders (Engineer) ---------------------------------
+
+/** Next running JO base sequence (claimed once per order). */
+async function nextJoBaseNo(): Promise<number> {
+  const KEY = "jo_counter";
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.appSetting.findUnique({ where: { key: KEY } });
+    const last = Number((row?.value as { last?: unknown } | null)?.last ?? 0) || 0;
+    const next = last + 1;
+    await tx.appSetting.upsert({
+      where: { key: KEY },
+      create: { key: KEY, value: { last: next } as Prisma.InputJsonValue },
+      update: { value: { last: next } as Prisma.InputJsonValue },
+    });
+    return next;
+  });
+}
+
+const fansJoSchema = z.object({
+  date: z.string().trim().default(""),
+  project: z.string().trim().default(""),
+  make: z.string().trim().default(""),
+  targetDate: z.string().trim().default(""),
+  quantity: z.string().trim().default(""),
+  uom: z.string().trim().default(""),
+  bodyLeadTime: z.string().trim().default(""),
+  bladeLeadTime: z.string().trim().default(""),
+  bladeDiameter: z.string().trim().default(""),
+  orientation: z.string().trim().default(""),
+  rotation: z.string().trim().default(""),
+  bladeType: z.string().trim().default(""),
+  driveType: z.string().trim().default(""),
+  capacity: z.string().trim().default(""),
+  capacityAt0: z.string().trim().default(""),
+  rpmCatalogue: z.string().trim().default(""),
+  motorBrand: z.string().trim().default(""),
+  motorPhAlias: z.string().trim().default(""),
+  motorHp: z.string().trim().default(""),
+  voltage: z.string().trim().default(""),
+  frequency: z.string().trim().default(""),
+  mounting: z.string().trim().default(""),
+  enclosure: z.string().trim().default(""),
+  motorPulley: z.string().trim().default(""),
+  fanPulley: z.string().trim().default(""),
+  assignedPersonnel: z.string().trim().default(""),
+});
+
+async function assertEngineer() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || user.role === "ENGINEER")) {
+    throw new Error("Only an engineer or an admin can make a Fans & Blowers job order.");
+  }
+  return user;
+}
+
+/**
+ * The Engineer creates or edits a Fans & Blowers job order on an order. Pass
+ * index = null to add a new one, or an existing index to edit. The first JO on
+ * an order claims the running base number.
+ */
+export async function saveFansJobOrder(
+  quotationId: string,
+  index: number | null,
+  input: z.infer<typeof fansJoSchema>,
+): Promise<void> {
+  await assertEngineer();
+  const d = fansJoSchema.parse(input);
+  const { cls, wf } = await loadWorkflow(quotationId);
+
+  let joBaseNo = wf.joBaseNo;
+  let joBaseYear = wf.joBaseYear;
+  if (joBaseNo == null) {
+    joBaseNo = await nextJoBaseNo();
+    joBaseYear = new Date().getFullYear();
+  }
+
+  const jo: FansJobOrder = { ...(coerceFansJobOrder({}) as FansJobOrder), ...d };
+  const list = [...wf.fansJobOrders];
+  if (index != null && index >= 0 && index < list.length) list[index] = jo;
+  else list.push(jo);
+
+  await saveWorkflow(quotationId, cls, { ...wf, fansJobOrders: list, joBaseNo, joBaseYear });
+}
+
+/** Remove a Fans & Blowers job order by index. */
+export async function deleteFansJobOrder(quotationId: string, index: number): Promise<void> {
+  await assertEngineer();
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const list = wf.fansJobOrders.filter((_, i) => i !== index);
+  await saveWorkflow(quotationId, cls, { ...wf, fansJobOrders: list });
 }
 
 /**

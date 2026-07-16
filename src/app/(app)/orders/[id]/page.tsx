@@ -26,6 +26,7 @@ import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
+import { FansJobOrderPanel } from "./fans-job-order-panel";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { FulfillmentActions } from "./fulfillment-actions";
@@ -123,6 +124,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canIssue =
     wf.stage === "released" &&
     (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey)));
+
+  // The Engineer (or admin) makes the Fans & Blowers job order.
+  const canManageJO = adminViewer || viewer?.role === "ENGINEER";
 
   const jobs = PRODUCTION_DEPTS.filter((d) => wf.jobOrders[d.key]).map((d) => {
     const jo = wf.jobOrders[d.key]!;
@@ -335,13 +339,25 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="text-sm text-muted-foreground">Job orders are issued once Phase 1 is complete.</p>
           ) : (
-            <JobOrderManager
-              orderId={quote.id}
-              stage={wf.stage}
-              canIssue={canIssue}
-              allDepts={PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))}
-              jobs={jobs}
-            />
+            <div className="space-y-4">
+              <JobOrderManager
+                orderId={quote.id}
+                stage={wf.stage}
+                canIssue={canIssue}
+                allDepts={PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))}
+                jobs={jobs}
+              />
+              <div className="border-t pt-3">
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">Fans &amp; Blowers job order (Engineer)</div>
+                <FansJobOrderPanel
+                  orderId={quote.id}
+                  jobOrders={wf.fansJobOrders}
+                  baseNo={wf.joBaseNo}
+                  baseYear={wf.joBaseYear}
+                  canManage={canManageJO}
+                />
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

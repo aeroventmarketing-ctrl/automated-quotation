@@ -378,6 +378,22 @@ export async function setPoNextNo(input: z.infer<typeof poNextSchema>): Promise<
   return d.next;
 }
 
+// --- Fans & Blowers Job Order numbering -------------------------------------
+const JO_COUNTER_KEY = "jo_counter";
+const joNextSchema = z.object({ next: z.number().int().min(1) });
+/** Set the next Job Order base sequence number (stored as last = next - 1). */
+export async function setJoNextNo(input: z.infer<typeof joNextSchema>): Promise<number> {
+  await assertAdmin();
+  const d = joNextSchema.parse(input);
+  await prisma.appSetting.upsert({
+    where: { key: JO_COUNTER_KEY },
+    create: { key: JO_COUNTER_KEY, value: { last: d.next - 1 } },
+    update: { value: { last: d.next - 1 } },
+  });
+  revalidatePath("/admin");
+  return d.next;
+}
+
 // --- Workflow (ERP) roles ---------------------------------------------------
 const workflowRolesSchema = z.object({ userId: z.string(), roles: z.array(z.string()) });
 export async function setUserWorkflowRolesAction(

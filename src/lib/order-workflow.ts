@@ -8,6 +8,7 @@
  *   docs_checked   → [Payment Approver: clear payment] → released (job orders out)
  */
 import type { WorkflowRoleKey } from "@/lib/workflow-roles";
+import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 
 export type OrderStage =
   | "payment_review"
@@ -129,6 +130,12 @@ export interface OrderWorkflow {
   jobOrders: Partial<Record<ProductionDeptKey, JobOrder>>;
   materialRequests: MaterialRequest[];
   documents: OrderDocuments;
+  // Detailed Fans & Blowers job order documents made by the Engineer. An order
+  // can carry several; they share a base number claimed once (joBaseNo/joBaseYear)
+  // and get an a/b/c suffix when there is more than one.
+  fansJobOrders: FansJobOrder[];
+  joBaseNo?: number;
+  joBaseYear?: number;
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -209,7 +216,13 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
         }))
     : [];
 
-  return { stage, approvals, jobOrders, materialRequests, documents };
+  const fansJobOrders: FansJobOrder[] = Array.isArray(wf?.fansJobOrders)
+    ? (wf.fansJobOrders as unknown[]).map(coerceFansJobOrder).filter((x): x is FansJobOrder => !!x)
+    : [];
+  const joBaseNo = typeof wf?.joBaseNo === "number" ? (wf.joBaseNo as number) : undefined;
+  const joBaseYear = typeof wf?.joBaseYear === "number" ? (wf.joBaseYear as number) : undefined;
+
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */
