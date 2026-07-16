@@ -13,6 +13,9 @@ const nextConfig = {
     "/(app)/orders/[id]/jo/[index]/xlsx": [
       "./public/templates/fans-jo-template.xlsx",
     ],
+    "/(app)/orders/[id]/jo/[index]/pdf": [
+      "./public/jo-discharge-reference.jpg",
+    ],
   },
   experimental: {
     serverActions: {

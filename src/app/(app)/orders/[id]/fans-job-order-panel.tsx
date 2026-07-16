@@ -93,11 +93,14 @@ export function FansJobOrderPanel({
                 {[jo.bladeDiameter && `${jo.bladeDiameter}"Ø`, jo.project, jo.quantity && `${jo.quantity} ${jo.uom}`].filter(Boolean).join(" · ")}
               </span>
               <a
-                href={`/orders/${orderId}/jo/${i}/xlsx`}
+                href={`/orders/${orderId}/jo/${i}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a]"
               >
                 <Printer className="h-3.5 w-3.5" /> Print Job Order
               </a>
+              <a href={`/orders/${orderId}/jo/${i}/xlsx`} className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">Excel</a>
               {canManage && (
                 <>
                   <button type="button" onClick={() => setEditIndex(i)} className="inline-flex items-center gap-1 rounded-md border border-[#ED1C24] px-2 py-1.5 font-semibold text-[#ED1C24] hover:bg-[#ED1C24]/10">
