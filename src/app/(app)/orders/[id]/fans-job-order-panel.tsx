@@ -152,7 +152,6 @@ function Field({
           onChange={(e) => onSet(k, e.target.value)}
         >
           <option value="">— select —</option>
-          {value && !list.includes(value) && <option value={value}>{value}</option>}
           {list.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       ) : (
