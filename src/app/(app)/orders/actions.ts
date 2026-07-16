@@ -211,6 +211,7 @@ const fansJoSchema = z.object({
   motorPulley: z.string().trim().default(""),
   fanPulley: z.string().trim().default(""),
   assignedPersonnel: z.string().trim().default(""),
+  directDrive: z.boolean().optional().default(false),
 });
 
 async function assertEngineer() {

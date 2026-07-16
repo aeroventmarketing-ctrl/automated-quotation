@@ -43,6 +43,8 @@ export interface FansJobOrder {
   fanPulley: string; // inches
   // App-only (NOT written to the JO Excel — the template has no cell for it).
   assignedPersonnel: string;
+  // When true, this is a direct-drive blower JO (uses the direct-drive template).
+  directDrive: boolean;
 }
 
 export const EMPTY_FANS_JO: FansJobOrder = {
@@ -73,6 +75,7 @@ export const EMPTY_FANS_JO: FansJobOrder = {
   motorPulley: "",
   fanPulley: "",
   assignedPersonnel: "",
+  directDrive: false,
 };
 
 /**
@@ -121,5 +124,6 @@ export function coerceFansJobOrder(value: unknown): FansJobOrder | null {
     motorPulley: s("motorPulley"),
     fanPulley: s("fanPulley"),
     assignedPersonnel: s("assignedPersonnel"),
+    directDrive: Boolean(o.directDrive),
   };
 }

@@ -204,6 +204,18 @@ function JobOrderForm({
       <div className="text-xs font-semibold text-muted-foreground">Header</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {fld("Project", "project", { list: PROJECTS })}
+        <div className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">Drive type</span>
+          <label className="flex h-8 items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[#ED1C24]"
+              checked={f.directDrive}
+              onChange={(e) => setF((p) => ({ ...p, directDrive: e.target.checked }))}
+            />
+            <span className="text-sm font-medium">Direct</span>
+          </label>
+        </div>
         {fld("Make", "make", { list: MAKES })}
         {fld("Date", "date", { type: "date" })}
         {fld("Target date", "targetDate", { type: "date" })}

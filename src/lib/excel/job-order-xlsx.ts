@@ -14,9 +14,10 @@ import JSZip from "jszip";
 import type { FansJobOrder } from "@/lib/job-order";
 
 type CellKind = "text" | "num" | "date";
+type StringKey = { [K in keyof FansJobOrder]: FansJobOrder[K] extends string ? K : never }[keyof FansJobOrder];
 
 /** Input-cell map: Source cell → (FansJobOrder field, value kind). */
-const CELL_MAP: Array<{ cell: string; key: keyof FansJobOrder; kind: CellKind }> = [
+const CELL_MAP: Array<{ cell: string; key: StringKey; kind: CellKind }> = [
   { cell: "B65", key: "date", kind: "date" },
   { cell: "B66", key: "joNumber", kind: "text" },
   { cell: "B67", key: "project", kind: "text" },
