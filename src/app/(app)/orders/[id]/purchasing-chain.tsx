@@ -135,7 +135,8 @@ export function PurchasingChain({
               <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
             ) : null}
 
-            {/* Supplier Purchase Order */}
+            {/* Supplier Purchase Order — a rejected request can't get a new PO. */}
+            {(r.status !== "REJECTED" || r.po) && (
             <div className="mt-2 border-t pt-2">
               {poEditId === r.id ? (
                 <PurchaseOrderPanel
@@ -177,6 +178,7 @@ export function PurchasingChain({
                 <span className="text-xs text-muted-foreground">No purchase order yet.</span>
               )}
             </div>
+            )}
           </div>
         );
       })}
