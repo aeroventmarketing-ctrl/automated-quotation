@@ -1,15 +1,12 @@
-import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
-import { code128Svg } from "@/lib/code128";
-import { qrSvg } from "@/lib/qr";
-import { PrintButton } from "./print-button";
+import { LabelSheet, type LabelItem } from "./label-sheet";
 
 export const dynamic = "force-dynamic";
 
-export default async function LabelsPage() {
-  const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
+export default async function LabelsPage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
+  const [viewer, assignments, sp] = await Promise.all([getCurrentUser(), getWorkflowRoles(), searchParams]);
   const admin = isAdmin(viewer);
   const canView =
     admin ||
@@ -18,44 +15,24 @@ export default async function LabelsPage() {
     return <div className="space-y-2"><h1 className="text-2xl font-bold">Labels</h1><p className="text-sm text-muted-foreground">No access.</p></div>;
   }
 
-  const items = await prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+  const rows = await prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+  const items: LabelItem[] = rows.map((i) => ({
+    id: i.id,
+    code: i.sku ?? i.id,
+    sku: i.sku,
+    name: i.name,
+    location: i.location,
+    unit: i.unit,
+  }));
+  const initialSelected = (sp.ids ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <div>
-          <h1 className="text-2xl font-bold">Stock labels</h1>
-          <p className="text-sm text-muted-foreground">Code 128 barcodes — scannable by any barcode scanner. Print and stick on bins/items.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/inventory" className="rounded-md border px-3 py-2 text-sm hover:bg-accent">← Inventory</Link>
-          <PrintButton />
-        </div>
-      </div>
-
-      {items.length === 0 ? (
+  if (items.length === 0) {
+    return (
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold">Stock labels</h1>
         <p className="text-sm text-muted-foreground">No stock items yet.</p>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {items.map((i) => {
-            const code = i.sku ?? i.id;
-            return (
-              <div key={i.id} className="flex flex-col items-center gap-1 rounded-md border p-3 text-center break-inside-avoid">
-                <div className="text-sm font-semibold leading-tight">{i.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {[i.sku ? `SKU ${i.sku}` : null, i.location ? `Loc ${i.location}` : null, i.unit].filter(Boolean).join(" · ")}
-                </div>
-                <div className="mt-1 flex items-center justify-center gap-3">
-                  {/* eslint-disable-next-line react/no-danger */}
-                  <div className="overflow-hidden" dangerouslySetInnerHTML={{ __html: code128Svg(code, { moduleWidth: 1.8, height: 46 }) }} />
-                  {/* eslint-disable-next-line react/no-danger */}
-                  <div dangerouslySetInnerHTML={{ __html: qrSvg(code, { scale: 3 }) }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
+  return <LabelSheet items={items} initialSelected={initialSelected} />;
 }

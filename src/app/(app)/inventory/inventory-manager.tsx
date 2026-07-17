@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -194,7 +195,10 @@ function StockRow({ item, canManage, scanTarget, scanNonce }: { item: Item; canM
                 {/* eslint-disable-next-line react/no-danger */}
                 <div dangerouslySetInnerHTML={{ __html: qrSvg(item.sku ?? item.id, { scale: 3 }) }} />
               </div>
-              <div className="text-[10px] text-muted-foreground">Code 128 + QR · scannable by any barcode scanner. Use “Labels” to print all.</div>
+              <div className="flex items-center gap-3">
+                <Link href={`/inventory/labels?ids=${item.id}`} className="text-xs font-medium text-primary hover:underline">Print this label →</Link>
+                <span className="text-[10px] text-muted-foreground">Code 128 + QR · any barcode scanner.</span>
+              </div>
             </div>
           </TableCell>
         </TableRow>
@@ -215,12 +219,19 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
   const [unitCost, setUnitCost] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // Scan-to-find: a barcode scanner "types" the item id + Enter into this box.
+  // Scan box: a barcode scanner "types" the SKU + Enter here. Mode decides what a
+  // scan does — jump to the item, or directly receive / issue the entered qty.
   const [scan, setScan] = useState("");
+  const [scanMode, setScanMode] = useState<"find" | "receive" | "issue">("find");
+  const [scanQty, setScanQty] = useState("1");
   const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [scanErr, setScanErr] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
   const [scanTarget, setScanTarget] = useState<string | null>(null);
   const [scanNonce, setScanNonce] = useState(0);
-  function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
+  const scanRef = useRef<HTMLInputElement>(null);
+
+  async function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
     e.preventDefault();
     const code = scan.trim();
@@ -230,12 +241,29 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
       items.find((i) => i.sku === code) ??
       items.find((i) => i.id === code) ??
       items.find((i) => i.name.toLowerCase() === code.toLowerCase());
-    if (found) {
-      setScanTarget(found.id);
-      setScanNonce((n) => n + 1);
-      setScanMsg(`Found: ${found.name}`);
-    } else {
-      setScanMsg(`No item matches “${code}”.`);
+    if (!found) { setScanErr(true); setScanMsg(`No item matches “${code}”.`); return; }
+    if (scanMode === "find") {
+      setScanTarget(found.id); setScanNonce((n) => n + 1); setScanErr(false); setScanMsg(`Found: ${found.name}`);
+      return;
+    }
+    const q = Number(scanQty);
+    if (!(q > 0)) { setScanErr(true); setScanMsg("Enter a quantity first."); return; }
+    setScanBusy(true);
+    try {
+      await adjustStock({
+        stockItemId: found.id,
+        kind: scanMode === "receive" ? "RECEIPT" : "ISSUE",
+        qty: q,
+        reason: scanMode === "receive" ? "Scan receive" : "Scan issue",
+      });
+      setScanErr(false);
+      setScanMsg(`${scanMode === "receive" ? "Received" : "Issued"} ${q} ${found.unit} · ${found.name}`);
+      router.refresh();
+    } catch (e2) {
+      setScanErr(true); setScanMsg(e2 instanceof Error ? e2.message : "Failed");
+    } finally {
+      setScanBusy(false);
+      scanRef.current?.focus();
     }
   }
 
@@ -258,15 +286,29 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
 
   return (
     <div className="space-y-3">
-      {/* Scan a barcode (scanner types the code + Enter) to jump to that item. */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Scan box: a scanner types the SKU + Enter. Mode = jump / receive / issue. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-2">
         <div className="relative">
           <ScanLine className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="h-9 w-64 pl-8" placeholder="Scan barcode…" value={scan} autoFocus onChange={(e) => setScan(e.target.value)} onKeyDown={onScanKey} />
+          <Input ref={scanRef} className="h-9 w-56 pl-8" placeholder="Scan barcode…" value={scan} autoFocus disabled={scanBusy}
+            onChange={(e) => setScan(e.target.value)} onKeyDown={onScanKey} />
         </div>
-        {scanMsg && <span className="text-xs text-muted-foreground">{scanMsg}</span>}
+        {canManage && (
+          <select value={scanMode} onChange={(e) => { setScanMode(e.target.value as typeof scanMode); scanRef.current?.focus(); }}
+            className="h-9 rounded-md border bg-background px-2 text-sm">
+            <option value="find">Scan → jump to item</option>
+            <option value="receive">Scan → receive</option>
+            <option value="issue">Scan → issue</option>
+          </select>
+        )}
+        {canManage && scanMode !== "find" && (
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            qty<Input className="h-9 w-20" type="number" step="any" min={0} value={scanQty} onChange={(e) => setScanQty(e.target.value)} />
+          </label>
+        )}
+        {scanMsg && <span className={`text-xs ${scanErr ? "text-destructive" : "text-emerald-600"}`}>{scanMsg}</span>}
         {canManage && items.some((i) => !i.sku) && (
-          <Button size="sm" variant="outline" className="h-9 text-xs" disabled={busy}
+          <Button size="sm" variant="outline" className="ml-auto h-9 text-xs" disabled={busy}
             onClick={async () => { setBusy(true); try { await assignMissingSkus(); router.refresh(); } finally { setBusy(false); } }}>
             {busy ? "…" : `Generate SKUs (${items.filter((i) => !i.sku).length})`}
           </Button>
