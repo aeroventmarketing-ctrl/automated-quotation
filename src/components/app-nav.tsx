@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Percent, Gauge, Wrench, Settings, LogOut, UserCog } from "lucide-react";
+import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, ShoppingCart, Percent, Gauge, Wrench, Settings, LogOut, UserCog } from "lucide-react";
 import type { Role } from "@prisma/client";
 
 export const NAV = [
@@ -13,6 +13,7 @@ export const NAV = [
   { href: "/follow-ups", label: "Follow-ups", icon: BellRing, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/orders", label: "Orders", icon: ClipboardList, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["SALES", "ENGINEER", "ADMIN"] },
+  { href: "/purchasing", label: "Purchasing", icon: ShoppingCart, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/commissions", label: "Commissions", icon: Percent, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/management", label: "Management", icon: Gauge, roles: ["ADMIN"] },
   { href: "/tools", label: "HVAC Tools", icon: Wrench, roles: ["SALES", "ENGINEER", "ADMIN"] },

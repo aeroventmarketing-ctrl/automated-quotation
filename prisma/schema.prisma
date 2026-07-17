@@ -298,9 +298,11 @@ enum PurchaseRequestStatus {
 
 model PurchaseRequest {
   id            String                @id @default(cuid())
-  quotationId   String
+  quotationId   String? // null for replenishment (stock top-up, not tied to an order)
+  kind          String                @default("order") // "order" | "replenishment"
+  stockItemId   String? // for replenishment: the stock item to receive into
   mrfId         String? // the JSON material-request id it was escalated from
-  dept          String // production department key
+  dept          String? // production department key (null for replenishment)
   items         Json                  @default("[]") // ["GI sheet 24ga x 4", ...]
   note          String?
   status        PurchaseRequestStatus @default(PENDING_APPROVAL)
@@ -335,7 +337,7 @@ model PurchaseRequest {
   // remarks). Null until the purchaser issues the PO.
   po            Json?
 
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  quotation Quotation? @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
   @@index([quotationId])
   @@index([status])

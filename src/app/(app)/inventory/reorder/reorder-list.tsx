@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { markOnOrder, markAllOnOrder, receiveReorder, cancelOnOrder } from "./actions";
+import { markOnOrder, markAllOnOrder, requestReplenishmentPO, receiveReorder, cancelOnOrder } from "./actions";
 
 export interface NeedsRow {
   id: string;
@@ -55,6 +55,15 @@ export function ReorderList({ needs, onOrder, canAct }: { needs: NeedsRow[]; onO
     if (orderable.length === 0) return;
     run("__all__", () => markAllOnOrder({ items: orderable }));
   }
+  function requestPO(id: string) {
+    const it = orderable.find((o) => o.stockItemId === id);
+    if (!it) return;
+    run(id, () => requestReplenishmentPO({ items: [it] }));
+  }
+  function requestAllPO() {
+    if (orderable.length === 0) return;
+    run("__po_all__", () => requestReplenishmentPO({ items: orderable }));
+  }
 
   return (
     <div className="space-y-6">
@@ -64,9 +73,14 @@ export function ReorderList({ needs, onOrder, canAct }: { needs: NeedsRow[]; onO
           <h2 className="text-sm font-semibold">Needs reordering <span className="text-muted-foreground">({needs.length})</span></h2>
           <div className="flex items-center gap-2 print:hidden">
             {canAct && orderable.length > 0 && (
-              <Button size="sm" className="h-7 text-xs" disabled={busy === "__all__"} onClick={orderAll}>
-                {busy === "__all__" ? "Ordering…" : `Order all (${orderable.length})`}
-              </Button>
+              <>
+                <Button size="sm" className="h-7 text-xs" disabled={busy === "__po_all__"} onClick={requestAllPO}>
+                  {busy === "__po_all__" ? "Requesting…" : `Request POs (${orderable.length})`}
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy === "__all__"} onClick={orderAll}>
+                  {busy === "__all__" ? "Ordering…" : `Quick order all (${orderable.length})`}
+                </Button>
+              </>
             )}
             {needs.length > 0 && (
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.print()}>Print list</Button>
@@ -109,10 +123,16 @@ export function ReorderList({ needs, onOrder, canAct }: { needs: NeedsRow[]; onO
                         <div className="flex flex-col gap-1">
                           <Input className="h-8 w-40" placeholder="Note (optional)"
                             value={note[n.id] ?? ""} onChange={(e) => setNote((x) => ({ ...x, [n.id]: e.target.value }))} />
-                          <Button size="sm" className="h-8" disabled={busy === n.id || !(Number(qty[n.id]) > 0)}
-                            onClick={() => run(n.id, () => markOnOrder({ stockItemId: n.id, qty: Number(qty[n.id]), note: note[n.id] || undefined }))}>
-                            {busy === n.id ? "Saving…" : "Mark on order"}
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button size="sm" className="h-8" disabled={busy === n.id || !(Number(qty[n.id]) > 0)}
+                              onClick={() => requestPO(n.id)}>
+                              {busy === n.id ? "…" : "Request PO"}
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8" disabled={busy === n.id || !(Number(qty[n.id]) > 0)}
+                              onClick={() => run(n.id, () => markOnOrder({ stockItemId: n.id, qty: Number(qty[n.id]), note: note[n.id] || undefined }))}>
+                              {busy === n.id ? "…" : "Quick order"}
+                            </Button>
+                          </div>
                         </div>
                       </td>
                     )}

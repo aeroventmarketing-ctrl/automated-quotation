@@ -498,7 +498,8 @@ export async function advancePurchaseRequest(
       break;
   }
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
-  revalidatePath(`/orders/${pr.quotationId}`);
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
 }
 
 // --- Supplier Purchase Order ------------------------------------------------
@@ -792,6 +793,7 @@ export async function receivePurchaseRequest(
       data: { status: "RECEIVED", receivedByName: user.name, receivedAt: new Date() },
     });
   });
-  revalidatePath(`/orders/${pr.quotationId}`);
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
   revalidatePath("/inventory");
 }

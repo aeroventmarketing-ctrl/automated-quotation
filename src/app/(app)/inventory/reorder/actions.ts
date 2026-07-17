@@ -87,6 +87,45 @@ export async function cancelOnOrder(stockItemId: string): Promise<void> {
   revalidatePath("/inventory/reorder");
 }
 
+const poReqSchema = z.object({
+  items: z
+    .array(z.object({ stockItemId: z.string().min(1), qty: z.number().positive(), note: z.string().trim().max(200).optional() }))
+    .min(1),
+});
+
+/**
+ * Raise formal replenishment purchase request(s) — one per item — that walk the
+ * purchasing approval chain (approve → voucher → buy → check → receive). On
+ * receive, stock is posted back to the item. Not tied to any order.
+ */
+export async function requestReplenishmentPO(input: z.infer<typeof poReqSchema>): Promise<void> {
+  const user = await requirePurchaser();
+  const d = poReqSchema.parse(input);
+  const items = await prisma.stockItem.findMany({ where: { id: { in: d.items.map((i) => i.stockItemId) } } });
+  const byId = new Map(items.map((i) => [i.id, i]));
+  await prisma.$transaction(async (tx) => {
+    for (const it of d.items) {
+      const item = byId.get(it.stockItemId);
+      if (!item) continue;
+      await tx.purchaseRequest.create({
+        data: {
+          quotationId: null,
+          kind: "replenishment",
+          stockItemId: it.stockItemId,
+          dept: null,
+          items: [`${item.name} — ${it.qty} ${item.unit}`],
+          note: it.note || null,
+          createdById: user.id,
+          createdByName: user.name,
+          status: "PENDING_APPROVAL",
+        },
+      });
+    }
+  });
+  revalidatePath("/inventory/reorder");
+  revalidatePath("/purchasing");
+}
+
 const receiveSchema = z.object({
   stockItemId: z.string().min(1),
   qty: z.number().positive(),
