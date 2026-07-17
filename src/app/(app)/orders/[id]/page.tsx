@@ -240,6 +240,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey));
   const pStamp = (label: string, who?: string | null, at?: Date | null) =>
     who ? `${label} — ${who} · ${formatDateTime(at ?? undefined)}` : null;
+  const mrfNoById = new Map(wf.materialRequests.map((m) => [m.id, m.formNo]));
   const purchaseRows = purchaseRequests.map((pr) => {
     const status = pr.status as PRStatus;
     const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
@@ -264,6 +265,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     return {
       id: pr.id,
       deptLabel: deptLabel(pr.dept as typeof PRODUCTION_DEPTS[number]["key"]),
+      mrfNo: pr.mrfId ? mrfNoById.get(pr.mrfId) ?? null : null,
       items: prItems,
       note: pr.note,
       status,

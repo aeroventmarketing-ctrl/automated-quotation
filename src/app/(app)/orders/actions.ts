@@ -469,11 +469,13 @@ export async function advancePurchaseRequest(
   if (!pr) throw new Error("Purchase request not found");
   if (pr.status !== step.from) throw new Error("That step isn't available at the current status.");
 
-  // The supplier Purchase Order must be issued before Accounting readies the
-  // voucher & check — the voucher is drawn against the PO amount. (Replenishment
-  // top-ups have no PO panel, so this only gates order-linked purchase requests.)
-  if (stepKey === "voucher" && pr.kind !== "replenishment" && !coercePurchaseOrder(pr.po)) {
-    throw new Error("Create the Purchase Order first before marking the voucher & check ready.");
+  // The supplier Purchase Order must be issued before the request can be
+  // approved/rejected or the voucher & check readied — everything downstream is
+  // drawn against the PO. (Replenishment top-ups have no PO panel, so this only
+  // gates order-linked purchase requests.)
+  const poRequiredSteps = new Set(["approve", "reject", "voucher"]);
+  if (poRequiredSteps.has(stepKey) && pr.kind !== "replenishment" && !coercePurchaseOrder(pr.po)) {
+    throw new Error("Create the Purchase Order first.");
   }
 
   const now = new Date();

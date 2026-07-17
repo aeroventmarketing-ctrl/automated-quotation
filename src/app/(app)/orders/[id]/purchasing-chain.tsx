@@ -21,6 +21,7 @@ interface ActionOpt {
 interface PRRow {
   id: string;
   deptLabel: string;
+  mrfNo?: string | null;
   items: string[];
   note?: string | null;
   status: string;
@@ -81,7 +82,10 @@ export function PurchasingChain({
         return (
           <div key={r.id} className="rounded-md border p-3">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium">{r.deptLabel}</span>
+              <span className="text-sm font-medium">
+                {r.deptLabel}
+                {r.mrfNo && <span className="ml-2 font-normal text-muted-foreground">MRF #{r.mrfNo}</span>}
+              </span>
               <Badge variant={r.variant}>{r.statusLabel}</Badge>
             </div>
             <ul className="ml-4 list-disc text-sm text-muted-foreground">
@@ -106,8 +110,9 @@ export function PurchasingChain({
             ) : actionable.length > 0 ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {actionable.map((a) => {
-                  // The voucher & check can't be readied until a Purchase Order exists.
-                  const blockedByPO = a.key === "voucher" && !r.po;
+                  // Approval, rejection and the voucher can't proceed until the
+                  // supplier Purchase Order has been created.
+                  const blockedByPO = (a.key === "approve" || a.key === "reject" || a.key === "voucher") && !r.po;
                   return (
                     <Button
                       key={a.key}
@@ -122,7 +127,7 @@ export function PurchasingChain({
                     </Button>
                   );
                 })}
-                {actionable.some((a) => a.key === "voucher") && !r.po && (
+                {actionable.some((a) => a.key === "approve" || a.key === "reject" || a.key === "voucher") && !r.po && (
                   <span className="text-xs text-muted-foreground">Create the Purchase Order first.</span>
                 )}
               </div>
