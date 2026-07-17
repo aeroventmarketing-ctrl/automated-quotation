@@ -206,7 +206,7 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   const wf = (classification as Record<string, unknown> | null)?.workflow as
     | Record<string, unknown>
     | undefined;
-  const stage = typeof wf?.stage === "string" && STAGE_KEYS.has(wf.stage as OrderStage)
+  const storedStage = typeof wf?.stage === "string" && STAGE_KEYS.has(wf.stage as OrderStage)
     ? (wf.stage as OrderStage)
     : "payment_review";
   const approvals = (wf?.approvals && typeof wf.approvals === "object"
@@ -248,6 +248,17 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     : [];
   const joBaseNo = typeof wf?.joBaseNo === "number" ? (wf.joBaseNo as number) : undefined;
   const joBaseYear = typeof wf?.joBaseYear === "number" ? (wf.joBaseYear as number) : undefined;
+
+  // Normalize the JO-Received → In Production → Production finished window so the
+  // order stage always reflects actual job-order progress. This self-heals orders
+  // whose job orders were started before the "In Production" stage existed (their
+  // stage was left at jo_received even though a job order is in production).
+  let stage = storedStage;
+  if (stage === "jo_received") {
+    const jos = Object.values(jobOrders).filter(Boolean) as JobOrder[];
+    if (jos.length > 0 && jos.every((j) => j.status === "finished")) stage = "production_finished";
+    else if (jos.some((j) => j.status === "in_production" || j.status === "finished")) stage = "producing";
+  }
 
   return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear };
 }
