@@ -12,6 +12,7 @@
  */
 import JSZip from "jszip";
 import type { FansJobOrder } from "@/lib/job-order";
+import { directDriveHubText } from "@/lib/direct-drive-hub";
 
 type CellKind = "text" | "num" | "date";
 type StringKey = { [K in keyof FansJobOrder]: FansJobOrder[K] extends string ? K : never }[keyof FansJobOrder];
@@ -265,6 +266,9 @@ export async function buildFansJobOrderWorkbook(
         cbXml = writeInlineCell(cbXml, "C54", NA); // Belt
         cbXml = writeInlineCell(cbXml, "C56", NA); // Bearing
         cbXml = clearCellContent(cbXml, "M56"); //    (bearing qty)
+        // Hub comes from the motor shaft for direct drive (keyed by the motor).
+        const hub = directDriveHubText(jo.motorHp);
+        if (hub) cbXml = writeInlineCell(cbXml, "C50", hub);
       }
 
       zip.file(cbPath, cbXml);
