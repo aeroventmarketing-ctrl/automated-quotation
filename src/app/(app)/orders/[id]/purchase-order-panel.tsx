@@ -56,7 +56,13 @@ export function PurchaseOrderPanel({
   }
   const [date, setDate] = useState(po?.date ? po.date.slice(0, 10) : todayInput());
   const [lines, setLines] = useState<POLine[]>(po?.lines?.length ? po.lines : defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }]);
-  const [ewtPct, setEwtPct] = useState(String(po?.ewtPct ?? 1));
+  const [ewtPct, setEwtPct] = useState(String(po?.ewtPct && po.ewtPct > 0 ? po.ewtPct : 1));
+  const [withEwt, setWithEwt] = useState((po?.ewtPct ?? 1) > 0);
+  function setEwtMode(mode: string) {
+    const on = mode === "with";
+    setWithEwt(on);
+    if (on && !(Number(ewtPct) > 0)) setEwtPct("1");
+  }
   const [remarks, setRemarks] = useState(po?.remarks ?? defaultRemarks);
   const [terms, setTerms] = useState<PaymentTerm[]>(paymentTerms);
   const [termBusy, setTermBusy] = useState(false);
@@ -88,7 +94,8 @@ export function PurchaseOrderPanel({
     setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
   }
 
-  const totals = poTotals({ lines, ewtPct: Number(ewtPct) || 0 });
+  const effectiveEwtPct = withEwt ? Number(ewtPct) || 0 : 0;
+  const totals = poTotals({ lines, ewtPct: effectiveEwtPct });
 
   async function save() {
     setBusy(true);
@@ -98,7 +105,7 @@ export function PurchaseOrderPanel({
         supplier: { company, attention, address },
         date,
         lines,
-        ewtPct: Number(ewtPct) || 0,
+        ewtPct: effectiveEwtPct,
         remarks,
       });
       router.refresh();
@@ -188,13 +195,26 @@ export function PurchaseOrderPanel({
 
       {/* Totals */}
       <div className="ml-auto max-w-xs space-y-1 text-sm">
-        <div className="flex justify-between"><span className="text-muted-foreground">Total amount</span><span className="tabular-nums">{formatCurrency(totals.total, "PHP")}</span></div>
         <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1 text-muted-foreground">Less EWT
-            <Input className="h-6 w-14 text-right" value={ewtPct} onChange={(e) => setEwtPct(e.target.value)} />%
-          </span>
-          <span className="tabular-nums">{formatCurrency(totals.ewt, "PHP")}</span>
+          <span className="text-muted-foreground">EWT</span>
+          <select
+            className="h-7 rounded-md border bg-background px-2 text-xs"
+            value={withEwt ? "with" : "without"}
+            onChange={(e) => setEwtMode(e.target.value)}
+          >
+            <option value="with">With EWT</option>
+            <option value="without">Without EWT</option>
+          </select>
         </div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Total amount</span><span className="tabular-nums">{formatCurrency(totals.total, "PHP")}</span></div>
+        {withEwt && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1 text-muted-foreground">Less EWT
+              <Input className="h-6 w-14 text-right" value={ewtPct} onChange={(e) => setEwtPct(e.target.value)} />%
+            </span>
+            <span className="tabular-nums">{formatCurrency(totals.ewt, "PHP")}</span>
+          </div>
+        )}
         <div className="flex justify-between border-t pt-1 font-semibold"><span>Net amount</span><span className="tabular-nums">{formatCurrency(totals.net, "PHP")}</span></div>
       </div>
 
