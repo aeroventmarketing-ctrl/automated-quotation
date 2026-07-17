@@ -319,7 +319,7 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
         )}
         {canManage && scanMode !== "find" && (
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            qty<Input className="h-9 w-20" type="number" step="any" min={0} value={scanQty} onChange={(e) => setScanQty(e.target.value)} />
+            Qty<Input className="h-9 w-20" type="number" step="any" min={0} value={scanQty} onChange={(e) => setScanQty(e.target.value)} />
           </label>
         )}
         {scanMsg && <span className={`text-xs ${scanErr ? "text-destructive" : "text-emerald-600"}`}>{scanMsg}</span>}

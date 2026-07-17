@@ -135,7 +135,7 @@ export function ReplenishmentList({ rows }: { rows: PRRow[] }) {
             <ScanLine className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input ref={scanRef} className="h-9 w-56 pl-8" placeholder="Scan to receive…" value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={onScan} />
           </div>
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">qty<Input className="h-9 w-20" type="number" step="any" min={0} value={scanQty} onChange={(e) => setScanQty(e.target.value)} /></label>
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">Qty<Input className="h-9 w-20" type="number" step="any" min={0} value={scanQty} onChange={(e) => setScanQty(e.target.value)} /></label>
           {scanMsg && <span className={`text-xs ${scanErr ? "text-destructive" : "text-emerald-600"}`}>{scanMsg}</span>}
         </div>
       )}
