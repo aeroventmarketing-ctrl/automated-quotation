@@ -104,19 +104,27 @@ export function PurchasingChain({
                 }}
               />
             ) : actionable.length > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {actionable.map((a) => (
-                  <Button
-                    key={a.key}
-                    size="sm"
-                    variant={a.key === "reject" ? "outline" : "default"}
-                    className="h-7 text-xs"
-                    disabled={busy === r.id + a.key}
-                    onClick={() => (a.key === "receive" ? setReceivingId(r.id) : run(r.id, a.key))}
-                  >
-                    {busy === r.id + a.key ? "Saving…" : a.label}
-                  </Button>
-                ))}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {actionable.map((a) => {
+                  // The voucher & check can't be readied until a Purchase Order exists.
+                  const blockedByPO = a.key === "voucher" && !r.po;
+                  return (
+                    <Button
+                      key={a.key}
+                      size="sm"
+                      variant={a.key === "reject" ? "outline" : "default"}
+                      className="h-7 text-xs"
+                      disabled={busy === r.id + a.key || blockedByPO}
+                      title={blockedByPO ? "Create the Purchase Order first." : undefined}
+                      onClick={() => (a.key === "receive" ? setReceivingId(r.id) : run(r.id, a.key))}
+                    >
+                      {busy === r.id + a.key ? "Saving…" : a.label}
+                    </Button>
+                  );
+                })}
+                {actionable.some((a) => a.key === "voucher") && !r.po && (
+                  <span className="text-xs text-muted-foreground">Create the Purchase Order first.</span>
+                )}
               </div>
             ) : awaiting ? (
               <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
