@@ -15,6 +15,7 @@ const nextConfig = {
       "./public/templates/fans-inline-jo-template.xlsx",
       "./public/templates/fans-panel-jo-template.xlsx",
       "./public/templates/fans-powerroof-jo-template.xlsx",
+      "./public/templates/fans-axial-jo-template.xlsx",
     ],
   },
   experimental: {

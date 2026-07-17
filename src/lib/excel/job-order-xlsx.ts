@@ -103,6 +103,34 @@ async function sheetPath(zip: JSZip, name: RegExp): Promise<string | null> {
   return `xl/${rel[1].replace(/^\/?xl\//, "")}`;
 }
 
+/**
+ * Detect a vertical shift in the Source input block. The base CELL_MAP is
+ * B65-based (Date at B65 / "Job Order #" at B66); some templates — e.g.
+ * Tubeaxial/Vaneaxial — start one row lower. Returns the row delta to add to
+ * every CELL_MAP address so we always write the right input cells.
+ */
+async function detectSourceOffset(zip: JSZip, srcXml: string): Promise<number> {
+  const shared = await zip.file("xl/sharedStrings.xml")?.async("string");
+  const sst = shared
+    ? [...shared.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) =>
+        [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((x) => x[1]).join(""))
+    : [];
+  const re = /<c r="A(\d+)"([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(srcXml))) {
+    const row = Number(m[1]);
+    const attrs = m[2];
+    const inner = m[3] || "";
+    let text = /<is><t[^>]*>([\s\S]*?)<\/t>/.exec(inner)?.[1] ?? "";
+    if (!text && /t="s"/.test(attrs)) {
+      const v = /<v>([\s\S]*?)<\/v>/.exec(inner)?.[1];
+      if (v != null) text = sst[Number(v)] ?? "";
+    }
+    if (text.trim() === "Job Order #") return row - 66;
+  }
+  return 0;
+}
+
 /** The printable production sheet — the first sheet that isn't "Source". */
 async function printableSheetPath(zip: JSZip): Promise<string | null> {
   const wbXml = await zip.file("xl/workbook.xml")?.async("string");
@@ -129,8 +157,10 @@ export async function buildFansJobOrderWorkbook(
   const srcFile = zip.file(srcPath);
   if (!srcFile) throw new Error("Job order template 'Source' sheet missing");
   let srcXml = await srcFile.async("string");
+  const offset = await detectSourceOffset(zip, srcXml);
+  const shiftRow = (addr: string, off: number) => addr.replace(/(\d+)$/, (d) => String(Number(d) + off));
   for (const { cell, key, kind } of CELL_MAP) {
-    srcXml = replaceCell(srcXml, cell, kind, jo[key]);
+    srcXml = replaceCell(srcXml, shiftRow(cell, offset), kind, jo[key]);
   }
   zip.file(srcPath, srcXml);
 

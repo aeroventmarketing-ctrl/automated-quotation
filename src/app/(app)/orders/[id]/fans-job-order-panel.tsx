@@ -46,6 +46,14 @@ const POWERROOF_BLADE_DIAMETERS = ["12", "16", "18", "20", "22", "24", "30", "36
 const POWERROOF_ORIENTATIONS = ["Exhaust", "Fresh Air"];
 const POWERROOF_MOUNTINGS = ["Roof Mounted", "Wall Mounted"];
 
+// Tubeaxial / Vaneaxial option lists (from its template's data validations).
+const AXIAL_PROJECTS = ["TAF", "VAF", "TAFDD", "VAFDD"];
+const AXIAL_BLADE_DIAMETERS = ["10", "12", "14", "16", "18", "20", "24", "30", "36", "42", "48", "54", "60"];
+const AXIAL_ORIENTATIONS = ["Foot Mounted", "Ceiling Hung", "Dual Mounted", "Flange Mounted", "With Stand"];
+const AXIAL_MOTOR_LOCATIONS = ["12 o'clock facing discharge", "9 o'clock facing discharge", "6 o'clock facing discharge", "3 o'clock facing discharge", "N/A"];
+const AXIAL_BLADE_TYPES = ["Axial", "Airfoil", "Semi-airfoil"];
+const AXIAL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
+
 // A belt-drive JO form is driven by a per-type config so the Centrifugal Blower
 // can serve as the reference for every belt-drive type. `fieldC` is the Source
 // B79 field — the Centrifugal Blower labels it "Rotation", the Inline labels it
@@ -127,6 +135,22 @@ const BELT_DRIVE_CONFIGS: Record<string, BeltDriveConfig> = {
     mountings: MOUNTINGS,
     enclosures: INLINE_ENCLOSURES,
     directCheckbox: true,
+  },
+  tubeaxial_vaneaxial: {
+    projects: AXIAL_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: AXIAL_BLADE_DIAMETERS,
+    orientations: AXIAL_ORIENTATIONS,
+    fieldC: { label: "Motor Location", options: AXIAL_MOTOR_LOCATIONS },
+    bladeTypes: AXIAL_BLADE_TYPES,
+    driveTypes: AXIAL_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    // DD variants are already in the project list (TAFDD/VAFDD) — no extra checkbox.
+    directCheckbox: false,
   },
 };
 const DEFAULT_BELT_CONFIG = BELT_DRIVE_CONFIGS.centrifugal_blower;
