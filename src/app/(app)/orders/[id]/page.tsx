@@ -207,7 +207,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canWarehouse =
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey));
   const raisableDepts =
-    wf.stage === "in_production"
+    wf.stage === "in_production" || wf.stage === "jo_received"
       ? PRODUCTION_DEPTS.filter(
           (d) =>
             wf.jobOrders[d.key] &&
@@ -228,7 +228,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     handledWhen: m.handledAt ? formatDateTime(m.handledAt) : "",
     canHandle: canWarehouse && m.status === "requested",
   }));
-  const showMaterials = wf.stage === "in_production" || wf.stage === "production_finished";
+  const showMaterials =
+    wf.stage === "in_production" || wf.stage === "jo_received" || wf.stage === "production_finished";
 
   // Purchasing chain (Phase 3, part 2) — real PurchaseRequest rows.
   const prVariant = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
