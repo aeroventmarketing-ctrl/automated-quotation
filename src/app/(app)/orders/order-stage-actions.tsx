@@ -14,6 +14,7 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   released: "success",
   in_production: "warning",
   jo_received: "warning",
+  producing: "warning",
   production_finished: "success",
   final_pay_review: "secondary",
   final_pay_checked: "warning",

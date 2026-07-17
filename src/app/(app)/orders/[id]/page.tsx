@@ -42,6 +42,7 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   released: "success",
   in_production: "warning",
   jo_received: "warning",
+  producing: "warning",
   production_finished: "success",
   final_pay_review: "secondary",
   final_pay_checked: "warning",
@@ -152,7 +153,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const nextLabel = nextTo === "in_production" ? "Start production" : nextTo === "finished" ? "Mark finished" : null;
     const canAdvance =
       nextTo != null &&
-      wf.stage === "jo_received" &&
+      (wf.stage === "jo_received" || wf.stage === "producing") &&
       (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)));
     const events: { label: string; who: string; when: string }[] = [];
     if (jo.issuedByName) events.push({ label: "Issued", who: jo.issuedByName, when: fmtWhen(jo.issuedAt) });
@@ -209,7 +210,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // A department can raise its MRF only once its job order is actually in
   // production (the head pressed "Start production" — status left "issued").
   const raisableDepts =
-    wf.stage === "jo_received"
+    wf.stage === "jo_received" || wf.stage === "producing"
       ? PRODUCTION_DEPTS.filter(
           (d) =>
             wf.jobOrders[d.key]?.status === "in_production" &&

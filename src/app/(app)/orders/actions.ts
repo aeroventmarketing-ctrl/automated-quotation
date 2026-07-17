@@ -168,7 +168,7 @@ export async function advanceJobOrder(
   }
 
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "jo_received") throw new Error("Production can start only after the Plant Manager receives the job orders.");
+  if (wf.stage !== "jo_received" && wf.stage !== "producing") throw new Error("Production can start only after the Plant Manager receives the job orders.");
   const jo = wf.jobOrders[deptKey];
   if (!jo) throw new Error("No job order for this department.");
 
@@ -182,6 +182,8 @@ export async function advanceJobOrder(
       : { ...jo, status: "finished", finishedAt: now, finishedByName: user.name };
 
   const nextWf = { ...wf, jobOrders: { ...wf.jobOrders, [deptKey]: updated } };
+  // First "Start production" moves the order from JO Received into In Production.
+  if (to === "in_production" && nextWf.stage === "jo_received") nextWf.stage = "producing";
   if (allJobOrdersFinished(nextWf)) nextWf.stage = "production_finished";
 
   await saveWorkflow(quotationId, cls, nextWf);
@@ -656,6 +658,15 @@ export async function adminRollbackStage(quotationId: string, toStage: OrderStag
         k,
         { status: "issued" as const, issuedAt: jo!.issuedAt, issuedByName: jo!.issuedByName },
       ]),
+    ) as typeof wf.jobOrders;
+  } else if (tgtIdx <= stageIndex("producing")) {
+    // Back to "In Production": nothing may be finished — reopen finished JOs.
+    jobOrders = Object.fromEntries(
+      Object.entries(wf.jobOrders).map(([k, jo]) =>
+        jo!.status === "finished"
+          ? [k, { ...jo!, status: "in_production" as const, finishedAt: undefined, finishedByName: undefined }]
+          : [k, jo!],
+      ),
     ) as typeof wf.jobOrders;
   }
 
