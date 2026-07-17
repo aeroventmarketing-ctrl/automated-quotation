@@ -206,11 +206,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // warehouse issue/escalate.
   const canWarehouse =
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey));
+  // A department can raise its MRF only once its job order is actually in
+  // production (the head pressed "Start production" — status left "issued").
   const raisableDepts =
     wf.stage === "jo_received"
       ? PRODUCTION_DEPTS.filter(
           (d) =>
-            wf.jobOrders[d.key] &&
+            wf.jobOrders[d.key]?.status === "in_production" &&
             (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey))),
         ).map((d) => ({ key: d.key, label: d.label }))
       : [];
@@ -228,10 +230,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     handledWhen: m.handledAt ? formatDateTime(m.handledAt) : "",
     canHandle: canWarehouse && m.status === "requested",
   }));
-  // Phase 3 (Materials + Purchasing) opens only once the Plant Manager has
-  // received the job orders — not while they're merely released (in_production).
-  const showMaterials =
-    wf.stage === "jo_received" || wf.stage === "production_finished";
+  // Phase 3 (Materials + Purchasing) opens only once production has actually
+  // started — a production head pressed "Start production" on a received job
+  // order (per-JO status leaves "issued"). It stays visible afterwards.
+  const productionStarted = PRODUCTION_DEPTS.some((d) => {
+    const s = wf.jobOrders[d.key]?.status;
+    return s === "in_production" || s === "finished";
+  });
+  const showMaterials = productionStarted || wf.stage === "production_finished";
 
   // Purchasing chain (Phase 3, part 2) — real PurchaseRequest rows.
   const prVariant = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
