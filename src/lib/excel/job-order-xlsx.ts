@@ -103,6 +103,21 @@ async function sheetPath(zip: JSZip, name: RegExp): Promise<string | null> {
   return `xl/${rel[1].replace(/^\/?xl\//, "")}`;
 }
 
+/** The printable production sheet — the first sheet that isn't "Source". */
+async function printableSheetPath(zip: JSZip): Promise<string | null> {
+  const wbXml = await zip.file("xl/workbook.xml")?.async("string");
+  const rels = await zip.file("xl/_rels/workbook.xml.rels")?.async("string");
+  if (!wbXml || !rels) return null;
+  for (const tag of wbXml.match(/<sheet [^>]*\/>/g) ?? []) {
+    const n = /name="([^"]+)"/.exec(tag);
+    const r = /r:id="(rId\d+)"/.exec(tag);
+    if (!n || !r || /source/i.test(n[1])) continue;
+    const rel = new RegExp(`Id="${r[1]}"[^>]*Target="([^"]+)"`).exec(rels);
+    if (rel) return `xl/${rel[1].replace(/^\/?xl\//, "")}`;
+  }
+  return null;
+}
+
 export async function buildFansJobOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   jo: FansJobOrder,
@@ -144,8 +159,10 @@ export async function buildFansJobOrderWorkbook(
 
   // 3) Print the production sheet on Letter (8.5×11) and always open it in
   //    Page Break Preview at 120% zoom, so the printable layout is what the
-  //    production line sees.
-  const cbPath = await sheetPath(zip, /centrifugal|blower/i);
+  //    production line sees. The production sheet is whichever sheet isn't the
+  //    hidden "Source" sheet (its name varies per type: Centrifugal Blower,
+  //    Centrifugal Inline Blower, Panel Fan, …).
+  const cbPath = (await printableSheetPath(zip)) ?? (await sheetPath(zip, /centrifugal|blower/i));
   if (cbPath) {
     const cbFile = zip.file(cbPath);
     if (cbFile) {

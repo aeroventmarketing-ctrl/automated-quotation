@@ -32,6 +32,14 @@ const INLINE_BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Airfoil"]
 const INLINE_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
 const INLINE_ENCLOSURES = ["TEFC", "Exproof"];
 
+// Panel Fan option lists (from the Panel Fan template's data validations).
+const PANEL_PROJECTS = ["EWF", "FAWF"];
+const PANEL_BLADE_DIAMETERS = ["10", "12", "14", "16", "18", "20", "24", "30", "36", "42", "48", "54", "60"];
+const PANEL_ORIENTATIONS = ["Exhaust 1", "Exhaust 2", "Supply 1", "Supply 2"];
+const PANEL_MOUNTINGS = ["Wall Mounted", "Ceiling Mounted", "With Stand", "Ceiling Hang"];
+const PANEL_BLADE_TYPES = ["Kidney Type", "Paddle Type", "Airfoil"];
+const PANEL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
+
 // A belt-drive JO form is driven by a per-type config so the Centrifugal Blower
 // can serve as the reference for every belt-drive type. `fieldC` is the Source
 // B79 field — the Centrifugal Blower labels it "Rotation", the Inline labels it
@@ -78,6 +86,21 @@ const BELT_DRIVE_CONFIGS: Record<string, BeltDriveConfig> = {
     fieldC: { label: "Motor Location", options: MOTOR_LOCATIONS },
     bladeTypes: INLINE_BLADE_TYPES,
     driveTypes: INLINE_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    directCheckbox: true,
+  },
+  panel_fan: {
+    projects: PANEL_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: PANEL_BLADE_DIAMETERS,
+    orientations: PANEL_ORIENTATIONS,
+    fieldC: { label: "Mounting", options: PANEL_MOUNTINGS },
+    bladeTypes: PANEL_BLADE_TYPES,
+    driveTypes: PANEL_DRIVE_TYPES,
     voltages: VOLTAGES,
     frequencies: FREQUENCIES,
     mountings: MOUNTINGS,

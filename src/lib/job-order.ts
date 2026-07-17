@@ -28,7 +28,7 @@ export interface JoTypeDef {
 export const JO_TYPES: JoTypeDef[] = [
   { key: "centrifugal_blower", label: "Centrifugal Blower", template: "fans-jo-template.xlsx" },
   { key: "centrifugal_inline_blower", label: "Centrifugal Inline Blower", template: "fans-inline-jo-template.xlsx" },
-  { key: "panel_fan", label: "Panel Fan", template: null },
+  { key: "panel_fan", label: "Panel Fan", template: "fans-panel-jo-template.xlsx" },
   { key: "power_roof", label: "Power Roof", template: null },
   { key: "tubeaxial_vaneaxial", label: "Tubeaxial / Vaneaxial", template: null },
   { key: "centrifugal_blower_didw", label: "Centrifugal Blower DIDW", template: null },

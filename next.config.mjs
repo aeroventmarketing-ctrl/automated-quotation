@@ -13,6 +13,7 @@ const nextConfig = {
     "/(app)/orders/[id]/jo/[index]/xlsx": [
       "./public/templates/fans-jo-template.xlsx",
       "./public/templates/fans-inline-jo-template.xlsx",
+      "./public/templates/fans-panel-jo-template.xlsx",
     ],
   },
   experimental: {
