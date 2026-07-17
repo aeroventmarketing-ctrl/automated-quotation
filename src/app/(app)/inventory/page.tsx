@@ -52,10 +52,15 @@ export default async function InventoryPage() {
           <h1 className="text-2xl font-bold">Inventory</h1>
           <p className="text-sm text-muted-foreground">Warehouse stock on hand, with receive / issue / adjust and a movement ledger.</p>
         </div>
-        <Link href="/inventory/reorder" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
-          <ShoppingCart className="h-4 w-4" />
-          Reorder{lowCount + outCount > 0 ? ` (${lowCount + outCount})` : ""}
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/inventory/labels" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
+            Labels
+          </Link>
+          <Link href="/inventory/reorder" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
+            <ShoppingCart className="h-4 w-4" />
+            Reorder{lowCount + outCount > 0 ? ` (${lowCount + outCount})` : ""}
+          </Link>
+        </div>
       </div>
 
       {tableMissing ? (

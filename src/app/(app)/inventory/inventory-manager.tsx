@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { code128Svg } from "@/lib/code128";
 import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation } from "./actions";
 
 interface Reservation {
@@ -34,9 +36,24 @@ interface Item {
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
-function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
+function StockRow({ item, canManage, scanTarget, scanNonce }: { item: Item; canManage: boolean; scanTarget: string | null; scanNonce: number }) {
   const router = useRouter();
-  const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "reserve">("none");
+  const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "reserve" | "label">("none");
+  const rowRef = useRef<HTMLTableRowElement>(null);
+  const [flash, setFlash] = useState(false);
+
+  // A scan that matches this item opens its Adjust panel and scrolls to it.
+  useEffect(() => {
+    if (scanTarget && scanTarget === item.id) {
+      setPanel("adjust");
+      setFlash(true);
+      rowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const t = setTimeout(() => setFlash(false), 1500);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanNonce]);
+
   const [kind, setKind] = useState<"RECEIPT" | "ISSUE" | "ADJUSTMENT">("RECEIPT");
   const [qty, setQty] = useState("");
   const [reason, setReason] = useState("");
@@ -75,7 +92,7 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
 
   return (
     <>
-      <TableRow>
+      <TableRow ref={rowRef} className={flash ? "bg-primary/10 transition-colors" : undefined}>
         <TableCell>
           <div className="font-medium">{item.name}</div>
           {item.category && <div className="text-xs text-muted-foreground">{item.category}</div>}
@@ -96,6 +113,7 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
         {canManage && (
           <TableCell className="text-right">
             <div className="flex justify-end gap-1">
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}>Label</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "reserve" ? "none" : "reserve"))}>Reserve{item.reservations.length ? ` (${item.reservations.length})` : ""}</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>Edit</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "adjust" ? "none" : "adjust"))}>Adjust</Button>
@@ -163,6 +181,18 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
           </TableCell>
         </TableRow>
       )}
+      {panel === "label" && (
+        <TableRow>
+          <TableCell colSpan={11} className="bg-muted/30">
+            <div className="flex flex-col items-start gap-1 py-1">
+              <div className="text-sm font-medium">{item.name}{item.location ? ` · Loc ${item.location}` : ""}</div>
+              {/* eslint-disable-next-line react/no-danger */}
+              <div dangerouslySetInnerHTML={{ __html: code128Svg(item.id, { moduleWidth: 1.8, height: 48, showText: false }) }} />
+              <div className="text-[10px] text-muted-foreground">Code 128 · scannable by any barcode scanner. Use “Labels” to print all.</div>
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
     </>
   );
 }
@@ -179,6 +209,26 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
   const [unitCost, setUnitCost] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Scan-to-find: a barcode scanner "types" the item id + Enter into this box.
+  const [scan, setScan] = useState("");
+  const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [scanTarget, setScanTarget] = useState<string | null>(null);
+  const [scanNonce, setScanNonce] = useState(0);
+  function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const code = scan.trim();
+    setScan("");
+    if (!code) return;
+    const found = items.find((i) => i.id === code) ?? items.find((i) => i.name.toLowerCase() === code.toLowerCase());
+    if (found) {
+      setScanTarget(found.id);
+      setScanNonce((n) => n + 1);
+      setScanMsg(`Found: ${found.name}`);
+    } else {
+      setScanMsg(`No item matches “${code}”.`);
+    }
+  }
 
   async function add() {
     if (name.trim() === "") { setErr("Enter an item name."); return; }
@@ -199,6 +249,15 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
 
   return (
     <div className="space-y-3">
+      {/* Scan a barcode (scanner types the code + Enter) to jump to that item. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <ScanLine className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="h-9 w-64 pl-8" placeholder="Scan barcode…" value={scan} autoFocus onChange={(e) => setScan(e.target.value)} onKeyDown={onScanKey} />
+        </div>
+        {scanMsg && <span className="text-xs text-muted-foreground">{scanMsg}</span>}
+      </div>
+
       {canManage && (
         <div>
           {showAdd ? (
@@ -244,7 +303,7 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((it) => <StockRow key={it.id} item={it} canManage={canManage} />)}
+              {items.map((it) => <StockRow key={it.id} item={it} canManage={canManage} scanTarget={scanTarget} scanNonce={scanNonce} />)}
             </TableBody>
           </Table>
         </div>
