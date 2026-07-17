@@ -54,6 +54,10 @@ const AXIAL_MOTOR_LOCATIONS = ["12 o'clock facing discharge", "9 o'clock facing 
 const AXIAL_BLADE_TYPES = ["Axial", "Airfoil", "Semi-airfoil"];
 const AXIAL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
 
+// Centrifugal Blower DIDW option lists (same family as the Centrifugal Blower).
+const DIDW_PROJECTS = ["DIDWCEB", "DIDWCFAB", "CEBCAB", "CFABCAB"];
+const DIDW_BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Forward Curved"];
+
 // A belt-drive JO form is driven by a per-type config so the Centrifugal Blower
 // can serve as the reference for every belt-drive type. `fieldC` is the Source
 // B79 field — the Centrifugal Blower labels it "Rotation", the Inline labels it
@@ -151,6 +155,21 @@ const BELT_DRIVE_CONFIGS: Record<string, BeltDriveConfig> = {
     enclosures: INLINE_ENCLOSURES,
     // DD variants are already in the project list (TAFDD/VAFDD) — no extra checkbox.
     directCheckbox: false,
+  },
+  centrifugal_blower_didw: {
+    projects: DIDW_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: BLADE_DIAMETERS,
+    orientations: ORIENTATIONS,
+    fieldC: { label: "Rotation", options: ROTATIONS },
+    bladeTypes: DIDW_BLADE_TYPES,
+    driveTypes: AXIAL_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    directCheckbox: true,
   },
 };
 const DEFAULT_BELT_CONFIG = BELT_DRIVE_CONFIGS.centrifugal_blower;

@@ -31,7 +31,7 @@ export const JO_TYPES: JoTypeDef[] = [
   { key: "panel_fan", label: "Panel Fan", template: "fans-panel-jo-template.xlsx" },
   { key: "power_roof", label: "Power Roof", template: "fans-powerroof-jo-template.xlsx" },
   { key: "tubeaxial_vaneaxial", label: "Tubeaxial / Vaneaxial", template: "fans-axial-jo-template.xlsx" },
-  { key: "centrifugal_blower_didw", label: "Centrifugal Blower DIDW", template: null },
+  { key: "centrifugal_blower_didw", label: "Centrifugal Blower DIDW", template: "fans-didw-jo-template.xlsx" },
 ];
 
 export const DEFAULT_JO_TYPE = "centrifugal_blower";
