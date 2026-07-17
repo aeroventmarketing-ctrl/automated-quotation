@@ -40,6 +40,12 @@ const PANEL_MOUNTINGS = ["Wall Mounted", "Ceiling Mounted", "With Stand", "Ceili
 const PANEL_BLADE_TYPES = ["Kidney Type", "Paddle Type", "Airfoil"];
 const PANEL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
 
+// Power Roof option lists (from the Power Roof template's data validations).
+const POWERROOF_PROJECTS = ["PRV"];
+const POWERROOF_BLADE_DIAMETERS = ["12", "16", "18", "20", "22", "24", "30", "36", "40", "42", "48", "50", "54", "58", "60"];
+const POWERROOF_ORIENTATIONS = ["Exhaust", "Fresh Air"];
+const POWERROOF_MOUNTINGS = ["Roof Mounted", "Wall Mounted"];
+
 // A belt-drive JO form is driven by a per-type config so the Centrifugal Blower
 // can serve as the reference for every belt-drive type. `fieldC` is the Source
 // B79 field — the Centrifugal Blower labels it "Rotation", the Inline labels it
@@ -99,6 +105,21 @@ const BELT_DRIVE_CONFIGS: Record<string, BeltDriveConfig> = {
     bladeDiameters: PANEL_BLADE_DIAMETERS,
     orientations: PANEL_ORIENTATIONS,
     fieldC: { label: "Mounting", options: PANEL_MOUNTINGS },
+    bladeTypes: PANEL_BLADE_TYPES,
+    driveTypes: PANEL_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    directCheckbox: true,
+  },
+  power_roof: {
+    projects: POWERROOF_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: POWERROOF_BLADE_DIAMETERS,
+    orientations: POWERROOF_ORIENTATIONS,
+    fieldC: { label: "Mounting", options: POWERROOF_MOUNTINGS },
     bladeTypes: PANEL_BLADE_TYPES,
     driveTypes: PANEL_DRIVE_TYPES,
     voltages: VOLTAGES,
