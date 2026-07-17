@@ -156,8 +156,8 @@ export function MaterialRequests({
                         <td className="py-1 pr-2">
                           {it.description}
                           {it.disposition && (
-                            <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${it.disposition === "issue" ? "bg-emerald-600/15 text-emerald-700" : "bg-amber-500/15 text-amber-700"}`}>
-                              {it.disposition === "issue" ? "Issued" : "To purchase"}
+                            <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${it.disposition === "issue" ? "bg-emerald-600/15 text-emerald-700" : it.disposition === "reserve" ? "bg-indigo-600/15 text-indigo-700" : "bg-amber-500/15 text-amber-700"}`}>
+                              {it.disposition === "issue" ? "Issued" : it.disposition === "reserve" ? "Reserved" : "To purchase"}
                             </span>
                           )}
                         </td>

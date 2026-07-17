@@ -32,6 +32,7 @@ import {
   type JobOrder,
   type MaterialRequest,
   type MRFItem,
+  type MRFLineDisposition,
 } from "@/lib/order-workflow";
 import { purchaseStep } from "@/lib/purchasing";
 import { payableTotal, round2 } from "@/lib/quote";
@@ -93,7 +94,7 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
 async function loadWorkflow(quotationId: string) {
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, classification: true, preparedById: true },
+    select: { id: true, quoteNumber: true, classification: true, preparedById: true },
   });
   if (!quote) throw new Error("Order not found");
   return { quote, cls: (quote.classification as Record<string, unknown>) ?? {}, wf: readOrderWorkflow(quote.classification) };
@@ -352,7 +353,7 @@ function mrfItemLine(it: MRFItem): string {
 }
 
 interface LineDisposition {
-  action: "issue" | "purchase";
+  action: "issue" | "purchase" | "reserve";
   stockItemId?: string;
   qty?: number;
 }
@@ -374,7 +375,7 @@ export async function processMaterialRequest(
     throw new Error("Only the Warehouse or an admin can handle material requests.");
   }
 
-  const { cls, wf } = await loadWorkflow(quotationId);
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
   const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
   if (idx < 0) throw new Error("Material request not found.");
   const mrf = wf.materialRequests[idx];
@@ -383,24 +384,37 @@ export async function processMaterialRequest(
     throw new Error("Mark every line as issue-from-stock or purchase.");
   }
 
-  const items: MRFItem[] = mrf.items.map((it, i) => ({
-    ...it,
-    disposition: dispositions[i]?.action === "purchase" ? "purchase" : "issue",
-  }));
-  const issueMatches = dispositions
-    .map((d, i) => ({ d, i }))
-    .filter(({ d }) => d.action === "issue" && d.stockItemId && Number(d.qty) > 0)
-    .map(({ d }) => ({ stockItemId: d.stockItemId as string, qty: Number(d.qty) }));
+  const dispOf = (a: LineDisposition["action"]): MRFLineDisposition =>
+    a === "purchase" ? "purchase" : a === "reserve" ? "reserve" : "issue";
+  const items: MRFItem[] = mrf.items.map((it, i) => ({ ...it, disposition: dispOf(dispositions[i]?.action ?? "issue") }));
+  const matchesFor = (action: "issue" | "reserve") =>
+    dispositions
+      .filter((d) => d.action === action && d.stockItemId && Number(d.qty) > 0)
+      .map((d) => ({ stockItemId: d.stockItemId as string, qty: Number(d.qty) }));
+  const issueMatches = matchesFor("issue");
+  const reserveMatches = matchesFor("reserve");
   const purchaseItems = items.filter((it) => it.disposition === "purchase");
 
-  const anyIssue = items.some((it) => it.disposition === "issue");
+  const anyStock = items.some((it) => it.disposition === "issue" || it.disposition === "reserve");
   const anyPurchase = purchaseItems.length > 0;
-  if (!anyIssue && !anyPurchase) throw new Error("Nothing to process.");
-  const status: MaterialRequest["status"] = anyIssue && anyPurchase ? "partial" : anyPurchase ? "purchasing" : "issued";
+  if (!anyStock && !anyPurchase) throw new Error("Nothing to process.");
+  const status: MaterialRequest["status"] = anyStock && anyPurchase ? "partial" : anyPurchase ? "purchasing" : "issued";
+  const orderRef = quote.quoteNumber || "order";
 
   await prisma.$transaction(async (tx) => {
     for (const m of issueMatches) {
       await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "ISSUE", qty: m.qty, reason: `MRF #${mrf.formNo}` }, user.name);
+    }
+    // Reserve lines: soft-hold against the order (available = on-hand − reserved).
+    for (const m of reserveMatches) {
+      const item = await tx.stockItem.findUnique({ where: { id: m.stockItemId } });
+      if (!item) continue;
+      const agg = await tx.stockReservation.aggregate({ where: { stockItemId: m.stockItemId, active: true }, _sum: { qty: true } });
+      const available = Number(item.quantity) - Number(agg._sum.qty ?? 0);
+      if (m.qty > available) throw new Error(`Only ${available} ${item.unit} of ${item.name} available to reserve.`);
+      await tx.stockReservation.create({
+        data: { stockItemId: m.stockItemId, qty: m.qty, forRef: orderRef, note: `MRF #${mrf.formNo}`, byName: user.name },
+      });
     }
     const materialRequests = wf.materialRequests.slice();
     materialRequests[idx] = { ...mrf, items, status, handledAt: new Date().toISOString(), handledByName: user.name };

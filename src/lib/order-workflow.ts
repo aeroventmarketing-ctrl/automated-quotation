@@ -73,7 +73,7 @@ export interface OrderApproval {
 export type MaterialRequestStatus = "requested" | "issued" | "purchasing" | "partial";
 
 /** Per-line outcome once the warehouse triages a Material Request Form. */
-export type MRFLineDisposition = "issue" | "purchase";
+export type MRFLineDisposition = "issue" | "purchase" | "reserve";
 
 /** One line of the Material Request Form (mirrors the paper form's columns). */
 export interface MRFItem {
@@ -105,7 +105,8 @@ export function coerceMrfItems(raw: unknown): MRFItem[] {
     .map((x): MRFItem => {
       if (typeof x === "string") return { description: x, qty: "", unit: "", remark: undefined };
       const o = (x ?? {}) as Record<string, unknown>;
-      const disp = o.disposition === "issue" || o.disposition === "purchase" ? o.disposition : undefined;
+      const disp =
+        o.disposition === "issue" || o.disposition === "purchase" || o.disposition === "reserve" ? o.disposition : undefined;
       return {
         description: String(o.description ?? ""),
         qty: String(o.qty ?? ""),
