@@ -316,6 +316,10 @@ export async function raiseMaterialRequest(
 
   const { cls, wf } = await loadWorkflow(quotationId);
   if (!wf.jobOrders[deptKey]) throw new Error("This department has no job order on this order.");
+  // Phase 3 opens only after the Plant Manager receives the released job orders.
+  if (stageIndex(wf.stage) < stageIndex("jo_received")) {
+    throw new Error("Job orders must be received by the Plant Manager before materials can be requested.");
+  }
 
   const req: MaterialRequest = {
     id: randomUUID(),
