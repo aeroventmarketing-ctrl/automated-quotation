@@ -379,8 +379,10 @@ model StockItem {
   name         String
   unit         String   @default("pcs")
   category     String?
+  location     String?  // warehouse bin / shelf location
   quantity     Decimal  @db.Decimal(14, 3) @default(0)
   reorderLevel Decimal  @db.Decimal(14, 3) @default(0)
+  unitCost     Decimal  @db.Decimal(14, 2) @default(0) // for stock valuation
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

@@ -35,11 +35,14 @@ export default async function InventoryPage() {
 
   const lowCount = items.filter((i) => i.status === "low").length;
   const outCount = items.filter((i) => i.status === "out").length;
+  const stockValue = Math.round(items.reduce((a, i) => a + i.value, 0) * 100) / 100;
+  const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
   const tiles = [
     { label: "Items", value: String(items.length) },
     { label: "Low stock", value: String(lowCount) },
     { label: "Out of stock", value: String(outCount) },
+    { label: "Stock value", value: peso(stockValue) },
   ];
 
   return (
@@ -61,7 +64,7 @@ export default async function InventoryPage() {
         </CardContent></Card>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {tiles.map((t) => (
               <Card key={t.label}>
                 <CardHeader className="pb-1"><CardTitle className="text-xs uppercase text-muted-foreground">{t.label}</CardTitle></CardHeader>
@@ -88,8 +91,20 @@ async function loadItems() {
   return list.map((i) => {
     const quantity = Number(i.quantity);
     const reorderLevel = Number(i.reorderLevel);
+    const unitCost = Number(i.unitCost);
     const status: "ok" | "low" | "out" =
       quantity <= 0 ? "out" : reorderLevel > 0 && quantity <= reorderLevel ? "low" : "ok";
-    return { id: i.id, name: i.name, unit: i.unit, category: i.category, quantity, reorderLevel, status };
+    return {
+      id: i.id,
+      name: i.name,
+      unit: i.unit,
+      category: i.category,
+      location: i.location,
+      quantity,
+      reorderLevel,
+      unitCost,
+      value: Math.round(quantity * unitCost * 100) / 100,
+      status,
+    };
   });
 }

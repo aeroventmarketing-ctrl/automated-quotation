@@ -22,8 +22,10 @@ const createSchema = z.object({
   name: z.string().trim().min(1),
   unit: z.string().trim().min(1),
   category: z.string().trim().optional(),
+  location: z.string().trim().optional(),
   quantity: z.number().min(0),
   reorderLevel: z.number().min(0),
+  unitCost: z.number().min(0).optional(),
 });
 
 /** Add a stock item. A non-zero opening quantity records an ADJUSTMENT movement. */
@@ -36,8 +38,10 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
         name: d.name,
         unit: d.unit,
         category: d.category || null,
+        location: d.location || null,
         quantity: d.quantity,
         reorderLevel: d.reorderLevel,
+        unitCost: d.unitCost ?? 0,
       },
     });
     if (d.quantity > 0) {
@@ -47,6 +51,31 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
     }
   });
   revalidatePath("/inventory");
+}
+
+const metaSchema = z.object({
+  stockItemId: z.string().min(1),
+  category: z.string().trim().optional(),
+  location: z.string().trim().optional(),
+  reorderLevel: z.number().min(0),
+  unitCost: z.number().min(0),
+});
+
+/** Edit an item's location, unit cost, category and reorder level (no movement). */
+export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Promise<void> {
+  await requireInventoryManager();
+  const d = metaSchema.parse(input);
+  await prisma.stockItem.update({
+    where: { id: d.stockItemId },
+    data: {
+      category: d.category?.trim() || null,
+      location: d.location?.trim() || null,
+      reorderLevel: d.reorderLevel,
+      unitCost: d.unitCost,
+    },
+  });
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/reorder");
 }
 
 const adjustSchema = z.object({
