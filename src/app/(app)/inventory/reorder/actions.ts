@@ -51,6 +51,30 @@ export async function markOnOrder(input: z.infer<typeof markSchema>): Promise<vo
   revalidatePath("/inventory/reorder");
 }
 
+const bulkSchema = z.object({
+  items: z
+    .array(z.object({ stockItemId: z.string().min(1), qty: z.number().positive(), note: z.string().trim().max(200).optional() }))
+    .min(1),
+});
+
+/** Place replenishment orders for many low/out items at once. */
+export async function markAllOnOrder(input: z.infer<typeof bulkSchema>): Promise<void> {
+  const user = await requirePurchaser();
+  const d = bulkSchema.parse(input);
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.appSetting.findUnique({ where: { key: REORDER_KEY } });
+    const map = coerceReorderMap(row?.value);
+    const now = new Date().toISOString();
+    const ids = new Set((await tx.stockItem.findMany({ where: { id: { in: d.items.map((i) => i.stockItemId) } }, select: { id: true } })).map((r) => r.id));
+    for (const it of d.items) {
+      if (!ids.has(it.stockItemId)) continue;
+      map[it.stockItemId] = { qty: it.qty, byName: user.name, at: now, note: it.note || undefined };
+    }
+    await writeMap(tx, map);
+  });
+  revalidatePath("/inventory/reorder");
+}
+
 /** Cancel an outstanding reorder without receiving anything. */
 export async function cancelOnOrder(stockItemId: string): Promise<void> {
   await requirePurchaser();

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { markOnOrder, receiveReorder, cancelOnOrder } from "./actions";
+import { markOnOrder, markAllOnOrder, receiveReorder, cancelOnOrder } from "./actions";
 
 export interface NeedsRow {
   id: string;
@@ -49,15 +49,29 @@ export function ReorderList({ needs, onOrder, canAct }: { needs: NeedsRow[]; onO
     }
   }
 
+  // Items with a positive order qty entered — used by the bulk action.
+  const orderable = needs.map((n) => ({ stockItemId: n.id, qty: Number(qty[n.id]) || 0, note: note[n.id] || undefined })).filter((i) => i.qty > 0);
+  function orderAll() {
+    if (orderable.length === 0) return;
+    run("__all__", () => markAllOnOrder({ items: orderable }));
+  }
+
   return (
     <div className="space-y-6">
       {/* Needs reordering */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Needs reordering <span className="text-muted-foreground">({needs.length})</span></h2>
-          {needs.length > 0 && (
-            <Button size="sm" variant="outline" className="h-7 text-xs print:hidden" onClick={() => window.print()}>Print list</Button>
-          )}
+          <div className="flex items-center gap-2 print:hidden">
+            {canAct && orderable.length > 0 && (
+              <Button size="sm" className="h-7 text-xs" disabled={busy === "__all__"} onClick={orderAll}>
+                {busy === "__all__" ? "Ordering…" : `Order all (${orderable.length})`}
+              </Button>
+            )}
+            {needs.length > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.print()}>Print list</Button>
+            )}
+          </div>
         </div>
         {needs.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing to reorder — all stock is above its reorder level.</p>
