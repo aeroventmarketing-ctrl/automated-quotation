@@ -50,6 +50,41 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/** The `s="…"` style attribute of a cell (kept when we rewrite its content). */
+function styleAttr(xml: string, addr: string): string {
+  const m = new RegExp(`<c r="${addr}"([^>]*?)(?:/>|>[\\s\\S]*?</c>)`).exec(xml);
+  const s = m ? /\bs="(\d+)"/.exec(m[1])?.[1] : undefined;
+  return s ? ` s="${s}"` : "";
+}
+/** Replace a printable-sheet cell with an inline string, preserving its style. */
+function writeInlineCell(xml: string, addr: string, text: string): string {
+  const re = new RegExp(`<c r="${addr}"[^>]*?(?:/>|>[\\s\\S]*?</c>)`);
+  if (!re.test(xml)) return xml;
+  return xml.replace(re, `<c r="${addr}"${styleAttr(xml, addr)} t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`);
+}
+/** Replace a printable-sheet cell's formula, preserving its style. */
+function writeFormulaCell(xml: string, addr: string, escapedFormula: string): string {
+  const re = new RegExp(`<c r="${addr}"[^>]*?(?:/>|>[\\s\\S]*?</c>)`);
+  if (!re.test(xml)) return xml;
+  return xml.replace(re, `<c r="${addr}"${styleAttr(xml, addr)}><f>${escapedFormula}</f></c>`);
+}
+/** Empty a printable-sheet cell, preserving its style. */
+function clearCellContent(xml: string, addr: string): string {
+  const re = new RegExp(`<c r="${addr}"[^>]*?(?:/>|>[\\s\\S]*?</c>)`);
+  if (!re.test(xml)) return xml;
+  return xml.replace(re, `<c r="${addr}"${styleAttr(xml, addr)}/>`);
+}
+
+/**
+ * Whether a job order is direct-drive: the fan sits on the motor shaft, so there
+ * is no pulley/shafting/belt/bearing and it turns at motor speed. Signalled by
+ * the Direct checkbox, a "…DD" project code, or a Direct/Directly-Coupled drive.
+ */
+function isDirectDrive(jo: FansJobOrder): boolean {
+  const dt = (jo.driveType || "").trim().toLowerCase();
+  return jo.directDrive === true || /DD$/i.test((jo.project || "").trim()) || dt === "direct" || dt.startsWith("directly");
+}
+
 /** Days since the Excel 1900 epoch (1899-12-30) for an ISO date, or null. */
 function excelSerial(iso: string): number | null {
   if (!iso) return null;
@@ -212,6 +247,26 @@ export async function buildFansJobOrderWorkbook(
         a = ` view="pageBreakPreview" zoomScale="120" zoomScaleSheetLayoutView="120"${a}`;
         return `<sheetView${a}${selfClose}>`;
       });
+
+      // Direct-drive units: Speed = Motor RPM; Motor Pulley, Fan Pulley,
+      // Shafting, Belt and Bearing become "N / A". (Hub details for direct drive
+      // come from the motor shaft — wired when that lookup is provided; until
+      // then the Hub row keeps its belt-drive value.)
+      if (isDirectDrive(jo)) {
+        const NA = "N / A";
+        // Speed (auto) row — replace the computed fan RPM with the motor RPM
+        // (Source!D89, offset-aware). Motor RPM drives the belt calc D76 = D89·pulley/pulley.
+        cbXml = writeFormulaCell(cbXml, "M42", `&quot; &quot;&amp;ROUNDUP(Source!D${89 + offset},0)&amp;&quot; rpm&quot;`);
+        cbXml = writeInlineCell(cbXml, "C46", NA); // Motor Pulley
+        cbXml = clearCellContent(cbXml, "Q46"); //    (its hub)
+        cbXml = writeInlineCell(cbXml, "C48", NA); // Fan Pulley
+        cbXml = clearCellContent(cbXml, "Q48"); //    (its hub)
+        cbXml = writeInlineCell(cbXml, "D52", NA); // Shafting
+        cbXml = writeInlineCell(cbXml, "C54", NA); // Belt
+        cbXml = writeInlineCell(cbXml, "C56", NA); // Bearing
+        cbXml = clearCellContent(cbXml, "M56"); //    (bearing qty)
+      }
+
       zip.file(cbPath, cbXml);
     }
   }
