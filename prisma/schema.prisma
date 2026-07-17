@@ -378,6 +378,7 @@ enum StockMovementKind {
 
 model StockItem {
   id           String   @id @default(cuid())
+  sku          String?  @unique // short human/scan code, e.g. "10001"
   name         String
   unit         String   @default("pcs")
   category     String?

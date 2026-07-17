@@ -110,6 +110,7 @@ async function loadItems() {
       quantity <= 0 ? "out" : reorderLevel > 0 && quantity <= reorderLevel ? "low" : "ok";
     return {
       id: i.id,
+      sku: i.sku,
       name: i.name,
       unit: i.unit,
       category: i.category,

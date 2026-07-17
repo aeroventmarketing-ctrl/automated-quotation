@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -16,6 +17,34 @@ async function requireInventoryManager() {
     userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey);
   if (!ok) throw new Error("Only the Warehouse, Plant Manager, or an admin can manage inventory.");
   return user;
+}
+
+/** Claim the next SKU number (starts at 10001). Runs inside a transaction. */
+async function nextSku(tx: Prisma.TransactionClient): Promise<string> {
+  const KEY = "sku_counter";
+  const row = await tx.appSetting.findUnique({ where: { key: KEY } });
+  const cur = typeof (row?.value as { n?: unknown } | null)?.n === "number" ? (row!.value as { n: number }).n : 10000;
+  const n = cur + 1;
+  await tx.appSetting.upsert({
+    where: { key: KEY },
+    create: { key: KEY, value: { n } as Prisma.InputJsonValue },
+    update: { value: { n } as Prisma.InputJsonValue },
+  });
+  return String(n);
+}
+
+/** Assign SKUs to every active item that doesn't have one yet. */
+export async function assignMissingSkus(): Promise<void> {
+  await requireInventoryManager();
+  await prisma.$transaction(async (tx) => {
+    const missing = await tx.stockItem.findMany({ where: { active: true, sku: null }, orderBy: { createdAt: "asc" }, select: { id: true } });
+    for (const m of missing) {
+      const sku = await nextSku(tx);
+      await tx.stockItem.update({ where: { id: m.id }, data: { sku } });
+    }
+  });
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/labels");
 }
 
 const createSchema = z.object({
@@ -33,8 +62,10 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
   const user = await requireInventoryManager();
   const d = createSchema.parse(input);
   await prisma.$transaction(async (tx) => {
+    const sku = await nextSku(tx);
     const item = await tx.stockItem.create({
       data: {
+        sku,
         name: d.name,
         unit: d.unit,
         category: d.category || null,

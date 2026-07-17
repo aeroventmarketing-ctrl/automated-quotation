@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { code128Svg } from "@/lib/code128";
+import { qrSvg } from "@/lib/qr";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -36,19 +37,23 @@ export default async function LabelsPage() {
         <p className="text-sm text-muted-foreground">No stock items yet.</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {items.map((i) => (
-            <div key={i.id} className="flex flex-col items-center gap-1 rounded-md border p-3 text-center break-inside-avoid">
-              <div className="text-sm font-semibold leading-tight">{i.name}</div>
-              <div className="text-xs text-muted-foreground">
-                {[i.location ? `Loc ${i.location}` : null, i.unit].filter(Boolean).join(" · ")}
+          {items.map((i) => {
+            const code = i.sku ?? i.id;
+            return (
+              <div key={i.id} className="flex flex-col items-center gap-1 rounded-md border p-3 text-center break-inside-avoid">
+                <div className="text-sm font-semibold leading-tight">{i.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {[i.sku ? `SKU ${i.sku}` : null, i.location ? `Loc ${i.location}` : null, i.unit].filter(Boolean).join(" · ")}
+                </div>
+                <div className="mt-1 flex items-center justify-center gap-3">
+                  {/* eslint-disable-next-line react/no-danger */}
+                  <div className="overflow-hidden" dangerouslySetInnerHTML={{ __html: code128Svg(code, { moduleWidth: 1.8, height: 46 }) }} />
+                  {/* eslint-disable-next-line react/no-danger */}
+                  <div dangerouslySetInnerHTML={{ __html: qrSvg(code, { scale: 3 }) }} />
+                </div>
               </div>
-              <div
-                className="mt-1 w-full overflow-hidden"
-                // eslint-disable-next-line react/no-danger
-                dangerouslySetInnerHTML={{ __html: code128Svg(i.id, { moduleWidth: 1.6, height: 46, showText: false }) }}
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { code128Svg } from "@/lib/code128";
-import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation } from "./actions";
+import { qrSvg } from "@/lib/qr";
+import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation, assignMissingSkus } from "./actions";
 
 interface Reservation {
   id: string;
@@ -19,6 +20,7 @@ interface Reservation {
 }
 interface Item {
   id: string;
+  sku: string | null;
   name: string;
   unit: string;
   category: string | null;
@@ -95,7 +97,7 @@ function StockRow({ item, canManage, scanTarget, scanNonce }: { item: Item; canM
       <TableRow ref={rowRef} className={flash ? "bg-primary/10 transition-colors" : undefined}>
         <TableCell>
           <div className="font-medium">{item.name}</div>
-          {item.category && <div className="text-xs text-muted-foreground">{item.category}</div>}
+          <div className="text-xs text-muted-foreground">{[item.sku ? `SKU ${item.sku}` : null, item.category].filter(Boolean).join(" · ")}</div>
         </TableCell>
         <TableCell className="text-sm text-muted-foreground">{item.unit}</TableCell>
         <TableCell className="text-sm">{item.location || <span className="text-muted-foreground">—</span>}</TableCell>
@@ -185,10 +187,14 @@ function StockRow({ item, canManage, scanTarget, scanNonce }: { item: Item; canM
         <TableRow>
           <TableCell colSpan={11} className="bg-muted/30">
             <div className="flex flex-col items-start gap-1 py-1">
-              <div className="text-sm font-medium">{item.name}{item.location ? ` · Loc ${item.location}` : ""}</div>
-              {/* eslint-disable-next-line react/no-danger */}
-              <div dangerouslySetInnerHTML={{ __html: code128Svg(item.id, { moduleWidth: 1.8, height: 48, showText: false }) }} />
-              <div className="text-[10px] text-muted-foreground">Code 128 · scannable by any barcode scanner. Use “Labels” to print all.</div>
+              <div className="text-sm font-medium">{item.name}{item.sku ? ` · SKU ${item.sku}` : ""}{item.location ? ` · Loc ${item.location}` : ""}</div>
+              <div className="flex items-center gap-4">
+                {/* eslint-disable-next-line react/no-danger */}
+                <div dangerouslySetInnerHTML={{ __html: code128Svg(item.sku ?? item.id, { moduleWidth: 2, height: 48 }) }} />
+                {/* eslint-disable-next-line react/no-danger */}
+                <div dangerouslySetInnerHTML={{ __html: qrSvg(item.sku ?? item.id, { scale: 3 }) }} />
+              </div>
+              <div className="text-[10px] text-muted-foreground">Code 128 + QR · scannable by any barcode scanner. Use “Labels” to print all.</div>
             </div>
           </TableCell>
         </TableRow>
@@ -220,7 +226,10 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
     const code = scan.trim();
     setScan("");
     if (!code) return;
-    const found = items.find((i) => i.id === code) ?? items.find((i) => i.name.toLowerCase() === code.toLowerCase());
+    const found =
+      items.find((i) => i.sku === code) ??
+      items.find((i) => i.id === code) ??
+      items.find((i) => i.name.toLowerCase() === code.toLowerCase());
     if (found) {
       setScanTarget(found.id);
       setScanNonce((n) => n + 1);
@@ -256,6 +265,12 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
           <Input className="h-9 w-64 pl-8" placeholder="Scan barcode…" value={scan} autoFocus onChange={(e) => setScan(e.target.value)} onKeyDown={onScanKey} />
         </div>
         {scanMsg && <span className="text-xs text-muted-foreground">{scanMsg}</span>}
+        {canManage && items.some((i) => !i.sku) && (
+          <Button size="sm" variant="outline" className="h-9 text-xs" disabled={busy}
+            onClick={async () => { setBusy(true); try { await assignMissingSkus(); router.refresh(); } finally { setBusy(false); } }}>
+            {busy ? "…" : `Generate SKUs (${items.filter((i) => !i.sku).length})`}
+          </Button>
+        )}
       </div>
 
       {canManage && (
