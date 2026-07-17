@@ -6,8 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { createStockItem, adjustStock, updateStockItemMeta } from "./actions";
+import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation } from "./actions";
 
+interface Reservation {
+  id: string;
+  qty: number;
+  forRef: string;
+  note: string | null;
+  byName: string;
+}
 interface Item {
   id: string;
   name: string;
@@ -18,6 +25,9 @@ interface Item {
   reorderLevel: number;
   unitCost: number;
   value: number;
+  reserved: number;
+  available: number;
+  reservations: Reservation[];
   status: "ok" | "low" | "out";
 }
 
@@ -26,7 +36,7 @@ const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFrac
 
 function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
   const router = useRouter();
-  const [panel, setPanel] = useState<"none" | "adjust" | "edit">("none");
+  const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "reserve">("none");
   const [kind, setKind] = useState<"RECEIPT" | "ISSUE" | "ADJUSTMENT">("RECEIPT");
   const [qty, setQty] = useState("");
   const [reason, setReason] = useState("");
@@ -35,12 +45,16 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
   const [location, setLocation] = useState(item.location ?? "");
   const [reorder, setReorder] = useState(String(item.reorderLevel));
   const [unitCost, setUnitCost] = useState(String(item.unitCost));
+  // Reserve fields
+  const [resvQty, setResvQty] = useState("");
+  const [resvRef, setResvRef] = useState("");
+  const [resvNote, setResvNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function run(fn: () => Promise<void>) {
+  async function run(fn: () => Promise<void>, keepOpen = false) {
     setBusy(true); setErr(null);
-    try { await fn(); setPanel("none"); router.refresh(); }
+    try { await fn(); if (!keepOpen) setPanel("none"); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(false); }
   }
@@ -51,6 +65,12 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
   }
   function saveMeta() {
     run(() => updateStockItemMeta({ stockItemId: item.id, category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0 }));
+  }
+  function reserve() {
+    const n = Number(resvQty);
+    if (!(n > 0)) { setErr("Enter a quantity."); return; }
+    if (resvRef.trim() === "") { setErr("Enter what it's reserved for."); return; }
+    run(() => reserveStock({ stockItemId: item.id, qty: n, forRef: resvRef, note: resvNote || undefined }).then(() => { setResvQty(""); setResvRef(""); setResvNote(""); }), true);
   }
 
   return (
@@ -63,6 +83,8 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
         <TableCell className="text-sm text-muted-foreground">{item.unit}</TableCell>
         <TableCell className="text-sm">{item.location || <span className="text-muted-foreground">—</span>}</TableCell>
         <TableCell className="text-right tabular-nums font-medium">{fmt(item.quantity)}</TableCell>
+        <TableCell className="text-right tabular-nums text-muted-foreground">{item.reserved ? fmt(item.reserved) : "—"}</TableCell>
+        <TableCell className={`text-right tabular-nums font-medium ${item.available < 0 ? "text-destructive" : ""}`}>{fmt(item.available)}</TableCell>
         <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(item.reorderLevel)}</TableCell>
         <TableCell className="text-right tabular-nums text-muted-foreground">{item.unitCost ? peso(item.unitCost) : "—"}</TableCell>
         <TableCell className="text-right tabular-nums">{item.value ? peso(item.value) : "—"}</TableCell>
@@ -74,6 +96,7 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
         {canManage && (
           <TableCell className="text-right">
             <div className="flex justify-end gap-1">
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "reserve" ? "none" : "reserve"))}>Reserve{item.reservations.length ? ` (${item.reservations.length})` : ""}</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>Edit</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "adjust" ? "none" : "adjust"))}>Adjust</Button>
             </div>
@@ -82,7 +105,7 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
       </TableRow>
       {panel === "adjust" && canManage && (
         <TableRow>
-          <TableCell colSpan={9} className="bg-muted/30">
+          <TableCell colSpan={11} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="h-8 rounded-md border bg-background px-2 text-sm">
                 <option value="RECEIPT">Receive (+)</option>
@@ -99,7 +122,7 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
       )}
       {panel === "edit" && canManage && (
         <TableRow>
-          <TableCell colSpan={9} className="bg-muted/30">
+          <TableCell colSpan={11} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <label className="text-xs text-muted-foreground">Location<Input className="h-8 w-40" placeholder="e.g. A-3-2" value={location} onChange={(e) => setLocation(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>
@@ -107,6 +130,35 @@ function StockRow({ item, canManage }: { item: Item; canManage: boolean }) {
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
               <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Save"}</Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+      {panel === "reserve" && canManage && (
+        <TableRow>
+          <TableCell colSpan={11} className="bg-muted/30">
+            <div className="space-y-2 py-1">
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="text-xs text-muted-foreground">Reserve qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={resvQty} onChange={(e) => setResvQty(e.target.value)} /></label>
+                <label className="text-xs text-muted-foreground">For (order / job)<Input className="h-8 w-44" placeholder="e.g. AFBM-JO2600054" value={resvRef} onChange={(e) => setResvRef(e.target.value)} /></label>
+                <label className="text-xs text-muted-foreground">Note<Input className="h-8 w-44" placeholder="optional" value={resvNote} onChange={(e) => setResvNote(e.target.value)} /></label>
+                <Button size="sm" className="h-8" disabled={busy} onClick={reserve}>{busy ? "…" : "Reserve"}</Button>
+                <span className="text-xs text-muted-foreground">{fmt(item.available)} {item.unit} available</span>
+                {err && <span className="text-xs text-destructive">{err}</span>}
+              </div>
+              {item.reservations.length > 0 && (
+                <ul className="space-y-1">
+                  {item.reservations.map((r) => (
+                    <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1 text-xs">
+                      <span className="font-medium tabular-nums">{fmt(r.qty)} {item.unit}</span>
+                      <span>→ {r.forRef}</span>
+                      {r.note && <span className="text-muted-foreground">· {r.note}</span>}
+                      <span className="text-muted-foreground">· {r.byName}</span>
+                      <button type="button" className="ml-auto rounded border px-2 py-0.5 text-muted-foreground hover:text-destructive" disabled={busy} onClick={() => run(() => releaseReservation(r.id), true)}>Release</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </TableCell>
         </TableRow>
@@ -182,6 +234,8 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
                 <TableHead>Unit</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead className="text-right">On hand</TableHead>
+                <TableHead className="text-right">Reserved</TableHead>
+                <TableHead className="text-right">Available</TableHead>
                 <TableHead className="text-right">Reorder at</TableHead>
                 <TableHead className="text-right">Unit cost</TableHead>
                 <TableHead className="text-right">Value</TableHead>

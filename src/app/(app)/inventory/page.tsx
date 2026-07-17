@@ -84,14 +84,23 @@ export default async function InventoryPage() {
 }
 
 async function loadItems() {
-  const list = await prisma.stockItem.findMany({
-    where: { active: true },
-    orderBy: [{ name: "asc" }],
-  });
+  const [list, reservations] = await Promise.all([
+    prisma.stockItem.findMany({ where: { active: true }, orderBy: [{ name: "asc" }] }),
+    prisma.stockReservation.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+  const byItem = new Map<string, { id: string; qty: number; forRef: string; note: string | null; byName: string }[]>();
+  for (const r of reservations) {
+    const arr = byItem.get(r.stockItemId) ?? [];
+    arr.push({ id: r.id, qty: Number(r.qty), forRef: r.forRef, note: r.note, byName: r.byName });
+    byItem.set(r.stockItemId, arr);
+  }
   return list.map((i) => {
     const quantity = Number(i.quantity);
     const reorderLevel = Number(i.reorderLevel);
     const unitCost = Number(i.unitCost);
+    const resv = byItem.get(i.id) ?? [];
+    const reserved = Math.round(resv.reduce((a, r) => a + r.qty, 0) * 1000) / 1000;
+    const available = Math.round((quantity - reserved) * 1000) / 1000;
     const status: "ok" | "low" | "out" =
       quantity <= 0 ? "out" : reorderLevel > 0 && quantity <= reorderLevel ? "low" : "ok";
     return {
@@ -104,6 +113,9 @@ async function loadItems() {
       reorderLevel,
       unitCost,
       value: Math.round(quantity * unitCost * 100) / 100,
+      reserved,
+      available,
+      reservations: resv,
       status,
     };
   });

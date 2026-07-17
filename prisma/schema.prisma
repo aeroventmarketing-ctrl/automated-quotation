@@ -387,9 +387,28 @@ model StockItem {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  movements StockMovement[]
+  movements    StockMovement[]
+  reservations StockReservation[]
 
   @@index([name])
+}
+
+model StockReservation {
+  id             String    @id @default(cuid())
+  stockItemId    String
+  qty            Decimal   @db.Decimal(14, 3)
+  forRef         String // what it's reserved for (order no. / job / free text)
+  note           String?
+  byName         String
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  releasedByName String?
+  releasedAt     DateTime?
+
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@index([stockItemId])
+  @@index([active])
 }
 
 model StockMovement {

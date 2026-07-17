@@ -78,6 +78,40 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
   revalidatePath("/inventory/reorder");
 }
 
+const reserveSchema = z.object({
+  stockItemId: z.string().min(1),
+  qty: z.number().positive(),
+  forRef: z.string().trim().min(1),
+  note: z.string().trim().max(200).optional(),
+});
+
+/** Reserve (soft-hold) stock against an order/job. Can't reserve beyond available. */
+export async function reserveStock(input: z.infer<typeof reserveSchema>): Promise<void> {
+  const user = await requireInventoryManager();
+  const d = reserveSchema.parse(input);
+  await prisma.$transaction(async (tx) => {
+    const item = await tx.stockItem.findUnique({ where: { id: d.stockItemId } });
+    if (!item) throw new Error("Stock item not found");
+    const agg = await tx.stockReservation.aggregate({ where: { stockItemId: d.stockItemId, active: true }, _sum: { qty: true } });
+    const available = Number(item.quantity) - Number(agg._sum.qty ?? 0);
+    if (d.qty > available) throw new Error(`Only ${available} ${item.unit} available to reserve.`);
+    await tx.stockReservation.create({
+      data: { stockItemId: d.stockItemId, qty: d.qty, forRef: d.forRef, note: d.note || null, byName: user.name },
+    });
+  });
+  revalidatePath("/inventory");
+}
+
+/** Release an active reservation (frees the held quantity back to available). */
+export async function releaseReservation(id: string): Promise<void> {
+  const user = await requireInventoryManager();
+  await prisma.stockReservation.update({
+    where: { id },
+    data: { active: false, releasedByName: user.name, releasedAt: new Date() },
+  });
+  revalidatePath("/inventory");
+}
+
 const adjustSchema = z.object({
   stockItemId: z.string().min(1),
   kind: z.enum(["RECEIPT", "ISSUE", "ADJUSTMENT"]),
