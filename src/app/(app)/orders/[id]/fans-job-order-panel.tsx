@@ -35,7 +35,7 @@ const INLINE_ENCLOSURES = ["TEFC", "Exproof"];
 // Panel Fan option lists (from the Panel Fan template's data validations).
 const PANEL_PROJECTS = ["EWF", "FAWF"];
 const PANEL_BLADE_DIAMETERS = ["10", "12", "14", "16", "18", "20", "24", "30", "36", "42", "48", "54", "60"];
-const PANEL_ORIENTATIONS = ["Exhaust 1", "Exhaust 2", "Supply 1", "Supply 2"];
+const PANEL_ORIENTATIONS = ["Exhaust 1", "Exhaust 2", "Supply 1", "Supply 2", "Exhaust 1 & Supply 1", "Exhaust 2 & Supply 2"];
 const PANEL_MOUNTINGS = ["Wall Mounted", "Ceiling Mounted", "With Stand", "Ceiling Hang"];
 const PANEL_BLADE_TYPES = ["Kidney Type", "Paddle Type", "Airfoil"];
 const PANEL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
