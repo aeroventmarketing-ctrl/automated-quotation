@@ -31,6 +31,11 @@ export default async function PurchasingPage() {
       where: { kind: "replenishment", status: { notIn: ["COMPLETED", "REJECTED"] } },
       orderBy: { createdAt: "asc" },
     });
+    const stockIds = [...new Set(prs.map((p) => p.stockItemId).filter((s): s is string => !!s))];
+    const stock = stockIds.length
+      ? await prisma.stockItem.findMany({ where: { id: { in: stockIds } }, select: { id: true, sku: true, unit: true } })
+      : [];
+    const stockById = new Map(stock.map((s) => [s.id, s]));
     const prVariant = (s: PRStatus): PRRow["variant"] =>
       s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
     const stamp = (label: string, who?: string | null, at?: Date | null) =>
@@ -52,9 +57,12 @@ export default async function PurchasingPage() {
         roleLabel: workflowRoleLabel(step.role),
         canAct: admin || (viewer != null && userHasWorkflowRole(assignments, viewer.id, step.role)),
       }));
+      const si = pr.stockItemId ? stockById.get(pr.stockItemId) : undefined;
       return {
         id: pr.id,
         stockItemId: pr.stockItemId ?? "",
+        sku: si?.sku ?? null,
+        unit: si?.unit ?? "",
         items: Array.isArray(pr.items) ? (pr.items as string[]) : [],
         note: pr.note,
         status,

@@ -25,7 +25,7 @@ export default async function ReorderPage() {
     );
   }
 
-  let items: { id: string; name: string; unit: string; category: string | null; quantity: number; reorderLevel: number }[] = [];
+  let items: { id: string; sku: string | null; name: string; unit: string; category: string | null; quantity: number; reorderLevel: number }[] = [];
   let map: ReturnType<typeof coerceReorderMap> = {};
   let tableMissing = false;
   try {
@@ -35,6 +35,7 @@ export default async function ReorderPage() {
     ]);
     items = rows.map((i) => ({
       id: i.id,
+      sku: i.sku,
       name: i.name,
       unit: i.unit,
       category: i.category,
@@ -55,6 +56,7 @@ export default async function ReorderPage() {
     if (entry) {
       onOrder.push({
         id: i.id,
+        sku: i.sku,
         name: i.name,
         unit: i.unit,
         onHand: i.quantity,

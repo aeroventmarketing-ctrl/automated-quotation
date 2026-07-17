@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ export interface NeedsRow {
 }
 export interface OnOrderRow {
   id: string;
+  sku: string | null;
   name: string;
   unit: string;
   onHand: number;
@@ -63,6 +65,33 @@ export function ReorderList({ needs, onOrder, canAct }: { needs: NeedsRow[]; onO
   function requestAllPO() {
     if (orderable.length === 0) return;
     run("__po_all__", () => requestReplenishmentPO({ items: orderable }));
+  }
+
+  // Scan-to-receive: scan an on-order item's barcode to receive its ordered qty.
+  const [scan, setScan] = useState("");
+  const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [scanErr, setScanErr] = useState(false);
+  const scanRef = useRef<HTMLInputElement>(null);
+  async function onOrderScan(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const code = scan.trim();
+    setScan("");
+    if (!code) return;
+    const row =
+      onOrder.find((o) => o.sku === code) ?? onOrder.find((o) => o.id === code) ?? onOrder.find((o) => o.name.toLowerCase() === code.toLowerCase());
+    if (!row) { setScanErr(true); setScanMsg(`No on-order item matches “${code}”.`); return; }
+    const q = Number(recvQty[row.id] ?? row.orderedQty) || row.orderedQty;
+    setBusy(row.id);
+    try {
+      await receiveReorder({ stockItemId: row.id, qty: q });
+      setScanErr(false); setScanMsg(`Received ${q} ${row.unit} · ${row.name}`);
+      router.refresh();
+    } catch (e2) {
+      setScanErr(true); setScanMsg(e2 instanceof Error ? e2.message : "Failed");
+    } finally {
+      setBusy(null); scanRef.current?.focus();
+    }
   }
 
   return (
@@ -146,7 +175,18 @@ export function ReorderList({ needs, onOrder, canAct }: { needs: NeedsRow[]; onO
 
       {/* On order */}
       <section className="space-y-3 print:hidden">
-        <h2 className="text-sm font-semibold">On order <span className="text-muted-foreground">({onOrder.length})</span></h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">On order <span className="text-muted-foreground">({onOrder.length})</span></h2>
+          {canAct && onOrder.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <ScanLine className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input ref={scanRef} className="h-8 w-56 pl-8" placeholder="Scan to receive…" value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={onOrderScan} />
+              </div>
+              {scanMsg && <span className={`text-xs ${scanErr ? "text-destructive" : "text-emerald-600"}`}>{scanMsg}</span>}
+            </div>
+          )}
+        </div>
         {onOrder.length === 0 ? (
           <p className="text-sm text-muted-foreground">No outstanding reorders.</p>
         ) : (
