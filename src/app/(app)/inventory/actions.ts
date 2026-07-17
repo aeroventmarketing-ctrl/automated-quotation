@@ -33,6 +33,107 @@ async function nextSku(tx: Prisma.TransactionClient): Promise<string> {
   return String(n);
 }
 
+// --- Bulk import (CSV / Excel) ----------------------------------------------
+
+/** Minimal RFC-4180-ish CSV parser (handles quoted fields and embedded commas). */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else if (c !== "\r") field += c;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+async function parseXlsx(buf: Buffer): Promise<string[][]> {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf as unknown as ArrayBuffer);
+  const ws = wb.worksheets[0];
+  const rows: string[][] = [];
+  ws?.eachRow({ includeEmpty: false }, (r) => {
+    const vals: string[] = [];
+    r.eachCell({ includeEmpty: true }, (cell) => vals.push(cell.text == null ? "" : String(cell.text)));
+    rows.push(vals);
+  });
+  return rows;
+}
+
+const num = (s: string | undefined) => {
+  const n = Number((s ?? "").toString().replace(/,/g, "").trim());
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
+
+/** Import stock items from an uploaded CSV or .xlsx file. */
+export async function importStockItems(
+  formData: FormData,
+): Promise<{ created: number; skipped: number; errors: string[] }> {
+  const user = await requireInventoryManager();
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) throw new Error("Choose a CSV or Excel file.");
+  const buf = Buffer.from(await file.arrayBuffer());
+  const rows = file.name.toLowerCase().endsWith(".xlsx") ? await parseXlsx(buf) : parseCsv(buf.toString("utf8"));
+  if (rows.length < 2) throw new Error("The file has no data rows (needs a header row + items).");
+
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const col = (names: string[]) => header.findIndex((h) => names.includes(h));
+  const iName = col(["name", "item", "description"]);
+  const iUnit = col(["unit", "uom"]);
+  const iCat = col(["category"]);
+  const iLoc = col(["location", "bin"]);
+  const iQty = col(["quantity", "qty", "on hand", "onhand", "opening qty", "opening"]);
+  const iReorder = col(["reorderlevel", "reorder level", "reorder at", "reorder"]);
+  const iCost = col(["unitcost", "unit cost", "cost"]);
+  if (iName < 0) throw new Error('The file needs a "name" column.');
+
+  const errors: string[] = [];
+  let created = 0;
+  let skipped = 0;
+  await prisma.$transaction(async (tx) => {
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const name = (row[iName] ?? "").trim();
+      if (!name) { skipped++; continue; }
+      const quantity = iQty >= 0 ? num(row[iQty]) : 0;
+      try {
+        const sku = await nextSku(tx);
+        const item = await tx.stockItem.create({
+          data: {
+            sku,
+            name,
+            unit: (iUnit >= 0 ? row[iUnit]?.trim() : "") || "pcs",
+            category: (iCat >= 0 ? row[iCat]?.trim() : "") || null,
+            location: (iLoc >= 0 ? row[iLoc]?.trim() : "") || null,
+            quantity,
+            reorderLevel: iReorder >= 0 ? num(row[iReorder]) : 0,
+            unitCost: iCost >= 0 ? num(row[iCost]) : 0,
+          },
+        });
+        if (quantity > 0) {
+          await tx.stockMovement.create({
+            data: { stockItemId: item.id, kind: "ADJUSTMENT", delta: quantity, balanceAfter: quantity, reason: "Opening balance (import)", byName: user.name },
+          });
+        }
+        created++;
+      } catch {
+        errors.push(`Row ${r + 1} (“${name}”) could not be imported.`);
+      }
+    }
+  });
+  revalidatePath("/inventory");
+  return { created, skipped, errors: errors.slice(0, 20) };
+}
+
 /** Assign SKUs to every active item that doesn't have one yet. */
 export async function assignMissingSkus(): Promise<void> {
   await requireInventoryManager();

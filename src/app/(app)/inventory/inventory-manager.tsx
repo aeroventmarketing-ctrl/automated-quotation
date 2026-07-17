@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
+import { BulkImport } from "./bulk-import";
 import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation, assignMissingSkus } from "./actions";
 
 interface Reservation {
@@ -334,7 +335,10 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
               {err && <p className="text-xs text-destructive">{err}</p>}
             </div>
           ) : (
-            <Button size="sm" onClick={() => setShowAdd(true)}>+ Add stock item</Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={() => setShowAdd(true)}>+ Add stock item</Button>
+              <BulkImport />
+            </div>
           )}
         </div>
       )}
