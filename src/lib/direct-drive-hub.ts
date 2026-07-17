@@ -80,13 +80,29 @@ const TABLE: Record<string, Hub> = Object.fromEntries(
   ROWS.map(([hp, dia, len, bore, keyway]) => [norm(hp), { dia, len, bore, keyway }]),
 );
 
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+
+/** A decimal inch value as a mixed fraction (eighths), e.g. 3.25 → "3 1/4". */
+function toFraction(value: string): string {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return value;
+  const whole = Math.floor(num);
+  let n = Math.round((num - whole) * 8);
+  if (n === 0) return String(whole);
+  let d = 8;
+  const g = gcd(n, d);
+  n /= g;
+  d /= g;
+  return whole > 0 ? `${whole} ${n}/${d}` : `${n}/${d}`;
+}
+
 /**
- * The direct-drive hub spec for a motor selection, or null if unknown.
- * Format mirrors the belt-drive pulley specs, e.g.
- * `3" Ø x 4.25" L x 42 mm Ø bore x 12 mm keyway`.
+ * The direct-drive hub spec for a motor selection, or null if unknown. Inch
+ * dimensions are shown as fractions to match the belt-drive specs, e.g.
+ * `3" Ø x 4 1/4" L x 42 mm Ø bore x 12 mm keyway`.
  */
 export function directDriveHubText(motorHp: string): string | null {
   const h = TABLE[norm(motorHp || "")];
   if (!h) return null;
-  return `${h.dia}" Ø x ${h.len}" L x ${h.bore} mm Ø bore x ${h.keyway} mm keyway`;
+  return `${toFraction(h.dia)}" Ø x ${toFraction(h.len)}" L x ${h.bore} mm Ø bore x ${h.keyway} mm keyway`;
 }
