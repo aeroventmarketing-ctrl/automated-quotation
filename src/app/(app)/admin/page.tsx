@@ -6,18 +6,20 @@ import { getAxialSpLock } from "@/lib/axial-lock";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { getNotificationsEnabled } from "@/lib/notification-settings";
+import { getStockLocations } from "@/lib/stock-locations";
+import { StockLocationsSetting } from "./stock-locations-setting";
 import { QuoteNumberSetting } from "./quote-number-setting";
 import { MrfNumberSetting } from "./mrf-number-setting";
 import { PoNumberSetting } from "./po-number-setting";
 import { JoNumberSetting } from "./jo-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress, notificationsEnabled] = await Promise.all([
+  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress, notificationsEnabled, stockLocations] = await Promise.all([
     prisma.user.count(),
     prisma.catalogueItem.count(),
     prisma.priceListEntry.count(),
@@ -31,6 +33,7 @@ export default async function AdminOverviewPage() {
     getFollowUpSettings(),
     getHideOrderProgress(),
     getNotificationsEnabled(),
+    getStockLocations(),
   ]);
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
@@ -145,6 +148,7 @@ export default async function AdminOverviewPage() {
         enabled={notificationsEnabled}
         onSave={saveNotificationsSetting}
       />
+      <StockLocationsSetting initial={stockLocations} onSave={saveStockLocationsAction} />
       <FollowUpSetting
         offsetsDays={followUpSettings.offsetsDays}
         maxNudges={followUpSettings.maxNudges}

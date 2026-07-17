@@ -40,7 +40,22 @@ interface Item {
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
-function StockRow({ item, canManage, scanTarget, scanNonce }: { item: Item; canManage: boolean; scanTarget: string | null; scanNonce: number }) {
+/** Location picker: a dropdown of admin-managed locations, or a free-text box when none are configured. */
+function LocationField({ value, onChange, locations, className }: { value: string; onChange: (v: string) => void; locations: string[]; className?: string }) {
+  if (locations.length === 0) {
+    return <Input className={className ?? "h-8 w-40"} placeholder="e.g. A-3-2" value={value} onChange={(e) => onChange(e.target.value)} />;
+  }
+  // Include the current value even if it isn't in the managed list (legacy data), so it isn't silently dropped.
+  const extra = value && !locations.includes(value) ? [value] : [];
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={`${className ?? "h-8 w-40"} rounded-md border bg-background px-2 text-sm`}>
+      <option value="">—</option>
+      {[...locations, ...extra].map((loc) => <option key={loc} value={loc}>{loc}</option>)}
+    </select>
+  );
+}
+
+function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item: Item; canManage: boolean; locations: string[]; scanTarget: string | null; scanNonce: number }) {
   const router = useRouter();
   const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "reserve" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
@@ -146,7 +161,7 @@ function StockRow({ item, canManage, scanTarget, scanNonce }: { item: Item; canM
         <TableRow>
           <TableCell colSpan={11} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
-              <label className="text-xs text-muted-foreground">Location<Input className="h-8 w-40" placeholder="e.g. A-3-2" value={location} onChange={(e) => setLocation(e.target.value)} /></label>
+              <label className="text-xs text-muted-foreground">Location<div><LocationField value={location} onChange={setLocation} locations={locations} /></div></label>
               <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Reorder at<Input className="h-8 w-28" type="number" step="any" min={0} value={reorder} onChange={(e) => setReorder(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
@@ -208,7 +223,7 @@ function StockRow({ item, canManage, scanTarget, scanNonce }: { item: Item; canM
   );
 }
 
-export function InventoryManager({ items, canManage }: { items: Item[]; canManage: boolean }) {
+export function InventoryManager({ items, canManage, locations }: { items: Item[]; canManage: boolean; locations: string[] }) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
@@ -325,7 +340,7 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
                 <Input className="h-8 w-56" placeholder="Name (e.g. GI sheet 24ga)" value={name} onChange={(e) => setName(e.target.value)} />
                 <Input className="h-8 w-24" placeholder="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} />
                 <Input className="h-8 w-40" placeholder="Category (optional)" value={category} onChange={(e) => setCategory(e.target.value)} />
-                <Input className="h-8 w-32" placeholder="Location (optional)" value={location} onChange={(e) => setLocation(e.target.value)} />
+                <LocationField value={location} onChange={setLocation} locations={locations} className="h-8 w-40" />
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Opening qty" value={qty} onChange={(e) => setQty(e.target.value)} />
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Reorder at" value={reorder} onChange={(e) => setReorder(e.target.value)} />
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Unit cost ₱" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
@@ -364,7 +379,7 @@ export function InventoryManager({ items, canManage }: { items: Item[]; canManag
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((it) => <StockRow key={it.id} item={it} canManage={canManage} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+              {items.map((it) => <StockRow key={it.id} item={it} canManage={canManage} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
             </TableBody>
           </Table>
         </div>

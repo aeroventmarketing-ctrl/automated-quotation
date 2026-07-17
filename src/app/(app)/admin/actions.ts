@@ -10,6 +10,7 @@ import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
 import { setHideOrderProgress } from "@/lib/order-progress-visibility";
 import { setNotificationsEnabled } from "@/lib/notification-settings";
+import { setStockLocations } from "@/lib/stock-locations";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
@@ -330,6 +331,17 @@ export async function saveNotificationsSetting(input: z.infer<typeof spLockSchem
   await setNotificationsEnabled(d.enabled);
   revalidatePath("/admin");
   return d.enabled;
+}
+
+// --- Stock locations (dropdown list for Inventory) --------------------------
+const locationsSchema = z.object({ locations: z.array(z.string()).max(500) });
+export async function saveStockLocationsAction(input: z.infer<typeof locationsSchema>): Promise<string[]> {
+  await assertAdmin();
+  const d = locationsSchema.parse(input);
+  const saved = await setStockLocations(d.locations);
+  revalidatePath("/admin");
+  revalidatePath("/inventory");
+  return saved;
 }
 
 // --- Client follow-up cadence + delivery ------------------------------------

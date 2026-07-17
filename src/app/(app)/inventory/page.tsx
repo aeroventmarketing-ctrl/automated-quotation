@@ -4,12 +4,13 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function InventoryPage() {
-  const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
+  const [viewer, assignments, locations] = await Promise.all([getCurrentUser(), getWorkflowRoles(), getStockLocations()]);
   const admin = isAdmin(viewer);
   const has = (role: "warehouse" | "plant_manager" | "purchaser") =>
     viewer != null && userHasWorkflowRole(assignments, viewer.id, role);
@@ -79,7 +80,7 @@ export default async function InventoryPage() {
           </div>
           <Card>
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManage} />
+              <InventoryManager items={items} canManage={canManage} locations={locations} />
             </CardContent>
           </Card>
         </>
