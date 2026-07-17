@@ -406,8 +406,16 @@ function JobOrderForm({
 
   const cfg = BELT_DRIVE_CONFIGS[f.type] ?? DEFAULT_BELT_CONFIG;
 
+  // Direct drive: fan on the motor shaft — no belt, no pulleys, runs at motor
+  // speed. Signalled by the Direct checkbox, a "…DD" project, or a Direct/
+  // Directly-Coupled drive type (mirrors the generator).
+  const dt = (f.driveType || "").trim().toLowerCase();
+  const isDirect = f.directDrive || /DD$/i.test((f.project || "").trim()) || dt === "direct" || dt.startsWith("directly");
+
   // Direct-drive units carry a "DD" suffix on their project/unit code.
   const projectOptions = f.directDrive ? cfg.projects.map((p) => `${p}DD`) : cfg.projects;
+  // Belt is not an option once the unit is direct drive.
+  const driveOptions = isDirect ? cfg.driveTypes.filter((d) => d.toLowerCase() !== "belt") : cfg.driveTypes;
   function toggleDirect(checked: boolean) {
     setF((p) => {
       let project = p.project;
@@ -417,11 +425,12 @@ function JobOrderForm({
     });
   }
 
-  // Live-computed Fan RPM = roundup(motorRpm × motorPulley ÷ fanPulley).
+  // Live-computed Fan RPM = roundup(motorRpm × motorPulley ÷ fanPulley); for
+  // direct drive the fan runs at motor speed.
   const motorRpm = MOTOR_RPM[f.motorHp];
   const mP = Number(String(f.motorPulley).replace(/,/g, ""));
   const fP = Number(String(f.fanPulley).replace(/,/g, ""));
-  const fanRpm = motorRpm && mP > 0 && fP > 0 ? Math.ceil((motorRpm * mP) / fP) : null;
+  const fanRpm = isDirect ? (motorRpm ?? null) : motorRpm && mP > 0 && fP > 0 ? Math.ceil((motorRpm * mP) / fP) : null;
 
   async function save() {
     setBusy(true);
@@ -476,7 +485,7 @@ function JobOrderForm({
         {fld("Orientation", "orientation", { list: cfg.orientations })}
         {fld(cfg.fieldC.label, "rotation", { list: cfg.fieldC.options })}
         {fld("Impeller / blade type", "bladeType", { list: cfg.bladeTypes })}
-        {fld("Drive", "driveType", { list: cfg.driveTypes })}
+        {fld("Drive", "driveType", { list: driveOptions })}
         {fld("Capacity (@ w.g.)", "capacity", { placeholder: '21,338 cfm @ 2" w.g.' })}
         {fld('Test @ 0" w.g.', "capacityAt0", { placeholder: '29,087 cfm @ 0" w.g.' })}
         {fld("RPM (catalogue)", "rpmCatalogue")}
@@ -509,11 +518,12 @@ function JobOrderForm({
         {fld("Frequency (Hz)", "frequency", { list: cfg.frequencies })}
         {fld("Mounting", "mounting", { list: cfg.mountings })}
         {fld("Enclosure", "enclosure", { list: cfg.enclosures })}
-        {fld("Motor pulley (Ø)", "motorPulley")}
-        {fld("Fan pulley (Ø)", "fanPulley")}
+        {/* Direct drive has no pulleys — hide both fields. */}
+        {!isDirect && fld("Motor pulley (Ø)", "motorPulley")}
+        {!isDirect && fld("Fan pulley (Ø)", "fanPulley")}
         <label className="space-y-1">
           <span className="text-[11px] text-muted-foreground">RPM (auto)</span>
-          <Input className="h-8 bg-muted/50 font-medium" readOnly value={fanRpm != null ? String(fanRpm) : ""} placeholder="—" title="Computed Fan RPM = roundup(Motor RPM × Motor Pulley ÷ Fan Pulley)" />
+          <Input className="h-8 bg-muted/50 font-medium" readOnly value={fanRpm != null ? String(fanRpm) : ""} placeholder="—" title={isDirect ? "Direct drive — fan runs at motor speed" : "Computed Fan RPM = roundup(Motor RPM × Motor Pulley ÷ Fan Pulley)"} />
         </label>
       </div>
 
