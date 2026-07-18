@@ -7,6 +7,7 @@ import {
   saleFromClassification,
   isSaleConfirmed,
   collectedTotal,
+  docCheckMissing,
   ARRANGEMENT_LABEL,
   type SaleRecord,
 } from "@/lib/sale";
@@ -59,6 +60,9 @@ export default async function OrdersPage() {
       const wf = readOrderWorkflow(q.classification);
       const next = nextOrderStep(wf.stage);
       const canAct = next != null && (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, next.requiredRole)));
+      // "Mark documents checked" is blocked until the required docs are attached.
+      const docMissing = next?.key === "doc_check" ? docCheckMissing(sale) : [];
+      const blockedReason = docMissing.length ? `Attach: ${docMissing.join(", ")}` : null;
       // Who acts next across the whole order (all phases), for the "Awaiting" hint.
       const pend = pendingStep(wf);
       const awaitingAll = pend
@@ -89,6 +93,7 @@ export default async function OrdersPage() {
         nextStep: next?.key ?? null,
         nextLabel: next?.label ?? null,
         canAct,
+        blockedReason,
         awaiting: awaitingAll,
       };
     })

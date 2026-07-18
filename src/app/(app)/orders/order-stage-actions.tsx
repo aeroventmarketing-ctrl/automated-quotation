@@ -32,6 +32,7 @@ export function OrderStageActions({
   nextStep,
   nextLabel,
   canAct,
+  blockedReason = null,
   awaiting,
   hideStage,
 }: {
@@ -41,6 +42,7 @@ export function OrderStageActions({
   nextStep: OrderStepKey | null;
   nextLabel: string | null;
   canAct: boolean;
+  blockedReason?: string | null;
   awaiting: string | null;
   hideStage?: boolean;
 }) {
@@ -71,9 +73,11 @@ export function OrderStageActions({
       <Badge variant={STAGE_VARIANT[stage]}>{stageLabel}</Badge>
       {nextStep && canAct && (
         <div>
-          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={act}>
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy || !!blockedReason} onClick={act}
+            title={blockedReason ?? undefined}>
             {busy ? "Saving…" : nextLabel}
           </Button>
+          {blockedReason && <div className="mt-0.5 text-[11px] text-amber-600">{blockedReason}</div>}
         </div>
       )}
       {!(nextStep && canAct) && awaiting && (

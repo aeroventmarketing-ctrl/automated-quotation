@@ -27,6 +27,7 @@ export interface OrderRow {
   nextStep: OrderStepKey | null;
   nextLabel: string | null;
   canAct: boolean;
+  blockedReason: string | null;
   awaiting: string | null;
 }
 
@@ -213,6 +214,7 @@ function GroupRows({ groupKey, rows, showHeader, currency, progressHidden }: { g
               nextStep={o.nextStep}
               nextLabel={o.nextLabel}
               canAct={o.canAct}
+              blockedReason={o.blockedReason}
               awaiting={o.awaiting}
               hideStage={progressHidden}
             />

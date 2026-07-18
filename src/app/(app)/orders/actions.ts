@@ -37,6 +37,7 @@ import {
   type MRFLineDisposition,
 } from "@/lib/order-workflow";
 import { purchaseStep, isCancellable, type PRStatus } from "@/lib/purchasing";
+import { saleFromClassification, docCheckMissing } from "@/lib/sale";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
@@ -73,6 +74,12 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
   const wf = readOrderWorkflow(quote.classification);
   if (wf.stage !== def.from) {
     throw new Error("This step isn't available at the order's current stage.");
+  }
+
+  // Documents can only be marked checked once the required files are attached.
+  if (step === "doc_check") {
+    const missing = docCheckMissing(saleFromClassification(quote.classification));
+    if (missing.length) throw new Error(`Attach ${missing.join(", ")} before marking documents checked.`);
   }
 
   const cls = (quote.classification as Record<string, unknown>) ?? {};

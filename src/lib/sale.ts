@@ -88,6 +88,23 @@ export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = {
   progress: "Progress billing",
 };
 
+/**
+ * Documents that must be attached before an order's documents can be marked
+ * "checked" (the doc_check step). Returns the labels still missing.
+ */
+export function docCheckMissing(sale: SaleRecord | null | undefined): string[] {
+  const missing: string[] = [];
+  if (!sale?.po) missing.push("Purchase Order");
+  const docs = sale?.docs ?? {};
+  const need: [string, string][] = [
+    ["computation", "Computation"],
+    ["quotation", "Quotation"],
+    ["rfq_boq", "RFQ / BOQ"],
+  ];
+  for (const [key, label] of need) if (!(docs[key]?.length)) missing.push(label);
+  return missing;
+}
+
 /** Total amount actually collected so far. */
 export function collectedTotal(sale: SaleRecord | null | undefined): number {
   return (sale?.payments ?? []).reduce((a, p) => a + (Number(p.amount) || 0), 0);
