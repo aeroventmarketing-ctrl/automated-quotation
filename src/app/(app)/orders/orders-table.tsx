@@ -58,6 +58,16 @@ export function OrdersTable({ orders, progressHidden }: { orders: OrderRow[]; pr
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [group, setGroup] = useState<GroupKey>("none");
+  const [query, setQuery] = useState("");
+
+  // Search across order no., client (company + project), date, and sales.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return orders;
+    return orders.filter((o) =>
+      [o.quoteNumber, o.company, o.project, o.dateText, o.sales].some((f) => (f ?? "").toLowerCase().includes(q)),
+    );
+  }, [orders, query]);
 
   const groupValue = (o: OrderRow): string => {
     switch (group) {
@@ -84,8 +94,8 @@ export function OrdersTable({ orders, progressHidden }: { orders: OrderRow[]; pr
         default: return (a.dateMs - b.dateMs) * mul;
       }
     };
-    return [...orders].sort(cmp);
-  }, [orders, sortKey, dir]);
+    return [...filtered].sort(cmp);
+  }, [filtered, sortKey, dir]);
 
   // Build groups (in first-appearance order of the sorted rows).
   const groups = useMemo(() => {
@@ -104,6 +114,15 @@ export function OrdersTable({ orders, progressHidden }: { orders: OrderRow[]; pr
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search order, client, date, sales…"
+            className="h-8 w-64 rounded-md border bg-background px-3 text-sm"
+          />
+        </div>
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           Group by
           <select value={group} onChange={(e) => setGroup(e.target.value as GroupKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
@@ -143,9 +162,15 @@ export function OrdersTable({ orders, progressHidden }: { orders: OrderRow[]; pr
             </TableRow>
           </TableHeader>
           <TableBody>
-            {groups.map((g) => (
-              <GroupRows key={g.key} groupKey={g.key} rows={g.rows} showHeader={group !== "none"} currency={currency} progressHidden={progressHidden} />
-            ))}
+            {sorted.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="py-8 text-center text-sm text-muted-foreground">No orders match &ldquo;{query}&rdquo;.</TableCell>
+              </TableRow>
+            ) : (
+              groups.map((g) => (
+                <GroupRows key={g.key} groupKey={g.key} rows={g.rows} showHeader={group !== "none"} currency={currency} progressHidden={progressHidden} />
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
