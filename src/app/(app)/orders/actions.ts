@@ -9,6 +9,7 @@ import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { coercePurchaseOrder, formatPoNumber, type PurchaseOrder } from "@/lib/purchase-order";
 import { poMemberIds } from "@/lib/purchase-batch";
+import { rememberProduct } from "@/lib/product-catalog";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
 import {
@@ -338,6 +339,14 @@ export async function raiseMaterialRequest(
     raisedByName: user.name,
   };
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests: [...wf.materialRequests, req] });
+
+  // Auto-save any newly typed items to the product catalogue (best effort — the
+  // product table may not exist yet). Never blocks the request.
+  try {
+    for (const it of cleanItems) await rememberProduct(it.description, it.unit);
+  } catch {
+    /* product table not migrated yet — ignore */
+  }
 }
 
 /** Next running Material Request Form number, zero-padded (e.g. "0173"). */

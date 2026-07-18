@@ -24,6 +24,7 @@ import {
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
+import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { COMPANY } from "@/lib/config";
@@ -72,6 +73,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   ]);
   if (!quote) notFound();
   const stockItems = stockItemsRaw;
+  // Catalogue of purchasable products (for the MRF autocomplete); may be empty
+  // before the product table is migrated.
+  const productOptions = await getProducts().then((ps) => ps.map((p) => ({ name: p.name, unit: p.unit }))).catch(() => []);
 
   const adminViewer = isAdmin(viewer);
   const wf = readOrderWorkflow(quote.classification);
@@ -397,7 +401,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
-            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} />
+            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} />
           </CardContent>
         </Card>
       )}

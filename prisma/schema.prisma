@@ -428,3 +428,24 @@ model StockMovement {
 
   @@index([stockItemId])
 }
+
+/**
+ * Purchasable product/item catalogue, connected to suppliers. Each product may
+ * be sourced from several suppliers (each with its own code and price), stored
+ * as JSON since suppliers live in the AppSetting directory (no supplier table).
+ * Mirrors StockItem's SKU + barcode/QR encoding features.
+ */
+model Product {
+  id        String   @id @default(cuid())
+  sku       String?  @unique // short human/scan code, e.g. "PRD10001"
+  name      String
+  unit      String   @default("pcs")
+  category  String?
+  note      String?
+  suppliers Json     @default("[]") // [{ supplierId, company, code, price }]
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}

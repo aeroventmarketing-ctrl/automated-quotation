@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -40,12 +40,14 @@ export function MaterialRequests({
   raisableDepts,
   requests,
   stockItems,
+  products = [],
 }: {
   orderId: string;
   requesterName: string;
   raisableDepts: { key: string; label: string }[];
   requests: ReqRow[];
   stockItems: StockOpt[];
+  products?: { name: string; unit: string }[];
 }) {
   const router = useRouter();
   const [issuingId, setIssuingId] = useState<string | null>(null);
@@ -54,9 +56,20 @@ export function MaterialRequests({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const productByName = useMemo(() => new Map(products.map((p) => [p.name.trim().toLowerCase(), p])), [products]);
 
   function setCell(i: number, key: keyof MRFItem, value: string) {
-    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
+    setRows((rs) =>
+      rs.map((r, idx) => {
+        if (idx !== i) return r;
+        // Picking/typing a catalogued product auto-fills its unit when blank.
+        if (key === "description") {
+          const match = productByName.get(value.trim().toLowerCase());
+          return { ...r, description: value, unit: r.unit || match?.unit || "" };
+        }
+        return { ...r, [key]: value };
+      }),
+    );
   }
 
   async function run(fn: () => Promise<void>, after?: () => void) {
@@ -92,6 +105,11 @@ export function MaterialRequests({
             <div className="text-sm text-muted-foreground">{raisableDepts[0].label}</div>
           )}
 
+          {products.length > 0 && (
+            <datalist id="mrf-products">
+              {products.map((p) => <option key={p.name} value={p.name} />)}
+            </datalist>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] border-collapse text-sm">
               <thead>
@@ -105,7 +123,7 @@ export function MaterialRequests({
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={i} className="border-b last:border-0">
-                    <td className="py-1 pr-2"><input value={r.description} onChange={(e) => setCell(i, "description", e.target.value)} className="w-full rounded border bg-background px-2 py-1" /></td>
+                    <td className="py-1 pr-2"><input list="mrf-products" value={r.description} onChange={(e) => setCell(i, "description", e.target.value)} className="w-full rounded border bg-background px-2 py-1" placeholder="Type or pick a product" /></td>
                     <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
                     <td className="py-1 px-1"><input value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>
                     <td className="py-1 pl-1"><input value={r.remark ?? ""} onChange={(e) => setCell(i, "remark", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>
