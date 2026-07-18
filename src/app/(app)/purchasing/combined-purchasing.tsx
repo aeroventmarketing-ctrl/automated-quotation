@@ -14,7 +14,7 @@ import type { PRStatus } from "@/lib/purchasing";
 import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest, deletePurchaseRequest } from "../orders/actions";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
-import { ProductScanBox } from "@/components/product-scan-box";
+import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 
 export interface CombinableItem {
@@ -436,9 +436,20 @@ function CombineForm({
   function setLine(i: number, key: keyof POLine, value: string) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
   }
-  function addScanned(p: ScanProduct) {
-    const price = catalogPriceFor(p.name, company.trim().toLowerCase(), catalogPrices);
-    setLines((ls) => [...ls, { description: p.name, qty: "", unit: p.unit, unitPrice: price ? String(price) : "" }]);
+  const [scanHighlight, setScanHighlight] = useState<number | null>(null);
+  function flashLine(idx: number) {
+    setScanHighlight(idx);
+    setTimeout(() => setScanHighlight((h) => (h === idx ? null : h)), 2000);
+  }
+  function handleScan({ mode, product, qty }: { mode: string; product: ScanProduct; qty: number }) {
+    if (mode === "add") {
+      const price = catalogPriceFor(product.name, company.trim().toLowerCase(), catalogPrices);
+      setLines((ls) => [...ls, { description: product.name, qty: String(qty), unit: product.unit, unitPrice: price ? String(price) : "" }]);
+      return { ok: true, message: `Added ${qty} · ${product.name}` };
+    }
+    const idx = lines.findIndex((l) => l.description.trim().toLowerCase() === product.name.trim().toLowerCase());
+    if (idx >= 0) { flashLine(idx); return { ok: true, message: `In line ${idx + 1}: ${product.name}` }; }
+    return { ok: false, message: `${product.name} isn't on the PO yet.` };
   }
 
   const effectiveEwt = withEwt ? Number(ewtPct) || 0 : 0;
@@ -510,7 +521,7 @@ function CombineForm({
           </thead>
           <tbody>
             {lines.map((l, i) => (
-              <tr key={i} className="border-b last:border-0">
+              <tr key={i} className={`border-b last:border-0 transition-colors ${scanHighlight === i ? "bg-amber-200/60" : ""}`}>
                 <td className="py-1 pr-2"><Input className="h-8" value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} /></td>
                 <td className="py-1 px-1"><Input className="h-8 text-right" value={l.qty} onChange={(e) => setLine(i, "qty", e.target.value)} /></td>
                 <td className="py-1 px-1"><Input className="h-8" value={l.unit} onChange={(e) => setLine(i, "unit", e.target.value)} /></td>
@@ -531,7 +542,7 @@ function CombineForm({
             Fill prices from {company}
           </Button>
         )}
-        {scanProducts.length > 0 && <ProductScanBox products={scanProducts} onFound={addScanned} />}
+        {scanProducts.length > 0 && <ProductScanBox products={scanProducts} modes={ADD_JUMP_MODES("add line")} onScan={handleScan} />}
       </div>
 
       <div className="ml-auto max-w-xs space-y-1 text-sm">

@@ -9,7 +9,7 @@ import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest } f
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
-import { ProductScanBox } from "@/components/product-scan-box";
+import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 
 interface ReqRow {
@@ -145,8 +145,19 @@ export function MaterialRequests({
   }
 
   const hasItems = rows.some((r) => r.description.trim() !== "");
-  function addScanned(p: ScanProduct) {
-    setRows((rs) => [...rs, { description: p.name, qty: "", unit: p.unit, remark: "" }]);
+  const [highlight, setHighlight] = useState<number | null>(null);
+  function flash(idx: number) {
+    setHighlight(idx);
+    setTimeout(() => setHighlight((h) => (h === idx ? null : h)), 2000);
+  }
+  function handleScan({ mode, product, qty }: { mode: string; product: ScanProduct; qty: number }) {
+    if (mode === "add") {
+      setRows((rs) => [...rs, { description: product.name, qty: String(qty), unit: product.unit, remark: "" }]);
+      return { ok: true, message: `Added ${qty} · ${product.name}` };
+    }
+    const idx = rows.findIndex((r) => r.description.trim().toLowerCase() === product.name.trim().toLowerCase());
+    if (idx >= 0) { flash(idx); return { ok: true, message: `In row ${idx + 1}: ${product.name}` }; }
+    return { ok: false, message: `${product.name} isn't in the list yet.` };
   }
 
   return (
@@ -166,7 +177,7 @@ export function MaterialRequests({
             <div className="text-sm text-muted-foreground">{raisableDepts[0].label}</div>
           )}
 
-          {products.length > 0 && <ProductScanBox products={products} onFound={addScanned} className="rounded-md border bg-muted/20 p-2" />}
+          {products.length > 0 && <ProductScanBox products={products} modes={ADD_JUMP_MODES("add item")} onScan={handleScan} className="rounded-md border bg-muted/20 p-2" />}
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] border-collapse text-sm">
@@ -180,7 +191,7 @@ export function MaterialRequests({
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={i} className="border-b last:border-0">
+                  <tr key={i} className={`border-b last:border-0 transition-colors ${highlight === i ? "bg-amber-200/60" : ""}`}>
                     <td className="py-1 pr-2"><ProductCombobox value={r.description} onChange={(v) => setCell(i, "description", v)} products={products} /></td>
                     <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
                     <td className="py-1 px-1"><input value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>

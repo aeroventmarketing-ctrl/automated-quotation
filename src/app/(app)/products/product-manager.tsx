@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ScanLine, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,8 @@ import type { ProductSupplierLink } from "@/lib/products";
 import type { ProductRow } from "@/lib/product-catalog";
 import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus } from "./actions";
 import { BulkImport } from "./bulk-import";
+import { ProductScanBox } from "@/components/product-scan-box";
+import type { ScanProduct } from "@/lib/product-scan";
 
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -178,26 +180,12 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [scan, setScan] = useState("");
-  const [scanMsg, setScanMsg] = useState<string | null>(null);
-  const [scanErr, setScanErr] = useState(false);
   const [scanTarget, setScanTarget] = useState<string | null>(null);
   const [scanNonce, setScanNonce] = useState(0);
-  const scanRef = useRef<HTMLInputElement>(null);
 
-  function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    const code = scan.trim();
-    setScan("");
-    if (!code) return;
-    const found =
-      products.find((p) => p.sku === code) ??
-      products.find((p) => p.id === code) ??
-      products.find((p) => p.name.toLowerCase() === code.toLowerCase());
-    if (!found) { setScanErr(true); setScanMsg(`No product matches “${code}”.`); return; }
-    setScanErr(false); setScanMsg(`Found: ${found.name}`);
-    setScanTarget(found.id); setScanNonce((n) => n + 1);
+  function handleScan({ product }: { product: ScanProduct }) {
+    setScanTarget(product.id); setScanNonce((n) => n + 1);
+    return { ok: true, message: `Found: ${product.name}` };
   }
 
   async function add() {
@@ -218,11 +206,11 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
     <div className="space-y-3">
       {/* Scan box: a scanner types the SKU + Enter → jump to the product. */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-2">
-        <div className="relative">
-          <ScanLine className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input ref={scanRef} className="h-9 w-56 pl-8" placeholder="Scan product barcode…" value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={onScanKey} />
-        </div>
-        {scanMsg && <span className={`text-xs ${scanErr ? "text-destructive" : "text-emerald-600"}`}>{scanMsg}</span>}
+        <ProductScanBox
+          products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))}
+          modes={[{ value: "find", label: "Scan → jump to item" }]}
+          onScan={handleScan}
+        />
         {canManage && missing > 0 && (
           <Button size="sm" variant="outline" className="ml-auto h-9 text-xs" disabled={busy}
             onClick={async () => { setBusy(true); try { await assignMissingProductSkus(); router.refresh(); } finally { setBusy(false); } }}>
