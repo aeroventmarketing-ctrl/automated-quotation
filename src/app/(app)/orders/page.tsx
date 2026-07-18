@@ -14,6 +14,7 @@ import {
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/workflow-roles";
 import { readOrderWorkflow, nextOrderStep, stageLabel, pendingStep } from "@/lib/order-workflow";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
+import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { OrdersTable } from "./orders-table";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ function orderDate(sale: SaleRecord, fallback: Date): Date {
  * quotation; VAT invoice generation follows in the next increment.
  */
 export default async function OrdersPage() {
-  const [quotes, viewer, assignments, hideOrderProgress] = await Promise.all([
+  const [quotes, viewer, assignments, hideOrderProgress, docCheckGate] = await Promise.all([
     prisma.quotation.findMany({
       where: { inquiry: { status: "WON" } },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
@@ -44,6 +45,7 @@ export default async function OrdersPage() {
     getCurrentUser(),
     getWorkflowRoles(),
     getHideOrderProgress().catch(() => false),
+    getDocCheckGateEnabled().catch(() => true),
   ]);
   const adminViewer = isAdmin(viewer);
   const progressHidden = progressHiddenFor(hideOrderProgress, viewer, adminViewer, assignments);
@@ -61,7 +63,7 @@ export default async function OrdersPage() {
       const next = nextOrderStep(wf.stage);
       const canAct = next != null && (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, next.requiredRole)));
       // "Mark documents checked" is blocked until the required docs are attached.
-      const docMissing = next?.key === "doc_check" ? docCheckMissing(sale) : [];
+      const docMissing = docCheckGate && next?.key === "doc_check" ? docCheckMissing(sale) : [];
       const blockedReason = docMissing.length ? `Attach: ${docMissing.join(", ")}` : null;
       // Who acts next across the whole order (all phases), for the "Awaiting" hint.
       const pend = pendingStep(wf);

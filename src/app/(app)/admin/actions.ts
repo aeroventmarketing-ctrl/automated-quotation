@@ -10,6 +10,7 @@ import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
 import { setHideOrderProgress } from "@/lib/order-progress-visibility";
 import { setNotificationsEnabled } from "@/lib/notification-settings";
+import { setDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { setStockLocations } from "@/lib/stock-locations";
 import { setDocViewers } from "@/lib/doc-viewers";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
@@ -340,6 +341,16 @@ export async function saveNotificationsSetting(input: z.infer<typeof spLockSchem
   const d = spLockSchema.parse(input);
   await setNotificationsEnabled(d.enabled);
   revalidatePath("/admin");
+  return d.enabled;
+}
+
+// --- Documents-required gate for "Mark documents checked" -------------------
+export async function saveDocCheckGateSetting(input: z.infer<typeof spLockSchema>): Promise<boolean> {
+  await assertAdmin();
+  const d = spLockSchema.parse(input);
+  await setDocCheckGateEnabled(d.enabled);
+  revalidatePath("/admin");
+  revalidatePath("/orders");
   return d.enabled;
 }
 

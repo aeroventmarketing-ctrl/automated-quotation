@@ -6,6 +6,7 @@ import { getAxialSpLock } from "@/lib/axial-lock";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { getNotificationsEnabled } from "@/lib/notification-settings";
+import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { getStockLocations } from "@/lib/stock-locations";
 import { StockLocationsSetting } from "./stock-locations-setting";
 import { QuoteNumberSetting } from "./quote-number-setting";
@@ -14,12 +15,12 @@ import { PoNumberSetting } from "./po-number-setting";
 import { JoNumberSetting } from "./jo-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress, notificationsEnabled, stockLocations] = await Promise.all([
+  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress, notificationsEnabled, stockLocations, docCheckGate] = await Promise.all([
     prisma.user.count(),
     prisma.catalogueItem.count(),
     prisma.priceListEntry.count(),
@@ -34,6 +35,7 @@ export default async function AdminOverviewPage() {
     getHideOrderProgress(),
     getNotificationsEnabled(),
     getStockLocations(),
+    getDocCheckGateEnabled(),
   ]);
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
@@ -160,6 +162,12 @@ export default async function AdminOverviewPage() {
         description="When enabled, an approver hears a loud 20-second alarm and sees a flashing pop-up whenever an order is waiting on their approval. Turn off to silence the alarm for everyone (the order workflow is unaffected)."
         enabled={notificationsEnabled}
         onSave={saveNotificationsSetting}
+      />
+      <SpLockSetting
+        title="Require documents before ‘Mark documents checked’"
+        description="When enabled, an order's documents can only be marked checked once the Purchase Order, Computation, Quotation, and RFQ/BOQ are attached. Turn off (e.g. while testing) to allow marking documents checked without the attachments."
+        enabled={docCheckGate}
+        onSave={saveDocCheckGateSetting}
       />
       <StockLocationsSetting initial={stockLocations} onSave={saveStockLocationsAction} />
       <FollowUpSetting
