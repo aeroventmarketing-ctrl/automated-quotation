@@ -599,25 +599,16 @@ export async function cancelPurchaseRequest(purchaseRequestId: string): Promise<
   revalidatePath("/purchasing");
 }
 
-/**
- * Delete a purchase request / PO (single or the whole combined PO). An admin can
- * delete any; a purchaser can delete rejected or cancelled ones (cleanup).
- */
+/** Delete a purchase request / PO (single or the whole combined PO). Admin only. */
 export async function deletePurchaseRequest(purchaseRequestId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can delete a purchase order.");
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   const ids = poMemberIds(pr.po);
   const targetIds = ids.length ? ids : [pr.id];
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: targetIds } } });
-
-  const admin = isAdmin(user);
-  const purchaser = userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey);
-  const terminal = members.every((m) => (["REJECTED", "CANCELLED"] as string[]).includes(m.status));
-  if (!admin && !(purchaser && terminal)) {
-    throw new Error("Only an admin can delete this — a purchaser can delete rejected or cancelled requests.");
-  }
   await prisma.purchaseRequest.deleteMany({ where: { id: { in: targetIds } } });
   for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
     revalidatePath(`/orders/${qid}`);

@@ -47,9 +47,8 @@ export default async function PurchasingPage() {
     const isRequestor = viewer != null && pr.createdById === viewer.id;
     return admin || canManagePO || isRequestor;
   };
-  // Delete: admin can remove any; a purchaser can remove rejected/cancelled ones.
-  const canDeleteStatus = (status: string): boolean =>
-    admin || (canManagePO && (status === "REJECTED" || status === "CANCELLED"));
+  // Delete: admin only.
+  const canDeleteStatus = (_status: string): boolean => admin;
 
   const [stockItems, suppliers, paymentTerms, allUsers] = await Promise.all([
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
