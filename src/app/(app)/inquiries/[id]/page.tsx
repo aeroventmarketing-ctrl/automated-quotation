@@ -7,6 +7,8 @@ import { formatDate, formatCurrency } from "@/lib/utils";
 import { InquiryWorkspace } from "./inquiry-workspace";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, ensureBuiltinTemplates, sortTemplatesByName } from "@/lib/ensure-templates";
 import { findContactOwner } from "@/lib/client-ownership";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { coerceInquiryDocs } from "@/lib/inquiry-docs";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,10 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
   ]);
 
   if (!inquiry) notFound();
+
+  const viewer = await getCurrentUser();
+  const canEditDocs = viewer != null && (isAdmin(viewer) || inquiry.createdById === viewer.id);
+  const inquiryDocs = coerceInquiryDocs((inquiry as { docs?: unknown }).docs);
 
   // First-contact owner for this client's contact details (dispute authority).
   const owner = await findContactOwner({
@@ -127,6 +133,8 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
         }))}
         catalogue={catalogueLite}
         templates={sortTemplatesByName(templates).map((t) => ({ id: t.id, name: t.name }))}
+        initialDocs={inquiryDocs}
+        canEditDocs={canEditDocs}
       />
     </div>
   );

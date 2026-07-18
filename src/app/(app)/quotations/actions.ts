@@ -10,6 +10,8 @@ import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
 import { isSaleConfirmed, saleFromClassification, type SaleRecord } from "@/lib/sale";
+import { getInquiryDocs } from "@/lib/inquiry-docs-store";
+import { inquiryDocsMissing } from "@/lib/inquiry-docs";
 import { findDuplicateQuotes, type DuplicateMatch } from "@/lib/quote-duplicates";
 
 const lineSchema = z.object({
@@ -36,6 +38,11 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const data = createSchema.parse(input);
+
+  // Gate: the Inquiry Form and RFQ / BOQ must be attached before a quotation.
+  const inquiryDocs = await getInquiryDocs(data.inquiryId);
+  const missingDocs = inquiryDocsMissing(inquiryDocs);
+  if (missingDocs.length) throw new Error(`Attach ${missingDocs.join(" and ")} to the inquiry before creating a quotation.`);
 
   const template = data.templateId
     ? await prisma.quotationTemplate.findUnique({ where: { id: data.templateId } })
@@ -76,6 +83,14 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
   const tplConfig = (template.config as Record<string, unknown>) ?? {};
   const terms = typeof tplConfig.terms === "string" ? tplConfig.terms : null;
 
+  // Seed the sale documents with the inquiry's Inquiry Form + RFQ/BOQ so they
+  // reflect in the quotation's Sale & payment panel.
+  const seededSale = {
+    arrangement: "downpayment_full",
+    payments: [],
+    docs: { inquiry_form: inquiryDocs.inquiry_form ?? [], rfq_boq: inquiryDocs.rfq_boq ?? [] },
+  };
+
   const quotation = await prisma.$transaction(async (tx) => {
     const quoteNumber = await nextQuoteNumber(tx, user.salesCode ?? "");
     return tx.quotation.create({
@@ -83,6 +98,7 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
         inquiryId: data.inquiryId,
         quoteNumber,
         templateId: template.id,
+        classification: { sale: seededSale } as unknown as Prisma.InputJsonObject,
         status: "DRAFT",
         vatMode: data.vatMode,
         discountPct: data.discountPct,

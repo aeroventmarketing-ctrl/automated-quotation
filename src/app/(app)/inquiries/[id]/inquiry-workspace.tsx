@@ -14,6 +14,9 @@ import type { MatchCandidate } from "@/lib/ai/schemas";
 import { isNextControlFlowError } from "@/lib/utils";
 import { lookupMotor, computeUnitPrice } from "@/lib/pricing/motors";
 import { createQuotationFromInquiry } from "../../quotations/actions";
+import { inquiryDocsMissing } from "@/lib/inquiry-docs";
+import type { SaleDoc } from "@/lib/sale";
+import { InquiryDocsUploader } from "./inquiry-docs-uploader";
 
 interface CatLite {
   id: string;
@@ -65,13 +68,19 @@ export function InquiryWorkspace({
   items,
   catalogue,
   templates,
+  initialDocs = {},
+  canEditDocs = true,
 }: {
   inquiryId: string;
   projectName: string;
   items: ItemLite[];
   catalogue: CatLite[];
   templates: { id: string; name: string }[];
+  initialDocs?: Record<string, SaleDoc[]>;
+  canEditDocs?: boolean;
 }) {
+  const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialDocs);
+  const docsMissing = inquiryDocsMissing(docs);
   const [state, setState] = useState<Record<string, ItemState>>(
     Object.fromEntries(items.map((it) => [it.id, initState()])),
   );
@@ -360,6 +369,9 @@ export function InquiryWorkspace({
         );
       })}
 
+      {/* Required documents before a quotation can be made */}
+      <InquiryDocsUploader inquiryId={inquiryId} docs={docs} onChange={setDocs} canEdit={canEditDocs} />
+
       {/* Create quotation */}
       <Card className="border-primary/40">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
@@ -372,8 +384,9 @@ export function InquiryWorkspace({
             </Select>
           </div>
           <div className="flex items-center gap-3">
+            {docsMissing.length > 0 && <span className="text-sm text-amber-600">Attach {docsMissing.join(" and ")} first</span>}
             {createError && <span className="text-sm text-destructive">{createError}</span>}
-            <Button onClick={createQuote} disabled={creating}>
+            <Button onClick={createQuote} disabled={creating || docsMissing.length > 0}>
               {creating ? "Creating…" : "Create draft quotation"}
             </Button>
           </div>

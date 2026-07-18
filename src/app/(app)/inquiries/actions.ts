@@ -6,7 +6,22 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { findContactOwner } from "@/lib/client-ownership";
+import { setInquiryDocs } from "@/lib/inquiry-docs-store";
 import type { InquirySource } from "@prisma/client";
+
+const inquiryDocSchema = z.object({ path: z.string(), name: z.string(), uploadedAt: z.string() });
+
+/** Save the pre-quotation documents (Inquiry Form, RFQ/BOQ) attached to an inquiry. */
+export async function saveInquiryDocs(inquiryId: string, docs: Record<string, z.infer<typeof inquiryDocSchema>[]>): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const inq = await prisma.inquiry.findUnique({ where: { id: inquiryId }, select: { createdById: true } });
+  if (!inq) throw new Error("Inquiry not found");
+  if (inq.createdById !== user.id && !isAdmin(user)) throw new Error("Only the inquiry's owner or an admin can attach documents.");
+  const clean = z.record(z.array(inquiryDocSchema)).parse(docs);
+  await setInquiryDocs(inquiryId, clean);
+  revalidatePath(`/inquiries/${inquiryId}`);
+}
 
 function formatOwnerDate(d: Date): string {
   return d.toISOString().slice(0, 10);

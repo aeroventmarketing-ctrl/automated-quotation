@@ -160,6 +160,7 @@ model Inquiry {
   createdById String
   projectName String?
   notes       String?
+  docs        Json          @default("{}") // pre-quotation docs: { inquiry_form: SaleDoc[], rfq_boq: SaleDoc[] }
   createdAt   DateTime      @default(now())
 
   customer    Customer       @relation(fields: [customerId], references: [id])

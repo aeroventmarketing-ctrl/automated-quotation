@@ -19,13 +19,15 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const file = form.get("file") as File | null;
   const quotationId = form.get("quotationId") as string | null;
-  if (!file || !quotationId) {
-    return NextResponse.json({ error: "file and quotationId are required" }, { status: 400 });
+  const inquiryId = form.get("inquiryId") as string | null;
+  if (!file || !(quotationId || inquiryId)) {
+    return NextResponse.json({ error: "file and quotationId (or inquiryId) are required" }, { status: 400 });
   }
 
   try {
     const ext = file.name.split(".").pop() || "bin";
-    const path = `sales/${quotationId}/${Date.now()}-${Math.round(performance.now())}.${ext}`;
+    const prefix = inquiryId ? `inquiries/${inquiryId}` : `sales/${quotationId}`;
+    const path = `${prefix}/${Date.now()}-${Math.round(performance.now())}.${ext}`;
     const bytes = new Uint8Array(await file.arrayBuffer());
     await uploadToStorage(path, bytes, file.type);
     return NextResponse.json({ path, name: file.name, uploadedAt: new Date().toISOString() });
@@ -50,13 +52,20 @@ export async function GET(req: NextRequest) {
   const path = req.nextUrl.searchParams.get("path");
   if (!path) return NextResponse.json({ error: "path is required" }, { status: 400 });
 
-  // View access: admins and the quote's preparer always; others only if the admin
-  // has granted them document-view permission. Path is "sales/<quotationId>/...".
+  // View access: admins and the doc's owner (quote preparer / inquiry creator)
+  // always; others only if the admin granted them document-view permission.
+  // Paths are "sales/<quotationId>/..." or "inquiries/<inquiryId>/...".
   if (!isAdmin(user)) {
-    const quotationId = path.split("/")[1];
-    const quote = quotationId ? await prisma.quotation.findUnique({ where: { id: quotationId }, select: { preparedById: true } }) : null;
-    const isPreparer = quote?.preparedById === user.id;
-    const allowed = isPreparer || (await getDocViewers()).includes(user.id);
+    const [scope, ownerId] = path.split("/");
+    let isOwner = false;
+    if (scope === "sales" && ownerId) {
+      const quote = await prisma.quotation.findUnique({ where: { id: ownerId }, select: { preparedById: true } });
+      isOwner = quote?.preparedById === user.id;
+    } else if (scope === "inquiries" && ownerId) {
+      const inq = await prisma.inquiry.findUnique({ where: { id: ownerId }, select: { createdById: true } });
+      isOwner = inq?.createdById === user.id;
+    }
+    const allowed = isOwner || (await getDocViewers()).includes(user.id);
     if (!allowed) return NextResponse.json({ error: "You don't have permission to view this document." }, { status: 403 });
   }
   const wantsDownload = req.nextUrl.searchParams.get("download") !== null;
