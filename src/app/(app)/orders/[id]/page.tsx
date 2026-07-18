@@ -75,7 +75,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const stockItems = stockItemsRaw;
   // Catalogue of purchasable products (for the MRF autocomplete); may be empty
   // before the product table is migrated.
-  const productOptions = await getProducts().then((ps) => ps.map((p) => ({ name: p.name, unit: p.unit }))).catch(() => []);
+  const productOptions = await getProducts().then((ps) => ps.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))).catch(() => []);
 
   const adminViewer = isAdmin(viewer);
   const wf = readOrderWorkflow(quote.classification);

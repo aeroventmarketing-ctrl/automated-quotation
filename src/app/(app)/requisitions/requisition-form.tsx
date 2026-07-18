@@ -4,13 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ProductScanBox } from "@/components/product-scan-box";
+import type { ScanProduct } from "@/lib/product-scan";
 import { createDepartmentRequisition } from "../orders/actions";
 
 interface Row { description: string; qty: string; unit: string; remark: string }
 const emptyRow = (): Row => ({ description: "", qty: "", unit: "", remark: "" });
 
 /** Raise a department requisition — production supplies not tied to an order. */
-export function RequisitionForm({ depts, products }: { depts: { key: string; label: string }[]; products: string[] }) {
+export function RequisitionForm({ depts, products }: { depts: { key: string; label: string }[]; products: ScanProduct[] }) {
   const router = useRouter();
   const [dept, setDept] = useState(depts[0]?.key ?? "");
   const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow(), emptyRow()]);
@@ -22,6 +24,9 @@ export function RequisitionForm({ depts, products }: { depts: { key: string; lab
   const hasItems = rows.some((r) => r.description.trim() !== "");
   function setCell(i: number, key: keyof Row, value: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
+  }
+  function addScanned(p: ScanProduct) {
+    setRows((rs) => [...rs, { description: p.name, qty: "", unit: p.unit, remark: "" }]);
   }
 
   async function submit() {
@@ -43,8 +48,9 @@ export function RequisitionForm({ depts, products }: { depts: { key: string; lab
       <CardHeader className="pb-2"><CardTitle className="text-sm">New department requisition</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">Request supplies, consumables or equipment for a department. Not tied to a customer order; received into stock after purchase.</p>
+        <ProductScanBox products={products} onFound={addScanned} className="rounded-md border bg-muted/20 p-2" />
         <datalist id="requisition-products">
-          {products.map((p) => <option key={p} value={p} />)}
+          {products.map((p) => <option key={p.id} value={p.name} />)}
         </datalist>
         <label className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-xs text-muted-foreground">Department</span>

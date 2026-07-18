@@ -8,6 +8,7 @@ import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PurchaseChainRow } from "@/lib/purchase-chain-row";
 import type { CatalogPrices, CatalogSuppliers } from "@/lib/po-catalog";
+import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
 import { CombinedPurchasing, type BatchCard, type CombinableItem, type SupplierSuggestion } from "./combined-purchasing";
 import type { StockOpt } from "../orders/[id]/stock-match-panel";
@@ -40,6 +41,7 @@ export function PurchasingWorkspace({
   poDefaultRemarks,
   catalogPrices,
   catalogSuppliers,
+  scanProducts,
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -52,6 +54,7 @@ export function PurchasingWorkspace({
   poDefaultRemarks: string;
   catalogPrices: CatalogPrices;
   catalogSuppliers: CatalogSuppliers;
+  scanProducts: ScanProduct[];
 }) {
   const [tab, setTab] = useState<Tab>("pending");
   const inTab = (bucket: PRBucket) => tab === "all" || tab === bucket;
@@ -100,6 +103,7 @@ export function PurchasingWorkspace({
           poDefaultRemarks={poDefaultRemarks}
           catalogPrices={catalogPrices}
           catalogSuppliers={catalogSuppliers}
+          scanProducts={scanProducts}
         />
       )}
 
@@ -123,6 +127,7 @@ export function PurchasingWorkspace({
               canManagePO={canManagePO}
               catalogSuppliers={catalogSuppliers}
               catalogPrices={catalogPrices}
+              scanProducts={scanProducts}
             />
           </CardContent>
         </Card>

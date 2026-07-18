@@ -72,6 +72,7 @@ export default async function PurchasingPage() {
 
   // Product catalogue → supplier lookup, used to suggest same-supplier combines.
   const products = await getProducts().catch(() => []);
+  const scanProducts = products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }));
   const suppliersByProduct = new Map<string, string[]>();
   for (const p of products) suppliersByProduct.set(p.name.trim().toLowerCase(), p.suppliers.map((s) => s.company).filter(Boolean));
   const productNamesByLen = [...suppliersByProduct.keys()].sort((a, b) => b.length - a.length);
@@ -318,6 +319,7 @@ export default async function PurchasingPage() {
               poDefaultRemarks={COMPANY.poDefaultRemarks}
               catalogPrices={catalogPrices}
               catalogSuppliers={Object.fromEntries(suppliersByProduct)}
+              scanProducts={scanProducts}
             />
           </section>
 
@@ -338,6 +340,7 @@ export default async function PurchasingPage() {
                     canManagePO={canManagePO}
                     catalogSuppliers={Object.fromEntries(suppliersByProduct)}
                     catalogPrices={catalogPrices}
+                    scanProducts={scanProducts}
                     poRoute="purchasing"
                   />
                 </CardContent>

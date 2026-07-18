@@ -9,6 +9,8 @@ import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest } f
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
+import { ProductScanBox } from "@/components/product-scan-box";
+import type { ScanProduct } from "@/lib/product-scan";
 
 interface ReqRow {
   id: string;
@@ -103,7 +105,7 @@ export function MaterialRequests({
   raisableDepts: { key: string; label: string }[];
   requests: ReqRow[];
   stockItems: StockOpt[];
-  products?: { name: string; unit: string }[];
+  products?: ScanProduct[];
 }) {
   const router = useRouter();
   const [issuingId, setIssuingId] = useState<string | null>(null);
@@ -143,6 +145,9 @@ export function MaterialRequests({
   }
 
   const hasItems = rows.some((r) => r.description.trim() !== "");
+  function addScanned(p: ScanProduct) {
+    setRows((rs) => [...rs, { description: p.name, qty: "", unit: p.unit, remark: "" }]);
+  }
 
   return (
     <div className="space-y-4">
@@ -160,6 +165,8 @@ export function MaterialRequests({
           ) : (
             <div className="text-sm text-muted-foreground">{raisableDepts[0].label}</div>
           )}
+
+          {products.length > 0 && <ProductScanBox products={products} onFound={addScanned} className="rounded-md border bg-muted/20 p-2" />}
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] border-collapse text-sm">

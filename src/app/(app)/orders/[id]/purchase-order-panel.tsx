@@ -10,6 +10,8 @@ import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/p
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import { carriersForLines, catalogPriceFor, withCatalogPrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { ProductScanBox } from "@/components/product-scan-box";
+import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
 
 function todayInput(): string {
@@ -29,6 +31,7 @@ export function PurchaseOrderPanel({
   canManageTerms,
   catalogSuppliers = {},
   catalogPrices = {},
+  scanProducts = [],
   onDone,
 }: {
   prId: string;
@@ -41,6 +44,7 @@ export function PurchaseOrderPanel({
   canManageTerms: boolean;
   catalogSuppliers?: CatalogSuppliers;
   catalogPrices?: CatalogPrices;
+  scanProducts?: ScanProduct[];
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -109,6 +113,10 @@ export function PurchaseOrderPanel({
   }
   function addRow() {
     setLines((ls) => [...ls, { description: "", qty: "", unit: "", unitPrice: "" }]);
+  }
+  function addScanned(p: ScanProduct) {
+    const price = catalogPriceFor(p.name, company.trim().toLowerCase(), catalogPrices);
+    setLines((ls) => [...ls, { description: p.name, qty: "", unit: p.unit, unitPrice: price ? String(price) : "" }]);
   }
   function removeRow(i: number) {
     setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
@@ -223,6 +231,7 @@ export function PurchaseOrderPanel({
             Fill prices from {company}
           </Button>
         )}
+        {scanProducts.length > 0 && <ProductScanBox products={scanProducts} onFound={addScanned} />}
       </div>
 
       {/* Totals */}

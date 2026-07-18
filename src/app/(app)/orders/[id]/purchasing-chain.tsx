@@ -12,6 +12,7 @@ import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { CatalogSuppliers, CatalogPrices } from "@/lib/po-catalog";
+import type { ScanProduct } from "@/lib/product-scan";
 
 interface ActionOpt {
   key: string;
@@ -47,6 +48,7 @@ export function PurchasingChain({
   canManagePO,
   catalogSuppliers = {},
   catalogPrices = {},
+  scanProducts = [],
   readOnly = false,
   poRoute = "order",
 }: {
@@ -59,6 +61,8 @@ export function PurchasingChain({
   canManagePO: boolean;
   catalogSuppliers?: CatalogSuppliers;
   catalogPrices?: CatalogPrices;
+  /** Catalogue for the PO editor's "Scan product barcode" quick-add. */
+  scanProducts?: ScanProduct[];
   /** Monitoring only — hide every action/PO editor (used on the order page). */
   readOnly?: boolean;
   /**
@@ -191,6 +195,7 @@ export function PurchasingChain({
                   canManageTerms={canManagePO}
                   catalogSuppliers={catalogSuppliers}
                   catalogPrices={catalogPrices}
+                  scanProducts={scanProducts}
                   onDone={() => setPoEditId(null)}
                 />
               ) : r.po ? (

@@ -14,6 +14,8 @@ import type { PRStatus } from "@/lib/purchasing";
 import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest, deletePurchaseRequest } from "../orders/actions";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
+import { ProductScanBox } from "@/components/product-scan-box";
+import type { ScanProduct } from "@/lib/product-scan";
 
 export interface CombinableItem {
   id: string;
@@ -77,6 +79,7 @@ export function CombinedPurchasing({
   poDefaultRemarks,
   catalogPrices = {},
   catalogSuppliers = {},
+  scanProducts = [],
 }: {
   combinable: CombinableItem[];
   batches: BatchCard[];
@@ -88,6 +91,7 @@ export function CombinedPurchasing({
   poDefaultRemarks: string;
   catalogPrices?: CatalogPrices;
   catalogSuppliers?: CatalogSuppliers;
+  scanProducts?: ScanProduct[];
 }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -109,7 +113,7 @@ export function CombinedPurchasing({
     <div className="space-y-3">
       {/* Existing combined POs */}
       {batches.map((b) => (
-        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} />
+        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} />
       ))}
 
       {/* Combine builder */}
@@ -170,6 +174,7 @@ export function CombinedPurchasing({
               poDefaultRemarks={poDefaultRemarks}
               catalogPrices={catalogPrices}
               catalogSuppliers={catalogSuppliers}
+              scanProducts={scanProducts}
               onSubmit={(input) => createCombinedPO(selectedItems.map((it) => it.id), input)}
               onCancel={() => { setBuilding(false); setPresetCompany(""); }}
               onDone={() => { setBuilding(false); setPresetCompany(""); setSel(new Set()); router.refresh(); }}
@@ -181,7 +186,7 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -231,6 +236,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           poDefaultRemarks={poDefaultRemarks}
           catalogPrices={catalogPrices}
           catalogSuppliers={catalogSuppliers}
+          scanProducts={scanProducts}
           onSubmit={(input) => updateCombinedPO(batch.anchorId, input)}
           onCancel={() => setEditing(false)}
           onDone={() => { setEditing(false); router.refresh(); }}
@@ -359,6 +365,7 @@ function CombineForm({
   poDefaultRemarks,
   catalogPrices,
   catalogSuppliers,
+  scanProducts = [],
   onSubmit,
   onCancel,
   onDone,
@@ -376,6 +383,7 @@ function CombineForm({
   poDefaultRemarks: string;
   catalogPrices: CatalogPrices;
   catalogSuppliers: CatalogSuppliers;
+  scanProducts?: ScanProduct[];
   onSubmit: (input: { supplier: { company: string; attention: string; address: string }; date: string; lines: POLine[]; ewtPct: number; remarks: string }) => Promise<void>;
   onCancel: () => void;
   onDone: () => void;
@@ -427,6 +435,10 @@ function CombineForm({
   }, []);
   function setLine(i: number, key: keyof POLine, value: string) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
+  }
+  function addScanned(p: ScanProduct) {
+    const price = catalogPriceFor(p.name, company.trim().toLowerCase(), catalogPrices);
+    setLines((ls) => [...ls, { description: p.name, qty: "", unit: p.unit, unitPrice: price ? String(price) : "" }]);
   }
 
   const effectiveEwt = withEwt ? Number(ewtPct) || 0 : 0;
@@ -519,6 +531,7 @@ function CombineForm({
             Fill prices from {company}
           </Button>
         )}
+        {scanProducts.length > 0 && <ProductScanBox products={scanProducts} onFound={addScanned} />}
       </div>
 
       <div className="ml-auto max-w-xs space-y-1 text-sm">

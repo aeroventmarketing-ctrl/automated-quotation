@@ -68,7 +68,7 @@ export default async function RequisitionsPage() {
         <p className="text-sm text-muted-foreground">Department requests for production supplies, consumables and equipment. The purchaser processes them in Purchasing; received items go into stock.</p>
       </div>
 
-      <RequisitionForm depts={PRODUCTION_DEPTS.filter((d) => raisableDepts.includes(d.key)).map((d) => ({ key: d.key, label: d.label }))} products={products.map((p) => p.name)} />
+      <RequisitionForm depts={PRODUCTION_DEPTS.filter((d) => raisableDepts.includes(d.key)).map((d) => ({ key: d.key, label: d.label }))} products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))} />
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">My requisitions</h2>
