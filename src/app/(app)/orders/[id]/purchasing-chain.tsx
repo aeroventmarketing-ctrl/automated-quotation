@@ -11,6 +11,7 @@ import { PurchaseOrderPanel } from "./purchase-order-panel";
 import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
+import type { CatalogSuppliers, CatalogPrices } from "@/lib/po-catalog";
 
 interface ActionOpt {
   key: string;
@@ -42,6 +43,8 @@ export function PurchasingChain({
   suppliers,
   paymentTerms,
   canManagePO,
+  catalogSuppliers = {},
+  catalogPrices = {},
   readOnly = false,
 }: {
   requests: PRRow[];
@@ -51,6 +54,8 @@ export function PurchasingChain({
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   canManagePO: boolean;
+  catalogSuppliers?: CatalogSuppliers;
+  catalogPrices?: CatalogPrices;
   /** Monitoring only — hide every action/PO editor (used on the order page). */
   readOnly?: boolean;
 }) {
@@ -155,6 +160,8 @@ export function PurchasingChain({
                   suppliers={suppliers}
                   paymentTerms={paymentTerms}
                   canManageTerms={canManagePO}
+                  catalogSuppliers={catalogSuppliers}
+                  catalogPrices={catalogPrices}
                   onDone={() => setPoEditId(null)}
                 />
               ) : r.po ? (

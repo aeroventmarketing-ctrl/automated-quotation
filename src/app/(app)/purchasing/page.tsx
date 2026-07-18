@@ -304,6 +304,8 @@ export default async function PurchasingPage() {
                         suppliers={suppliers}
                         paymentTerms={paymentTerms}
                         canManagePO={canManagePO}
+                        catalogSuppliers={Object.fromEntries(suppliersByProduct)}
+                        catalogPrices={catalogPrices}
                       />
                     </CardContent>
                   </Card>

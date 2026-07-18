@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
+import { carriersForLines, catalogPriceFor, withCatalogPrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
 
 function todayInput(): string {
@@ -26,6 +27,8 @@ export function PurchaseOrderPanel({
   suppliers,
   paymentTerms,
   canManageTerms,
+  catalogSuppliers = {},
+  catalogPrices = {},
   onDone,
 }: {
   prId: string;
@@ -36,6 +39,8 @@ export function PurchaseOrderPanel({
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   canManageTerms: boolean;
+  catalogSuppliers?: CatalogSuppliers;
+  catalogPrices?: CatalogPrices;
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -44,18 +49,33 @@ export function PurchaseOrderPanel({
   const [address, setAddress] = useState(po?.supplier.address ?? "");
   const [supplierOpen, setSupplierOpen] = useState(false);
 
-  const matches = company.trim()
-    ? suppliers.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
-    : suppliers;
-
   function pickSupplier(s: Supplier) {
     setCompany(s.company);
     setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
     if (s.address) setAddress(s.address);
     setSupplierOpen(false);
+    setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
   }
   const [date, setDate] = useState(po?.date ? po.date.slice(0, 10) : todayInput());
   const [lines, setLines] = useState<POLine[]>(po?.lines?.length ? po.lines : defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }]);
+
+  // Only offer suppliers that carry the products on the PO lines (from the
+  // catalogue); fall back to all suppliers when none of the products are catalogued.
+  const carrierSet = carriersForLines(lines, catalogSuppliers);
+  const filtered = carrierSet.size > 0;
+  const eligible = filtered ? suppliers.filter((s) => carrierSet.has(s.company.toLowerCase())) : suppliers;
+  const matches = company.trim()
+    ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
+    : eligible;
+  const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices));
+
+  // When exactly one supplier carries the products, auto-populate it (new PO only).
+  const autoPicked = useRef(false);
+  useEffect(() => {
+    if (autoPicked.current) return;
+    if (!po && !company && filtered && eligible.length === 1) { autoPicked.current = true; pickSupplier(eligible[0]); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [ewtPct, setEwtPct] = useState(String(po?.ewtPct && po.ewtPct > 0 ? po.ewtPct : 1));
   const [withEwt, setWithEwt] = useState((po?.ewtPct ?? 1) > 0);
   function setEwtMode(mode: string) {
@@ -128,7 +148,7 @@ export function PurchaseOrderPanel({
             <Input
               className="h-8"
               value={company}
-              placeholder={suppliers.length ? "Search or type supplier…" : "Type supplier…"}
+              placeholder={filtered ? "Suppliers that carry these items…" : suppliers.length ? "Search or type supplier…" : "Type supplier…"}
               onChange={(e) => { setCompany(e.target.value); setSupplierOpen(true); }}
               onFocus={() => setSupplierOpen(true)}
               onBlur={() => setTimeout(() => setSupplierOpen(false), 150)}
@@ -153,6 +173,11 @@ export function PurchaseOrderPanel({
               </ul>
             )}
           </div>
+          {filtered && (
+            <p className="text-[11px] text-muted-foreground">
+              Showing {eligible.length} supplier{eligible.length === 1 ? "" : "s"} that carry these products. Type to use another.
+            </p>
+          )}
         </div>
         <label className="space-y-1"><span className="text-xs text-muted-foreground">Attention</span>
           <Input className="h-8" value={attention} onChange={(e) => setAttention(e.target.value)} /></label>
@@ -191,7 +216,14 @@ export function PurchaseOrderPanel({
           </tbody>
         </table>
       </div>
-      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addRow}>+ Add line</Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addRow}>+ Add line</Button>
+        {canFillPrices && (
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => withCatalogPrices(ls, company, catalogPrices))}>
+            Fill prices from {company}
+          </Button>
+        )}
+      </div>
 
       {/* Totals */}
       <div className="ml-auto max-w-xs space-y-1 text-sm">

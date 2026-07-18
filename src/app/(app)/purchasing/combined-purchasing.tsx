@@ -12,44 +12,7 @@ import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
 import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO } from "../orders/actions";
-
-type CatalogPrices = Record<string, Record<string, number>>;
-
-/** The catalogue price for a line description + supplier, tolerant of order-ref
- *  suffixes on the description (matches the longest product name contained in it). */
-function catalogPriceFor(description: string, companyLower: string, catalog: CatalogPrices): number | undefined {
-  const desc = description.trim().toLowerCase();
-  if (!desc || !companyLower) return undefined;
-  const exact = catalog[desc]?.[companyLower];
-  if (exact) return exact;
-  const names = Object.keys(catalog).sort((a, b) => b.length - a.length);
-  const key = names.find((n) => n.length >= 3 && (desc.includes(n) || n.includes(desc)));
-  return key ? catalog[key]?.[companyLower] : undefined;
-}
-
-type CatalogSuppliers = Record<string, string[]>;
-
-/** Supplier companies that carry a line's product (tolerant of order-ref suffixes). */
-function suppliersForDescription(description: string, catalog: CatalogSuppliers): string[] {
-  const desc = description.trim().toLowerCase();
-  if (!desc) return [];
-  const exact = catalog[desc];
-  if (exact) return exact;
-  const names = Object.keys(catalog).sort((a, b) => b.length - a.length);
-  const key = names.find((n) => n.length >= 3 && (desc.includes(n) || n.includes(desc)));
-  return key ? catalog[key] ?? [] : [];
-}
-
-/** Fill each line's unit price from the catalogue for the chosen supplier (only where blank). */
-function withCatalogPrices(lines: POLine[], company: string, catalog: CatalogPrices, force = false): POLine[] {
-  const co = company.trim().toLowerCase();
-  if (!co) return lines;
-  return lines.map((l) => {
-    if (l.unitPrice && !force) return l;
-    const price = catalogPriceFor(l.description, co, catalog);
-    return price ? { ...l, unitPrice: String(price) } : l;
-  });
-}
+import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 
 export interface CombinableItem {
