@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { raiseMaterialRequest, processMaterialRequest } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
@@ -17,19 +17,21 @@ interface ReqRow {
   deptLabel: string;
   items: MRFItem[];
   note?: string | null;
-  status: "requested" | "issued" | "purchasing" | "partial";
+  status: "requested" | "issued" | "purchasing" | "partial" | "cancelled";
   raisedByName: string;
   date: string;
   handledByName?: string;
   handledWhen?: string;
   canHandle: boolean;
+  canCancel: boolean;
 }
 
-const STATUS: Record<ReqRow["status"], { label: string; variant: "secondary" | "success" | "warning" }> = {
+const STATUS: Record<ReqRow["status"], { label: string; variant: "secondary" | "success" | "warning" | "destructive" }> = {
   requested: { label: "Requested", variant: "secondary" },
   issued: { label: "Issued from stock", variant: "success" },
   purchasing: { label: "For purchasing", variant: "warning" },
   partial: { label: "Partly issued · purchasing", variant: "warning" },
+  cancelled: { label: "Cancelled", variant: "destructive" },
 };
 
 const emptyRow = (): MRFItem => ({ description: "", qty: "", unit: "", remark: "" });
@@ -239,23 +241,31 @@ export function MaterialRequests({
                 Requested by {r.raisedByName} · {r.date}
                 {r.handledByName ? ` · handled by ${r.handledByName}${r.handledWhen ? ` · ${r.handledWhen}` : ""}` : ""}
               </p>
-              {r.status === "requested" && r.canHandle && (
-                issuingId === r.id ? (
-                  <MrfTriagePanel
-                    lines={r.items.map((it) => ({ description: it.description, qty: it.qty, unit: it.unit, remark: it.remark }))}
-                    stockItems={stockItems}
-                    onCancel={() => setIssuingId(null)}
-                    onSubmit={async (dispositions) => {
-                      await processMaterialRequest(orderId, r.id, dispositions);
-                      setIssuingId(null);
-                      router.refresh();
-                    }}
-                  />
-                ) : (
-                  <div className="mt-2">
+              {r.status === "requested" && (r.canHandle || r.canCancel) && issuingId !== r.id && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {r.canHandle && (
                     <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Check availability &amp; process</Button>
-                  </div>
-                )
+                  )}
+                  {r.canCancel && (
+                    <button type="button" disabled={busy}
+                      className="text-xs font-medium text-muted-foreground hover:text-destructive"
+                      onClick={() => { if (window.confirm(`Cancel material request MRF #${r.formNo}?`)) run(() => cancelMaterialRequest(orderId, r.id)); }}>
+                      Cancel request
+                    </button>
+                  )}
+                </div>
+              )}
+              {r.status === "requested" && r.canHandle && issuingId === r.id && (
+                <MrfTriagePanel
+                  lines={r.items.map((it) => ({ description: it.description, qty: it.qty, unit: it.unit, remark: it.remark }))}
+                  stockItems={stockItems}
+                  onCancel={() => setIssuingId(null)}
+                  onSubmit={async (dispositions) => {
+                    await processMaterialRequest(orderId, r.id, dispositions);
+                    setIssuingId(null);
+                    router.refresh();
+                  }}
+                />
               )}
             </div>
           ))}

@@ -234,6 +234,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     handledByName: m.handledByName,
     handledWhen: m.handledAt ? formatDateTime(m.handledAt) : "",
     canHandle: canWarehouse && m.status === "requested",
+    // The requesting department head (or an admin) can withdraw it before the
+    // warehouse handles it.
+    canCancel:
+      m.status === "requested" &&
+      (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey))),
   }));
   // Phase 3 (Materials + Purchasing) opens only once production has actually
   // started — a production head pressed "Start production" on a received job

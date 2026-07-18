@@ -365,6 +365,26 @@ async function nextMrfNo(): Promise<string> {
   });
 }
 
+/**
+ * The requesting department head (or an admin) withdraws a material request
+ * before the warehouse handles it. Only possible while it's still "requested".
+ */
+export async function cancelMaterialRequest(quotationId: string, requestId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  if (mrf.status !== "requested") throw new Error("Only a request the warehouse hasn't handled yet can be cancelled.");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(mrf.dept) as WorkflowRoleKey))) {
+    throw new Error(`Only the ${deptLabel(mrf.dept)} head or an admin can cancel this material request.`);
+  }
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = { ...mrf, status: "cancelled", handledAt: new Date().toISOString(), handledByName: user.name };
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+}
+
 /** Render one MRF item as a single display line for the purchasing chain. */
 function mrfItemLine(it: MRFItem): string {
   const qtyUnit = [it.qty, it.unit].filter(Boolean).join(" ");

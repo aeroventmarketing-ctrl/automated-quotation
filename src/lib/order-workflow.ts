@@ -72,7 +72,7 @@ export interface OrderApproval {
  * A Material Request Form raised by a production department against the order.
  * The warehouse either issues it (in stock) or escalates it to purchasing.
  */
-export type MaterialRequestStatus = "requested" | "issued" | "purchasing" | "partial";
+export type MaterialRequestStatus = "requested" | "issued" | "purchasing" | "partial" | "cancelled";
 
 /** Per-line outcome once the warehouse triages a Material Request Form. */
 export type MRFLineDisposition = "issue" | "purchase" | "reserve";
