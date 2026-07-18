@@ -338,7 +338,7 @@ export default async function PurchasingPage() {
                     canManagePO={canManagePO}
                     catalogSuppliers={Object.fromEntries(suppliersByProduct)}
                     catalogPrices={catalogPrices}
-                    poHref={(prId) => `/purchasing/po/${prId}/xlsx`}
+                    poRoute="purchasing"
                   />
                 </CardContent>
               </Card>

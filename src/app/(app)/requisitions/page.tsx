@@ -88,7 +88,7 @@ export default async function RequisitionsPage() {
                 paymentTerms={paymentTerms}
                 canManagePO={false}
                 readOnly
-                poHref={(prId) => `/purchasing/po/${prId}/xlsx`}
+                poRoute="purchasing"
               />
             </CardContent>
           </Card>

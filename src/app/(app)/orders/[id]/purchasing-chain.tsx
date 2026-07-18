@@ -48,7 +48,7 @@ export function PurchasingChain({
   catalogSuppliers = {},
   catalogPrices = {},
   readOnly = false,
-  poHref,
+  poRoute = "order",
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -61,10 +61,16 @@ export function PurchasingChain({
   catalogPrices?: CatalogPrices;
   /** Monitoring only — hide every action/PO editor (used on the order page). */
   readOnly?: boolean;
-  /** Build the PO print URL for a request (defaults to the order PO route). */
-  poHref?: (prId: string) => string;
+  /**
+   * Which PO print route to build. "order" uses the order-scoped route (needs
+   * orderId); "purchasing" uses the generic route (department requisitions /
+   * combined POs not tied to an order). A plain string, not a function — a
+   * Server Component can't pass a function prop to this Client Component.
+   */
+  poRoute?: "order" | "purchasing";
 }) {
-  const printHref = poHref ?? ((prId: string) => `/orders/${orderId}/po/${prId}/xlsx`);
+  const printHref = (prId: string) =>
+    poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
