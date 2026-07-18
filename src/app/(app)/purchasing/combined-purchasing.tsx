@@ -12,7 +12,6 @@ import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
 import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest } from "../orders/actions";
-import { isCancellable } from "@/lib/purchasing";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 
@@ -58,6 +57,7 @@ export interface BatchCard {
   trail: string[];
   actions: BatchAction[];
   canManagePO: boolean;
+  canCancel: boolean;
 }
 
 function todayInput(): string {
@@ -197,7 +197,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
-  const cancellable = batch.canManagePO && isCancellable(batch.status);
+  const cancellable = batch.canCancel;
   async function cancel() {
     if (!window.confirm(`Cancel combined PO ${batch.poNumber}? This withdraws all ${batch.members.length} requests.`)) return;
     setBusy("cancel"); setErr(null);

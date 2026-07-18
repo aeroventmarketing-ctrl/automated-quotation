@@ -530,13 +530,14 @@ export async function advancePurchaseRequest(
   revalidatePath("/purchasing");
 }
 
-/** Purchaser/admin cancels a purchase request (single or the whole combined PO). */
+/**
+ * Cancel a purchase request (single or the whole combined PO). Before approval
+ * the requestor, the purchaser, or an admin can cancel; once approved only an
+ * admin can. Not possible once received into stock.
+ */
 export async function cancelPurchaseRequest(purchaseRequestId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey))) {
-    throw new Error("Only the Purchaser or an admin can cancel a purchase order.");
-  }
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   // Cancel every member if it's part of a combined PO, otherwise just this one.
@@ -546,6 +547,17 @@ export async function cancelPurchaseRequest(purchaseRequestId: string): Promise<
   if (members.some((m) => !isCancellable(m.status as PRStatus))) {
     throw new Error("This purchase order can no longer be cancelled.");
   }
+
+  const admin = isAdmin(user);
+  const purchaser = userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey);
+  const requestor = members.some((m) => m.createdById === user.id);
+  const approvedPhase = members.some((m) => (m.status as PRStatus) !== "PENDING_APPROVAL");
+  if (approvedPhase) {
+    if (!admin) throw new Error("Once approved, a purchase order can only be cancelled by an admin.");
+  } else if (!(admin || purchaser || requestor)) {
+    throw new Error("Only the requestor, the purchaser, or an admin can cancel this.");
+  }
+
   const now = new Date();
   await prisma.$transaction(
     targetIds.map((id) =>

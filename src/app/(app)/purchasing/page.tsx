@@ -3,7 +3,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
-import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { buildPurchaseChainRow } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
@@ -38,6 +38,15 @@ export default async function PurchasingPage() {
 
   const canManagePO = admin || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey));
   const canAct = (role: WorkflowRoleKey) => admin || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role));
+  // Who may cancel: before approval the requestor / purchaser / admin; once
+  // approved (or further) only an admin. Never once received into stock.
+  const canCancelPr = (pr: { status: string; createdById: string }): boolean => {
+    const status = pr.status as PRStatus;
+    if (!isCancellable(status)) return false;
+    if (status !== "PENDING_APPROVAL") return admin; // approved phase → admin only
+    const isRequestor = viewer != null && pr.createdById === viewer.id;
+    return admin || canManagePO || isRequestor;
+  };
 
   const [stockItems, suppliers, paymentTerms, allUsers] = await Promise.all([
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
@@ -163,6 +172,8 @@ export default async function PurchasingPage() {
         const names = namesForRole(step.role);
         return { key: step.key, label: step.label, canAct: canAct(step.role), roleLabel: `${workflowRoleLabel(step.role)}${names.length ? ` (${names.join(", ")})` : ""}` };
       });
+      const bRequestor = viewer != null && members.some((m) => m.createdById === viewer.id);
+      const canCancel = isCancellable(status) && (status !== "PENDING_APPROVAL" ? admin : admin || canManagePO || bRequestor);
       return {
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
@@ -185,6 +196,7 @@ export default async function PurchasingPage() {
         trail,
         actions,
         canManagePO,
+        canCancel,
       } satisfies BatchCard;
     });
 
@@ -196,7 +208,7 @@ export default async function PurchasingPage() {
         const rows = unbatched
           .filter((pr) => pr.quotationId === qid)
           .map((pr) =>
-            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, namesForRole, canAct }),
+            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), namesForRole, canAct }),
           );
         if (rows.length === 0) return null;
         const project = q.projectName ?? q.inquiry.projectName ?? "";
