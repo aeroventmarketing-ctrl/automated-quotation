@@ -42,6 +42,7 @@ export function PurchasingChain({
   suppliers,
   paymentTerms,
   canManagePO,
+  readOnly = false,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -50,6 +51,8 @@ export function PurchasingChain({
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   canManagePO: boolean;
+  /** Monitoring only — hide every action/PO editor (used on the order page). */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -95,7 +98,11 @@ export function PurchasingChain({
             {r.trail.length > 0 && (
               <div className="mt-1 text-xs text-muted-foreground">{r.trail.join(" · ")}</div>
             )}
-            {receivingId === r.id ? (
+            {readOnly ? (
+              r.status !== "REJECTED" && r.status !== "COMPLETED" && r.actions[0] ? (
+                <div className="mt-2 text-xs text-muted-foreground">Waiting on {r.actions[0].roleLabel} — process in Purchasing</div>
+              ) : null
+            ) : receivingId === r.id ? (
               <StockMatchPanel
                 lines={r.items.map((it) => ({ label: it, qtyDefault: "" }))}
                 stockItems={stockItems}
@@ -138,7 +145,7 @@ export function PurchasingChain({
             {/* Supplier Purchase Order — a rejected request can't get a new PO. */}
             {(r.status !== "REJECTED" || r.po) && (
             <div className="mt-2 border-t pt-2">
-              {poEditId === r.id ? (
+              {!readOnly && poEditId === r.id ? (
                 <PurchaseOrderPanel
                   prId={r.id}
                   orderId={orderId}
@@ -162,7 +169,7 @@ export function PurchasingChain({
                       <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
                     </a>
                   </div>
-                  {r.canManagePO && (
+                  {!readOnly && r.canManagePO && (
                     <button
                       type="button"
                       onClick={() => setPoEditId(r.id)}
@@ -172,6 +179,8 @@ export function PurchasingChain({
                     </button>
                   )}
                 </div>
+              ) : readOnly ? (
+                <span className="text-xs text-muted-foreground">No purchase order yet.</span>
               ) : r.canManagePO ? (
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPoEditId(r.id)}>Create Purchase Order</Button>
               ) : (
