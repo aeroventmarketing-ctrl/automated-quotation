@@ -41,9 +41,9 @@ export interface SaleDocType {
 
 /** Document slots shown before the "Payments collected" section, in order. */
 export const SALE_DOCS_BEFORE_PAYMENTS: SaleDocType[] = [
-  { key: "rfq_boq", label: "RFQ / BOQ", required: true },
   { key: "computation", label: "Computation", required: true },
   { key: "quotation", label: "Quotation", required: true },
+  { key: "rfq_boq", label: "RFQ / BOQ", required: true },
   { key: "drawing", label: "Drawing / Pictures", required: false },
   { key: "billing_dp", label: "Billing Statement DP", required: false },
   { key: "billing_fp", label: "Billing Statement FP", required: false },
