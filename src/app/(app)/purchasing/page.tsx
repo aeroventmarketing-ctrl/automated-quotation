@@ -47,6 +47,9 @@ export default async function PurchasingPage() {
     const isRequestor = viewer != null && pr.createdById === viewer.id;
     return admin || canManagePO || isRequestor;
   };
+  // Delete: admin can remove any; a purchaser can remove rejected/cancelled ones.
+  const canDeleteStatus = (status: string): boolean =>
+    admin || (canManagePO && (status === "REJECTED" || status === "CANCELLED"));
 
   const [stockItems, suppliers, paymentTerms, allUsers] = await Promise.all([
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
@@ -174,6 +177,7 @@ export default async function PurchasingPage() {
       });
       const bRequestor = viewer != null && members.some((m) => m.createdById === viewer.id);
       const canCancel = isCancellable(status) && (status !== "PENDING_APPROVAL" ? admin : admin || canManagePO || bRequestor);
+      const canDelete = canDeleteStatus(status);
       return {
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
@@ -197,6 +201,7 @@ export default async function PurchasingPage() {
         actions,
         canManagePO,
         canCancel,
+        canDelete,
       } satisfies BatchCard;
     });
 
@@ -208,7 +213,7 @@ export default async function PurchasingPage() {
         const rows = unbatched
           .filter((pr) => pr.quotationId === qid)
           .map((pr) =>
-            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), namesForRole, canAct }),
+            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct }),
           );
         if (rows.length === 0) return null;
         const project = q.projectName ?? q.inquiry.projectName ?? "";

@@ -11,7 +11,7 @@ import { poLineAmount, poTotals, poLineFromPRItem, type POLine } from "@/lib/pur
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
-import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest } from "../orders/actions";
+import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest, deletePurchaseRequest } from "../orders/actions";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 
@@ -58,6 +58,7 @@ export interface BatchCard {
   actions: BatchAction[];
   canManagePO: boolean;
   canCancel: boolean;
+  canDelete: boolean;
 }
 
 function todayInput(): string {
@@ -205,6 +206,13 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
+  async function del() {
+    if (!window.confirm(`Delete combined PO ${batch.poNumber}? This permanently removes all ${batch.members.length} requests.`)) return;
+    setBusy("delete"); setErr(null);
+    try { await deletePurchaseRequest(batch.anchorId); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
 
   if (editing) {
     return (
@@ -308,6 +316,12 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           {" · "}<span className="font-semibold text-foreground">Net {formatCurrency(totals.net, "PHP")}</span>
         </span>
         <div className="flex items-center gap-2">
+          {batch.canDelete && (
+            <button type="button" onClick={del} disabled={busy === "delete"}
+              className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10">
+              {busy === "delete" ? "…" : "Delete"}
+            </button>
+          )}
           {cancellable && (
             <button type="button" onClick={cancel} disabled={busy === "cancel"}
               className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-destructive">

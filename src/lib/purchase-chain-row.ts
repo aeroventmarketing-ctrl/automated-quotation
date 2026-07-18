@@ -31,6 +31,7 @@ export interface PurchaseChainRow {
   poDefaultLines: POLine[];
   canManagePO: boolean;
   canCancel?: boolean;
+  canDelete?: boolean;
 }
 
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
@@ -67,6 +68,7 @@ export function buildPurchaseChainRow(
     mrfNo?: string | null;
     canManagePO: boolean;
     canCancel?: boolean;
+    canDelete?: boolean;
     namesForRole: (role: WorkflowRoleKey) => string[];
     canAct: (role: WorkflowRoleKey) => boolean;
   },
@@ -108,5 +110,6 @@ export function buildPurchaseChainRow(
     poDefaultLines: prItems.map(poLineFromPRItem),
     canManagePO: ctx.canManagePO,
     canCancel: ctx.canCancel ?? false,
+    canDelete: ctx.canDelete ?? false,
   };
 }

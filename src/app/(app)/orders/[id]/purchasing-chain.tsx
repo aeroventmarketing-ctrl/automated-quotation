@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Printer, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest } from "../actions";
+import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest, deletePurchaseRequest } from "../actions";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
@@ -34,6 +34,7 @@ interface PRRow {
   poDefaultLines: POLine[];
   canManagePO: boolean;
   canCancel?: boolean;
+  canDelete?: boolean;
 }
 
 export function PurchasingChain({
@@ -71,6 +72,15 @@ export function PurchasingChain({
     setBusy(prId + "cancel");
     setErr(null);
     try { await cancelPurchaseRequest(prId); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function del(prId: string) {
+    if (!window.confirm("Permanently delete this purchase request / PO?")) return;
+    setBusy(prId + "delete");
+    setErr(null);
+    try { await deletePurchaseRequest(prId); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
@@ -206,12 +216,20 @@ export function PurchasingChain({
             </div>
             )}
 
-            {!readOnly && r.canCancel && (
-              <div className="mt-2">
-                <button type="button" onClick={() => cancel(r.id)} disabled={busy === r.id + "cancel"}
-                  className="text-xs font-medium text-muted-foreground hover:text-destructive">
-                  {busy === r.id + "cancel" ? "…" : "Cancel this PO"}
-                </button>
+            {!readOnly && (r.canCancel || r.canDelete) && (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                {r.canCancel && (
+                  <button type="button" onClick={() => cancel(r.id)} disabled={busy === r.id + "cancel"}
+                    className="text-xs font-medium text-muted-foreground hover:text-destructive">
+                    {busy === r.id + "cancel" ? "…" : "Cancel this PO"}
+                  </button>
+                )}
+                {r.canDelete && (
+                  <button type="button" onClick={() => del(r.id)} disabled={busy === r.id + "delete"}
+                    className="text-xs font-medium text-destructive hover:underline">
+                    {busy === r.id + "delete" ? "…" : "Delete"}
+                  </button>
+                )}
               </div>
             )}
           </div>
