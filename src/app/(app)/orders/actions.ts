@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { coercePurchaseOrder, formatPoNumber, type PurchaseOrder } from "@/lib/purchase-order";
+import { poMemberIds } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
 import {
@@ -602,6 +603,142 @@ export async function savePurchaseOrder(
   // Remember the supplier for next time (searchable in the PO form).
   await rememberSupplier(po.supplier);
   revalidatePath(`/orders/${pr.quotationId}`);
+}
+
+// --- Combined Purchase Order (one PO covering several requests) -------------
+
+/**
+ * Create one supplier Purchase Order covering several purchase requests (a
+ * "batch"). Every selected request must be pending approval with no PO yet.
+ * The combined PO (one number, all lines) is written to each member and they
+ * move through the chain together. Purchaser/admin only.
+ */
+export async function createCombinedPO(
+  purchaseRequestIds: string[],
+  input: z.infer<typeof poInputSchema>,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey))) {
+    throw new Error("Only the Purchaser or an admin can issue a purchase order.");
+  }
+  const ids = [...new Set((purchaseRequestIds ?? []).filter(Boolean))];
+  if (ids.length < 2) throw new Error("Select at least two requests to combine.");
+  const d = poInputSchema.parse(input);
+  const lines = d.lines.filter((l) => l.description.trim() !== "");
+  if (lines.length === 0) throw new Error("Add at least one line to the purchase order.");
+
+  const prs = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
+  if (prs.length !== ids.length) throw new Error("Some requests could not be found.");
+  for (const pr of prs) {
+    if (pr.status !== "PENDING_APPROVAL") throw new Error("Every request must be awaiting approval to combine.");
+    if (coercePurchaseOrder(pr.po)) throw new Error("One of the requests already has a purchase order.");
+  }
+
+  const poNumber = await nextPoNo();
+  const now = new Date().toISOString();
+  const po = {
+    poNumber,
+    date: d.date || now,
+    supplier: d.supplier,
+    lines,
+    ewtPct: d.ewtPct,
+    remarks: d.remarks || COMPANY.poDefaultRemarks,
+    createdByName: user.name,
+    createdAt: now,
+    batchId: randomUUID(),
+    memberPrIds: ids,
+  };
+
+  await prisma.$transaction(
+    ids.map((id) =>
+      prisma.purchaseRequest.update({ where: { id }, data: { po: po as unknown as Prisma.InputJsonObject } }),
+    ),
+  );
+  await rememberSupplier(d.supplier);
+  for (const qid of [...new Set(prs.map((p) => p.quotationId).filter((q): q is string => !!q))]) {
+    revalidatePath(`/orders/${qid}`);
+  }
+  revalidatePath("/purchasing");
+}
+
+/** Advance a combined PO one chain step, updating every member together. */
+export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const step = purchaseStep(stepKey);
+  if (!step) throw new Error("Unknown step");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, step.role))) {
+    throw new Error(`Only ${workflowRoleLabel(step.role)} or an admin can do this.`);
+  }
+  const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
+  if (!anchor) throw new Error("Purchase request not found");
+  const ids = poMemberIds(anchor.po);
+  if (ids.length === 0) throw new Error("This is not a combined purchase order.");
+  const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
+  if (members.some((m) => m.status !== step.from)) throw new Error("That step isn't available at the current status.");
+
+  const now = new Date();
+  const data: Prisma.PurchaseRequestUpdateInput = { status: step.to };
+  switch (stepKey) {
+    case "approve":
+    case "reject":
+      data.decidedById = user.id;
+      data.decidedByName = user.name;
+      data.decidedAt = now;
+      break;
+    case "voucher":
+      data.voucherByName = user.name;
+      data.voucherAt = now;
+      break;
+    case "buy":
+      data.purchasedByName = user.name;
+      data.purchasedAt = now;
+      break;
+    case "check":
+      data.checkedByName = user.name;
+      data.checkedAt = now;
+      break;
+    case "plant":
+      data.plantApprovedByName = user.name;
+      data.plantApprovedAt = now;
+      break;
+  }
+  await prisma.$transaction(ids.map((id) => prisma.purchaseRequest.update({ where: { id }, data })));
+  for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
+    revalidatePath(`/orders/${qid}`);
+  }
+  revalidatePath("/purchasing");
+}
+
+/** Receive a combined PO into stock and mark every member RECEIVED together. */
+export async function receiveCombinedPO(anchorPurchaseRequestId: string, matches: StockMatch[]): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can receive purchases.");
+  }
+  const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
+  if (!anchor) throw new Error("Purchase request not found");
+  const ids = poMemberIds(anchor.po);
+  if (ids.length === 0) throw new Error("This is not a combined purchase order.");
+  const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
+  if (members.some((m) => m.status !== "CHECKED")) throw new Error("This purchase isn't ready to receive.");
+
+  const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
+  await prisma.$transaction(async (tx) => {
+    for (const m of clean) {
+      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: Number(m.qty), reason: "Purchase received (combined PO)" }, user.name);
+    }
+    for (const id of ids) {
+      await tx.purchaseRequest.update({ where: { id }, data: { status: "RECEIVED", receivedByName: user.name, receivedAt: new Date() } });
+    }
+  });
+  for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
+    revalidatePath(`/orders/${qid}`);
+  }
+  revalidatePath("/purchasing");
+  revalidatePath("/inventory");
 }
 
 /** Purchaser/admin adds a reusable supplier payment term from the PO form. */
