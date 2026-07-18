@@ -158,6 +158,13 @@ export async function buildPurchaseOrderWorkbook(
   // NOT covered by a box and therefore display.
   const f = wb.worksheets.find((s) => /2307/i.test(s.name));
   if (f) {
+    // Fit the form to exactly one page wide so the right-hand column (the 4A/8A
+    // ZIP boxes) never spills off the printed page. Height is left unconstrained
+    // (fitToHeight 0 = as many pages as needed) so nothing is squashed vertically.
+    f.pageSetup.fitToPage = true;
+    f.pageSetup.fitToWidth = 1;
+    f.pageSetup.fitToHeight = 0;
+
     const period = quarterPeriod(po.date);
     // Part III — ATC + amounts (income = VAT-exclusive; tax = 1%). Amount goes in
     // the month-of-quarter column (1st→O, 2nd→T, 3rd→Y); AI48 total is a formula.
