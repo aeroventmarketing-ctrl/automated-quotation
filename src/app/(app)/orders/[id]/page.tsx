@@ -221,25 +221,37 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey))),
         ).map((d) => ({ key: d.key, label: d.label }))
       : [];
-  const materialReqs = wf.materialRequests.map((m) => ({
-    id: m.id,
-    formNo: m.formNo,
-    orderId: quote.id,
-    deptLabel: deptLabel(m.dept),
-    items: m.items,
-    note: m.note,
-    status: m.status,
-    raisedByName: m.raisedByName,
-    date: m.raisedAt ? formatDateTime(m.raisedAt) : "",
-    handledByName: m.handledByName,
-    handledWhen: m.handledAt ? formatDateTime(m.handledAt) : "",
-    canHandle: canWarehouse && m.status === "requested",
-    // The requesting department head (or an admin) can withdraw it before the
-    // warehouse handles it.
-    canCancel:
-      m.status === "requested" &&
-      (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey))),
-  }));
+  // Link each MRF to the purchase request it was escalated into, so the MRF card
+  // reflects the live purchasing-chain stage (approved → voucher → purchased → …).
+  const prByMrf = new Map<string, (typeof purchaseRequests)[number]>();
+  for (const pr of purchaseRequests) if (pr.mrfId) prByMrf.set(pr.mrfId, pr);
+  const prBadge = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
+    s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" || s === "CANCELLED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
+  const materialReqs = wf.materialRequests.map((m) => {
+    const linkedPr = prByMrf.get(m.id);
+    const poStatus = linkedPr ? (linkedPr.status as PRStatus) : null;
+    return {
+      id: m.id,
+      formNo: m.formNo,
+      orderId: quote.id,
+      deptLabel: deptLabel(m.dept),
+      items: m.items,
+      note: m.note,
+      status: m.status,
+      poStatusLabel: poStatus ? PR_STATUS_LABEL[poStatus] : null,
+      poStatusVariant: poStatus ? prBadge(poStatus) : null,
+      raisedByName: m.raisedByName,
+      date: m.raisedAt ? formatDateTime(m.raisedAt) : "",
+      handledByName: m.handledByName,
+      handledWhen: m.handledAt ? formatDateTime(m.handledAt) : "",
+      canHandle: canWarehouse && m.status === "requested",
+      // The requesting department head (or an admin) can withdraw it before the
+      // warehouse handles it.
+      canCancel:
+        m.status === "requested" &&
+        (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey))),
+    };
+  });
   // Phase 3 (Materials + Purchasing) opens only once production has actually
   // started — a production head pressed "Start production" on a received job
   // order (per-JO status leaves "issued"). It stays visible afterwards.

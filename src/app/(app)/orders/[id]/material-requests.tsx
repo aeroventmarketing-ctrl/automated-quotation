@@ -18,6 +18,8 @@ interface ReqRow {
   items: MRFItem[];
   note?: string | null;
   status: "requested" | "issued" | "purchasing" | "partial" | "cancelled";
+  poStatusLabel?: string | null;
+  poStatusVariant?: "secondary" | "warning" | "success" | "destructive" | null;
   raisedByName: string;
   date: string;
   handledByName?: string;
@@ -202,8 +204,11 @@ export function MaterialRequests({
                 <span className="text-sm font-medium">
                   MRF #{r.formNo} · {r.deptLabel}
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>
+                  {r.poStatusLabel && r.poStatusVariant && (
+                    <Badge variant={r.poStatusVariant}>PO: {r.poStatusLabel}</Badge>
+                  )}
                   <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="text-xs text-primary hover:underline">Print</Link>
                 </div>
               </div>
