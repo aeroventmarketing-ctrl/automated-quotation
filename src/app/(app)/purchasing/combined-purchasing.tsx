@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Printer, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,19 @@ function catalogPriceFor(description: string, companyLower: string, catalog: Cat
   const names = Object.keys(catalog).sort((a, b) => b.length - a.length);
   const key = names.find((n) => n.length >= 3 && (desc.includes(n) || n.includes(desc)));
   return key ? catalog[key]?.[companyLower] : undefined;
+}
+
+type CatalogSuppliers = Record<string, string[]>;
+
+/** Supplier companies that carry a line's product (tolerant of order-ref suffixes). */
+function suppliersForDescription(description: string, catalog: CatalogSuppliers): string[] {
+  const desc = description.trim().toLowerCase();
+  if (!desc) return [];
+  const exact = catalog[desc];
+  if (exact) return exact;
+  const names = Object.keys(catalog).sort((a, b) => b.length - a.length);
+  const key = names.find((n) => n.length >= 3 && (desc.includes(n) || n.includes(desc)));
+  return key ? catalog[key] ?? [] : [];
 }
 
 /** Fill each line's unit price from the catalogue for the chosen supplier (only where blank). */
@@ -98,6 +111,7 @@ export function CombinedPurchasing({
   canManagePO,
   poDefaultRemarks,
   catalogPrices = {},
+  catalogSuppliers = {},
 }: {
   combinable: CombinableItem[];
   batches: BatchCard[];
@@ -108,6 +122,7 @@ export function CombinedPurchasing({
   canManagePO: boolean;
   poDefaultRemarks: string;
   catalogPrices?: CatalogPrices;
+  catalogSuppliers?: CatalogSuppliers;
 }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -129,7 +144,7 @@ export function CombinedPurchasing({
     <div className="space-y-3">
       {/* Existing combined POs */}
       {batches.map((b) => (
-        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} />
+        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} />
       ))}
 
       {/* Combine builder */}
@@ -189,6 +204,7 @@ export function CombinedPurchasing({
               paymentTerms={paymentTerms}
               poDefaultRemarks={poDefaultRemarks}
               catalogPrices={catalogPrices}
+              catalogSuppliers={catalogSuppliers}
               onSubmit={(input) => createCombinedPO(selectedItems.map((it) => it.id), input)}
               onCancel={() => { setBuilding(false); setPresetCompany(""); }}
               onDone={() => { setBuilding(false); setPresetCompany(""); setSel(new Set()); router.refresh(); }}
@@ -200,7 +216,7 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -234,6 +250,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           paymentTerms={paymentTerms}
           poDefaultRemarks={poDefaultRemarks}
           catalogPrices={catalogPrices}
+          catalogSuppliers={catalogSuppliers}
           onSubmit={(input) => updateCombinedPO(batch.anchorId, input)}
           onCancel={() => setEditing(false)}
           onDone={() => { setEditing(false); router.refresh(); }}
@@ -349,6 +366,7 @@ function CombineForm({
   paymentTerms,
   poDefaultRemarks,
   catalogPrices,
+  catalogSuppliers,
   onSubmit,
   onCancel,
   onDone,
@@ -365,6 +383,7 @@ function CombineForm({
   paymentTerms: PaymentTerm[];
   poDefaultRemarks: string;
   catalogPrices: CatalogPrices;
+  catalogSuppliers: CatalogSuppliers;
   onSubmit: (input: { supplier: { company: string; attention: string; address: string }; date: string; lines: POLine[]; ewtPct: number; remarks: string }) => Promise<void>;
   onCancel: () => void;
   onDone: () => void;
@@ -384,18 +403,36 @@ function CombineForm({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Suppliers that carry at least one of the requested products (from the catalogue).
+  const carrierSet = new Set<string>();
+  for (const l of lines) for (const co of suppliersForDescription(l.description, catalogSuppliers)) carrierSet.add(co.toLowerCase());
+  // Only show suppliers that carry the products; fall back to all when nothing matched.
+  const eligible = carrierSet.size > 0 ? suppliers.filter((s) => carrierSet.has(s.company.toLowerCase())) : suppliers;
+  const filtered = carrierSet.size > 0;
+
   const matches = company.trim()
-    ? suppliers.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
-    : suppliers;
-  const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPrices[l.description.trim().toLowerCase()]?.[company.trim().toLowerCase()]);
+    ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
+    : eligible;
+  const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices));
 
   function pickSupplier(s: Supplier) {
     setCompany(s.company);
     setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
     if (s.address) setAddress(s.address);
     setSupplierOpen(false);
-    setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices));
+    setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
   }
+
+  // When exactly one supplier carries the products, auto-populate it on open.
+  const autoPicked = useRef(false);
+  useEffect(() => {
+    if (autoPicked.current) return;
+    if (!company && filtered && eligible.length === 1) {
+      autoPicked.current = true;
+      pickSupplier(eligible[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   function setLine(i: number, key: keyof POLine, value: string) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
   }
@@ -423,7 +460,7 @@ function CombineForm({
         <div className="space-y-1">
           <span className="text-xs text-muted-foreground">Supplier</span>
           <div className="relative">
-            <Input className="h-8" value={company} placeholder={suppliers.length ? "Search or type supplier…" : "Type supplier…"}
+            <Input className="h-8" value={company} placeholder={filtered ? "Suppliers that carry these items…" : suppliers.length ? "Search or type supplier…" : "Type supplier…"}
               onChange={(e) => { setCompany(e.target.value); setSupplierOpen(true); }}
               onFocus={() => setSupplierOpen(true)}
               onBlur={() => setTimeout(() => setSupplierOpen(false), 150)} />
@@ -441,6 +478,11 @@ function CombineForm({
               </ul>
             )}
           </div>
+          {filtered && (
+            <p className="text-[11px] text-muted-foreground">
+              Showing {eligible.length} supplier{eligible.length === 1 ? "" : "s"} that carry these products. Type to use another.
+            </p>
+          )}
         </div>
         <label className="space-y-1"><span className="text-xs text-muted-foreground">Attention</span>
           <Input className="h-8" value={attention} onChange={(e) => setAttention(e.target.value)} /></label>

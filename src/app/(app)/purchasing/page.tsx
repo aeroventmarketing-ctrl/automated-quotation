@@ -283,6 +283,7 @@ export default async function PurchasingPage() {
                     canManagePO={canManagePO}
                     poDefaultRemarks={COMPANY.poDefaultRemarks}
                     catalogPrices={catalogPrices}
+                    catalogSuppliers={Object.fromEntries(suppliersByProduct)}
                   />
                 )}
                 {orderGroups.map((g) => (
