@@ -1,9 +1,6 @@
-import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { payableTotal, round2 } from "@/lib/quote";
 import {
@@ -16,7 +13,7 @@ import {
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/workflow-roles";
 import { readOrderWorkflow, nextOrderStep, stageLabel, pendingStep } from "@/lib/order-workflow";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
-import { OrderStageActions } from "./order-stage-actions";
+import { OrdersTable } from "./orders-table";
 
 export const dynamic = "force-dynamic";
 
@@ -72,12 +69,14 @@ export default async function OrdersPage() {
             : null
         : null;
 
+      const d = orderDate(sale, q.createdAt);
       return {
         id: q.id,
         quoteNumber: q.quoteNumber,
         company: q.inquiry.customer.company,
         project: q.projectName ?? q.inquiry.projectName ?? "",
-        date: orderDate(sale, q.createdAt),
+        dateMs: d.getTime(),
+        dateText: formatDate(d),
         currency: q.currency,
         value,
         collected,
@@ -94,7 +93,7 @@ export default async function OrdersPage() {
       };
     })
     .filter((o): o is NonNullable<typeof o> => o != null)
-    .sort((a, b) => b.date.getTime() - a.date.getTime());
+    .sort((a, b) => b.dateMs - a.dateMs);
 
   const currency = orders[0]?.currency ?? "PHP";
   const totalValue = round2(orders.reduce((a, o) => a + o.value, 0));
@@ -107,8 +106,6 @@ export default async function OrdersPage() {
     { label: "Collected", value: formatCurrency(totalCollected, currency) },
     { label: "Outstanding", value: formatCurrency(totalOutstanding, currency) },
   ];
-
-  const statusVariant = (s: string) => (s === "Paid" ? "success" : s === "Partial" ? "warning" : "secondary");
 
   return (
     <div className="space-y-6">
@@ -137,60 +134,7 @@ export default async function OrdersPage() {
               No confirmed orders yet. A quote becomes an order once its sale is recorded (PO attached).
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Terms</TableHead>
-                    <TableHead className="text-right">Value</TableHead>
-                    <TableHead className="text-right">Collected</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Order stage</TableHead>
-                    <TableHead>Sales</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((o) => (
-                    <TableRow key={o.id}>
-                      <TableCell>
-                        <Link href={`/quotations/${o.id}`} className="font-medium text-primary hover:underline">
-                          {o.quoteNumber}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{o.company}</div>
-                        {o.project && <div className="text-xs text-muted-foreground">{o.project}</div>}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm">{formatDate(o.date)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{o.arrangement}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(o.value, o.currency)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(o.collected, o.currency)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(o.balance, o.currency)}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant(o.status)}>{o.status}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <OrderStageActions
-                          orderId={o.id}
-                          stage={o.stage}
-                          stageLabel={o.stageText}
-                          nextStep={o.nextStep}
-                          nextLabel={o.nextLabel}
-                          canAct={o.canAct}
-                          awaiting={o.awaiting}
-                          hideStage={progressHidden}
-                        />
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{o.sales}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <OrdersTable orders={orders} progressHidden={progressHidden} />
           )}
         </CardContent>
       </Card>
