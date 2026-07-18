@@ -21,6 +21,11 @@ export interface CombinableItem {
   deptLabel: string;
   mrfNo: string | null;
   items: string[];
+  supplierCompanies: string[];
+}
+export interface SupplierSuggestion {
+  company: string;
+  prIds: string[];
 }
 export interface BatchMember {
   orderLabel: string;
@@ -57,6 +62,7 @@ function todayInput(): string {
 export function CombinedPurchasing({
   combinable,
   batches,
+  suggestions = [],
   suppliers,
   paymentTerms,
   stockItems,
@@ -65,6 +71,7 @@ export function CombinedPurchasing({
 }: {
   combinable: CombinableItem[];
   batches: BatchCard[];
+  suggestions?: SupplierSuggestion[];
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   stockItems: StockOpt[];
@@ -74,9 +81,15 @@ export function CombinedPurchasing({
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [building, setBuilding] = useState(false);
+  const [presetCompany, setPresetCompany] = useState("");
 
   function toggle(id: string) {
     setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  function acceptSuggestion(s: SupplierSuggestion) {
+    setSel(new Set(s.prIds));
+    setPresetCompany(s.company);
+    setBuilding(true);
   }
 
   const selectedItems = combinable.filter((c) => sel.has(c.id));
@@ -93,10 +106,26 @@ export function CombinedPurchasing({
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-medium">Combine requests into one PO</div>
-                <Button size="sm" disabled={sel.size < 2} onClick={() => setBuilding(true)}>
+                <Button size="sm" disabled={sel.size < 2} onClick={() => { setPresetCompany(""); setBuilding(true); }}>
                   Combine {sel.size > 0 ? `${sel.size} ` : ""}into one PO
                 </Button>
               </div>
+
+              {/* Auto-suggested combines: suppliers that can serve 2+ requests. */}
+              {suggestions.length > 0 && (
+                <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                  <div className="mb-1 text-xs font-medium text-primary">Suggested combines (same supplier)</div>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.map((s) => (
+                      <button key={s.company} type="button" onClick={() => acceptSuggestion(s)}
+                        className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-background px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">
+                        {s.company} · {s.prIds.length} requests →
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <p className="text-xs text-muted-foreground">Tick the open requests going to the same supplier — across any orders — then issue a single PO for all of them.</p>
               <div className="divide-y rounded-md border">
                 {combinable.map((c) => (
@@ -107,6 +136,11 @@ export function CombinedPurchasing({
                       {c.mrfNo && <span className="ml-1 text-muted-foreground">MRF #{c.mrfNo}</span>}
                       <span className="ml-1 text-xs text-muted-foreground">· {c.orderLabel}</span>
                       <span className="block text-xs text-muted-foreground">{c.items.join(", ")}</span>
+                      {c.supplierCompanies.length > 0 && (
+                        <span className="mt-0.5 flex flex-wrap gap-1">
+                          {c.supplierCompanies.map((co) => <Badge key={co} variant="secondary" className="font-normal">{co}</Badge>)}
+                        </span>
+                      )}
                     </span>
                   </label>
                 ))}
@@ -118,8 +152,9 @@ export function CombinedPurchasing({
               suppliers={suppliers}
               paymentTerms={paymentTerms}
               poDefaultRemarks={poDefaultRemarks}
-              onCancel={() => setBuilding(false)}
-              onDone={() => { setBuilding(false); setSel(new Set()); router.refresh(); }}
+              presetCompany={presetCompany}
+              onCancel={() => { setBuilding(false); setPresetCompany(""); }}
+              onDone={() => { setBuilding(false); setPresetCompany(""); setSel(new Set()); router.refresh(); }}
             />
           )}
         </div>
@@ -207,6 +242,7 @@ function CombineForm({
   suppliers,
   paymentTerms,
   poDefaultRemarks,
+  presetCompany = "",
   onCancel,
   onDone,
 }: {
@@ -214,6 +250,7 @@ function CombineForm({
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   poDefaultRemarks: string;
+  presetCompany?: string;
   onCancel: () => void;
   onDone: () => void;
 }) {
@@ -221,9 +258,10 @@ function CombineForm({
     () => items.flatMap((it) => it.items.map((s) => poLineFromPRItem(s))),
     [items],
   );
-  const [company, setCompany] = useState("");
-  const [attention, setAttention] = useState("");
-  const [address, setAddress] = useState("");
+  const preset = presetCompany ? suppliers.find((s) => s.company.toLowerCase() === presetCompany.toLowerCase()) : undefined;
+  const [company, setCompany] = useState(presetCompany);
+  const [attention, setAttention] = useState(preset ? [preset.contactPerson, preset.contactNumber].filter(Boolean).join(" - ") : "");
+  const [address, setAddress] = useState(preset?.address ?? "");
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [date, setDate] = useState(todayInput());
   const [lines, setLines] = useState<POLine[]>(defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }]);

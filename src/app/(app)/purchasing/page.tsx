@@ -7,14 +7,15 @@ import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { buildPurchaseChainRow } from "@/lib/purchase-chain-row";
-import { coercePurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
+import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { ReplenishmentList, type PRRow } from "./replenishment-list";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
-import { CombinedPurchasing, type CombinableItem, type BatchCard } from "./combined-purchasing";
+import { CombinedPurchasing, type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,23 @@ export default async function PurchasingPage() {
   let orderGroups: { id: string; title: string; subtitle: string; rows: ReturnType<typeof buildPurchaseChainRow>[] }[] = [];
   let combinable: CombinableItem[] = [];
   let batches: BatchCard[] = [];
+  let suggestions: SupplierSuggestion[] = [];
   let tableMissing = false;
+
+  // Product catalogue → supplier lookup, used to suggest same-supplier combines.
+  const products = await getProducts().catch(() => []);
+  const suppliersByProduct = new Map<string, string[]>();
+  for (const p of products) suppliersByProduct.set(p.name.trim().toLowerCase(), p.suppliers.map((s) => s.company).filter(Boolean));
+  const productNamesByLen = [...suppliersByProduct.keys()].sort((a, b) => b.length - a.length);
+  const suppliersForItem = (itemStr: string): string[] => {
+    const desc = poLineFromPRItem(itemStr).description.trim().toLowerCase();
+    if (!desc) return [];
+    const exact = suppliersByProduct.get(desc);
+    if (exact) return exact;
+    const hit = productNamesByLen.find((n) => n.length >= 3 && (desc.includes(n) || n.includes(desc)));
+    return hit ? suppliersByProduct.get(hit) ?? [] : [];
+  };
+
   try {
     const orderPrs = await prisma.purchaseRequest.findMany({
       where: { quotationId: { not: null }, status: { notIn: ["COMPLETED", "REJECTED"] } },
@@ -85,14 +102,34 @@ export default async function PurchasingPage() {
     // Combinable: pending approval, no PO yet.
     combinable = unbatched
       .filter((pr) => pr.status === "PENDING_APPROVAL" && !coercePurchaseOrder(pr.po))
-      .map((pr) => ({
-        id: pr.id,
-        orderId: pr.quotationId ?? "",
-        orderLabel: orderLabelOf(pr.quotationId),
-        deptLabel: deptLabelOf(pr.dept),
-        mrfNo: mrfNoOf(pr.quotationId, pr.mrfId),
-        items: Array.isArray(pr.items) ? (pr.items as string[]) : [],
-      }));
+      .map((pr) => {
+        const items = Array.isArray(pr.items) ? (pr.items as string[]) : [];
+        // Candidate suppliers = union of the suppliers that stock this request's items.
+        const supplierCompanies = [...new Set(items.flatMap((it) => suppliersForItem(it)))];
+        return {
+          id: pr.id,
+          orderId: pr.quotationId ?? "",
+          orderLabel: orderLabelOf(pr.quotationId),
+          deptLabel: deptLabelOf(pr.dept),
+          mrfNo: mrfNoOf(pr.quotationId, pr.mrfId),
+          items,
+          supplierCompanies,
+        };
+      });
+
+    // Suggest combines: any supplier that can serve 2+ of the combinable requests.
+    const byCompany = new Map<string, { company: string; prIds: string[] }>();
+    for (const c of combinable) {
+      for (const company of c.supplierCompanies) {
+        const key = company.toLowerCase();
+        const entry = byCompany.get(key) ?? { company, prIds: [] };
+        entry.prIds.push(c.id);
+        byCompany.set(key, entry);
+      }
+    }
+    suggestions = [...byCompany.values()]
+      .filter((e) => e.prIds.length >= 2)
+      .sort((a, b) => b.prIds.length - a.prIds.length);
 
     // Combined POs: group members by batch id.
     const byBatch = new Map<string, typeof batched>();
@@ -227,6 +264,7 @@ export default async function PurchasingPage() {
                   <CombinedPurchasing
                     combinable={combinable}
                     batches={batches}
+                    suggestions={suggestions}
                     suppliers={suppliers}
                     paymentTerms={paymentTerms}
                     stockItems={stockItems}
