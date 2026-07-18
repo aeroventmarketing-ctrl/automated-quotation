@@ -14,10 +14,13 @@ import {
   type SaleRecord,
   type SaleArrangement,
   type SaleDoc,
+  type SaleDocType,
   type SalePayment,
   type PaymentKind,
   ARRANGEMENT_LABEL,
   PAYMENT_KIND_LABEL,
+  SALE_DOCS_BEFORE_PAYMENTS,
+  SALE_DOCS_AFTER_PAYMENTS,
   collectedTotal,
   isSaleConfirmed,
 } from "@/lib/sale";
@@ -28,23 +31,31 @@ const newId = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
+// View opens the file inline; download forces a save with its original name.
+const docLink = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
+const docDownload = (d: SaleDoc) => `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
+
 export function SalePanel({
   quotationId,
   currency,
   dealTotal,
   initialSale,
   canEdit,
+  isAdmin = false,
 }: {
   quotationId: string;
   currency: string;
   dealTotal: number;
   initialSale: SaleRecord | null;
   canEdit: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [arrangement, setArrangement] = useState<SaleArrangement>(initialSale?.arrangement ?? "downpayment_full");
   const [po, setPo] = useState<SaleDoc | null>(initialSale?.po ?? null);
   const [payments, setPayments] = useState<SalePayment[]>(initialSale?.payments ?? []);
+  const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialSale?.docs ?? {});
+  const [note, setNote] = useState(initialSale?.note ?? "");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -52,6 +63,7 @@ export function SalePanel({
   const confirmed = isSaleConfirmed(draft);
   const collected = collectedTotal(draft);
   const balance = Math.max(0, dealTotal - collected);
+  const canClear = canEdit && (!confirmed || isAdmin);
 
   async function upload(file: File): Promise<SaleDoc | null> {
     const fd = new FormData();
@@ -67,19 +79,25 @@ export function SalePanel({
   }
 
   async function onPoFile(file: File) {
-    setBusy(true);
-    setMsg(null);
+    setBusy(true); setMsg(null);
     const doc = await upload(file);
     if (doc) setPo(doc);
     setBusy(false);
   }
-
   async function onProofFile(id: string, file: File) {
-    setBusy(true);
-    setMsg(null);
+    setBusy(true); setMsg(null);
     const doc = await upload(file);
     if (doc) setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
     setBusy(false);
+  }
+  async function onDocFile(key: string, file: File) {
+    setBusy(true); setMsg(null);
+    const doc = await upload(file);
+    if (doc) setDocs((d) => ({ ...d, [key]: [...(d[key] ?? []), doc] }));
+    setBusy(false);
+  }
+  function removeDoc(key: string, path: string) {
+    setDocs((d) => ({ ...d, [key]: (d[key] ?? []).filter((x) => x.path !== path) }));
   }
 
   function addPayment() {
@@ -93,10 +111,9 @@ export function SalePanel({
   }
 
   async function save() {
-    setBusy(true);
-    setMsg(null);
+    setBusy(true); setMsg(null);
     try {
-      await recordSale(quotationId, { arrangement, po, payments });
+      await recordSale(quotationId, { arrangement, po, payments, docs, note });
       setMsg("Saved.");
       router.refresh();
     } catch (e) {
@@ -107,12 +124,10 @@ export function SalePanel({
   }
   async function clearAll() {
     if (!confirm("Remove this sale record? Attached files stay in storage.")) return;
-    setBusy(true);
-    setMsg(null);
+    setBusy(true); setMsg(null);
     try {
       await clearSale(quotationId);
-      setPo(null);
-      setPayments([]);
+      setPo(null); setPayments([]); setDocs({}); setNote("");
       router.refresh();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Action failed");
@@ -121,10 +136,43 @@ export function SalePanel({
     }
   }
 
-  // View opens the file inline; download forces a save with its original name.
-  const docLink = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
-  const docDownload = (d: SaleDoc) =>
-    `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
+  // One document slot (Computation, Quotation, Sales Invoice, …) — supports
+  // multiple files per slot.
+  function DocSlot({ type }: { type: SaleDocType }) {
+    const files = docs[type.key] ?? [];
+    return (
+      <div className="space-y-1">
+        <Label className="text-xs">
+          {type.label} <span className="text-muted-foreground">({type.required ? "required" : "optional"})</span>
+        </Label>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {files.map((f) => (
+            <div key={f.path} className="flex items-center gap-2">
+              <a href={docLink(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
+                <FileText className="h-4 w-4" /> {f.name}
+              </a>
+              <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
+                <Download className="h-4 w-4" />
+              </a>
+              {canEdit && (
+                <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => removeDoc(type.key, f.path)} disabled={busy} aria-label="Remove">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ))}
+          {canEdit ? (
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+              <Upload className="h-4 w-4" /> {files.length ? "Add file" : "Upload"}
+              <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && onDocFile(type.key, e.target.files[0])} />
+            </label>
+          ) : files.length === 0 ? (
+            <span className="text-sm text-muted-foreground">Not attached.</span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Card>
@@ -145,9 +193,7 @@ export function SalePanel({
           <div className="space-y-1">
             <Label className="text-xs">Payment arrangement</Label>
             <Select value={arrangement} disabled={!canEdit} onChange={(e) => setArrangement(e.target.value as SaleArrangement)}>
-              {ARRANGEMENTS.map((a) => (
-                <option key={a} value={a}>{ARRANGEMENT_LABEL[a]}</option>
-              ))}
+              {ARRANGEMENTS.map((a) => (<option key={a} value={a}>{ARRANGEMENT_LABEL[a]}</option>))}
             </Select>
           </div>
           <div className="space-y-1">
@@ -163,17 +209,15 @@ export function SalePanel({
           </div>
         </div>
 
-        {/* Purchase Order (always required) */}
+        {/* 1. Purchase Order (always required) */}
         <div className="space-y-1">
           <Label className="text-xs">Purchase Order (required)</Label>
           {po ? (
             <div className="flex items-center gap-2">
-              <a href={docLink(po)} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-primary underline">
+              <a href={docLink(po)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
                 <FileText className="h-4 w-4" /> {po.name}
               </a>
-              <a href={docDownload(po)} className="text-muted-foreground hover:text-primary"
-                title="Download PO" aria-label="Download PO">
+              <a href={docDownload(po)} className="text-muted-foreground hover:text-primary" title="Download PO" aria-label="Download PO">
                 <Download className="h-4 w-4" />
               </a>
               {canEdit && (
@@ -185,17 +229,19 @@ export function SalePanel({
           ) : canEdit ? (
             <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
               <Upload className="h-4 w-4" /> Upload PO
-              <input type="file" className="hidden" disabled={busy}
-                onChange={(e) => e.target.files?.[0] && onPoFile(e.target.files[0])} />
+              <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && onPoFile(e.target.files[0])} />
             </label>
           ) : (
             <span className="text-sm text-muted-foreground">No PO attached.</span>
           )}
         </div>
 
-        {/* Payments */}
+        {/* 2–6. Computation, Quotation, Drawing/Pictures, Billing DP, Billing FP */}
+        {SALE_DOCS_BEFORE_PAYMENTS.map((t) => <DocSlot key={t.key} type={t} />)}
+
+        {/* 7. Payments collected (required) */}
         <div className="space-y-2">
-          <Label className="text-xs">Payments collected</Label>
+          <Label className="text-xs">Payments Collected (required)</Label>
           {payments.length === 0 && (
             <p className="text-xs text-muted-foreground">
               {arrangement === "terms" ? "On terms — PO alone confirms the sale; add payments as they arrive." : "Add the down payment / full payment to confirm the sale."}
@@ -203,32 +249,25 @@ export function SalePanel({
           )}
           {payments.map((p) => (
             <div key={p.id} className="grid grid-cols-2 items-center gap-2 rounded-md border p-2 md:grid-cols-12">
-              <Select className="h-8 md:col-span-3" value={p.kind} disabled={!canEdit}
-                onChange={(e) => updatePayment(p.id, { kind: e.target.value as PaymentKind })}>
+              <Select className="h-8 md:col-span-3" value={p.kind} disabled={!canEdit} onChange={(e) => updatePayment(p.id, { kind: e.target.value as PaymentKind })}>
                 {PAYMENT_KINDS.map((k) => (<option key={k} value={k}>{PAYMENT_KIND_LABEL[k]}</option>))}
               </Select>
-              <Input className="h-8 text-right md:col-span-3" type="number" step="0.01" placeholder="Amount ₱"
-                value={p.amount || ""} disabled={!canEdit}
-                onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value) || 0 })} />
-              <Input className="h-8 md:col-span-3" type="date" value={p.date?.slice(0, 10) || today()} disabled={!canEdit}
-                onChange={(e) => updatePayment(p.id, { date: e.target.value })} />
+              <Input className="h-8 text-right md:col-span-3" type="number" step="0.01" placeholder="Amount ₱" value={p.amount || ""} disabled={!canEdit} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value) || 0 })} />
+              <Input className="h-8 md:col-span-3" type="date" value={p.date?.slice(0, 10) || today()} disabled={!canEdit} onChange={(e) => updatePayment(p.id, { date: e.target.value })} />
               <div className="md:col-span-2">
                 {p.proof ? (
                   <div className="flex items-center gap-2">
-                    <a href={docLink(p.proof)} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary underline">
+                    <a href={docLink(p.proof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary underline">
                       <FileText className="h-3.5 w-3.5" /> proof
                     </a>
-                    <a href={docDownload(p.proof)} className="text-muted-foreground hover:text-primary"
-                      title="Download proof" aria-label="Download proof">
+                    <a href={docDownload(p.proof)} className="text-muted-foreground hover:text-primary" title="Download proof" aria-label="Download proof">
                       <Download className="h-3.5 w-3.5" />
                     </a>
                   </div>
                 ) : canEdit ? (
                   <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-primary underline">
                     <Upload className="h-3.5 w-3.5" /> proof
-                    <input type="file" className="hidden" disabled={busy}
-                      onChange={(e) => e.target.files?.[0] && onProofFile(p.id, e.target.files[0])} />
+                    <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && onProofFile(p.id, e.target.files[0])} />
                   </label>
                 ) : (
                   <span className="text-xs text-muted-foreground">—</span>
@@ -248,18 +287,37 @@ export function SalePanel({
           )}
         </div>
 
+        {/* 8–11. Sales Invoice, OR/CR/AF, Delivery Receipt, BIR 2307 */}
+        {SALE_DOCS_AFTER_PAYMENTS.map((t) => <DocSlot key={t.key} type={t} />)}
+
+        {/* Client note — additional information given by the client. */}
+        <div className="space-y-1">
+          <Label className="text-xs">Note (additional information given by the client)</Label>
+          <textarea
+            className="min-h-[70px] w-full rounded-md border bg-background px-3 py-2 text-sm"
+            placeholder="e.g. special delivery instructions, requested changes, remarks from the client…"
+            value={note}
+            disabled={!canEdit}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
+
         {canEdit && (
           <div className="flex items-center gap-2">
             <Button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save sale"}</Button>
-            {(po || payments.length > 0) && (
-              <Button variant="outline" onClick={clearAll} disabled={busy}>Clear sale</Button>
+            {(po || payments.length > 0 || Object.keys(docs).length > 0 || note) && (
+              canClear ? (
+                <Button variant="outline" onClick={clearAll} disabled={busy}>Clear sale</Button>
+              ) : (
+                <span className="text-xs text-muted-foreground">Confirmed — only an admin can clear this sale.</span>
+              )
             )}
             {msg && <span className="text-xs text-muted-foreground">{msg}</span>}
           </div>
         )}
         {!confirmed && (
           <p className="text-xs text-muted-foreground">
-            A sale is confirmed once a PO is attached{arrangement === "terms" ? "" : " and at least one payment is recorded"}.
+            A sale is confirmed once a PO is attached{arrangement === "terms" ? "" : " and at least one payment is recorded"}. The other documents can be added anytime.
           </p>
         )}
       </CardContent>

@@ -108,6 +108,19 @@ export default async function AdminOverviewPage() {
           </CardContent>
         </Card>
       </Link>
+      <Link href="/admin/document-access">
+        <Card className="transition-colors hover:bg-accent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Document access →</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Grant users permission to view sale/order documents (PO, Computation, Quotation, invoices, delivery
+              receipts, BIR 2307, etc.). Admins and each quote&rsquo;s preparer can always view.
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
       <Link href="/admin/signatory">
         <Card className="transition-colors hover:bg-accent">
           <CardHeader className="pb-2">

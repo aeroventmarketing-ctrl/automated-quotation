@@ -11,6 +11,7 @@ import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
 import { setHideOrderProgress } from "@/lib/order-progress-visibility";
 import { setNotificationsEnabled } from "@/lib/notification-settings";
 import { setStockLocations } from "@/lib/stock-locations";
+import { setDocViewers } from "@/lib/doc-viewers";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
@@ -20,6 +21,15 @@ async function assertAdmin() {
   const user = await getCurrentUser();
   if (!isAdmin(user)) throw new Error("Admin access required");
   return user!;
+}
+
+/** Grant/revoke which users may view sale/order documents. */
+export async function saveDocViewersAction(input: { ids: string[] }): Promise<string[]> {
+  await assertAdmin();
+  const ids = z.object({ ids: z.array(z.string()).max(1000) }).parse(input).ids;
+  const saved = await setDocViewers(ids);
+  revalidatePath("/admin/document-access");
+  return saved;
 }
 
 // --- Catalogue --------------------------------------------------------------

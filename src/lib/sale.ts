@@ -29,6 +29,50 @@ export interface SaleRecord {
   arrangement: SaleArrangement;
   po?: SaleDoc | null; // purchase order document
   payments: SalePayment[];
+  docs?: Record<string, SaleDoc[]>; // additional order documents, by type key
+  note?: string; // additional information given by the client
+}
+
+export interface SaleDocType {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+/** Document slots shown before the "Payments collected" section, in order. */
+export const SALE_DOCS_BEFORE_PAYMENTS: SaleDocType[] = [
+  { key: "computation", label: "Computation", required: true },
+  { key: "quotation", label: "Quotation", required: true },
+  { key: "drawing", label: "Drawing / Pictures", required: false },
+  { key: "billing_dp", label: "Billing Statement DP", required: false },
+  { key: "billing_fp", label: "Billing Statement FP", required: false },
+];
+/** Document slots shown after the "Payments collected" section, in order. */
+export const SALE_DOCS_AFTER_PAYMENTS: SaleDocType[] = [
+  { key: "sales_invoice", label: "Sales Invoice", required: true },
+  { key: "or_cr_af", label: "OR / CR / AF", required: true },
+  { key: "delivery_receipt", label: "Delivery Receipt / Delivery Form", required: true },
+  { key: "bir_2307", label: "BIR 2307", required: true },
+];
+export const SALE_DOC_TYPES: SaleDocType[] = [...SALE_DOCS_BEFORE_PAYMENTS, ...SALE_DOCS_AFTER_PAYMENTS];
+
+/** Coerce one raw doc record into a SaleDoc, or null. */
+function coerceDoc(v: unknown): SaleDoc | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.path !== "string" || !o.path) return null;
+  return { path: o.path, name: typeof o.name === "string" ? o.name : o.path.split("/").pop() ?? "file", uploadedAt: typeof o.uploadedAt === "string" ? o.uploadedAt : "" };
+}
+
+/** Coerce the docs map (each type → array of SaleDoc). */
+export function coerceSaleDocs(value: unknown): Record<string, SaleDoc[]> {
+  const out: Record<string, SaleDoc[]> = {};
+  if (!value || typeof value !== "object") return out;
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    const arr = (Array.isArray(v) ? v : [v]).map(coerceDoc).filter((d): d is SaleDoc => d !== null);
+    if (arr.length) out[k] = arr;
+  }
+  return out;
 }
 
 export const ARRANGEMENT_LABEL: Record<SaleArrangement, string> = {
@@ -69,5 +113,7 @@ export function saleFromClassification(classification: unknown): SaleRecord | nu
     arrangement: s.arrangement as SaleArrangement,
     po: (s.po as SaleDoc) ?? null,
     payments: Array.isArray(s.payments) ? (s.payments as SalePayment[]) : [],
+    docs: coerceSaleDocs(s.docs),
+    note: typeof s.note === "string" ? s.note : undefined,
   };
 }

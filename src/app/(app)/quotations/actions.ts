@@ -525,6 +525,8 @@ const saleSchema = z.object({
       }),
     )
     .default([]),
+  docs: z.record(z.array(saleDocSchema)).optional().default({}),
+  note: z.string().trim().max(5000).optional().default(""),
 });
 
 /**
@@ -577,6 +579,10 @@ export async function clearSale(quotationId: string) {
   if (quote.preparedById !== user.id && !isAdmin(user))
     throw new Error("Only the preparer or an admin can clear this sale.");
   const cls = (quote.classification as Record<string, unknown>) ?? {};
+  // Once the sale is confirmed, only an admin may clear it.
+  if (!isAdmin(user) && isSaleConfirmed(saleFromClassification(cls))) {
+    throw new Error("This sale is confirmed — only an admin can clear it.");
+  }
   await prisma.$transaction([
     prisma.quotation.update({
       where: { id: quotationId },

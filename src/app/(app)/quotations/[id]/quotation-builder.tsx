@@ -5884,6 +5884,7 @@ export function QuotationBuilder({
           dealTotal={totals.grandTotal}
           initialSale={quotation.sale}
           canEdit={(isPreparer || isAdmin) && quotation.status !== "DRAFT" && quotation.status !== "PENDING_APPROVAL"}
+          isAdmin={isAdmin}
         />
       )}
 

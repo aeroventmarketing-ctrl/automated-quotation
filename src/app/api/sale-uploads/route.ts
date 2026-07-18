@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { getDocViewers } from "@/lib/doc-viewers";
 import { uploadToStorage, signedUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -47,6 +49,16 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const path = req.nextUrl.searchParams.get("path");
   if (!path) return NextResponse.json({ error: "path is required" }, { status: 400 });
+
+  // View access: admins and the quote's preparer always; others only if the admin
+  // has granted them document-view permission. Path is "sales/<quotationId>/...".
+  if (!isAdmin(user)) {
+    const quotationId = path.split("/")[1];
+    const quote = quotationId ? await prisma.quotation.findUnique({ where: { id: quotationId }, select: { preparedById: true } }) : null;
+    const isPreparer = quote?.preparedById === user.id;
+    const allowed = isPreparer || (await getDocViewers()).includes(user.id);
+    if (!allowed) return NextResponse.json({ error: "You don't have permission to view this document." }, { status: 403 });
+  }
   const wantsDownload = req.nextUrl.searchParams.get("download") !== null;
   const name = req.nextUrl.searchParams.get("name");
   const download = wantsDownload ? (name ?? true) : undefined;
