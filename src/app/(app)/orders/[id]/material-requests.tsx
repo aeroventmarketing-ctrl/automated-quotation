@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,58 @@ const STATUS: Record<ReqRow["status"], { label: string; variant: "secondary" | "
 };
 
 const emptyRow = (): MRFItem => ({ description: "", qty: "", unit: "", remark: "" });
+
+/**
+ * Product autocomplete for the description field. Unlike a native <datalist>, it
+ * keeps showing matches even when the value already equals a product (no need to
+ * clear the field), and uses fixed positioning so the table's horizontal scroll
+ * never clips it.
+ */
+function ProductCombobox({ value, onChange, products }: { value: string; onChange: (v: string) => void; products: { name: string; unit: string }[] }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
+  const q = value.trim().toLowerCase();
+  const matches = (q ? products.filter((p) => p.name.toLowerCase().includes(q)) : products).slice(0, 10);
+
+  function place() {
+    const r = ref.current?.getBoundingClientRect();
+    if (r) setPos({ left: r.left, top: r.bottom, width: r.width });
+  }
+
+  return (
+    <>
+      <input
+        ref={ref}
+        value={value}
+        onChange={(e) => { onChange(e.target.value); place(); setOpen(true); }}
+        onFocus={() => { place(); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Type or pick a product"
+        className="w-full rounded border bg-background px-2 py-1"
+      />
+      {open && pos && products.length > 0 && matches.length > 0 && (
+        <ul
+          style={{ position: "fixed", left: pos.left, top: pos.top, width: pos.width, zIndex: 50 }}
+          className="mt-1 max-h-52 overflow-auto rounded-md border bg-background text-sm shadow-md"
+        >
+          {matches.map((p) => (
+            <li key={p.name}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { onChange(p.name); setOpen(false); }}
+                className="block w-full px-2 py-1.5 text-left hover:bg-accent"
+              >
+                {p.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
 
 export function MaterialRequests({
   orderId,
@@ -105,11 +157,6 @@ export function MaterialRequests({
             <div className="text-sm text-muted-foreground">{raisableDepts[0].label}</div>
           )}
 
-          {products.length > 0 && (
-            <datalist id="mrf-products">
-              {products.map((p) => <option key={p.name} value={p.name} />)}
-            </datalist>
-          )}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] border-collapse text-sm">
               <thead>
@@ -123,7 +170,7 @@ export function MaterialRequests({
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={i} className="border-b last:border-0">
-                    <td className="py-1 pr-2"><input list="mrf-products" value={r.description} onChange={(e) => setCell(i, "description", e.target.value)} className="w-full rounded border bg-background px-2 py-1" placeholder="Type or pick a product" /></td>
+                    <td className="py-1 pr-2"><ProductCombobox value={r.description} onChange={(v) => setCell(i, "description", v)} products={products} /></td>
                     <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
                     <td className="py-1 px-1"><input value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>
                     <td className="py-1 pl-1"><input value={r.remark ?? ""} onChange={(e) => setCell(i, "remark", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>
