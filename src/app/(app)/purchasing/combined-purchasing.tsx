@@ -14,13 +14,26 @@ import type { PRStatus } from "@/lib/purchasing";
 import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO } from "../orders/actions";
 
 type CatalogPrices = Record<string, Record<string, number>>;
+
+/** The catalogue price for a line description + supplier, tolerant of order-ref
+ *  suffixes on the description (matches the longest product name contained in it). */
+function catalogPriceFor(description: string, companyLower: string, catalog: CatalogPrices): number | undefined {
+  const desc = description.trim().toLowerCase();
+  if (!desc || !companyLower) return undefined;
+  const exact = catalog[desc]?.[companyLower];
+  if (exact) return exact;
+  const names = Object.keys(catalog).sort((a, b) => b.length - a.length);
+  const key = names.find((n) => n.length >= 3 && (desc.includes(n) || n.includes(desc)));
+  return key ? catalog[key]?.[companyLower] : undefined;
+}
+
 /** Fill each line's unit price from the catalogue for the chosen supplier (only where blank). */
 function withCatalogPrices(lines: POLine[], company: string, catalog: CatalogPrices, force = false): POLine[] {
   const co = company.trim().toLowerCase();
   if (!co) return lines;
   return lines.map((l) => {
     if (l.unitPrice && !force) return l;
-    const price = catalog[l.description.trim().toLowerCase()]?.[co];
+    const price = catalogPriceFor(l.description, co, catalog);
     return price ? { ...l, unitPrice: String(price) } : l;
   });
 }
