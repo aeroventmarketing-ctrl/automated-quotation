@@ -14,6 +14,7 @@ import type { Supplier } from "@/lib/suppliers";
 import type { ProductSupplierLink } from "@/lib/products";
 import type { ProductRow } from "@/lib/product-catalog";
 import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus } from "./actions";
+import { BulkImport } from "./bulk-import";
 
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -254,6 +255,7 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add product</Button>
+              <BulkImport />
               <Link href="/products/labels" className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">Labels</Link>
             </div>
           )}
