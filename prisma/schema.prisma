@@ -294,6 +294,7 @@ enum PurchaseRequestStatus {
   CHECKED          // 11: items checked, awaiting delivery to warehouse
   RECEIVED         // 13: warehouse received, awaiting plant manager
   COMPLETED        // 13: plant manager final approval
+  CANCELLED        // withdrawn by the purchaser before receiving
 }
 
 model PurchaseRequest {

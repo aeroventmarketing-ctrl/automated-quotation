@@ -36,7 +36,7 @@ import {
   type MRFItem,
   type MRFLineDisposition,
 } from "@/lib/order-workflow";
-import { purchaseStep } from "@/lib/purchasing";
+import { purchaseStep, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
@@ -527,6 +527,34 @@ export async function advancePurchaseRequest(
   }
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+}
+
+/** Purchaser/admin cancels a purchase request (single or the whole combined PO). */
+export async function cancelPurchaseRequest(purchaseRequestId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey))) {
+    throw new Error("Only the Purchaser or an admin can cancel a purchase order.");
+  }
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  // Cancel every member if it's part of a combined PO, otherwise just this one.
+  const ids = poMemberIds(pr.po);
+  const targetIds = ids.length ? ids : [pr.id];
+  const members = await prisma.purchaseRequest.findMany({ where: { id: { in: targetIds } } });
+  if (members.some((m) => !isCancellable(m.status as PRStatus))) {
+    throw new Error("This purchase order can no longer be cancelled.");
+  }
+  const now = new Date();
+  await prisma.$transaction(
+    targetIds.map((id) =>
+      prisma.purchaseRequest.update({ where: { id }, data: { status: "CANCELLED", decidedByName: user.name, decidedAt: now } }),
+    ),
+  );
+  for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
+    revalidatePath(`/orders/${qid}`);
+  }
   revalidatePath("/purchasing");
 }
 

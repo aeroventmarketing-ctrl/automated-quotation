@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Printer, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { advancePurchaseRequest, receivePurchaseRequest } from "../actions";
+import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest } from "../actions";
+import { isCancellable, type PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
@@ -64,6 +65,15 @@ export function PurchasingChain({
   const [err, setErr] = useState<string | null>(null);
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [poEditId, setPoEditId] = useState<string | null>(null);
+
+  async function cancel(prId: string) {
+    if (!window.confirm("Cancel this purchase order / request?")) return;
+    setBusy(prId + "cancel");
+    setErr(null);
+    try { await cancelPurchaseRequest(prId); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
 
   async function run(prId: string, stepKey: string) {
     setBusy(prId + stepKey);
@@ -194,6 +204,15 @@ export function PurchasingChain({
                 <span className="text-xs text-muted-foreground">No purchase order yet.</span>
               )}
             </div>
+            )}
+
+            {!readOnly && r.canManagePO && isCancellable(r.status as PRStatus) && (
+              <div className="mt-2">
+                <button type="button" onClick={() => cancel(r.id)} disabled={busy === r.id + "cancel"}
+                  className="text-xs font-medium text-muted-foreground hover:text-destructive">
+                  {busy === r.id + "cancel" ? "…" : "Cancel this PO"}
+                </button>
+              </div>
             )}
           </div>
         );

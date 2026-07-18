@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -14,8 +13,8 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { ReplenishmentList, type PRRow } from "./replenishment-list";
-import { PurchasingChain } from "../orders/[id]/purchasing-chain";
-import { CombinedPurchasing, type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
+import { PurchasingWorkspace } from "./purchasing-workspace";
+import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
 export const dynamic = "force-dynamic";
 
@@ -82,8 +81,8 @@ export default async function PurchasingPage() {
 
   try {
     const orderPrs = await prisma.purchaseRequest.findMany({
-      where: { quotationId: { not: null }, status: { notIn: ["COMPLETED", "REJECTED"] } },
-      orderBy: { createdAt: "asc" },
+      where: { quotationId: { not: null } },
+      orderBy: { createdAt: "desc" },
     });
     const quotationIds = [...new Set(orderPrs.map((p) => p.quotationId).filter((q): q is string => !!q))];
     const quotations = quotationIds.length
@@ -251,8 +250,6 @@ export default async function PurchasingPage() {
     }
   }
 
-  const hasOrderWork = combinable.length > 0 || batches.length > 0 || orderGroups.length > 0;
-
   return (
     <div className="space-y-6">
       <div>
@@ -268,50 +265,19 @@ export default async function PurchasingPage() {
         <>
           <section className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Order material requests</h2>
-            {!hasOrderWork ? (
-              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No open order material requests.</CardContent></Card>
-            ) : (
-              <>
-                {(combinable.length > 0 || batches.length > 0) && (
-                  <CombinedPurchasing
-                    combinable={combinable}
-                    batches={batches}
-                    suggestions={suggestions}
-                    suppliers={suppliers}
-                    paymentTerms={paymentTerms}
-                    stockItems={stockItems}
-                    canManagePO={canManagePO}
-                    poDefaultRemarks={COMPANY.poDefaultRemarks}
-                    catalogPrices={catalogPrices}
-                    catalogSuppliers={Object.fromEntries(suppliersByProduct)}
-                  />
-                )}
-                {orderGroups.map((g) => (
-                  <Card key={g.id}>
-                    <CardContent className="space-y-3 pt-6">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <Link href={`/orders/${g.id}`} className="font-semibold hover:underline">{g.title}</Link>
-                          <span className="ml-2 text-xs text-muted-foreground">{g.subtitle}</span>
-                        </div>
-                        <Link href={`/orders/${g.id}`} className="text-xs font-medium text-primary hover:underline">Open order →</Link>
-                      </div>
-                      <PurchasingChain
-                        requests={g.rows}
-                        stockItems={stockItems}
-                        orderId={g.id}
-                        poDefaultRemarks={COMPANY.poDefaultRemarks}
-                        suppliers={suppliers}
-                        paymentTerms={paymentTerms}
-                        canManagePO={canManagePO}
-                        catalogSuppliers={Object.fromEntries(suppliersByProduct)}
-                        catalogPrices={catalogPrices}
-                      />
-                    </CardContent>
-                  </Card>
-                ))}
-              </>
-            )}
+            <PurchasingWorkspace
+              batches={batches}
+              combinable={combinable}
+              suggestions={suggestions}
+              orderGroups={orderGroups}
+              suppliers={suppliers}
+              paymentTerms={paymentTerms}
+              stockItems={stockItems}
+              canManagePO={canManagePO}
+              poDefaultRemarks={COMPANY.poDefaultRemarks}
+              catalogPrices={catalogPrices}
+              catalogSuppliers={Object.fromEntries(suppliersByProduct)}
+            />
           </section>
 
           <section className="space-y-3">

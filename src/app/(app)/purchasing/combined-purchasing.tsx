@@ -11,7 +11,8 @@ import { poLineAmount, poTotals, poLineFromPRItem, type POLine } from "@/lib/pur
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
-import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO } from "../orders/actions";
+import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest } from "../orders/actions";
+import { isCancellable } from "@/lib/purchasing";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 
@@ -196,6 +197,14 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
+  const cancellable = batch.canManagePO && isCancellable(batch.status);
+  async function cancel() {
+    if (!window.confirm(`Cancel combined PO ${batch.poNumber}? This withdraws all ${batch.members.length} requests.`)) return;
+    setBusy("cancel"); setErr(null);
+    try { await cancelPurchaseRequest(batch.anchorId); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
 
   if (editing) {
     return (
@@ -299,6 +308,12 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           {" · "}<span className="font-semibold text-foreground">Net {formatCurrency(totals.net, "PHP")}</span>
         </span>
         <div className="flex items-center gap-2">
+          {cancellable && (
+            <button type="button" onClick={cancel} disabled={busy === "cancel"}
+              className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-destructive">
+              {busy === "cancel" ? "…" : "Cancel"}
+            </button>
+          )}
           {editable && (
             <button type="button" onClick={() => setEditing(true)}
               className="inline-flex items-center gap-1.5 rounded-md border border-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10">

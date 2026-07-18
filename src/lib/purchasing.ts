@@ -13,7 +13,8 @@ export type PRStatus =
   | "PURCHASED"
   | "CHECKED"
   | "RECEIVED"
-  | "COMPLETED";
+  | "COMPLETED"
+  | "CANCELLED";
 
 export const PR_STATUS_LABEL: Record<PRStatus, string> = {
   PENDING_APPROVAL: "Awaiting approval",
@@ -24,7 +25,22 @@ export const PR_STATUS_LABEL: Record<PRStatus, string> = {
   CHECKED: "Checked — awaiting receiving",
   RECEIVED: "Received — awaiting Plant Manager",
   COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
 };
+
+/** The tab a PO belongs to, grouping the fine-grained chain statuses. */
+export type PRBucket = "pending" | "approved" | "rejected" | "cancelled";
+export function statusBucket(status: PRStatus): PRBucket {
+  if (status === "PENDING_APPROVAL") return "pending";
+  if (status === "REJECTED") return "rejected";
+  if (status === "CANCELLED") return "cancelled";
+  return "approved"; // APPROVED, VOUCHER_READY, PURCHASED, CHECKED, RECEIVED, COMPLETED
+}
+
+/** A PO can be cancelled by the purchaser up until it's received into stock. */
+export function isCancellable(status: PRStatus): boolean {
+  return (["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY", "PURCHASED", "CHECKED"] as PRStatus[]).includes(status);
+}
 
 export interface PurchaseStepDef {
   key: string;
