@@ -48,6 +48,7 @@ export function PurchasingChain({
   catalogSuppliers = {},
   catalogPrices = {},
   readOnly = false,
+  poHref,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -60,7 +61,10 @@ export function PurchasingChain({
   catalogPrices?: CatalogPrices;
   /** Monitoring only — hide every action/PO editor (used on the order page). */
   readOnly?: boolean;
+  /** Build the PO print URL for a request (defaults to the order PO route). */
+  poHref?: (prId: string) => string;
 }) {
+  const printHref = poHref ?? ((prId: string) => `/orders/${orderId}/po/${prId}/xlsx`);
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -189,7 +193,7 @@ export function PurchasingChain({
                     <Badge variant="success">PO {r.po.poNumber}</Badge>
                     {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
                     <a
-                      href={`/orders/${orderId}/po/${r.id}/xlsx`}
+                      href={printHref(r.id)}
                       className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED1C24]/40"
                     >
                       <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307

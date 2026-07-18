@@ -375,6 +375,61 @@ async function nextMrfNo(): Promise<string> {
 }
 
 /**
+ * Raise a department requisition — production supplies/consumables/equipment not
+ * tied to a customer order. Created by the department head (for their own dept)
+ * or by the purchaser/admin (any dept). Walks the same purchasing chain and is
+ * received into stock. Stored as a PurchaseRequest with kind "department".
+ */
+export async function createDepartmentRequisition(
+  dept: string,
+  items: MRFItem[],
+  note: string,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
+  const deptKey = dept as ProductionDeptKey;
+
+  const roles = await getWorkflowRoles();
+  const allowed =
+    isAdmin(user) ||
+    userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, deptRole(deptKey) as WorkflowRoleKey);
+  if (!allowed) throw new Error(`Only the ${deptLabel(deptKey)} head, the Purchaser, or an admin can raise this requisition.`);
+
+  const cleanItems: MRFItem[] = (items ?? [])
+    .map((it) => ({
+      description: (it.description ?? "").trim(),
+      qty: (it.qty ?? "").trim(),
+      unit: (it.unit ?? "").trim(),
+      remark: (it.remark ?? "").trim() || undefined,
+    }))
+    .filter((it) => it.description !== "");
+  if (cleanItems.length === 0) throw new Error("List at least one item.");
+
+  await prisma.purchaseRequest.create({
+    data: {
+      kind: "department",
+      dept: deptKey,
+      items: cleanItems.map(mrfItemLine) as Prisma.InputJsonValue,
+      note: note.trim() || null,
+      createdById: user.id,
+      createdByName: user.name,
+      status: "PENDING_APPROVAL",
+    },
+  });
+
+  // Auto-save any newly typed items to the product catalogue (best effort).
+  try {
+    for (const it of cleanItems) await rememberProduct(it.description, it.unit);
+  } catch {
+    /* product table not migrated yet — ignore */
+  }
+  revalidatePath("/requisitions");
+  revalidatePath("/purchasing");
+}
+
+/**
  * The requesting department head (or an admin) withdraws a material request
  * before the warehouse handles it. Only possible while it's still "requested".
  */

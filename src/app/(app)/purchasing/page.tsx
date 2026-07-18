@@ -14,6 +14,7 @@ import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { ReplenishmentList, type PRRow } from "./replenishment-list";
 import { PurchasingWorkspace } from "./purchasing-workspace";
+import { PurchasingChain } from "../orders/[id]/purchasing-chain";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
 export const dynamic = "force-dynamic";
@@ -223,6 +224,29 @@ export default async function PurchasingPage() {
     tableMissing = true;
   }
 
+  // Department requisitions (production supplies, not tied to an order).
+  let deptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
+  if (!tableMissing) {
+    try {
+      const prs = await prisma.purchaseRequest.findMany({
+        where: { kind: "department", status: { notIn: ["COMPLETED"] } },
+        orderBy: { createdAt: "desc" },
+      });
+      deptRows = prs.map((pr) =>
+        buildPurchaseChainRow(pr, {
+          mrfNo: null,
+          canManagePO,
+          canCancel: canCancelPr(pr),
+          canDelete: canDeleteStatus(pr.status),
+          namesForRole,
+          canAct,
+        }),
+      );
+    } catch {
+      tableMissing = true;
+    }
+  }
+
   // Replenishment (stock top-ups).
   let replenRows: PRRow[] = [];
   if (!tableMissing) {
@@ -294,6 +318,30 @@ export default async function PurchasingPage() {
               catalogPrices={catalogPrices}
               catalogSuppliers={Object.fromEntries(suppliersByProduct)}
             />
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Department requisitions</h2>
+            {deptRows.length === 0 ? (
+              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No open department requisitions. Departments raise them from Requisitions.</CardContent></Card>
+            ) : (
+              <Card>
+                <CardContent className="pt-6">
+                  <PurchasingChain
+                    requests={deptRows}
+                    stockItems={stockItems}
+                    orderId=""
+                    poDefaultRemarks={COMPANY.poDefaultRemarks}
+                    suppliers={suppliers}
+                    paymentTerms={paymentTerms}
+                    canManagePO={canManagePO}
+                    catalogSuppliers={Object.fromEntries(suppliersByProduct)}
+                    catalogPrices={catalogPrices}
+                    poHref={(prId) => `/purchasing/po/${prId}/xlsx`}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </section>
 
           <section className="space-y-3">
