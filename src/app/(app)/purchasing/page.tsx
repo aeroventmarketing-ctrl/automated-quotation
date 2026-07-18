@@ -67,6 +67,7 @@ export default async function PurchasingPage() {
   let combinable: CombinableItem[] = [];
   let batches: BatchCard[] = [];
   let suggestions: SupplierSuggestion[] = [];
+  let deptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
   let tableMissing = false;
 
   // Product catalogue → supplier lookup, used to suggest same-supplier combines.
@@ -92,10 +93,19 @@ export default async function PurchasingPage() {
   }
 
   try {
-    const orderPrs = await prisma.purchaseRequest.findMany({
-      where: { quotationId: { not: null } },
-      orderBy: { createdAt: "desc" },
-    });
+    const [orderPrs, deptPrs] = await Promise.all([
+      prisma.purchaseRequest.findMany({
+        where: { quotationId: { not: null } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.purchaseRequest.findMany({
+        where: { kind: "department", status: { notIn: ["COMPLETED"] } },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+    // Department requisitions share the same combine-by-supplier workspace as
+    // order material requests.
+    const allPrs = [...orderPrs, ...deptPrs];
     const quotationIds = [...new Set(orderPrs.map((p) => p.quotationId).filter((q): q is string => !!q))];
     const quotations = quotationIds.length
       ? await prisma.quotation.findMany({ where: { id: { in: quotationIds } }, include: { inquiry: { include: { customer: true } } } })
@@ -115,8 +125,8 @@ export default async function PurchasingPage() {
     const deptLabelOf = (dept: string | null) =>
       dept && PRODUCTION_DEPTS.some((d) => d.key === dept) ? deptLabel(dept as (typeof PRODUCTION_DEPTS)[number]["key"]) : dept ?? "—";
 
-    const batched = orderPrs.filter((pr) => poBatchId(pr.po));
-    const unbatched = orderPrs.filter((pr) => !poBatchId(pr.po));
+    const batched = allPrs.filter((pr) => poBatchId(pr.po));
+    const unbatched = allPrs.filter((pr) => !poBatchId(pr.po));
 
     // Combinable: pending approval, no PO yet.
     combinable = unbatched
@@ -128,7 +138,7 @@ export default async function PurchasingPage() {
         return {
           id: pr.id,
           orderId: pr.quotationId ?? "",
-          orderLabel: orderLabelOf(pr.quotationId),
+          orderLabel: pr.quotationId ? orderLabelOf(pr.quotationId) : `Department · ${deptLabelOf(pr.dept)}`,
           deptLabel: deptLabelOf(pr.dept),
           mrfNo: mrfNoOf(pr.quotationId, pr.mrfId),
           items,
@@ -192,7 +202,7 @@ export default async function PurchasingPage() {
         variant: variantFor(status),
         lines: po?.lines ?? [],
         members: members.map((m) => ({
-          orderLabel: orderLabelOf(m.quotationId),
+          orderLabel: m.quotationId ? orderLabelOf(m.quotationId) : `Department · ${deptLabelOf(m.dept)}`,
           deptLabel: deptLabelOf(m.dept),
           mrfNo: mrfNoOf(m.quotationId, m.mrfId),
           items: Array.isArray(m.items) ? (m.items as string[]) : [],
@@ -220,19 +230,11 @@ export default async function PurchasingPage() {
         return { id: q.id, title: q.inquiry.customer.company, subtitle: `Order ${q.quoteNumber}${project ? ` · ${project}` : ""}`, rows };
       })
       .filter((g): g is NonNullable<typeof g> => g !== null);
-  } catch {
-    tableMissing = true;
-  }
 
-  // Department requisitions (production supplies, not tied to an order).
-  let deptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
-  if (!tableMissing) {
-    try {
-      const prs = await prisma.purchaseRequest.findMany({
-        where: { kind: "department", status: { notIn: ["COMPLETED"] } },
-        orderBy: { createdAt: "desc" },
-      });
-      deptRows = prs.map((pr) =>
+    // Uncombined department requisitions → individual chains.
+    deptRows = unbatched
+      .filter((pr) => pr.kind === "department")
+      .map((pr) =>
         buildPurchaseChainRow(pr, {
           mrfNo: null,
           canManagePO,
@@ -242,9 +244,8 @@ export default async function PurchasingPage() {
           canAct,
         }),
       );
-    } catch {
-      tableMissing = true;
-    }
+  } catch {
+    tableMissing = true;
   }
 
   // Replenishment (stock top-ups).
