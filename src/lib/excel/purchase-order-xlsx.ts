@@ -193,6 +193,15 @@ export async function buildPurchaseOrderWorkbook(
     }
   }
 
+  // Rename the 2307 tab to "2307" and password-protect both tabs so the
+  // generated PO/2307 can't be accidentally edited. Same password for every
+  // client. (Only selection is allowed, matching Excel's default Protect Sheet.)
+  if (f) f.name = "2307";
+  const PROTECT_PASSWORD = "142677";
+  const protectOpts = { selectLockedCells: true, selectUnlockedCells: true } as const;
+  await ws.protect(PROTECT_PASSWORD, protectOpts);
+  if (f) await f.protect(PROTECT_PASSWORD, protectOpts);
+
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
 }
