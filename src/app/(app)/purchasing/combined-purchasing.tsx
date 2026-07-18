@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Printer } from "lucide-react";
+import { Printer, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,19 @@ import { poLineAmount, poTotals, poLineFromPRItem, type POLine } from "@/lib/pur
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
-import { createCombinedPO, advanceCombinedPO, receiveCombinedPO } from "../orders/actions";
+import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO } from "../orders/actions";
+
+type CatalogPrices = Record<string, Record<string, number>>;
+/** Fill each line's unit price from the catalogue for the chosen supplier (only where blank). */
+function withCatalogPrices(lines: POLine[], company: string, catalog: CatalogPrices, force = false): POLine[] {
+  const co = company.trim().toLowerCase();
+  if (!co) return lines;
+  return lines.map((l) => {
+    if (l.unitPrice && !force) return l;
+    const price = catalog[l.description.trim().toLowerCase()]?.[co];
+    return price ? { ...l, unitPrice: String(price) } : l;
+  });
+}
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 
 export interface CombinableItem {
@@ -44,6 +56,10 @@ export interface BatchCard {
   orderIdForPrint: string;
   poNumber: string;
   supplierCompany: string;
+  supplierAttention: string;
+  supplierAddress: string;
+  ewtPct: number;
+  remarks: string;
   status: PRStatus;
   statusLabel: string;
   variant: "secondary" | "warning" | "success" | "destructive";
@@ -68,6 +84,7 @@ export function CombinedPurchasing({
   stockItems,
   canManagePO,
   poDefaultRemarks,
+  catalogPrices = {},
 }: {
   combinable: CombinableItem[];
   batches: BatchCard[];
@@ -77,6 +94,7 @@ export function CombinedPurchasing({
   stockItems: StockOpt[];
   canManagePO: boolean;
   poDefaultRemarks: string;
+  catalogPrices?: CatalogPrices;
 }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -97,7 +115,9 @@ export function CombinedPurchasing({
   return (
     <div className="space-y-3">
       {/* Existing combined POs */}
-      {batches.map((b) => <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} />)}
+      {batches.map((b) => (
+        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} />
+      ))}
 
       {/* Combine builder */}
       {canManagePO && combinable.length > 0 && (
@@ -148,11 +168,15 @@ export function CombinedPurchasing({
             </div>
           ) : (
             <CombineForm
-              items={selectedItems}
+              title={`New combined PO · ${selectedItems.length} requests`}
+              submitLabel="Create combined PO"
+              initialLines={selectedItems.flatMap((it) => it.items.map((s) => poLineFromPRItem(s)))}
+              presetCompany={presetCompany}
               suppliers={suppliers}
               paymentTerms={paymentTerms}
               poDefaultRemarks={poDefaultRemarks}
-              presetCompany={presetCompany}
+              catalogPrices={catalogPrices}
+              onSubmit={(input) => createCombinedPO(selectedItems.map((it) => it.id), input)}
               onCancel={() => { setBuilding(false); setPresetCompany(""); }}
               onDone={() => { setBuilding(false); setPresetCompany(""); setSel(new Set()); router.refresh(); }}
             />
@@ -163,20 +187,46 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems }: { batch: BatchCard; stockItems: StockOpt[] }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [receiving, setReceiving] = useState(false);
-  const totals = poTotals({ lines: batch.lines, ewtPct: 0 });
+  const [editing, setEditing] = useState(false);
+  const totals = poTotals({ lines: batch.lines, ewtPct: batch.ewtPct });
   const actionable = batch.actions.filter((a) => a.canAct);
   const awaiting = batch.actions.find((a) => !a.canAct);
+  const editable = batch.canManagePO && (["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(batch.status);
 
   async function run(stepKey: string) {
     setBusy(stepKey); setErr(null);
     try { await advanceCombinedPO(batch.anchorId, stepKey); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
+  }
+
+  if (editing) {
+    return (
+      <div className="rounded-md border p-3">
+        <CombineForm
+          title={`Edit combined PO ${batch.poNumber} · ${batch.members.length} requests`}
+          submitLabel="Save changes"
+          initialLines={batch.lines}
+          presetCompany={batch.supplierCompany}
+          initialAttention={batch.supplierAttention}
+          initialAddress={batch.supplierAddress}
+          initialEwtPct={batch.ewtPct}
+          initialRemarks={batch.remarks}
+          suppliers={suppliers}
+          paymentTerms={paymentTerms}
+          poDefaultRemarks={poDefaultRemarks}
+          catalogPrices={catalogPrices}
+          onSubmit={(input) => updateCombinedPO(batch.anchorId, input)}
+          onCancel={() => setEditing(false)}
+          onDone={() => { setEditing(false); router.refresh(); }}
+        />
+      </div>
+    );
   }
 
   return (
@@ -198,6 +248,30 @@ function BatchCardView({ batch, stockItems }: { batch: BatchCard; stockItems: St
           </li>
         ))}
       </ul>
+
+      {/* PO lines with prices for the purchaser's reference. */}
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[420px] border-collapse text-xs">
+          <thead>
+            <tr className="border-b text-left text-muted-foreground">
+              <th className="py-1 pr-2 font-medium">Description</th>
+              <th className="w-16 py-1 px-1 text-right font-medium">Qty</th>
+              <th className="w-24 py-1 px-1 text-right font-medium">Unit price</th>
+              <th className="w-24 py-1 px-1 text-right font-medium">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {batch.lines.map((l, i) => (
+              <tr key={i} className="border-b last:border-0">
+                <td className="py-1 pr-2">{l.description}</td>
+                <td className="py-1 px-1 text-right tabular-nums">{[l.qty, l.unit].filter(Boolean).join(" ")}</td>
+                <td className="py-1 px-1 text-right tabular-nums">{l.unitPrice ? formatCurrency(Number(l.unitPrice), "PHP") : "—"}</td>
+                <td className="py-1 px-1 text-right tabular-nums">{poLineAmount(l) ? formatCurrency(poLineAmount(l), "PHP") : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {batch.trail.length > 0 && <div className="mt-1 text-xs text-muted-foreground">{batch.trail.join(" · ")}</div>}
 
@@ -226,11 +300,23 @@ function BatchCardView({ batch, stockItems }: { batch: BatchCard; stockItems: St
       ) : null}
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">
-        <span className="text-muted-foreground">Net {formatCurrency(totals.net, "PHP")}</span>
-        <a href={`/orders/${batch.orderIdForPrint}/po/${batch.anchorId}/xlsx`}
-          className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a]">
-          <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
-        </a>
+        <span className="text-muted-foreground">
+          Total {formatCurrency(totals.total, "PHP")}
+          {batch.ewtPct > 0 && <> · less EWT {formatCurrency(totals.ewt, "PHP")}</>}
+          {" · "}<span className="font-semibold text-foreground">Net {formatCurrency(totals.net, "PHP")}</span>
+        </span>
+        <div className="flex items-center gap-2">
+          {editable && (
+            <button type="button" onClick={() => setEditing(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10">
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </button>
+          )}
+          <a href={`/orders/${batch.orderIdForPrint}/po/${batch.anchorId}/xlsx`}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a]">
+            <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
+          </a>
+        </div>
       </div>
       {err && <p className="mt-1 text-xs text-destructive">{err}</p>}
     </div>
@@ -238,48 +324,64 @@ function BatchCardView({ batch, stockItems }: { batch: BatchCard; stockItems: St
 }
 
 function CombineForm({
-  items,
+  title,
+  submitLabel,
+  initialLines,
+  presetCompany = "",
+  initialAttention,
+  initialAddress,
+  initialEwtPct,
+  initialRemarks,
   suppliers,
   paymentTerms,
   poDefaultRemarks,
-  presetCompany = "",
+  catalogPrices,
+  onSubmit,
   onCancel,
   onDone,
 }: {
-  items: CombinableItem[];
+  title: string;
+  submitLabel: string;
+  initialLines: POLine[];
+  presetCompany?: string;
+  initialAttention?: string;
+  initialAddress?: string;
+  initialEwtPct?: number;
+  initialRemarks?: string;
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   poDefaultRemarks: string;
-  presetCompany?: string;
+  catalogPrices: CatalogPrices;
+  onSubmit: (input: { supplier: { company: string; attention: string; address: string }; date: string; lines: POLine[]; ewtPct: number; remarks: string }) => Promise<void>;
   onCancel: () => void;
   onDone: () => void;
 }) {
-  const defaultLines = useMemo<POLine[]>(
-    () => items.flatMap((it) => it.items.map((s) => poLineFromPRItem(s))),
-    [items],
-  );
   const preset = presetCompany ? suppliers.find((s) => s.company.toLowerCase() === presetCompany.toLowerCase()) : undefined;
   const [company, setCompany] = useState(presetCompany);
-  const [attention, setAttention] = useState(preset ? [preset.contactPerson, preset.contactNumber].filter(Boolean).join(" - ") : "");
-  const [address, setAddress] = useState(preset?.address ?? "");
+  const [attention, setAttention] = useState(initialAttention ?? (preset ? [preset.contactPerson, preset.contactNumber].filter(Boolean).join(" - ") : ""));
+  const [address, setAddress] = useState(initialAddress ?? preset?.address ?? "");
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [date, setDate] = useState(todayInput());
-  const [lines, setLines] = useState<POLine[]>(defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }]);
-  const [withEwt, setWithEwt] = useState(true);
-  const [ewtPct, setEwtPct] = useState("1");
-  const [remarks, setRemarks] = useState(poDefaultRemarks);
+  // Pre-fill line prices from the catalogue for the chosen supplier.
+  const seededLines = withCatalogPrices(initialLines.length ? initialLines : [{ description: "", qty: "", unit: "", unitPrice: "" }], presetCompany, catalogPrices);
+  const [lines, setLines] = useState<POLine[]>(seededLines);
+  const [withEwt, setWithEwt] = useState((initialEwtPct ?? 1) > 0);
+  const [ewtPct, setEwtPct] = useState(String(initialEwtPct && initialEwtPct > 0 ? initialEwtPct : 1));
+  const [remarks, setRemarks] = useState(initialRemarks ?? poDefaultRemarks);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const matches = company.trim()
     ? suppliers.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
     : suppliers;
+  const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPrices[l.description.trim().toLowerCase()]?.[company.trim().toLowerCase()]);
 
   function pickSupplier(s: Supplier) {
     setCompany(s.company);
     setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
     if (s.address) setAddress(s.address);
     setSupplierOpen(false);
+    setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices));
   }
   function setLine(i: number, key: keyof POLine, value: string) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
@@ -288,17 +390,11 @@ function CombineForm({
   const effectiveEwt = withEwt ? Number(ewtPct) || 0 : 0;
   const totals = poTotals({ lines, ewtPct: effectiveEwt });
 
-  async function create() {
+  async function submit() {
     if (company.trim() === "") { setErr("Enter the supplier."); return; }
     setBusy(true); setErr(null);
     try {
-      await createCombinedPO(items.map((it) => it.id), {
-        supplier: { company, attention, address },
-        date,
-        lines,
-        ewtPct: effectiveEwt,
-        remarks,
-      });
+      await onSubmit({ supplier: { company, attention, address }, date, lines, ewtPct: effectiveEwt, remarks });
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -308,7 +404,7 @@ function CombineForm({
 
   return (
     <div className="space-y-3">
-      <div className="text-sm font-medium">New combined PO · {items.length} requests</div>
+      <div className="text-sm font-medium">{title}</div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="space-y-1">
@@ -369,7 +465,14 @@ function CombineForm({
           </tbody>
         </table>
       </div>
-      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => [...ls, { description: "", qty: "", unit: "", unitPrice: "" }])}>+ Add line</Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => [...ls, { description: "", qty: "", unit: "", unitPrice: "" }])}>+ Add line</Button>
+        {canFillPrices && (
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => withCatalogPrices(ls, company, catalogPrices))}>
+            Fill prices from {company}
+          </Button>
+        )}
+      </div>
 
       <div className="ml-auto max-w-xs space-y-1 text-sm">
         <div className="flex items-center justify-between gap-2">
@@ -404,7 +507,7 @@ function CombineForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" className="h-8" disabled={busy} onClick={create}>{busy ? "Creating…" : "Create combined PO"}</Button>
+        <Button size="sm" className="h-8" disabled={busy} onClick={submit}>{busy ? "Saving…" : submitLabel}</Button>
         <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={onCancel}>Cancel</Button>
         {err && <span className="text-xs text-destructive">{err}</span>}
       </div>

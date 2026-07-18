@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { coercePurchaseOrder, formatPoNumber, type PurchaseOrder } from "@/lib/purchase-order";
-import { poMemberIds } from "@/lib/purchase-batch";
+import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberProduct } from "@/lib/product-catalog";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
@@ -666,6 +666,52 @@ export async function createCombinedPO(
   );
   await rememberSupplier(d.supplier);
   for (const qid of [...new Set(prs.map((p) => p.quotationId).filter((q): q is string => !!q))]) {
+    revalidatePath(`/orders/${qid}`);
+  }
+  revalidatePath("/purchasing");
+}
+
+/** Edit a combined PO's supplier, lines, EWT and remarks (before it's purchased). */
+export async function updateCombinedPO(
+  anchorPurchaseRequestId: string,
+  input: z.infer<typeof poInputSchema>,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey))) {
+    throw new Error("Only the Purchaser or an admin can edit a purchase order.");
+  }
+  const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
+  if (!anchor) throw new Error("Purchase request not found");
+  const ids = poMemberIds(anchor.po);
+  if (ids.length === 0) throw new Error("This is not a combined purchase order.");
+  if (!(["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(anchor.status)) {
+    throw new Error("A combined PO can only be edited before it is purchased.");
+  }
+  const existing = coercePurchaseOrder(anchor.po);
+  const batchId = poBatchId(anchor.po);
+  const d = poInputSchema.parse(input);
+  const lines = d.lines.filter((l) => l.description.trim() !== "");
+  if (lines.length === 0) throw new Error("Add at least one line to the purchase order.");
+
+  const po = {
+    poNumber: existing?.poNumber ?? (await nextPoNo()),
+    date: d.date || existing?.date || new Date().toISOString(),
+    supplier: d.supplier,
+    lines,
+    ewtPct: d.ewtPct,
+    remarks: d.remarks || COMPANY.poDefaultRemarks,
+    createdByName: existing?.createdByName ?? user.name,
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    batchId,
+    memberPrIds: ids,
+  };
+  await prisma.$transaction(
+    ids.map((id) => prisma.purchaseRequest.update({ where: { id }, data: { po: po as unknown as Prisma.InputJsonObject } })),
+  );
+  await rememberSupplier(d.supplier);
+  const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } }, select: { quotationId: true } });
+  for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
     revalidatePath(`/orders/${qid}`);
   }
   revalidatePath("/purchasing");

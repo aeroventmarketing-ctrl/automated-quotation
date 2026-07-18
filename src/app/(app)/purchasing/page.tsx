@@ -71,6 +71,14 @@ export default async function PurchasingPage() {
     const hit = productNamesByLen.find((n) => n.length >= 3 && (desc.includes(n) || n.includes(desc)));
     return hit ? suppliersByProduct.get(hit) ?? [] : [];
   };
+  // Catalogue prices: product name → supplier company → unit price. Used to
+  // pre-fill PO line prices for the purchaser's reference.
+  const catalogPrices: Record<string, Record<string, number>> = {};
+  for (const p of products) {
+    const m: Record<string, number> = {};
+    for (const s of p.suppliers) if (s.price && s.price > 0) m[s.company.toLowerCase()] = s.price;
+    if (Object.keys(m).length) catalogPrices[p.name.trim().toLowerCase()] = m;
+  }
 
   try {
     const orderPrs = await prisma.purchaseRequest.findMany({
@@ -161,6 +169,10 @@ export default async function PurchasingPage() {
         orderIdForPrint: anchor.quotationId ?? "",
         poNumber: po?.poNumber ?? "—",
         supplierCompany: po?.supplier.company ?? "",
+        supplierAttention: po?.supplier.attention ?? "",
+        supplierAddress: po?.supplier.address ?? "",
+        ewtPct: po?.ewtPct ?? 0,
+        remarks: po?.remarks ?? "",
         status,
         statusLabel: PR_STATUS_LABEL[status],
         variant: variantFor(status),
@@ -270,6 +282,7 @@ export default async function PurchasingPage() {
                     stockItems={stockItems}
                     canManagePO={canManagePO}
                     poDefaultRemarks={COMPANY.poDefaultRemarks}
+                    catalogPrices={catalogPrices}
                   />
                 )}
                 {orderGroups.map((g) => (
