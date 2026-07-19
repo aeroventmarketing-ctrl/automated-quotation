@@ -30,6 +30,7 @@ import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-vi
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
+import { ConversationLog } from "./conversation-log";
 import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
@@ -407,6 +408,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   baseYear={wf.joBaseYear}
                   canManage={canManageJO}
                 />
+              </div>
+              <div className="border-t pt-3">
+                <ConversationLog orderId={quote.id} conversations={wf.conversations} canLog={isSalesViewer} />
               </div>
             </div>
           )}

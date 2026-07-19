@@ -35,6 +35,7 @@ import {
   type MaterialRequest,
   type MRFItem,
   type MRFLineDisposition,
+  type OrderConversation,
 } from "@/lib/order-workflow";
 import { purchaseStep, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { saleFromClassification, docCheckMissing } from "@/lib/sale";
@@ -356,6 +357,41 @@ export async function raiseMaterialRequest(
   } catch {
     /* product table not migrated yet — ignore */
   }
+}
+
+/** Sales (or admin) logs a conversation with a production head about the order. */
+export async function addOrderConversation(
+  quotationId: string,
+  input: { at: string; withName: string; message: string },
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!(isAdmin(user) || user.id === quote.preparedById || user.role === "SALES" || user.role === "ENGINEER")) {
+    throw new Error("Only sales or an admin can log a conversation.");
+  }
+  const message = (input.message ?? "").trim();
+  if (!message) throw new Error("Enter the conversation details.");
+  const entry: OrderConversation = {
+    id: randomUUID(),
+    at: (input.at ?? "").trim() || new Date().toISOString(),
+    withName: (input.withName ?? "").trim(),
+    message,
+    loggedByName: user.name,
+    loggedAt: new Date().toISOString(),
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, conversations: [...wf.conversations, entry] });
+}
+
+/** Remove a logged conversation (sales owner or admin). */
+export async function deleteOrderConversation(quotationId: string, id: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!(isAdmin(user) || user.id === quote.preparedById || user.role === "SALES" || user.role === "ENGINEER")) {
+    throw new Error("Only sales or an admin can remove a conversation.");
+  }
+  await saveWorkflow(quotationId, cls, { ...wf, conversations: wf.conversations.filter((c) => c.id !== id) });
 }
 
 /** Next running Material Request Form number, zero-padded (e.g. "0173"). */

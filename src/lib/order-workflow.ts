@@ -120,6 +120,19 @@ export function coerceMrfItems(raw: unknown): MRFItem[] {
     .filter((i) => i.description.trim() !== "");
 }
 
+/**
+ * A note of a conversation sales had with a production head (or anyone) about
+ * the order — captured on the Job orders & production card.
+ */
+export interface OrderConversation {
+  id: string;
+  at: string; // ISO — when the conversation happened
+  withName: string; // person sales talked to (e.g. the production head)
+  message: string; // the conversation / message
+  loggedByName: string; // who logged it
+  loggedAt: string; // ISO — when logged
+}
+
 /** Delivery-document reference numbers captured in Phase 6. */
 export interface OrderDocuments {
   dr?: string; // Delivery Receipt
@@ -141,6 +154,8 @@ export interface OrderWorkflow {
   fansJobOrders: FansJobOrder[];
   joBaseNo?: number;
   joBaseYear?: number;
+  // Sales' log of conversations with production heads about the order.
+  conversations: OrderConversation[];
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -249,6 +264,20 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   const joBaseNo = typeof wf?.joBaseNo === "number" ? (wf.joBaseNo as number) : undefined;
   const joBaseYear = typeof wf?.joBaseYear === "number" ? (wf.joBaseYear as number) : undefined;
 
+  const conversations: OrderConversation[] = Array.isArray(wf?.conversations)
+    ? (wf.conversations as unknown[])
+        .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+        .map((c) => ({
+          id: String(c.id ?? ""),
+          at: String(c.at ?? ""),
+          withName: String(c.withName ?? ""),
+          message: String(c.message ?? ""),
+          loggedByName: String(c.loggedByName ?? ""),
+          loggedAt: String(c.loggedAt ?? ""),
+        }))
+        .filter((c) => c.message.trim() !== "")
+    : [];
+
   // Normalize the JO-Received → In Production → Production finished window so the
   // order stage always reflects actual job-order progress. This self-heals orders
   // whose job orders were started before the "In Production" stage existed (their
@@ -260,7 +289,7 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     else if (jos.some((j) => j.status === "in_production" || j.status === "finished")) stage = "producing";
   }
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, conversations };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */
