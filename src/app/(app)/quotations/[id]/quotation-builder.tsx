@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuotationStatusBadge } from "@/components/status-badge";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { formatCurrency } from "@/lib/utils";
 import { config } from "@/lib/config";
 import { applyPricing, DEFAULT_PRICING, type PricingAdjust, type AdjustMode } from "@/lib/quote";
@@ -4815,6 +4816,7 @@ export function QuotationBuilder({
 
   return (
     <div className="space-y-6">
+      <AutoRefresh />
       <SimilarQuotes matches={dupMatches} currentCompany={quotation.customer} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
