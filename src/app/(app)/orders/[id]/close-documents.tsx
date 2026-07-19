@@ -86,14 +86,12 @@ export function CloseDocuments({
 
   return (
     <div className="space-y-3">
-      <div>
-        <p className="text-sm font-medium">{closed ? "Closing documents — incomplete" : "File documents & close order"}</p>
-        <p className="text-xs text-muted-foreground">
-          {closed
-            ? "The order is closed but its documents are incomplete. Upload the remaining documents to complete it and release the sales commission."
-            : "Accounting files all delivery documents; the order is closed and the sales commission is computed."}
-        </p>
-      </div>
+      {!closed && (
+        <div>
+          <p className="text-sm font-medium">File documents &amp; close order</p>
+          <p className="text-xs text-muted-foreground">Accounting files all delivery documents; the order is closed and the sales commission is computed.</p>
+        </div>
+      )}
 
       <div className="space-y-3">
         {types.map((t) => {
@@ -141,13 +139,15 @@ export function CloseDocuments({
         state.complete ? (
           <p className="text-xs text-emerald-600">Documents complete — finalizing…</p>
         ) : canFile ? (
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-amber-700">
-              {state.bir2307Missing ? "Marked incomplete — BIR 2307 not yet uploaded." : "Marked incomplete — required documents missing."}
-            </p>
+          <div className="flex flex-wrap items-center gap-3">
             <Button size="sm" disabled={busy} onClick={close} className="bg-amber-500 text-white hover:bg-amber-600">
               {busy ? "Saving…" : "File documents — close order (incomplete)"}
             </Button>
+            <p className="max-w-md text-xs text-muted-foreground">
+              <span className="font-medium text-amber-700">Closing documents — incomplete.</span>{" "}
+              {state.bir2307Missing ? "BIR 2307 is not yet uploaded. " : ""}
+              The order is closed but its documents are incomplete. Upload the remaining documents to complete it and release the sales commission.
+            </p>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Awaiting Accounting to complete the closing documents.</p>
