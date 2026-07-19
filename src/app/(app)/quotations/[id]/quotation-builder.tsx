@@ -5969,11 +5969,6 @@ export function QuotationBuilder({
               <Download className="h-4 w-4" /> Download Excel
             </a>
           </Button>
-          <Button variant="outline" asChild>
-            <a href={`/api/quotations/${quotation.id}/pdf`} target="_blank" rel="noopener noreferrer">
-              <Download className="h-4 w-4" /> PDF
-            </a>
-          </Button>
         </div>
       </div>
     </div>
