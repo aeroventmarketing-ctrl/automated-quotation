@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
@@ -344,6 +345,11 @@ export async function reviseQuotation(quotationId: string) {
   // The salesperson who prepared the quote — or an admin — may revise it.
   if (quote.preparedById !== user.id && !isAdmin(user))
     throw new Error("Only the preparer or an admin can revise this quotation.");
+  // Once the order is in production (or later) the quotation is locked — only an
+  // admin can still revise it.
+  if (!isAdmin(user) && stageIndex(readOrderWorkflow(quote.classification).stage) >= stageIndex("producing")) {
+    throw new Error("This order is already in production — only an admin can revise the quotation.");
+  }
 
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const currentRev = typeof cls.revision === "number" ? cls.revision : 0;

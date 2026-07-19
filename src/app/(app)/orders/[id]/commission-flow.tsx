@@ -105,9 +105,9 @@ export function CommissionFlow({
   ].filter(Boolean);
 
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium">Sales commission</p>
+        <p className="text-sm text-muted-foreground">Commission amount (1.5%)</p>
         <span className="text-sm font-semibold">{formatCurrency(amount, currency)}</span>
       </div>
       <p className="text-xs text-muted-foreground">

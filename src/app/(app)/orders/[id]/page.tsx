@@ -27,7 +27,7 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
-import { saleFromClassification } from "@/lib/sale";
+import { saleFromClassification, closeDocsState } from "@/lib/sale";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
@@ -36,6 +36,7 @@ import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { FulfillmentActions } from "./fulfillment-actions";
+import { CommissionFlow } from "./commission-flow";
 
 export const dynamic = "force-dynamic";
 
@@ -512,17 +513,36 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
-      {/* Phase 5 — final payment, quality, delivery, documents & commission */}
+      {/* Phase 5 — final payment, quality, delivery & documents */}
       {showFulfillment && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Final payment, quality, delivery, documents &amp; commission</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {fTrail.length > 0 && (
               <div className="space-y-0.5 text-xs text-muted-foreground">
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} commission={commissionInfo} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Phase 6 — sales commission (once the order is closed with complete docs) */}
+      {wf.stage === "closed" && commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 6 · Sales commission</CardTitle></CardHeader>
+          <CardContent>
+            <CommissionFlow
+              orderId={quote.id}
+              amount={commissionInfo.amount}
+              currency={commissionInfo.currency}
+              salesMonth={commissionInfo.salesMonth}
+              dueLabel={commissionInfo.dueLabel}
+              flow={commissionInfo.flow}
+              canApprove={perms.canApproveComm}
+              canAccounting={perms.canAccountingComm}
+            />
           </CardContent>
         </Card>
       )}

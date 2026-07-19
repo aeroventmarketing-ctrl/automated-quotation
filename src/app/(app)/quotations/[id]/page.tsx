@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByName } from "@/lib/ensure-templates";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
@@ -83,6 +84,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       isAdmin={isAdmin(user)}
       isPreparer={!!user && user.id === quotation.preparedById}
       canClearSale={canClearSale}
+      orderInProduction={stageIndex(readOrderWorkflow(quotation.classification).stage) >= stageIndex("producing")}
       propellerSpLock={propellerSpLock}
       axialSpLock={axialSpLock}
       revisionHistory={(() => {

@@ -6,9 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { closeDocsState, type SaleDoc } from "@/lib/sale";
-import type { OrderCommissionFlow } from "@/lib/order-workflow";
 import { CloseDocuments } from "./close-documents";
-import { CommissionFlow } from "./commission-flow";
 import {
   notifyClientReady,
   checkFinalPayment,
@@ -40,20 +38,11 @@ interface Perms {
   canAccountingComm: boolean;
 }
 
-interface CommissionInfo {
-  amount: number;
-  currency: string;
-  salesMonth: string;
-  dueLabel: string;
-  flow: OrderCommissionFlow;
-}
-
 export function FulfillmentActions({
   orderId,
   stage,
   perms,
   documents,
-  commission,
   closeDocs,
   vatInclusive,
   canEditCloseDocs,
@@ -62,7 +51,6 @@ export function FulfillmentActions({
   stage: string;
   perms: Perms;
   documents: { dr?: string; si?: string; or?: string; pod?: string };
-  commission: CommissionInfo | null;
   closeDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   canEditCloseDocs: boolean;
@@ -238,26 +226,10 @@ export function FulfillmentActions({
       )}
 
       {stage === "closed" && closeDocsState(closeDocs, vatInclusive).complete && (
-        <div className="space-y-3">
-          <p className="text-sm text-emerald-600">
-            Order complete. DR {documents.dr || "—"} · SI {documents.si || "—"} · OR {documents.or || "—"}
-            {documents.pod ? ` · POD ${documents.pod}` : ""}
-          </p>
-
-          {/* Sales commission fulfillment */}
-          {commission && (
-            <CommissionFlow
-              orderId={orderId}
-              amount={commission.amount}
-              currency={commission.currency}
-              salesMonth={commission.salesMonth}
-              dueLabel={commission.dueLabel}
-              flow={commission.flow}
-              canApprove={perms.canApproveComm}
-              canAccounting={perms.canAccountingComm}
-            />
-          )}
-        </div>
+        <p className="text-sm text-emerald-600">
+          Order complete. DR {documents.dr || "—"} · SI {documents.si || "—"} · OR {documents.or || "—"}
+          {documents.pod ? ` · POD ${documents.pod}` : ""}
+        </p>
       )}
 
       {err && <p className="text-xs text-destructive">{err}</p>}

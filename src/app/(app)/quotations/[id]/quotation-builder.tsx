@@ -2601,6 +2601,7 @@ export function QuotationBuilder({
   isAdmin = false,
   isPreparer = false,
   canClearSale = false,
+  orderInProduction = false,
   revisionHistory = [],
   catalog,
   propellerSpLock = true,
@@ -2612,6 +2613,8 @@ export function QuotationBuilder({
   isAdmin?: boolean;
   isPreparer?: boolean;
   canClearSale?: boolean;
+  /** The order tied to this quote is in production (or later) — revise is admin-only. */
+  orderInProduction?: boolean;
   revisionHistory?: RevisionSnapshot[];
   catalog: Record<string, CatalogEntry>;
   propellerSpLock?: boolean;
@@ -5960,9 +5963,10 @@ export function QuotationBuilder({
               <Send className="h-4 w-4" /> Mark as sent
             </Button>
           )}
-          {/* Revise a finalized quote: bump rev. N and reopen for editing.
-              The preparer or an admin may revise it. */}
-          {(isPreparer || isAdmin) && (quotation.status === "APPROVED" || quotation.status === "SENT") && (
+          {/* Revise a finalized quote: bump rev. N and reopen for editing. The
+              preparer or an admin may revise it — but once the order is in
+              production the quote is locked to everyone except an admin. */}
+          {(isAdmin || (isPreparer && !orderInProduction)) && (quotation.status === "APPROVED" || quotation.status === "SENT") && (
             <Button variant="outline" onClick={revise} disabled={busy}>
               <RotateCcw className="h-4 w-4" /> Revise
             </Button>
