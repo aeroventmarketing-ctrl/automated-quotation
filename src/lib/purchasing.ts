@@ -15,6 +15,7 @@ export type PRStatus =
   | "WITH_PURCHASER"
   | "CASH_CONFIRMED"
   | "TASKED"
+  | "LOGISTICS_CONFIRMED"
   | "PURCHASED"
   | "CHECKED"
   | "DELIVERED"
@@ -31,7 +32,8 @@ export const PR_STATUS_LABEL: Record<PRStatus, string> = {
   CASH_RELEASED: "Cash released — awaiting hand-off",
   WITH_PURCHASER: "Handed to purchaser — awaiting purchaser's confirmation",
   CASH_CONFIRMED: "Cash confirmed by purchaser — awaiting task assignment",
-  TASKED: "Tasks assigned — awaiting purchase",
+  TASKED: "Handed to Logistics Head — awaiting confirmation",
+  LOGISTICS_CONFIRMED: "Cash confirmed by Logistics Head — awaiting purchase",
   PURCHASED: "Purchased — awaiting check",
   CHECKED: "Checked — awaiting delivery to warehouse",
   DELIVERED: "Delivered — awaiting warehouse receiving",
@@ -53,7 +55,8 @@ export function statusBucket(status: PRStatus): PRBucket {
 export function isCancellable(status: PRStatus): boolean {
   return ([
     "PENDING_APPROVAL", "APPROVED", "VOUCHER_READY", "VOUCHER_SIGNED", "CASH_RELEASED",
-    "WITH_PURCHASER", "CASH_CONFIRMED", "TASKED", "PURCHASED", "CHECKED", "DELIVERED",
+    "WITH_PURCHASER", "CASH_CONFIRMED", "TASKED", "LOGISTICS_CONFIRMED",
+    "PURCHASED", "CHECKED", "DELIVERED",
   ] as PRStatus[]).includes(status);
 }
 
@@ -75,7 +78,8 @@ export const PURCHASE_STEPS: PurchaseStepDef[] = [
   { key: "hand_purchaser", from: "CASH_RELEASED", to: "WITH_PURCHASER", role: "accounting", label: "Give cash & check to Purchaser" },
   { key: "confirm_cash", from: "WITH_PURCHASER", to: "CASH_CONFIRMED", role: "purchaser", label: "Confirm cash & check received" },
   { key: "assign_tasks", from: "CASH_CONFIRMED", to: "TASKED", role: "purchaser", label: "Give to Logistics Head & distribute tasks" },
-  { key: "buy", from: "TASKED", to: "PURCHASED", role: "purchaser", label: "Item bought" },
+  { key: "logistics_confirm", from: "TASKED", to: "LOGISTICS_CONFIRMED", role: "logistics", label: "Confirm cash received by Logistics Head" },
+  { key: "buy", from: "LOGISTICS_CONFIRMED", to: "PURCHASED", role: "purchaser", label: "Item bought" },
   { key: "check", from: "PURCHASED", to: "CHECKED", role: "purchaser", label: "Check & approve purchased item" },
   { key: "deliver", from: "CHECKED", to: "DELIVERED", role: "logistics", label: "Deliver to Warehouseman" },
   { key: "receive", from: "DELIVERED", to: "RECEIVED", role: "warehouse", label: "Warehouseman receive & approve" },
@@ -83,7 +87,7 @@ export const PURCHASE_STEPS: PurchaseStepDef[] = [
 ];
 
 /** New chain steps whose sign-off rides in the PurchaseRequest.chainLog JSON. */
-export const CHAINLOG_STEPS = ["sign", "release_cash", "hand_purchaser", "confirm_cash", "assign_tasks", "deliver"] as const;
+export const CHAINLOG_STEPS = ["sign", "release_cash", "hand_purchaser", "confirm_cash", "assign_tasks", "logistics_confirm", "deliver"] as const;
 
 export function purchaseStepsFrom(status: PRStatus): PurchaseStepDef[] {
   return PURCHASE_STEPS.filter((s) => s.from === status);

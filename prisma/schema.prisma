@@ -296,6 +296,7 @@ enum PurchaseRequestStatus {
   WITH_PURCHASER   // accounting handed cash & check to the purchaser
   CASH_CONFIRMED   // purchaser confirmed receipt of the cash & check
   TASKED           // purchaser handed to logistics head, tasks distributed
+  LOGISTICS_CONFIRMED // logistics head confirmed receipt of the cash
   PURCHASED        // bought, awaiting purchaser's item check
   CHECKED          // items checked, awaiting delivery to warehouse
   DELIVERED        // logistics delivered to warehouseman

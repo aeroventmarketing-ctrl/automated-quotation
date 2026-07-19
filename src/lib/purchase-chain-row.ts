@@ -100,6 +100,7 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
     lstamp("Cash & check to Purchaser", acct, "hand_purchaser"),
     lstamp("Cash & check received", purchaser, "confirm_cash"),
     lstamp("Tasks distributed to Logistics", purchaser, "assign_tasks"),
+    lstamp("Cash received by Logistics Head", logistics, "logistics_confirm"),
     stamp("Item bought", purchaser, pr.purchasedByName, pr.purchasedAt),
     stamp("Item checked & approved", purchaser, pr.checkedByName, pr.checkedAt),
     lstamp("Delivered to Warehouseman", logistics, "deliver"),
