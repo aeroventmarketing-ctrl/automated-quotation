@@ -15,6 +15,7 @@ export const WORKFLOW_ROLES = [
   { key: "accounting", label: "Accounting", group: "Finance" },
   { key: "payment_approver", label: "Payment Approver", group: "Finance" },
   { key: "technical_head", label: "Technical Head", group: "Production" },
+  { key: "quality_inspector", label: "Quality Inspector", group: "Production" },
   { key: "prod_head_fans", label: "Head — Fans & Blower", group: "Production" },
   { key: "prod_head_duct", label: "Head — Duct", group: "Production" },
   { key: "prod_head_accessories", label: "Head — Accessories", group: "Production" },

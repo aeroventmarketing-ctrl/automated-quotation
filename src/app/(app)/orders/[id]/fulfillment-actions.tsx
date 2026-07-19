@@ -9,6 +9,10 @@ import {
   notifyClientReady,
   checkFinalPayment,
   confirmFinalPayment,
+  qaTest,
+  qaPlantCheck,
+  qaTransfer,
+  qaSalesCheck,
   prepareDeliveryDocs,
   markDelivered,
   fileDocuments,
@@ -18,6 +22,10 @@ interface Perms {
   canNotify: boolean;
   canCheckPay: boolean;
   canConfirmPay: boolean;
+  canQaTest: boolean;
+  canQaPlant: boolean;
+  canQaTransfer: boolean;
+  canQaSales: boolean;
   canPrepDocs: boolean;
   canDeliver: boolean;
   canFile: boolean;
@@ -81,8 +89,53 @@ export function FulfillmentActions({
           </Button>
         ) : awaiting("the Payment Approver to confirm"))}
 
-      {/* Phase 6 */}
+      {/* Quality assurance & transfer (after final payment is confirmed) */}
       {stage === "final_pay_cleared" &&
+        (perms.canQaTest ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Quality testing</p>
+            <p className="text-xs text-muted-foreground">The item undergoes quality testing by the Technical Head or an approved Quality Inspector.</p>
+            <Button size="sm" disabled={busy} onClick={() => run(() => qaTest(orderId))}>
+              {busy ? "Saving…" : "Quality tested — pass"}
+            </Button>
+          </div>
+        ) : awaiting("the Technical Head / Quality Inspector to test quality"))}
+
+      {stage === "qa_tested" &&
+        (perms.canQaPlant ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Plant Manager quality &amp; quantity check</p>
+            <p className="text-xs text-muted-foreground">The Plant Manager quality- and quantity-checks the order; only approved quality is transferred to the office.</p>
+            <Button size="sm" disabled={busy} onClick={() => run(() => qaPlantCheck(orderId))}>
+              {busy ? "Saving…" : "Quality & quantity approved"}
+            </Button>
+          </div>
+        ) : awaiting("the Plant Manager to quality & quantity check"))}
+
+      {stage === "qa_plant_checked" &&
+        (perms.canQaTransfer ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Transfer items to office</p>
+            <p className="text-xs text-muted-foreground">Logistics transfers the approved items to the office.</p>
+            <Button size="sm" disabled={busy} onClick={() => run(() => qaTransfer(orderId))}>
+              {busy ? "Saving…" : "Transferred to office"}
+            </Button>
+          </div>
+        ) : awaiting("Logistics to transfer the items to the office"))}
+
+      {stage === "qa_transferred" &&
+        (perms.canQaSales ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Sales 2nd quality &amp; quantity check</p>
+            <p className="text-xs text-muted-foreground">The Sales in-charge for this order makes a 2nd quality and quantity check.</p>
+            <Button size="sm" disabled={busy} onClick={() => run(() => qaSalesCheck(orderId))}>
+              {busy ? "Saving…" : "Quality & quantity re-checked"}
+            </Button>
+          </div>
+        ) : awaiting("Sales to make the 2nd quality & quantity check"))}
+
+      {/* Phase 6 */}
+      {stage === "qa_sales_checked" &&
         (perms.canPrepDocs ? (
           <div className="space-y-2">
             <p className="text-sm font-medium">Prepare delivery documents</p>

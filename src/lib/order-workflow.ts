@@ -21,6 +21,10 @@ export type OrderStage =
   | "final_pay_review"
   | "final_pay_checked"
   | "final_pay_cleared"
+  | "qa_tested"
+  | "qa_plant_checked"
+  | "qa_transferred"
+  | "qa_sales_checked"
   | "delivery_docs_ready"
   | "delivered"
   | "closed";
@@ -36,6 +40,10 @@ export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] =
   { key: "final_pay_review", label: "Awaiting final payment", phase: "Phase 5" },
   { key: "final_pay_checked", label: "Final payment checked", phase: "Phase 5" },
   { key: "final_pay_cleared", label: "Final payment confirmed", phase: "Phase 5 done" },
+  { key: "qa_tested", label: "Quality tested", phase: "Quality & transfer" },
+  { key: "qa_plant_checked", label: "Plant QC passed", phase: "Quality & transfer" },
+  { key: "qa_transferred", label: "Transferred to office", phase: "Quality & transfer" },
+  { key: "qa_sales_checked", label: "Sales re-checked", phase: "Quality & transfer" },
   { key: "delivery_docs_ready", label: "Delivery docs ready", phase: "Phase 6" },
   { key: "delivered", label: "Delivered", phase: "Phase 6" },
   { key: "closed", label: "Closed", phase: "Phase 6 done" },
@@ -204,7 +212,11 @@ export const APPROVAL_STEPS: Record<string, { label: string; from: OrderStage; t
   client_notified: { label: "Client notified (order ready)", from: "production_finished", to: "final_pay_review" },
   final_pay_checked: { label: "Final payment checked", from: "final_pay_review", to: "final_pay_checked" },
   final_pay_confirmed: { label: "Final payment confirmed", from: "final_pay_checked", to: "final_pay_cleared" },
-  delivery_approved: { label: "Delivery documents ready", from: "final_pay_cleared", to: "delivery_docs_ready" },
+  qa_tested: { label: "Quality tested", from: "final_pay_cleared", to: "qa_tested" },
+  qa_plant_checked: { label: "Plant QC & quantity passed", from: "qa_tested", to: "qa_plant_checked" },
+  qa_transferred: { label: "Transferred to office", from: "qa_plant_checked", to: "qa_transferred" },
+  qa_sales_checked: { label: "Sales 2nd QC & quantity passed", from: "qa_transferred", to: "qa_sales_checked" },
+  delivery_approved: { label: "Delivery documents ready", from: "qa_sales_checked", to: "delivery_docs_ready" },
   delivered: { label: "Delivered", from: "delivery_docs_ready", to: "delivered" },
   documents_filed: { label: "Documents filed (order closed)", from: "delivered", to: "closed" },
 };
@@ -354,6 +366,14 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
     case "final_pay_checked":
       return { action: "Confirm final payment", roles: ["payment_approver"] };
     case "final_pay_cleared":
+      return { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
+    case "qa_tested":
+      return { action: "Plant QC & quantity check", roles: ["plant_manager"] };
+    case "qa_plant_checked":
+      return { action: "Transfer items to office", roles: ["logistics"] };
+    case "qa_transferred":
+      return { action: "Sales 2nd QC & quantity check", roles: [], sales: true };
+    case "qa_sales_checked":
       return { action: "Prepare delivery documents", roles: ["accounting"] };
     case "delivery_docs_ready":
       return { action: "Deliver the order", roles: ["logistics"] };

@@ -49,6 +49,10 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   final_pay_review: "secondary",
   final_pay_checked: "warning",
   final_pay_cleared: "warning",
+  qa_tested: "warning",
+  qa_plant_checked: "warning",
+  qa_transferred: "warning",
+  qa_sales_checked: "warning",
   delivery_docs_ready: "warning",
   delivered: "warning",
   closed: "success",
@@ -122,20 +126,21 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   };
   // The designation (job title) each approval step is performed in. Shown next
   // to the approver's name on every sign-off.
-  const APPROVAL_ROLE: Record<string, WorkflowRoleKey | "sales"> = {
-    doc_check: "accounting",
-    payment_cleared: "payment_approver",
-    client_notified: "sales",
-    final_pay_checked: "accounting",
-    final_pay_confirmed: "payment_approver",
-    delivery_approved: "accounting",
-    delivered: "logistics",
-    documents_filed: "accounting",
+  const APPROVAL_DESIGNATION: Record<string, string> = {
+    doc_check: workflowRoleLabel("accounting"),
+    payment_cleared: workflowRoleLabel("payment_approver"),
+    client_notified: "Sales",
+    final_pay_checked: workflowRoleLabel("accounting"),
+    final_pay_confirmed: workflowRoleLabel("payment_approver"),
+    qa_tested: `${workflowRoleLabel("technical_head")} / ${workflowRoleLabel("quality_inspector")}`,
+    qa_plant_checked: workflowRoleLabel("plant_manager"),
+    qa_transferred: workflowRoleLabel("logistics"),
+    qa_sales_checked: "Sales",
+    delivery_approved: workflowRoleLabel("accounting"),
+    delivered: workflowRoleLabel("logistics"),
+    documents_filed: workflowRoleLabel("accounting"),
   };
-  const designationOf = (key: string): string => {
-    const r = APPROVAL_ROLE[key];
-    return r === "sales" ? "Sales" : r ? workflowRoleLabel(r) : "";
-  };
+  const designationOf = (key: string): string => APPROVAL_DESIGNATION[key] ?? "";
   // "Name (Designation)" — or just the name when no designation maps.
   const withDesig = (name: string, designation: string) => (designation ? `${name} (${designation})` : name);
 
@@ -207,6 +212,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canNotify: isSalesViewer,
     canCheckPay: hasRole("accounting"),
     canConfirmPay: hasRole("payment_approver"),
+    canQaTest: hasRole("technical_head") || hasRole("quality_inspector"),
+    canQaPlant: hasRole("plant_manager"),
+    canQaTransfer: hasRole("logistics"),
+    canQaSales: isSalesViewer,
     canPrepDocs: hasRole("accounting"),
     canDeliver: hasRole("logistics"),
     canFile: hasRole("accounting"),
@@ -218,12 +227,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     fStamp("Client notified", "client_notified", A.client_notified),
     fStamp("Final payment checked", "final_pay_checked", A.final_pay_checked),
     fStamp("Final payment confirmed", "final_pay_confirmed", A.final_pay_confirmed),
+    fStamp("Quality tested", "qa_tested", A.qa_tested),
+    fStamp("Plant QC & quantity passed", "qa_plant_checked", A.qa_plant_checked),
+    fStamp("Transferred to office", "qa_transferred", A.qa_transferred),
+    fStamp("Sales 2nd QC & quantity passed", "qa_sales_checked", A.qa_sales_checked),
     fStamp("Delivery approved", "delivery_approved", A.delivery_approved),
     fStamp("Delivered", "delivered", A.delivered),
     fStamp("Documents filed", "documents_filed", A.documents_filed),
   ].filter((s): s is string => s !== null);
   const fulfillmentStages = new Set([
     "production_finished", "final_pay_review", "final_pay_checked", "final_pay_cleared",
+    "qa_tested", "qa_plant_checked", "qa_transferred", "qa_sales_checked",
     "delivery_docs_ready", "delivered", "closed",
   ]);
   const showFulfillment = fulfillmentStages.has(wf.stage);
@@ -463,7 +477,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       {/* Phase 5 & 6 — delivery & closeout */}
       {showFulfillment && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 &amp; 6 · Final payment, delivery &amp; documents</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 &amp; 6 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {fTrail.length > 0 && <div className="text-xs text-muted-foreground">{fTrail.join(" · ")}</div>}
             <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} />

@@ -1088,6 +1088,57 @@ export async function confirmFinalPayment(quotationId: string): Promise<void> {
   await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_cleared", approvals: stamp(wf, "final_pay_confirmed", user) });
 }
 
+/**
+ * Quality & transfer phase (after final payment is confirmed, before delivery
+ * documents). Four sequential sign-offs:
+ *   final_pay_cleared → [Technical Head / Quality Inspector: quality testing] → qa_tested
+ *   qa_tested         → [Plant Manager: quality & quantity check] → qa_plant_checked
+ *   qa_plant_checked  → [Logistics: transfer items to office] → qa_transferred
+ *   qa_transferred    → [Sales: 2nd quality & quantity check] → qa_sales_checked
+ */
+export async function qaTest(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  const ok = isAdmin(user)
+    || userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
+    || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only the Technical Head, a Quality Inspector or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "final_pay_cleared") throw new Error("The order isn't ready for quality testing.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_tested", approvals: stamp(wf, "qa_tested", user) });
+}
+
+export async function qaPlantCheck(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "plant_manager" as WorkflowRoleKey)))
+    throw new Error("Only the Plant Manager or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "qa_tested") throw new Error("The order hasn't passed quality testing yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_plant_checked", approvals: stamp(wf, "qa_plant_checked", user) });
+}
+
+export async function qaTransfer(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "logistics" as WorkflowRoleKey)))
+    throw new Error("Only Logistics or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "qa_plant_checked") throw new Error("The order hasn't passed the Plant Manager check yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_transferred", approvals: stamp(wf, "qa_transferred", user) });
+}
+
+export async function qaSalesCheck(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
+  if (!isSales) throw new Error("Only Sales (the order's preparer) or an admin can do this.");
+  if (wf.stage !== "qa_transferred") throw new Error("The items haven't been transferred to the office yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_sales_checked", approvals: stamp(wf, "qa_sales_checked", user) });
+}
+
 /** Accounting prepares the delivery documents and approves delivery (Phase 6, step 21). */
 export async function prepareDeliveryDocs(
   quotationId: string,
@@ -1098,7 +1149,7 @@ export async function prepareDeliveryDocs(
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
     throw new Error("Only Accounting or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "final_pay_cleared") throw new Error("The order isn't ready for delivery documents.");
+  if (wf.stage !== "qa_sales_checked") throw new Error("The order isn't ready for delivery documents.");
   const documents = {
     ...wf.documents,
     dr: docs.dr.trim() || undefined,
