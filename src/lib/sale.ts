@@ -63,6 +63,20 @@ export const SALE_DOCS_AFTER_PAYMENTS: SaleDocType[] = [
 export const SALE_DOC_TYPES: SaleDocType[] = [...SALE_DOCS_BEFORE_PAYMENTS, ...SALE_DOCS_AFTER_PAYMENTS];
 
 /**
+ * Unsigned client documents attached when preparing the delivery documents
+ * (before the client signs). Stored under their own keys, separate from the
+ * signed closing documents. Sales Invoice only applies to VAT-inclusive deals.
+ */
+export const DELIVERY_UNSIGNED_DOCS: SaleDocType[] = [
+  { key: "unsigned_si", label: "Sales Invoice", required: false },
+  { key: "unsigned_or_cr_af", label: "OR / CR / AF", required: false },
+  { key: "unsigned_dr", label: "Delivery Receipt / Delivery Form", required: false },
+];
+export function deliveryUnsignedDocTypes(vatInclusive: boolean): SaleDocType[] {
+  return DELIVERY_UNSIGNED_DOCS.filter((t) => vatInclusive || t.key !== "unsigned_si");
+}
+
+/**
  * The after-payment (closing) document slots that apply to a transaction. For
  * VAT-exclusive deals the Sales Invoice and BIR 2307 aren't required, so those
  * slots are hidden. VAT-inclusive shows all four.

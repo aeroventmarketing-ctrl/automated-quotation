@@ -1,5 +1,5 @@
 import { FileText, Download } from "lucide-react";
-import { SALE_DOCS_BEFORE_PAYMENTS, afterPaymentDocTypes, type SaleDoc, type SaleRecord } from "@/lib/sale";
+import { SALE_DOCS_BEFORE_PAYMENTS, afterPaymentDocTypes, deliveryUnsignedDocTypes, type SaleDoc, type SaleRecord } from "@/lib/sale";
 
 const link = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
 const download = (d: SaleDoc) => `${link(d)}&download=1&name=${encodeURIComponent(d.name)}`;
@@ -16,6 +16,9 @@ export function SaleDocumentList({ sale, vatInclusive }: { sale: SaleRecord; vat
   for (const t of SALE_DOCS_BEFORE_PAYMENTS) {
     const files = [...(docs[t.key] ?? []), ...(t.mergeKeys ?? []).flatMap((k) => docs[k] ?? [])];
     if (files.length) rows.push({ label: t.label, files });
+  }
+  for (const t of deliveryUnsignedDocTypes(vatInclusive)) {
+    if ((docs[t.key] ?? []).length) rows.push({ label: `${t.label} (unsigned)`, files: docs[t.key] });
   }
   for (const t of afterPaymentDocTypes(vatInclusive)) {
     if ((docs[t.key] ?? []).length) rows.push({ label: t.label, files: docs[t.key] });

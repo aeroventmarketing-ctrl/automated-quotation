@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { closeDocsState, type SaleDoc } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
+import { DeliveryDocsForm } from "./delivery-docs-form";
 import {
   notifyClientReady,
   checkFinalPayment,
@@ -15,7 +16,6 @@ import {
   qaPlantCheck,
   qaTransfer,
   qaSalesCheck,
-  prepareDeliveryDocs,
   markDelivered,
   approveDelivery,
   surrenderDeliveryDocs,
@@ -58,9 +58,6 @@ export function FulfillmentActions({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [dr, setDr] = useState("");
-  const [si, setSi] = useState("");
-  const [or, setOr] = useState("");
   const [pod, setPod] = useState("");
 
   async function run(fn: () => Promise<void>) {
@@ -150,17 +147,7 @@ export function FulfillmentActions({
       {/* Phase 6 */}
       {stage === "qa_sales_checked" &&
         (perms.canPrepDocs ? (
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Prepare delivery documents</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div className="space-y-1"><Label className="text-xs">Delivery Receipt #</Label><Input className="h-8" value={dr} onChange={(e) => setDr(e.target.value)} /></div>
-              <div className="space-y-1"><Label className="text-xs">Sales Invoice #</Label><Input className="h-8" value={si} onChange={(e) => setSi(e.target.value)} /></div>
-              <div className="space-y-1"><Label className="text-xs">Official Receipt #</Label><Input className="h-8" value={or} onChange={(e) => setOr(e.target.value)} /></div>
-            </div>
-            <Button size="sm" disabled={busy} onClick={() => run(() => prepareDeliveryDocs(orderId, { dr, si, or }))}>
-              {busy ? "Saving…" : "Save documents & approve delivery"}
-            </Button>
-          </div>
+          <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} />
         ) : awaiting("Accounting to prepare the delivery documents"))}
 
       {stage === "delivery_docs_ready" && (
