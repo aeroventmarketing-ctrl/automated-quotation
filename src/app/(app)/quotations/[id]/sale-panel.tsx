@@ -141,14 +141,19 @@ export function SalePanel({
   // One document slot (Computation, Quotation, Sales Invoice, …) — supports
   // multiple files per slot.
   function DocSlot({ type }: { type: SaleDocType }) {
-    const files = docs[type.key] ?? [];
+    // Files from this slot's own key plus any merged keys (e.g. the seeded
+    // Inquiry Form shows inside "Computation / Inquiry Form").
+    const files: { doc: SaleDoc; srcKey: string }[] = [
+      ...(docs[type.key] ?? []).map((doc) => ({ doc, srcKey: type.key })),
+      ...(type.mergeKeys ?? []).flatMap((k) => (docs[k] ?? []).map((doc) => ({ doc, srcKey: k }))),
+    ];
     return (
       <div className="space-y-1">
         <Label className="text-xs">
           {type.label} <span className="text-muted-foreground">({type.required ? "required" : "optional"})</span>
         </Label>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {files.map((f) => (
+          {files.map(({ doc: f, srcKey }) => (
             <div key={f.path} className="flex items-center gap-2">
               <a href={docLink(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
                 <FileText className="h-4 w-4" /> {f.name}
@@ -157,7 +162,7 @@ export function SalePanel({
                 <Download className="h-4 w-4" />
               </a>
               {canEdit && (
-                <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => removeDoc(type.key, f.path)} disabled={busy} aria-label="Remove">
+                <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => removeDoc(srcKey, f.path)} disabled={busy} aria-label="Remove">
                   <Trash2 className="h-4 w-4" />
                 </button>
               )}

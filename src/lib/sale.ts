@@ -37,13 +37,15 @@ export interface SaleDocType {
   key: string;
   label: string;
   required: boolean;
+  /** Other doc keys whose files also show (and can be removed) in this slot. */
+  mergeKeys?: string[];
 }
 
 /** Document slots shown before the "Payments collected" section, in order. */
 export const SALE_DOCS_BEFORE_PAYMENTS: SaleDocType[] = [
-  { key: "computation", label: "Computation", required: true },
+  // The Inquiry Form (seeded from the inquiry) folds into this slot.
+  { key: "computation", label: "Computation / Inquiry Form", required: true, mergeKeys: ["inquiry_form"] },
   { key: "quotation", label: "Quotation", required: true },
-  { key: "inquiry_form", label: "Inquiry Form", required: true },
   { key: "rfq_boq", label: "RFQ / BOQ", required: true },
   { key: "drawing", label: "Drawing / Pictures", required: false },
   { key: "billing_dp", label: "Billing Statement DP", required: false },
@@ -97,8 +99,10 @@ export function docCheckMissing(sale: SaleRecord | null | undefined): string[] {
   const missing: string[] = [];
   if (!sale?.po) missing.push("Purchase Order");
   const docs = sale?.docs ?? {};
+  // Computation / Inquiry Form is satisfied by either a computation or an
+  // inquiry-form file (they share one slot).
+  if (!(docs["computation"]?.length || docs["inquiry_form"]?.length)) missing.push("Computation / Inquiry Form");
   const need: [string, string][] = [
-    ["computation", "Computation"],
     ["quotation", "Quotation"],
     ["rfq_boq", "RFQ / BOQ"],
   ];
