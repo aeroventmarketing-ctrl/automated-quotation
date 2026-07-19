@@ -517,7 +517,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Final payment, quality, delivery, documents &amp; commission</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            {fTrail.length > 0 && <div className="text-xs text-muted-foreground">{fTrail.join(" · ")}</div>}
+            {fTrail.length > 0 && (
+              <div className="space-y-0.5 text-xs text-muted-foreground">
+                {fTrail.map((s, i) => <div key={i}>{s}</div>)}
+              </div>
+            )}
             <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} commission={commissionInfo} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
           </CardContent>
         </Card>
