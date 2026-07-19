@@ -27,6 +27,8 @@ export type OrderStage =
   | "qa_sales_checked"
   | "delivery_docs_ready"
   | "delivered"
+  | "delivery_confirmed"
+  | "docs_surrendered"
   | "closed";
 
 export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] = [
@@ -46,6 +48,8 @@ export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] =
   { key: "qa_sales_checked", label: "Sales re-checked", phase: "Quality & transfer" },
   { key: "delivery_docs_ready", label: "Delivery docs ready", phase: "Phase 6" },
   { key: "delivered", label: "Delivered", phase: "Phase 6" },
+  { key: "delivery_confirmed", label: "Delivery confirmed", phase: "Phase 6" },
+  { key: "docs_surrendered", label: "Docs surrendered", phase: "Phase 6" },
   { key: "closed", label: "Closed", phase: "Phase 6 done" },
 ];
 
@@ -141,6 +145,21 @@ export interface OrderConversation {
   loggedAt: string; // ISO — when logged
 }
 
+/**
+ * Sales-commission fulfillment sign-offs after the order closes (steps 5–7):
+ * approver approves the amount → accounting prepares the voucher → sales
+ * receives it. Rides in the order workflow JSON; the DB Commission row is
+ * marked paid when received.
+ */
+export interface OrderCommissionFlow {
+  approvedByName?: string;
+  approvedAt?: string;
+  voucherByName?: string;
+  voucherAt?: string;
+  receivedByName?: string;
+  receivedAt?: string;
+}
+
 /** Delivery-document reference numbers captured in Phase 6. */
 export interface OrderDocuments {
   dr?: string; // Delivery Receipt
@@ -164,6 +183,8 @@ export interface OrderWorkflow {
   joBaseYear?: number;
   // Sales' log of conversations with production heads about the order.
   conversations: OrderConversation[];
+  // Post-close sales-commission sign-offs (approve → voucher → received).
+  commission?: OrderCommissionFlow;
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -218,7 +239,9 @@ export const APPROVAL_STEPS: Record<string, { label: string; from: OrderStage; t
   qa_sales_checked: { label: "Sales 2nd QC & quantity passed", from: "qa_transferred", to: "qa_sales_checked" },
   delivery_approved: { label: "Delivery documents ready", from: "qa_sales_checked", to: "delivery_docs_ready" },
   delivered: { label: "Delivered", from: "delivery_docs_ready", to: "delivered" },
-  documents_filed: { label: "Documents filed (order closed)", from: "delivered", to: "closed" },
+  delivery_confirmed: { label: "Delivery confirmed (successful delivery)", from: "delivered", to: "delivery_confirmed" },
+  docs_surrendered: { label: "Signed documents surrendered", from: "delivery_confirmed", to: "docs_surrendered" },
+  documents_filed: { label: "Documents filed (order closed)", from: "docs_surrendered", to: "closed" },
 };
 
 /** Position of a stage in the linear workflow (−1 if unknown). */
@@ -290,6 +313,18 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
         .filter((c) => c.message.trim() !== "")
     : [];
 
+  const cm = wf?.commission && typeof wf.commission === "object" ? (wf.commission as Record<string, unknown>) : undefined;
+  const commission: OrderCommissionFlow | undefined = cm
+    ? {
+        approvedByName: typeof cm.approvedByName === "string" ? cm.approvedByName : undefined,
+        approvedAt: typeof cm.approvedAt === "string" ? cm.approvedAt : undefined,
+        voucherByName: typeof cm.voucherByName === "string" ? cm.voucherByName : undefined,
+        voucherAt: typeof cm.voucherAt === "string" ? cm.voucherAt : undefined,
+        receivedByName: typeof cm.receivedByName === "string" ? cm.receivedByName : undefined,
+        receivedAt: typeof cm.receivedAt === "string" ? cm.receivedAt : undefined,
+      }
+    : undefined;
+
   // Normalize the JO-Received → In Production → Production finished window so the
   // order stage always reflects actual job-order progress. This self-heals orders
   // whose job orders were started before the "In Production" stage existed (their
@@ -301,7 +336,7 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     else if (jos.some((j) => j.status === "in_production" || j.status === "finished")) stage = "producing";
   }
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, conversations };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, conversations, commission };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */
@@ -378,6 +413,10 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
     case "delivery_docs_ready":
       return { action: "Deliver the order", roles: ["logistics"] };
     case "delivered":
+      return { action: "Approve proof of delivery (successful delivery)", roles: [], sales: true };
+    case "delivery_confirmed":
+      return { action: "Surrender signed documents to accounting", roles: ["logistics"] };
+    case "docs_surrendered":
       return { action: "File documents & close the order", roles: ["accounting"] };
     case "closed":
     default:

@@ -25,6 +25,8 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   qa_sales_checked: "warning",
   delivery_docs_ready: "warning",
   delivered: "warning",
+  delivery_confirmed: "warning",
+  docs_surrendered: "warning",
   closed: "success",
 };
 

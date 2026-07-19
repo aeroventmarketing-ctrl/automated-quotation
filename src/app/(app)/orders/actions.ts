@@ -1171,14 +1171,36 @@ export async function markDelivered(quotationId: string, pod: string): Promise<v
   await saveWorkflow(quotationId, cls, { ...wf, stage: "delivered", documents, approvals: stamp(wf, "delivered", user) });
 }
 
-/** Accounting files the signed documents and closes the order (Phase 6, steps 23-24). */
+/** Sales approves the proof of delivery — marks the delivery successful (step 1). */
+export async function approveDelivery(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
+  if (!isSales) throw new Error("Only Sales (the order's preparer) or an admin can do this.");
+  if (wf.stage !== "delivered") throw new Error("The order hasn't been delivered yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "delivery_confirmed", approvals: stamp(wf, "delivery_confirmed", user) });
+}
+
+/** Logistics surrenders the client-signed documents to accounting (step 2). */
+export async function surrenderDeliveryDocs(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "logistics" as WorkflowRoleKey)))
+    throw new Error("Only Logistics or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "delivery_confirmed") throw new Error("The delivery hasn't been confirmed by Sales yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "docs_surrendered", approvals: stamp(wf, "docs_surrendered", user) });
+}
+
+/** Accounting files the signed documents and closes the order (steps 3-4). */
 export async function fileDocuments(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
     throw new Error("Only Accounting or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "delivered") throw new Error("The order hasn't been delivered yet.");
+  if (wf.stage !== "docs_surrendered") throw new Error("The signed documents haven't been surrendered to accounting yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
 
   // Phase 7 — compute the 1.5% sales commission for the close month. Guarded so a
@@ -1206,6 +1228,52 @@ export async function fileDocuments(quotationId: string): Promise<void> {
     }
   } catch {
     // Commission table not set up yet — closing the order still succeeds.
+  }
+  revalidatePath("/commissions");
+}
+
+/**
+ * Sales-commission fulfillment after the order closes:
+ *   [Admin / Payment Approver: approve the amount] → approved
+ *   [Accounting: prepare the voucher] → voucher
+ *   [Sales: receive the commission] → received (DB Commission marked paid)
+ */
+export async function approveCommission(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "payment_approver" as WorkflowRoleKey)))
+    throw new Error("Only an admin or the Payment Approver can approve the commission.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "closed") throw new Error("The order isn't closed yet.");
+  const commission = { ...(wf.commission ?? {}), approvedByName: user.name, approvedAt: new Date().toISOString() };
+  await saveWorkflow(quotationId, cls, { ...wf, commission });
+}
+
+export async function prepareCommissionVoucher(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
+    throw new Error("Only Accounting or an admin can prepare the voucher.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.commission?.approvedAt) throw new Error("The commission amount hasn't been approved yet.");
+  const commission = { ...wf.commission, voucherByName: user.name, voucherAt: new Date().toISOString() };
+  await saveWorkflow(quotationId, cls, { ...wf, commission });
+}
+
+export async function receiveCommission(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
+  if (!isSales) throw new Error("Only Sales (the order's preparer) or an admin can do this.");
+  if (!wf.commission?.voucherAt) throw new Error("The commission voucher hasn't been prepared yet.");
+  const commission = { ...wf.commission, receivedByName: user.name, receivedAt: new Date().toISOString() };
+  await saveWorkflow(quotationId, cls, { ...wf, commission });
+  // Mark the DB commission row paid (best-effort — table may not exist yet).
+  try {
+    await prisma.commission.update({ where: { quotationId }, data: { paid: true, paidAt: new Date(), paidByName: user.name } });
+  } catch {
+    /* commission row not present — order-side sign-off still recorded */
   }
   revalidatePath("/commissions");
 }

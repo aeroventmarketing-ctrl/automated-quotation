@@ -55,6 +55,8 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   qa_sales_checked: "warning",
   delivery_docs_ready: "warning",
   delivered: "warning",
+  delivery_confirmed: "warning",
+  docs_surrendered: "warning",
   closed: "success",
 };
 
@@ -81,6 +83,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Catalogue of purchasable products (for the MRF autocomplete); may be empty
   // before the product table is migrated.
   const productOptions = await getProducts().then((ps) => ps.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))).catch(() => []);
+  // Sales commission (exists once the order is closed) — for the post-close
+  // commission sign-offs and the "issued 15 days after the sales month" due date.
+  const commissionRow = await prisma.commission.findUnique({ where: { quotationId: id } }).catch(() => null);
 
   const adminViewer = isAdmin(viewer);
   const wf = readOrderWorkflow(quote.classification);
@@ -138,6 +143,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     qa_sales_checked: "Sales",
     delivery_approved: workflowRoleLabel("accounting"),
     delivered: workflowRoleLabel("logistics"),
+    delivery_confirmed: "Sales",
+    docs_surrendered: workflowRoleLabel("logistics"),
     documents_filed: workflowRoleLabel("accounting"),
   };
   const designationOf = (key: string): string => APPROVAL_DESIGNATION[key] ?? "";
@@ -218,7 +225,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canQaSales: isSalesViewer,
     canPrepDocs: hasRole("accounting"),
     canDeliver: hasRole("logistics"),
+    canApproveDelivery: isSalesViewer,
+    canSurrender: hasRole("logistics"),
     canFile: hasRole("accounting"),
+    canApproveComm: hasRole("payment_approver"),
+    canCommVoucher: hasRole("accounting"),
+    canReceiveComm: isSalesViewer,
   };
   const A = wf.approvals;
   const fStamp = (label: string, key: string, a?: { byName: string; at: string }) =>
@@ -233,14 +245,34 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     fStamp("Sales 2nd QC & quantity passed", "qa_sales_checked", A.qa_sales_checked),
     fStamp("Delivery approved", "delivery_approved", A.delivery_approved),
     fStamp("Delivered", "delivered", A.delivered),
+    fStamp("Delivery confirmed", "delivery_confirmed", A.delivery_confirmed),
+    fStamp("Documents surrendered", "docs_surrendered", A.docs_surrendered),
     fStamp("Documents filed", "documents_filed", A.documents_filed),
   ].filter((s): s is string => s !== null);
   const fulfillmentStages = new Set([
     "production_finished", "final_pay_review", "final_pay_checked", "final_pay_cleared",
     "qa_tested", "qa_plant_checked", "qa_transferred", "qa_sales_checked",
-    "delivery_docs_ready", "delivered", "closed",
+    "delivery_docs_ready", "delivered", "delivery_confirmed", "docs_surrendered", "closed",
   ]);
   const showFulfillment = fulfillmentStages.has(wf.stage);
+
+  // Sales-commission info for the post-close sign-offs. Due date = the 15th day
+  // after the sales month ends ("issued 15 days after the sales month").
+  const commissionInfo = commissionRow
+    ? {
+        amount: Number(commissionRow.amount),
+        currency: quote.currency,
+        salesMonth: commissionRow.salesMonth,
+        dueLabel: ((): string => {
+          const [y, m] = commissionRow.salesMonth.split("-").map(Number);
+          if (!y || !m) return "";
+          const d = new Date(y, m, 0); // last day of the sales month
+          d.setDate(d.getDate() + 15);
+          return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+        })(),
+        flow: wf.commission ?? {},
+      }
+    : null;
 
   // Materials (Phase 3, part 1): raise MRFs (dept head, during production) and
   // warehouse issue/escalate.
@@ -480,7 +512,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 &amp; 6 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {fTrail.length > 0 && <div className="text-xs text-muted-foreground">{fTrail.join(" · ")}</div>}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} commission={commissionInfo} />
           </CardContent>
         </Card>
       )}
