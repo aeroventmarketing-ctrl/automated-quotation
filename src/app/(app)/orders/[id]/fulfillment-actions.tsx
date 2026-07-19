@@ -127,12 +127,12 @@ export function FulfillmentActions({
         (perms.canQaSales ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Sales 2nd quality &amp; quantity check</p>
-            <p className="text-xs text-muted-foreground">The Sales in-charge for this order makes a 2nd quality and quantity check.</p>
+            <p className="text-xs text-muted-foreground">The Sales in-charge makes a 2nd quality and quantity check — any Sales team member or the Sales head can cover if the in-charge is absent or on leave.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaSalesCheck(orderId))}>
               {busy ? "Saving…" : "Quality & quantity re-checked"}
             </Button>
           </div>
-        ) : awaiting("Sales to make the 2nd quality & quantity check"))}
+        ) : awaiting("the Sales in-charge (or any Sales team member) to make the 2nd quality & quantity check"))}
 
       {/* Phase 6 */}
       {stage === "qa_sales_checked" &&
