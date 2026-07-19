@@ -983,7 +983,7 @@ export async function receiveCombinedPO(anchorPurchaseRequestId: string, matches
   const ids = poMemberIds(anchor.po);
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
-  if (members.some((m) => m.status !== "CHECKED")) throw new Error("This purchase isn't ready to receive.");
+  if (members.some((m) => m.status !== "DELIVERED")) throw new Error("This purchase isn't ready to receive (Logistics must deliver it first).");
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
   await prisma.$transaction(async (tx) => {
@@ -1442,7 +1442,7 @@ export async function receivePurchaseRequest(
   }
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
-  if (pr.status !== "CHECKED") throw new Error("This purchase isn't ready to receive.");
+  if (pr.status !== "DELIVERED") throw new Error("This purchase isn't ready to receive (Logistics must deliver it first).");
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
 
