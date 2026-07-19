@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
+import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByName } from "@/lib/ensure-templates";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
@@ -50,6 +51,10 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
 
   if (!quotation) notFound();
 
+  // Clearing a confirmed sale is an accounting / admin action.
+  const assignments = await getWorkflowRoles();
+  const canClearSale = !!user && (isAdmin(user) || userHasWorkflowRole(assignments, user.id, "accounting"));
+
   const catalog = Object.fromEntries(
     catItems.map((i) => [
       i.id,
@@ -77,6 +82,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       canApprove={canApprove(user)}
       isAdmin={isAdmin(user)}
       isPreparer={!!user && user.id === quotation.preparedById}
+      canClearSale={canClearSale}
       propellerSpLock={propellerSpLock}
       axialSpLock={axialSpLock}
       revisionHistory={(() => {

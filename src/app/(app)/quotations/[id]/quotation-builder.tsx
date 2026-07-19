@@ -2600,6 +2600,7 @@ export function QuotationBuilder({
   canApprove,
   isAdmin = false,
   isPreparer = false,
+  canClearSale = false,
   revisionHistory = [],
   catalog,
   propellerSpLock = true,
@@ -2610,6 +2611,7 @@ export function QuotationBuilder({
   canApprove: boolean;
   isAdmin?: boolean;
   isPreparer?: boolean;
+  canClearSale?: boolean;
   revisionHistory?: RevisionSnapshot[];
   catalog: Record<string, CatalogEntry>;
   propellerSpLock?: boolean;
@@ -5884,7 +5886,7 @@ export function QuotationBuilder({
           dealTotal={totals.grandTotal}
           initialSale={quotation.sale}
           canEdit={(isPreparer || isAdmin) && quotation.status !== "DRAFT" && quotation.status !== "PENDING_APPROVAL"}
-          isAdmin={isAdmin}
+          canClear={canClearSale}
         />
       )}
 

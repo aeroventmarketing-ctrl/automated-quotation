@@ -41,14 +41,16 @@ export function SalePanel({
   dealTotal,
   initialSale,
   canEdit,
-  isAdmin = false,
+  canClear = false,
 }: {
   quotationId: string;
   currency: string;
   dealTotal: number;
   initialSale: SaleRecord | null;
+  /** Sales (preparer) or admin — may edit and Save the sale. */
   canEdit: boolean;
-  isAdmin?: boolean;
+  /** Accounting or admin — may Clear the sale. */
+  canClear?: boolean;
 }) {
   const router = useRouter();
   const [arrangement, setArrangement] = useState<SaleArrangement>(initialSale?.arrangement ?? "downpayment_full");
@@ -63,7 +65,7 @@ export function SalePanel({
   const confirmed = isSaleConfirmed(draft);
   const collected = collectedTotal(draft);
   const balance = Math.max(0, dealTotal - collected);
-  const canClear = canEdit && (!confirmed || isAdmin);
+  const hasSaleData = !!(po || payments.length > 0 || Object.keys(docs).length > 0 || note);
 
   async function upload(file: File): Promise<SaleDoc | null> {
     const fd = new FormData();
@@ -302,15 +304,14 @@ export function SalePanel({
           />
         </div>
 
-        {canEdit && (
+        {(canEdit || canClear) && (
           <div className="flex items-center gap-2">
-            <Button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save sale"}</Button>
-            {(po || payments.length > 0 || Object.keys(docs).length > 0 || note) && (
-              canClear ? (
-                <Button variant="outline" onClick={clearAll} disabled={busy}>Clear sale</Button>
-              ) : (
-                <span className="text-xs text-muted-foreground">Confirmed — only an admin can clear this sale.</span>
-              )
+            {canEdit && <Button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save sale"}</Button>}
+            {canClear && hasSaleData && (
+              <Button variant="outline" onClick={clearAll} disabled={busy}>Clear sale</Button>
+            )}
+            {canEdit && !canClear && hasSaleData && (
+              <span className="text-xs text-muted-foreground">Only accounting or an admin can clear this sale.</span>
             )}
             {msg && <span className="text-xs text-muted-foreground">{msg}</span>}
           </div>
