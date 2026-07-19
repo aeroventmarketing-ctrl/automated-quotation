@@ -2602,6 +2602,7 @@ export function QuotationBuilder({
   isPreparer = false,
   canClearSale = false,
   orderInProduction = false,
+  hasOrderWorkflow = false,
   revisionHistory = [],
   catalog,
   propellerSpLock = true,
@@ -2615,6 +2616,8 @@ export function QuotationBuilder({
   canClearSale?: boolean;
   /** The order tied to this quote is in production (or later) — revise is admin-only. */
   orderInProduction?: boolean;
+  /** The quote is won/closed — show a link to its order workflow. */
+  hasOrderWorkflow?: boolean;
   revisionHistory?: RevisionSnapshot[];
   catalog: Record<string, CatalogEntry>;
   propellerSpLock?: boolean;
@@ -4840,7 +4843,14 @@ export function QuotationBuilder({
             {quotation.approvedBy ? ` · approved by ${quotation.approvedBy}` : ""}
           </p>
         </div>
-        <QuotationStatusBadge status={quotation.status} />
+        <div className="flex items-center gap-3">
+          {hasOrderWorkflow && (
+            <a href={`/orders/${quotation.id}`} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+              Go to workflow →
+            </a>
+          )}
+          <QuotationStatusBadge status={quotation.status} />
+        </div>
       </div>
 
       {msg && <p className="text-sm text-muted-foreground">{msg}</p>}

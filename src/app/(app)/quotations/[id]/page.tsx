@@ -7,7 +7,7 @@ import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByN
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
-import { saleFromClassification } from "@/lib/sale";
+import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { readPricing } from "@/lib/quote";
 import { DuplicateToClient } from "./duplicate-to-client";
 
@@ -85,6 +85,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       isPreparer={!!user && user.id === quotation.preparedById}
       canClearSale={canClearSale}
       orderInProduction={stageIndex(readOrderWorkflow(quotation.classification).stage) >= stageIndex("producing")}
+      hasOrderWorkflow={quotation.inquiry.status === "WON" && isSaleConfirmed(saleFromClassification(quotation.classification))}
       propellerSpLock={propellerSpLock}
       axialSpLock={axialSpLock}
       revisionHistory={(() => {
