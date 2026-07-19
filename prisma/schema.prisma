@@ -300,8 +300,9 @@ enum PurchaseRequestStatus {
   PURCHASED        // bought, awaiting purchaser's item check
   CHECKED          // items checked, awaiting delivery to warehouse
   DELIVERED        // logistics delivered to warehouseman
-  RECEIVED         // warehouse received, awaiting plant manager
-  COMPLETED        // plant manager final approval
+  RECEIVED         // warehouseman approved the delivery, awaiting plant manager
+  PLANT_APPROVED   // plant manager final approval, awaiting receiving into stock
+  COMPLETED        // warehouseman received & added to stock
   CANCELLED        // withdrawn by the purchaser before receiving
 }
 

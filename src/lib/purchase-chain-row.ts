@@ -104,8 +104,9 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
     stamp("Item bought", purchaser, pr.purchasedByName, pr.purchasedAt),
     stamp("Item checked & approved", purchaser, pr.checkedByName, pr.checkedAt),
     lstamp("Delivered to Warehouseman", logistics, "deliver"),
-    stamp("Received at warehouse", warehouse, pr.receivedByName, pr.receivedAt),
-    stamp("Plant Manager approved", plant, pr.plantApprovedByName, pr.plantApprovedAt),
+    lstamp("Warehouseman received & approved", warehouse, "warehouse_approve"),
+    stamp("Plant Manager final approval", plant, pr.plantApprovedByName, pr.plantApprovedAt),
+    stamp("Received & added to stock", warehouse, pr.receivedByName, pr.receivedAt),
   ].filter((s): s is string => s !== null);
 }
 

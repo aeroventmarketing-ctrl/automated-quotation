@@ -640,7 +640,8 @@ export async function advancePurchaseRequest(
     case "confirm_cash":
     case "assign_tasks":
     case "logistics_confirm":
-    case "deliver": {
+    case "deliver":
+    case "warehouse_approve": {
       const log = (pr.chainLog && typeof pr.chainLog === "object" ? pr.chainLog : {}) as Record<string, unknown>;
       data.chainLog = { ...log, [stepKey]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue;
       break;
@@ -946,7 +947,8 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
     case "confirm_cash":
     case "assign_tasks":
     case "logistics_confirm":
-    case "deliver": {
+    case "deliver":
+    case "warehouse_approve": {
       const log = (anchor.chainLog && typeof anchor.chainLog === "object" ? anchor.chainLog : {}) as Record<string, unknown>;
       data.chainLog = { ...log, [stepKey]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue;
       break;
@@ -983,7 +985,7 @@ export async function receiveCombinedPO(anchorPurchaseRequestId: string, matches
   const ids = poMemberIds(anchor.po);
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
-  if (members.some((m) => m.status !== "DELIVERED")) throw new Error("This purchase isn't ready to receive (Logistics must deliver it first).");
+  if (members.some((m) => m.status !== "PLANT_APPROVED")) throw new Error("This purchase isn't ready to receive (awaiting Plant Manager's final approval).");
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
   await prisma.$transaction(async (tx) => {
@@ -991,7 +993,7 @@ export async function receiveCombinedPO(anchorPurchaseRequestId: string, matches
       await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: Number(m.qty), reason: "Purchase received (combined PO)" }, user.name);
     }
     for (const id of ids) {
-      await tx.purchaseRequest.update({ where: { id }, data: { status: "RECEIVED", receivedByName: user.name, receivedAt: new Date() } });
+      await tx.purchaseRequest.update({ where: { id }, data: { status: "COMPLETED", receivedByName: user.name, receivedAt: new Date() } });
     }
   });
   for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
@@ -1442,7 +1444,7 @@ export async function receivePurchaseRequest(
   }
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
-  if (pr.status !== "DELIVERED") throw new Error("This purchase isn't ready to receive (Logistics must deliver it first).");
+  if (pr.status !== "PLANT_APPROVED") throw new Error("This purchase isn't ready to receive (awaiting Plant Manager's final approval).");
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
 
@@ -1452,7 +1454,7 @@ export async function receivePurchaseRequest(
     }
     await tx.purchaseRequest.update({
       where: { id: purchaseRequestId },
-      data: { status: "RECEIVED", receivedByName: user.name, receivedAt: new Date() },
+      data: { status: "COMPLETED", receivedByName: user.name, receivedAt: new Date() },
     });
   });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
