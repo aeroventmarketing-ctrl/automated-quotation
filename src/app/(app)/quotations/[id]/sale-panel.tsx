@@ -66,6 +66,9 @@ export function SalePanel({
   const collected = collectedTotal(draft);
   const balance = Math.max(0, dealTotal - collected);
   const hasSaleData = !!(po || payments.length > 0 || Object.keys(docs).length > 0 || note);
+  // "Add payment" stays turquoise (still collecting) until a full payment is
+  // recorded — down payments and progress billings keep it highlighted.
+  const paymentImportant = !payments.some((p) => p.kind === "full");
 
   async function upload(file: File): Promise<SaleDoc | null> {
     const fd = new FormData();
@@ -291,7 +294,13 @@ export function SalePanel({
             </div>
           ))}
           {canEdit && (
-            <Button variant="outline" size="sm" onClick={addPayment} disabled={busy}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addPayment}
+              disabled={busy}
+              className={cn(paymentImportant && "border-teal-400 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-700")}
+            >
               <Plus className="h-4 w-4" /> Add payment
             </Button>
           )}
