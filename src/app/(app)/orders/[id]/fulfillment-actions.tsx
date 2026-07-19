@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
-import type { SaleDoc } from "@/lib/sale";
+import { closeDocsState, type SaleDoc } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
 import {
   notifyClientReady,
@@ -232,7 +232,20 @@ export function FulfillmentActions({
         />
       )}
 
-      {stage === "closed" && (
+      {/* Closed but documents still incomplete — no commission yet; show the
+          amber "File documents — close order (incomplete)" affordance + slots. */}
+      {stage === "closed" && !closeDocsState(closeDocs, vatInclusive).complete && (
+        <CloseDocuments
+          orderId={orderId}
+          initialDocs={closeDocs}
+          vatInclusive={vatInclusive}
+          canEdit={canEditCloseDocs}
+          canFile={perms.canFile}
+          closed
+        />
+      )}
+
+      {stage === "closed" && closeDocsState(closeDocs, vatInclusive).complete && (
         <div className="space-y-3">
           <p className="text-sm text-emerald-600">
             Order complete. DR {documents.dr || "—"} · SI {documents.si || "—"} · OR {documents.or || "—"}

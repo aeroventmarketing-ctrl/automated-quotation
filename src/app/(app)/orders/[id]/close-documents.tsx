@@ -22,12 +22,15 @@ export function CloseDocuments({
   vatInclusive,
   canEdit,
   canFile,
+  closed = false,
 }: {
   orderId: string;
   initialDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   canEdit: boolean;
   canFile: boolean;
+  /** The order already closed but its documents are still incomplete. */
+  closed?: boolean;
 }) {
   const router = useRouter();
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialDocs);
@@ -84,8 +87,12 @@ export function CloseDocuments({
   return (
     <div className="space-y-3">
       <div>
-        <p className="text-sm font-medium">File documents &amp; close order</p>
-        <p className="text-xs text-muted-foreground">Accounting files all delivery documents; the order is closed and the sales commission is computed.</p>
+        <p className="text-sm font-medium">{closed ? "Closing documents — incomplete" : "File documents & close order"}</p>
+        <p className="text-xs text-muted-foreground">
+          {closed
+            ? "The order is closed but its documents are incomplete. Upload the remaining documents to complete it and release the sales commission."
+            : "Accounting files all delivery documents; the order is closed and the sales commission is computed."}
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -127,9 +134,25 @@ export function CloseDocuments({
         })}
       </div>
 
-      {/* Close button: hidden until the required documents are uploaded. Appears
-          "incomplete" when BIR 2307 is still missing (VAT-inclusive). */}
-      {!state.appear ? (
+      {/* Close button. Pre-close: hidden until the required docs are uploaded,
+          then green (complete) or amber (BIR 2307 missing). Already closed &
+          incomplete: always the amber "incomplete" affordance. */}
+      {closed ? (
+        state.complete ? (
+          <p className="text-xs text-emerald-600">Documents complete — finalizing…</p>
+        ) : canFile ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-amber-700">
+              {state.bir2307Missing ? "Marked incomplete — BIR 2307 not yet uploaded." : "Marked incomplete — required documents missing."}
+            </p>
+            <Button size="sm" disabled={busy} onClick={close} className="bg-amber-500 text-white hover:bg-amber-600">
+              {busy ? "Saving…" : "File documents — close order (incomplete)"}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Awaiting Accounting to complete the closing documents.</p>
+        )
+      ) : !state.appear ? (
         <p className="text-xs text-muted-foreground">Upload the required documents above to close the order.</p>
       ) : canFile ? (
         <div className="space-y-1">

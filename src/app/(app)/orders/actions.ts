@@ -1254,14 +1254,18 @@ export async function fileDocuments(quotationId: string): Promise<void> {
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
     throw new Error("Only Accounting or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "docs_surrendered") throw new Error("The signed documents haven't been surrendered to accounting yet.");
-  // Gate on the closing documents (Sales Invoice / OR-CR-AF / Delivery Receipt,
-  // plus BIR 2307 for VAT-inclusive — 2307 may lag, closing is allowed incomplete).
-  const vq = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { vatMode: true } });
-  const vatInclusive = vq?.vatMode === "INCLUSIVE";
-  const closeState = closeDocsState(saleFromClassification(cls)?.docs, vatInclusive);
-  if (!closeState.appear) throw new Error("Upload all required closing documents before filing.");
-  await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
+  if (wf.stage !== "docs_surrendered" && wf.stage !== "closed")
+    throw new Error("The signed documents haven't been surrendered to accounting yet.");
+  // First close (from docs_surrendered) requires the closing documents present
+  // (Sales Invoice / OR-CR-AF / Delivery Receipt, plus BIR 2307 for VAT-inclusive —
+  // 2307 may lag). Re-filing an already-closed order is idempotent.
+  if (wf.stage === "docs_surrendered") {
+    const vq = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { vatMode: true } });
+    const vatInclusive = vq?.vatMode === "INCLUSIVE";
+    const closeState = closeDocsState(saleFromClassification(cls)?.docs, vatInclusive);
+    if (!closeState.appear) throw new Error("Upload all required closing documents before filing.");
+    await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
+  }
 
   // Phase 7 — compute the 1.5% sales commission for the close month. Guarded so a
   // missing table (before the migration is applied) never blocks closing the order.
