@@ -287,14 +287,19 @@ model AppSetting {
  * approval chain; each step stamps who did it and when.
  */
 enum PurchaseRequestStatus {
-  PENDING_APPROVAL // 8: purchaser prepared the list, awaiting approver
-  REJECTED         // 8: approver rejected
-  APPROVED         // 8 done, awaiting voucher/check
-  VOUCHER_READY    // 9: voucher + check approved, awaiting buying
-  PURCHASED        // 10: bought, awaiting purchaser's item check
-  CHECKED          // 11: items checked, awaiting delivery to warehouse
-  RECEIVED         // 13: warehouse received, awaiting plant manager
-  COMPLETED        // 13: plant manager final approval
+  PENDING_APPROVAL // purchaser prepared the list, awaiting approver
+  REJECTED         // approver rejected
+  APPROVED         // approved, awaiting voucher/check
+  VOUCHER_READY    // accounting prepared voucher + checks, awaiting signing
+  VOUCHER_SIGNED   // approver signed check & voucher
+  CASH_RELEASED    // approver released cash
+  WITH_PURCHASER   // accounting handed cash & check to the purchaser
+  TASKED           // purchaser handed to logistics head, tasks distributed
+  PURCHASED        // bought, awaiting purchaser's item check
+  CHECKED          // items checked, awaiting delivery to warehouse
+  DELIVERED        // logistics delivered to warehouseman
+  RECEIVED         // warehouse received, awaiting plant manager
+  COMPLETED        // plant manager final approval
   CANCELLED        // withdrawn by the purchaser before receiving
 }
 
@@ -308,6 +313,9 @@ model PurchaseRequest {
   items         Json                  @default("[]") // ["GI sheet 24ga x 4", ...]
   note          String?
   status        PurchaseRequestStatus @default(PENDING_APPROVAL)
+  // Sign-off log for the extended chain steps (sign / release cash / hand to
+  // purchaser / assign tasks / deliver) — { stepKey: { byName, at } }.
+  chainLog      Json                  @default("{}")
 
   createdById   String
   createdByName String

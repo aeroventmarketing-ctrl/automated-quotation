@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
-import { buildPurchaseChainRow } from "@/lib/purchase-chain-row";
+import { buildPurchaseChainRow, buildPurchaseTrail } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
@@ -60,8 +60,6 @@ export default async function PurchasingPage() {
   const userName = new Map(allUsers.map((u) => [u.id, u.name] as const));
   const namesForRole = (role: WorkflowRoleKey): string[] =>
     usersWithWorkflowRole(assignments, role).map((uid) => userName.get(uid)).filter((n): n is string => !!n);
-  const stamp = (label: string, who?: string | null, at?: Date | null) =>
-    who ? `${label} — ${who} · ${formatDateTime(at ?? undefined)}` : null;
 
   let orderGroups: { id: string; title: string; subtitle: string; rows: ReturnType<typeof buildPurchaseChainRow>[] }[] = [];
   let combinable: CombinableItem[] = [];
@@ -173,15 +171,7 @@ export default async function PurchasingPage() {
       const anchor = members[0];
       const po = coercePurchaseOrder(anchor.po);
       const status = anchor.status as PRStatus;
-      const trail = [
-        stamp("Requested", anchor.createdByName, anchor.createdAt),
-        stamp(status === "REJECTED" ? "Rejected" : "Approved", anchor.decidedByName, anchor.decidedAt),
-        stamp("Voucher & check", anchor.voucherByName, anchor.voucherAt),
-        stamp("Purchased", anchor.purchasedByName, anchor.purchasedAt),
-        stamp("Checked", anchor.checkedByName, anchor.checkedAt),
-        stamp("Received", anchor.receivedByName, anchor.receivedAt),
-        stamp("Plant Manager approved", anchor.plantApprovedByName, anchor.plantApprovedAt),
-      ].filter((s): s is string => s !== null);
+      const trail = buildPurchaseTrail(anchor);
       const actions = purchaseStepsFrom(status).map((step) => {
         const names = namesForRole(step.role);
         return { key: step.key, label: step.label, canAct: canAct(step.role), roleLabel: `${workflowRoleLabel(step.role)}${names.length ? ` (${names.join(", ")})` : ""}` };
@@ -262,15 +252,7 @@ export default async function PurchasingPage() {
       const stockById = new Map(stock.map((s) => [s.id, s]));
       replenRows = prs.map((pr) => {
         const status = pr.status as PRStatus;
-        const trail = [
-          stamp("Requested", pr.createdByName, pr.createdAt),
-          stamp(status === "REJECTED" ? "Rejected" : "Approved", pr.decidedByName, pr.decidedAt),
-          stamp("Voucher & check", pr.voucherByName, pr.voucherAt),
-          stamp("Purchased", pr.purchasedByName, pr.purchasedAt),
-          stamp("Checked", pr.checkedByName, pr.checkedAt),
-          stamp("Received", pr.receivedByName, pr.receivedAt),
-          stamp("Plant Manager approved", pr.plantApprovedByName, pr.plantApprovedAt),
-        ].filter((s): s is string => s !== null);
+        const trail = buildPurchaseTrail(pr);
         const actions = purchaseStepsFrom(status).map((step) => ({ key: step.key, label: step.label, roleLabel: workflowRoleLabel(step.role), canAct: canAct(step.role) }));
         const si = pr.stockItemId ? stockById.get(pr.stockItemId) : undefined;
         return {

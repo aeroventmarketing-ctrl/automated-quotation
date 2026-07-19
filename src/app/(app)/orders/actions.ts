@@ -634,6 +634,15 @@ export async function advancePurchaseRequest(
       data.voucherAt = now;
       if (note) data.voucherRef = note;
       break;
+    case "sign":
+    case "release_cash":
+    case "hand_purchaser":
+    case "assign_tasks":
+    case "deliver": {
+      const log = (pr.chainLog && typeof pr.chainLog === "object" ? pr.chainLog : {}) as Record<string, unknown>;
+      data.chainLog = { ...log, [stepKey]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue;
+      break;
+    }
     case "buy":
       data.purchasedByName = user.name;
       data.purchasedAt = now;
@@ -929,6 +938,15 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
       data.voucherByName = user.name;
       data.voucherAt = now;
       break;
+    case "sign":
+    case "release_cash":
+    case "hand_purchaser":
+    case "assign_tasks":
+    case "deliver": {
+      const log = (anchor.chainLog && typeof anchor.chainLog === "object" ? anchor.chainLog : {}) as Record<string, unknown>;
+      data.chainLog = { ...log, [stepKey]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue;
+      break;
+    }
     case "buy":
       data.purchasedByName = user.name;
       data.purchasedAt = now;

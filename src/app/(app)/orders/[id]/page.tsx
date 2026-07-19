@@ -22,6 +22,7 @@ import {
   type OrderStage,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
+import { buildPurchaseTrail } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
@@ -344,21 +345,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
   const canManagePO =
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey));
-  const pStamp = (label: string, who?: string | null, at?: Date | null) =>
-    who ? `${label} — ${who} · ${formatDateTime(at ?? undefined)}` : null;
   const mrfNoById = new Map(wf.materialRequests.map((m) => [m.id, m.formNo]));
   const purchaseRows = purchaseRequests.map((pr) => {
     const status = pr.status as PRStatus;
     const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
-    const trail: string[] = [
-      pStamp("Requested", pr.createdByName, pr.createdAt),
-      pStamp(status === "REJECTED" ? "Rejected" : "Approved", pr.decidedByName, pr.decidedAt),
-      pStamp("Voucher & check", pr.voucherByName, pr.voucherAt),
-      pStamp("Purchased", pr.purchasedByName, pr.purchasedAt),
-      pStamp("Checked", pr.checkedByName, pr.checkedAt),
-      pStamp("Received", pr.receivedByName, pr.receivedAt),
-      pStamp("Plant Manager approved", pr.plantApprovedByName, pr.plantApprovedAt),
-    ].filter((s): s is string => s !== null);
+    const trail = buildPurchaseTrail(pr);
     const actions = purchaseStepsFrom(status).map((step) => {
       const names = namesForRole(step.role);
       return {

@@ -56,6 +56,46 @@ export interface PurchaseRequestLike {
   receivedAt: Date | null;
   plantApprovedByName: string | null;
   plantApprovedAt: Date | null;
+  chainLog?: unknown;
+}
+
+interface ChainLogEntry { byName?: string; at?: string }
+export function coerceChainLog(v: unknown): Record<string, ChainLogEntry> {
+  if (!v || typeof v !== "object") return {};
+  const out: Record<string, ChainLogEntry> = {};
+  for (const [k, e] of Object.entries(v as Record<string, unknown>)) {
+    if (e && typeof e === "object") {
+      const o = e as Record<string, unknown>;
+      out[k] = { byName: typeof o.byName === "string" ? o.byName : undefined, at: typeof o.at === "string" ? o.at : undefined };
+    }
+  }
+  return out;
+}
+
+/** The full role-stamped chain trail for a purchase request, in order. */
+export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
+  const status = pr.status as PRStatus;
+  const log = coerceChainLog(pr.chainLog);
+  const stamp = (label: string, who?: string | null, at?: Date | null) =>
+    who ? `${label} — ${who} · ${formatDateTime(at ?? undefined)}` : null;
+  const lstamp = (label: string, key: string) => {
+    const e = log[key];
+    return e?.byName ? `${label} — ${e.byName} · ${formatDateTime(e.at ? new Date(e.at) : undefined)}` : null;
+  };
+  return [
+    stamp("Requested", pr.createdByName, pr.createdAt),
+    stamp(status === "REJECTED" ? "Rejected" : "Approved", pr.decidedByName, pr.decidedAt),
+    stamp("Voucher & checks prepared", pr.voucherByName, pr.voucherAt),
+    lstamp("Check & voucher signed", "sign"),
+    lstamp("Cash released", "release_cash"),
+    lstamp("Cash & check to Purchaser", "hand_purchaser"),
+    lstamp("Tasks distributed to Logistics", "assign_tasks"),
+    stamp("Item bought", pr.purchasedByName, pr.purchasedAt),
+    stamp("Item checked & approved", pr.checkedByName, pr.checkedAt),
+    lstamp("Delivered to Warehouseman", "deliver"),
+    stamp("Received at warehouse", pr.receivedByName, pr.receivedAt),
+    stamp("Plant Manager approved", pr.plantApprovedByName, pr.plantApprovedAt),
+  ].filter((s): s is string => s !== null);
 }
 
 function prVariant(s: PRStatus): PurchaseChainRow["variant"] {
@@ -75,17 +115,7 @@ export function buildPurchaseChainRow(
 ): PurchaseChainRow {
   const status = pr.status as PRStatus;
   const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
-  const stamp = (label: string, who?: string | null, at?: Date | null) =>
-    who ? `${label} — ${who} · ${formatDateTime(at ?? undefined)}` : null;
-  const trail = [
-    stamp("Requested", pr.createdByName, pr.createdAt),
-    stamp(status === "REJECTED" ? "Rejected" : "Approved", pr.decidedByName, pr.decidedAt),
-    stamp("Voucher & check", pr.voucherByName, pr.voucherAt),
-    stamp("Purchased", pr.purchasedByName, pr.purchasedAt),
-    stamp("Checked", pr.checkedByName, pr.checkedAt),
-    stamp("Received", pr.receivedByName, pr.receivedAt),
-    stamp("Plant Manager approved", pr.plantApprovedByName, pr.plantApprovedAt),
-  ].filter((s): s is string => s !== null);
+  const trail = buildPurchaseTrail(pr);
   const actions = purchaseStepsFrom(status).map((step) => {
     const names = ctx.namesForRole(step.role);
     return {
