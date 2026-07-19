@@ -62,6 +62,31 @@ export const SALE_DOCS_AFTER_PAYMENTS: SaleDocType[] = [
 ];
 export const SALE_DOC_TYPES: SaleDocType[] = [...SALE_DOCS_BEFORE_PAYMENTS, ...SALE_DOCS_AFTER_PAYMENTS];
 
+/**
+ * The after-payment (closing) document slots that apply to a transaction. For
+ * VAT-exclusive deals the Sales Invoice and BIR 2307 aren't required, so those
+ * slots are hidden. VAT-inclusive shows all four.
+ */
+export function afterPaymentDocTypes(vatInclusive: boolean): SaleDocType[] {
+  return SALE_DOCS_AFTER_PAYMENTS.filter(
+    (t) => vatInclusive || (t.key !== "sales_invoice" && t.key !== "bir_2307"),
+  );
+}
+
+/**
+ * Whether an order's closing documents are in place. `appear` gates the
+ * "File documents — close order" button (all required except BIR 2307);
+ * `complete` means everything incl. BIR 2307 is attached; `bir2307Missing`
+ * flags the incomplete case (VAT-inclusive with no 2307 yet).
+ */
+export function closeDocsState(docs: Record<string, SaleDoc[]> | undefined, vatInclusive: boolean) {
+  const has = (k: string) => (docs?.[k]?.length ?? 0) > 0;
+  const appearKeys = ["or_cr_af", "delivery_receipt", ...(vatInclusive ? ["sales_invoice"] : [])];
+  const appear = appearKeys.every(has);
+  const bir2307Missing = vatInclusive && !has("bir_2307");
+  return { appear, complete: appear && !bir2307Missing, bir2307Missing, missing: appearKeys.filter((k) => !has(k)) };
+}
+
 /** Coerce one raw doc record into a SaleDoc, or null. */
 function coerceDoc(v: unknown): SaleDoc | null {
   if (!v || typeof v !== "object") return null;

@@ -27,6 +27,7 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
+import { saleFromClassification } from "@/lib/sale";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
@@ -89,6 +90,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   const adminViewer = isAdmin(viewer);
   const wf = readOrderWorkflow(quote.classification);
+  // Sale record (PO, payments, closing documents) — the closing docs reflect
+  // between the quotation Sale panel and this order's close step.
+  const saleForClose = saleFromClassification(quote.classification);
   const value = payableTotal(quote);
 
   // Admin toggle: hide workflow progress from Sales & Engineer (who hold no
@@ -512,7 +516,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 &amp; 6 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {fTrail.length > 0 && <div className="text-xs text-muted-foreground">{fTrail.join(" · ")}</div>}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} commission={commissionInfo} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} commission={commissionInfo} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
           </CardContent>
         </Card>
       )}

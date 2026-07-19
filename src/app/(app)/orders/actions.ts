@@ -38,7 +38,7 @@ import {
   type OrderConversation,
 } from "@/lib/order-workflow";
 import { purchaseStep, isCancellable, type PRStatus } from "@/lib/purchasing";
-import { saleFromClassification, docCheckMissing } from "@/lib/sale";
+import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
@@ -1171,6 +1171,54 @@ export async function markDelivered(quotationId: string, pod: string): Promise<v
   await saveWorkflow(quotationId, cls, { ...wf, stage: "delivered", documents, approvals: stamp(wf, "delivered", user) });
 }
 
+const CLOSE_DOC_KEYS = new Set(["sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307"]);
+
+/** Load a quote for editing its sale documents; gate to Accounting/Sales/admin. */
+async function loadForCloseDoc(quotationId: string, key: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!CLOSE_DOC_KEYS.has(key)) throw new Error("Unknown document.");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, classification: true, preparedById: true },
+  });
+  if (!quote) throw new Error("Order not found");
+  const ok = isAdmin(user)
+    || quote.preparedById === user.id
+    || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only Accounting, Sales or an admin can attach closing documents.");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const sale = saleFromClassification(cls) ?? { arrangement: "downpayment_full" as const, payments: [] };
+  return { user, cls, sale };
+}
+
+/** Attach a closing document (Sales Invoice / OR-CR-AF / Delivery Receipt / BIR 2307). */
+export async function saveCloseDoc(quotationId: string, key: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
+  const { cls, sale } = await loadForCloseDoc(quotationId, key);
+  const docs = { ...(sale.docs ?? {}) };
+  const entry: SaleDoc = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt || new Date().toISOString() };
+  docs[key] = [...(docs[key] ?? []), entry];
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, sale: { ...sale, docs } } as unknown as Prisma.InputJsonObject },
+  });
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
+/** Remove a closing document. */
+export async function removeCloseDoc(quotationId: string, key: string, path: string): Promise<void> {
+  const { cls, sale } = await loadForCloseDoc(quotationId, key);
+  const docs = { ...(sale.docs ?? {}) };
+  docs[key] = (docs[key] ?? []).filter((d) => d.path !== path);
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, sale: { ...sale, docs } } as unknown as Prisma.InputJsonObject },
+  });
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
 /** Sales approves the proof of delivery — marks the delivery successful (step 1). */
 export async function approveDelivery(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
@@ -1201,6 +1249,12 @@ export async function fileDocuments(quotationId: string): Promise<void> {
     throw new Error("Only Accounting or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "docs_surrendered") throw new Error("The signed documents haven't been surrendered to accounting yet.");
+  // Gate on the closing documents (Sales Invoice / OR-CR-AF / Delivery Receipt,
+  // plus BIR 2307 for VAT-inclusive — 2307 may lag, closing is allowed incomplete).
+  const vq = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { vatMode: true } });
+  const vatInclusive = vq?.vatMode === "INCLUSIVE";
+  const closeState = closeDocsState(saleFromClassification(cls)?.docs, vatInclusive);
+  if (!closeState.appear) throw new Error("Upload all required closing documents before filing.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
 
   // Phase 7 — compute the 1.5% sales commission for the close month. Guarded so a

@@ -20,7 +20,7 @@ import {
   ARRANGEMENT_LABEL,
   PAYMENT_KIND_LABEL,
   SALE_DOCS_BEFORE_PAYMENTS,
-  SALE_DOCS_AFTER_PAYMENTS,
+  afterPaymentDocTypes,
   collectedTotal,
   isSaleConfirmed,
 } from "@/lib/sale";
@@ -42,6 +42,7 @@ export function SalePanel({
   initialSale,
   canEdit,
   canClear = false,
+  vatInclusive = true,
 }: {
   quotationId: string;
   currency: string;
@@ -51,6 +52,8 @@ export function SalePanel({
   canEdit: boolean;
   /** Accounting or admin — may Clear the sale. */
   canClear?: boolean;
+  /** VAT-inclusive shows Sales Invoice + BIR 2307; exclusive hides them. */
+  vatInclusive?: boolean;
 }) {
   const router = useRouter();
   const [arrangement, setArrangement] = useState<SaleArrangement>(initialSale?.arrangement ?? "downpayment_full");
@@ -306,8 +309,9 @@ export function SalePanel({
           )}
         </div>
 
-        {/* 8–11. Sales Invoice, OR/CR/AF, Delivery Receipt, BIR 2307 */}
-        {SALE_DOCS_AFTER_PAYMENTS.map((t) => <DocSlot key={t.key} type={t} />)}
+        {/* 8–11. Sales Invoice, OR/CR/AF, Delivery Receipt, BIR 2307
+            (Sales Invoice + BIR 2307 hidden for VAT-exclusive deals). */}
+        {afterPaymentDocTypes(vatInclusive).map((t) => <DocSlot key={t.key} type={t} />)}
 
         {/* Client note — additional information given by the client. */}
         <div className="space-y-1">

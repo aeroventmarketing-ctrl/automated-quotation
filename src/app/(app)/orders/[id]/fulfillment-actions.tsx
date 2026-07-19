@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
+import type { SaleDoc } from "@/lib/sale";
+import { CloseDocuments } from "./close-documents";
 import {
   notifyClientReady,
   checkFinalPayment,
@@ -18,7 +20,6 @@ import {
   markDelivered,
   approveDelivery,
   surrenderDeliveryDocs,
-  fileDocuments,
   approveCommission,
   prepareCommissionVoucher,
   receiveCommission,
@@ -61,12 +62,18 @@ export function FulfillmentActions({
   perms,
   documents,
   commission,
+  closeDocs,
+  vatInclusive,
+  canEditCloseDocs,
 }: {
   orderId: string;
   stage: string;
   perms: Perms;
   documents: { dr?: string; si?: string; or?: string; pod?: string };
   commission: CommissionInfo | null;
+  closeDocs: Record<string, SaleDoc[]>;
+  vatInclusive: boolean;
+  canEditCloseDocs: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -215,16 +222,15 @@ export function FulfillmentActions({
           </div>
         ) : awaiting("Logistics to surrender the signed documents to accounting"))}
 
-      {stage === "docs_surrendered" &&
-        (perms.canFile ? (
-          <div className="space-y-1">
-            <p className="text-sm font-medium">File documents &amp; close order</p>
-            <p className="text-xs text-muted-foreground">Accounting files all delivery documents; the order is closed and the sales commission is computed.</p>
-            <Button size="sm" disabled={busy} onClick={() => run(() => fileDocuments(orderId))}>
-              {busy ? "Saving…" : "File documents — close order"}
-            </Button>
-          </div>
-        ) : awaiting("Accounting to file the documents"))}
+      {stage === "docs_surrendered" && (
+        <CloseDocuments
+          orderId={orderId}
+          initialDocs={closeDocs}
+          vatInclusive={vatInclusive}
+          canEdit={canEditCloseDocs}
+          canFile={perms.canFile}
+        />
+      )}
 
       {stage === "closed" && (
         <div className="space-y-3">

@@ -5887,6 +5887,7 @@ export function QuotationBuilder({
           initialSale={quotation.sale}
           canEdit={(isPreparer || isAdmin) && quotation.status !== "DRAFT" && quotation.status !== "PENDING_APPROVAL"}
           canClear={canClearSale}
+          vatInclusive={quotation.vatMode === "INCLUSIVE"}
         />
       )}
 
