@@ -1181,6 +1181,8 @@ const CLOSE_DOC_KEYS = new Set([
   "sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307",
   // Unsigned client documents attached when preparing the delivery documents.
   "unsigned_si", "unsigned_or_cr_af", "unsigned_dr",
+  // Proof-of-delivery files uploaded by Logistics.
+  "pod",
 ]);
 
 /** Load a quote for editing its sale documents; gate to Accounting/Sales/admin. */

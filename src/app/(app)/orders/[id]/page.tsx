@@ -526,7 +526,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
             {saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode === "INCLUSIVE"} />}
           </CardContent>
         </Card>

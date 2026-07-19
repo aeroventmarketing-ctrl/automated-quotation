@@ -23,6 +23,7 @@ export function SaleDocumentList({ sale, vatInclusive }: { sale: SaleRecord; vat
   for (const t of afterPaymentDocTypes(vatInclusive)) {
     if ((docs[t.key] ?? []).length) rows.push({ label: t.label, files: docs[t.key] });
   }
+  if ((docs["pod"] ?? []).length) rows.push({ label: "Proof of delivery", files: docs["pod"] });
   if (rows.length === 0) return null;
 
   return (

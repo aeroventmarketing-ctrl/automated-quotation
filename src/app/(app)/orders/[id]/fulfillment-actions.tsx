@@ -3,12 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Download } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { closeDocsState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
+import { DeliveredForm } from "./delivered-form";
 import {
   notifyClientReady,
   checkFinalPayment,
@@ -17,7 +16,6 @@ import {
   qaPlantCheck,
   qaTransfer,
   qaSalesCheck,
-  markDelivered,
   approveDelivery,
   surrenderDeliveryDocs,
 } from "../actions";
@@ -43,7 +41,6 @@ export function FulfillmentActions({
   orderId,
   stage,
   perms,
-  documents,
   closeDocs,
   vatInclusive,
   canEditCloseDocs,
@@ -51,7 +48,6 @@ export function FulfillmentActions({
   orderId: string;
   stage: string;
   perms: Perms;
-  documents: { dr?: string; si?: string; or?: string; pod?: string };
   closeDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   canEditCloseDocs: boolean;
@@ -59,7 +55,6 @@ export function FulfillmentActions({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [pod, setPod] = useState("");
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -177,12 +172,7 @@ export function FulfillmentActions({
             })}
           </div>
           {perms.canDeliver ? (
-            <div className="space-y-2">
-              <div className="space-y-1"><Label className="text-xs">Proof of delivery (ref / note)</Label><Input className="h-8" value={pod} onChange={(e) => setPod(e.target.value)} /></div>
-              <Button size="sm" disabled={busy} onClick={() => run(() => markDelivered(orderId, pod))}>
-                {busy ? "Saving…" : "Mark delivered"}
-              </Button>
-            </div>
+            <DeliveredForm orderId={orderId} initialFiles={closeDocs["pod"] ?? []} />
           ) : awaiting("Logistics to deliver")}
         </div>
       )}
@@ -234,10 +224,7 @@ export function FulfillmentActions({
       )}
 
       {stage === "closed" && closeDocsState(closeDocs, vatInclusive).complete && (
-        <p className="text-sm text-emerald-600">
-          Order complete. DR {documents.dr || "—"} · SI {documents.si || "—"} · OR {documents.or || "—"}
-          {documents.pod ? ` · POD ${documents.pod}` : ""}
-        </p>
+        <p className="text-sm text-emerald-600">Order complete — all documents filed.</p>
       )}
 
       {err && <p className="text-xs text-destructive">{err}</p>}
