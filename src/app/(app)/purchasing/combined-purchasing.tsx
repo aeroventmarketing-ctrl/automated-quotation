@@ -289,7 +289,11 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         </table>
       </div>
 
-      {batch.trail.length > 0 && <div className="mt-1 text-xs text-muted-foreground">{batch.trail.join(" · ")}</div>}
+      {batch.trail.length > 0 && (
+        <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+          {batch.trail.map((s, i) => <div key={i}>{s}</div>)}
+        </div>
+      )}
 
       {receiving ? (
         <div className="mt-2">

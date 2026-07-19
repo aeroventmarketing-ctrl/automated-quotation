@@ -72,29 +72,39 @@ export function coerceChainLog(v: unknown): Record<string, ChainLogEntry> {
   return out;
 }
 
-/** The full role-stamped chain trail for a purchase request, in order. */
+/**
+ * The full role-stamped chain trail for a purchase request, in order. Each entry
+ * carries the actor's name, their title (designation), and the date & time.
+ */
 export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
   const status = pr.status as PRStatus;
   const log = coerceChainLog(pr.chainLog);
-  const stamp = (label: string, who?: string | null, at?: Date | null) =>
-    who ? `${label} — ${who} · ${formatDateTime(at ?? undefined)}` : null;
-  const lstamp = (label: string, key: string) => {
+  const stamp = (label: string, title: string, who?: string | null, at?: Date | null) =>
+    who ? `${label} — ${who} (${title}) · ${formatDateTime(at ?? undefined)}` : null;
+  const lstamp = (label: string, title: string, key: string) => {
     const e = log[key];
-    return e?.byName ? `${label} — ${e.byName} · ${formatDateTime(e.at ? new Date(e.at) : undefined)}` : null;
+    return e?.byName ? `${label} — ${e.byName} (${title}) · ${formatDateTime(e.at ? new Date(e.at) : undefined)}` : null;
   };
+  const approver = workflowRoleLabel("payment_approver");
+  const acct = workflowRoleLabel("accounting");
+  const purchaser = workflowRoleLabel("purchaser");
+  const logistics = workflowRoleLabel("logistics");
+  const warehouse = workflowRoleLabel("warehouse");
+  const plant = workflowRoleLabel("plant_manager");
   return [
-    stamp("Requested", pr.createdByName, pr.createdAt),
-    stamp(status === "REJECTED" ? "Rejected" : "Approved", pr.decidedByName, pr.decidedAt),
-    stamp("Voucher & checks prepared", pr.voucherByName, pr.voucherAt),
-    lstamp("Check & voucher signed", "sign"),
-    lstamp("Cash released", "release_cash"),
-    lstamp("Cash & check to Purchaser", "hand_purchaser"),
-    lstamp("Tasks distributed to Logistics", "assign_tasks"),
-    stamp("Item bought", pr.purchasedByName, pr.purchasedAt),
-    stamp("Item checked & approved", pr.checkedByName, pr.checkedAt),
-    lstamp("Delivered to Warehouseman", "deliver"),
-    stamp("Received at warehouse", pr.receivedByName, pr.receivedAt),
-    stamp("Plant Manager approved", pr.plantApprovedByName, pr.plantApprovedAt),
+    stamp("Requested", "Requestor", pr.createdByName, pr.createdAt),
+    stamp(status === "REJECTED" ? "Rejected" : "Approved", approver, pr.decidedByName, pr.decidedAt),
+    stamp("Voucher & checks prepared", acct, pr.voucherByName, pr.voucherAt),
+    lstamp("Check & voucher signed", approver, "sign"),
+    lstamp("Cash released", approver, "release_cash"),
+    lstamp("Cash & check to Purchaser", acct, "hand_purchaser"),
+    lstamp("Cash & check received", purchaser, "confirm_cash"),
+    lstamp("Tasks distributed to Logistics", purchaser, "assign_tasks"),
+    stamp("Item bought", purchaser, pr.purchasedByName, pr.purchasedAt),
+    stamp("Item checked & approved", purchaser, pr.checkedByName, pr.checkedAt),
+    lstamp("Delivered to Warehouseman", logistics, "deliver"),
+    stamp("Received at warehouse", warehouse, pr.receivedByName, pr.receivedAt),
+    stamp("Plant Manager approved", plant, pr.plantApprovedByName, pr.plantApprovedAt),
   ].filter((s): s is string => s !== null);
 }
 

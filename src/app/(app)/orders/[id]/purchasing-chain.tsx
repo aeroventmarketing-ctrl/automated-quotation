@@ -135,7 +135,9 @@ export function PurchasingChain({
             </ul>
             {r.note && <p className="mt-1 text-xs text-muted-foreground">Note: {r.note}</p>}
             {r.trail.length > 0 && (
-              <div className="mt-1 text-xs text-muted-foreground">{r.trail.join(" · ")}</div>
+              <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                {r.trail.map((s, i) => <div key={i}>{s}</div>)}
+              </div>
             )}
             {readOnly ? (
               r.status !== "REJECTED" && r.status !== "COMPLETED" && r.actions[0] ? (

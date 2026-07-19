@@ -294,6 +294,7 @@ enum PurchaseRequestStatus {
   VOUCHER_SIGNED   // approver signed check & voucher
   CASH_RELEASED    // approver released cash
   WITH_PURCHASER   // accounting handed cash & check to the purchaser
+  CASH_CONFIRMED   // purchaser confirmed receipt of the cash & check
   TASKED           // purchaser handed to logistics head, tasks distributed
   PURCHASED        // bought, awaiting purchaser's item check
   CHECKED          // items checked, awaiting delivery to warehouse

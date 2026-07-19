@@ -637,6 +637,7 @@ export async function advancePurchaseRequest(
     case "sign":
     case "release_cash":
     case "hand_purchaser":
+    case "confirm_cash":
     case "assign_tasks":
     case "deliver": {
       const log = (pr.chainLog && typeof pr.chainLog === "object" ? pr.chainLog : {}) as Record<string, unknown>;
@@ -941,6 +942,7 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
     case "sign":
     case "release_cash":
     case "hand_purchaser":
+    case "confirm_cash":
     case "assign_tasks":
     case "deliver": {
       const log = (anchor.chainLog && typeof anchor.chainLog === "object" ? anchor.chainLog : {}) as Record<string, unknown>;
