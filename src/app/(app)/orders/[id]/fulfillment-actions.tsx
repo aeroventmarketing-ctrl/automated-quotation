@@ -18,6 +18,7 @@ import {
   qaSalesCheck,
   approveDelivery,
   surrenderDeliveryDocs,
+  confirmDocsReceived,
 } from "../actions";
 
 interface Perms {
@@ -200,7 +201,20 @@ export function FulfillmentActions({
           </div>
         ) : awaiting("Logistics to surrender the signed documents to accounting"))}
 
-      {stage === "docs_surrendered" && (
+      {/* Two-party handshake: Logistics surrendered; Accounting must confirm
+          receipt before the file-and-close step appears. */}
+      {stage === "docs_surrendered" &&
+        (perms.canFile ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Confirm documents received</p>
+            <p className="text-xs text-muted-foreground">Logistics has surrendered the signed documents. Accounting confirms receipt before the order can be filed and closed.</p>
+            <Button size="sm" disabled={busy} onClick={() => run(() => confirmDocsReceived(orderId))}>
+              {busy ? "Saving…" : "Confirm documents received"}
+            </Button>
+          </div>
+        ) : awaiting("Accounting to confirm it received the documents"))}
+
+      {stage === "docs_received" && (
         <CloseDocuments
           orderId={orderId}
           initialDocs={closeDocs}

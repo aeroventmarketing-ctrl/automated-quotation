@@ -1253,6 +1253,17 @@ export async function surrenderDeliveryDocs(quotationId: string): Promise<void> 
   await saveWorkflow(quotationId, cls, { ...wf, stage: "docs_surrendered", approvals: stamp(wf, "docs_surrendered", user) });
 }
 
+/** Accounting confirms it received the client-signed documents from Logistics. */
+export async function confirmDocsReceived(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
+    throw new Error("Only Accounting or an admin can do this.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "docs_surrendered") throw new Error("Logistics hasn't surrendered the documents yet.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "docs_received", approvals: stamp(wf, "docs_received", user) });
+}
+
 /** Accounting files the signed documents and closes the order (steps 3-4). */
 export async function fileDocuments(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
@@ -1260,12 +1271,12 @@ export async function fileDocuments(quotationId: string): Promise<void> {
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
     throw new Error("Only Accounting or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "docs_surrendered" && wf.stage !== "closed")
-    throw new Error("The signed documents haven't been surrendered to accounting yet.");
-  // First close (from docs_surrendered) requires the closing documents present
+  if (wf.stage !== "docs_received" && wf.stage !== "closed")
+    throw new Error("Accounting hasn't confirmed receipt of the documents yet.");
+  // First close (from docs_received) requires the closing documents present
   // (Sales Invoice / OR-CR-AF / Delivery Receipt, plus BIR 2307 for VAT-inclusive —
   // 2307 may lag). Re-filing an already-closed order is idempotent.
-  if (wf.stage === "docs_surrendered") {
+  if (wf.stage === "docs_received") {
     const vq = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { vatMode: true } });
     const vatInclusive = vq?.vatMode === "INCLUSIVE";
     const closeState = closeDocsState(saleFromClassification(cls)?.docs, vatInclusive);

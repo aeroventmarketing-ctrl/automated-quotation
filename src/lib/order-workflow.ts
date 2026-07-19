@@ -29,6 +29,7 @@ export type OrderStage =
   | "delivered"
   | "delivery_confirmed"
   | "docs_surrendered"
+  | "docs_received"
   | "closed";
 
 // Phases match the order-page cards (gapless): 1 intake, 2 job orders &
@@ -54,6 +55,7 @@ export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] =
   { key: "delivered", label: "Delivered", phase: "Phase 5" },
   { key: "delivery_confirmed", label: "Delivery confirmed", phase: "Phase 5" },
   { key: "docs_surrendered", label: "Docs surrendered", phase: "Phase 5" },
+  { key: "docs_received", label: "Docs received", phase: "Phase 5" },
   { key: "closed", label: "Closed", phase: "Closed" },
 ];
 
@@ -264,7 +266,8 @@ export const APPROVAL_STEPS: Record<string, { label: string; from: OrderStage; t
   delivered: { label: "Delivered", from: "delivery_docs_ready", to: "delivered" },
   delivery_confirmed: { label: "Delivery confirmed (successful delivery)", from: "delivered", to: "delivery_confirmed" },
   docs_surrendered: { label: "Signed documents surrendered", from: "delivery_confirmed", to: "docs_surrendered" },
-  documents_filed: { label: "Documents filed (order closed)", from: "docs_surrendered", to: "closed" },
+  docs_received: { label: "Documents received by accounting", from: "docs_surrendered", to: "docs_received" },
+  documents_filed: { label: "Documents filed (order closed)", from: "docs_received", to: "closed" },
 };
 
 /** Position of a stage in the linear workflow (−1 if unknown). */
@@ -456,6 +459,8 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
     case "delivery_confirmed":
       return { action: "Surrender signed documents to accounting", roles: ["logistics"] };
     case "docs_surrendered":
+      return { action: "Confirm documents received", roles: ["accounting"] };
+    case "docs_received":
       return { action: "File documents & close the order", roles: ["accounting"] };
     case "closed":
     default:

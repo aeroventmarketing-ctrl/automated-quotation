@@ -61,6 +61,7 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   delivered: "warning",
   delivery_confirmed: "warning",
   docs_surrendered: "warning",
+  docs_received: "warning",
   closed: "success",
 };
 
@@ -152,6 +153,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     delivered: workflowRoleLabel("logistics"),
     delivery_confirmed: "Sales",
     docs_surrendered: workflowRoleLabel("logistics"),
+    docs_received: workflowRoleLabel("accounting"),
     documents_filed: workflowRoleLabel("accounting"),
   };
   const designationOf = (key: string): string => APPROVAL_DESIGNATION[key] ?? "";
@@ -255,12 +257,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     fStamp("Delivered", "delivered", A.delivered),
     fStamp("Delivery confirmed", "delivery_confirmed", A.delivery_confirmed),
     fStamp("Documents surrendered", "docs_surrendered", A.docs_surrendered),
+    fStamp("Documents received", "docs_received", A.docs_received),
     fStamp("Documents filed", "documents_filed", A.documents_filed),
   ].filter((s): s is string => s !== null);
   const fulfillmentStages = new Set([
     "production_finished", "final_pay_review", "final_pay_checked", "final_pay_cleared",
     "qa_tested", "qa_plant_checked", "qa_transferred", "qa_sales_checked",
-    "delivery_docs_ready", "delivered", "delivery_confirmed", "docs_surrendered", "closed",
+    "delivery_docs_ready", "delivered", "delivery_confirmed", "docs_surrendered", "docs_received", "closed",
   ]);
   const showFulfillment = fulfillmentStages.has(wf.stage);
 

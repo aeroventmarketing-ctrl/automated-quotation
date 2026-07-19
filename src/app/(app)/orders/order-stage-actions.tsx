@@ -27,6 +27,7 @@ const STAGE_VARIANT: Record<OrderStage, "secondary" | "warning" | "success"> = {
   delivered: "warning",
   delivery_confirmed: "warning",
   docs_surrendered: "warning",
+  docs_received: "warning",
   closed: "success",
 };
 
