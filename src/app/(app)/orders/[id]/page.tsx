@@ -37,6 +37,7 @@ import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
+import { SaleDocumentList } from "./sale-document-list";
 
 export const dynamic = "force-dynamic";
 
@@ -524,6 +525,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               </div>
             )}
             <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
+            {saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode === "INCLUSIVE"} />}
           </CardContent>
         </Card>
       )}
