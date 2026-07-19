@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { formatCurrency } from "@/lib/utils";
 import { closeDocsState, type SaleDoc } from "@/lib/sale";
+import type { OrderCommissionFlow } from "@/lib/order-workflow";
 import { CloseDocuments } from "./close-documents";
+import { CommissionFlow } from "./commission-flow";
 import {
   notifyClientReady,
   checkFinalPayment,
@@ -20,9 +21,6 @@ import {
   markDelivered,
   approveDelivery,
   surrenderDeliveryDocs,
-  approveCommission,
-  prepareCommissionVoucher,
-  receiveCommission,
 } from "../actions";
 
 interface Perms {
@@ -39,21 +37,15 @@ interface Perms {
   canSurrender: boolean;
   canFile: boolean;
   canApproveComm: boolean;
-  canCommVoucher: boolean;
-  canReceiveComm: boolean;
+  canAccountingComm: boolean;
 }
 
-interface CommissionFlow {
-  approvedByName?: string; approvedAt?: string;
-  voucherByName?: string; voucherAt?: string;
-  receivedByName?: string; receivedAt?: string;
-}
 interface CommissionInfo {
   amount: number;
   currency: string;
   salesMonth: string;
   dueLabel: string;
-  flow: CommissionFlow;
+  flow: OrderCommissionFlow;
 }
 
 export function FulfillmentActions({
@@ -252,53 +244,18 @@ export function FulfillmentActions({
             {documents.pod ? ` · POD ${documents.pod}` : ""}
           </p>
 
-          {/* Sales commission fulfillment (steps 5–8) */}
+          {/* Sales commission fulfillment */}
           {commission && (
-            <div className="space-y-2 rounded-md border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">Sales commission</p>
-                <span className="text-sm font-semibold">{formatCurrency(commission.amount, commission.currency)}</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Sales month {commission.salesMonth}. Issued to Sales {commission.dueLabel ? `by ${commission.dueLabel}` : ""} — 15 days after the sales month.
-              </p>
-
-              {/* Trail of completed commission sign-offs */}
-              {(commission.flow.approvedAt || commission.flow.voucherAt || commission.flow.receivedAt) && (
-                <div className="text-xs text-muted-foreground">
-                  {[
-                    commission.flow.approvedByName && `Amount approved — ${commission.flow.approvedByName}`,
-                    commission.flow.voucherByName && `Voucher prepared — ${commission.flow.voucherByName}`,
-                    commission.flow.receivedByName && `Received — ${commission.flow.receivedByName}`,
-                  ].filter(Boolean).join(" · ")}
-                </div>
-              )}
-
-              {!commission.flow.approvedAt &&
-                (perms.canApproveComm ? (
-                  <Button size="sm" disabled={busy} onClick={() => run(() => approveCommission(orderId))}>
-                    {busy ? "Saving…" : "Approve commission amount"}
-                  </Button>
-                ) : awaiting("an admin / the Payment Approver to approve the commission amount"))}
-
-              {commission.flow.approvedAt && !commission.flow.voucherAt &&
-                (perms.canCommVoucher ? (
-                  <Button size="sm" disabled={busy} onClick={() => run(() => prepareCommissionVoucher(orderId))}>
-                    {busy ? "Saving…" : "Prepare commission voucher"}
-                  </Button>
-                ) : awaiting("Accounting to prepare the commission voucher"))}
-
-              {commission.flow.voucherAt && !commission.flow.receivedAt &&
-                (perms.canReceiveComm ? (
-                  <Button size="sm" disabled={busy} onClick={() => run(() => receiveCommission(orderId))}>
-                    {busy ? "Saving…" : "Mark commission received"}
-                  </Button>
-                ) : awaiting("Sales to receive the commission"))}
-
-              {commission.flow.receivedAt && (
-                <p className="text-sm text-emerald-600">Commission received by {commission.flow.receivedByName}.</p>
-              )}
-            </div>
+            <CommissionFlow
+              orderId={orderId}
+              amount={commission.amount}
+              currency={commission.currency}
+              salesMonth={commission.salesMonth}
+              dueLabel={commission.dueLabel}
+              flow={commission.flow}
+              canApprove={perms.canApproveComm}
+              canAccounting={perms.canAccountingComm}
+            />
           )}
         </div>
       )}

@@ -1298,48 +1298,92 @@ export async function fileDocuments(quotationId: string): Promise<void> {
 
 /**
  * Sales-commission fulfillment after the order closes:
- *   [Admin / Payment Approver: approve the amount] → approved
- *   [Accounting: prepare the voucher] → voucher
- *   [Sales: receive the commission] → received (DB Commission marked paid)
+ *   1. [Admin / Payment Approver] approve the amount
+ *   2. [Accounting] upload the commission voucher
+ *   3. [Admin / Payment Approver] approve the voucher
+ *   4. [Admin / Payment Approver] release the budget
+ *   5. [Accounting] mark the commission received (DB Commission marked paid)
+ *   6. [Accounting] file the voucher signed by the sales executive
  */
-export async function approveCommission(quotationId: string): Promise<void> {
+async function commissionActor(role: "approver" | "accounting") {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "payment_approver" as WorkflowRoleKey)))
-    throw new Error("Only an admin or the Payment Approver can approve the commission.");
+  const roles = await getWorkflowRoles();
+  const ok = role === "approver"
+    ? isAdmin(user) || userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey)
+    : isAdmin(user) || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey);
+  if (!ok) throw new Error(role === "approver" ? "Only an admin or the Payment Approver can do this." : "Only Accounting or an admin can do this.");
+  return user;
+}
+
+/** 1. Approve the commission amount. */
+export async function approveCommission(quotationId: string): Promise<void> {
+  const user = await commissionActor("approver");
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "closed") throw new Error("The order isn't closed yet.");
   const commission = { ...(wf.commission ?? {}), approvedByName: user.name, approvedAt: new Date().toISOString() };
   await saveWorkflow(quotationId, cls, { ...wf, commission });
 }
 
-export async function prepareCommissionVoucher(quotationId: string): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
-    throw new Error("Only Accounting or an admin can prepare the voucher.");
+/** 2. Accounting uploads the commission voucher. */
+export async function uploadCommissionVoucher(quotationId: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
+  const user = await commissionActor("accounting");
   const { cls, wf } = await loadWorkflow(quotationId);
   if (!wf.commission?.approvedAt) throw new Error("The commission amount hasn't been approved yet.");
-  const commission = { ...wf.commission, voucherByName: user.name, voucherAt: new Date().toISOString() };
+  const commission = {
+    ...wf.commission,
+    voucherDoc: { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt || new Date().toISOString() },
+    voucherByName: user.name,
+    voucherAt: new Date().toISOString(),
+  };
   await saveWorkflow(quotationId, cls, { ...wf, commission });
 }
 
+/** 3. Approve the commission voucher. */
+export async function approveCommissionVoucher(quotationId: string): Promise<void> {
+  const user = await commissionActor("approver");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.commission?.voucherAt) throw new Error("The commission voucher hasn't been uploaded yet.");
+  const commission = { ...wf.commission, voucherApprovedByName: user.name, voucherApprovedAt: new Date().toISOString() };
+  await saveWorkflow(quotationId, cls, { ...wf, commission });
+}
+
+/** 4. Release the commission budget. */
+export async function releaseCommissionBudget(quotationId: string): Promise<void> {
+  const user = await commissionActor("approver");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.commission?.voucherApprovedAt) throw new Error("The commission voucher hasn't been approved yet.");
+  const commission = { ...wf.commission, budgetReleasedByName: user.name, budgetReleasedAt: new Date().toISOString() };
+  await saveWorkflow(quotationId, cls, { ...wf, commission });
+}
+
+/** 5. Accounting records that Sales received the commission (DB row marked paid). */
 export async function receiveCommission(quotationId: string): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
-  const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
-  if (!isSales) throw new Error("Only Sales (the order's preparer) or an admin can do this.");
-  if (!wf.commission?.voucherAt) throw new Error("The commission voucher hasn't been prepared yet.");
+  const user = await commissionActor("accounting");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.commission?.budgetReleasedAt) throw new Error("The commission budget hasn't been released yet.");
   const commission = { ...wf.commission, receivedByName: user.name, receivedAt: new Date().toISOString() };
   await saveWorkflow(quotationId, cls, { ...wf, commission });
-  // Mark the DB commission row paid (best-effort — table may not exist yet).
   try {
     await prisma.commission.update({ where: { quotationId }, data: { paid: true, paidAt: new Date(), paidByName: user.name } });
   } catch {
     /* commission row not present — order-side sign-off still recorded */
   }
   revalidatePath("/commissions");
+}
+
+/** 6. Accounting files the voucher signed by the sales executive. */
+export async function fileSignedCommissionVoucher(quotationId: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
+  const user = await commissionActor("accounting");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.commission?.receivedAt) throw new Error("The commission hasn't been received yet.");
+  const commission = {
+    ...wf.commission,
+    signedVoucherDoc: { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt || new Date().toISOString() },
+    filedByName: user.name,
+    filedAt: new Date().toISOString(),
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, commission });
 }
 
 // --- Inventory integration --------------------------------------------------

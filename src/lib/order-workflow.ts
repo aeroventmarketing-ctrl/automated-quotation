@@ -145,19 +145,38 @@ export interface OrderConversation {
   loggedAt: string; // ISO — when logged
 }
 
+/** A stored document reference (Supabase Storage path + original name). */
+export interface WorkflowDoc {
+  path: string;
+  name: string;
+  uploadedAt?: string;
+}
+
 /**
- * Sales-commission fulfillment sign-offs after the order closes (steps 5–7):
- * approver approves the amount → accounting prepares the voucher → sales
- * receives it. Rides in the order workflow JSON; the DB Commission row is
- * marked paid when received.
+ * Sales-commission fulfillment sign-offs after the order closes:
+ *   1. Approver approves the amount.
+ *   2. Accounting uploads the commission voucher.
+ *   3. Approver approves the voucher.
+ *   4. Approver releases the budget.
+ *   5. Accounting marks the commission received (DB Commission row marked paid).
+ *   6. Accounting files the signed voucher (signed by the sales executive).
+ * Rides in the order workflow JSON.
  */
 export interface OrderCommissionFlow {
   approvedByName?: string;
   approvedAt?: string;
   voucherByName?: string;
   voucherAt?: string;
+  voucherDoc?: WorkflowDoc | null;
+  voucherApprovedByName?: string;
+  voucherApprovedAt?: string;
+  budgetReleasedByName?: string;
+  budgetReleasedAt?: string;
   receivedByName?: string;
   receivedAt?: string;
+  signedVoucherDoc?: WorkflowDoc | null;
+  filedByName?: string;
+  filedAt?: string;
 }
 
 /** Delivery-document reference numbers captured in Phase 6. */
@@ -314,14 +333,30 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     : [];
 
   const cm = wf?.commission && typeof wf.commission === "object" ? (wf.commission as Record<string, unknown>) : undefined;
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const doc = (v: unknown): WorkflowDoc | null => {
+    if (!v || typeof v !== "object") return null;
+    const o = v as Record<string, unknown>;
+    return typeof o.path === "string" && o.path
+      ? { path: o.path, name: typeof o.name === "string" ? o.name : o.path.split("/").pop() ?? "file", uploadedAt: str(o.uploadedAt) }
+      : null;
+  };
   const commission: OrderCommissionFlow | undefined = cm
     ? {
-        approvedByName: typeof cm.approvedByName === "string" ? cm.approvedByName : undefined,
-        approvedAt: typeof cm.approvedAt === "string" ? cm.approvedAt : undefined,
-        voucherByName: typeof cm.voucherByName === "string" ? cm.voucherByName : undefined,
-        voucherAt: typeof cm.voucherAt === "string" ? cm.voucherAt : undefined,
-        receivedByName: typeof cm.receivedByName === "string" ? cm.receivedByName : undefined,
-        receivedAt: typeof cm.receivedAt === "string" ? cm.receivedAt : undefined,
+        approvedByName: str(cm.approvedByName),
+        approvedAt: str(cm.approvedAt),
+        voucherByName: str(cm.voucherByName),
+        voucherAt: str(cm.voucherAt),
+        voucherDoc: doc(cm.voucherDoc),
+        voucherApprovedByName: str(cm.voucherApprovedByName),
+        voucherApprovedAt: str(cm.voucherApprovedAt),
+        budgetReleasedByName: str(cm.budgetReleasedByName),
+        budgetReleasedAt: str(cm.budgetReleasedAt),
+        receivedByName: str(cm.receivedByName),
+        receivedAt: str(cm.receivedAt),
+        signedVoucherDoc: doc(cm.signedVoucherDoc),
+        filedByName: str(cm.filedByName),
+        filedAt: str(cm.filedAt),
       }
     : undefined;
 

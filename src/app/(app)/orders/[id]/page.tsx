@@ -235,8 +235,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canSurrender: hasRole("logistics"),
     canFile: hasRole("accounting"),
     canApproveComm: hasRole("payment_approver"),
-    canCommVoucher: hasRole("accounting"),
-    canReceiveComm: isSalesViewer,
+    canAccountingComm: hasRole("accounting"),
   };
   const A = wf.approvals;
   const fStamp = (label: string, key: string, a?: { byName: string; at: string }) =>
