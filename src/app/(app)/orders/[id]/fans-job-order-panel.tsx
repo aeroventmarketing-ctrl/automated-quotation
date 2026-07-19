@@ -218,12 +218,15 @@ export function FansJobOrderPanel({
   baseNo,
   baseYear,
   canManage,
+  canAdd = canManage,
 }: {
   orderId: string;
   jobOrders: FansJobOrder[];
   baseNo?: number;
   baseYear?: number;
   canManage: boolean;
+  /** Whether new job orders can still be added (hidden once in production). */
+  canAdd?: boolean;
 }) {
   const router = useRouter();
   const [editIndex, setEditIndex] = useState<number | null>(null); // null = list view; -1 = new
@@ -302,7 +305,7 @@ export function FansJobOrderPanel({
           ))}
         </ul>
       )}
-      {canManage && (
+      {canAdd && (
         <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setEditIndex(-1); setNewType(null); }}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Add Fans &amp; Blowers job order
         </Button>

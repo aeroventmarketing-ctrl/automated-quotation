@@ -276,6 +276,12 @@ export async function saveFansJobOrder(
   }
   const { cls, wf } = await loadWorkflow(quotationId);
 
+  // New job orders can't be added once the order is In Production (or later).
+  const isNew = index == null || index < 0 || index >= wf.fansJobOrders.length;
+  if (isNew && stageIndex(wf.stage) >= stageIndex("producing")) {
+    throw new Error("The order is in production — new job orders can no longer be added.");
+  }
+
   let joBaseNo = wf.joBaseNo;
   let joBaseYear = wf.joBaseYear;
   if (joBaseNo == null) {

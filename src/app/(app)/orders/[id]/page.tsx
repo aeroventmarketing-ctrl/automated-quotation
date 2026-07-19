@@ -182,8 +182,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     .map(([k, a]) => ({ key: k, label: APPROVAL_STEPS[k].label, byName: a.byName, at: fmtWhen(a.at) }))
     .sort((x, y) => stageIndex(APPROVAL_STEPS[x.key].to) - stageIndex(APPROVAL_STEPS[y.key].to));
 
-  // The Engineer (or admin) makes the Fans & Blowers job order.
+  // The Engineer (or admin) makes the Fans & Blowers job order. New job orders
+  // can no longer be added once the order is In Production (or later).
   const canManageJO = adminViewer || viewer?.role === "ENGINEER";
+  const inProductionOrLater = stageIndex(wf.stage) >= stageIndex("producing");
 
   const jobs = PRODUCTION_DEPTS.filter((d) => wf.jobOrders[d.key]).map((d) => {
     const jo = wf.jobOrders[d.key]!;
@@ -477,6 +479,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   baseNo={wf.joBaseNo}
                   baseYear={wf.joBaseYear}
                   canManage={canManageJO}
+                  canAdd={canManageJO && !inProductionOrLater}
                 />
               </div>
               <div className="border-t pt-3">
