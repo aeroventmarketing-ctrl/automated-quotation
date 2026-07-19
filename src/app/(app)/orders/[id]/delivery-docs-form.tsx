@@ -78,12 +78,12 @@ export function DeliveryDocsForm({
         <p className="text-xs text-muted-foreground">Attach the unsigned client documents (to be signed on delivery).</p>
       </div>
 
-      <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         {types.map((t) => {
           const files = docs[t.key] ?? [];
           return (
-            <div key={t.key} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Label className="min-w-[13rem] text-xs">{t.label} <span className="text-muted-foreground">(unsigned)</span></Label>
+            <div key={t.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <Label className="text-xs">{t.label} <span className="text-muted-foreground">(unsigned)</span></Label>
               {files.map((f) => (
                 <span key={f.path} className="inline-flex items-center gap-2">
                   <a href={docLink(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
