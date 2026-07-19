@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { FileText, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { closeDocsState, type SaleDoc } from "@/lib/sale";
+import { closeDocsState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
 import {
@@ -152,8 +153,28 @@ export function FulfillmentActions({
 
       {stage === "delivery_docs_ready" && (
         <div className="space-y-2">
-          <div className="text-sm text-muted-foreground">
-            DR {documents.dr || "—"} · SI {documents.si || "—"} · OR {documents.or || "—"}
+          {/* Unsigned client documents attached at the prep step — stay visible
+              so Logistics can print/carry them for signing on delivery. */}
+          <div className="space-y-1">
+            {deliveryUnsignedDocTypes(vatInclusive).map((t) => {
+              const files = closeDocs[t.key] ?? [];
+              if (!files.length) return null;
+              return (
+                <div key={t.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span className="min-w-[13rem] font-medium">{t.label}</span>
+                  {files.map((f) => (
+                    <span key={f.path} className="inline-flex items-center gap-1.5">
+                      <a href={`/api/sale-uploads?path=${encodeURIComponent(f.path)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                        <FileText className="h-3.5 w-3.5" /> {f.name}
+                      </a>
+                      <a href={`/api/sale-uploads?path=${encodeURIComponent(f.path)}&download=1&name=${encodeURIComponent(f.name)}`} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
+                    </span>
+                  ))}
+                </div>
+              );
+            })}
           </div>
           {perms.canDeliver ? (
             <div className="space-y-2">
