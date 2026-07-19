@@ -10,7 +10,7 @@ interface JobRow {
   key: string;
   label: string;
   status: "issued" | "in_production" | "finished";
-  events: { label: string; who: string; when: string }[];
+  events: { label: string; who: string; designation?: string; when: string }[];
   canAdvance: boolean;
   nextTo: "in_production" | "finished" | null;
   nextLabel: string | null;
@@ -124,7 +124,7 @@ export function JobOrderManager({
             <div className="mt-0.5 space-y-0.5">
               {j.events.map((e, i) => (
                 <div key={i} className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground/70">{e.label}</span> — {e.who} · {e.when}
+                  <span className="font-medium text-foreground/70">{e.label}</span> — {e.who}{e.designation ? ` (${e.designation})` : ""} · {e.when}
                 </div>
               ))}
             </div>

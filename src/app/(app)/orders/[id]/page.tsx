@@ -120,6 +120,24 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const names = namesForRole(role);
     return `${workflowRoleLabel(role)}${names.length ? ` — ${names.join(", ")}` : " (unassigned)"}`;
   };
+  // The designation (job title) each approval step is performed in. Shown next
+  // to the approver's name on every sign-off.
+  const APPROVAL_ROLE: Record<string, WorkflowRoleKey | "sales"> = {
+    doc_check: "accounting",
+    payment_cleared: "payment_approver",
+    client_notified: "sales",
+    final_pay_checked: "accounting",
+    final_pay_confirmed: "payment_approver",
+    delivery_approved: "accounting",
+    delivered: "logistics",
+    documents_filed: "accounting",
+  };
+  const designationOf = (key: string): string => {
+    const r = APPROVAL_ROLE[key];
+    return r === "sales" ? "Sales" : r ? workflowRoleLabel(r) : "";
+  };
+  // "Name (Designation)" — or just the name when no designation maps.
+  const withDesig = (name: string, designation: string) => (designation ? `${name} (${designation})` : name);
 
   // Live "who acts next" for the whole order.
   const pend = pendingStep(wf);
@@ -160,10 +178,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       nextTo != null &&
       (wf.stage === "jo_received" || wf.stage === "producing") &&
       (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)));
-    const events: { label: string; who: string; when: string }[] = [];
-    if (jo.issuedByName) events.push({ label: "Issued", who: jo.issuedByName, when: fmtWhen(jo.issuedAt) });
-    if (jo.startedByName) events.push({ label: "Started", who: jo.startedByName, when: fmtWhen(jo.startedAt) });
-    if (jo.finishedByName) events.push({ label: "Finished", who: jo.finishedByName, when: fmtWhen(jo.finishedAt) });
+    const issueDesig = workflowRoleLabel("technical_head" as WorkflowRoleKey);
+    const deptDesig = workflowRoleLabel(deptRole(d.key) as WorkflowRoleKey);
+    const events: { label: string; who: string; designation: string; when: string }[] = [];
+    if (jo.issuedByName) events.push({ label: "Issued", who: jo.issuedByName, designation: issueDesig, when: fmtWhen(jo.issuedAt) });
+    if (jo.startedByName) events.push({ label: "Started", who: jo.startedByName, designation: deptDesig, when: fmtWhen(jo.startedAt) });
+    if (jo.finishedByName) events.push({ label: "Finished", who: jo.finishedByName, designation: deptDesig, when: fmtWhen(jo.finishedAt) });
     return {
       key: d.key,
       label: d.label,
@@ -192,15 +212,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canFile: hasRole("accounting"),
   };
   const A = wf.approvals;
-  const fStamp = (label: string, a?: { byName: string; at: string }) =>
-    a ? `${label} — ${a.byName} · ${fmtWhen(a.at)}` : null;
+  const fStamp = (label: string, key: string, a?: { byName: string; at: string }) =>
+    a ? `${label} — ${withDesig(a.byName, designationOf(key))} · ${fmtWhen(a.at)}` : null;
   const fTrail: string[] = [
-    fStamp("Client notified", A.client_notified),
-    fStamp("Final payment checked", A.final_pay_checked),
-    fStamp("Final payment confirmed", A.final_pay_confirmed),
-    fStamp("Delivery approved", A.delivery_approved),
-    fStamp("Delivered", A.delivered),
-    fStamp("Documents filed", A.documents_filed),
+    fStamp("Client notified", "client_notified", A.client_notified),
+    fStamp("Final payment checked", "final_pay_checked", A.final_pay_checked),
+    fStamp("Final payment confirmed", "final_pay_confirmed", A.final_pay_confirmed),
+    fStamp("Delivery approved", "delivery_approved", A.delivery_approved),
+    fStamp("Delivered", "delivered", A.delivered),
+    fStamp("Documents filed", "documents_filed", A.documents_filed),
   ].filter((s): s is string => s !== null);
   const fulfillmentStages = new Set([
     "production_finished", "final_pay_review", "final_pay_checked", "final_pay_cleared",
@@ -371,11 +391,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <CardContent className="space-y-2 text-sm">
           <div className="flex items-center gap-2">
             {docCheck ? <span className="text-emerald-600">✓</span> : <span className="text-muted-foreground">○</span>}
-            <span>Documents checked{docCheck ? ` — ${docCheck.byName}, ${fmtWhen(docCheck.at)}` : ""}</span>
+            <span>Documents checked{docCheck ? ` — ${withDesig(docCheck.byName, designationOf("doc_check"))}, ${fmtWhen(docCheck.at)}` : ""}</span>
           </div>
           <div className="flex items-center gap-2">
             {payCleared ? <span className="text-emerald-600">✓</span> : <span className="text-muted-foreground">○</span>}
-            <span>Payment cleared &amp; job orders released{payCleared ? ` — ${payCleared.byName}, ${fmtWhen(payCleared.at)}` : ""}</span>
+            <span>Payment cleared &amp; job orders released{payCleared ? ` — ${withDesig(payCleared.byName, designationOf("payment_cleared"))}, ${fmtWhen(payCleared.at)}` : ""}</span>
           </div>
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="pt-1 text-xs text-muted-foreground">Complete these sign-offs from the Orders list.</p>
