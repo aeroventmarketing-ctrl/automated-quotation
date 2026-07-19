@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Check, Upload, Trash2, Plus, FileText, Download } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { recordSale, clearSale } from "../actions";
 import {
   type SaleRecord,
@@ -169,7 +169,10 @@ export function SalePanel({
             </div>
           ))}
           {canEdit ? (
-            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+            <label className={cn(
+              "inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent",
+              type.important && files.length === 0 && "border-teal-400 bg-teal-50 text-teal-700 hover:bg-teal-100",
+            )}>
               <Upload className="h-4 w-4" /> {files.length ? "Add file" : "Upload"}
               <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && onDocFile(type.key, e.target.files[0])} />
             </label>
@@ -234,7 +237,7 @@ export function SalePanel({
               )}
             </div>
           ) : canEdit ? (
-            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-teal-400 bg-teal-50 px-3 py-1.5 text-sm text-teal-700 hover:bg-teal-100">
               <Upload className="h-4 w-4" /> Upload PO
               <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && onPoFile(e.target.files[0])} />
             </label>

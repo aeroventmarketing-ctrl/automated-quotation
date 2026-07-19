@@ -39,14 +39,16 @@ export interface SaleDocType {
   required: boolean;
   /** Other doc keys whose files also show (and can be removed) in this slot. */
   mergeKeys?: string[];
+  /** Part of the documents-checked gate — highlighted until a file is attached. */
+  important?: boolean;
 }
 
 /** Document slots shown before the "Payments collected" section, in order. */
 export const SALE_DOCS_BEFORE_PAYMENTS: SaleDocType[] = [
   // The Inquiry Form (seeded from the inquiry) folds into this slot.
-  { key: "computation", label: "Computation / Inquiry Form", required: true, mergeKeys: ["inquiry_form"] },
-  { key: "quotation", label: "Quotation", required: true },
-  { key: "rfq_boq", label: "RFQ / BOQ", required: true },
+  { key: "computation", label: "Computation / Inquiry Form", required: true, mergeKeys: ["inquiry_form"], important: true },
+  { key: "quotation", label: "Quotation", required: true, important: true },
+  { key: "rfq_boq", label: "RFQ / BOQ", required: true, important: true },
   { key: "drawing", label: "Drawing / Pictures", required: false },
   { key: "billing_dp", label: "Billing Statement DP", required: false },
   { key: "billing_fp", label: "Billing Statement FP", required: false },
