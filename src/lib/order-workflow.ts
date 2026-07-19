@@ -31,26 +31,30 @@ export type OrderStage =
   | "docs_surrendered"
   | "closed";
 
+// Phases match the order-page cards (gapless): 1 intake, 2 job orders &
+// production, 3 materials, 4 purchasing (3 & 4 run concurrently during
+// production — no dedicated linear stage), 5 finalize (final payment, quality,
+// delivery, documents & commission).
 export const ORDER_STAGES: { key: OrderStage; label: string; phase: string }[] = [
   { key: "payment_review", label: "Payment review", phase: "Phase 1" },
   { key: "docs_checked", label: "Docs checked", phase: "Phase 1" },
-  { key: "released", label: "For JO creation", phase: "Phase 1 done" },
-  { key: "in_production", label: "JO released", phase: "Phase 4" },
-  { key: "jo_received", label: "JO Received", phase: "Phase 4" },
-  { key: "producing", label: "In Production", phase: "Phase 4" },
-  { key: "production_finished", label: "Production finished", phase: "Phase 4 done" },
+  { key: "released", label: "For JO creation", phase: "Phase 2" },
+  { key: "in_production", label: "JO released", phase: "Phase 2" },
+  { key: "jo_received", label: "JO Received", phase: "Phase 2" },
+  { key: "producing", label: "In Production", phase: "Phase 2" },
+  { key: "production_finished", label: "Production finished", phase: "Phase 2" },
   { key: "final_pay_review", label: "Awaiting final payment", phase: "Phase 5" },
   { key: "final_pay_checked", label: "Final payment checked", phase: "Phase 5" },
-  { key: "final_pay_cleared", label: "Final payment confirmed", phase: "Phase 5 done" },
-  { key: "qa_tested", label: "Quality tested", phase: "Quality & transfer" },
-  { key: "qa_plant_checked", label: "Plant QC passed", phase: "Quality & transfer" },
-  { key: "qa_transferred", label: "Transferred to office", phase: "Quality & transfer" },
-  { key: "qa_sales_checked", label: "Sales re-checked", phase: "Quality & transfer" },
-  { key: "delivery_docs_ready", label: "Delivery docs ready", phase: "Phase 6" },
-  { key: "delivered", label: "Delivered", phase: "Phase 6" },
-  { key: "delivery_confirmed", label: "Delivery confirmed", phase: "Phase 6" },
-  { key: "docs_surrendered", label: "Docs surrendered", phase: "Phase 6" },
-  { key: "closed", label: "Closed", phase: "Phase 6 done" },
+  { key: "final_pay_cleared", label: "Final payment confirmed", phase: "Phase 5" },
+  { key: "qa_tested", label: "Quality tested", phase: "Phase 5" },
+  { key: "qa_plant_checked", label: "Plant QC passed", phase: "Phase 5" },
+  { key: "qa_transferred", label: "Transferred to office", phase: "Phase 5" },
+  { key: "qa_sales_checked", label: "Sales re-checked", phase: "Phase 5" },
+  { key: "delivery_docs_ready", label: "Delivery docs ready", phase: "Phase 5" },
+  { key: "delivered", label: "Delivered", phase: "Phase 5" },
+  { key: "delivery_confirmed", label: "Delivery confirmed", phase: "Phase 5" },
+  { key: "docs_surrendered", label: "Docs surrendered", phase: "Phase 5" },
+  { key: "closed", label: "Closed", phase: "Closed" },
 ];
 
 /** The four production departments a job order can go to (relevant ones only). */

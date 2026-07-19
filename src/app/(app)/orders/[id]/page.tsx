@@ -454,9 +454,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </CardContent>
       </Card>
 
-      {/* Phase 2 / 4 — job orders & production */}
+      {/* Phase 2 — job orders & production */}
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Job orders &amp; production</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 2 · Job orders &amp; production</CardTitle></CardHeader>
         <CardContent>
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="text-sm text-muted-foreground">Job orders are issued once Phase 1 is complete.</p>
@@ -503,7 +503,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       {(showMaterials || purchaseRows.length > 0) && (
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-sm">Phase 3 · Purchasing</CardTitle>
+            <CardTitle className="text-sm">Phase 4 · Purchasing</CardTitle>
             <Link href="/purchasing" className="text-xs font-medium text-primary hover:underline">Process in Purchasing →</Link>
           </CardHeader>
           <CardContent>
@@ -512,10 +512,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
-      {/* Phase 5 & 6 — delivery & closeout */}
+      {/* Phase 5 — final payment, quality, delivery, documents & commission */}
       {showFulfillment && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 &amp; 6 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Final payment, quality, delivery, documents &amp; commission</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {fTrail.length > 0 && <div className="text-xs text-muted-foreground">{fTrail.join(" · ")}</div>}
             <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} documents={wf.documents} commission={commissionInfo} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
