@@ -170,6 +170,7 @@ export async function updateQuotationLines(
     headerUnits?: Record<string, string>;
     classification?: Record<string, string>;
   },
+  opts?: { revalidate?: boolean },
 ) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -251,7 +252,11 @@ export async function updateQuotationLines(
     }),
   ]);
 
-  revalidatePath(`/quotations/${quotationId}`);
+  // Auto-save persists silently: skipping revalidation avoids refreshing the
+  // route the user is actively editing (which would re-run mount effects and,
+  // e.g., reset the header units mid-edit). Other views catch up on the next
+  // manual save or navigation.
+  if (opts?.revalidate !== false) revalidatePath(`/quotations/${quotationId}`);
 }
 
 /** Delete a quotation (admin only). Its line items cascade; the inquiry stays. */

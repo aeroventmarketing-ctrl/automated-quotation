@@ -2797,9 +2797,11 @@ export function QuotationBuilder({
   const busyRef = useRef(false);
   useEffect(() => { busyRef.current = busy; }, [busy]);
 
-  // Persist the current payload (shared by manual + auto save).
-  async function persist(): Promise<void> {
-    await updateQuotationLines(quotation.id, savePayload.lines, savePayload.meta);
+  // Persist the current payload (shared by manual + auto save). Auto-save skips
+  // revalidation so the route the user is editing isn't refreshed mid-edit
+  // (which would re-run mount effects and reset fields like the header units).
+  async function persist(auto: boolean): Promise<void> {
+    await updateQuotationLines(quotation.id, savePayload.lines, savePayload.meta, auto ? { revalidate: false } : undefined);
     lastSavedSig.current = sig;
     setLastSaveAt(new Date());
   }
@@ -2815,7 +2817,7 @@ export function QuotationBuilder({
       if (busyRef.current) return; // manual op in flight — try again on next edit
       setAutoState("saving");
       try {
-        await persist();
+        await persist(true);
         setAutoState("saved");
       } catch {
         setAutoState("error");
@@ -3742,7 +3744,7 @@ export function QuotationBuilder({
     setMsg(null);
     setAutoState("saving");
     try {
-      await persist();
+      await persist(false);
       setAutoState("saved");
       setMsg("Saved.");
       router.refresh();
