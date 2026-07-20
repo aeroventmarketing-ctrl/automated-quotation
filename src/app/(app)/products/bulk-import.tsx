@@ -39,6 +39,13 @@ export function BulkImport() {
     setBusy(true); setMsg(null); setErrs([]);
     try {
       const r = await importProducts(fd);
+      const nothingImported = r.created === 0 && r.updated === 0 && r.skipped === 0;
+      if (nothingImported && r.errors.length > 0) {
+        // Pure validation failure (bad columns, unreadable file, …) — show it plainly.
+        setMsg(null);
+        setErrs(r.errors);
+        return;
+      }
       const parts = [
         `${r.created} added`,
         r.updated ? `${r.updated} updated` : "",

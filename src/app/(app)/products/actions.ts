@@ -137,13 +137,25 @@ export async function importProducts(
   formData: FormData,
 ): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
   await requireProductManager();
-  const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) throw new Error("Choose a CSV or Excel file.");
-  const buf = Buffer.from(await file.arrayBuffer());
-  const rows = file.name.toLowerCase().endsWith(".xlsx") ? await parseXlsx(buf) : parseCsv(buf.toString("utf8"));
-  if (rows.length < 2) throw new Error("The file has no data rows (needs a header row + products).");
+  // Validation problems are returned (not thrown) so the real reason reaches the
+  // user — production redacts every error thrown from a Server Action to a
+  // generic "Server Components render" message.
+  const fail = (message: string) => ({ created: 0, updated: 0, skipped: 0, errors: [message] });
 
-  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return fail("Choose a CSV or Excel file.");
+  const buf = Buffer.from(await file.arrayBuffer());
+  let rows: string[][];
+  try {
+    // Strip a UTF-8 BOM (Excel / Google Sheets add one on save) so the first
+    // header cell reads "name", not "﻿name".
+    rows = file.name.toLowerCase().endsWith(".xlsx") ? await parseXlsx(buf) : parseCsv(buf.toString("utf8").replace(/^﻿/, ""));
+  } catch {
+    return fail("Could not read the file. Save it as a plain CSV or .xlsx and try again.");
+  }
+  if (rows.length < 2) return fail("The file has no data rows (needs a header row + at least one product).");
+
+  const header = rows[0].map((h) => h.replace(/^﻿/, "").trim().toLowerCase());
   const col = (names: string[]) => header.findIndex((h) => names.includes(h));
   const iName = col(["name", "item", "product", "description"]);
   const iUnit = col(["unit", "uom"]);
@@ -152,7 +164,7 @@ export async function importProducts(
   const iSup = col(["supplier", "supplier name", "company"]);
   const iCode = col(["code", "supplier code", "sku"]);
   const iPrice = col(["price", "unit price", "cost"]);
-  if (iName < 0) throw new Error('The file needs a "name" column.');
+  if (iName < 0) return fail(`The file needs a "name" column. Columns found: ${header.filter(Boolean).join(", ") || "(none)"}.`);
 
   // Group rows by product name; collect a supplier link per row that has one.
   const groups = new Map<string, ImportGroup>();
@@ -178,11 +190,18 @@ export async function importProducts(
     groups.set(key, g);
   }
 
+  if (groups.size === 0) return fail("No products found in the file (every row was missing a name).");
+
   // Ensure imported supplier companies exist in the directory, then resolve ids.
-  const distinctCompanies = [...new Set([...groups.values()].flatMap((g) => g.suppliers.map((s) => s.company)))];
-  for (const company of distinctCompanies) await rememberSupplier({ company });
-  const dir = await getSuppliers();
-  const idByCompany = new Map(dir.map((s) => [s.company.toLowerCase(), s.id]));
+  const idByCompany = new Map<string, string>();
+  try {
+    const distinctCompanies = [...new Set([...groups.values()].flatMap((g) => g.suppliers.map((s) => s.company)))];
+    for (const company of distinctCompanies) await rememberSupplier({ company });
+    const dir = await getSuppliers();
+    for (const s of dir) idByCompany.set(s.company.toLowerCase(), s.id);
+  } catch {
+    return fail("Could not update the supplier directory. Please try again.");
+  }
   for (const g of groups.values()) {
     for (const s of g.suppliers) s.supplierId = idByCompany.get(s.company.toLowerCase()) ?? "";
   }
