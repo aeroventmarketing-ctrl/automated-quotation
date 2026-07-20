@@ -13,7 +13,8 @@ import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
 import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest, deletePurchaseRequest } from "../orders/actions";
 import { PurchaseReturnsPanel } from "./purchase-returns-panel";
-import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
+import { PurchaseReconcilePanel } from "./purchase-reconcile-panel";
+import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
@@ -66,6 +67,9 @@ export interface BatchCard {
   returns: PurchaseReturnView[];
   canRaiseReturn: boolean;
   canResolveReturn: boolean;
+  reconcile: PurchaseReconcileView;
+  canRecordReconcile: boolean;
+  canSettleReconcile: boolean;
 }
 
 function todayInput(): string {
@@ -330,6 +334,14 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         returns={batch.returns}
         canRaiseReturn={batch.canRaiseReturn}
         canResolveReturn={batch.canResolveReturn}
+      />
+
+      {/* Voucher reconciliation — actual spend vs the issued voucher for this PO. */}
+      <PurchaseReconcilePanel
+        prId={batch.anchorId}
+        reconcile={batch.reconcile}
+        canRecord={batch.canRecordReconcile}
+        canSettle={batch.canSettleReconcile}
       />
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">

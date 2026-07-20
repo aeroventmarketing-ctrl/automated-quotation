@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest, deletePurchaseRequest } from "../actions";
 import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
-import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
+import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
+import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
@@ -41,6 +42,9 @@ interface PRRow {
   returns?: PurchaseReturnView[];
   canRaiseReturn?: boolean;
   canResolveReturn?: boolean;
+  reconcile?: PurchaseReconcileView;
+  canRecordReconcile?: boolean;
+  canSettleReconcile?: boolean;
 }
 
 export function PurchasingChain({
@@ -195,6 +199,17 @@ export function PurchasingChain({
               canResolveReturn={!readOnly && (r.canResolveReturn ?? false)}
               readOnly={readOnly}
             />
+
+            {/* Voucher reconciliation — actual spend vs the issued voucher. */}
+            {r.reconcile && (
+              <PurchaseReconcilePanel
+                prId={r.id}
+                reconcile={r.reconcile}
+                canRecord={!readOnly && (r.canRecordReconcile ?? false)}
+                canSettle={!readOnly && (r.canSettleReconcile ?? false)}
+                readOnly={readOnly}
+              />
+            )}
 
             {/* Supplier Purchase Order — a rejected request can't get a new PO. */}
             {(r.status !== "REJECTED" || r.po) && (

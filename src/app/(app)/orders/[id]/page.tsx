@@ -22,7 +22,7 @@ import {
   type OrderStage,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
-import { buildPurchaseTrail, buildReturnViews } from "@/lib/purchase-chain-row";
+import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
@@ -383,6 +383,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       returns: buildReturnViews(pr),
       canRaiseReturn: false,
       canResolveReturn: false,
+      reconcile: buildReconcileView(pr),
+      canRecordReconcile: false,
+      canSettleReconcile: false,
     };
   });
 

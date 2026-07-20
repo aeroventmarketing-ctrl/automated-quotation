@@ -324,6 +324,10 @@ model PurchaseRequest {
   // resolvedByName, resolvedRole, resolvedAt, resolutionNote }]. A PO can't be
   // received into stock while any return is unresolved.
   returns       Json                  @default("[]")
+  // Voucher reconciliation: actual cash spent vs the issued voucher (PO total),
+  // receipts attached — { voucherAmount, actualSpent, receipts[], recordedByName,
+  // recordedAt, settled? }. Auto-tallies so change/overspend is flagged.
+  reconciliation Json                 @default("{}")
 
   createdById   String
   createdByName String

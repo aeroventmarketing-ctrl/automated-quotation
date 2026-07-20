@@ -3,9 +3,10 @@
  * PurchaseRequest. Shared by the per-order Phase 3 box (read-only monitoring)
  * and the central Purchasing workspace (where the purchaser processes them).
  */
-import { coercePurchaseOrder, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLineFromPRItem, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
+import { coerceReconciliation, computeVariance, isReconciled, canReconcileAt, type ReconcileStatus } from "@/lib/purchase-reconcile";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { formatDateTime } from "@/lib/utils";
@@ -27,6 +28,38 @@ export interface PurchaseReturnView {
   proof: { path: string; name: string }[]; // proof the item was replaced
 }
 
+/** Voucher reconciliation, formatted for display. */
+export interface PurchaseReconcileView {
+  voucherAmount: number; // issued voucher (PO total, or the stored amount)
+  actualSpent: number | null; // null until the purchaser records it
+  variance: number; // voucher − spent
+  status: ReconcileStatus | null; // null until recorded
+  receipts: { path: string; name: string }[];
+  recorded: string | null; // "Name (Role) · date/time"
+  settled: string | null; // settlement stamp, or null
+  note: string | null;
+}
+
+export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileView {
+  const r = coerceReconciliation(pr.reconciliation);
+  const po = coercePurchaseOrder(pr.po);
+  const poTotal = po ? poTotals(po).total : 0;
+  const voucherAmount = typeof r.voucherAmount === "number" ? r.voucherAmount : poTotal;
+  const recorded = isReconciled(r);
+  const actualSpent = recorded ? r.actualSpent! : null;
+  const v = recorded ? computeVariance(voucherAmount, actualSpent!) : null;
+  return {
+    voucherAmount,
+    actualSpent,
+    variance: v?.variance ?? 0,
+    status: v?.status ?? null,
+    receipts: (r.receipts ?? []).map((d) => ({ path: d.path, name: d.name })),
+    recorded: r.recordedAt ? `${r.recordedByName}${r.recordedRole ? ` (${r.recordedRole})` : ""} · ${formatDateTime(new Date(r.recordedAt))}` : null,
+    settled: r.settled?.at ? `${r.settled.byName}${r.settled.role ? ` (${r.settled.role})` : ""} · ${formatDateTime(new Date(r.settled.at))}${r.settled.note ? ` · ${r.settled.note}` : ""}` : null,
+    note: r.note ?? null,
+  };
+}
+
 export interface PurchaseChainRow {
   id: string;
   deptLabel: string;
@@ -46,6 +79,9 @@ export interface PurchaseChainRow {
   returns: PurchaseReturnView[];
   canRaiseReturn: boolean;
   canResolveReturn: boolean;
+  reconcile: PurchaseReconcileView;
+  canRecordReconcile: boolean;
+  canSettleReconcile: boolean;
 }
 
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
@@ -72,6 +108,7 @@ export interface PurchaseRequestLike {
   plantApprovedAt: Date | null;
   chainLog?: unknown;
   returns?: unknown;
+  reconciliation?: unknown;
 }
 
 /** Format a request's supplier returns for display. */
@@ -163,6 +200,11 @@ export function buildPurchaseChainRow(
   const canRaiseReturn =
     canRaiseReturnAt(status) && (ctx.canAct("purchaser") || ctx.canAct("warehouse") || ctx.canAct("plant_manager"));
   const canResolveReturn = ctx.canAct("purchaser") || ctx.canAct("warehouse");
+  // Voucher reconciliation: the purchaser records the spend once bought;
+  // accounting or the purchaser settle any change / overspend.
+  const reconcile = buildReconcileView(pr);
+  const canRecordReconcile = canReconcileAt(status) && ctx.canAct("purchaser");
+  const canSettleReconcile = ctx.canAct("accounting") || ctx.canAct("purchaser");
   const actions = purchaseStepsFrom(status).map((step) => {
     const names = ctx.namesForRole(step.role);
     return {
@@ -191,5 +233,8 @@ export function buildPurchaseChainRow(
     returns,
     canRaiseReturn,
     canResolveReturn,
+    reconcile,
+    canRecordReconcile,
+    canSettleReconcile,
   };
 }

@@ -5,8 +5,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
-import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews } from "@/lib/purchase-chain-row";
+import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
+import { canReconcileAt } from "@/lib/purchase-reconcile";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
@@ -184,6 +185,10 @@ export default async function PurchasingPage() {
       const returns = buildReturnViews(anchor);
       const canRaiseReturn = canRaiseReturnAt(status) && (canAct("purchaser") || canAct("warehouse") || canAct("plant_manager"));
       const canResolveReturn = canAct("purchaser") || canAct("warehouse");
+      // Voucher reconciliation rides on the anchor (the whole PO / voucher).
+      const reconcile = buildReconcileView(anchor);
+      const canRecordReconcile = canReconcileAt(status) && canAct("purchaser");
+      const canSettleReconcile = canAct("accounting") || canAct("purchaser");
       return {
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
@@ -211,6 +216,9 @@ export default async function PurchasingPage() {
         returns,
         canRaiseReturn,
         canResolveReturn,
+        reconcile,
+        canRecordReconcile,
+        canSettleReconcile,
       } satisfies BatchCard;
     });
 
