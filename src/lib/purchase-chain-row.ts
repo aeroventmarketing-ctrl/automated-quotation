@@ -5,6 +5,7 @@
  */
 import { coercePurchaseOrder, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
+import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { formatDateTime } from "@/lib/utils";
@@ -14,6 +15,15 @@ export interface PurchaseActionOpt {
   label: string;
   canAct: boolean;
   roleLabel: string;
+}
+
+/** A supplier return, formatted for display. */
+export interface PurchaseReturnView {
+  id: string;
+  items: string;
+  reason: string;
+  raised: string; // "Name (Role) · date/time"
+  resolved: string | null; // resolution stamp, or null while awaiting replacement
 }
 
 export interface PurchaseChainRow {
@@ -32,6 +42,9 @@ export interface PurchaseChainRow {
   canManagePO: boolean;
   canCancel?: boolean;
   canDelete?: boolean;
+  returns: PurchaseReturnView[];
+  canRaiseReturn: boolean;
+  canResolveReturn: boolean;
 }
 
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
@@ -57,6 +70,20 @@ export interface PurchaseRequestLike {
   plantApprovedByName: string | null;
   plantApprovedAt: Date | null;
   chainLog?: unknown;
+  returns?: unknown;
+}
+
+/** Format a request's supplier returns for display. */
+export function buildReturnViews(pr: PurchaseRequestLike): PurchaseReturnView[] {
+  return coercePurchaseReturns(pr.returns).map((r) => ({
+    id: r.id,
+    items: r.items,
+    reason: r.reason,
+    raised: `${r.raisedByName}${r.raisedRole ? ` (${r.raisedRole})` : ""} · ${formatDateTime(r.raisedAt ? new Date(r.raisedAt) : undefined)}`,
+    resolved: r.resolvedAt
+      ? `Replacement received — ${r.resolvedByName}${r.resolvedRole ? ` (${r.resolvedRole})` : ""} · ${formatDateTime(new Date(r.resolvedAt))}${r.resolutionNote ? ` · ${r.resolutionNote}` : ""}`
+      : null,
+  }));
 }
 
 interface ChainLogEntry { byName?: string; at?: string }
@@ -128,6 +155,12 @@ export function buildPurchaseChainRow(
   const status = pr.status as PRStatus;
   const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
   const trail = buildPurchaseTrail(pr);
+  const returns = buildReturnViews(pr);
+  // Inspectors (purchaser / warehouse / plant manager) can flag a return; the
+  // purchaser or warehouse can mark the replacement received.
+  const canRaiseReturn =
+    canRaiseReturnAt(status) && (ctx.canAct("purchaser") || ctx.canAct("warehouse") || ctx.canAct("plant_manager"));
+  const canResolveReturn = ctx.canAct("purchaser") || ctx.canAct("warehouse");
   const actions = purchaseStepsFrom(status).map((step) => {
     const names = ctx.namesForRole(step.role);
     return {
@@ -153,5 +186,8 @@ export function buildPurchaseChainRow(
     canManagePO: ctx.canManagePO,
     canCancel: ctx.canCancel ?? false,
     canDelete: ctx.canDelete ?? false,
+    returns,
+    canRaiseReturn,
+    canResolveReturn,
   };
 }

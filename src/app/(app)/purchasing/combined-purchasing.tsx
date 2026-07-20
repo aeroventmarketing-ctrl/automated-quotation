@@ -12,6 +12,8 @@ import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
 import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest, deletePurchaseRequest } from "../orders/actions";
+import { PurchaseReturnsPanel } from "./purchase-returns-panel";
+import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
@@ -61,6 +63,9 @@ export interface BatchCard {
   canManagePO: boolean;
   canCancel: boolean;
   canDelete: boolean;
+  returns: PurchaseReturnView[];
+  canRaiseReturn: boolean;
+  canResolveReturn: boolean;
 }
 
 function todayInput(): string {
@@ -318,6 +323,14 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
       ) : awaiting ? (
         <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
       ) : null}
+
+      {/* Supplier returns — disapproved items in this PO sent back for replacement. */}
+      <PurchaseReturnsPanel
+        prId={batch.anchorId}
+        returns={batch.returns}
+        canRaiseReturn={batch.canRaiseReturn}
+        canResolveReturn={batch.canResolveReturn}
+      />
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">
         <span className="text-muted-foreground">

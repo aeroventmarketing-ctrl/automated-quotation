@@ -319,6 +319,11 @@ model PurchaseRequest {
   // Sign-off log for the extended chain steps (sign / release cash / hand to
   // purchaser / assign tasks / deliver) — { stepKey: { byName, at } }.
   chainLog      Json                  @default("{}")
+  // Supplier returns: items disapproved on inspection and sent back for
+  // replacement — [{ id, items, reason, raisedByName, raisedRole, raisedAt,
+  // resolvedByName, resolvedRole, resolvedAt, resolutionNote }]. A PO can't be
+  // received into stock while any return is unresolved.
+  returns       Json                  @default("[]")
 
   createdById   String
   createdByName String

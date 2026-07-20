@@ -6,6 +6,8 @@ import { Printer, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest, deletePurchaseRequest } from "../actions";
+import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
+import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
@@ -36,6 +38,9 @@ interface PRRow {
   canManagePO: boolean;
   canCancel?: boolean;
   canDelete?: boolean;
+  returns?: PurchaseReturnView[];
+  canRaiseReturn?: boolean;
+  canResolveReturn?: boolean;
 }
 
 export function PurchasingChain({
@@ -181,6 +186,15 @@ export function PurchasingChain({
             ) : awaiting ? (
               <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
             ) : null}
+
+            {/* Supplier returns — disapproved items sent back for replacement. */}
+            <PurchaseReturnsPanel
+              prId={r.id}
+              returns={r.returns ?? []}
+              canRaiseReturn={!readOnly && (r.canRaiseReturn ?? false)}
+              canResolveReturn={!readOnly && (r.canResolveReturn ?? false)}
+              readOnly={readOnly}
+            />
 
             {/* Supplier Purchase Order — a rejected request can't get a new PO. */}
             {(r.status !== "REJECTED" || r.po) && (

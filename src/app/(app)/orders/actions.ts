@@ -38,6 +38,7 @@ import {
   type OrderConversation,
 } from "@/lib/order-workflow";
 import { purchaseStep, isCancellable, type PRStatus } from "@/lib/purchasing";
+import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
@@ -668,6 +669,96 @@ export async function advancePurchaseRequest(
   revalidatePath("/purchasing");
 }
 
+/** Roles that can flag items for return to the supplier (any inspection point). */
+const RETURN_RAISE_ROLES: WorkflowRoleKey[] = ["purchaser", "warehouse", "plant_manager"];
+/** Roles that can mark a supplier return resolved (replacement received). */
+const RETURN_RESOLVE_ROLES: WorkflowRoleKey[] = ["purchaser", "warehouse"];
+
+async function userHasAnyRole(userId: string, roles: WorkflowRoleKey[]): Promise<boolean> {
+  const assignments = await getWorkflowRoles();
+  return roles.some((r) => userHasWorkflowRole(assignments, userId, r));
+}
+
+/**
+ * Flag one or more purchased items as disapproved and send them back to the
+ * supplier for replacement. Recorded against the request (the anchor, for a
+ * combined PO) with who/designation/when; the item is tracked until the
+ * replacement is received. The main chain keeps its status — the return rides
+ * alongside and gates the final "receive into stock" step.
+ */
+export async function returnPurchaseItems(
+  purchaseRequestId: string,
+  input: { items: string; reason: string },
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  if (!(admin || (await userHasAnyRole(user.id, RETURN_RAISE_ROLES)))) {
+    throw new Error("Only the Purchaser, Warehouse, Plant Manager or an admin can return items to the supplier.");
+  }
+  const items = input.items.trim();
+  const reason = input.reason.trim();
+  if (!items) throw new Error("Describe which item(s) are being returned.");
+  if (!reason) throw new Error("Give the reason for the return.");
+
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  if (!canRaiseReturnAt(pr.status as PRStatus)) {
+    throw new Error("Items can only be returned once they've been purchased and are under inspection.");
+  }
+
+  // The designation the actor is raising the return in (their inspecting role).
+  const assignments = await getWorkflowRoles();
+  const role = RETURN_RAISE_ROLES.find((r) => userHasWorkflowRole(assignments, user.id, r));
+  const raisedRole = role ? workflowRoleLabel(role) : admin ? "Admin" : "";
+
+  const list = coercePurchaseReturns(pr.returns);
+  list.push({
+    id: randomUUID(),
+    items,
+    reason,
+    raisedByName: user.name,
+    raisedRole,
+    raisedAt: new Date().toISOString(),
+  });
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { returns: list as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/** Mark a supplier return resolved — the replacement has been received/settled. */
+export async function resolvePurchaseReturn(
+  purchaseRequestId: string,
+  returnId: string,
+  note?: string,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  if (!(admin || (await userHasAnyRole(user.id, RETURN_RESOLVE_ROLES)))) {
+    throw new Error("Only the Purchaser, Warehouse or an admin can resolve a supplier return.");
+  }
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const assignments = await getWorkflowRoles();
+  const role = RETURN_RESOLVE_ROLES.find((r) => userHasWorkflowRole(assignments, user.id, r));
+  const resolvedRole = role ? workflowRoleLabel(role) : admin ? "Admin" : "";
+
+  const list = coercePurchaseReturns(pr.returns);
+  const entry = list.find((r) => r.id === returnId);
+  if (!entry) throw new Error("Return not found.");
+  if (entry.resolvedAt) throw new Error("This return is already resolved.");
+  entry.resolvedByName = user.name;
+  entry.resolvedRole = resolvedRole;
+  entry.resolvedAt = new Date().toISOString();
+  if (note && note.trim()) entry.resolutionNote = note.trim();
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { returns: list as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
 /**
  * Cancel a purchase request (single or the whole combined PO). Before approval
  * the requestor, the purchaser, or an admin can cancel; once approved only an
@@ -986,6 +1077,9 @@ export async function receiveCombinedPO(anchorPurchaseRequestId: string, matches
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
   if (members.some((m) => m.status !== "PLANT_APPROVED")) throw new Error("This purchase isn't ready to receive (awaiting Plant Manager's final approval).");
+  if (members.some((m) => hasUnresolvedReturn(coercePurchaseReturns(m.returns)))) {
+    throw new Error("Resolve all supplier returns first — a replacement must be received before this PO can be added to stock.");
+  }
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
   await prisma.$transaction(async (tx) => {
@@ -1447,6 +1541,9 @@ export async function receivePurchaseRequest(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   if (pr.status !== "PLANT_APPROVED") throw new Error("This purchase isn't ready to receive (awaiting Plant Manager's final approval).");
+  if (hasUnresolvedReturn(coercePurchaseReturns(pr.returns))) {
+    throw new Error("Resolve all supplier returns first — a replacement must be received before this PO can be added to stock.");
+  }
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
 

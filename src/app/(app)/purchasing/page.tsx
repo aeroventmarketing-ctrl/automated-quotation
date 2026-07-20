@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
-import { buildPurchaseChainRow, buildPurchaseTrail } from "@/lib/purchase-chain-row";
+import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews } from "@/lib/purchase-chain-row";
+import { canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
@@ -179,6 +180,10 @@ export default async function PurchasingPage() {
       const bRequestor = viewer != null && members.some((m) => m.createdById === viewer.id);
       const canCancel = isCancellable(status) && (status !== "PENDING_APPROVAL" ? admin : admin || canManagePO || bRequestor);
       const canDelete = canDeleteStatus(status);
+      // Supplier returns ride on the anchor request (the whole PO).
+      const returns = buildReturnViews(anchor);
+      const canRaiseReturn = canRaiseReturnAt(status) && (canAct("purchaser") || canAct("warehouse") || canAct("plant_manager"));
+      const canResolveReturn = canAct("purchaser") || canAct("warehouse");
       return {
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
@@ -203,6 +208,9 @@ export default async function PurchasingPage() {
         canManagePO,
         canCancel,
         canDelete,
+        returns,
+        canRaiseReturn,
+        canResolveReturn,
       } satisfies BatchCard;
     });
 
