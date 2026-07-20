@@ -2757,6 +2757,74 @@ export function QuotationBuilder({
     return { net, vat: gross - net, gross, exclusive, displayedNet, markupAmt, afterMarkup, discountAmt, finalNet, addVat, vatAmt, grandTotal };
   }, [lines, vatRate, effectiveVatMode, pricing]);
 
+  // --- Auto-save ---------------------------------------------------------
+  // The savable payload, mirrored from the manual "Save changes" mapping so the
+  // two never drift. Serialised into a signature we compare against the last
+  // saved state to know when there's genuinely something new to persist.
+  const savePayload = useMemo(
+    () => ({
+      lines: lines.map((l) => ({
+        id: l.id,
+        descriptionSnapshot: l.descriptionSnapshot,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        lineTotal: lineGross(l),
+        selectionNote: l.selectionNote,
+        specsSnapshot: { ...l.rawSpecs, ...l.specs },
+      })),
+      meta: {
+        templateId,
+        notes,
+        terms,
+        validUntil: validUntil || undefined,
+        projectName,
+        vatMode: effectiveVatMode,
+        discountPct: pricing.discountMode === "percent" ? pricing.discountValue : 0,
+        pricing,
+        headerUnits: units,
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lines, templateId, notes, terms, validUntil, projectName, effectiveVatMode, pricing, units],
+  );
+  const sig = useMemo(() => JSON.stringify(savePayload), [savePayload]);
+  // Baseline = the payload as first loaded (useRef keeps the first-render value).
+  const lastSavedSig = useRef(sig);
+  const [autoState, setAutoState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSaveAt, setLastSaveAt] = useState<Date | null>(null);
+  // Mirror `busy` into a ref so the auto-save timer can bail when a manual save
+  // or workflow action is mid-flight, without re-subscribing the effect.
+  const busyRef = useRef(false);
+  useEffect(() => { busyRef.current = busy; }, [busy]);
+
+  // Persist the current payload (shared by manual + auto save).
+  async function persist(): Promise<void> {
+    await updateQuotationLines(quotation.id, savePayload.lines, savePayload.meta);
+    lastSavedSig.current = sig;
+    setLastSaveAt(new Date());
+  }
+
+  // Auto-save: a few seconds after the last edit, persist the draft quietly so
+  // progress survives a crash / refresh / connection drop — important for large
+  // quotations. Draft-only; no router.refresh() so the editing session isn't
+  // disrupted; skipped while a manual save / workflow action is running.
+  useEffect(() => {
+    if (!editable) return;
+    if (sig === lastSavedSig.current) return; // nothing new since the last save
+    const t = setTimeout(async () => {
+      if (busyRef.current) return; // manual op in flight — try again on next edit
+      setAutoState("saving");
+      try {
+        await persist();
+        setAutoState("saved");
+      } catch {
+        setAutoState("error");
+      }
+    }, 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig, editable]);
+
   // Live "duplicate quote" check: as the line items change, look for existing
   // quotes with the identical item set (debounced; DRAFT only).
   useEffect(() => {
@@ -3672,36 +3740,14 @@ export function QuotationBuilder({
   async function save() {
     setBusy(true);
     setMsg(null);
+    setAutoState("saving");
     try {
-      await updateQuotationLines(
-        quotation.id,
-        lines.map((l) => ({
-          id: l.id,
-          descriptionSnapshot: l.descriptionSnapshot,
-          qty: l.qty,
-          unitPrice: l.unitPrice,
-          lineTotal: lineGross(l),
-          selectionNote: l.selectionNote,
-          // merge edited flat specs back over anything nested (selection/requirement)
-          specsSnapshot: { ...l.rawSpecs, ...l.specs },
-        })),
-        {
-          templateId,
-          notes,
-          terms,
-          validUntil: validUntil || undefined,
-          projectName,
-          vatMode: effectiveVatMode,
-          // Legacy column kept in sync for older readers: a percent discount maps
-          // through; an amount discount can't be expressed as a %, so store 0.
-          discountPct: pricing.discountMode === "percent" ? pricing.discountValue : 0,
-          pricing,
-          headerUnits: units,
-        },
-      );
+      await persist();
+      setAutoState("saved");
       setMsg("Saved.");
       router.refresh();
     } catch (e) {
+      setAutoState("error");
       setMsg(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
@@ -5952,6 +5998,19 @@ export function QuotationBuilder({
       <div className="flex flex-wrap items-center gap-2">
         {editable && (
           <Button onClick={save} disabled={busy} size="lg">{busy ? "Saving…" : "Save changes"}</Button>
+        )}
+        {editable && (
+          <span className="text-xs text-muted-foreground" aria-live="polite">
+            {autoState === "saving"
+              ? "Auto-saving…"
+              : autoState === "error"
+                ? <span className="font-medium text-destructive">Auto-save failed — click “Save changes”</span>
+                : sig !== lastSavedSig.current
+                  ? "Unsaved changes — auto-saves in a few seconds"
+                  : lastSaveAt
+                    ? `All changes saved · ${lastSaveAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", timeZone: "Asia/Manila" })}`
+                    : "Auto-save on"}
+          </span>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {quotation.status === "DRAFT" && (
