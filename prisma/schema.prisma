@@ -365,6 +365,64 @@ model PurchaseRequest {
   @@index([status])
 }
 
+enum CashRequestStatus {
+  SUBMITTED      // requestor requested money, awaiting accounting to prepare voucher
+  REJECTED       // approver rejected the voucher
+  VOUCHER_READY  // accounting prepared the voucher, awaiting the approver
+  CASH_RELEASED  // approver approved the voucher & released cash (held by accounting)
+  DISBURSED      // accounting handed the cash to the requestor
+  RECEIVED       // requestor confirmed the cash received
+  LIQUIDATED     // requestor liquidated (receipts + actual spend)
+  SETTLED        // change returned / overspend reimbursed
+  CANCELLED      // withdrawn before the voucher was prepared
+}
+
+/**
+ * A cash request (cash voucher) — AeroVent's general money-request flow for cash
+ * that isn't a supplier material PO (advances, reimbursements, petty cash,
+ * expenses). Walks a role-gated chain: request → voucher (accounting) → approve
+ * & release cash (approver) → hand to requestor (accounting) → confirm →
+ * liquidate. See src/lib/cash-request.ts.
+ */
+model CashRequest {
+  id            String            @id @default(cuid())
+  number        String            @unique // CV-<year><seq>
+  purpose       String
+  category      String            @default("advance") // advance | reimbursement | expense | petty_cash | other
+  dept          String? // optional department the cash is for
+  amount        Decimal           @db.Decimal(14, 2) // requested / released amount
+  lines         Json              @default("[]") // optional breakdown [{ description, amount }]
+  status        CashRequestStatus @default(SUBMITTED)
+
+  requestedById   String
+  requestedByName String
+  note            String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Accounting prepares the voucher.
+  voucherRef    String?
+  voucherByName String?
+  voucherAt     DateTime?
+  // Approver decision (approve & release, or reject).
+  decidedByName String?
+  decisionNote  String?
+  decidedAt     DateTime?
+  releasedByName String?
+  releasedAt    DateTime?
+  // Accounting hands the cash to the requestor.
+  disbursedByName String?
+  disbursedAt   DateTime?
+  // Requestor confirms receipt.
+  receivedByName String?
+  receivedAt    DateTime?
+  // Liquidation: actual spend + receipts, change/overspend settlement.
+  liquidation   Json              @default("{}")
+
+  @@index([status])
+  @@index([requestedById])
+}
+
 /**
  * Sales commission (Phase 7). One row per closed order: 1.5% of the order value,
  * credited to the order's salesperson and attributed to the close month.
