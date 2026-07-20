@@ -187,7 +187,7 @@ export default async function PurchasingPage() {
       const canResolveReturn = canAct("purchaser") || canAct("warehouse");
       // Voucher reconciliation rides on the anchor (the whole PO / voucher).
       const reconcile = buildReconcileView(anchor);
-      const canRecordReconcile = canReconcileAt(status) && canAct("purchaser");
+      const canRecordReconcile = canReconcileAt(status) && (canAct("purchaser") || canAct("accounting"));
       const canSettleReconcile = canAct("accounting") || canAct("purchaser");
       return {
         anchorId: anchor.id,

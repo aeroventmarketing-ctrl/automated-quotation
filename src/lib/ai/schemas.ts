@@ -37,3 +37,26 @@ export const matchResultSchema = z.object({
 
 export type MatchCandidate = z.infer<typeof matchCandidateSchema>;
 export type MatchResult = z.infer<typeof matchResultSchema>;
+
+// --- Receipt reading (voucher reconciliation) -------------------------------
+// One entry per PO line, in the same order, carrying the actual amount the AI
+// found for it on the receipt(s).
+export const receiptLineSchema = z.object({
+  actualAmount: z.number().nullable().default(null),
+  matched: z.boolean().default(false),
+  note: z.string().default(""),
+});
+
+export const receiptReadSchema = z.object({
+  supplier: z.string().nullable().default(null),
+  date: z.string().nullable().default(null),
+  vatMode: z.enum(["inclusive", "exclusive"]).nullable().default(null),
+  receiptTotal: z.number().nullable().default(null),
+  lines: z.array(receiptLineSchema).default([]),
+  extraItems: z
+    .array(z.object({ description: z.string().default(""), amount: z.number().nullable().default(null) }))
+    .default([]),
+  warnings: z.array(z.string()).default([]),
+});
+
+export type ReceiptRead = z.infer<typeof receiptReadSchema>;

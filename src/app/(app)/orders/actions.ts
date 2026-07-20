@@ -790,8 +790,10 @@ export async function recordReconciliation(
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const admin = isAdmin(user);
-  if (!(admin || (await userHasAnyRole(user.id, ["purchaser"])))) {
-    throw new Error("Only the Purchaser or an admin can reconcile a voucher.");
+  const assignments = await getWorkflowRoles();
+  const recRole = (["purchaser", "accounting"] as WorkflowRoleKey[]).find((r) => userHasWorkflowRole(assignments, user.id, r));
+  if (!(admin || recRole)) {
+    throw new Error("Only the Purchaser, Accounting or an admin can reconcile a voucher.");
   }
   const lines = (input.lines ?? [])
     .map((l) => ({
@@ -817,7 +819,7 @@ export async function recordReconciliation(
     lines,
     receipts: receipts.length ? receipts : cur.receipts,
     recordedByName: user.name,
-    recordedRole: admin ? "Admin" : workflowRoleLabel("purchaser"),
+    recordedRole: recRole ? workflowRoleLabel(recRole) : "Admin",
     recordedAt: new Date().toISOString(),
     note: input.note?.trim() || undefined,
   };

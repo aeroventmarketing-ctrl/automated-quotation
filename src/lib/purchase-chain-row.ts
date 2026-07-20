@@ -242,7 +242,7 @@ export function buildPurchaseChainRow(
   // Voucher reconciliation: the purchaser records the spend once bought;
   // accounting or the purchaser settle any change / overspend.
   const reconcile = buildReconcileView(pr);
-  const canRecordReconcile = canReconcileAt(status) && ctx.canAct("purchaser");
+  const canRecordReconcile = canReconcileAt(status) && (ctx.canAct("purchaser") || ctx.canAct("accounting"));
   const canSettleReconcile = ctx.canAct("accounting") || ctx.canAct("purchaser");
   const actions = purchaseStepsFrom(status).map((step) => {
     const names = ctx.namesForRole(step.role);

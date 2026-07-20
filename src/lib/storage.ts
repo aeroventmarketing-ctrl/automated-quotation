@@ -27,6 +27,15 @@ export async function uploadToStorage(path: string, bytes: Uint8Array, contentTy
   if (retry.error) throw retry.error;
 }
 
+/** Download a stored object as base64 + its content type (for AI vision, etc.). */
+export async function downloadFromStorage(path: string): Promise<{ base64: string; contentType: string }> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.storage.from(config.storageBucket).download(path);
+  if (error || !data) throw error ?? new Error("Download failed");
+  const buf = Buffer.from(await data.arrayBuffer());
+  return { base64: buf.toString("base64"), contentType: data.type || "application/octet-stream" };
+}
+
 /**
  * A short-lived signed URL for a stored object. Pass `download` to force a
  * download (a filename string sets the saved name; `true` uses the stored one);

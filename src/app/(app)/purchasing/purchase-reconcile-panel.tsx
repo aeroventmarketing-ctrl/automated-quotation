@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Scale, Upload, FileText, Download, Trash2 } from "lucide-react";
+import { Scale, Upload, FileText, Download, Trash2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReconcileView } from "@/lib/purchase-chain-row";
@@ -54,6 +54,9 @@ export function PurchaseReconcilePanel({
   const [receipts, setReceipts] = useState<SaleDoc[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // AI read-receipt results (info + warnings shown under the table).
+  const [aiInfo, setAiInfo] = useState<string | null>(null);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
 
   const factor = vatMode === "exclusive" ? 1 + VAT : 1;
   const preview = useMemo(() => {
@@ -80,6 +83,40 @@ export function PurchaseReconcilePanel({
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setReceipts((rs) => [...rs, data as SaleDoc]);
     } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
+    finally { setBusy(null); }
+  }
+
+  // Read the uploaded receipt image(s) with AI and auto-fill the per-line
+  // actuals, so there's no manual typing/checking — just review and record.
+  async function autoRead() {
+    if (receipts.length === 0) { setErr("Upload the receipt image first."); return; }
+    setBusy("read"); setErr(null); setAiInfo(null); setAiWarnings([]);
+    try {
+      const res = await fetch("/api/ai/read-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purchaseRequestId: prId, paths: receipts.map((r) => r.path) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not read the receipt.");
+      // Fill the per-line actuals the AI matched (leave unmatched blank).
+      setRows((rs) => rs.map((r, i) => {
+        const l = data.lines?.[i];
+        return l && typeof l.actualAmount === "number" ? { ...r, actual: String(l.actualAmount) } : r;
+      }));
+      if (data.vatMode === "inclusive" || data.vatMode === "exclusive") setVatMode(data.vatMode);
+      const bits = [
+        data.supplier ? `Supplier: ${data.supplier}` : "",
+        data.date ? `Date: ${data.date}` : "",
+        typeof data.receiptTotal === "number" ? `Receipt total: ₱${new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2 }).format(data.receiptTotal)}` : "",
+      ].filter(Boolean);
+      setAiInfo(bits.length ? `Read ✓ · ${bits.join(" · ")}` : "Receipt read.");
+      const warns = Array.isArray(data.warnings) ? [...data.warnings] : [];
+      const unmatched = (data.lines ?? []).filter((l: { actualAmount: number | null }) => l.actualAmount === null).length;
+      if (unmatched > 0) warns.push(`${unmatched} PO line${unmatched === 1 ? "" : "s"} not found on the receipt — enter ${unmatched === 1 ? "it" : "them"} manually.`);
+      if (Array.isArray(data.extraItems) && data.extraItems.length) warns.push(`${data.extraItems.length} receipt item(s) not on the PO: ${data.extraItems.map((e: { description: string }) => e.description).filter(Boolean).join(", ")}.`);
+      setAiWarnings(warns);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
 
@@ -272,7 +309,19 @@ export function PurchaseReconcilePanel({
               <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : receipts.length ? "Add receipt" : "Upload receipt"}
               <input type="file" className="hidden" disabled={busy === "upload"} onChange={(e) => e.target.files?.[0] && uploadReceipt(e.target.files[0])} />
             </label>
+            {receipts.length > 0 && (
+              <button type="button" onClick={autoRead} disabled={busy === "read"}
+                className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/5 px-2.5 py-1 font-semibold text-primary hover:bg-primary/10 disabled:opacity-60">
+                <Sparkles className="h-3.5 w-3.5" /> {busy === "read" ? "Reading…" : "Auto-read receipt"}
+              </button>
+            )}
           </div>
+          {aiInfo && <p className="text-xs text-emerald-700">{aiInfo}</p>}
+          {aiWarnings.length > 0 && (
+            <ul className="space-y-0.5 text-xs text-amber-700">
+              {aiWarnings.map((w, i) => <li key={i}>⚠ {w}</li>)}
+            </ul>
+          )}
           <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
           <div className="flex items-center gap-2">
             <Button size="sm" className="h-7 text-xs" disabled={busy === "record"} onClick={record}>{busy === "record" ? "Saving…" : "Record & tally"}</Button>
