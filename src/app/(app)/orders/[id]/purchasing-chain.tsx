@@ -193,13 +193,16 @@ export function PurchasingChain({
               <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
             ) : null}
 
-            {/* Supplier returns — disapproved items sent back for replacement. */}
+            {/* Supplier returns — disapproved items sent back for replacement.
+                Like reconciliation, interactivity follows the row's own return
+                permissions so it works on monitoring surfaces (e.g. Requisitions)
+                for whoever may raise/resolve a return. */}
             <PurchaseReturnsPanel
               prId={r.id}
               returns={r.returns ?? []}
-              canRaiseReturn={!readOnly && (r.canRaiseReturn ?? false)}
-              canResolveReturn={!readOnly && (r.canResolveReturn ?? false)}
-              readOnly={readOnly}
+              canRaiseReturn={r.canRaiseReturn ?? false}
+              canResolveReturn={r.canResolveReturn ?? false}
+              readOnly={!(r.canRaiseReturn || r.canResolveReturn)}
             />
 
             {/* Voucher reconciliation — actual spend vs the issued voucher.
