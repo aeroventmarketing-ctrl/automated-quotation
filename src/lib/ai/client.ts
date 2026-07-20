@@ -71,10 +71,72 @@ function toAnthropicContent(blocks: ContentBlock[]): Anthropic.MessageParam["con
   });
 }
 
+/** A provider-neutral chat message (converted per provider at call time). */
+interface NeutralMessage {
+  role: "user" | "assistant";
+  content: ContentBlock[];
+}
+interface RunResult {
+  text: string;
+  inTokens: number;
+  outTokens: number;
+}
+
+/** OpenAI-compatible content (used by OpenRouter). */
+function toOpenAIContent(blocks: ContentBlock[]): string | Record<string, unknown>[] {
+  if (blocks.every((b) => b.type === "text")) return blocks.map((b) => b.text ?? "").join("\n");
+  return blocks.map((b) => {
+    if (b.type === "image" && b.image) return { type: "image_url", image_url: { url: `data:${b.image.mediaType};base64,${b.image.base64}` } };
+    if (b.type === "document" && b.document) return { type: "file", file: { filename: "receipt.pdf", file_data: `data:application/pdf;base64,${b.document.base64}` } };
+    return { type: "text", text: b.text ?? "" };
+  });
+}
+
+async function runAnthropic(system: string, messages: NeutralMessage[], maxTokens: number): Promise<RunResult> {
+  const client = getClient();
+  const res = await client.messages.create({
+    model: config.anthropicModel,
+    max_tokens: maxTokens,
+    system,
+    messages: messages.map((m) => ({ role: m.role, content: toAnthropicContent(m.content) })),
+  });
+  const block = res.content.find((c) => c.type === "text");
+  return { text: block && "text" in block ? block.text : "", inTokens: res.usage?.input_tokens ?? 0, outTokens: res.usage?.output_tokens ?? 0 };
+}
+
+async function runOpenRouter(system: string, messages: NeutralMessage[], maxTokens: number): Promise<RunResult> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("OPENROUTER_API_KEY is not set");
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": config.appUrl,
+      "X-Title": "AeroQuote",
+    },
+    body: JSON.stringify({
+      model: config.openrouterModel,
+      max_tokens: maxTokens,
+      messages: [{ role: "system", content: system }, ...messages.map((m) => ({ role: m.role, content: toOpenAIContent(m.content) }))],
+    }),
+  });
+  const json = (await res.json().catch(() => null)) as {
+    choices?: { message?: { content?: unknown } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+    error?: unknown;
+  } | null;
+  if (!res.ok) throw new Error(`${res.status} ${JSON.stringify(json?.error ?? json ?? {})}`);
+  const c = json?.choices?.[0]?.message?.content;
+  const text = typeof c === "string" ? c : Array.isArray(c) ? c.map((p) => (p as { text?: string }).text ?? "").join("") : "";
+  return { text, inTokens: json?.usage?.prompt_tokens ?? 0, outTokens: json?.usage?.completion_tokens ?? 0 };
+}
+
 /**
- * Call Claude and parse the response into a zod-validated object.
- * Strips markdown fences, and retries ONCE on a parse/validation failure with
- * an explicit "return valid JSON only" nudge.
+ * Call Claude (via Anthropic direct, or via OpenRouter when OPENROUTER_API_KEY
+ * is set / AI_PROVIDER=openrouter) and parse the response into a zod-validated
+ * object. Strips markdown fences, and retries ONCE on a parse/validation
+ * failure with an explicit "return valid JSON only" nudge.
  */
 export async function callClaudeJson<T>(opts: {
   system: string;
@@ -82,25 +144,18 @@ export async function callClaudeJson<T>(opts: {
   schema: z.ZodType<T>;
   maxTokens?: number;
 }): Promise<T> {
-  const client = getClient();
-  const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: toAnthropicContent(opts.content) },
-  ];
+  const useOpenRouter = config.aiProvider === "openrouter";
+  const runOnce = (msgs: NeutralMessage[]) =>
+    useOpenRouter ? runOpenRouter(opts.system, msgs, opts.maxTokens ?? 2048) : runAnthropic(opts.system, msgs, opts.maxTokens ?? 2048);
 
-  // Sum token usage across attempts and meter it once at the end.
+  const messages: NeutralMessage[] = [{ role: "user", content: opts.content }];
   let inTokens = 0;
   let outTokens = 0;
   const run = async (): Promise<string> => {
-    const res = await client.messages.create({
-      model: config.anthropicModel,
-      max_tokens: opts.maxTokens ?? 2048,
-      system: opts.system,
-      messages,
-    });
-    inTokens += res.usage?.input_tokens ?? 0;
-    outTokens += res.usage?.output_tokens ?? 0;
-    const block = res.content.find((c) => c.type === "text");
-    return block && "text" in block ? block.text : "";
+    const r = await runOnce(messages);
+    inTokens += r.inTokens;
+    outTokens += r.outTokens;
+    return r.text;
   };
 
   const attempt = (raw: string): T => {
@@ -115,12 +170,8 @@ export async function callClaudeJson<T>(opts: {
       return attempt(first);
     } catch {
       // Retry once: feed back the previous (bad) output and demand strict JSON.
-      messages.push({ role: "assistant", content: first });
-      messages.push({
-        role: "user",
-        content:
-          "That was not valid JSON matching the required schema. Reply again with STRICT JSON only — no prose, no markdown fences.",
-      });
+      messages.push({ role: "assistant", content: [{ type: "text", text: first }] });
+      messages.push({ role: "user", content: [{ type: "text", text: "That was not valid JSON matching the required schema. Reply again with STRICT JSON only — no prose, no markdown fences." }] });
       const second = await run();
       return attempt(second);
     }

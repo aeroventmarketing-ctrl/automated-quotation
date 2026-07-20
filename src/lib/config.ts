@@ -7,6 +7,12 @@ export const config = {
   // Current vision-capable default; override with ANTHROPIC_MODEL (e.g.
   // "claude-haiku-4-5-20251001" for lower cost on receipt reading).
   anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5",
+  // AI provider: "anthropic" (direct) or "openrouter" (same Claude models,
+  // pay with PayPal/crypto/more cards). Defaults to openrouter when an
+  // OPENROUTER_API_KEY is present, else anthropic.
+  aiProvider: (process.env.AI_PROVIDER ?? (process.env.OPENROUTER_API_KEY ? "openrouter" : "anthropic")).toLowerCase(),
+  // OpenRouter model slug (see openrouter.ai/models). A vision-capable Claude.
+  openrouterModel: process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet",
   // Optional: your Anthropic price per 1M tokens (USD), used only to show an
   // estimated cost on the AI-usage page. Leave unset to display token counts
   // only (no fabricated pricing). Find current rates on the Anthropic console.
