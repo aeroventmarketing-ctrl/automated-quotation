@@ -7,6 +7,9 @@ import { downloadFromStorage } from "@/lib/storage";
 import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { receiptReadSchema } from "@/lib/ai/schemas";
 import { coercePurchaseOrder, poLineAmount } from "@/lib/purchase-order";
+import { coerceReconciliation } from "@/lib/purchase-reconcile";
+import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
+import { Prisma } from "@prisma/client";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 
 export const runtime = "nodejs";
@@ -73,6 +76,19 @@ export async function POST(req: NextRequest) {
   const poLines = (po?.lines ?? []).map((l) => ({ description: l.description, qty: l.qty, poAmount: poLineAmount(l) }));
   if (poLines.length === 0) return NextResponse.json({ error: "This PO has no priced lines to reconcile against." }, { status: 400 });
 
+  // Cap the number of AI reads per voucher so Accounting verifies the document
+  // by hand instead of relying on repeated AI reads. The count is persisted.
+  const cur = coerceReconciliation(pr.reconciliation);
+  const reads = cur.aiReadCount ?? 0;
+  if (reads >= AI_RECEIPT_READ_LIMIT) {
+    return NextResponse.json({
+      error: `AI read limit reached (${AI_RECEIPT_READ_LIMIT} of ${AI_RECEIPT_READ_LIMIT} used). Please check the receipt and enter the figures manually.`,
+      limitReached: true,
+      reads,
+      limit: AI_RECEIPT_READ_LIMIT,
+    }, { status: 429 });
+  }
+
   // Load the receipt files from storage — images and PDFs are both read.
   const content: ContentBlock[] = [];
   const skipped: string[] = [];
@@ -125,6 +141,12 @@ export async function POST(req: NextRequest) {
     });
     const warnings = [...(result.warnings ?? [])];
     if (skipped.length) warnings.push(`Couldn't read: ${skipped.join(", ")} (not an image).`);
+    // A read completed — burn one of the allotted tries.
+    const usedReads = reads + 1;
+    await prisma.purchaseRequest.update({
+      where: { id: body.purchaseRequestId },
+      data: { reconciliation: { ...cur, aiReadCount: usedReads } as unknown as Prisma.InputJsonValue },
+    });
     return NextResponse.json({
       supplier: result.supplier,
       date: result.date,
@@ -133,6 +155,9 @@ export async function POST(req: NextRequest) {
       lines,
       extraItems: result.extraItems ?? [],
       warnings,
+      reads: usedReads,
+      limit: AI_RECEIPT_READ_LIMIT,
+      remaining: Math.max(0, AI_RECEIPT_READ_LIMIT - usedReads),
     });
   } catch (err) {
     console.error("read-receipt error", err);

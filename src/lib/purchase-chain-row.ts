@@ -56,6 +56,7 @@ export interface PurchaseReconcileView {
   approved: string | null; // approver authorised the discrepancy
   settled: string | null; // settlement stamp, or null
   note: string | null;
+  aiReads: number; // AI receipt reads used (against the per-voucher limit)
 }
 
 export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileView {
@@ -100,6 +101,7 @@ export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileVi
     approved: stampLabel(r.approval),
     settled: stampLabel(r.settled),
     note: r.note ?? null,
+    aiReads: r.aiReadCount ?? 0,
   };
 }
 

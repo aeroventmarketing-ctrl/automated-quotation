@@ -6,6 +6,9 @@ import { prisma } from "@/lib/db";
 import { downloadFromStorage } from "@/lib/storage";
 import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { receiptReadSchema } from "@/lib/ai/schemas";
+import { coerceLiquidation } from "@/lib/cash-request";
+import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
+import { Prisma } from "@prisma/client";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 
 export const runtime = "nodejs";
@@ -67,6 +70,19 @@ export async function POST(req: NextRequest) {
     if (!ok) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
 
+  // Cap the number of AI reads per liquidation so the document is verified by
+  // hand instead of relying on repeated AI reads. The count is persisted.
+  const cur = coerceLiquidation(cr.liquidation);
+  const reads = cur.aiReadCount ?? 0;
+  if (reads >= AI_RECEIPT_READ_LIMIT) {
+    return NextResponse.json({
+      error: `AI read limit reached (${AI_RECEIPT_READ_LIMIT} of ${AI_RECEIPT_READ_LIMIT} used). Please check the receipt and enter the figures manually.`,
+      limitReached: true,
+      reads,
+      limit: AI_RECEIPT_READ_LIMIT,
+    }, { status: 429 });
+  }
+
   const budgetLines = body.lines.length ? body.lines : [{ description: cr.purpose, budgetAmount: Number(cr.amount) || 0 }];
 
   const content: ContentBlock[] = [];
@@ -116,6 +132,12 @@ export async function POST(req: NextRequest) {
     });
     const warnings = [...(result.warnings ?? [])];
     if (skipped.length) warnings.push(`Couldn't read: ${skipped.join(", ")} (not an image/PDF).`);
+    // A read completed — burn one of the allotted tries.
+    const usedReads = reads + 1;
+    await prisma.cashRequest.update({
+      where: { id: body.cashRequestId },
+      data: { liquidation: { ...cur, aiReadCount: usedReads } as unknown as Prisma.InputJsonValue },
+    });
     return NextResponse.json({
       supplier: result.supplier,
       date: result.date,
@@ -123,6 +145,9 @@ export async function POST(req: NextRequest) {
       lines,
       extraItems: result.extraItems ?? [],
       warnings,
+      reads: usedReads,
+      limit: AI_RECEIPT_READ_LIMIT,
+      remaining: Math.max(0, AI_RECEIPT_READ_LIMIT - usedReads),
     });
   } catch (err) {
     console.error("read-cash-receipt error", err);

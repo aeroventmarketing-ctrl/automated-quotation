@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
+import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { recordReconciliation, settleReconciliation, escalateReconciliation, approveReconciliation } from "../orders/actions";
 
 const VAT = 0.12;
@@ -65,6 +66,10 @@ export function PurchaseReconcilePanel({
   // AI read-receipt results (info + warnings shown under the table).
   const [aiInfo, setAiInfo] = useState<string | null>(null);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+  // AI reads are capped per voucher — after the limit, figures go in by hand.
+  const [reads, setReads] = useState(reconcile.aiReads);
+  const readsLeft = Math.max(0, AI_RECEIPT_READ_LIMIT - reads);
+  const limitReached = readsLeft <= 0;
 
   const factor = vatMode === "exclusive" ? 1 + VAT : 1;
   const preview = useMemo(() => {
@@ -116,6 +121,7 @@ export function PurchaseReconcilePanel({
   // review (the only time a person is needed is when it doesn't balance).
   async function autoRead() {
     if (receipts.length === 0) { setErr("Upload the receipt first."); return; }
+    if (limitReached) { setErr(`AI read limit reached (${AI_RECEIPT_READ_LIMIT} of ${AI_RECEIPT_READ_LIMIT} used). Check the receipt and enter the figures manually.`); return; }
     setBusy("read"); setErr(null); setAiInfo(null); setAiWarnings([]);
     try {
       const res = await fetch("/api/ai/read-receipt", {
@@ -124,7 +130,12 @@ export function PurchaseReconcilePanel({
         body: JSON.stringify({ purchaseRequestId: prId, paths: receipts.map((r) => r.path) }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not read the receipt.");
+      if (!res.ok) {
+        // Limit hit: lock the button and show the notification (not a hard error).
+        if (data.limitReached) { setReads(typeof data.reads === "number" ? data.reads : AI_RECEIPT_READ_LIMIT); setAiInfo(null); setAiWarnings([data.error]); return; }
+        throw new Error(data.error || "Could not read the receipt.");
+      }
+      if (typeof data.reads === "number") setReads(data.reads);
 
       const vatUsed: "inclusive" | "exclusive" = data.vatMode === "exclusive" ? "exclusive" : data.vatMode === "inclusive" ? "inclusive" : vatMode;
       const newRows = rows.map((r, i) => {
@@ -412,9 +423,9 @@ export function PurchaseReconcilePanel({
               <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy === "upload"} onChange={(e) => e.target.files?.[0] && uploadReceipt(e.target.files[0])} />
             </label>
             {receipts.length > 0 && (
-              <button type="button" onClick={autoRead} disabled={busy === "read"}
+              <button type="button" onClick={autoRead} disabled={busy === "read" || limitReached}
                 className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/5 px-2.5 py-1 font-semibold text-primary hover:bg-primary/10 disabled:opacity-60">
-                <Sparkles className="h-3.5 w-3.5" /> {busy === "read" ? "Reading…" : "Auto-read receipt"}
+                <Sparkles className="h-3.5 w-3.5" /> {busy === "read" ? "Reading…" : limitReached ? "AI limit reached" : `Auto-read receipt${reads > 0 ? ` (${readsLeft} left)` : ""}`}
               </button>
             )}
           </div>
@@ -424,6 +435,13 @@ export function PurchaseReconcilePanel({
               {aiWarnings.map((w, i) => <li key={i}>⚠ {w}</li>)}
             </ul>
           )}
+          {limitReached ? (
+            <p className="rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1 text-xs font-medium text-destructive">
+              AI read limit reached ({AI_RECEIPT_READ_LIMIT} of {AI_RECEIPT_READ_LIMIT} used). Please check the receipt and enter the figures manually.
+            </p>
+          ) : reads > 0 ? (
+            <p className="text-xs text-muted-foreground">AI reads left: {readsLeft} of {AI_RECEIPT_READ_LIMIT}.</p>
+          ) : null}
           <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
           <div className="flex items-center gap-2">
             <Button size="sm" className="h-7 text-xs" disabled={busy === "record"} onClick={record}>{busy === "record" ? "Saving…" : "Record & tally"}</Button>

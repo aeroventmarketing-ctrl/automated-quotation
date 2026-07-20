@@ -142,6 +142,7 @@ export interface CashLiquidation {
   recordedRole?: string;
   recordedAt?: string; // ISO
   note?: string;
+  aiReadCount?: number; // times the AI receipt reader has been run (limited)
   escalation?: CashStamp; // requestor/accounting informed the approver
   approval?: CashStamp; // the approver authorised the discrepancy
   settled?: CashStamp; // change returned / overspend reimbursed
@@ -175,6 +176,7 @@ export function coerceLiquidation(v: unknown): CashLiquidation {
     recordedRole: typeof o.recordedRole === "string" ? o.recordedRole : undefined,
     recordedAt: typeof o.recordedAt === "string" ? o.recordedAt : undefined,
     note: typeof o.note === "string" ? o.note : undefined,
+    aiReadCount: typeof o.aiReadCount === "number" ? o.aiReadCount : undefined,
     escalation: coerceStamp(o.escalation),
     approval: coerceStamp(o.approval),
     settled: coerceStamp(o.settled),

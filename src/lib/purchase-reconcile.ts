@@ -42,6 +42,7 @@ export interface Reconciliation {
   recordedRole?: string;
   recordedAt?: string; // ISO
   note?: string;
+  aiReadCount?: number; // times the AI receipt reader has been run (limited)
   // Discrepancy handling (only when the tally doesn't balance):
   escalation?: ReconcileStamp; // accounting informed the approver
   approval?: ReconcileStamp; // the payment approver authorised the discrepancy
@@ -88,6 +89,7 @@ export function coerceReconciliation(v: unknown): Reconciliation {
     recordedRole: typeof o.recordedRole === "string" ? o.recordedRole : undefined,
     recordedAt: typeof o.recordedAt === "string" ? o.recordedAt : undefined,
     note: typeof o.note === "string" ? o.note : undefined,
+    aiReadCount: typeof o.aiReadCount === "number" ? o.aiReadCount : undefined,
     escalation: coerceStamp(o.escalation),
     approval: coerceStamp(o.approval),
     settled: coerceStamp(o.settled),
