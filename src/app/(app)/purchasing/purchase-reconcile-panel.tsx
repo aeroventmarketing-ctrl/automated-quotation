@@ -10,6 +10,11 @@ import type { SaleDoc } from "@/lib/sale";
 import { recordReconciliation, settleReconciliation } from "../orders/actions";
 
 const VAT = 0.12;
+// Auto-record threshold: the AI-read receipt is recorded without human review
+// only when the total is within ₱5 (or 0.05% of the voucher) of the PO. Any
+// bigger gap — or an unreadable line — is left for a person to check.
+const AUTO_TOLERANCE = 5;
+const AUTO_TOLERANCE_PCT = 0.0005;
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const num = (s: string) => Number(String(s ?? "").replace(/,/g, "").trim()) || 0;
@@ -86,10 +91,28 @@ export function PurchaseReconcilePanel({
     finally { setBusy(null); }
   }
 
-  // Read the uploaded receipt image(s) with AI and auto-fill the per-line
-  // actuals, so there's no manual typing/checking — just review and record.
+  // Persist a reconciliation (shared by the manual "Record" button and the
+  // fully-automatic path). Returns true on success.
+  async function submitRecord(vatModeArg: "inclusive" | "exclusive", rowsArg: typeof rows, noteArg: string): Promise<boolean> {
+    try {
+      await recordReconciliation(prId, {
+        vatMode: vatModeArg,
+        lines: rowsArg.map((r) => ({ description: r.description, qty: r.qty, poAmount: r.poAmount, actualAmount: num(r.actual) })),
+        receipts,
+        note: noteArg,
+      });
+      setOpen(false); setReceipts([]); setNote("");
+      router.refresh();
+      return true;
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); return false; }
+  }
+
+  // Read the uploaded receipt image(s)/PDF(s) with AI, auto-fill the per-line
+  // actuals, and — when every line matched and the total tallies within a small
+  // tolerance — record it automatically. Otherwise leave it for a human to
+  // review (the only time a person is needed is when it doesn't balance).
   async function autoRead() {
-    if (receipts.length === 0) { setErr("Upload the receipt image first."); return; }
+    if (receipts.length === 0) { setErr("Upload the receipt first."); return; }
     setBusy("read"); setErr(null); setAiInfo(null); setAiWarnings([]);
     try {
       const res = await fetch("/api/ai/read-receipt", {
@@ -99,22 +122,47 @@ export function PurchaseReconcilePanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not read the receipt.");
-      // Fill the per-line actuals the AI matched (leave unmatched blank).
-      setRows((rs) => rs.map((r, i) => {
+
+      const vatUsed: "inclusive" | "exclusive" = data.vatMode === "exclusive" ? "exclusive" : data.vatMode === "inclusive" ? "inclusive" : vatMode;
+      const newRows = rows.map((r, i) => {
         const l = data.lines?.[i];
         return l && typeof l.actualAmount === "number" ? { ...r, actual: String(l.actualAmount) } : r;
-      }));
-      if (data.vatMode === "inclusive" || data.vatMode === "exclusive") setVatMode(data.vatMode);
-      const bits = [
-        data.supplier ? `Supplier: ${data.supplier}` : "",
-        data.date ? `Date: ${data.date}` : "",
-        typeof data.receiptTotal === "number" ? `Receipt total: ₱${new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2 }).format(data.receiptTotal)}` : "",
-      ].filter(Boolean);
-      setAiInfo(bits.length ? `Read ✓ · ${bits.join(" · ")}` : "Receipt read.");
+      });
+      setRows(newRows);
+      setVatMode(vatUsed);
+
       const warns = Array.isArray(data.warnings) ? [...data.warnings] : [];
       const unmatched = (data.lines ?? []).filter((l: { actualAmount: number | null }) => l.actualAmount === null).length;
       if (unmatched > 0) warns.push(`${unmatched} PO line${unmatched === 1 ? "" : "s"} not found on the receipt — enter ${unmatched === 1 ? "it" : "them"} manually.`);
       if (Array.isArray(data.extraItems) && data.extraItems.length) warns.push(`${data.extraItems.length} receipt item(s) not on the PO: ${data.extraItems.map((e: { description: string }) => e.description).filter(Boolean).join(", ")}.`);
+
+      // Tally check for auto-record.
+      const f = vatUsed === "exclusive" ? 1 + VAT : 1;
+      const allMatched = newRows.every((r) => r.actual.trim() !== "");
+      const voucher = round2(newRows.reduce((a, r) => a + r.poAmount, 0) * f);
+      const actual = round2(newRows.reduce((a, r) => a + num(r.actual), 0));
+      const variance = round2(voucher - actual);
+      const tolerance = Math.max(AUTO_TOLERANCE, round2(voucher * AUTO_TOLERANCE_PCT));
+
+      if (allMatched && Math.abs(variance) <= tolerance) {
+        // Fully automatic — no human needed. Record it straight away.
+        setBusy("record");
+        const okNote = `Auto-reconciled from receipt (AI)${note ? ` · ${note}` : ""}`;
+        await submitRecord(vatUsed, newRows, okNote);
+        return;
+      }
+
+      // Needs a human: doesn't balance, or a line couldn't be matched.
+      const bits = [
+        data.supplier ? `Supplier: ${data.supplier}` : "",
+        typeof data.receiptTotal === "number" ? `Receipt total: ₱${new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2 }).format(data.receiptTotal)}` : "",
+      ].filter(Boolean);
+      warns.unshift(
+        !allMatched
+          ? "Some lines couldn't be read — please review and complete before recording."
+          : `Doesn't balance (${variance > 0 ? "change" : "over"} ${peso(Math.abs(variance))}) — please review before recording.`,
+      );
+      setAiInfo(bits.length ? `Read ✓ · ${bits.join(" · ")}` : "Receipt read.");
       setAiWarnings(warns);
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
@@ -122,17 +170,8 @@ export function PurchaseReconcilePanel({
 
   async function record() {
     setBusy("record"); setErr(null);
-    try {
-      await recordReconciliation(prId, {
-        vatMode,
-        lines: rows.map((r) => ({ description: r.description, qty: r.qty, poAmount: r.poAmount, actualAmount: num(r.actual) })),
-        receipts,
-        note,
-      });
-      setOpen(false); setReceipts([]); setNote("");
-      router.refresh();
-    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
-    finally { setBusy(null); }
+    await submitRecord(vatMode, rows, note);
+    setBusy(null);
   }
 
   async function settle() {
@@ -307,7 +346,7 @@ export function PurchaseReconcilePanel({
             ))}
             <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 font-medium hover:bg-accent">
               <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : receipts.length ? "Add receipt" : "Upload receipt"}
-              <input type="file" className="hidden" disabled={busy === "upload"} onChange={(e) => e.target.files?.[0] && uploadReceipt(e.target.files[0])} />
+              <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy === "upload"} onChange={(e) => e.target.files?.[0] && uploadReceipt(e.target.files[0])} />
             </label>
             {receipts.length > 0 && (
               <button type="button" onClick={autoRead} disabled={busy === "read"}

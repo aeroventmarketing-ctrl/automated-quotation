@@ -72,20 +72,21 @@ export async function POST(req: NextRequest) {
   const poLines = (po?.lines ?? []).map((l) => ({ description: l.description, qty: l.qty, poAmount: poLineAmount(l) }));
   if (poLines.length === 0) return NextResponse.json({ error: "This PO has no priced lines to reconcile against." }, { status: 400 });
 
-  // Load the receipt images from storage. PDFs / non-images are skipped.
+  // Load the receipt files from storage — images and PDFs are both read.
   const content: ContentBlock[] = [];
   const skipped: string[] = [];
   for (const path of body.paths) {
     try {
       const { base64, contentType } = await downloadFromStorage(path);
-      if (!IMAGE_TYPES.has(contentType)) { skipped.push(path.split("/").pop() ?? path); continue; }
-      content.push({ type: "image", image: { mediaType: contentType, base64 } });
+      if (IMAGE_TYPES.has(contentType)) content.push({ type: "image", image: { mediaType: contentType, base64 } });
+      else if (contentType === "application/pdf" || path.toLowerCase().endsWith(".pdf")) content.push({ type: "document", document: { base64 } });
+      else skipped.push(path.split("/").pop() ?? path);
     } catch {
       skipped.push(path.split("/").pop() ?? path);
     }
   }
   if (content.length === 0) {
-    return NextResponse.json({ error: "No readable image receipts. Auto-read supports photos/images (JPG, PNG); for a PDF, enter the figures manually." }, { status: 422 });
+    return NextResponse.json({ error: "No readable receipts. Auto-read supports photos/images (JPG, PNG) and PDFs." }, { status: 422 });
   }
   content.push({ type: "text", text: userPrompt(poLines) });
 

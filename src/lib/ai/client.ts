@@ -38,9 +38,10 @@ export function stripJsonFences(text: string): string {
 }
 
 export interface ContentBlock {
-  type: "text" | "image";
+  type: "text" | "image" | "document";
   text?: string;
   image?: { mediaType: string; base64: string };
+  document?: { base64: string }; // PDF (application/pdf)
 }
 
 function toAnthropicContent(blocks: ContentBlock[]): Anthropic.MessageParam["content"] {
@@ -57,6 +58,12 @@ function toAnthropicContent(blocks: ContentBlock[]): Anthropic.MessageParam["con
             | "image/webp",
           data: b.image.base64,
         },
+      };
+    }
+    if (b.type === "document" && b.document) {
+      return {
+        type: "document" as const,
+        source: { type: "base64" as const, media_type: "application/pdf" as const, data: b.document.base64 },
       };
     }
     return { type: "text" as const, text: b.text ?? "" };
