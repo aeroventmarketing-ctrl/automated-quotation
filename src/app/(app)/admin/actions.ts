@@ -157,7 +157,7 @@ export async function upsertUser(input: z.infer<typeof userSchema>) {
  * A user who still has quotations or inquiries can't be hard-deleted (it would
  * orphan that history) — we report exactly what's linking them instead.
  */
-export async function deleteUser(id: string): Promise<{ ok: true } | { error: string }> {
+export async function deleteUser(id: string): Promise<{ ok: true } | { error: string; reassignable?: boolean }> {
   const me = await assertAdmin();
   if (me.id === id) return { error: "You can't delete your own account while signed in as it." };
 
@@ -175,7 +175,8 @@ export async function deleteUser(id: string): Promise<{ ok: true } | { error: st
   if (inquiries) blockers.push(`${inquiries} inquir${inquiries === 1 ? "y" : "ies"}`);
   if (blockers.length) {
     return {
-      error: `Can't delete ${target.name}: they're still linked to ${blockers.join(", ")}. Deleting would remove that history — reassign or keep the record instead.`,
+      error: `${target.name} is still linked to ${blockers.join(", ")}. Reassign these to another user, then the account can be deleted.`,
+      reassignable: true,
     };
   }
 
@@ -183,6 +184,38 @@ export async function deleteUser(id: string): Promise<{ ok: true } | { error: st
     await prisma.user.delete({ where: { id } });
   } catch {
     return { error: "Could not delete this user — they're still linked to other records." };
+  }
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
+/**
+ * Reassign a user's history (quotations prepared & approved, inquiries created)
+ * to another user, then delete their account — all in one transaction so the
+ * records are never orphaned. Returns a result value (not a throw) so the reason
+ * survives production redaction.
+ */
+export async function reassignAndDeleteUser(id: string, targetId: string): Promise<{ ok: true } | { error: string }> {
+  const me = await assertAdmin();
+  if (me.id === id) return { error: "You can't delete your own account while signed in as it." };
+  if (!targetId || targetId === id) return { error: "Choose a different user to receive the records." };
+
+  const [source, target] = await Promise.all([
+    prisma.user.findUnique({ where: { id } }),
+    prisma.user.findUnique({ where: { id: targetId } }),
+  ]);
+  if (!source) return { error: "That user no longer exists." };
+  if (!target) return { error: "The user to reassign to no longer exists." };
+
+  try {
+    await prisma.$transaction([
+      prisma.quotation.updateMany({ where: { preparedById: id }, data: { preparedById: targetId } }),
+      prisma.quotation.updateMany({ where: { approvedById: id }, data: { approvedById: targetId } }),
+      prisma.inquiry.updateMany({ where: { createdById: id }, data: { createdById: targetId } }),
+      prisma.user.delete({ where: { id } }),
+    ]);
+  } catch {
+    return { error: "Could not reassign and delete — please try again." };
   }
   revalidatePath("/admin/users");
   return { ok: true };

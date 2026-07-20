@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { upsertUser, deleteUser, setUserPassword, saveUserSignature } from "../actions";
+import { upsertUser, deleteUser, reassignAndDeleteUser, setUserPassword, saveUserSignature } from "../actions";
 
 const ROLES = ["SALES", "ENGINEER", "ADMIN"];
 
@@ -73,18 +73,53 @@ export function UsersManager({ users }: { users: U[] }) {
 
   const [delErr, setDelErr] = useState<string | null>(null);
   const [delBusy, setDelBusy] = useState<string | null>(null);
-  async function remove(id: string) {
-    if (!confirm("Delete this user record?")) return;
+  // Reassign-then-delete: opened when a delete is blocked by linked history.
+  const [reUser, setReUser] = useState<U | null>(null);
+  const [reNote, setReNote] = useState<string | null>(null);
+  const [reTo, setReTo] = useState("");
+  const [reBusy, setReBusy] = useState(false);
+  const [reErr, setReErr] = useState<string | null>(null);
+
+  async function remove(u: U) {
+    if (!confirm(`Delete ${u.name}?`)) return;
     setDelErr(null);
-    setDelBusy(id);
+    setDelBusy(u.id);
     try {
-      const res = await deleteUser(id);
-      if (res && "error" in res) { setDelErr(res.error); return; }
+      const res = await deleteUser(u.id);
+      if (res && "error" in res) {
+        if ("reassignable" in res && res.reassignable) { openReassign(u, res.error); }
+        else setDelErr(res.error);
+        return;
+      }
       router.refresh();
     } catch (e) {
       setDelErr(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setDelBusy(null);
+    }
+  }
+
+  function openReassign(u: U, note?: string) {
+    setReUser(u);
+    setReNote(note ?? null);
+    setReErr(null);
+    setReTo(users.find((x) => x.id !== u.id)?.id ?? "");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  async function doReassignDelete() {
+    if (!reUser) return;
+    if (!reTo) { setReErr("Choose a user to receive the records."); return; }
+    setReErr(null);
+    setReBusy(true);
+    try {
+      const res = await reassignAndDeleteUser(reUser.id, reTo);
+      if (res && "error" in res) { setReErr(res.error); return; }
+      setReUser(null);
+      router.refresh();
+    } catch (e) {
+      setReErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setReBusy(false);
     }
   }
 
@@ -217,6 +252,37 @@ export function UsersManager({ users }: { users: U[] }) {
         </Card>
       )}
 
+      {reUser && (
+        <Card className="border-destructive/40">
+          <CardHeader><CardTitle>Reassign &amp; delete — {reUser.name} ({reUser.email})</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {reNote && <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-amber-700">{reNote}</p>}
+            <div className="grid items-end gap-3 md:grid-cols-4">
+              <div className="space-y-1 md:col-span-2">
+                <Label>Reassign their quotations &amp; inquiries to</Label>
+                <Select value={reTo} onChange={(e) => setReTo(e.target.value)}>
+                  <option value="" disabled>Select a user…</option>
+                  {users.filter((x) => x.id !== reUser.id).map((x) => (
+                    <option key={x.id} value={x.id}>{x.name} ({x.email})</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="destructive" onClick={doReassignDelete} disabled={reBusy || !reTo}>
+                  {reBusy ? "Working…" : "Reassign & delete"}
+                </Button>
+                <Button variant="ghost" onClick={() => setReUser(null)} disabled={reBusy}>Cancel</Button>
+              </div>
+            </div>
+            {reErr && <p className="text-sm text-destructive">{reErr}</p>}
+            <p className="text-xs text-muted-foreground">
+              Their prepared &amp; approved quotations and created inquiries move to the selected user, then this
+              account is deleted. This keeps the history intact and can&apos;t be undone.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="pt-6">
           {sigErr && <p className="mb-3 text-sm text-destructive">{sigErr}</p>}
@@ -255,7 +321,7 @@ export function UsersManager({ users }: { users: U[] }) {
                   <TableCell className="text-right">
                     <Button size="sm" variant="ghost" onClick={() => edit(u)}>Edit</Button>
                     <Button size="sm" variant="ghost" onClick={() => openPw(u)}>Password</Button>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={delBusy === u.id} onClick={() => remove(u.id)}>{delBusy === u.id ? "Deleting…" : "Delete"}</Button>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={delBusy === u.id} onClick={() => remove(u)}>{delBusy === u.id ? "Deleting…" : "Delete"}</Button>
                   </TableCell>
                 </TableRow>
               ))}
