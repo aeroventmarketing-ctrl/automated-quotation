@@ -4,7 +4,9 @@ export const config = {
   vatRate: Number(process.env.NEXT_PUBLIC_VAT_RATE ?? "0.12"),
   defaultCurrency: process.env.NEXT_PUBLIC_DEFAULT_CURRENCY ?? "PHP",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-  anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6",
+  // Current vision-capable default; override with ANTHROPIC_MODEL (e.g.
+  // "claude-haiku-4-5-20251001" for lower cost on receipt reading).
+  anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5",
   // Optional: your Anthropic price per 1M tokens (USD), used only to show an
   // estimated cost on the AI-usage page. Leave unset to display token counts
   // only (no fabricated pricing). Find current rates on the Anthropic console.
