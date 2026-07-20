@@ -6,7 +6,7 @@ import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews } from "@/lib/purchase-chain-row";
-import { canRaiseReturnAt } from "@/lib/purchase-returns";
+import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
@@ -230,19 +230,22 @@ export default async function PurchasingPage() {
       })
       .filter((g): g is NonNullable<typeof g> => g !== null);
 
-    // Uncombined department requisitions → individual chains.
-    deptRows = unbatched
-      .filter((pr) => pr.kind === "department")
-      .map((pr) =>
-        buildPurchaseChainRow(pr, {
-          mrfNo: null,
-          canManagePO,
-          canCancel: canCancelPr(pr),
-          canDelete: canDeleteStatus(pr.status),
-          namesForRole,
-          canAct,
-        }),
-      );
+    // Uncombined department requisitions → individual chains. Completed ones are
+    // excluded above, except those still carrying an open supplier return so the
+    // replacement can be tracked and resolved after the good items were received.
+    const completedDeptWithReturns = (
+      await prisma.purchaseRequest.findMany({ where: { kind: "department", status: "COMPLETED" }, orderBy: { createdAt: "desc" } })
+    ).filter((pr) => hasUnresolvedReturn(coercePurchaseReturns(pr.returns)));
+    deptRows = [...unbatched.filter((pr) => pr.kind === "department"), ...completedDeptWithReturns].map((pr) =>
+      buildPurchaseChainRow(pr, {
+        mrfNo: null,
+        canManagePO,
+        canCancel: canCancelPr(pr),
+        canDelete: canDeleteStatus(pr.status),
+        namesForRole,
+        canAct,
+      }),
+    );
   } catch {
     tableMissing = true;
   }

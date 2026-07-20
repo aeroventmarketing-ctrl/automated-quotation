@@ -38,7 +38,7 @@ import {
   type OrderConversation,
 } from "@/lib/order-workflow";
 import { purchaseStep, isCancellable, type PRStatus } from "@/lib/purchasing";
-import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
+import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
@@ -1077,9 +1077,8 @@ export async function receiveCombinedPO(anchorPurchaseRequestId: string, matches
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
   if (members.some((m) => m.status !== "PLANT_APPROVED")) throw new Error("This purchase isn't ready to receive (awaiting Plant Manager's final approval).");
-  if (members.some((m) => hasUnresolvedReturn(coercePurchaseReturns(m.returns)))) {
-    throw new Error("Resolve all supplier returns first — a replacement must be received before this PO can be added to stock.");
-  }
+  // Good items are received now; disapproved items stay open as supplier returns
+  // and are tracked until their replacement arrives.
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
   await prisma.$transaction(async (tx) => {
@@ -1541,9 +1540,8 @@ export async function receivePurchaseRequest(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   if (pr.status !== "PLANT_APPROVED") throw new Error("This purchase isn't ready to receive (awaiting Plant Manager's final approval).");
-  if (hasUnresolvedReturn(coercePurchaseReturns(pr.returns))) {
-    throw new Error("Resolve all supplier returns first — a replacement must be received before this PO can be added to stock.");
-  }
+  // Good items can be received into stock now; any disapproved item stays open
+  // as a supplier return and is tracked separately until its replacement lands.
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
 

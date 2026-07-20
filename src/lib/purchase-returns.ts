@@ -51,11 +51,12 @@ export function hasUnresolvedReturn(returns: PurchaseReturn[]): boolean {
 }
 
 /**
- * A return can be raised only after the items exist to inspect — from the
- * purchaser's check through the plant manager's final approval, and while the
- * items are in transit for approval.
+ * A return can be raised once the items exist to inspect — from the purchaser's
+ * check through the plant manager's final approval, and even after the good
+ * items have been received into stock (COMPLETED): a defect found later can
+ * still be sent back, and an open return stays actionable on a received PO.
  */
-const RETURNABLE_STATUSES: PRStatus[] = ["PURCHASED", "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED"];
+const RETURNABLE_STATUSES: PRStatus[] = ["PURCHASED", "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED", "COMPLETED"];
 export function canRaiseReturnAt(status: PRStatus): boolean {
   return RETURNABLE_STATUSES.includes(status);
 }
