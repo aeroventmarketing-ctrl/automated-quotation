@@ -136,6 +136,19 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("read-receipt error", err);
-    return NextResponse.json({ error: "Could not read the receipt. Verify ANTHROPIC_API_KEY, or enter the figures manually." }, { status: 502 });
+    const detail = err instanceof Error ? err.message : String(err);
+    // Surface the real cause so the admin can fix config (missing key vs bad
+    // model id vs auth), instead of a generic message.
+    let error: string;
+    if (/ANTHROPIC_API_KEY/i.test(detail)) {
+      error = "The AI key (ANTHROPIC_API_KEY) isn't set on the server. Add it to your hosting environment variables and redeploy — or enter the figures manually.";
+    } else if (/model/i.test(detail) && /(not_found|404|does not exist|invalid)/i.test(detail)) {
+      error = `The configured AI model isn't valid (${detail}). Set ANTHROPIC_MODEL to a current model and redeploy.`;
+    } else if (/401|authentication|invalid x-api-key|permission/i.test(detail)) {
+      error = "The AI key was rejected (authentication error). Check ANTHROPIC_API_KEY is correct and active.";
+    } else {
+      error = `Could not read the receipt: ${detail}. You can enter the figures manually.`;
+    }
+    return NextResponse.json({ error }, { status: 502 });
   }
 }
