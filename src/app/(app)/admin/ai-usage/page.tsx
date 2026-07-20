@@ -92,9 +92,13 @@ export default async function AiUsagePage() {
           )}
           {!showCost && (
             <p className="mt-3 text-xs text-muted-foreground">
-              To show an estimated cost here, set <span className="font-mono">ANTHROPIC_PRICE_INPUT_PER_M</span> and
-              <span className="font-mono"> ANTHROPIC_PRICE_OUTPUT_PER_M</span> (USD per 1M tokens, from the Anthropic console)
-              in your environment.
+              {config.aiProvider === "openrouter" ? (
+                <>Your exact spend is on <span className="font-mono">openrouter.ai</span> → Activity / Credits. To also estimate it here, </>
+              ) : (
+                <>To show an estimated cost here, </>
+              )}
+              set <span className="font-mono">ANTHROPIC_PRICE_INPUT_PER_M</span> and
+              <span className="font-mono"> ANTHROPIC_PRICE_OUTPUT_PER_M</span> (USD per 1M tokens) in your environment.
             </p>
           )}
         </CardContent>
