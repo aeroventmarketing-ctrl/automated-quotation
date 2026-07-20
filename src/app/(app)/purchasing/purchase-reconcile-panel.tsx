@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Scale, Upload, FileText, Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,16 +9,20 @@ import type { PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
 import { recordReconciliation, settleReconciliation } from "../orders/actions";
 
+const VAT = 0.12;
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const num = (s: string) => Number(String(s ?? "").replace(/,/g, "").trim()) || 0;
 const link = (path: string) => `/api/purchase-uploads?path=${encodeURIComponent(path)}`;
 const dl = (path: string, name: string) => `${link(path)}&download=1&name=${encodeURIComponent(name)}`;
 
 /**
- * Voucher reconciliation panel: shows the issued voucher (PO total) against the
- * actual cash spent, auto-tallying to balanced / change-to-return / over-voucher
- * so accounting doesn't check each voucher and receipt by hand. The purchaser
- * records the spend + uploads receipts; accounting or the purchaser settle any
- * change. `prId` is the request (or anchor) to act on. Read-only on the order page.
+ * Voucher reconciliation panel: a per-line tally of the actual amount paid vs
+ * the PO (issued voucher), with a VAT-inclusive / VAT-exclusive toggle, so
+ * accounting doesn't check each voucher and receipt by hand. The purchaser
+ * records the per-line spend + uploads receipts; accounting or the purchaser
+ * settle any change. `prId` is the request (or anchor) to act on. Read-only on
+ * the order page.
  */
 export function PurchaseReconcilePanel({
   prId,
@@ -34,14 +38,36 @@ export function PurchaseReconcilePanel({
   readOnly?: boolean;
 }) {
   const router = useRouter();
-  const recorded = reconcile.actualSpent !== null;
+  const recorded = reconcile.lines !== null;
   const [open, setOpen] = useState(false);
-  const [spent, setSpent] = useState(recorded ? String(reconcile.actualSpent) : "");
-  const [voucher, setVoucher] = useState(String(reconcile.voucherAmount || ""));
+  const [vatMode, setVatMode] = useState<"inclusive" | "exclusive">(reconcile.vatMode);
+  // Editable per-line actuals, seeded from the PO lines (or the recorded ones).
+  const seed = () =>
+    (reconcile.lines ?? reconcile.poLines.map((l) => ({ description: l.description, qty: l.qty, poAmount: l.poAmount, actualAmount: 0 }))).map((l) => ({
+      description: l.description,
+      qty: l.qty,
+      poAmount: l.poAmount,
+      actual: l.actualAmount ? String(l.actualAmount) : "",
+    }));
+  const [rows, setRows] = useState(seed);
   const [note, setNote] = useState("");
   const [receipts, setReceipts] = useState<SaleDoc[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  const factor = vatMode === "exclusive" ? 1 + VAT : 1;
+  const preview = useMemo(() => {
+    const voucher = round2(rows.reduce((a, r) => a + r.poAmount, 0) * factor);
+    const actual = round2(rows.reduce((a, r) => a + num(r.actual), 0));
+    return { voucher, actual, variance: round2(voucher - actual) };
+  }, [rows, factor]);
+
+  function startEdit() {
+    setRows(seed()); setVatMode(reconcile.vatMode); setNote(""); setReceipts([]); setErr(null); setOpen(true);
+  }
+  function setActual(i: number, v: string) {
+    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, actual: v } : r)));
+  }
 
   async function uploadReceipt(file: File) {
     setBusy("upload"); setErr(null);
@@ -58,11 +84,14 @@ export function PurchaseReconcilePanel({
   }
 
   async function record() {
-    const actualSpent = Number(spent.replace(/,/g, ""));
-    if (!Number.isFinite(actualSpent) || actualSpent < 0) { setErr("Enter the actual amount spent."); return; }
     setBusy("record"); setErr(null);
     try {
-      await recordReconciliation(prId, { actualSpent, voucherAmount: Number(voucher.replace(/,/g, "")) || undefined, receipts, note });
+      await recordReconciliation(prId, {
+        vatMode,
+        lines: rows.map((r) => ({ description: r.description, qty: r.qty, poAmount: r.poAmount, actualAmount: num(r.actual) })),
+        receipts,
+        note,
+      });
       setOpen(false); setReceipts([]); setNote("");
       router.refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
@@ -72,44 +101,65 @@ export function PurchaseReconcilePanel({
   async function settle() {
     const n = window.prompt("Note (optional) — e.g. change returned to accounting, overspend reimbursed:", "") ?? undefined;
     setBusy("settle"); setErr(null);
-    try {
-      await settleReconciliation(prId, n);
-      router.refresh();
-    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    try { await settleReconciliation(prId, n); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
 
-  // Tally badge for a recorded reconciliation.
-  const tally = () => {
-    if (reconcile.status === "balanced") return <span className="font-semibold text-emerald-700">Tallied ✓ — voucher matches receipts</span>;
-    if (reconcile.status === "change") return <span className="font-semibold text-amber-700">Change to return: {peso(reconcile.variance)}</span>;
-    if (reconcile.status === "over") return <span className="font-semibold text-destructive">Over voucher by {peso(-reconcile.variance)}</span>;
+  const verdict = (status: PurchaseReconcileView["status"], variance: number) => {
+    if (status === "balanced") return <span className="font-semibold text-emerald-700">Tallied ✓ — voucher matches receipts</span>;
+    if (status === "change") return <span className="font-semibold text-amber-700">Change to return: {peso(variance)}</span>;
+    if (status === "over") return <span className="font-semibold text-destructive">Over voucher by {peso(-variance)}</span>;
     return null;
   };
 
-  // Nothing to show on the read-only order page until it's been reconciled.
   if (readOnly && !recorded) return null;
 
   return (
     <div className="mt-2 space-y-2 rounded-md border p-2">
       <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         <Scale className="h-3.5 w-3.5" /> Voucher reconciliation
+        <span className="ml-1 font-normal normal-case">· VAT {reconcile.vatMode === "exclusive" ? "exclusive (+12%)" : "inclusive"}</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm sm:max-w-sm">
-        <span className="text-muted-foreground">Voucher issued</span>
-        <span className="text-right tabular-nums font-medium">{peso(reconcile.voucherAmount)}</span>
-        {recorded && (
-          <>
-            <span className="text-muted-foreground">Actual spent (receipts)</span>
-            <span className="text-right tabular-nums font-medium">{peso(reconcile.actualSpent!)}</span>
-          </>
-        )}
-      </div>
+      {recorded && reconcile.lines && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] border-collapse text-xs">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="py-1 pr-2 font-medium">Item</th>
+                <th className="w-24 py-1 px-1 text-right font-medium">PO / voucher</th>
+                <th className="w-24 py-1 px-1 text-right font-medium">Actual</th>
+                <th className="w-24 py-1 px-1 text-right font-medium">Difference</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reconcile.lines.map((l, i) => (
+                <tr key={i} className="border-b last:border-0">
+                  <td className="py-1 pr-2">{l.description || <span className="text-muted-foreground">Line {i + 1}</span>}{l.qty ? <span className="text-muted-foreground"> · {l.qty}</span> : null}</td>
+                  <td className="py-1 px-1 text-right tabular-nums">{peso(l.expected)}</td>
+                  <td className="py-1 px-1 text-right tabular-nums">{peso(l.actualAmount)}</td>
+                  <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(l.variance) < 0.005 ? "text-emerald-700" : l.variance > 0 ? "text-amber-700" : "text-destructive"}`}>
+                    {Math.abs(l.variance) < 0.005 ? "✓" : (l.variance > 0 ? "" : "-") + peso(Math.abs(l.variance))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t font-medium">
+                <td className="py-1 pr-2">Total</td>
+                <td className="py-1 px-1 text-right tabular-nums">{peso(reconcile.voucherAmount)}</td>
+                <td className="py-1 px-1 text-right tabular-nums">{peso(reconcile.actualSpent ?? 0)}</td>
+                <td className="py-1 px-1 text-right tabular-nums">{Math.abs(reconcile.variance) < 0.005 ? "✓" : (reconcile.variance > 0 ? "" : "-") + peso(Math.abs(reconcile.variance))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
 
       {recorded ? (
         <>
-          <div className="text-sm">{tally()}</div>
+          <div className="text-sm">{verdict(reconcile.status, reconcile.variance)}</div>
           {reconcile.receipts.length > 0 && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="text-muted-foreground">Receipts:</span>
@@ -136,42 +186,75 @@ export function PurchaseReconcilePanel({
             </button>
           ) : null}
           {!readOnly && canRecord && !open && (
-            <button type="button" onClick={() => { setOpen(true); setSpent(String(reconcile.actualSpent)); setVoucher(String(reconcile.voucherAmount || "")); }}
-              className="ml-3 text-xs font-medium text-muted-foreground hover:text-foreground">Correct figures</button>
+            <button type="button" onClick={startEdit} className="ml-3 text-xs font-medium text-muted-foreground hover:text-foreground">Correct figures</button>
           )}
         </>
       ) : !readOnly && canRecord && !open ? (
-        <button type="button" onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold hover:bg-accent">
-          <Scale className="h-3.5 w-3.5" /> Reconcile voucher (record spend &amp; receipts)
-        </button>
+        <div className="text-sm">
+          <p className="text-muted-foreground">Voucher (PO total): <span className="font-medium text-foreground tabular-nums">{peso(reconcile.voucherAmount)}</span></p>
+          <button type="button" onClick={startEdit}
+            className="mt-1 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold hover:bg-accent">
+            <Scale className="h-3.5 w-3.5" /> Reconcile voucher (per-line spend &amp; receipts)
+          </button>
+        </div>
       ) : !recorded && !readOnly ? (
-        <p className="text-xs text-muted-foreground">Awaiting the Purchaser to record the actual spend &amp; receipts.</p>
+        <p className="text-xs text-muted-foreground">Voucher (PO total): {peso(reconcile.voucherAmount)} · awaiting the Purchaser to record the actual spend.</p>
       ) : null}
 
+      {/* Record / correct form */}
       {!readOnly && canRecord && open && (
         <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-muted-foreground">Voucher issued (₱)
-              <Input className="h-8 w-32" value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="0.00" />
-            </label>
-            <label className="text-xs text-muted-foreground">Actual spent (₱)
-              <Input className="h-8 w-32" value={spent} onChange={(e) => setSpent(e.target.value)} placeholder="0.00" />
-            </label>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Payment is</span>
+            <select value={vatMode} onChange={(e) => setVatMode(e.target.value as "inclusive" | "exclusive")}
+              className="h-7 rounded-md border bg-background px-2 text-xs">
+              <option value="inclusive">VAT inclusive</option>
+              <option value="exclusive">VAT exclusive (+12%)</option>
+            </select>
           </div>
-          {/* Live preview of the tally as the numbers are entered. */}
-          {spent.trim() !== "" && (() => {
-            const v = Number(voucher.replace(/,/g, "")) || 0;
-            const s = Number(spent.replace(/,/g, "")) || 0;
-            const diff = Math.round((v - s) * 100) / 100;
-            return (
-              <p className="text-xs">
-                {Math.abs(diff) < 0.005 ? <span className="font-medium text-emerald-700">Tallies ✓</span>
-                  : diff > 0 ? <span className="font-medium text-amber-700">Change to return: {peso(diff)}</span>
-                  : <span className="font-medium text-destructive">Over voucher by {peso(-diff)}</span>}
-              </p>
-            );
-          })()}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[440px] border-collapse text-xs">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="py-1 pr-2 font-medium">Item</th>
+                  <th className="w-24 py-1 px-1 text-right font-medium">PO / voucher</th>
+                  <th className="w-28 py-1 px-1 text-right font-medium">Actual paid</th>
+                  <th className="w-20 py-1 px-1 text-right font-medium">Diff.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const expected = round2(r.poAmount * factor);
+                  const diff = round2(expected - num(r.actual));
+                  return (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="py-1 pr-2">{r.description || `Line ${i + 1}`}{r.qty ? <span className="text-muted-foreground"> · {r.qty}</span> : null}</td>
+                      <td className="py-1 px-1 text-right tabular-nums text-muted-foreground">{peso(expected)}</td>
+                      <td className="py-1 px-1"><Input className="h-7 text-right text-xs" value={r.actual} onChange={(e) => setActual(i, e.target.value)} placeholder="0.00" /></td>
+                      <td className={`py-1 px-1 text-right tabular-nums ${r.actual.trim() === "" ? "text-muted-foreground" : Math.abs(diff) < 0.005 ? "text-emerald-700" : diff > 0 ? "text-amber-700" : "text-destructive"}`}>
+                        {r.actual.trim() === "" ? "—" : Math.abs(diff) < 0.005 ? "✓" : (diff > 0 ? "" : "-") + peso(Math.abs(diff))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t font-medium">
+                  <td className="py-1 pr-2">Total</td>
+                  <td className="py-1 px-1 text-right tabular-nums">{peso(preview.voucher)}</td>
+                  <td className="py-1 px-1 text-right tabular-nums">{peso(preview.actual)}</td>
+                  <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(preview.variance) < 0.005 ? "text-emerald-700" : preview.variance > 0 ? "text-amber-700" : "text-destructive"}`}>
+                    {Math.abs(preview.variance) < 0.005 ? "✓" : (preview.variance > 0 ? "" : "-") + peso(Math.abs(preview.variance))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="text-xs">
+            {Math.abs(preview.variance) < 0.005 ? <span className="font-medium text-emerald-700">Tallies ✓</span>
+              : preview.variance > 0 ? <span className="font-medium text-amber-700">Change to return: {peso(preview.variance)}</span>
+              : <span className="font-medium text-destructive">Over voucher by {peso(-preview.variance)}</span>}
+          </p>
           {/* Receipts */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="text-muted-foreground">Receipts:</span>

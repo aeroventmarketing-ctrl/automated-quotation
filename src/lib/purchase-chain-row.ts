@@ -3,10 +3,11 @@
  * PurchaseRequest. Shared by the per-order Phase 3 box (read-only monitoring)
  * and the central Purchasing workspace (where the purchaser processes them).
  */
-import { coercePurchaseOrder, poLineFromPRItem, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
-import { coerceReconciliation, computeVariance, isReconciled, canReconcileAt, type ReconcileStatus } from "@/lib/purchase-reconcile";
+import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
+import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { formatDateTime } from "@/lib/utils";
@@ -28,10 +29,25 @@ export interface PurchaseReturnView {
   proof: { path: string; name: string }[]; // proof the item was replaced
 }
 
+/** One reconciled line: PO expected (VAT-adjusted) vs actual paid. */
+export interface ReconcileLineView {
+  description: string;
+  qty: string;
+  poAmount: number; // PO gross line amount as priced
+  expected: number; // poAmount × VAT factor (what should be paid)
+  actualAmount: number; // actual paid, per the receipt
+  variance: number; // expected − actual
+}
+
 /** Voucher reconciliation, formatted for display. */
 export interface PurchaseReconcileView {
-  voucherAmount: number; // issued voucher (PO total, or the stored amount)
-  actualSpent: number | null; // null until the purchaser records it
+  vatMode: ReconcileVatMode;
+  // PO lines for seeding the record form (description, qty, expected PO amount).
+  poLines: { description: string; qty: string; unit: string; poAmount: number }[];
+  // Recorded per-line actuals (null until the purchaser records them).
+  lines: ReconcileLineView[] | null;
+  voucherAmount: number; // expected total (Σ PO amount × VAT factor)
+  actualSpent: number | null; // Σ actual paid, or null until recorded
   variance: number; // voucher − spent
   status: ReconcileStatus | null; // null until recorded
   receipts: { path: string; name: string }[];
@@ -43,16 +59,39 @@ export interface PurchaseReconcileView {
 export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileView {
   const r = coerceReconciliation(pr.reconciliation);
   const po = coercePurchaseOrder(pr.po);
-  const poTotal = po ? poTotals(po).total : 0;
-  const voucherAmount = typeof r.voucherAmount === "number" ? r.voucherAmount : poTotal;
+  const poLines = (po?.lines ?? []).map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, poAmount: poLineAmount(l) }));
+  const vatMode = r.vatMode ?? "inclusive";
+  const factor = vatFactor(vatMode);
   const recorded = isReconciled(r);
-  const actualSpent = recorded ? r.actualSpent! : null;
-  const v = recorded ? computeVariance(voucherAmount, actualSpent!) : null;
+
+  let lines: ReconcileLineView[] | null = null;
+  let voucherAmount: number;
+  let actualSpent: number | null = null;
+  let variance = 0;
+  let status: ReconcileStatus | null = null;
+
+  if (recorded) {
+    const t = reconcileTotals(r.lines!, vatMode);
+    lines = r.lines!.map((l) => {
+      const expected = round2(l.poAmount * factor);
+      return { description: l.description, qty: l.qty, poAmount: l.poAmount, expected, actualAmount: l.actualAmount, variance: round2(expected - l.actualAmount) };
+    });
+    voucherAmount = t.voucher;
+    actualSpent = t.actual;
+    variance = t.variance;
+    status = t.status;
+  } else {
+    voucherAmount = round2(poLines.reduce((a, l) => a + l.poAmount, 0) * factor);
+  }
+
   return {
+    vatMode,
+    poLines,
+    lines,
     voucherAmount,
     actualSpent,
-    variance: v?.variance ?? 0,
-    status: v?.status ?? null,
+    variance,
+    status,
     receipts: (r.receipts ?? []).map((d) => ({ path: d.path, name: d.name })),
     recorded: r.recordedAt ? `${r.recordedByName}${r.recordedRole ? ` (${r.recordedRole})` : ""} · ${formatDateTime(new Date(r.recordedAt))}` : null,
     settled: r.settled?.at ? `${r.settled.byName}${r.settled.role ? ` (${r.settled.role})` : ""} · ${formatDateTime(new Date(r.settled.at))}${r.settled.note ? ` · ${r.settled.note}` : ""}` : null,

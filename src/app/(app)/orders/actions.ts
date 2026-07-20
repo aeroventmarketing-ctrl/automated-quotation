@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { coercePurchaseOrder, formatPoNumber, poTotals, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, formatPoNumber, type PurchaseOrder } from "@/lib/purchase-order";
 import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberProduct } from "@/lib/product-catalog";
 import { rememberSupplier } from "@/lib/suppliers";
@@ -39,7 +39,7 @@ import {
 } from "@/lib/order-workflow";
 import { purchaseStep, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
-import { coerceReconciliation, canReconcileAt } from "@/lib/purchase-reconcile";
+import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
@@ -772,15 +772,20 @@ export async function resolvePurchaseReturn(
 // --- Voucher reconciliation -------------------------------------------------
 
 /**
- * Record the actual cash spent + receipts against the issued voucher. The
- * purchaser enters what was actually spent and attaches the receipts (uploaded
- * to /api/purchase-uploads); the system tallies it against the voucher (PO
- * total) automatically. The voucher amount defaults to the PO total when not
- * given explicitly.
+ * Record the per-line actual spend + receipts against the issued voucher. The
+ * purchaser enters the actual amount paid for each PO line and attaches the
+ * receipts (uploaded to /api/purchase-uploads); the system tallies each line
+ * and the total against the PO automatically. VAT mode ("inclusive" |
+ * "exclusive") decides whether 12% VAT is added on top of the PO amounts.
  */
 export async function recordReconciliation(
   purchaseRequestId: string,
-  input: { actualSpent: number; voucherAmount?: number; receipts?: { path: string; name: string; uploadedAt?: string }[]; note?: string },
+  input: {
+    vatMode: "inclusive" | "exclusive";
+    lines: { description: string; qty?: string; poAmount: number; actualAmount: number }[];
+    receipts?: { path: string; name: string; uploadedAt?: string }[];
+    note?: string;
+  },
 ): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -788,24 +793,28 @@ export async function recordReconciliation(
   if (!(admin || (await userHasAnyRole(user.id, ["purchaser"])))) {
     throw new Error("Only the Purchaser or an admin can reconcile a voucher.");
   }
-  const actualSpent = Number(input.actualSpent);
-  if (!Number.isFinite(actualSpent) || actualSpent < 0) throw new Error("Enter the actual amount spent.");
+  const lines = (input.lines ?? [])
+    .map((l) => ({
+      description: String(l.description ?? ""),
+      qty: String(l.qty ?? ""),
+      poAmount: Number(l.poAmount) || 0,
+      actualAmount: Number(l.actualAmount) || 0,
+    }));
+  if (lines.length === 0) throw new Error("Nothing to reconcile — the PO has no lines.");
 
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   if (!canReconcileAt(pr.status as PRStatus)) throw new Error("A voucher can only be reconciled once the materials have been purchased.");
 
   const cur = coerceReconciliation(pr.reconciliation);
-  const poTotal = poTotals(coercePurchaseOrder(pr.po) ?? { lines: [], ewtPct: 0 }).total;
-  const voucherAmount = typeof input.voucherAmount === "number" && input.voucherAmount >= 0 ? input.voucherAmount : cur.voucherAmount ?? poTotal;
   const receipts = (input.receipts ?? [])
     .filter((d) => d && typeof d.path === "string" && typeof d.name === "string")
     .map((d) => ({ path: d.path, name: d.name, uploadedAt: d.uploadedAt ?? new Date().toISOString() }));
 
   const next = {
     ...cur,
-    voucherAmount,
-    actualSpent,
+    vatMode: input.vatMode === "exclusive" ? "exclusive" : "inclusive",
+    lines,
     receipts: receipts.length ? receipts : cur.receipts,
     recordedByName: user.name,
     recordedRole: admin ? "Admin" : workflowRoleLabel("purchaser"),
@@ -829,7 +838,7 @@ export async function settleReconciliation(purchaseRequestId: string, note?: str
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   const cur = coerceReconciliation(pr.reconciliation);
-  if (typeof cur.actualSpent !== "number") throw new Error("Record the actual spend first.");
+  if (!isReconciled(cur)) throw new Error("Record the actual spend first.");
   const assignments = await getWorkflowRoles();
   const settleRole = (["accounting", "purchaser"] as WorkflowRoleKey[]).find((r) => userHasWorkflowRole(assignments, user.id, r));
   const next = {
