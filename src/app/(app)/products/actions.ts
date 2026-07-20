@@ -156,15 +156,31 @@ export async function importProducts(
   if (rows.length < 2) return fail("The file has no data rows (needs a header row + at least one product).");
 
   const header = rows[0].map((h) => h.replace(/^﻿/, "").trim().toLowerCase());
-  const col = (names: string[]) => header.findIndex((h) => names.includes(h));
-  const iName = col(["name", "item", "product", "description"]);
-  const iUnit = col(["unit", "uom"]);
-  const iCat = col(["category"]);
-  const iNote = col(["note", "remarks", "remark"]);
-  const iSup = col(["supplier", "supplier name", "company"]);
-  const iCode = col(["code", "supplier code", "sku"]);
-  const iPrice = col(["price", "unit price", "cost"]);
-  if (iName < 0) return fail(`The file needs a "name" column. Columns found: ${header.filter(Boolean).join(", ") || "(none)"}.`);
+  // Flexible header matching: an exact match wins, otherwise a header that
+  // *contains* the keyword (so "item description" → name, "supplier's name" →
+  // supplier). Each column is claimed once; the more specific columns are
+  // assigned first so a generic keyword can't steal a labelled one (e.g. "name"
+  // must not grab "supplier's name").
+  const used = new Set<number>();
+  const pick = (keywords: string[]): number => {
+    for (const kw of keywords) {
+      const i = header.findIndex((h, idx) => !used.has(idx) && h === kw);
+      if (i >= 0) { used.add(i); return i; }
+    }
+    for (const kw of keywords) {
+      const i = header.findIndex((h, idx) => !used.has(idx) && h.includes(kw));
+      if (i >= 0) { used.add(i); return i; }
+    }
+    return -1;
+  };
+  const iSup = pick(["supplier", "supplier's name", "supplier name", "vendor", "company"]);
+  const iCode = pick(["code", "supplier code", "item code", "sku"]);
+  const iPrice = pick(["price", "unit price", "unit cost", "cost"]);
+  const iUnit = pick(["unit", "uom", "units"]);
+  const iCat = pick(["category", "categories"]);
+  const iNote = pick(["note", "notes", "remarks", "remark"]);
+  const iName = pick(["name", "item description", "description", "item", "product", "particulars"]);
+  if (iName < 0) return fail(`The file needs a product-name column (e.g. "name", "item description" or "product"). Columns found: ${header.filter(Boolean).join(", ") || "(none)"}.`);
 
   // Group rows by product name; collect a supplier link per row that has one.
   const groups = new Map<string, ImportGroup>();
