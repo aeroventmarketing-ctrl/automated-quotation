@@ -11,8 +11,9 @@ export const config = {
   // pay with PayPal/crypto/more cards). Defaults to openrouter when an
   // OPENROUTER_API_KEY is present, else anthropic.
   aiProvider: (process.env.AI_PROVIDER ?? (process.env.OPENROUTER_API_KEY ? "openrouter" : "anthropic")).toLowerCase(),
-  // OpenRouter model slug (see openrouter.ai/models). A vision-capable Claude.
-  openrouterModel: process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet",
+  // OpenRouter model slug (see openrouter.ai/models — copy the exact id). A
+  // vision-capable Claude. Override with OPENROUTER_MODEL if this 404s.
+  openrouterModel: process.env.OPENROUTER_MODEL ?? "anthropic/claude-sonnet-4.5",
   // Optional: your Anthropic price per 1M tokens (USD), used only to show an
   // estimated cost on the AI-usage page. Leave unset to display token counts
   // only (no fabricated pricing). Find current rates on the Anthropic console.
