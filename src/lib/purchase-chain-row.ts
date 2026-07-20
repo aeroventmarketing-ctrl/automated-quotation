@@ -52,6 +52,8 @@ export interface PurchaseReconcileView {
   status: ReconcileStatus | null; // null until recorded
   receipts: { path: string; name: string }[];
   recorded: string | null; // "Name (Role) · date/time"
+  escalated: string | null; // accounting informed the approver
+  approved: string | null; // approver authorised the discrepancy
   settled: string | null; // settlement stamp, or null
   note: string | null;
 }
@@ -94,9 +96,16 @@ export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileVi
     status,
     receipts: (r.receipts ?? []).map((d) => ({ path: d.path, name: d.name })),
     recorded: r.recordedAt ? `${r.recordedByName}${r.recordedRole ? ` (${r.recordedRole})` : ""} · ${formatDateTime(new Date(r.recordedAt))}` : null,
-    settled: r.settled?.at ? `${r.settled.byName}${r.settled.role ? ` (${r.settled.role})` : ""} · ${formatDateTime(new Date(r.settled.at))}${r.settled.note ? ` · ${r.settled.note}` : ""}` : null,
+    escalated: stampLabel(r.escalation),
+    approved: stampLabel(r.approval),
+    settled: stampLabel(r.settled),
     note: r.note ?? null,
   };
+}
+
+function stampLabel(s: { byName: string; role: string; at: string; note?: string } | undefined): string | null {
+  if (!s?.at) return null;
+  return `${s.byName}${s.role ? ` (${s.role})` : ""} · ${formatDateTime(new Date(s.at))}${s.note ? ` · ${s.note}` : ""}`;
 }
 
 export interface PurchaseChainRow {
@@ -121,6 +130,8 @@ export interface PurchaseChainRow {
   reconcile: PurchaseReconcileView;
   canRecordReconcile: boolean;
   canSettleReconcile: boolean;
+  canEscalateReconcile: boolean;
+  canApproveReconcile: boolean;
 }
 
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
@@ -242,8 +253,12 @@ export function buildPurchaseChainRow(
   // Voucher reconciliation: the purchaser records the spend once bought;
   // accounting or the purchaser settle any change / overspend.
   const reconcile = buildReconcileView(pr);
-  const canRecordReconcile = canReconcileAt(status) && (ctx.canAct("purchaser") || ctx.canAct("accounting"));
+  // Purchaser/accounting record it; the approver may also edit figures.
+  const canRecordReconcile = canReconcileAt(status) && (ctx.canAct("purchaser") || ctx.canAct("accounting") || ctx.canAct("payment_approver"));
   const canSettleReconcile = ctx.canAct("accounting") || ctx.canAct("purchaser");
+  // Discrepancy authorisation: accounting/purchaser escalate; the approver approves.
+  const canEscalateReconcile = ctx.canAct("accounting") || ctx.canAct("purchaser");
+  const canApproveReconcile = ctx.canAct("payment_approver");
   const actions = purchaseStepsFrom(status).map((step) => {
     const names = ctx.namesForRole(step.role);
     return {
@@ -275,5 +290,7 @@ export function buildPurchaseChainRow(
     reconcile,
     canRecordReconcile,
     canSettleReconcile,
+    canEscalateReconcile,
+    canApproveReconcile,
   };
 }

@@ -386,6 +386,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       reconcile: buildReconcileView(pr),
       canRecordReconcile: false,
       canSettleReconcile: false,
+      canEscalateReconcile: false,
+      canApproveReconcile: false,
     };
   });
 

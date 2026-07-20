@@ -70,6 +70,8 @@ export interface BatchCard {
   reconcile: PurchaseReconcileView;
   canRecordReconcile: boolean;
   canSettleReconcile: boolean;
+  canEscalateReconcile: boolean;
+  canApproveReconcile: boolean;
 }
 
 function todayInput(): string {
@@ -342,6 +344,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         reconcile={batch.reconcile}
         canRecord={batch.canRecordReconcile}
         canSettle={batch.canSettleReconcile}
+        canEscalate={batch.canEscalateReconcile}
+        canApprove={batch.canApproveReconcile}
       />
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">

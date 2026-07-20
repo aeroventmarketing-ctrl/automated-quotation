@@ -7,14 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
-import { recordReconciliation, settleReconciliation } from "../orders/actions";
+import { recordReconciliation, settleReconciliation, escalateReconciliation, approveReconciliation } from "../orders/actions";
 
 const VAT = 0.12;
-// Auto-record threshold: the AI-read receipt is recorded without human review
-// only when the total is within ₱5 (or 0.05% of the voucher) of the PO. Any
-// bigger gap — or an unreadable line — is left for a person to check.
-const AUTO_TOLERANCE = 5;
-const AUTO_TOLERANCE_PCT = 0.0005;
+// Auto-record threshold — mirrors balanceTolerance() on the server so an
+// AI-read receipt that auto-records also reads as "balanced" (never as a
+// discrepancy needing approval). Beyond this, a person reviews.
+const balanceTolerance = (voucher: number) => Math.max(1, Math.round(Math.abs(voucher) * 0.0005 * 100) / 100);
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const num = (s: string) => Number(String(s ?? "").replace(/,/g, "").trim()) || 0;
@@ -34,12 +33,16 @@ export function PurchaseReconcilePanel({
   reconcile,
   canRecord,
   canSettle,
+  canEscalate = false,
+  canApprove = false,
   readOnly = false,
 }: {
   prId: string;
   reconcile: PurchaseReconcileView;
   canRecord: boolean;
   canSettle: boolean;
+  canEscalate?: boolean;
+  canApprove?: boolean;
   readOnly?: boolean;
 }) {
   const router = useRouter();
@@ -142,7 +145,7 @@ export function PurchaseReconcilePanel({
       const voucher = round2(newRows.reduce((a, r) => a + r.poAmount, 0) * f);
       const actual = round2(newRows.reduce((a, r) => a + num(r.actual), 0));
       const variance = round2(voucher - actual);
-      const tolerance = Math.max(AUTO_TOLERANCE, round2(voucher * AUTO_TOLERANCE_PCT));
+      const tolerance = balanceTolerance(voucher);
 
       if (allMatched && Math.abs(variance) <= tolerance) {
         // Fully automatic — no human needed. Record it straight away.
@@ -178,6 +181,22 @@ export function PurchaseReconcilePanel({
     const n = window.prompt("Note (optional) — e.g. change returned to accounting, overspend reimbursed:", "") ?? undefined;
     setBusy("settle"); setErr(null);
     try { await settleReconciliation(prId, n); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function escalate() {
+    const n = window.prompt("Message to the approver (optional) — explain the discrepancy:", "") ?? undefined;
+    setBusy("escalate"); setErr(null);
+    try { await escalateReconciliation(prId, n); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function approve() {
+    const n = window.prompt("Approval note (optional):", "") ?? undefined;
+    setBusy("approve"); setErr(null);
+    try { await approveReconciliation(prId, n); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
@@ -253,16 +272,60 @@ export function PurchaseReconcilePanel({
           )}
           {reconcile.note && <p className="text-xs text-muted-foreground">Note: {reconcile.note}</p>}
           {reconcile.recorded && <p className="text-xs text-muted-foreground">Reconciled by {reconcile.recorded}</p>}
-          {reconcile.settled ? (
+          {/* Discrepancy authorisation flow — only when it doesn't balance. */}
+          {reconcile.status !== "balanced" ? (
+            <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 p-2">
+              {reconcile.approved ? (
+                <>
+                  <p className="text-xs text-emerald-700">✓ Discrepancy approved — {reconcile.approved}</p>
+                  {reconcile.settled ? (
+                    <p className="text-xs text-emerald-700">✓ Settled — {reconcile.settled}</p>
+                  ) : !readOnly && canSettle ? (
+                    <button type="button" onClick={settle} disabled={busy === "settle"}
+                      className="rounded border border-emerald-600/50 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-600/10">
+                      {busy === "settle" ? "…" : reconcile.status === "change" ? "Mark change returned" : "Mark overspend settled"}
+                    </button>
+                  ) : null}
+                </>
+              ) : reconcile.escalated ? (
+                <>
+                  <p className="text-xs text-amber-700">Discrepancy sent to the approver — {reconcile.escalated}</p>
+                  {!readOnly && canApprove ? (
+                    <button type="button" onClick={approve} disabled={busy === "approve"}
+                      className="rounded border border-emerald-600/50 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-600/10">
+                      {busy === "approve" ? "…" : "Approve discrepancy"}
+                    </button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Awaiting the Approver&rsquo;s decision — the approver may approve or edit the figures.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-amber-700">This voucher doesn&rsquo;t balance — it needs the Approver&rsquo;s authorisation.</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!readOnly && canEscalate && (
+                      <button type="button" onClick={escalate} disabled={busy === "escalate"}
+                        className="rounded border border-amber-600/50 px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-600/10">
+                        {busy === "escalate" ? "…" : "Notify approver of discrepancy"}
+                      </button>
+                    )}
+                    {!readOnly && canApprove && (
+                      <button type="button" onClick={approve} disabled={busy === "approve"}
+                        className="rounded border border-emerald-600/50 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-600/10">
+                        {busy === "approve" ? "…" : "Approve discrepancy"}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : reconcile.settled ? (
             <p className="text-xs text-emerald-700">✓ Settled — {reconcile.settled}</p>
-          ) : reconcile.status !== "balanced" && !readOnly && canSettle ? (
-            <button type="button" onClick={settle} disabled={busy === "settle"}
-              className="rounded border border-emerald-600/50 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-600/10">
-              {busy === "settle" ? "…" : reconcile.status === "change" ? "Mark change returned" : "Mark overspend settled"}
-            </button>
           ) : null}
           {!readOnly && canRecord && !open && (
-            <button type="button" onClick={startEdit} className="ml-3 text-xs font-medium text-muted-foreground hover:text-foreground">Correct figures</button>
+            <button type="button" onClick={startEdit} className="text-xs font-medium text-muted-foreground hover:text-foreground">
+              {reconcile.status === "balanced" ? "Correct figures" : "Edit figures"}
+            </button>
           )}
         </>
       ) : !readOnly && canRecord && !open ? (

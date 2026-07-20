@@ -791,9 +791,11 @@ export async function recordReconciliation(
   if (!user) throw new Error("Unauthorized");
   const admin = isAdmin(user);
   const assignments = await getWorkflowRoles();
-  const recRole = (["purchaser", "accounting"] as WorkflowRoleKey[]).find((r) => userHasWorkflowRole(assignments, user.id, r));
+  // The purchaser/accounting record it; the payment approver may also edit
+  // figures when authorising a discrepancy.
+  const recRole = (["purchaser", "accounting", "payment_approver"] as WorkflowRoleKey[]).find((r) => userHasWorkflowRole(assignments, user.id, r));
   if (!(admin || recRole)) {
-    throw new Error("Only the Purchaser, Accounting or an admin can reconcile a voucher.");
+    throw new Error("Only the Purchaser, Accounting, the Approver or an admin can reconcile a voucher.");
   }
   const lines = (input.lines ?? [])
     .map((l) => ({
@@ -822,6 +824,57 @@ export async function recordReconciliation(
     recordedRole: recRole ? workflowRoleLabel(recRole) : "Admin",
     recordedAt: new Date().toISOString(),
     note: input.note?.trim() || undefined,
+  };
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/**
+ * Accounting escalates a discrepancy (a reconciliation that doesn't balance) to
+ * the admin / payment approver for authorisation.
+ */
+export async function escalateReconciliation(purchaseRequestId: string, note?: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  const assignments = await getWorkflowRoles();
+  const role = (["accounting", "purchaser"] as WorkflowRoleKey[]).find((r) => userHasWorkflowRole(assignments, user.id, r));
+  if (!(admin || role)) throw new Error("Only Accounting, the Purchaser or an admin can escalate a discrepancy.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const cur = coerceReconciliation(pr.reconciliation);
+  if (!isReconciled(cur)) throw new Error("Record the actual spend first.");
+  const next = {
+    ...cur,
+    escalation: { byName: user.name, role: role ? workflowRoleLabel(role) : "Admin", at: new Date().toISOString(), note: note?.trim() || undefined },
+  };
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/**
+ * The payment approver (or an admin) authorises a discrepancy — the approver has
+ * the authority to approve it as-is (or edit the figures first via
+ * recordReconciliation, then approve).
+ */
+export async function approveReconciliation(purchaseRequestId: string, note?: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  const assignments = await getWorkflowRoles();
+  const isApprover = userHasWorkflowRole(assignments, user.id, "payment_approver");
+  if (!(admin || isApprover)) throw new Error("Only the Payment Approver or an admin can approve a discrepancy.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const cur = coerceReconciliation(pr.reconciliation);
+  if (!isReconciled(cur)) throw new Error("Record the actual spend first.");
+  const next = {
+    ...cur,
+    approval: { byName: user.name, role: isApprover ? workflowRoleLabel("payment_approver") : "Admin", at: new Date().toISOString(), note: note?.trim() || undefined },
   };
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);

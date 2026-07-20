@@ -187,8 +187,10 @@ export default async function PurchasingPage() {
       const canResolveReturn = canAct("purchaser") || canAct("warehouse");
       // Voucher reconciliation rides on the anchor (the whole PO / voucher).
       const reconcile = buildReconcileView(anchor);
-      const canRecordReconcile = canReconcileAt(status) && (canAct("purchaser") || canAct("accounting"));
+      const canRecordReconcile = canReconcileAt(status) && (canAct("purchaser") || canAct("accounting") || canAct("payment_approver"));
       const canSettleReconcile = canAct("accounting") || canAct("purchaser");
+      const canEscalateReconcile = canAct("accounting") || canAct("purchaser");
+      const canApproveReconcile = canAct("payment_approver");
       return {
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
@@ -219,6 +221,8 @@ export default async function PurchasingPage() {
         reconcile,
         canRecordReconcile,
         canSettleReconcile,
+        canEscalateReconcile,
+        canApproveReconcile,
       } satisfies BatchCard;
     });
 

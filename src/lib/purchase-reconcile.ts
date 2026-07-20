@@ -27,7 +27,7 @@ export interface ReconcileLine {
   actualAmount: number; // actual amount paid for this line, per the receipt
 }
 
-export interface ReconcileSettlement {
+export interface ReconcileStamp {
   byName: string;
   role: string;
   at: string; // ISO
@@ -42,7 +42,21 @@ export interface Reconciliation {
   recordedRole?: string;
   recordedAt?: string; // ISO
   note?: string;
-  settled?: ReconcileSettlement; // change returned / overspend reimbursed
+  // Discrepancy handling (only when the tally doesn't balance):
+  escalation?: ReconcileStamp; // accounting informed the approver
+  approval?: ReconcileStamp; // the payment approver authorised the discrepancy
+  settled?: ReconcileStamp; // change returned / overspend reimbursed
+}
+
+function coerceStamp(v: unknown): ReconcileStamp | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  return {
+    byName: typeof o.byName === "string" ? o.byName : "",
+    role: typeof o.role === "string" ? o.role : "",
+    at: typeof o.at === "string" ? o.at : "",
+    note: typeof o.note === "string" ? o.note : undefined,
+  };
 }
 
 function coerceDoc(v: unknown): SaleDoc | null {
@@ -66,7 +80,6 @@ function coerceLine(v: unknown): ReconcileLine | null {
 export function coerceReconciliation(v: unknown): Reconciliation {
   if (!v || typeof v !== "object") return {};
   const o = v as Record<string, unknown>;
-  const s = o.settled && typeof o.settled === "object" ? (o.settled as Record<string, unknown>) : null;
   return {
     vatMode: o.vatMode === "exclusive" ? "exclusive" : o.vatMode === "inclusive" ? "inclusive" : undefined,
     lines: Array.isArray(o.lines) ? o.lines.map(coerceLine).filter((l): l is ReconcileLine => l !== null) : undefined,
@@ -75,14 +88,9 @@ export function coerceReconciliation(v: unknown): Reconciliation {
     recordedRole: typeof o.recordedRole === "string" ? o.recordedRole : undefined,
     recordedAt: typeof o.recordedAt === "string" ? o.recordedAt : undefined,
     note: typeof o.note === "string" ? o.note : undefined,
-    settled: s
-      ? {
-          byName: typeof s.byName === "string" ? s.byName : "",
-          role: typeof s.role === "string" ? s.role : "",
-          at: typeof s.at === "string" ? s.at : "",
-          note: typeof s.note === "string" ? s.note : undefined,
-        }
-      : undefined,
+    escalation: coerceStamp(o.escalation),
+    approval: coerceStamp(o.approval),
+    settled: coerceStamp(o.settled),
   };
 }
 
@@ -93,10 +101,19 @@ export function vatFactor(mode: ReconcileVatMode): number {
 
 export type ReconcileStatus = "balanced" | "change" | "over";
 
+/**
+ * How close the total must be to count as "balanced" (and to auto-record without
+ * a human). A small floor absorbs VAT/centavo rounding; it scales gently for
+ * large vouchers. Anything beyond this is a discrepancy that needs the approver.
+ */
+export function balanceTolerance(voucherAmount: number): number {
+  return Math.max(1, round2(Math.abs(voucherAmount) * 0.0005));
+}
+
 /** Compare an issued voucher against the actual spend. variance = voucher − spent. */
 export function computeVariance(voucherAmount: number, actualSpent: number): { variance: number; status: ReconcileStatus } {
   const variance = round2(voucherAmount - actualSpent);
-  if (Math.abs(variance) < 0.005) return { variance: 0, status: "balanced" };
+  if (Math.abs(variance) <= balanceTolerance(voucherAmount)) return { variance, status: "balanced" };
   return { variance, status: variance > 0 ? "change" : "over" };
 }
 

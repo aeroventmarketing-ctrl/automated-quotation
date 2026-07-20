@@ -45,6 +45,8 @@ interface PRRow {
   reconcile?: PurchaseReconcileView;
   canRecordReconcile?: boolean;
   canSettleReconcile?: boolean;
+  canEscalateReconcile?: boolean;
+  canApproveReconcile?: boolean;
 }
 
 export function PurchasingChain({
@@ -207,6 +209,8 @@ export function PurchasingChain({
                 reconcile={r.reconcile}
                 canRecord={!readOnly && (r.canRecordReconcile ?? false)}
                 canSettle={!readOnly && (r.canSettleReconcile ?? false)}
+                canEscalate={!readOnly && (r.canEscalateReconcile ?? false)}
+                canApprove={!readOnly && (r.canApproveReconcile ?? false)}
                 readOnly={readOnly}
               />
             )}
