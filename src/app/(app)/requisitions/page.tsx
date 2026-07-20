@@ -43,6 +43,10 @@ export default async function RequisitionsPage() {
   const userName = new Map(allUsers.map((u) => [u.id, u.name] as const));
   const namesForRole = (role: WorkflowRoleKey): string[] =>
     usersWithWorkflowRole(assignments, role).map((uid) => userName.get(uid)).filter((n): n is string => !!n);
+  // Real role check so the voucher reconciliation (and its AI receipt reader) is
+  // usable here by the Purchaser / Accounting / Approver — the rest of the chain
+  // stays read-only (processed in Purchasing).
+  const canAct = (role: WorkflowRoleKey): boolean => admin || has(role);
 
   // The viewer's requisitions (their departments; purchaser/admin see all active).
   let rows: ReturnType<typeof buildPurchaseChainRow>[] = [];
@@ -56,7 +60,7 @@ export default async function RequisitionsPage() {
       },
       orderBy: { createdAt: "desc" },
     });
-    rows = prs.map((pr) => buildPurchaseChainRow(pr, { mrfNo: null, canManagePO: false, namesForRole, canAct: () => false }));
+    rows = prs.map((pr) => buildPurchaseChainRow(pr, { mrfNo: null, canManagePO: false, namesForRole, canAct }));
   } catch {
     tableMissing = true;
   }

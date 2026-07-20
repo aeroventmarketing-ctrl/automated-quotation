@@ -202,16 +202,19 @@ export function PurchasingChain({
               readOnly={readOnly}
             />
 
-            {/* Voucher reconciliation — actual spend vs the issued voucher. */}
+            {/* Voucher reconciliation — actual spend vs the issued voucher.
+                Interactivity is driven by the row's own reconcile permissions,
+                not the chain's read-only flag, so it works on monitoring
+                surfaces (e.g. Requisitions) for whoever may reconcile. */}
             {r.reconcile && (
               <PurchaseReconcilePanel
                 prId={r.id}
                 reconcile={r.reconcile}
-                canRecord={!readOnly && (r.canRecordReconcile ?? false)}
-                canSettle={!readOnly && (r.canSettleReconcile ?? false)}
-                canEscalate={!readOnly && (r.canEscalateReconcile ?? false)}
-                canApprove={!readOnly && (r.canApproveReconcile ?? false)}
-                readOnly={readOnly}
+                canRecord={r.canRecordReconcile ?? false}
+                canSettle={r.canSettleReconcile ?? false}
+                canEscalate={r.canEscalateReconcile ?? false}
+                canApprove={r.canApproveReconcile ?? false}
+                readOnly={!(r.canRecordReconcile || r.canSettleReconcile || r.canEscalateReconcile || r.canApproveReconcile)}
               />
             )}
 
