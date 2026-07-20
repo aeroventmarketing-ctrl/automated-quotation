@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { X } from "lucide-react";
+import { X, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -183,6 +183,18 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
   const [scanTarget, setScanTarget] = useState<string | null>(null);
   const [scanNonce, setScanNonce] = useState(0);
 
+  // Text search: filter by name, SKU, category or supplier company.
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const filtered = q === ""
+    ? products
+    : products.filter((p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.sku ?? "").toLowerCase().includes(q) ||
+        (p.category ?? "").toLowerCase().includes(q) ||
+        p.suppliers.some((s) => s.company.toLowerCase().includes(q)),
+      );
+
   function handleScan({ product }: { product: ScanProduct }) {
     setScanTarget(product.id); setScanNonce((n) => n + 1);
     return { ok: true, message: `Found: ${product.name}` };
@@ -250,10 +262,24 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
         </div>
       )}
 
+      {/* Text search across name / SKU / category / supplier. */}
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input className="h-9 pl-8" placeholder="Search products by name, SKU, category or supplier…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {q !== "" && (
+          <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       {products.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No products yet.</p>
+      ) : filtered.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">No products match &ldquo;{query}&rdquo;.</p>
       ) : (
         <div className="overflow-x-auto">
+          {q !== "" && <p className="mb-1 text-xs text-muted-foreground">{filtered.length} of {products.length} products</p>}
           <Table>
             <TableHeader>
               <TableRow>
@@ -264,7 +290,7 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+              {filtered.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
             </TableBody>
           </Table>
         </div>

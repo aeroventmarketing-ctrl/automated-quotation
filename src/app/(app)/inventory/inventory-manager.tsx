@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ScanLine } from "lucide-react";
+import { ScanLine, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -246,6 +246,17 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
   const [scanTarget, setScanTarget] = useState<string | null>(null);
   const [scanNonce, setScanNonce] = useState(0);
   const scanRef = useRef<HTMLInputElement>(null);
+  // Text search: filter by name, SKU, category or location.
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const filtered = q === ""
+    ? items
+    : items.filter((it) =>
+        it.name.toLowerCase().includes(q) ||
+        (it.sku ?? "").toLowerCase().includes(q) ||
+        (it.category ?? "").toLowerCase().includes(q) ||
+        (it.location ?? "").toLowerCase().includes(q),
+      );
 
   async function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
@@ -358,10 +369,24 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
         </div>
       )}
 
+      {/* Text search across name / SKU / category / location. */}
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input className="h-9 pl-8" placeholder="Search items by name, SKU, category or location…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {q !== "" && (
+          <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No stock items yet.</p>
+      ) : filtered.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">No items match &ldquo;{query}&rdquo;.</p>
       ) : (
         <div className="overflow-x-auto">
+          {q !== "" && <p className="mb-1 text-xs text-muted-foreground">{filtered.length} of {items.length} items</p>}
           <Table>
             <TableHeader>
               <TableRow>
@@ -379,7 +404,7 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((it) => <StockRow key={it.id} item={it} canManage={canManage} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+              {filtered.map((it) => <StockRow key={it.id} item={it} canManage={canManage} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
             </TableBody>
           </Table>
         </div>
