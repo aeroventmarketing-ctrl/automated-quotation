@@ -151,10 +151,41 @@ export async function upsertUser(input: z.infer<typeof userSchema>) {
   revalidatePath("/admin/users");
 }
 
-export async function deleteUser(id: string) {
-  await assertAdmin();
-  await prisma.user.delete({ where: { id } });
+/**
+ * Delete a user's app record. Returns a result value (not a thrown error) so
+ * the reason survives Next.js's production redaction of server-action throws.
+ * A user who still has quotations or inquiries can't be hard-deleted (it would
+ * orphan that history) — we report exactly what's linking them instead.
+ */
+export async function deleteUser(id: string): Promise<{ ok: true } | { error: string }> {
+  const me = await assertAdmin();
+  if (me.id === id) return { error: "You can't delete your own account while signed in as it." };
+
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target) return { error: "That user no longer exists." };
+
+  const [prepared, approved, inquiries] = await Promise.all([
+    prisma.quotation.count({ where: { preparedById: id } }),
+    prisma.quotation.count({ where: { approvedById: id } }),
+    prisma.inquiry.count({ where: { createdById: id } }),
+  ]);
+  const blockers: string[] = [];
+  if (prepared) blockers.push(`${prepared} quotation${prepared === 1 ? "" : "s"} prepared`);
+  if (approved) blockers.push(`${approved} quotation${approved === 1 ? "" : "s"} approved`);
+  if (inquiries) blockers.push(`${inquiries} inquir${inquiries === 1 ? "y" : "ies"}`);
+  if (blockers.length) {
+    return {
+      error: `Can't delete ${target.name}: they're still linked to ${blockers.join(", ")}. Deleting would remove that history — reassign or keep the record instead.`,
+    };
+  }
+
+  try {
+    await prisma.user.delete({ where: { id } });
+  } catch {
+    return { error: "Could not delete this user — they're still linked to other records." };
+  }
   revalidatePath("/admin/users");
+  return { ok: true };
 }
 
 // A user's signature image (PNG/JPEG data URL) shown on their quotation exports.

@@ -71,10 +71,21 @@ export function UsersManager({ users }: { users: U[] }) {
     }
   }
 
+  const [delErr, setDelErr] = useState<string | null>(null);
+  const [delBusy, setDelBusy] = useState<string | null>(null);
   async function remove(id: string) {
     if (!confirm("Delete this user record?")) return;
-    await deleteUser(id);
-    router.refresh();
+    setDelErr(null);
+    setDelBusy(id);
+    try {
+      const res = await deleteUser(id);
+      if (res && "error" in res) { setDelErr(res.error); return; }
+      router.refresh();
+    } catch (e) {
+      setDelErr(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDelBusy(null);
+    }
   }
 
   // --- Signature upload ---
@@ -209,6 +220,7 @@ export function UsersManager({ users }: { users: U[] }) {
       <Card>
         <CardContent className="pt-6">
           {sigErr && <p className="mb-3 text-sm text-destructive">{sigErr}</p>}
+          {delErr && <p className="mb-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{delErr}</p>}
           <Table>
             <TableHeader>
               <TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Letter</TableHead><TableHead>Signature</TableHead><TableHead></TableHead></TableRow>
@@ -243,7 +255,7 @@ export function UsersManager({ users }: { users: U[] }) {
                   <TableCell className="text-right">
                     <Button size="sm" variant="ghost" onClick={() => edit(u)}>Edit</Button>
                     <Button size="sm" variant="ghost" onClick={() => openPw(u)}>Password</Button>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => remove(u.id)}>Delete</Button>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={delBusy === u.id} onClick={() => remove(u.id)}>{delBusy === u.id ? "Deleting…" : "Delete"}</Button>
                   </TableCell>
                 </TableRow>
               ))}
