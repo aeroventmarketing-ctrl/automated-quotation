@@ -7,7 +7,8 @@ import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Packa
 import type { Role } from "@prisma/client";
 
 export const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["SALES", "ENGINEER", "ADMIN"] },
+  { href: "/management", label: "Management Dashboard", icon: Gauge, roles: ["ADMIN"] },
+  { href: "/dashboard", label: "Sales Dashboard", icon: LayoutDashboard, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/inquiries", label: "Inquiries", icon: Inbox, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/quotations", label: "Quotations", icon: FileText, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/follow-ups", label: "Follow-ups", icon: BellRing, roles: ["SALES", "ENGINEER", "ADMIN"] },
@@ -18,7 +19,6 @@ export const NAV = [
   { href: "/purchasing", label: "Purchasing", icon: ShoppingCart, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/cash-requests", label: "Cash Requests", icon: Wallet, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/commissions", label: "Commissions", icon: Percent, roles: ["SALES", "ENGINEER", "ADMIN"] },
-  { href: "/management", label: "Management", icon: Gauge, roles: ["ADMIN"] },
   { href: "/tools", label: "HVAC Tools", icon: Wrench, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/admin", label: "Admin", icon: Settings, roles: ["ADMIN"] },
 ] as const;

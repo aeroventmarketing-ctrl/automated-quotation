@@ -147,7 +147,7 @@ export default async function ManagementPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Management</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Management Dashboard</h1>
           <p className="text-sm text-muted-foreground">Live snapshot across orders, production, inventory, receivables, purchasing, and commissions.</p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground">

@@ -233,7 +233,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <h1 className="text-2xl font-bold">Sales Dashboard</h1>
           <p className="text-muted-foreground">Welcome back, {user?.name}.</p>
         </div>
         <Button asChild>
