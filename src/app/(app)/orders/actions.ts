@@ -1207,6 +1207,8 @@ const CLOSE_DOC_KEYS = new Set([
   "unsigned_si", "unsigned_or_cr_af", "unsigned_dr",
   // Proof-of-delivery files uploaded by Logistics.
   "pod",
+  // Proof of final payment (for the approver's review, then archived).
+  "final_payment",
 ]);
 
 /** Load a quote for editing its sale documents; gate to Accounting/Sales/admin. */

@@ -8,6 +8,7 @@ import { closeDocsState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sa
 import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
 import { DeliveredForm } from "./delivered-form";
+import { FinalPaymentProof } from "./final-payment-proof";
 import {
   notifyClientReady,
   checkFinalPayment,
@@ -81,6 +82,11 @@ export function FulfillmentActions({
             {busy ? "Saving…" : "Notify client — order ready"}
           </Button>
         ) : awaiting("Sales to notify the client"))}
+
+      {/* Final payment proof — uploaded for the approver to review, then archived. */}
+      {(stage === "final_pay_review" || stage === "final_pay_checked") && (
+        <FinalPaymentProof orderId={orderId} initialFiles={closeDocs["final_payment"] ?? []} canEdit={canEditCloseDocs} />
+      )}
 
       {stage === "final_pay_review" &&
         (perms.canCheckPay ? (

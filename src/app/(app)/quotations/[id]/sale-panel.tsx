@@ -309,6 +309,10 @@ export function SalePanel({
           )}
         </div>
 
+        {/* Proof of the final payment — reviewed by the approver on the order,
+            reflected here once attached. */}
+        <DocSlot type={{ key: "final_payment", label: "Final payment proof", required: false }} />
+
         {/* 8–11. Sales Invoice, OR/CR/AF, Delivery Receipt, BIR 2307
             (Sales Invoice + BIR 2307 hidden for VAT-exclusive deals). */}
         {afterPaymentDocTypes(vatInclusive).map((t) => <DocSlot key={t.key} type={t} />)}

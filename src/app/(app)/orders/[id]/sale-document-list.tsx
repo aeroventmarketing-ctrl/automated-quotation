@@ -9,7 +9,7 @@ const download = (d: SaleDoc) => `${link(d)}&download=1&name=${encodeURIComponen
  * the order's Phase 5 card so the closing documents attached on the quotation
  * are visible/downloadable here too. Server component — just links.
  */
-export function SaleDocumentList({ sale, vatInclusive }: { sale: SaleRecord; vatInclusive: boolean }) {
+export function SaleDocumentList({ sale, vatInclusive, showFinalPayment = false }: { sale: SaleRecord; vatInclusive: boolean; showFinalPayment?: boolean }) {
   const docs = sale.docs ?? {};
   const rows: { label: string; files: SaleDoc[] }[] = [];
   if (sale.po) rows.push({ label: "Purchase Order", files: [sale.po] });
@@ -23,6 +23,7 @@ export function SaleDocumentList({ sale, vatInclusive }: { sale: SaleRecord; vat
   for (const t of afterPaymentDocTypes(vatInclusive)) {
     if ((docs[t.key] ?? []).length) rows.push({ label: t.label, files: docs[t.key] });
   }
+  if (showFinalPayment && (docs["final_payment"] ?? []).length) rows.push({ label: "Final payment", files: docs["final_payment"] });
   if ((docs["pod"] ?? []).length) rows.push({ label: "Proof of delivery", files: docs["pod"] });
   if (rows.length === 0) return null;
 
