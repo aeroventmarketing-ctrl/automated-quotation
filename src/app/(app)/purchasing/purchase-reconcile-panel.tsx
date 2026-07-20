@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import type { PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
-import { recordReconciliation, settleReconciliation, escalateReconciliation, approveReconciliation } from "../orders/actions";
+import { recordReconciliation, settleReconciliation, escalateReconciliation, approveReconciliation, escalateReconcileAiRead, resetReconcileAiRead } from "../orders/actions";
 
 const VAT = 0.12;
 // Auto-record threshold — mirrors balanceTolerance() on the server so an
@@ -212,6 +212,21 @@ export function PurchaseReconcilePanel({
     finally { setBusy(null); }
   }
 
+  async function notifyAiLimit() {
+    const n = window.prompt("Message to the admin/approver (optional) — the AI receipt-read limit was reached:", "") ?? undefined;
+    setBusy("ai-escalate"); setErr(null);
+    try { await escalateReconcileAiRead(prId, n); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function allowMoreAiReads() {
+    setBusy("ai-reset"); setErr(null);
+    try { await resetReconcileAiRead(prId); setReads(0); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
+
   const verdict = (status: PurchaseReconcileView["status"], variance: number) => {
     if (status === "balanced") return <span className="font-semibold text-emerald-700">Tallied ✓ — voucher matches receipts</span>;
     if (status === "change") return <span className="font-semibold text-amber-700">Change to return: {peso(variance)}</span>;
@@ -227,6 +242,33 @@ export function PurchaseReconcilePanel({
         <Scale className="h-3.5 w-3.5" /> Voucher reconciliation
         <span className="ml-1 font-normal normal-case">· VAT {reconcile.vatMode === "exclusive" ? "exclusive (+12%)" : "inclusive"}</span>
       </div>
+
+      {/* AI read-limit notice — Accounting informs the admin/approver, who may
+          bypass (allow more reads) or the figures go in manually. */}
+      {!readOnly && limitReached && (
+        <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5">
+          <p className="text-xs font-medium text-destructive">
+            AI read limit reached ({AI_RECEIPT_READ_LIMIT} of {AI_RECEIPT_READ_LIMIT} used). Check the receipt and enter the figures manually — or ask the admin/approver to allow more reads.
+          </p>
+          {reconcile.aiReadEscalated ? (
+            <p className="text-xs text-amber-700">Sent to the admin/approver — {reconcile.aiReadEscalated}</p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {!reconcile.aiReadEscalated && canEscalate && !canApprove && (
+              <button type="button" onClick={notifyAiLimit} disabled={busy === "ai-escalate"}
+                className="rounded border border-amber-600/50 px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-600/10">
+                {busy === "ai-escalate" ? "…" : "Notify admin/approver"}
+              </button>
+            )}
+            {canApprove && (
+              <button type="button" onClick={allowMoreAiReads} disabled={busy === "ai-reset"}
+                className="rounded border border-primary/50 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10">
+                {busy === "ai-reset" ? "…" : `Allow ${AI_RECEIPT_READ_LIMIT} more AI reads (bypass)`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {recorded && reconcile.lines && (
         <div className="overflow-x-auto">
@@ -436,9 +478,7 @@ export function PurchaseReconcilePanel({
             </ul>
           )}
           {limitReached ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1 text-xs font-medium text-destructive">
-              AI read limit reached ({AI_RECEIPT_READ_LIMIT} of {AI_RECEIPT_READ_LIMIT} used). Please check the receipt and enter the figures manually.
-            </p>
+            <p className="text-xs font-medium text-destructive">AI read limit reached — check the receipt and enter the figures manually (see the notice above), or ask the admin/approver to allow more reads.</p>
           ) : reads > 0 ? (
             <p className="text-xs text-muted-foreground">AI reads left: {readsLeft} of {AI_RECEIPT_READ_LIMIT}.</p>
           ) : null}

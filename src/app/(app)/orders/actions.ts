@@ -907,6 +907,50 @@ export async function settleReconciliation(purchaseRequestId: string, note?: str
 }
 
 /**
+ * When the AI receipt-read limit is reached, Accounting/the Purchaser informs
+ * the admin/approver so they can allow more reads (or the figures go in by hand).
+ */
+export async function escalateReconcileAiRead(purchaseRequestId: string, note?: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  const assignments = await getWorkflowRoles();
+  const role = (["accounting", "purchaser"] as WorkflowRoleKey[]).find((r) => userHasWorkflowRole(assignments, user.id, r));
+  if (!(admin || role)) throw new Error("Only Accounting, the Purchaser or an admin can do this.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const cur = coerceReconciliation(pr.reconciliation);
+  const next = {
+    ...cur,
+    aiReadEscalation: { byName: user.name, role: role ? workflowRoleLabel(role) : "Admin", at: new Date().toISOString(), note: note?.trim() || undefined },
+  };
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/**
+ * The admin/approver bypasses the AI receipt-read limit — resets the count so
+ * another set of AI reads is allowed (and clears the escalation notice).
+ */
+export async function resetReconcileAiRead(purchaseRequestId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  const isApprover = userHasWorkflowRole(await getWorkflowRoles(), user.id, "payment_approver");
+  if (!(admin || isApprover)) throw new Error("Only the Payment Approver or an admin can bypass the AI-read limit.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const cur = coerceReconciliation(pr.reconciliation);
+  const next = { ...cur, aiReadCount: 0, aiReadEscalation: undefined };
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/**
  * Cancel a purchase request (single or the whole combined PO). Before approval
  * the requestor, the purchaser, or an admin can cancel; once approved only an
  * admin can. Not possible once received into stock.

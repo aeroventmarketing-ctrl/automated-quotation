@@ -256,6 +256,41 @@ export async function approveCashLiquidation(id: string, note?: string): Promise
   revalidatePath("/cash-requests");
 }
 
+/**
+ * When the AI receipt-read limit is reached, the requestor/accounting informs
+ * the admin/approver so they can allow more reads (or the figures go in by hand).
+ */
+export async function escalateCashAiRead(id: string, note?: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  const pr = await loadOr404(id);
+  const acct = await financeRole(user.id, ["accounting"]);
+  if (!(admin || pr.requestedById === user.id || acct)) throw new Error("Only the requestor, Accounting or an admin can do this.");
+  const cur = coerceLiquidation(pr.liquidation);
+  const role = acct ? workflowRoleLabel("accounting") : pr.requestedById === user.id ? "Requestor" : "Admin";
+  const next = { ...cur, aiReadEscalation: { byName: user.name, role, at: new Date().toISOString(), note: note?.trim() || undefined } };
+  await prisma.cashRequest.update({ where: { id }, data: { liquidation: next as unknown as Prisma.InputJsonValue } });
+  revalidatePath("/cash-requests");
+}
+
+/**
+ * The admin/approver bypasses the AI receipt-read limit — resets the count so
+ * another set of AI reads is allowed (and clears the escalation notice).
+ */
+export async function resetCashAiRead(id: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  const isApprover = userHasWorkflowRole(await getWorkflowRoles(), user.id, "payment_approver");
+  if (!(admin || isApprover)) throw new Error("Only the Payment Approver or an admin can bypass the AI-read limit.");
+  const pr = await loadOr404(id);
+  const cur = coerceLiquidation(pr.liquidation);
+  const next = { ...cur, aiReadCount: 0, aiReadEscalation: undefined };
+  await prisma.cashRequest.update({ where: { id }, data: { liquidation: next as unknown as Prisma.InputJsonValue } });
+  revalidatePath("/cash-requests");
+}
+
 /** Settle the liquidation — change returned / overspend reimbursed → SETTLED. */
 export async function settleCashLiquidation(id: string, note?: string): Promise<void> {
   const user = await getCurrentUser();

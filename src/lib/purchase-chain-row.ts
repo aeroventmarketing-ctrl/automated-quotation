@@ -57,6 +57,7 @@ export interface PurchaseReconcileView {
   settled: string | null; // settlement stamp, or null
   note: string | null;
   aiReads: number; // AI receipt reads used (against the per-voucher limit)
+  aiReadEscalated: string | null; // accounting informed the approver the AI limit was hit
 }
 
 export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileView {
@@ -102,6 +103,7 @@ export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileVi
     settled: stampLabel(r.settled),
     note: r.note ?? null,
     aiReads: r.aiReadCount ?? 0,
+    aiReadEscalated: stampLabel(r.aiReadEscalation),
   };
 }
 

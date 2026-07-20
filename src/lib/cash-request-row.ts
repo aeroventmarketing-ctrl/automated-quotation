@@ -54,6 +54,7 @@ export interface CashLiquidationView {
   settled: string | null;
   note: string | null;
   aiReads: number; // AI receipt reads used (against the per-liquidation limit)
+  aiReadEscalated: string | null; // requestor/accounting informed the approver the AI limit was hit
 }
 
 export interface CashRequestRow {
@@ -202,6 +203,7 @@ export function buildCashRequestRow(
     settled: stampLabel(l.settled),
     note: l.note ?? null,
     aiReads: l.aiReadCount ?? 0,
+    aiReadEscalated: stampLabel(l.aiReadEscalation),
   };
 
   return {
