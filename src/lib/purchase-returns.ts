@@ -8,6 +8,7 @@
  * PO they attach to the anchor request — the whole PO.
  */
 import type { PRStatus } from "@/lib/purchasing";
+import type { SaleDoc } from "@/lib/sale";
 
 export interface PurchaseReturn {
   id: string;
@@ -20,6 +21,14 @@ export interface PurchaseReturn {
   resolvedRole?: string;
   resolvedAt?: string; // ISO — replacement received / return settled
   resolutionNote?: string;
+  proof?: SaleDoc[]; // proof the item was replaced (uploaded on resolution)
+}
+
+function coerceDoc(v: unknown): SaleDoc | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.path !== "string" || typeof o.name !== "string") return null;
+  return { path: o.path, name: o.name, uploadedAt: typeof o.uploadedAt === "string" ? o.uploadedAt : "" };
 }
 
 export function coercePurchaseReturns(v: unknown): PurchaseReturn[] {
@@ -40,6 +49,7 @@ export function coercePurchaseReturns(v: unknown): PurchaseReturn[] {
       resolvedRole: typeof o.resolvedRole === "string" ? o.resolvedRole : undefined,
       resolvedAt: typeof o.resolvedAt === "string" ? o.resolvedAt : undefined,
       resolutionNote: typeof o.resolutionNote === "string" ? o.resolutionNote : undefined,
+      proof: Array.isArray(o.proof) ? o.proof.map(coerceDoc).filter((d): d is SaleDoc => d !== null) : undefined,
     });
   }
   return out;

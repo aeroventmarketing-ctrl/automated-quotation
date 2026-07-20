@@ -24,6 +24,7 @@ export interface PurchaseReturnView {
   reason: string;
   raised: string; // "Name (Role) · date/time"
   resolved: string | null; // resolution stamp, or null while awaiting replacement
+  proof: { path: string; name: string }[]; // proof the item was replaced
 }
 
 export interface PurchaseChainRow {
@@ -83,6 +84,7 @@ export function buildReturnViews(pr: PurchaseRequestLike): PurchaseReturnView[] 
     resolved: r.resolvedAt
       ? `Replacement received — ${r.resolvedByName}${r.resolvedRole ? ` (${r.resolvedRole})` : ""} · ${formatDateTime(new Date(r.resolvedAt))}${r.resolutionNote ? ` · ${r.resolutionNote}` : ""}`
       : null,
+    proof: (r.proof ?? []).map((d) => ({ path: d.path, name: d.name })),
   }));
 }
 

@@ -2,18 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Upload, FileText, Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
+import type { SaleDoc } from "@/lib/sale";
 import { returnPurchaseItems, resolvePurchaseReturn } from "../orders/actions";
+
+const proofLink = (path: string) => `/api/purchase-uploads?path=${encodeURIComponent(path)}`;
+const proofDownload = (path: string, name: string) => `${proofLink(path)}&download=1&name=${encodeURIComponent(name)}`;
 
 /**
  * "Returns to supplier" panel: lists items disapproved on inspection and sent
  * back for replacement, lets an inspector raise a new return, and lets the
- * purchaser/warehouse mark the replacement received. Shared by the individual
- * chain rows and the combined-PO card. `prId` is the request (or anchor) to act
- * on. Read-only on the order page (list only).
+ * purchaser/warehouse mark the replacement received — attaching proof that the
+ * item was replaced. Shared by the individual chain rows and the combined-PO
+ * card. `prId` is the request (or anchor) to act on. Read-only on the order page.
  */
 export function PurchaseReturnsPanel({
   prId,
@@ -35,6 +39,11 @@ export function PurchaseReturnsPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // Resolve form state (per return being closed out).
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [proof, setProof] = useState<SaleDoc[]>([]);
+
   const unresolved = returns.filter((r) => !r.resolved).length;
 
   async function raise() {
@@ -48,11 +57,30 @@ export function PurchaseReturnsPanel({
     finally { setBusy(null); }
   }
 
-  async function resolve(id: string) {
-    const note = window.prompt("Note (optional) — e.g. replacement received, credited:", "") ?? undefined;
-    setBusy(id); setErr(null);
+  function startResolve(id: string) {
+    setResolvingId(id); setNote(""); setProof([]); setErr(null);
+  }
+
+  async function uploadProof(file: File) {
+    setBusy("upload"); setErr(null);
     try {
-      await resolvePurchaseReturn(prId, id, note);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("purchaseRequestId", prId);
+      const res = await fetch("/api/purchase-uploads", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setProof((ps) => [...ps, data as SaleDoc]);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function confirmResolve() {
+    if (proof.length === 0) { setErr("Upload proof that the item was replaced."); return; }
+    setBusy("resolve"); setErr(null);
+    try {
+      await resolvePurchaseReturn(prId, resolvingId!, note, proof);
+      setResolvingId(null); setNote(""); setProof([]);
       router.refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
@@ -74,18 +102,62 @@ export function PurchaseReturnsPanel({
                 <div className="text-muted-foreground">Reason: {r.reason}</div>
                 <div className="text-muted-foreground">Returned by {r.raised}</div>
                 {r.resolved ? (
-                  <div className="text-emerald-700">✓ {r.resolved}</div>
+                  <>
+                    <div className="text-emerald-700">✓ {r.resolved}</div>
+                    {r.proof.length > 0 && (
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="text-muted-foreground">Proof:</span>
+                        {r.proof.map((f) => (
+                          <span key={f.path} className="inline-flex items-center gap-1">
+                            <a href={proofLink(f.path)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                              <FileText className="h-3.5 w-3.5" /> {f.name}
+                            </a>
+                            <a href={proofDownload(f.path, f.name)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
+                              <Download className="h-3.5 w-3.5" />
+                            </a>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : !readOnly && canResolveReturn && resolvingId === r.id ? (
+                  <div className="mt-1 space-y-1.5 rounded-md border bg-background p-2">
+                    <div className="font-medium text-foreground">Replacement received</div>
+                    {/* Proof the item was replaced. */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {proof.map((f) => (
+                        <span key={f.path} className="inline-flex items-center gap-1">
+                          <a href={proofLink(f.path)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                            <FileText className="h-3.5 w-3.5" /> {f.name}
+                          </a>
+                          <button type="button" onClick={() => setProof((ps) => ps.filter((x) => x.path !== f.path))} className="text-muted-foreground hover:text-destructive" aria-label="Remove">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                      <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 font-medium hover:bg-accent">
+                        <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : proof.length ? "Add proof" : "Upload proof"}
+                        <input type="file" className="hidden" disabled={busy === "upload"} onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                      </label>
+                    </div>
+                    <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional) — e.g. replaced, credited" />
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" className="h-7 text-xs" disabled={busy === "resolve"} onClick={confirmResolve}>
+                        {busy === "resolve" ? "Saving…" : "Confirm replacement"}
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setResolvingId(null); setErr(null); }}>Cancel</Button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="mt-0.5 flex items-center gap-2">
                     <span className="font-medium text-amber-700">Awaiting replacement from supplier</span>
                     {!readOnly && canResolveReturn && (
                       <button
                         type="button"
-                        onClick={() => resolve(r.id)}
-                        disabled={busy === r.id}
+                        onClick={() => startResolve(r.id)}
                         className="rounded border border-emerald-600/50 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-600/10"
                       >
-                        {busy === r.id ? "…" : "Replacement received"}
+                        Replacement received
                       </button>
                     )}
                   </div>

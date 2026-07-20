@@ -727,11 +727,16 @@ export async function returnPurchaseItems(
   revalidatePath("/requisitions");
 }
 
-/** Mark a supplier return resolved — the replacement has been received/settled. */
+/**
+ * Mark a supplier return resolved — the replacement has been received/settled.
+ * Proof that the item was replaced (uploaded to /api/purchase-uploads) is
+ * attached so it stays on the return's record.
+ */
 export async function resolvePurchaseReturn(
   purchaseRequestId: string,
   returnId: string,
   note?: string,
+  proof?: { path: string; name: string; uploadedAt?: string }[],
 ): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -753,6 +758,10 @@ export async function resolvePurchaseReturn(
   entry.resolvedRole = resolvedRole;
   entry.resolvedAt = new Date().toISOString();
   if (note && note.trim()) entry.resolutionNote = note.trim();
+  const proofDocs = (proof ?? [])
+    .filter((d) => d && typeof d.path === "string" && typeof d.name === "string")
+    .map((d) => ({ path: d.path, name: d.name, uploadedAt: d.uploadedAt ?? new Date().toISOString() }));
+  if (proofDocs.length) entry.proof = proofDocs;
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { returns: list as unknown as Prisma.InputJsonValue } });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
