@@ -16,6 +16,7 @@ import { setDocViewers } from "@/lib/doc-viewers";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
+import { saveAiUsageLimit } from "@/lib/ai/usage";
 import { createServiceClient } from "@/lib/supabase/server";
 
 async function assertAdmin() {
@@ -537,4 +538,12 @@ export async function auditLogins(): Promise<LoginAudit | { error: string }> {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Audit failed" };
   }
+}
+
+/** Save the monthly AI-usage alert thresholds (0 = no limit). */
+export async function saveAiUsageLimitAction(input: { monthlyCalls: number; monthlyTokens: number }): Promise<void> {
+  await assertAdmin();
+  await saveAiUsageLimit({ monthlyCalls: input.monthlyCalls, monthlyTokens: input.monthlyTokens });
+  revalidatePath("/admin/ai-usage");
+  revalidatePath("/admin");
 }

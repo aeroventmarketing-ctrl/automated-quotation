@@ -8,6 +8,7 @@ import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { getNotificationsEnabled } from "@/lib/notification-settings";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { getStockLocations } from "@/lib/stock-locations";
+import { getAiUsageLimit, currentMonthUsage, evaluateUsageAlert } from "@/lib/ai/usage";
 import { StockLocationsSetting } from "./stock-locations-setting";
 import { QuoteNumberSetting } from "./quote-number-setting";
 import { MrfNumberSetting } from "./mrf-number-setting";
@@ -44,6 +45,8 @@ export default async function AdminOverviewPage() {
   const poNext = (Number((poRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
   const joRow = await prisma.appSetting.findUnique({ where: { key: "jo_counter" } });
   const joNext = (Number((joRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
+  const [aiLimit, aiThisMonth] = await Promise.all([getAiUsageLimit(), currentMonthUsage()]);
+  const aiAlert = evaluateUsageAlert(aiThisMonth, aiLimit);
 
   const stats = [
     { label: "Users", value: users, href: "/admin/users" },
@@ -57,6 +60,17 @@ export default async function AdminOverviewPage() {
 
   return (
     <div className="space-y-4">
+      {aiAlert.level !== "ok" && (
+        <Link href="/admin/ai-usage" className="block">
+          <div className={`rounded-md border p-3 text-sm transition-colors ${aiAlert.level === "over" ? "border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10" : "border-amber-500/40 bg-amber-500/5 text-amber-700 hover:bg-amber-500/10"}`}>
+            <p className="font-semibold">{aiAlert.level === "over" ? "AI usage limit reached this month" : "AI usage nearing the monthly limit"}</p>
+            <ul className="mt-0.5 list-disc pl-5 text-xs">
+              {aiAlert.messages.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+            <p className="mt-1 text-xs underline">Open AI usage →</p>
+          </div>
+        </Link>
+      )}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {stats.map((s) => (
           <Link key={s.label} href={s.href}>

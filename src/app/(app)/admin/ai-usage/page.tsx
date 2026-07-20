@@ -2,8 +2,9 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { getAiUsage } from "@/lib/ai/usage";
+import { getAiUsage, getAiUsageLimit, currentMonthUsage, evaluateUsageAlert } from "@/lib/ai/usage";
 import { config } from "@/lib/config";
+import { AiUsageLimit } from "./ai-usage-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export default async function AiUsagePage() {
   const viewer = await getCurrentUser();
   if (!isAdmin(viewer)) redirect("/dashboard");
 
-  const usage = await getAiUsage();
+  const [usage, limit, thisMonth] = await Promise.all([getAiUsage(), getAiUsageLimit(), currentMonthUsage()]);
+  const alert = evaluateUsageAlert(thisMonth, limit);
   const inPrice = config.anthropicPriceInputPerM;
   const outPrice = config.anthropicPriceOutputPerM;
   const showCost = inPrice > 0 || outPrice > 0;
@@ -35,6 +37,20 @@ export default async function AiUsagePage() {
           <span className="font-mono"> ANTHROPIC_API_KEY</span>. This is a usage meter recorded by the app; the Anthropic console remains the source of truth for billing.
         </p>
       </div>
+
+      {alert.level !== "ok" && (
+        <div className={`rounded-md border p-3 text-sm ${alert.level === "over" ? "border-destructive/40 bg-destructive/5 text-destructive" : "border-amber-500/40 bg-amber-500/5 text-amber-700"}`}>
+          <p className="font-semibold">{alert.level === "over" ? "AI usage limit reached" : "AI usage nearing the limit"}</p>
+          <ul className="mt-0.5 list-disc pl-5 text-xs">
+            {alert.messages.map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Monthly usage alert</CardTitle></CardHeader>
+        <CardContent><AiUsageLimit monthlyCalls={limit.monthlyCalls} monthlyTokens={limit.monthlyTokens} /></CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm">Monthly usage</CardTitle></CardHeader>
