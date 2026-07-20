@@ -12,7 +12,7 @@ import {
   type SaleRecord,
 } from "@/lib/sale";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/workflow-roles";
-import { readOrderWorkflow, nextOrderStep, stageLabel, pendingStep } from "@/lib/order-workflow";
+import { readOrderWorkflow, nextOrderStep, stageLabel, pendingStep, ORDER_STAGES, PRODUCTION_DEPTS, deptLabel, type OrderStage } from "@/lib/order-workflow";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { OrdersTable } from "./orders-table";
@@ -35,7 +35,11 @@ function orderDate(sale: SaleRecord, fallback: Date): Date {
  * outstanding balance. Read-only view over the sale data already captured on each
  * quotation; VAT invoice generation follows in the next increment.
  */
-export default async function OrdersPage() {
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ stage?: string; dept?: string }> }) {
+  const sp = await searchParams;
+  const stageParam = sp.stage && ORDER_STAGES.some((s) => s.key === sp.stage) ? (sp.stage as OrderStage) : undefined;
+  const deptParam = sp.dept && PRODUCTION_DEPTS.some((d) => d.key === sp.dept) ? sp.dept : undefined;
+
   const [quotes, viewer, assignments, hideOrderProgress, docCheckGate] = await Promise.all([
     prisma.quotation.findMany({
       where: { inquiry: { status: "WON" } },
@@ -75,6 +79,12 @@ export default async function OrdersPage() {
             : null
         : null;
 
+      // Departments with an active (unfinished) job order — for the dept filter.
+      const inProd = wf.stage === "in_production" || wf.stage === "jo_received" || wf.stage === "producing";
+      const prodDepts = inProd
+        ? PRODUCTION_DEPTS.filter((pd) => { const jo = wf.jobOrders[pd.key]; return jo && jo.status !== "finished"; }).map((pd) => pd.key)
+        : [];
+
       const d = orderDate(sale, q.createdAt);
       return {
         id: q.id,
@@ -92,6 +102,7 @@ export default async function OrdersPage() {
         sales: q.preparedBy.name,
         stage: wf.stage,
         stageText: stageLabel(wf.stage),
+        prodDepts,
         nextStep: next?.key ?? null,
         nextLabel: next?.label ?? null,
         canAct,
@@ -141,7 +152,14 @@ export default async function OrdersPage() {
               No confirmed orders yet. A quote becomes an order once its sale is recorded (PO attached).
             </p>
           ) : (
-            <OrdersTable orders={orders} progressHidden={progressHidden} />
+            <OrdersTable
+              orders={orders}
+              progressHidden={progressHidden}
+              initialStage={stageParam}
+              initialStageLabel={stageParam ? stageLabel(stageParam) : undefined}
+              initialDept={deptParam}
+              initialDeptLabel={deptParam ? deptLabel(deptParam as (typeof PRODUCTION_DEPTS)[number]["key"]) : undefined}
+            />
           )}
         </CardContent>
       </Card>

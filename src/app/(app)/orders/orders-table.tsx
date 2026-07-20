@@ -24,6 +24,7 @@ export interface OrderRow {
   sales: string;
   stage: OrderStage;
   stageText: string;
+  prodDepts: string[];
   nextStep: OrderStepKey | null;
   nextLabel: string | null;
   canAct: boolean;
@@ -55,20 +56,44 @@ const GROUP_OPTIONS: { key: GroupKey; label: string }[] = [
 
 const statusVariant = (s: string): "success" | "warning" | "secondary" => (s === "Paid" ? "success" : s === "Partial" ? "warning" : "secondary");
 
-export function OrdersTable({ orders, progressHidden }: { orders: OrderRow[]; progressHidden: boolean }) {
+export function OrdersTable({
+  orders,
+  progressHidden,
+  initialStage,
+  initialStageLabel,
+  initialDept,
+  initialDeptLabel,
+}: {
+  orders: OrderRow[];
+  progressHidden: boolean;
+  initialStage?: string;
+  initialStageLabel?: string;
+  initialDept?: string;
+  initialDeptLabel?: string;
+}) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [group, setGroup] = useState<GroupKey>("none");
   const [query, setQuery] = useState("");
 
+  // A drill-down filter from the Management dashboard (a stage or a department).
+  const filterLabel = initialStageLabel ?? initialDeptLabel ?? null;
+  const base = useMemo(() => {
+    return orders.filter((o) => {
+      if (initialStage && o.stage !== initialStage) return false;
+      if (initialDept && !o.prodDepts.includes(initialDept)) return false;
+      return true;
+    });
+  }, [orders, initialStage, initialDept]);
+
   // Search across order no., client (company + project), date, and sales.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter((o) =>
+    if (!q) return base;
+    return base.filter((o) =>
       [o.quoteNumber, o.company, o.project, o.dateText, o.sales].some((f) => (f ?? "").toLowerCase().includes(q)),
     );
-  }, [orders, query]);
+  }, [base, query]);
 
   const groupValue = (o: OrderRow): string => {
     switch (group) {
@@ -114,6 +139,16 @@ export function OrdersTable({ orders, progressHidden }: { orders: OrderRow[]; pr
 
   return (
     <div className="space-y-3">
+      {filterLabel && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Showing orders in</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary">
+            {initialStageLabel ? "Stage" : "Department"}: {filterLabel}
+            <Link href="/orders" className="ml-0.5 rounded-full text-primary/70 hover:text-primary" aria-label="Clear filter" title="Clear filter">✕</Link>
+          </span>
+          <span className="text-xs text-muted-foreground">{base.length} order{base.length === 1 ? "" : "s"}</span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative">
           <input
@@ -165,7 +200,9 @@ export function OrdersTable({ orders, progressHidden }: { orders: OrderRow[]; pr
           <TableBody>
             {sorted.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="py-8 text-center text-sm text-muted-foreground">No orders match &ldquo;{query}&rdquo;.</TableCell>
+                <TableCell colSpan={10} className="py-8 text-center text-sm text-muted-foreground">
+                  {query ? <>No orders match &ldquo;{query}&rdquo;{filterLabel ? ` in ${filterLabel}` : ""}.</> : filterLabel ? `No orders in ${filterLabel} right now.` : "No orders."}
+                </TableCell>
               </TableRow>
             ) : (
               groups.map((g) => (

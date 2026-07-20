@@ -53,13 +53,13 @@ function Donut({ data, total, size = 148, thickness = 20 }: { data: { label: str
   );
 }
 
-/** A thin horizontal bar with a rounded data-end, direct-labelled. */
+/** A thin horizontal bar with a rounded data-end, direct-labelled. Rows with a
+ *  value and an href become a clickable drill-down link. */
 function Bar({ label, value, max, color, tag, href }: { label: string; value: number; max: number; color: string; tag?: string; href?: string }) {
   const pct = max > 0 ? (value > 0 ? Math.max((value / max) * 100, 5) : 0) : 0;
-  const name = href ? <Link href={href} className={value > 0 ? "hover:underline" : "text-muted-foreground hover:underline"}>{label}</Link> : <span className={value > 0 ? "" : "text-muted-foreground"}>{label}</span>;
-  return (
+  const inner = (
     <div className="flex items-center gap-3 text-sm" title={`${label}: ${value}`}>
-      <span className="w-36 shrink-0 truncate sm:w-44">{name}</span>
+      <span className={`w-36 shrink-0 truncate sm:w-44 ${value > 0 ? "" : "text-muted-foreground"}`}>{label}</span>
       <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
         <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: value > 0 ? color : "transparent" }} />
       </div>
@@ -67,6 +67,10 @@ function Bar({ label, value, max, color, tag, href }: { label: string; value: nu
       {tag !== undefined && <span className="hidden w-14 text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:inline">{tag}</span>}
     </div>
   );
+  if (href && value > 0) {
+    return <Link href={href} className="-mx-1.5 block rounded-md px-1.5 py-0.5 transition-colors hover:bg-accent">{inner}</Link>;
+  }
+  return inner;
 }
 
 export default async function ManagementPage() {
@@ -210,7 +214,7 @@ export default async function ManagementPage() {
                 {/* Stage bars */}
                 <div className="flex-1 space-y-1.5 md:border-l md:pl-6">
                   {ORDER_STAGES.map((s) => (
-                    <Bar key={s.key} label={s.label} value={stageCount.get(s.key) ?? 0} max={maxStage} color={PHASE_COLOR[s.phase] ?? "#2a78d6"} tag={s.phase} />
+                    <Bar key={s.key} label={s.label} value={stageCount.get(s.key) ?? 0} max={maxStage} color={PHASE_COLOR[s.phase] ?? "#2a78d6"} tag={s.phase} href={`/orders?stage=${s.key}`} />
                   ))}
                 </div>
               </div>
@@ -231,7 +235,7 @@ export default async function ManagementPage() {
             ) : (
               <div className="space-y-2.5">
                 {PRODUCTION_DEPTS.map((d) => (
-                  <Bar key={d.key} label={d.label} value={prodActive.get(d.key) ?? 0} max={maxDept} color={DEPT_COLOR[d.key]} />
+                  <Bar key={d.key} label={d.label} value={prodActive.get(d.key) ?? 0} max={maxDept} color={DEPT_COLOR[d.key]} href={`/orders?dept=${d.key}`} />
                 ))}
               </div>
             )}
