@@ -28,7 +28,7 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
-import { saleFromClassification, closeDocsState } from "@/lib/sale";
+import { saleFromClassification, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
@@ -267,6 +267,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     "delivery_docs_ready", "delivered", "delivery_confirmed", "docs_surrendered", "docs_received", "closed",
   ]);
   const showFulfillment = fulfillmentStages.has(wf.stage);
+  // Payments already recorded on the sale (e.g. a one-time full payment) — their
+  // proofs are surfaced read-only at the final-payment check so the approver can
+  // view the payment made before signing off.
+  const recordedPayments = (saleForClose?.payments ?? []).map((p) => ({
+    label: `${PAYMENT_KIND_LABEL[p.kind]} · ${formatCurrency(Number(p.amount) || 0, quote.currency)}${p.date ? ` · ${fmtWhen(p.date)}` : ""}`,
+    proof: p.proof ?? null,
+  }));
 
   // Sales-commission info for the post-close sign-offs. Due date = the 15th day
   // after the sales month ends ("issued 15 days after the sales month").
@@ -520,7 +527,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={recordedPayments} />
             {saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode === "INCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>

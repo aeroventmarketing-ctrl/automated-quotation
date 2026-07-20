@@ -22,6 +22,12 @@ import {
   confirmDocsReceived,
 } from "../actions";
 
+/** A recorded sale payment surfaced (read-only) for the approver to review. */
+export interface RecordedPayment {
+  label: string;
+  proof: SaleDoc | null;
+}
+
 interface Perms {
   canNotify: boolean;
   canCheckPay: boolean;
@@ -46,6 +52,7 @@ export function FulfillmentActions({
   closeDocs,
   vatInclusive,
   canEditCloseDocs,
+  recordedPayments = [],
 }: {
   orderId: string;
   stage: string;
@@ -53,6 +60,7 @@ export function FulfillmentActions({
   closeDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   canEditCloseDocs: boolean;
+  recordedPayments?: RecordedPayment[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -82,6 +90,34 @@ export function FulfillmentActions({
             {busy ? "Saving…" : "Notify client — order ready"}
           </Button>
         ) : awaiting("Sales to notify the client"))}
+
+      {/* Payments already recorded on the sale (incl. a one-time full payment) —
+          read-only proof links so the approver can view the payment made before
+          pressing "Final payment checked". */}
+      {(stage === "final_pay_review" || stage === "final_pay_checked") && recordedPayments.length > 0 && (
+        <div className="space-y-1 rounded-md border bg-muted/20 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment made — for review</p>
+          <div className="space-y-1">
+            {recordedPayments.map((p, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="min-w-[13rem] font-medium">{p.label}</span>
+                {p.proof ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <a href={`/api/sale-uploads?path=${encodeURIComponent(p.proof.path)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                      <FileText className="h-3.5 w-3.5" /> {p.proof.name}
+                    </a>
+                    <a href={`/api/sale-uploads?path=${encodeURIComponent(p.proof.path)}&download=1&name=${encodeURIComponent(p.proof.name)}`} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
+                      <Download className="h-3.5 w-3.5" />
+                    </a>
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">No proof attached.</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Final payment proof — uploaded for the approver to review, then archived. */}
       {(stage === "final_pay_review" || stage === "final_pay_checked") && (
