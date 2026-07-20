@@ -21,6 +21,7 @@ import {
 import type { ReconcileStatus } from "@/lib/purchase-reconcile";
 import { deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { workflowRoleLabel } from "@/lib/workflow-roles";
+import { round2 } from "@/lib/quote";
 import { formatDateTime } from "@/lib/utils";
 
 export interface CashActionOpt {
@@ -30,12 +31,22 @@ export interface CashActionOpt {
   actorLabel: string; // who must act (role or "the requestor")
 }
 
+/** One liquidated line for display: planned vs actual with the difference. */
+export interface CashLiquidationLineView {
+  description: string;
+  budgetAmount: number;
+  actualAmount: number;
+  variance: number; // budget − actual
+}
+
 export interface CashLiquidationView {
   released: number; // released cash (the request amount)
   spent: number | null; // actual spent, or null until liquidated
   variance: number; // released − spent
   status: ReconcileStatus | null; // null until liquidated
-  lines: CashRequestLine[] | null; // optional per-line breakdown
+  // Seed lines for the record form (the request's breakdown, or one whole-amount line).
+  budgetLines: { description: string; budgetAmount: number }[];
+  lines: CashLiquidationLineView[] | null; // recorded per-line spend
   receipts: { path: string; name: string }[];
   recorded: string | null; // "Name (Role) · date/time"
   escalated: string | null;
@@ -164,6 +175,13 @@ export function buildCashRequestRow(
     actorLabel: actorLabel(step.by),
   }));
 
+  const reqLines = coerceCashLines(pr.lines);
+  // Seed lines for the liquidation form: the request's breakdown, or — when the
+  // requestor gave no breakdown — a single line for the whole amount.
+  const budgetLines = reqLines.length
+    ? reqLines.map((l) => ({ description: l.description, budgetAmount: l.amount }))
+    : [{ description: pr.purpose, budgetAmount: amount }];
+
   const l = coerceLiquidation(pr.liquidation);
   const liquidated = isLiquidated(l);
   const v = liquidationVariance(amount, l);
@@ -172,7 +190,10 @@ export function buildCashRequestRow(
     spent: liquidated ? v.spent : null,
     variance: v.variance,
     status: liquidated ? v.status : null,
-    lines: l.lines && l.lines.length ? l.lines : null,
+    budgetLines,
+    lines: l.lines && l.lines.length
+      ? l.lines.map((ln) => ({ description: ln.description, budgetAmount: ln.budgetAmount, actualAmount: ln.actualAmount, variance: round2(ln.budgetAmount - ln.actualAmount) }))
+      : null,
     receipts: (l.receipts ?? []).map((d) => ({ path: d.path, name: d.name })),
     recorded: l.recordedAt ? `${l.recordedByName}${l.recordedRole ? ` (${l.recordedRole})` : ""} · ${formatDateTime(new Date(l.recordedAt))}` : null,
     escalated: stampLabel(l.escalation),
@@ -188,7 +209,7 @@ export function buildCashRequestRow(
     categoryLabel: cashCategoryLabel(pr.category),
     deptLabel: pr.dept ? deptLabel(pr.dept as (typeof PRODUCTION_DEPTS)[number]["key"]) : null,
     amount,
-    lines: coerceCashLines(pr.lines),
+    lines: reqLines,
     note: pr.note,
     status,
     statusLabel: CASH_STATUS_LABEL[status],

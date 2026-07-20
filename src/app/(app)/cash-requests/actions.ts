@@ -7,7 +7,6 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import {
   cashStep,
-  coerceCashLines,
   coerceLiquidation,
   isLiquidated,
   canLiquidateAt,
@@ -17,6 +16,7 @@ import {
   type CashCategoryKey,
 } from "@/lib/cash-request";
 import { PRODUCTION_DEPTS } from "@/lib/order-workflow";
+import { round2 } from "@/lib/quote";
 
 /** Claim the next cash-voucher number, e.g. "CV-2026-00042". */
 async function nextCashNumber(tx: Prisma.TransactionClient, year: number): Promise<string> {
@@ -181,8 +181,7 @@ async function financeRole(userId: string, roles: WorkflowRoleKey[]): Promise<Wo
 export async function recordCashLiquidation(
   id: string,
   input: {
-    actualSpent: string;
-    lines?: { description: string; amount: string }[];
+    lines: { description: string; budgetAmount: number; actualAmount: string }[];
     receipts?: { path: string; name: string; uploadedAt?: string }[];
     note?: string;
   },
@@ -194,8 +193,15 @@ export async function recordCashLiquidation(
   if (!(admin || pr.requestedById === user.id)) throw new Error("Only the requestor or an admin can liquidate this cash.");
   if (!canLiquidateAt(pr.status as CashRequestStatus)) throw new Error("Liquidate once the cash has been received.");
 
-  const actualSpent = num(input.actualSpent);
-  const lines = coerceCashLines((input.lines ?? []).map((l) => ({ description: l.description, amount: num(l.amount) })));
+  // Per-line actuals: each line carries the planned (budget) amount and the
+  // actual amount spent; the total spent is the sum of the line actuals.
+  const lines = (input.lines ?? []).map((l) => ({
+    description: String(l.description ?? ""),
+    budgetAmount: Number(l.budgetAmount) || 0,
+    actualAmount: num(l.actualAmount),
+  }));
+  if (lines.length === 0) throw new Error("Nothing to liquidate — add at least one line.");
+  const actualSpent = round2(lines.reduce((a, l) => a + l.actualAmount, 0));
   const receipts = (input.receipts ?? [])
     .filter((d) => d && typeof d.path === "string" && typeof d.name === "string")
     .map((d) => ({ path: d.path, name: d.name, uploadedAt: d.uploadedAt ?? new Date().toISOString() }));
@@ -204,7 +210,7 @@ export async function recordCashLiquidation(
   const next = {
     ...cur,
     actualSpent,
-    lines: lines.length ? lines : cur.lines,
+    lines,
     receipts: receipts.length ? receipts : cur.receipts,
     recordedByName: user.name,
     recordedRole: pr.requestedById === user.id ? "Requestor" : "Admin",

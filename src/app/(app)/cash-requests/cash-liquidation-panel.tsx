@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Scale, Upload, FileText, Download, Trash2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,15 @@ const num = (s: string) => Number(String(s ?? "").replace(/,/g, "").trim()) || 0
 const link = (path: string) => `/api/cash-uploads?path=${encodeURIComponent(path)}`;
 const dl = (path: string, name: string) => `${link(path)}&download=1&name=${encodeURIComponent(name)}`;
 
+interface Row { description: string; budgetAmount: number; actual: string }
+
 /**
- * Liquidation panel for a cash request: the requestor records the actual amount
- * spent and uploads receipts; the system tallies it against the released cash
- * (change to return / overspend to reimburse). AI can read the receipt total.
- * A discrepancy is escalated to the approver, who authorises it before it's
- * settled by accounting.
+ * Liquidation panel for a cash request: a per-line tally of the actual amount
+ * spent vs each planned (budget) line, with the whole liquidation checked
+ * against the cash released (change to return / overspend). The requestor
+ * records the per-line spend + uploads receipts; AI can read the receipt and
+ * fill the actuals. A discrepancy is escalated to the approver, who authorises
+ * it before accounting settles it.
  */
 export function CashLiquidationPanel({
   id,
@@ -43,9 +46,16 @@ export function CashLiquidationPanel({
   canApprove: boolean;
 }) {
   const router = useRouter();
-  const recorded = liquidation.spent !== null;
+  const recorded = liquidation.lines !== null;
   const [open, setOpen] = useState(false);
-  const [spent, setSpent] = useState(liquidation.spent != null ? String(liquidation.spent) : "");
+  // Editable per-line actuals, seeded from the recorded lines or the budget lines.
+  const seed = (): Row[] =>
+    (liquidation.lines ?? liquidation.budgetLines.map((l) => ({ description: l.description, budgetAmount: l.budgetAmount, actualAmount: 0 }))).map((l) => ({
+      description: l.description,
+      budgetAmount: l.budgetAmount,
+      actual: l.actualAmount ? String(l.actualAmount) : "",
+    }));
+  const [rows, setRows] = useState<Row[]>(seed);
   const [note, setNote] = useState("");
   const [receipts, setReceipts] = useState<SaleDoc[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -53,11 +63,17 @@ export function CashLiquidationPanel({
   const [aiInfo, setAiInfo] = useState<string | null>(null);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
 
-  const previewVar = round2(released - num(spent));
+  const preview = useMemo(() => {
+    const budget = round2(rows.reduce((a, r) => a + r.budgetAmount, 0));
+    const actual = round2(rows.reduce((a, r) => a + num(r.actual), 0));
+    return { budget, actual, variance: round2(released - actual) };
+  }, [rows, released]);
 
   function startEdit() {
-    setSpent(liquidation.spent != null ? String(liquidation.spent) : "");
-    setNote(""); setReceipts([]); setErr(null); setAiInfo(null); setAiWarnings([]); setOpen(true);
+    setRows(seed()); setNote(""); setReceipts([]); setErr(null); setAiInfo(null); setAiWarnings([]); setOpen(true);
+  }
+  function setActual(i: number, v: string) {
+    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, actual: v } : r)));
   }
 
   async function uploadReceipt(file: File) {
@@ -74,9 +90,13 @@ export function CashLiquidationPanel({
     finally { setBusy(null); }
   }
 
-  async function submitRecord(spentArg: string, noteArg: string): Promise<boolean> {
+  async function submitRecord(rowsArg: Row[], noteArg: string): Promise<boolean> {
     try {
-      await recordCashLiquidation(id, { actualSpent: spentArg, receipts, note: noteArg });
+      await recordCashLiquidation(id, {
+        lines: rowsArg.map((r) => ({ description: r.description, budgetAmount: r.budgetAmount, actualAmount: r.actual })),
+        receipts,
+        note: noteArg,
+      });
       setOpen(false); setReceipts([]); setNote("");
       router.refresh();
       return true;
@@ -90,43 +110,51 @@ export function CashLiquidationPanel({
       const res = await fetch("/api/ai/read-cash-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cashRequestId: id, paths: receipts.map((r) => r.path) }),
+        body: JSON.stringify({ cashRequestId: id, paths: receipts.map((r) => r.path), lines: rows.map((r) => ({ description: r.description, budgetAmount: r.budgetAmount })) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not read the receipt.");
 
-      const total = typeof data.receiptTotal === "number" ? data.receiptTotal : null;
-      const warns = Array.isArray(data.warnings) ? [...data.warnings] : [];
-      if (total == null) {
-        warns.unshift("Couldn't read the total — enter it manually.");
-        setAiWarnings(warns);
-        return;
-      }
-      setSpent(String(total));
+      const newRows = rows.map((r, i) => {
+        const l = data.lines?.[i];
+        return l && typeof l.actualAmount === "number" ? { ...r, actual: String(l.actualAmount) } : r;
+      });
+      setRows(newRows);
 
-      const variance = round2(released - total);
+      const warns = Array.isArray(data.warnings) ? [...data.warnings] : [];
+      const unmatched = (data.lines ?? []).filter((l: { actualAmount: number | null }) => l.actualAmount === null).length;
+      if (unmatched > 0) warns.push(`${unmatched} line${unmatched === 1 ? "" : "s"} not found on the receipt — enter ${unmatched === 1 ? "it" : "them"} manually.`);
+      if (Array.isArray(data.extraItems) && data.extraItems.length) warns.push(`${data.extraItems.length} receipt item(s) not on the breakdown: ${data.extraItems.map((e: { description: string }) => e.description).filter(Boolean).join(", ")}.`);
+
+      const allMatched = newRows.every((r) => r.actual.trim() !== "");
+      const actual = round2(newRows.reduce((a, r) => a + num(r.actual), 0));
+      const variance = round2(released - actual);
       const tolerance = balanceTolerance(released);
-      if (Math.abs(variance) <= tolerance) {
-        // Tallies within tolerance — record it straight away.
+
+      if (allMatched && Math.abs(variance) <= tolerance) {
         setBusy("record");
-        await submitRecord(String(total), `Auto-liquidated from receipt (AI)${note ? ` · ${note}` : ""}`);
+        await submitRecord(newRows, `Auto-liquidated from receipt (AI)${note ? ` · ${note}` : ""}`);
         return;
       }
       const bits = [
         data.supplier ? `Supplier: ${data.supplier}` : "",
-        `Receipt total: ${peso(total)}`,
+        typeof data.receiptTotal === "number" ? `Receipt total: ${peso(data.receiptTotal)}` : "",
       ].filter(Boolean);
-      warns.unshift(`Doesn't balance (${variance > 0 ? "change" : "over"} ${peso(Math.abs(variance))}) — review before recording.`);
-      setAiInfo(`Read ✓ · ${bits.join(" · ")}`);
+      warns.unshift(
+        !allMatched
+          ? "Some lines couldn't be read — review and complete before recording."
+          : `Doesn't balance (${variance > 0 ? "change" : "over"} ${peso(Math.abs(variance))}) — review before recording.`,
+      );
+      setAiInfo(bits.length ? `Read ✓ · ${bits.join(" · ")}` : "Receipt read.");
       setAiWarnings(warns);
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
 
   async function record() {
-    if (num(spent) <= 0) { setErr("Enter the amount actually spent."); return; }
+    if (rows.every((r) => r.actual.trim() === "")) { setErr("Enter the amount spent on at least one line."); return; }
     setBusy("record"); setErr(null);
-    await submitRecord(spent, note);
+    await submitRecord(rows, note);
     setBusy(null);
   }
 
@@ -152,12 +180,46 @@ export function CashLiquidationPanel({
         <span className="ml-1 font-normal normal-case">· cash released {peso(released)}</span>
       </div>
 
+      {recorded && liquidation.lines && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] border-collapse text-xs">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="py-1 pr-2 font-medium">Line</th>
+                <th className="w-24 py-1 px-1 text-right font-medium">Planned</th>
+                <th className="w-24 py-1 px-1 text-right font-medium">Actual</th>
+                <th className="w-24 py-1 px-1 text-right font-medium">Difference</th>
+              </tr>
+            </thead>
+            <tbody>
+              {liquidation.lines.map((l, i) => (
+                <tr key={i} className="border-b last:border-0">
+                  <td className="py-1 pr-2">{l.description || <span className="text-muted-foreground">Line {i + 1}</span>}</td>
+                  <td className="py-1 px-1 text-right tabular-nums text-muted-foreground">{peso(l.budgetAmount)}</td>
+                  <td className="py-1 px-1 text-right tabular-nums">{peso(l.actualAmount)}</td>
+                  <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(l.variance) < 0.005 ? "text-emerald-700" : l.variance > 0 ? "text-amber-700" : "text-destructive"}`}>
+                    {Math.abs(l.variance) < 0.005 ? "✓" : (l.variance > 0 ? "" : "-") + peso(Math.abs(l.variance))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t font-medium">
+                <td className="py-1 pr-2">Cash released / spent</td>
+                <td className="py-1 px-1 text-right tabular-nums">{peso(liquidation.released)}</td>
+                <td className="py-1 px-1 text-right tabular-nums">{peso(liquidation.spent ?? 0)}</td>
+                <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(liquidation.variance) < 0.005 ? "text-emerald-700" : liquidation.variance > 0 ? "text-amber-700" : "text-destructive"}`}>
+                  {Math.abs(liquidation.variance) < 0.005 ? "✓" : (liquidation.variance > 0 ? "" : "-") + peso(Math.abs(liquidation.variance))}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
       {recorded ? (
         <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-            <span className="text-muted-foreground">Spent: <span className="font-medium tabular-nums text-foreground">{peso(liquidation.spent ?? 0)}</span></span>
-            <span>{verdict(liquidation.status, liquidation.variance)}</span>
-          </div>
+          <div className="text-sm">{verdict(liquidation.status, liquidation.variance)}</div>
           {liquidation.receipts.length > 0 && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="text-muted-foreground">Receipts:</span>
@@ -242,7 +304,7 @@ export function CashLiquidationPanel({
       ) : canRecord && !open ? (
         <button type="button" onClick={startEdit}
           className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold hover:bg-accent">
-          <Scale className="h-3.5 w-3.5" /> Liquidate (actual spend &amp; receipts)
+          <Scale className="h-3.5 w-3.5" /> Liquidate (per-line spend &amp; receipts)
         </button>
       ) : !recorded ? (
         <p className="text-xs text-muted-foreground">Awaiting the requestor to liquidate the cash.</p>
@@ -250,15 +312,47 @@ export function CashLiquidationPanel({
 
       {canRecord && open && (
         <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-          <label className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-xs text-muted-foreground">Actual amount spent</span>
-            <Input className="h-8 w-40 text-right" value={spent} onChange={(e) => setSpent(e.target.value)} placeholder="0.00" />
-          </label>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[440px] border-collapse text-xs">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="py-1 pr-2 font-medium">Line</th>
+                  <th className="w-24 py-1 px-1 text-right font-medium">Planned</th>
+                  <th className="w-28 py-1 px-1 text-right font-medium">Actual spent</th>
+                  <th className="w-20 py-1 px-1 text-right font-medium">Diff.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const diff = round2(r.budgetAmount - num(r.actual));
+                  return (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="py-1 pr-2">{r.description || `Line ${i + 1}`}</td>
+                      <td className="py-1 px-1 text-right tabular-nums text-muted-foreground">{peso(r.budgetAmount)}</td>
+                      <td className="py-1 px-1"><Input className="h-7 text-right text-xs" value={r.actual} onChange={(e) => setActual(i, e.target.value)} placeholder="0.00" /></td>
+                      <td className={`py-1 px-1 text-right tabular-nums ${r.actual.trim() === "" ? "text-muted-foreground" : Math.abs(diff) < 0.005 ? "text-emerald-700" : diff > 0 ? "text-amber-700" : "text-destructive"}`}>
+                        {r.actual.trim() === "" ? "—" : Math.abs(diff) < 0.005 ? "✓" : (diff > 0 ? "" : "-") + peso(Math.abs(diff))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t font-medium">
+                  <td className="py-1 pr-2">Cash released / spent</td>
+                  <td className="py-1 px-1 text-right tabular-nums text-muted-foreground">{peso(released)}</td>
+                  <td className="py-1 px-1 text-right tabular-nums">{peso(preview.actual)}</td>
+                  <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(preview.variance) < 0.005 ? "text-emerald-700" : preview.variance > 0 ? "text-amber-700" : "text-destructive"}`}>
+                    {Math.abs(preview.variance) < 0.005 ? "✓" : (preview.variance > 0 ? "" : "-") + peso(Math.abs(preview.variance))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
           <p className="text-xs">
-            {spent.trim() === "" ? <span className="text-muted-foreground">Enter the amount spent to tally it against {peso(released)}.</span>
-              : Math.abs(previewVar) < 0.005 ? <span className="font-medium text-emerald-700">Tallies ✓</span>
-              : previewVar > 0 ? <span className="font-medium text-amber-700">Change to return: {peso(previewVar)}</span>
-              : <span className="font-medium text-destructive">Over the cash released by {peso(-previewVar)}</span>}
+            {Math.abs(preview.variance) < 0.005 ? <span className="font-medium text-emerald-700">Tallies ✓</span>
+              : preview.variance > 0 ? <span className="font-medium text-amber-700">Change to return: {peso(preview.variance)}</span>
+              : <span className="font-medium text-destructive">Over the cash released by {peso(-preview.variance)}</span>}
           </p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="text-muted-foreground">Receipts:</span>

@@ -110,11 +110,33 @@ export interface CashStamp {
   note?: string;
 }
 
-/** Liquidation of the released cash — actual spend + receipts, with the same
- *  change/overspend maths as voucher reconciliation. */
+/** One liquidated line: what was planned for it vs what was actually spent. */
+export interface CashLiquidationLine {
+  description: string;
+  budgetAmount: number; // planned amount (from the request breakdown)
+  actualAmount: number; // actual amount spent, per the receipt
+}
+
+export function coerceLiquidationLines(v: unknown): CashLiquidationLine[] {
+  if (!Array.isArray(v)) return [];
+  const out: CashLiquidationLine[] = [];
+  for (const e of v) {
+    if (!e || typeof e !== "object") continue;
+    const o = e as Record<string, unknown>;
+    out.push({
+      description: typeof o.description === "string" ? o.description : "",
+      budgetAmount: typeof o.budgetAmount === "number" ? o.budgetAmount : Number(o.budgetAmount) || 0,
+      actualAmount: typeof o.actualAmount === "number" ? o.actualAmount : Number(o.actualAmount) || 0,
+    });
+  }
+  return out;
+}
+
+/** Liquidation of the released cash — per-line actual spend + receipts, with the
+ *  same change/overspend maths as voucher reconciliation. */
 export interface CashLiquidation {
-  actualSpent?: number; // total actually spent (from receipts)
-  lines?: CashRequestLine[]; // optional per-line breakdown of the spend
+  actualSpent?: number; // total actually spent (Σ line actuals)
+  lines?: CashLiquidationLine[]; // per-line breakdown of the spend
   receipts?: SaleDoc[];
   recordedByName?: string;
   recordedRole?: string;
@@ -147,7 +169,7 @@ export function coerceLiquidation(v: unknown): CashLiquidation {
   const o = v as Record<string, unknown>;
   return {
     actualSpent: typeof o.actualSpent === "number" ? o.actualSpent : undefined,
-    lines: Array.isArray(o.lines) ? coerceCashLines(o.lines) : undefined,
+    lines: Array.isArray(o.lines) ? coerceLiquidationLines(o.lines) : undefined,
     receipts: Array.isArray(o.receipts) ? o.receipts.map(coerceDoc).filter((d): d is SaleDoc => d !== null) : undefined,
     recordedByName: typeof o.recordedByName === "string" ? o.recordedByName : undefined,
     recordedRole: typeof o.recordedRole === "string" ? o.recordedRole : undefined,
