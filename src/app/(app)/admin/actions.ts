@@ -422,6 +422,24 @@ export async function setPoNextNo(input: z.infer<typeof poNextSchema>): Promise<
   return d.next;
 }
 
+// --- Cash Request (voucher) numbering ---------------------------------------
+// The cash-voucher counter stores { n } = the last issued sequence, so the next
+// number is n + 1. Format: "CV-<year>-<5 digits>".
+const CASH_COUNTER_KEY = "cash_request_counter";
+const cashNextSchema = z.object({ next: z.number().int().min(1) });
+/** Set the next cash-voucher sequence number (stored as n = next - 1). */
+export async function setCashNextNo(input: z.infer<typeof cashNextSchema>): Promise<number> {
+  await assertAdmin();
+  const d = cashNextSchema.parse(input);
+  await prisma.appSetting.upsert({
+    where: { key: CASH_COUNTER_KEY },
+    create: { key: CASH_COUNTER_KEY, value: { n: d.next - 1 } },
+    update: { value: { n: d.next - 1 } },
+  });
+  revalidatePath("/admin");
+  return d.next;
+}
+
 // --- Fans & Blowers Job Order numbering -------------------------------------
 const JO_COUNTER_KEY = "jo_counter";
 const joNextSchema = z.object({ next: z.number().int().min(1) });

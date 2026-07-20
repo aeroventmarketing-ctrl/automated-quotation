@@ -14,6 +14,7 @@ import { QuoteNumberSetting } from "./quote-number-setting";
 import { MrfNumberSetting } from "./mrf-number-setting";
 import { PoNumberSetting } from "./po-number-setting";
 import { JoNumberSetting } from "./jo-number-setting";
+import { CashNumberSetting } from "./cash-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
 import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
@@ -45,6 +46,8 @@ export default async function AdminOverviewPage() {
   const poNext = (Number((poRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
   const joRow = await prisma.appSetting.findUnique({ where: { key: "jo_counter" } });
   const joNext = (Number((joRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
+  const cashRow = await prisma.appSetting.findUnique({ where: { key: "cash_request_counter" } });
+  const cashNext = (Number((cashRow?.value as { n?: unknown } | null)?.n ?? 0) || 0) + 1;
   const [aiLimit, aiThisMonth] = await Promise.all([getAiUsageLimit(), currentMonthUsage()]);
   const aiAlert = evaluateUsageAlert(aiThisMonth, aiLimit);
 
@@ -166,6 +169,7 @@ export default async function AdminOverviewPage() {
       <MrfNumberSetting current={mrfNext} />
       <PoNumberSetting current={poNext} />
       <JoNumberSetting current={joNext} />
+      <CashNumberSetting current={cashNext} />
       <SpLockSetting
         title="Propeller Type static-pressure lock"
         description={'When enabled, Power Roof Ventilator and Wall Fan (Propeller Type) lines are capped at 0.5" w.g.: the builder warns above that and disables Run selection. Turn off to allow selecting these fans at any static pressure.'}
