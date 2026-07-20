@@ -5,6 +5,11 @@ export const config = {
   defaultCurrency: process.env.NEXT_PUBLIC_DEFAULT_CURRENCY ?? "PHP",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6",
+  // Optional: your Anthropic price per 1M tokens (USD), used only to show an
+  // estimated cost on the AI-usage page. Leave unset to display token counts
+  // only (no fabricated pricing). Find current rates on the Anthropic console.
+  anthropicPriceInputPerM: Number(process.env.ANTHROPIC_PRICE_INPUT_PER_M ?? "0"),
+  anthropicPriceOutputPerM: Number(process.env.ANTHROPIC_PRICE_OUTPUT_PER_M ?? "0"),
   // Trim stray whitespace from the env value — a leading/trailing space makes
   // the bucket name invalid (Supabase rejects "  attachments"). Fall back to the
   // default when the variable is unset or only whitespace.

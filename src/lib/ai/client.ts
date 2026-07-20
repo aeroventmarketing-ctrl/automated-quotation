@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { config } from "../config";
+import { recordAiUsage } from "./usage";
 
 let _client: Anthropic | null = null;
 
@@ -86,6 +87,9 @@ export async function callClaudeJson<T>(opts: {
     { role: "user", content: toAnthropicContent(opts.content) },
   ];
 
+  // Sum token usage across attempts and meter it once at the end.
+  let inTokens = 0;
+  let outTokens = 0;
   const run = async (): Promise<string> => {
     const res = await client.messages.create({
       model: config.anthropicModel,
@@ -93,6 +97,8 @@ export async function callClaudeJson<T>(opts: {
       system: opts.system,
       messages,
     });
+    inTokens += res.usage?.input_tokens ?? 0;
+    outTokens += res.usage?.output_tokens ?? 0;
     const block = res.content.find((c) => c.type === "text");
     return block && "text" in block ? block.text : "";
   };
@@ -103,18 +109,22 @@ export async function callClaudeJson<T>(opts: {
     return opts.schema.parse(parsed);
   };
 
-  const first = await run();
   try {
-    return attempt(first);
-  } catch {
-    // Retry once: feed back the previous (bad) output and demand strict JSON.
-    messages.push({ role: "assistant", content: first });
-    messages.push({
-      role: "user",
-      content:
-        "That was not valid JSON matching the required schema. Reply again with STRICT JSON only — no prose, no markdown fences.",
-    });
-    const second = await run();
-    return attempt(second);
+    const first = await run();
+    try {
+      return attempt(first);
+    } catch {
+      // Retry once: feed back the previous (bad) output and demand strict JSON.
+      messages.push({ role: "assistant", content: first });
+      messages.push({
+        role: "user",
+        content:
+          "That was not valid JSON matching the required schema. Reply again with STRICT JSON only — no prose, no markdown fences.",
+      });
+      const second = await run();
+      return attempt(second);
+    }
+  } finally {
+    await recordAiUsage(inTokens, outTokens);
   }
 }

@@ -110,6 +110,19 @@ export default async function AdminOverviewPage() {
           </CardContent>
         </Card>
       </Link>
+      <Link href="/admin/ai-usage">
+        <Card className="transition-colors hover:bg-accent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">AI usage →</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Monthly Claude token usage for the AI features (receipt reading, inquiry &amp; quotation extraction),
+              billed by Anthropic. Set price env vars to also see an estimated cost.
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
       <Link href="/admin/document-access">
         <Card className="transition-colors hover:bg-accent">
           <CardHeader className="pb-2">

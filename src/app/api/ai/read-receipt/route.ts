@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { z } from "zod";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -78,9 +79,26 @@ export async function POST(req: NextRequest) {
   for (const path of body.paths) {
     try {
       const { base64, contentType } = await downloadFromStorage(path);
-      if (IMAGE_TYPES.has(contentType)) content.push({ type: "image", image: { mediaType: contentType, base64 } });
-      else if (contentType === "application/pdf" || path.toLowerCase().endsWith(".pdf")) content.push({ type: "document", document: { base64 } });
-      else skipped.push(path.split("/").pop() ?? path);
+      if (IMAGE_TYPES.has(contentType)) {
+        // Downscale big phone photos (cap the long edge at 1568px, Claude's
+        // optimal) to bound the vision token cost and the upload size.
+        let mediaType = contentType;
+        let data = base64;
+        try {
+          const out = await sharp(Buffer.from(base64, "base64"))
+            .rotate() // honour EXIF orientation
+            .resize({ width: 1568, height: 1568, fit: "inside", withoutEnlargement: true })
+            .jpeg({ quality: 80 })
+            .toBuffer();
+          data = out.toString("base64");
+          mediaType = "image/jpeg";
+        } catch { /* fall back to the original bytes if resize fails */ }
+        content.push({ type: "image", image: { mediaType, base64: data } });
+      } else if (contentType === "application/pdf" || path.toLowerCase().endsWith(".pdf")) {
+        content.push({ type: "document", document: { base64 } });
+      } else {
+        skipped.push(path.split("/").pop() ?? path);
+      }
     } catch {
       skipped.push(path.split("/").pop() ?? path);
     }
