@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { renderPurchaseOrderHtml } from "@/lib/po-html";
+import { getPurchaserSignatory } from "@/lib/purchaser-signatory";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const po = coercePurchaseOrder(pr.po);
   if (!po) return new Response("No purchase order issued yet", { status: 404 });
 
-  return new Response(renderPurchaseOrderHtml(po), {
+  const purchaser = await getPurchaserSignatory().catch(() => null);
+  return new Response(renderPurchaseOrderHtml(po, { name: purchaser?.name, designation: purchaser?.designation, signature: purchaser?.signature }), {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });
 }

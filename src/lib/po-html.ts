@@ -21,8 +21,14 @@ function fmtDate(iso: string): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "long", day: "numeric" }).format(d);
 }
 
-export function renderPurchaseOrderHtml(po: PurchaseOrder): string {
+export type PoPurchaser = { name?: string | null; designation?: string | null; signature?: string | null };
+
+export function renderPurchaseOrderHtml(po: PurchaseOrder, purchaser: PoPurchaser = {}): string {
   const totals = poTotals(po);
+  const signImg = (purchaser.signature ?? "").trim();
+  const signName = (purchaser.name ?? po.createdByName ?? "").trim();
+  const signDesignation = (purchaser.designation ?? "Purchasing Head").trim();
+  const signCompany = "AEROVENT";
   const rows = po.lines
     .map((l, i) => {
       const amt = poLineAmount(l);
@@ -67,8 +73,35 @@ export function renderPurchaseOrderHtml(po: PurchaseOrder): string {
   .totals .net { border-top: 1px solid #111; font-weight: bold; margin-top: 4px; padding-top: 6px; }
   .rem { margin-top: 14px; font-size: 12px; }
   .rem .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #6b7280; }
-  .sign { margin-top: 40px; font-size: 12px; }
-  .sign .line { border-top: 1px solid #111; width: 220px; padding-top: 4px; }
+  /* Centered signature block (flexbox, never split across pages). */
+  .signature-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-top: 35px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .signature {
+    max-width: 180px;
+    max-height: 70px;
+    object-fit: contain;
+    margin-bottom: -12px;
+    z-index: 2;
+  }
+  .name-line {
+    width: 240px;
+    border-bottom: 2px solid #000;
+    text-align: center;
+    font-weight: 700;
+    font-size: 18px;
+    padding-bottom: 4px;
+    z-index: 1;
+  }
+  .designation { margin-top: 10px; font-size: 17px; font-weight: 600; }
+  .company { margin-top: 8px; font-size: 18px; font-weight: 700; letter-spacing: .5px; }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 8px 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
   .bar button { background: #ED1C24; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: system-ui, sans-serif; }
   .bar .hint { font-size: 12px; color: #cbd5e1; font-family: system-ui, sans-serif; }
@@ -110,8 +143,17 @@ export function renderPurchaseOrderHtml(po: PurchaseOrder): string {
       <div class="net"><span>Net amount</span><span>${peso(totals.net)}</span></div>
     </div>
     ${po.remarks ? `<div class="rem"><span class="lbl">Payment terms / remarks</span><div>${esc(po.remarks)}</div></div>` : ""}
-    <div class="sign">
-      <div class="line">${esc(po.createdByName || "")}<div style="font-size:10px;color:#6b7280">Prepared by</div></div>
+    <div class="signature-section">
+      ${signImg ? `<img src="${esc(signImg)}" class="signature" alt="signature">` : ""}
+      <div class="name-line">
+        <span>${esc(signName)}</span>
+      </div>
+      <div class="designation">
+        ${esc(signDesignation)}
+      </div>
+      <div class="company">
+        ${esc(signCompany)}
+      </div>
     </div>
   </div>
 </body>
