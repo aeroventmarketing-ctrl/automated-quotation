@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { AiExtractPanel } from "@/components/intake/ai-extract-panel";
+import type { DraftItem } from "@/components/intake/types";
+import { addInquiryItems } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -95,8 +99,24 @@ export function InquiryWorkspace({
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const router = useRouter();
+  const [showImport, setShowImport] = useState(items.length === 0);
+  const [importErr, setImportErr] = useState<string | null>(null);
 
   const catById = Object.fromEntries(catalogue.map((c) => [c.id, c]));
+
+  // Add AI-extracted RFQ items to the inquiry, then reload so they appear below.
+  async function addFromRfq(extracted: DraftItem[]) {
+    setImportErr(null);
+    if (extracted.length === 0) { setImportErr("No line items were found in that RFQ."); return; }
+    try {
+      await addInquiryItems(inquiryId, extracted.map((d) => ({ rawText: d.rawText, qty: d.qty, parsedJson: d.parsedJson as unknown as Record<string, unknown> })));
+      setShowImport(false);
+      router.refresh();
+    } catch (e) {
+      setImportErr(e instanceof Error ? e.message : "Could not add the items.");
+    }
+  }
 
   function patch(itemId: string, p: Partial<ItemState>) {
     setState((s) => ({ ...s, [itemId]: { ...s[itemId], ...p } }));
@@ -210,6 +230,29 @@ export function InquiryWorkspace({
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Requirements → Match → Select</h2>
+
+      {/* Generate items from an RFQ — upload a photo/scan or paste text; AI extracts the line items. */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-3 pb-2">
+          <div>
+            <CardTitle className="text-sm">Import from RFQ (AI)</CardTitle>
+            <p className="text-xs text-muted-foreground">Upload a photo/scan of the RFQ (or paste its text) and AI turns it into line items you can size and quote.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setShowImport((v) => !v)}>
+            {showImport ? "Hide" : "Upload RFQ / paste text"}
+          </Button>
+        </CardHeader>
+        {showImport && (
+          <CardContent className="pt-0">
+            <AiExtractPanel onExtracted={addFromRfq} />
+            {importErr && <p className="mt-2 text-sm text-destructive">{importErr}</p>}
+          </CardContent>
+        )}
+      </Card>
+
+      {items.length === 0 && !showImport && (
+        <p className="text-sm text-muted-foreground">No line items yet — use “Import from RFQ (AI)” above or add them from the inquiry.</p>
+      )}
 
       {items.map((item) => {
         const st = state[item.id];
