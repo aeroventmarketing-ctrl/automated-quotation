@@ -157,7 +157,6 @@ export async function upsertUser(input: z.infer<typeof userSchema>) {
   // Persist workflow (ERP) roles when provided (empty array clears them).
   if (d.workflowRoles) await setUserWorkflowRoles(userId, d.workflowRoles);
   revalidatePath("/admin/users");
-  revalidatePath("/admin/workflow-roles");
   return userId;
 }
 
@@ -538,7 +537,7 @@ export async function setUserWorkflowRolesAction(
   await assertAdmin();
   const d = workflowRolesSchema.parse(input);
   const saved = await setUserWorkflowRoles(d.userId, d.roles);
-  revalidatePath("/admin/workflow-roles");
+  revalidatePath("/admin/users");
   return saved;
 }
 

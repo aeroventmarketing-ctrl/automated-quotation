@@ -88,19 +88,6 @@ export default async function AdminOverviewPage() {
           </Link>
         ))}
       </div>
-      <Link href="/admin/workflow-roles">
-        <Card className="transition-colors hover:bg-accent">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Workflow roles →</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Assign ERP departmental roles (Accounting, Approver, Technical Head, Production heads,
-              Warehouse, Purchaser, Logistics, Plant Manager) that drive order approvals.
-            </p>
-          </CardContent>
-        </Card>
-      </Link>
       <Link href="/admin/suppliers">
         <Card className="transition-colors hover:bg-accent">
           <CardHeader className="pb-2">
