@@ -168,14 +168,15 @@ export async function buildPurchaseOrderWorkbook(
     nameCell.alignment = { horizontal: "center", vertical: "bottom" };
   }
   // Move the "___" signature line text from column A into B, centred + bottom-
-  // aligned, clear the column-A original, and set the row height to 3.
+  // aligned, and clear the column-A original. Keep the row's natural height so
+  // bottom-alignment actually seats the underscores at the bottom (a 3pt row is
+  // shorter than the text and forces it to float mid-cell instead).
   {
     const aCell = ws.getCell(`A${lineRow}`);
     const bCell = ws.getCell(`B${lineRow}`);
     bCell.value = aCell.value;
     aCell.value = null;
     bCell.alignment = { horizontal: "center", vertical: "bottom" };
-    ws.getRow(lineRow).height = 3;
   }
   // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
   // centred (trim the template's leading spaces), and clear the column-A originals.
