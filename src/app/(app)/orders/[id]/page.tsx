@@ -24,7 +24,6 @@ import {
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
-import { quoteVatToReconcile } from "@/lib/purchase-reconcile";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
@@ -417,7 +416,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       returns: buildReturnViews(pr),
       canRaiseReturn: false,
       canResolveReturn: false,
-      reconcile: buildReconcileView(pr, quoteVatToReconcile(quote.vatMode)),
+      reconcile: buildReconcileView(pr),
       canRecordReconcile: false,
       canSettleReconcile: false,
       canEscalateReconcile: false,

@@ -19,14 +19,6 @@ import { round2 } from "@/lib/quote";
 
 export type ReconcileVatMode = "inclusive" | "exclusive";
 
-/**
- * Map a quotation's vatMode ("INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS") to the
- * reconciliation's two-way VAT mode. Any EXCLUSIVE variant → "exclusive".
- */
-export function quoteVatToReconcile(vatMode?: string | null): ReconcileVatMode {
-  return String(vatMode ?? "").toUpperCase().startsWith("EXCLUSIVE") ? "exclusive" : "inclusive";
-}
-
 /** One PO line's expected (PO) amount vs the actual amount paid for it. */
 export interface ReconcileLine {
   description: string;

@@ -141,11 +141,16 @@ export async function buildPurchaseOrderWorkbook(
     ws.getCell(`J${r}`).value = l.description ? poLineAmount(l) : "";
   });
 
-  // Totals (labels are already in the shifted rows; set the amounts + EWT %).
-  ws.getCell(`A${21 + N}`).value = `LESS EWT ${po.ewtPct}%`;
+  // Totals. A VAT-exclusive purchase (no EWT) drops the "LESS EWT" row entirely —
+  // hide it (hidden rows don't print) so only TOTAL and NET remain.
   ws.getCell(`J${20 + N}`).value = totals.total;
-  ws.getCell(`J${21 + N}`).value = totals.ewt;
   ws.getCell(`J${22 + N}`).value = totals.net;
+  if ((po.ewtPct ?? 0) > 0) {
+    ws.getCell(`A${21 + N}`).value = `LESS EWT ${po.ewtPct}%`;
+    ws.getCell(`J${21 + N}`).value = totals.ewt;
+  } else {
+    ws.getRow(21 + N).hidden = true;
+  }
 
   // Remarks. The footer bank details are left blank for now (filled in later).
   ws.getCell(`B${24 + N}`).value = po.remarks;

@@ -98,10 +98,12 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
               <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">TOTAL AMOUNT</td>
               <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">{peso(totals.total)}</td>
             </tr>
-            <tr>
-              <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">LESS EWT {po.ewtPct}%</td>
-              <td className="border border-black px-2 py-1 text-right tabular-nums">{peso(totals.ewt)}</td>
-            </tr>
+            {po.ewtPct > 0 && (
+              <tr>
+                <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">LESS EWT {po.ewtPct}%</td>
+                <td className="border border-black px-2 py-1 text-right tabular-nums">{peso(totals.ewt)}</td>
+              </tr>
+            )}
             <tr>
               <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">NET AMOUNT =&gt;</td>
               <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">{peso(totals.net)}</td>
