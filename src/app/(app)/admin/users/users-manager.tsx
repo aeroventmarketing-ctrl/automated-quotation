@@ -13,7 +13,8 @@ import { upsertUser, deleteUser, reassignAndDeleteUser, setUserPassword, saveUse
 
 const ROLES = ["SALES", "ENGINEER", "ADMIN"];
 
-interface U { id: string; email: string; name: string; role: string; salesCode: string; signature: string | null }
+interface U { id: string; email: string; name: string; role: string; salesCode: string; signature: string | null; workflowRoles: string[] }
+interface WfRole { key: string; label: string; group: string }
 
 /** Read an image file, downscale to ≤600px wide, and return a PNG data URL. */
 function fileToSignatureDataUrl(file: File): Promise<string> {
@@ -39,21 +40,28 @@ function fileToSignatureDataUrl(file: File): Promise<string> {
   });
 }
 
-export function UsersManager({ users }: { users: U[] }) {
+export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workflowRoleOptions: WfRole[] }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("SALES");
   const [salesCode, setSalesCode] = useState("");
+  const [wfRoles, setWfRoles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Workflow roles grouped by their category (Finance / Production / Supply chain).
+  const wfGroups = Array.from(new Set(workflowRoleOptions.map((r) => r.group)))
+    .map((g) => ({ group: g, roles: workflowRoleOptions.filter((r) => r.group === g) }));
+  const roleLabel = (key: string) => workflowRoleOptions.find((r) => r.key === key)?.label ?? key;
+  const toggleWf = (key: string) => setWfRoles((rs) => (rs.includes(key) ? rs.filter((r) => r !== key) : [...rs, key]));
+
   function reset() {
-    setEditingId(null); setEmail(""); setName(""); setRole("SALES"); setSalesCode(""); setError(null);
+    setEditingId(null); setEmail(""); setName(""); setRole("SALES"); setSalesCode(""); setWfRoles([]); setError(null);
   }
   function edit(u: U) {
-    setEditingId(u.id); setEmail(u.email); setName(u.name); setRole(u.role); setSalesCode(u.salesCode); setError(null);
+    setEditingId(u.id); setEmail(u.email); setName(u.name); setRole(u.role); setSalesCode(u.salesCode); setWfRoles(u.workflowRoles); setError(null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -61,7 +69,7 @@ export function UsersManager({ users }: { users: U[] }) {
     setBusy(true);
     setError(null);
     try {
-      await upsertUser({ id: editingId ?? undefined, email, name, role: role as never, salesCode });
+      await upsertUser({ id: editingId ?? undefined, email, name, role: role as never, salesCode, workflowRoles: wfRoles });
       reset();
       router.refresh();
     } catch (e) {
@@ -218,9 +226,26 @@ export function UsersManager({ users }: { users: U[] }) {
               <Button variant="ghost" onClick={reset} disabled={busy}>Cancel</Button>
             )}
           </div>
+          <div className="space-y-2 md:col-span-5">
+            <Label className="text-xs">Workflow (ERP) roles</Label>
+            <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              {wfGroups.map((g) => (
+                <div key={g.group} className="space-y-1.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{g.group}</div>
+                  {g.roles.map((r) => (
+                    <label key={r.key} className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input type="checkbox" className="h-3.5 w-3.5 rounded border-input accent-primary" checked={wfRoles.includes(r.key)} onChange={() => toggleWf(r.key)} />
+                      {r.label}
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Assign the departmental roles that drive the workflows (Purchasing, Requisitions, Cash requests, orders). A user can hold several.</p>
+          </div>
           {error && <p className="text-sm text-destructive md:col-span-5">{error}</p>}
           <p className="text-xs text-muted-foreground md:col-span-5">
-            Note: this manages the app role record (matched by email). Create the matching login in
+            Note: the base role &amp; workflow roles are matched by email. Create the matching login in
             Supabase Authentication.
           </p>
         </CardContent>
@@ -296,7 +321,16 @@ export function UsersManager({ users }: { users: U[] }) {
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">{u.name}</TableCell>
                   <TableCell>{u.email}</TableCell>
-                  <TableCell><Badge variant="secondary">{u.role}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{u.role}</Badge>
+                    {u.workflowRoles.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {u.workflowRoles.map((k) => (
+                          <span key={k} className="inline-flex rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[10px] font-medium text-primary">{roleLabel(k)}</span>
+                        ))}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell>{u.salesCode || "—"}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

@@ -134,6 +134,9 @@ const userSchema = z.object({
   role: z.enum(["SALES", "ENGINEER", "ADMIN"]),
   // Single letter appended to quote numbers (e.g. "J").
   salesCode: z.string().trim().max(1).optional(),
+  // Workflow (ERP) roles assigned to this user. Omitted = leave unchanged;
+  // an empty array clears them.
+  workflowRoles: z.array(z.string()).optional(),
 });
 
 export async function upsertUser(input: z.infer<typeof userSchema>) {
@@ -142,13 +145,20 @@ export async function upsertUser(input: z.infer<typeof userSchema>) {
   const salesCode = d.salesCode ? d.salesCode.toUpperCase() : null;
   const email = d.email.toLowerCase();
   const data = { email, name: d.name, role: d.role, salesCode };
+  let userId: string;
   if (d.id) {
     // Editing an existing record by id — allows changing the email too.
-    await prisma.user.update({ where: { id: d.id }, data });
+    const u = await prisma.user.update({ where: { id: d.id }, data });
+    userId = u.id;
   } else {
-    await prisma.user.upsert({ where: { email }, update: { name: d.name, role: d.role, salesCode }, create: data });
+    const u = await prisma.user.upsert({ where: { email }, update: { name: d.name, role: d.role, salesCode }, create: data });
+    userId = u.id;
   }
+  // Persist workflow (ERP) roles when provided (empty array clears them).
+  if (d.workflowRoles) await setUserWorkflowRoles(userId, d.workflowRoles);
   revalidatePath("/admin/users");
+  revalidatePath("/admin/workflow-roles");
+  return userId;
 }
 
 /**
