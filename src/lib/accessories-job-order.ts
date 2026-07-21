@@ -16,9 +16,19 @@ import { PRODUCT_TAXONOMY } from "@/lib/product-taxonomy";
 /** Suggested accessory product types (every Ventilation Accessory except the
  * Air Duct group, which has its own Duct job order). Used as datalist hints —
  * the type field stays free text so anything (e.g. "Linear Bar Grille") works. */
+const EXCLUDED_ACCESSORY_TYPES = new Set([
+  "Vent Cap",
+  "TDC Cleat",
+  "C-clip",
+  "S-clip",
+  "Duct Angle corner",
+  "Spring Vibration Isolator",
+]);
 export const ACCESSORY_TYPE_SUGGESTIONS: string[] = Array.from(
   new Set(
-    PRODUCT_TAXONOMY.filter((e) => e.category === "Ventilation Accessories" && e.group !== "Air Duct").map((e) => e.type),
+    PRODUCT_TAXONOMY.filter(
+      (e) => e.category === "Ventilation Accessories" && e.group !== "Air Duct" && !EXCLUDED_ACCESSORY_TYPES.has(e.type),
+    ).map((e) => e.type),
   ),
 );
 
