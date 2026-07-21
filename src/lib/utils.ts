@@ -59,3 +59,15 @@ export function formatDateTime(d: Date | string | null | undefined): string {
     timeZone: PH_TIME_ZONE,
   });
 }
+
+/** Time of day in Philippine Standard Time, e.g. "3:42 PM". */
+export function formatTime(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: PH_TIME_ZONE,
+  });
+}

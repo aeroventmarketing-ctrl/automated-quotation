@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InquiryStatusBadge } from "@/components/status-badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatTime } from "@/lib/utils";
 import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { InquiryActions } from "./inquiry-actions";
 
@@ -176,7 +176,10 @@ export function InquiriesTable({
               <TableCell>{inq.source}</TableCell>
               <TableCell>{inq.items}</TableCell>
               <TableCell>{inq.quotes}</TableCell>
-              <TableCell>{formatDate(new Date(inq.createdISO))}</TableCell>
+              <TableCell>
+                <div>{formatDate(new Date(inq.createdISO))}</div>
+                <div className="text-xs text-muted-foreground">{formatTime(new Date(inq.createdISO))}</div>
+              </TableCell>
               <TableCell>
                 <InquiryStatusBadge status={inq.status} />
               </TableCell>
