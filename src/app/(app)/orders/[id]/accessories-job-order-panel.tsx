@@ -18,9 +18,6 @@ import {
 } from "@/lib/accessories-job-order";
 import { saveAccessoriesJobOrder, deleteAccessoriesJobOrder } from "../actions";
 
-const SELECT_CLS = "h-8 w-full rounded-md border bg-background px-2 text-sm";
-const TYPES_LIST_ID = "acc-type-suggestions";
-
 function todayISO(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -139,6 +136,12 @@ function AccessoriesJobOrderForm({
   const [f, setF] = useState<AccessoriesJobOrder>({ ...initial, lines: initial.lines.length ? initial.lines : [] });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Line indices whose product type is being entered as a custom (free-text) value.
+  const [customLines, setCustomLines] = useState<Set<number>>(() => {
+    const s = new Set<number>();
+    (initial.lines ?? []).forEach((l, i) => { if (l.type && !ACCESSORY_TYPE_SUGGESTIONS.includes(l.type)) s.add(i); });
+    return s;
+  });
   const set = (k: keyof AccessoriesJobOrder, v: string) => setF((p) => ({ ...p, [k]: v }));
 
   const addLine = () => {
@@ -146,7 +149,7 @@ function AccessoriesJobOrderForm({
       const last = p.lines[p.lines.length - 1];
       const line: AccessoryLine = {
         ...EMPTY_ACCESSORY_LINE,
-        dimensions: [{ value: "", label: "" }],
+        dimensions: [{ value: "", label: "" }, { value: "", label: "" }],
         material: last?.material || EMPTY_ACCESSORY_LINE.material,
         uom: last?.uom || EMPTY_ACCESSORY_LINE.uom,
       };
@@ -155,7 +158,25 @@ function AccessoriesJobOrderForm({
   };
   const setLine = (i: number, patch: Partial<AccessoryLine>) =>
     setF((p) => ({ ...p, lines: p.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)) }));
-  const removeLine = (i: number) => setF((p) => ({ ...p, lines: p.lines.filter((_, j) => j !== i) }));
+  const removeLine = (i: number) => {
+    setF((p) => ({ ...p, lines: p.lines.filter((_, j) => j !== i) }));
+    // Re-index the custom-type flags around the removed line.
+    setCustomLines((prev) => {
+      const next = new Set<number>();
+      prev.forEach((idx) => { if (idx < i) next.add(idx); else if (idx > i) next.add(idx - 1); });
+      return next;
+    });
+  };
+  // Pick a product type from the dropdown, or switch a line to custom free text.
+  const onTypeSelect = (i: number, value: string) => {
+    if (value === "__custom__") {
+      setCustomLines((prev) => new Set(prev).add(i));
+      setLine(i, { type: "" });
+    } else {
+      setCustomLines((prev) => { const n = new Set(prev); n.delete(i); return n; });
+      setLine(i, { type: value });
+    }
+  };
   const setDim = (li: number, di: number, patch: Partial<{ value: string; label: string }>) =>
     setF((p) => ({
       ...p,
@@ -178,9 +199,6 @@ function AccessoriesJobOrderForm({
 
   return (
     <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-      <datalist id={TYPES_LIST_ID}>
-        {ACCESSORY_TYPE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
-      </datalist>
       <div className="text-sm font-medium">{index != null ? "Edit" : "New"} Accessories Job Order</div>
 
       <div className="text-xs font-semibold text-muted-foreground">Header</div>
@@ -208,13 +226,30 @@ function AccessoriesJobOrderForm({
           <div key={i} className="space-y-2 rounded-md border bg-background p-2">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-mono text-muted-foreground">{i + 1}.</span>
-              <Input
-                className="h-7 flex-1 text-xs"
-                list={TYPES_LIST_ID}
-                value={line.type}
-                placeholder="Product type — e.g. Linear Bar Grille"
-                onChange={(e) => setLine(i, { type: e.target.value })}
-              />
+              {(() => {
+                const isCustom = customLines.has(i) || (!!line.type && !ACCESSORY_TYPE_SUGGESTIONS.includes(line.type));
+                return (
+                  <div className="flex flex-1 flex-wrap items-center gap-1.5">
+                    <select
+                      className="h-7 flex-1 rounded-md border bg-background px-2 text-xs font-medium"
+                      value={isCustom ? "__custom__" : line.type}
+                      onChange={(e) => onTypeSelect(i, e.target.value)}
+                    >
+                      <option value="">Type…</option>
+                      {ACCESSORY_TYPE_SUGGESTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                      <option value="__custom__">Custom type…</option>
+                    </select>
+                    {isCustom && (
+                      <Input
+                        className="h-7 flex-1 text-xs"
+                        value={line.type}
+                        placeholder="Type the product — e.g. Linear Bar Grille"
+                        onChange={(e) => setLine(i, { type: e.target.value })}
+                      />
+                    )}
+                  </div>
+                );
+              })()}
               <button type="button" onClick={() => removeLine(i)} className="text-muted-foreground hover:text-destructive">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
