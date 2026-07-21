@@ -283,7 +283,7 @@ export function FansJobOrderPanel({
               <span className="font-mono font-semibold">{numberFor(i)}</span>
               <span className="rounded-full bg-[#ED1C24]/10 px-2 py-0.5 font-medium text-[#ED1C24]">{joTypeLabel(jo.type)}</span>
               <span className="text-muted-foreground">
-                {[jo.bladeDiameter && `${jo.bladeDiameter}"Ø`, jo.project, jo.quantity && `${jo.quantity} ${jo.uom}`].filter(Boolean).join(" · ")}
+                {[jo.bladeDiameter && `${jo.bladeDiameter}"Ø`, jo.project, jo.quantity && `${jo.quantity} ${jo.uom}`, jo.targetDate && `due ${jo.targetDate}`].filter(Boolean).join(" · ")}
               </span>
               <a
                 href={`/orders/${orderId}/jo/${i}/xlsx`}
