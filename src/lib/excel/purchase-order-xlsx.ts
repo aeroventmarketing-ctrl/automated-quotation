@@ -151,6 +151,12 @@ export async function buildPurchaseOrderWorkbook(
   ws.getCell(`B${24 + N}`).value = po.remarks;
 
   ws.pageSetup.printArea = `A1:J${33 + N}`;
+  // Print margins (Excel dialog values are in centimetres; ExcelJS wants inches).
+  // Top 3, Left 3, Right 0, Bottom 0, Header 8, Footer 8 cm; centre horizontally.
+  const CM = 1 / 2.54;
+  ws.pageSetup.margins = { top: 3 * CM, bottom: 0, left: 3 * CM, right: 0, header: 8 * CM, footer: 8 * CM };
+  ws.pageSetup.horizontalCentered = true;
+  ws.pageSetup.verticalCentered = false;
 
   // --- Purchaser signature block ("Account Purchaser") -----------------------
   // The template's signature line ("___") sits at row 29+N, with "Account
