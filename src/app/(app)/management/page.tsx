@@ -15,12 +15,18 @@ const CURRENCY = "PHP";
 // Ordinal blue ramp (light→dark) for the order pipeline phases — a progression,
 // validated against the reference palette. Departments use categorical hues.
 const PHASE_COLOR: Record<string, string> = {
-  "Phase 1": "#86b6ef",
-  "Phase 2": "#5598e7",
+  "Phase 1": "#9ec5f4",
+  "Phase 2": "#6da7ec",
+  "Phase 3": "#5598e7",
+  "Phase 4": "#3987e5",
   "Phase 5": "#2a78d6",
   "Closed": "#1c5cab",
 };
+// The donut shows each order's linear phase (these sum to the order total).
 const PHASE_ORDER = ["Phase 1", "Phase 2", "Phase 5", "Closed"];
+// The legend lists every phase; 3 (materials) & 4 (purchasing) run concurrently
+// within production, so they're shown as separate counts, not donut arcs.
+const LEGEND_PHASES = ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Closed"];
 const DEPT_COLOR: Record<string, string> = {
   fans: "#2a78d6",
   duct: "#1baf7a",
@@ -81,8 +87,11 @@ export default async function ManagementPage() {
     }),
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" } }).catch(() => []),
     prisma.commission.findMany({ where: { paid: false } }).catch(() => []),
-    prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] } }, select: { id: true } }).catch(() => []),
+    prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] } }, select: { id: true, quotationId: true } }).catch(() => []),
   ]);
+
+  // Orders (by quotation id) that currently have an open purchase request → Phase 4.
+  const openPrQuoteIds = new Set(prPending.map((p) => p.quotationId).filter((x): x is string => !!x));
 
   const stageCount = new Map<OrderStage, number>();
   const prodActive = new Map<string, number>();
@@ -91,6 +100,8 @@ export default async function ManagementPage() {
   let openOrders = 0;
   let billed = 0;
   let collected = 0;
+  let materialsCount = 0; // Phase 3: orders with an open material request
+  let purchasingCount = 0; // Phase 4: orders with an open purchase request
 
   for (const q of wonQuotes) {
     const sale = saleFromClassification(q.classification);
@@ -99,6 +110,11 @@ export default async function ManagementPage() {
     const wf = readOrderWorkflow(q.classification);
     stageCount.set(wf.stage, (stageCount.get(wf.stage) ?? 0) + 1);
     if (wf.stage !== "closed") openOrders++;
+
+    // Phase 3 & 4 run within production — count orders still awaiting materials
+    // (an open MRF) or with a purchase request in progress.
+    if (wf.materialRequests.some((m) => m.status === "requested" || m.status === "purchasing" || m.status === "partial")) materialsCount++;
+    if (openPrQuoteIds.has(q.id)) purchasingCount++;
 
     const value = round2(payableTotal(q));
     const paid = round2(collectedTotal(sale));
@@ -199,16 +215,20 @@ export default async function ManagementPage() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    {PHASE_ORDER.map((p) => {
-                      const n = phaseCount.get(p) ?? 0;
+                    {LEGEND_PHASES.map((p) => {
+                      const concurrent = p === "Phase 3" || p === "Phase 4";
+                      const n = p === "Phase 3" ? materialsCount : p === "Phase 4" ? purchasingCount : (phaseCount.get(p) ?? 0);
                       return (
                         <div key={p} className="flex items-center gap-2 text-xs">
                           <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: PHASE_COLOR[p] }} />
-                          <span className={n > 0 ? "font-medium" : "text-muted-foreground"}>{p}</span>
+                          <span className={n > 0 ? "font-medium" : "text-muted-foreground"}>
+                            {p}{concurrent && <span className="ml-1 font-normal text-muted-foreground">· {p === "Phase 3" ? "materials" : "purchasing"}</span>}
+                          </span>
                           <span className="ml-auto tabular-nums text-muted-foreground">{n}</span>
                         </div>
                       );
                     })}
+                    <p className="pt-1 text-[10px] leading-tight text-muted-foreground">Phases 3 &amp; 4 run within production, so they overlap Phase 2.</p>
                   </div>
                 </div>
                 {/* Stage bars */}
