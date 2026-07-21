@@ -88,9 +88,9 @@ function wrapTerms(s: string, maxChars: number): string[] {
 export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Quotation", {
-    // Open the sheet in Page Break Preview so the printable layout shows on
-    // open, with gridlines visible.
-    views: [{ showGridLines: true, style: "pageBreakPreview" }],
+    // Open the sheet in Page Break Preview at 140% zoom so the printable layout
+    // shows on open, with gridlines visible.
+    views: [{ showGridLines: true, style: "pageBreakPreview", zoomScale: 140, zoomScaleNormal: 140 }],
     pageSetup: {
       paperSize: 9, // A4
       orientation: "portrait",
@@ -279,17 +279,17 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   };
 
   for (const it of data.items) {
-    // Row height = text height + a fixed ~9pt of vertical breathing room so a
-    // short 2–3 line row (Motor Controller, isolator) gets the same space above
-    // and below its text as a tall multi-line blower row. Estimate the wrapped
-    // line count from the merged D:H width (~30 chars at Times New Roman 10 — the
-    // width Excel actually wraps at); under-counting the chars/line over-estimates
-    // the wraps and leaves a tall row with wide empty top/bottom allowance.
-    const descCharsPerLine = 30;
+    // Row height = text height + vertical breathing room. Estimate the wrapped
+    // line count from the merged D:H width. We deliberately assume a slightly
+    // NARROWER wrap width (~26 chars) and a taller per-line height so the row
+    // never clips on machines where Times New Roman is substituted (a taller
+    // fallback font) — clipped text was the reported issue. Clamped to Excel's
+    // 409pt max row height.
+    const descCharsPerLine = 26;
     const wrappedLines = String(it.descriptionSnapshot)
       .split("\n")
       .reduce((acc, seg) => acc + Math.max(1, Math.ceil(seg.length / descCharsPerLine)), 0);
-    const rowH = Math.max(28, wrappedLines * 13.5, wrappedLines * 12 + 9);
+    const rowH = Math.min(409, Math.max(30, wrappedLines * 15 + 8));
     guardPage(rowH); // may advance r past a break + fresh logo
 
     ws.mergeCells(`D${r}:H${r}`);
