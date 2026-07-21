@@ -203,6 +203,33 @@ export async function advanceJobOrder(
   await saveWorkflow(quotationId, cls, nextWf);
 }
 
+/**
+ * Set (or clear) a job order's target completion date. Set by the Technical
+ * Head, the Plant Manager, the department head, or an admin. `dueAt` is a
+ * YYYY-MM-DD date string; pass null/"" to clear it.
+ */
+export async function setJobOrderDue(quotationId: string, dept: string, dueAt: string | null): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
+  const deptKey = dept as ProductionDeptKey;
+  const roles = await getWorkflowRoles();
+  const allowed =
+    isAdmin(user) ||
+    userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, deptRole(deptKey) as WorkflowRoleKey);
+  if (!allowed) throw new Error("Only the Technical Head, Plant Manager, the department head or an admin can set a deadline.");
+
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const jo = wf.jobOrders[deptKey];
+  if (!jo) throw new Error("No job order for this department.");
+  const clean = (dueAt ?? "").trim();
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(clean) ? clean : undefined;
+  const updated: JobOrder = { ...jo, dueAt: due };
+  await saveWorkflow(quotationId, cls, { ...wf, jobOrders: { ...wf.jobOrders, [deptKey]: updated } });
+}
+
 // --- Fans & Blowers Job Orders (Engineer) ---------------------------------
 
 /** Next running JO base sequence (claimed once per order). */

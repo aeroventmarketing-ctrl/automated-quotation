@@ -208,10 +208,19 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     if (jo.issuedByName) events.push({ label: "Issued", who: jo.issuedByName, designation: issueDesig, when: fmtWhen(jo.issuedAt) });
     if (jo.startedByName) events.push({ label: "Started", who: jo.startedByName, designation: deptDesig, when: fmtWhen(jo.startedAt) });
     if (jo.finishedByName) events.push({ label: "Finished", who: jo.finishedByName, designation: deptDesig, when: fmtWhen(jo.finishedAt) });
+    const canSetDue =
+      adminViewer ||
+      (viewer != null && (
+        userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey) ||
+        userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey) ||
+        userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)
+      ));
     return {
       key: d.key,
       label: d.label,
       status: jo.status,
+      dueAt: jo.dueAt ?? null,
+      canSetDue,
       events,
       canAdvance,
       nextTo,

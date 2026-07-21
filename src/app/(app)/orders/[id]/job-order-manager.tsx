@@ -4,16 +4,43 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { issueJobOrders, advanceJobOrder, receiveJobOrders } from "../actions";
+import { issueJobOrders, advanceJobOrder, receiveJobOrders, setJobOrderDue } from "../actions";
 
 interface JobRow {
   key: string;
   label: string;
   status: "issued" | "in_production" | "finished";
+  dueAt: string | null;
+  canSetDue: boolean;
   events: { label: string; who: string; designation?: string; when: string }[];
   canAdvance: boolean;
   nextTo: "in_production" | "finished" | null;
   nextLabel: string | null;
+}
+
+/** Days from today (local) to a YYYY-MM-DD date (negative = past). */
+function daysUntil(due: string): number {
+  const [y, m, d] = due.split("-").map(Number);
+  const dueMid = new Date(y, m - 1, d).getTime();
+  const now = new Date();
+  const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((dueMid - todayMid) / 86_400_000);
+}
+function fmtDue(due: string): string {
+  const [y, m, d] = due.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+}
+/** Traffic-light styling + label for a job order's deadline. */
+function deadlineChip(dueAt: string | null, status: JobRow["status"]): { text: string; cls: string } | null {
+  if (!dueAt) return null;
+  const days = daysUntil(dueAt);
+  if (status === "finished") {
+    return { text: `Due ${fmtDue(dueAt)}`, cls: "border-border bg-muted text-muted-foreground" };
+  }
+  if (days < 0) return { text: `Delayed · ${-days}d overdue (due ${fmtDue(dueAt)})`, cls: "border-destructive/40 bg-destructive/10 text-destructive" };
+  if (days === 0) return { text: `Due today (${fmtDue(dueAt)})`, cls: "border-destructive/40 bg-destructive/10 text-destructive" };
+  if (days <= 3) return { text: `Due in ${days}d (${fmtDue(dueAt)})`, cls: "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" };
+  return { text: `On track · due ${fmtDue(dueAt)}`, cls: "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" };
 }
 
 const STATUS_VARIANT: Record<JobRow["status"], "secondary" | "warning" | "success"> = {
@@ -117,10 +144,15 @@ export function JobOrderManager({
         </div>
       )}
       {jobs.length === 0 && <p className="text-sm text-muted-foreground">No job orders on this order.</p>}
-      {jobs.map((j) => (
+      {jobs.map((j) => {
+        const chip = deadlineChip(j.dueAt, j.status);
+        return (
         <div key={j.key} className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3">
           <div>
-            <div className="text-sm font-medium">{j.label}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">{j.label}</span>
+              {chip && <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${chip.cls}`}>{chip.text}</span>}
+            </div>
             <div className="mt-0.5 space-y-0.5">
               {j.events.map((e, i) => (
                 <div key={i} className="text-xs text-muted-foreground">
@@ -128,6 +160,19 @@ export function JobOrderManager({
                 </div>
               ))}
             </div>
+            {/* Deadline editor (Technical Head / Plant Manager / dept head / admin). */}
+            {j.canSetDue && j.status !== "finished" && (
+              <label className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                Deadline
+                <input type="date" defaultValue={j.dueAt ?? ""} disabled={busy}
+                  className="h-7 rounded-md border bg-background px-2 text-xs"
+                  onChange={(e) => run(() => setJobOrderDue(orderId, j.key, e.target.value || null))} />
+                {j.dueAt && (
+                  <button type="button" className="text-muted-foreground hover:text-destructive" disabled={busy}
+                    onClick={() => run(() => setJobOrderDue(orderId, j.key, null))}>Clear</button>
+                )}
+              </label>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={STATUS_VARIANT[j.status]}>{STATUS_LABEL[j.status]}</Badge>
@@ -139,7 +184,8 @@ export function JobOrderManager({
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );

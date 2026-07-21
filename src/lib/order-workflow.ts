@@ -78,6 +78,7 @@ export interface JobOrder {
   startedByName?: string;
   finishedAt?: string;
   finishedByName?: string;
+  dueAt?: string; // target completion date (YYYY-MM-DD)
 }
 
 export interface OrderApproval {
