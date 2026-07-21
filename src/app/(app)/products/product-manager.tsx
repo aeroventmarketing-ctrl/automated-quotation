@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { X, Search } from "lucide-react";
@@ -19,6 +19,30 @@ import { ProductScanBox } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+
+type SortKey = "name" | "sku" | "unit" | "category" | "supplier" | "price";
+type GroupKey = "none" | "category" | "supplier" | "unit";
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "Name" },
+  { key: "sku", label: "SKU" },
+  { key: "unit", label: "Unit" },
+  { key: "category", label: "Category" },
+  { key: "supplier", label: "Supplier" },
+  { key: "price", label: "Price" },
+];
+const GROUP_OPTIONS: { key: GroupKey; label: string }[] = [
+  { key: "none", label: "No grouping" },
+  { key: "category", label: "Category" },
+  { key: "supplier", label: "Supplier" },
+  { key: "unit", label: "Unit" },
+];
+/** First supplier company on a product (for sort/group), or "" / "No supplier". */
+const primarySupplier = (p: ProductRow) => p.suppliers[0]?.company ?? "";
+/** Lowest defined supplier price on a product, or 0 when none priced. */
+const primaryPrice = (p: ProductRow) => {
+  const prices = p.suppliers.map((s) => s.price).filter((n): n is number => typeof n === "number" && n > 0);
+  return prices.length ? Math.min(...prices) : 0;
+};
 
 /** Add/remove the suppliers a product can be bought from, each with code + price. */
 function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplierLink[]; onChange: (v: ProductSupplierLink[]) => void; suppliers: Supplier[] }) {
@@ -195,6 +219,43 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
         p.suppliers.some((s) => s.company.toLowerCase().includes(q)),
       );
 
+  // Sort & group controls.
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [dir, setDir] = useState<"asc" | "desc">("asc");
+  const [group, setGroup] = useState<GroupKey>("none");
+
+  const sorted = useMemo(() => {
+    const mul = dir === "asc" ? 1 : -1;
+    const cmp = (a: ProductRow, b: ProductRow): number => {
+      switch (sortKey) {
+        case "sku": return ((a.sku ?? "").localeCompare(b.sku ?? "") || a.name.localeCompare(b.name)) * mul;
+        case "unit": return ((a.unit ?? "").localeCompare(b.unit ?? "") || a.name.localeCompare(b.name)) * mul;
+        case "category": return ((a.category ?? "").localeCompare(b.category ?? "") || a.name.localeCompare(b.name)) * mul;
+        case "supplier": return (primarySupplier(a).localeCompare(primarySupplier(b)) || a.name.localeCompare(b.name)) * mul;
+        case "price": return (primaryPrice(a) - primaryPrice(b) || a.name.localeCompare(b.name)) * mul;
+        default: return a.name.localeCompare(b.name) * mul;
+      }
+    };
+    return [...filtered].sort(cmp);
+  }, [filtered, sortKey, dir]);
+
+  const groupValue = (p: ProductRow): string => {
+    switch (group) {
+      case "category": return p.category || "—";
+      case "supplier": return primarySupplier(p) || "No supplier";
+      case "unit": return p.unit || "—";
+      default: return "";
+    }
+  };
+  const groups = useMemo(() => {
+    if (group === "none") return [{ key: "", rows: sorted }];
+    const map = new Map<string, ProductRow[]>();
+    for (const p of sorted) { const k = groupValue(p); (map.get(k) ?? map.set(k, []).get(k)!).push(p); }
+    return [...map.entries()].map(([key, rows]) => ({ key, rows }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, group]);
+  const cols = canManage ? 4 : 3;
+
   function handleScan({ product }: { product: ScanProduct }) {
     setScanTarget(product.id); setScanNonce((n) => n + 1);
     return { ok: true, message: `Found: ${product.name}` };
@@ -262,15 +323,33 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
         </div>
       )}
 
-      {/* Text search across name / SKU / category / supplier. */}
-      <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="h-9 pl-8" placeholder="Search products by name, SKU, category or supplier…" value={query} onChange={(e) => setQuery(e.target.value)} />
-        {q !== "" && (
-          <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
-            <X className="h-4 w-4" />
-          </button>
-        )}
+      {/* Text search + sort / group controls. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[16rem] max-w-md flex-1">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="h-9 pl-8" placeholder="Search products by name, SKU, category or supplier…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          {q !== "" && (
+            <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          Group by
+          <select value={group} onChange={(e) => setGroup(e.target.value as GroupKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
+            {GROUP_OPTIONS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          Sort by
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
+            {SORT_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
+          className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-sm hover:bg-accent" title={dir === "asc" ? "Ascending" : "Descending"}>
+          {dir === "asc" ? "↑ Asc" : "↓ Desc"}
+        </button>
       </div>
 
       {products.length === 0 ? (
@@ -290,7 +369,19 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+              {groups.map((g) => (
+                <Fragment key={g.key || "all"}>
+                  {group !== "none" && (
+                    <TableRow className="bg-muted/40">
+                      <TableCell colSpan={cols} className="py-1.5">
+                        <span className="text-sm font-semibold">{g.key || "—"}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{g.rows.length} product{g.rows.length === 1 ? "" : "s"}</span>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+                </Fragment>
+              ))}
             </TableBody>
           </Table>
         </div>
