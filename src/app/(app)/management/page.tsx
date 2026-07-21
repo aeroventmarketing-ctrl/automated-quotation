@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart } from "lucide-react";
+import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,16 @@ const PHASE_COLOR: Record<string, string> = {
 };
 // The donut shows each order's linear phase (these sum to the order total).
 const PHASE_ORDER = ["Phase 1", "Phase 2", "Phase 5", "Closed"];
+
+/** Whole-day difference (target − reference), both YYYY-MM-DD. Negative = past. */
+function daysBetween(fromYMD: string, toYMD: string): number {
+  const p = (s: string) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((p(toYMD) - p(fromYMD)) / 86_400_000);
+}
+function fmtDue(due: string): string {
+  const [y, m, d] = due.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+}
 // The legend lists every phase; 3 (materials) & 4 (purchasing) run concurrently
 // within production, so they're shown as separate counts, not donut arcs.
 const LEGEND_PHASES = ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Closed"];
@@ -83,7 +93,7 @@ export default async function ManagementPage() {
   const [wonQuotes, stockItems, commissions, prPending] = await Promise.all([
     prisma.quotation.findMany({
       where: { inquiry: { status: "WON" } },
-      select: { id: true, classification: true, total: true, discountPct: true, vatMode: true },
+      select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { company: true } } } } },
     }),
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" } }).catch(() => []),
     prisma.commission.findMany({ where: { paid: false } }).catch(() => []),
@@ -93,8 +103,13 @@ export default async function ManagementPage() {
   // Orders (by quotation id) that currently have an open purchase request → Phase 4.
   const openPrQuoteIds = new Set(prPending.map((p) => p.quotationId).filter((x): x is string => !!x));
 
+  // Today in Manila (PH) for consistent deadline maths regardless of server TZ.
+  const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+
   const stageCount = new Map<OrderStage, number>();
   const prodActive = new Map<string, number>();
+  // Unfinished job orders with a deadline within 3 days or already past.
+  const atRisk: { orderId: string; company: string; quoteNumber: string; dept: string; dueAt: string; days: number }[] = [];
   let orderCount = 0;
   let outstanding = 0;
   let openOrders = 0;
@@ -129,7 +144,19 @@ export default async function ManagementPage() {
         if (jo && jo.status !== "finished") prodActive.set(d.key, (prodActive.get(d.key) ?? 0) + 1);
       }
     }
+
+    // Job-order deadlines at risk: unfinished, due within 3 days or overdue.
+    for (const d of PRODUCTION_DEPTS) {
+      const jo = wf.jobOrders[d.key];
+      if (!jo || jo.status === "finished" || !jo.dueAt) continue;
+      const days = daysBetween(phToday, jo.dueAt);
+      if (days > 3) continue;
+      atRisk.push({ orderId: q.id, company: q.inquiry?.customer?.company ?? "—", quoteNumber: q.quoteNumber, dept: d.label, dueAt: jo.dueAt, days });
+    }
   }
+  atRisk.sort((a, b) => a.days - b.days);
+  const overdueCount = atRisk.filter((a) => a.days < 0).length;
+  const dueSoonCount = atRisk.filter((a) => a.days >= 0).length;
 
   const lowStock = stockItems.filter((i) => {
     const q = Number(i.quantity);
@@ -262,6 +289,48 @@ export default async function ManagementPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Job order deadlines at risk */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><CalendarClock className="h-4 w-4 text-muted-foreground" /> Job order deadlines</CardTitle></CardHeader>
+        <CardContent>
+          <div className="mb-3 flex flex-wrap gap-6">
+            <div>
+              <div className={`text-3xl font-bold tabular-nums ${overdueCount > 0 ? "text-destructive" : ""}`}>{overdueCount}</div>
+              <div className="text-xs text-muted-foreground">Overdue</div>
+            </div>
+            <div>
+              <div className={`text-3xl font-bold tabular-nums ${dueSoonCount > 0 ? "text-amber-600" : ""}`}>{dueSoonCount}</div>
+              <div className="text-xs text-muted-foreground">Due within 3 days</div>
+            </div>
+          </div>
+          {atRisk.length === 0 ? (
+            <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
+              All job orders on track.
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {atRisk.slice(0, 8).map((a, i) => {
+                const late = a.days < 0;
+                const text = late ? `Delayed · ${-a.days}d overdue` : a.days === 0 ? "Due today" : `Due in ${a.days}d`;
+                const cls = late || a.days === 0 ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-amber-400 bg-amber-50 text-amber-700";
+                return (
+                  <li key={i}>
+                    <Link href={`/orders/${a.orderId}`} className="-mx-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-1.5 text-sm hover:bg-accent">
+                      <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>{text}</span>
+                      <span className="font-medium">{a.dept}</span>
+                      <span className="min-w-0 truncate text-muted-foreground">{a.company} · {a.quoteNumber}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">due {fmtDue(a.dueAt)}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+              {atRisk.length > 8 && <li className="pt-1 text-xs text-muted-foreground">+ {atRisk.length - 8} more</li>}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Receivables */}
