@@ -162,15 +162,10 @@ export async function buildPurchaseOrderWorkbook(
   // Printed name sits on its own row just above the signature line, centred in
   // column B (the "___" line stays on lineRow, below the name).
   if (purchaserName) {
-    // Name sits on the signature-line row itself (lineRow), centred + bottom-
-    // aligned in column B, and that row is shrunk to height 2 so the name rests
-    // right on the line. Clear the column-A original.
-    ws.getCell(`A${lineRow}`).value = null;
-    const nameCell = ws.getCell(`B${lineRow}`);
+    const nameCell = ws.getCell(`B${lineRow - 1}`);
     nameCell.value = purchaserName;
     nameCell.font = { name: "Arial", size: 9, bold: true };
     nameCell.alignment = { horizontal: "center", vertical: "bottom" };
-    ws.getRow(lineRow).height = 2;
   }
   // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
   // centred (trim the template's leading spaces), and clear the column-A originals.
