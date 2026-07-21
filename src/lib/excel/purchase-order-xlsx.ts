@@ -158,18 +158,33 @@ export async function buildPurchaseOrderWorkbook(
   // above the line and overlay their signature image on it.
   const purchaserName = (purchaser.name ?? po.createdByName ?? "").trim();
   const purchaserDesignation = (purchaser.designation ?? "").trim();
-  const lineRow = 29 + N; // the "___________" signature line
+  const lineRow = 29 + N; // the "___________" signature line (kept)
+  // Printed name sits centred on the line row, in column B (over the line).
   if (purchaserName) {
-    const nameCell = ws.getCell(`A${lineRow - 2}`); // two rows above the line
+    const nameCell = ws.getCell(`B${lineRow}`);
     nameCell.value = purchaserName;
     nameCell.font = { name: "Arial", size: 9, bold: true };
-    nameCell.alignment = { horizontal: "left", vertical: "bottom", indent: 2 };
+    nameCell.alignment = { horizontal: "center", vertical: "bottom" };
   }
-  // Optional: override the template's "Account Purchaser" designation (row 30+N).
-  if (purchaserDesignation) {
-    const desCell = ws.getCell(`A${lineRow + 1}`);
-    desCell.value = purchaserDesignation;
-    desCell.alignment = { horizontal: "left", vertical: "middle", indent: 2 };
+  // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
+  // centred (trim the template's leading spaces), and clear the column-A originals.
+  {
+    const des = purchaserDesignation || String(ws.getCell(`A${lineRow + 1}`).value ?? "").trim();
+    ws.getCell(`A${lineRow + 1}`).value = null;
+    if (des) {
+      const desCell = ws.getCell(`B${lineRow + 1}`);
+      desCell.value = des;
+      desCell.alignment = { horizontal: "center", vertical: "middle" };
+    }
+  }
+  {
+    const company = String(ws.getCell(`A${lineRow + 2}`).value ?? "").trim();
+    ws.getCell(`A${lineRow + 2}`).value = null;
+    if (company) {
+      const coCell = ws.getCell(`B${lineRow + 2}`);
+      coCell.value = company;
+      coCell.alignment = { horizontal: "center", vertical: "middle" };
+    }
   }
   const sigUrl = (purchaser.signature ?? "").trim();
   if (sigUrl && /^data:image\/(png|jpe?g);base64,/i.test(sigUrl)) {
@@ -181,8 +196,8 @@ export async function buildPurchaseOrderWorkbook(
     let w = maxW, h = Math.round(w / aspect);
     if (h > maxH) { h = maxH; w = Math.round(h * aspect); }
     const sigId = wb.addImage({ base64: sigUrl.split(",")[1], extension: ext as "png" | "jpeg" });
-    // Anchor over the left block, floating just above the (moved-up) name (0-indexed).
-    ws.addImage(sigId, { tl: { col: 0.6, row: lineRow - 4 }, ext: { width: w, height: h }, editAs: "oneCell" });
+    // Float the signature just above the printed name / line, centred over col B (0-indexed).
+    ws.addImage(sigId, { tl: { col: 0.9, row: lineRow - 3 }, ext: { width: w, height: h }, editAs: "oneCell" });
   }
 
   // --- BIR 2307 ---------------------------------------------------------------
