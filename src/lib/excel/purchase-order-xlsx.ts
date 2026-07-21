@@ -11,6 +11,7 @@ import JSZip from "jszip";
 import { poLineAmount, poTotals, type PurchaseOrder } from "@/lib/purchase-order";
 import { round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
+import { imageDataUrlSize } from "@/lib/signature";
 
 /** AeroVent's payor details for the BIR 2307 (Part II). */
 const PAYOR = {
@@ -95,6 +96,7 @@ export async function buildPurchaseOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   po: PurchaseOrder,
   signatory: Signatory2307 = {},
+  purchaser: { name?: string; signature?: string | null } = {},
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuffer as ArrayBuffer);
@@ -149,6 +151,32 @@ export async function buildPurchaseOrderWorkbook(
   ws.getCell(`B${24 + N}`).value = po.remarks;
 
   ws.pageSetup.printArea = `A1:J${31 + N}`;
+
+  // --- Purchaser signature block ("Account Purchaser") -----------------------
+  // The template's signature line ("___") sits at row 29+N, with "Account
+  // Purchaser" at 30+N and "AEROVENT" at 31+N. Print the purchaser's name just
+  // above the line and overlay their signature image on it.
+  const purchaserName = (purchaser.name ?? po.createdByName ?? "").trim();
+  const lineRow = 29 + N; // the "___________" signature line
+  if (purchaserName) {
+    const nameCell = ws.getCell(`A${lineRow - 1}`);
+    nameCell.value = purchaserName;
+    nameCell.font = { name: "Arial", size: 9, bold: true };
+    nameCell.alignment = { horizontal: "center", vertical: "bottom" };
+  }
+  const sigUrl = (purchaser.signature ?? "").trim();
+  if (sigUrl && /^data:image\/(png|jpe?g);base64,/i.test(sigUrl)) {
+    const dim = imageDataUrlSize(sigUrl) ?? { width: 300, height: 100 };
+    const ext = /^data:image\/png/i.test(sigUrl) ? "png" : "jpeg";
+    // Cap to a signature-sized box, preserving aspect ratio.
+    const maxW = 150, maxH = 46;
+    const aspect = dim.width > 0 && dim.height > 0 ? dim.width / dim.height : 3;
+    let w = maxW, h = Math.round(w / aspect);
+    if (h > maxH) { h = maxH; w = Math.round(h * aspect); }
+    const sigId = wb.addImage({ base64: sigUrl.split(",")[1], extension: ext as "png" | "jpeg" });
+    // Anchor centred over the left block, floating just above the line (0-indexed).
+    ws.addImage(sigId, { tl: { col: 0.7, row: lineRow - 3 }, ext: { width: w, height: h }, editAs: "oneCell" });
+  }
 
   // --- BIR 2307 ---------------------------------------------------------------
   // Part I/II (period, payee, payor) can't be written as cell values — the form's
@@ -443,7 +471,7 @@ function imageSize(bytes: Buffer, ext: string): { w: number; h: number } {
 const SIG_CENTER_X = 3609975; // horizontal centre of the merged A63:AN65 block (matches the centred name)
 const SIG_SHIFT_X = 217170; //   move right 1.2 column-widths (≈180,975 EMU each)
 const SIG_BASE_Y = 9540225; //   just below the declaration line, above the name
-const SIG_DROP_Y = 228600; //    move down 18 points so it sits over the printed name
+const SIG_DROP_Y = 38100; //     sits just above the printed name (raised ~1 row)
 
 /**
  * A fixed-size picture anchor for the payor signature. Aspect ratio is preserved

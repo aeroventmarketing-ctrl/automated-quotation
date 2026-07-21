@@ -28,6 +28,20 @@ export async function getUserSignature(userId: string): Promise<string | null> {
   return map[userId] ?? null;
 }
 
+/**
+ * Resolve a purchaser's printed name + signature from the name stored on a PO.
+ * The PO only keeps `createdByName`, so we match a user by name to fetch their
+ * uploaded signature (null if no such user or no signature on file).
+ */
+export async function resolvePurchaserSignature(name: string | null | undefined): Promise<{ name: string; signature: string | null }> {
+  const nm = (name ?? "").trim();
+  if (!nm) return { name: "", signature: null };
+  const user = await prisma.user.findFirst({ where: { name: nm }, select: { id: true } }).catch(() => null);
+  if (!user) return { name: nm, signature: null };
+  const map = await getSignatureMap();
+  return { name: nm, signature: map[user.id] ?? null };
+}
+
 /** Save (or clear, when dataUrl is null) a user's signature. */
 export async function setUserSignatureValue(userId: string, dataUrl: string | null): Promise<void> {
   const map = await getSignatureMap();
