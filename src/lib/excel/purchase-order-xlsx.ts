@@ -160,16 +160,16 @@ export async function buildPurchaseOrderWorkbook(
   const purchaserDesignation = (purchaser.designation ?? "").trim();
   const lineRow = 29 + N; // the "___________" signature line
   if (purchaserName) {
-    const nameCell = ws.getCell(`A${lineRow - 1}`);
+    const nameCell = ws.getCell(`A${lineRow - 2}`); // two rows above the line
     nameCell.value = purchaserName;
     nameCell.font = { name: "Arial", size: 9, bold: true };
-    nameCell.alignment = { horizontal: "center", vertical: "bottom" };
+    nameCell.alignment = { horizontal: "left", vertical: "bottom", indent: 2 };
   }
   // Optional: override the template's "Account Purchaser" designation (row 30+N).
   if (purchaserDesignation) {
     const desCell = ws.getCell(`A${lineRow + 1}`);
     desCell.value = purchaserDesignation;
-    desCell.alignment = { horizontal: "center", vertical: "middle" };
+    desCell.alignment = { horizontal: "left", vertical: "middle", indent: 2 };
   }
   const sigUrl = (purchaser.signature ?? "").trim();
   if (sigUrl && /^data:image\/(png|jpe?g);base64,/i.test(sigUrl)) {
@@ -181,8 +181,8 @@ export async function buildPurchaseOrderWorkbook(
     let w = maxW, h = Math.round(w / aspect);
     if (h > maxH) { h = maxH; w = Math.round(h * aspect); }
     const sigId = wb.addImage({ base64: sigUrl.split(",")[1], extension: ext as "png" | "jpeg" });
-    // Anchor centred over the left block, floating just above the line (0-indexed).
-    ws.addImage(sigId, { tl: { col: 0.7, row: lineRow - 3 }, ext: { width: w, height: h }, editAs: "oneCell" });
+    // Anchor over the left block, floating just above the (moved-up) name (0-indexed).
+    ws.addImage(sigId, { tl: { col: 0.6, row: lineRow - 4 }, ext: { width: w, height: h }, editAs: "oneCell" });
   }
 
   // --- BIR 2307 ---------------------------------------------------------------
