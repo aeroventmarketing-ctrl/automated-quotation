@@ -63,7 +63,8 @@ export const EMPTY_ACCESSORY_LINE: AccessoryLine = {
   type: "",
   quantity: "1",
   uom: "pc",
-  dimensions: [{ value: "", label: "" }],
+  // Rectangular / square accessories always carry two dimensions.
+  dimensions: [{ value: "", label: "" }, { value: "", label: "" }],
   material: "",
 };
 
@@ -123,11 +124,17 @@ export function coerceAccessoryLine(value: unknown): AccessoryLine | null {
   const dimensions = Array.isArray(o.dimensions)
     ? (o.dimensions as unknown[]).map(coerceAccessoryDimension).filter((d): d is AccessoryDimension => !!d)
     : [];
+  // Rectangular / square accessories always have exactly two dimensions —
+  // normalize (pad with blanks) so the form and print stay consistent.
+  const twoDims: AccessoryDimension[] = [
+    dimensions[0] ?? { value: "", label: "" },
+    dimensions[1] ?? { value: "", label: "" },
+  ];
   return {
     type: s("type"),
     quantity: s("quantity"),
     uom: s("uom") || "pc",
-    dimensions: dimensions.length ? dimensions : [{ value: "", label: "" }],
+    dimensions: twoDims,
     material: s("material"),
   };
 }

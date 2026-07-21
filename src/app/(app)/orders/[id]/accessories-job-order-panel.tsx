@@ -163,10 +163,6 @@ function AccessoriesJobOrderForm({
         j === li ? { ...l, dimensions: l.dimensions.map((d, k) => (k === di ? { ...d, ...patch } : d)) } : l,
       ),
     }));
-  const addDim = (li: number) =>
-    setF((p) => ({ ...p, lines: p.lines.map((l, j) => (j === li ? { ...l, dimensions: [...l.dimensions, { value: "", label: "" }] } : l)) }));
-  const removeDim = (li: number, di: number) =>
-    setF((p) => ({ ...p, lines: p.lines.map((l, j) => (j === li ? { ...l, dimensions: l.dimensions.filter((_, k) => k !== di) } : l)) }));
 
   async function save() {
     setBusy(true);
@@ -246,22 +242,17 @@ function AccessoriesJobOrderForm({
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] text-muted-foreground">Dimensions (value &amp; label, e.g. &ldquo;450 mm&rdquo; / &ldquo;Horizontal Blade&rdquo;)</span>
-              {line.dimensions.map((d, di) => (
-                <div key={di} className="flex items-center gap-1.5">
-                  <Input className="h-7 w-24 shrink-0 text-xs sm:w-32" value={d.value} placeholder="450 mm" onChange={(e) => setDim(i, di, { value: e.target.value })} />
-                  <span className="text-[10px] text-muted-foreground">-</span>
-                  <Input className="h-7 min-w-0 flex-1 text-xs" value={d.label} placeholder="Horizontal Blade" onChange={(e) => setDim(i, di, { label: e.target.value })} />
-                  {line.dimensions.length > 1 && (
-                    <button type="button" onClick={() => removeDim(i, di)} className="text-muted-foreground hover:text-destructive">
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <Button type="button" size="sm" variant="outline" className="h-6 text-[11px]" onClick={() => addDim(i)}>
-                <Plus className="mr-1 h-3 w-3" /> Add dimension
-              </Button>
+              <span className="text-[10px] text-muted-foreground">Dimensions — two required (value &amp; label, e.g. &ldquo;450 mm&rdquo; / &ldquo;Horizontal Blade&rdquo;)</span>
+              {[0, 1].map((di) => {
+                const d = line.dimensions[di] ?? { value: "", label: "" };
+                return (
+                  <div key={di} className="flex items-center gap-1.5">
+                    <Input className="h-7 w-24 shrink-0 text-xs sm:w-32" value={d.value} placeholder="450 mm" onChange={(e) => setDim(i, di, { value: e.target.value })} />
+                    <span className="text-[10px] text-muted-foreground">-</span>
+                    <Input className="h-7 min-w-0 flex-1 text-xs" value={d.label} placeholder={di === 0 ? "Horizontal Blade" : "Neck size"} onChange={(e) => setDim(i, di, { label: e.target.value })} />
+                  </div>
+                );
+              })}
             </div>
 
             <p className="text-[11px] text-muted-foreground">{formatAccessoryLine(line)}</p>
