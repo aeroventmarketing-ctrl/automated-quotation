@@ -150,23 +150,27 @@ export async function buildPurchaseOrderWorkbook(
   // Remarks. The footer bank details are left blank for now (filled in later).
   ws.getCell(`B${24 + N}`).value = po.remarks;
 
-  ws.pageSetup.printArea = `A1:J${31 + N}`;
+  ws.pageSetup.printArea = `A1:J${33 + N}`;
 
   // --- Purchaser signature block ("Account Purchaser") -----------------------
   // The template's signature line ("___") sits at row 29+N, with "Account
-  // Purchaser" at 30+N and "AEROVENT" at 31+N. Print the purchaser's name just
-  // above the line and overlay their signature image on it.
+  // Purchaser" at 30+N and "AEROVENT" at 31+N. The whole block is shifted DOWN
+  // two rows (SIG_SHIFT) so there are two blank rows below the table line; we
+  // read the template source cells from their original rows but WRITE to the
+  // shifted output rows.
   const purchaserName = (purchaser.name ?? po.createdByName ?? "").trim();
   const purchaserDesignation = (purchaser.designation ?? "").trim();
-  const lineRow = 29 + N; // the "___________" signature line (kept)
+  const SIG_SHIFT = 2;
+  const srcLine = 29 + N;             // template underscore row (column A)
+  const outLine = srcLine + SIG_SHIFT; // where the "___" line prints (column B)
   // Printed name sits on its own row just above the signature line, centred in
-  // column B (the "___" line stays on lineRow, below the name).
-  // NOTE: these signature cells (A29/B29/A30/B30/B31/B32) share ONE style object
-  // in the loaded template, so `cell.alignment = {...}` mutates that shared object
-  // and the last write wins for all of them. Assign a fresh `cell.style` per cell
-  // instead — that gives each cell its own style and keeps the alignments distinct.
+  // column B (the "___" line stays on outLine, below the name).
+  // NOTE: these signature cells share ONE style object in the loaded template,
+  // so `cell.alignment = {...}` mutates that shared object and the last write
+  // wins for all of them. Assign a fresh `cell.style` per cell instead — that
+  // gives each cell its own style and keeps the alignments distinct.
   if (purchaserName) {
-    const nameCell = ws.getCell(`B${lineRow - 1}`);
+    const nameCell = ws.getCell(`B${outLine - 1}`);
     nameCell.value = purchaserName;
     nameCell.style = {
       ...nameCell.style,
@@ -174,32 +178,32 @@ export async function buildPurchaseOrderWorkbook(
       alignment: { horizontal: "center", vertical: "bottom" },
     };
   }
-  // Move the "___" signature line text from column A into B, centred + bottom-
-  // aligned, clear the column-A original, and set the row height to 3.
+  // Move the "___" signature line text from column A (source row) into B (output
+  // row), centred + bottom-aligned, clear the column-A original, set height 3.
   {
-    const aCell = ws.getCell(`A${lineRow}`);
-    const bCell = ws.getCell(`B${lineRow}`);
+    const aCell = ws.getCell(`A${srcLine}`);
+    const bCell = ws.getCell(`B${outLine}`);
     bCell.value = aCell.value;
     aCell.value = null;
     bCell.style = { ...bCell.style, alignment: { horizontal: "center", vertical: "bottom" } };
-    ws.getRow(lineRow).height = 3;
+    ws.getRow(outLine).height = 3;
   }
-  // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
-  // centred (trim the template's leading spaces), and clear the column-A originals.
+  // Designation and company "AEROVENT": read from the template's original column-A
+  // rows, write to the shifted column-B output rows, centred, and clear the originals.
   {
-    const des = purchaserDesignation || String(ws.getCell(`A${lineRow + 1}`).value ?? "").trim();
-    ws.getCell(`A${lineRow + 1}`).value = null;
+    const des = purchaserDesignation || String(ws.getCell(`A${srcLine + 1}`).value ?? "").trim();
+    ws.getCell(`A${srcLine + 1}`).value = null;
     if (des) {
-      const desCell = ws.getCell(`B${lineRow + 1}`);
+      const desCell = ws.getCell(`B${outLine + 1}`);
       desCell.value = des;
       desCell.style = { ...desCell.style, alignment: { horizontal: "center", vertical: "middle" } };
     }
   }
   {
-    const company = String(ws.getCell(`A${lineRow + 2}`).value ?? "").trim();
-    ws.getCell(`A${lineRow + 2}`).value = null;
+    const company = String(ws.getCell(`A${srcLine + 2}`).value ?? "").trim();
+    ws.getCell(`A${srcLine + 2}`).value = null;
     if (company) {
-      const coCell = ws.getCell(`B${lineRow + 2}`);
+      const coCell = ws.getCell(`B${outLine + 2}`);
       coCell.value = company;
       coCell.style = { ...coCell.style, alignment: { horizontal: "center", vertical: "middle" } };
     }
@@ -215,7 +219,7 @@ export async function buildPurchaseOrderWorkbook(
     if (h > maxH) { h = maxH; w = Math.round(h * aspect); }
     const sigId = wb.addImage({ base64: sigUrl.split(",")[1], extension: ext as "png" | "jpeg" });
     // Float the signature just above the printed name, centred over col B (0-indexed).
-    ws.addImage(sigId, { tl: { col: 0.9, row: lineRow - 4 }, ext: { width: w, height: h }, editAs: "oneCell" });
+    ws.addImage(sigId, { tl: { col: 0.9, row: outLine - 4 }, ext: { width: w, height: h }, editAs: "oneCell" });
   }
 
   // --- BIR 2307 ---------------------------------------------------------------
