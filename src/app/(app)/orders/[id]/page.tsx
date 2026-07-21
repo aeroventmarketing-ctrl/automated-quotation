@@ -32,6 +32,8 @@ import { saleFromClassification, closeDocsState, PAYMENT_KIND_LABEL } from "@/li
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
+import { DuctJobOrderPanel } from "./duct-job-order-panel";
+import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { ConversationLog } from "./conversation-log";
 import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
@@ -504,7 +506,28 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 />
               </div>
               <div className="border-t pt-3">
-                <ConversationLog orderId={quote.id} conversations={wf.conversations} canLog={isSalesViewer} />
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">Duct job order (Engineer)</div>
+                <DuctJobOrderPanel
+                  orderId={quote.id}
+                  jobOrders={wf.ductJobOrders}
+                  baseNo={wf.ductJoBaseNo}
+                  baseYear={wf.ductJoBaseYear}
+                  canManage={canManageJO}
+                  canAdd={canManageJO && !inProductionOrLater}
+                />
+              </div>
+              <div className="border-t pt-3">
+                <ConversationLog
+                  orderId={quote.id}
+                  conversations={wf.conversations}
+                  canLog={isSalesViewer}
+                  jobOrderRemarks={wf.ductJobOrders
+                    .map((d, i) => ({
+                      label: wf.ductJoBaseNo != null ? formatDuctJoNumber(wf.ductJoBaseNo, wf.ductJoBaseYear ?? new Date().getFullYear(), i, wf.ductJobOrders.length) : "Duct JO",
+                      note: d.note.trim(),
+                    }))
+                    .filter((r) => r.note !== "")}
+                />
               </div>
             </div>
           )}

@@ -45,6 +45,7 @@ import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
+import { coerceDuctJobOrder, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 
 interface StockMatch { stockItemId: string; qty: number }
 
@@ -332,6 +333,103 @@ export async function deleteFansJobOrder(quotationId: string, index: number): Pr
   const { cls, wf } = await loadWorkflow(quotationId);
   const list = wf.fansJobOrders.filter((_, i) => i !== index);
   await saveWorkflow(quotationId, cls, { ...wf, fansJobOrders: list });
+}
+
+// --- Duct Job Orders (Engineer) -------------------------------------------
+
+/** Next running Duct JO base sequence (claimed once per order). */
+async function nextDuctJoBaseNo(): Promise<number> {
+  const KEY = "duct_jo_counter";
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.appSetting.findUnique({ where: { key: KEY } });
+    const last = Number((row?.value as { last?: unknown } | null)?.last ?? 0) || 0;
+    const next = last + 1;
+    await tx.appSetting.upsert({
+      where: { key: KEY },
+      create: { key: KEY, value: { last: next } as Prisma.InputJsonValue },
+      update: { value: { last: next } as Prisma.InputJsonValue },
+    });
+    return next;
+  });
+}
+
+const ductSegmentSchema = z.object({
+  kind: z.enum(["straight", "reducer"]).default("straight"),
+  horizontal: z.string().trim().default(""),
+  vertical: z.string().trim().default(""),
+  length: z.string().trim().default(""),
+  toHorizontal: z.string().trim().default(""),
+  toVertical: z.string().trim().default(""),
+  material: z.string().trim().default(""),
+  gauge: z.string().trim().default(""),
+});
+
+const ductJoSchema = z.object({
+  date: z.string().trim().default(""),
+  project: z.string().trim().default(""),
+  dueDate: z.string().trim().default(""),
+  quantity: z.string().trim().default(""),
+  uom: z.string().trim().default(""),
+  segments: z.array(ductSegmentSchema).default([]),
+  note: z.string().trim().default(""),
+  assignedPersonnel: z.string().trim().default(""),
+});
+
+/**
+ * The Engineer creates or edits a Duct job order on an order. Pass index = null
+ * to add a new one, or an existing index to edit. The first Duct JO on an order
+ * claims the running DUCT-JO base number.
+ */
+export async function saveDuctJobOrder(
+  quotationId: string,
+  index: number | null,
+  input: z.infer<typeof ductJoSchema>,
+): Promise<void> {
+  await assertEngineer();
+  const d = ductJoSchema.parse(input);
+  const { cls, wf } = await loadWorkflow(quotationId);
+
+  // New job orders can't be added once the order is In Production (or later).
+  const isNew = index == null || index < 0 || index >= wf.ductJobOrders.length;
+  if (isNew && stageIndex(wf.stage) >= stageIndex("producing")) {
+    throw new Error("The order is in production — new job orders can no longer be added.");
+  }
+
+  // Keep only segments that carry at least the leading dimensions.
+  const segments: DuctSegment[] = d.segments
+    .map((s) => ({
+      kind: s.kind,
+      horizontal: s.horizontal,
+      vertical: s.vertical,
+      length: s.length,
+      toHorizontal: s.kind === "reducer" ? s.toHorizontal : "",
+      toVertical: s.kind === "reducer" ? s.toVertical : "",
+      material: s.material || "G.I. Material",
+      gauge: s.gauge || "GA20",
+    }))
+    .filter((s) => s.horizontal !== "" || s.vertical !== "" || s.length !== "");
+
+  let ductJoBaseNo = wf.ductJoBaseNo;
+  let ductJoBaseYear = wf.ductJoBaseYear;
+  if (ductJoBaseNo == null) {
+    ductJoBaseNo = await nextDuctJoBaseNo();
+    ductJoBaseYear = new Date().getFullYear();
+  }
+
+  const jo: DuctJobOrder = { ...(coerceDuctJobOrder({}) as DuctJobOrder), ...d, segments };
+  const list = [...wf.ductJobOrders];
+  if (index != null && index >= 0 && index < list.length) list[index] = jo;
+  else list.push(jo);
+
+  await saveWorkflow(quotationId, cls, { ...wf, ductJobOrders: list, ductJoBaseNo, ductJoBaseYear });
+}
+
+/** Remove a Duct job order by index. */
+export async function deleteDuctJobOrder(quotationId: string, index: number): Promise<void> {
+  await assertEngineer();
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const list = wf.ductJobOrders.filter((_, i) => i !== index);
+  await saveWorkflow(quotationId, cls, { ...wf, ductJobOrders: list });
 }
 
 /**

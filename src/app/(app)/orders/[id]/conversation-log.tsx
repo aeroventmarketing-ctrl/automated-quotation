@@ -21,10 +21,14 @@ export function ConversationLog({
   orderId,
   conversations,
   canLog,
+  jobOrderRemarks = [],
 }: {
   orderId: string;
   conversations: OrderConversation[];
   canLog: boolean;
+  /** Notes captured on job orders (e.g. duct "Center Reducer / Flat bottom"),
+   * surfaced here as remarks sales can reference or add to a conversation. */
+  jobOrderRemarks?: { label: string; note: string }[];
 }) {
   const router = useRouter();
   const [at, setAt] = useState(nowLocalInput());
@@ -72,6 +76,27 @@ export function ConversationLog({
       <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
         <MessageSquare className="h-3.5 w-3.5" /> Conversation log
       </div>
+
+      {jobOrderRemarks.length > 0 && (
+        <div className="space-y-1 rounded-md border border-dashed bg-muted/20 p-2">
+          <div className="text-[11px] font-semibold text-muted-foreground">Job order remarks</div>
+          {jobOrderRemarks.map((rmk, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-mono text-muted-foreground">{rmk.label}</span>
+              <span>{rmk.note}</span>
+              {canLog && (
+                <button
+                  type="button"
+                  onClick={() => setMessage((m) => (m.trim() ? `${m}\n${rmk.label}: ${rmk.note}` : `${rmk.label}: ${rmk.note}`))}
+                  className="text-[11px] font-medium text-[#ED1C24] hover:underline"
+                >
+                  Add to conversation
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {sorted.length === 0 ? (
         <p className="text-sm text-muted-foreground">No conversations logged yet.</p>
