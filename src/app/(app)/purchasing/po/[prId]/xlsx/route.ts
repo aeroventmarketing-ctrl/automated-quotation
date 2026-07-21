@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getSignatory } from "@/lib/signatory";
-import { resolvePurchaserSignature } from "@/lib/signature";
+import { getPurchaserSignatory } from "@/lib/purchaser-signatory";
 import { buildPurchaseOrderWorkbook, restore2307Shapes, build2307Fields } from "@/lib/excel/purchase-order-xlsx";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +24,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ prId: s
   const suppliers = await getSuppliers().catch(() => []);
   const match = suppliers.find((s) => s.company.trim().toLowerCase() === po.supplier.company.trim().toLowerCase());
   const signatory = await getSignatory().catch(() => null);
-  const purchaser = await resolvePurchaserSignature(po.createdByName);
+  const purchaser = await getPurchaserSignatory().catch(() => null);
 
   const dir = path.join(process.cwd(), "public", "templates");
   const template = await fs.readFile(path.join(dir, "po-2307-template.xlsx"));
-  let buffer = await buildPurchaseOrderWorkbook(template, po, { name: signatory?.name, designation: signatory?.designation }, purchaser);
+  let buffer = await buildPurchaseOrderWorkbook(template, po, { name: signatory?.name, designation: signatory?.designation }, { name: purchaser?.name, designation: purchaser?.designation, signature: purchaser?.signature });
   const fields = build2307Fields(po, { name: match?.company, address: match?.address, tin: match?.tin, zip: match?.zip });
   const source = await fs.readFile(path.join(dir, "2307-source.xlsx")).catch(() => null);
   if (source) buffer = await restore2307Shapes(buffer, source, fields, signatory?.signature);

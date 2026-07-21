@@ -152,6 +152,18 @@ export default async function AdminOverviewPage() {
           </CardContent>
         </Card>
       </Link>
+      <Link href="/admin/purchaser-signatory">
+        <Card className="transition-colors hover:bg-accent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Purchaser Signatory →</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Set the purchaser&rsquo;s name and signature image printed on every Purchase Order.
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
       <QuoteNumberSetting current={nextQuoteSeq} />
       <MrfNumberSetting current={mrfNext} />
       <PoNumberSetting current={poNext} />

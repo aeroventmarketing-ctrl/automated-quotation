@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getSignatory } from "@/lib/signatory";
-import { resolvePurchaserSignature } from "@/lib/signature";
+import { getPurchaserSignatory } from "@/lib/purchaser-signatory";
 import { buildPurchaseOrderWorkbook, restore2307Shapes, build2307Fields } from "@/lib/excel/purchase-order-xlsx";
 
 export const dynamic = "force-dynamic";
@@ -28,16 +28,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // The payor signatory (name/designation/signature) printed on the 2307.
   const signatory = await getSignatory().catch(() => null);
 
-  // The purchaser who created the PO — their name + signature sign the PO's
-  // "Account Purchaser" block. Matched to a user by name (that's all the PO stores).
-  const purchaser = await resolvePurchaserSignature(po.createdByName);
+  // The admin-configured purchaser signatory — name + signature on the PO's
+  // "Account Purchaser" block.
+  const purchaser = await getPurchaserSignatory().catch(() => null);
 
   const dir = path.join(process.cwd(), "public", "templates");
   const template = await fs.readFile(path.join(dir, "po-2307-template.xlsx"));
   let buffer = await buildPurchaseOrderWorkbook(template, po, {
     name: signatory?.name,
     designation: signatory?.designation,
-  }, purchaser);
+  }, {
+    name: purchaser?.name,
+    designation: purchaser?.designation,
+    signature: purchaser?.signature,
+  });
   // Restore the 2307 form's shapes (white input boxes) that exceljs strips, and
   // paint the Part I/II values as overlay text boxes on top of those boxes.
   // Payee name/address come from the PO; payee TIN/ZIP from the Supplier's List.

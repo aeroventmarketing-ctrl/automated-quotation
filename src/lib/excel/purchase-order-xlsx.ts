@@ -96,7 +96,7 @@ export async function buildPurchaseOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   po: PurchaseOrder,
   signatory: Signatory2307 = {},
-  purchaser: { name?: string; signature?: string | null } = {},
+  purchaser: { name?: string; designation?: string; signature?: string | null } = {},
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuffer as ArrayBuffer);
@@ -157,12 +157,19 @@ export async function buildPurchaseOrderWorkbook(
   // Purchaser" at 30+N and "AEROVENT" at 31+N. Print the purchaser's name just
   // above the line and overlay their signature image on it.
   const purchaserName = (purchaser.name ?? po.createdByName ?? "").trim();
+  const purchaserDesignation = (purchaser.designation ?? "").trim();
   const lineRow = 29 + N; // the "___________" signature line
   if (purchaserName) {
     const nameCell = ws.getCell(`A${lineRow - 1}`);
     nameCell.value = purchaserName;
     nameCell.font = { name: "Arial", size: 9, bold: true };
     nameCell.alignment = { horizontal: "center", vertical: "bottom" };
+  }
+  // Optional: override the template's "Account Purchaser" designation (row 30+N).
+  if (purchaserDesignation) {
+    const desCell = ws.getCell(`A${lineRow + 1}`);
+    desCell.value = purchaserDesignation;
+    desCell.alignment = { horizontal: "center", vertical: "middle" };
   }
   const sigUrl = (purchaser.signature ?? "").trim();
   if (sigUrl && /^data:image\/(png|jpe?g);base64,/i.test(sigUrl)) {
