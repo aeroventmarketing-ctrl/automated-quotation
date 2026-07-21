@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Printer, Pencil } from "lucide-react";
+import { Printer, Pencil, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest, deletePurchaseRequest } from "../actions";
@@ -89,6 +89,8 @@ export function PurchasingChain({
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
+  const viewHref = (prId: string) =>
+    poRoute === "purchasing" ? `/purchasing/po/${prId}/view` : `/orders/${orderId}/po/${prId}/view`;
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -247,6 +249,14 @@ export function PurchasingChain({
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="success">PO {r.po.poNumber}</Badge>
                     {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
+                    <a
+                      href={viewHref(r.id)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10"
+                    >
+                      <Eye className="h-3.5 w-3.5" /> View PO
+                    </a>
                     <a
                       href={printHref(r.id)}
                       className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED1C24]/40"
