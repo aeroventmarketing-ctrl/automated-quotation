@@ -41,7 +41,8 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
       },
     }),
     getCurrentUser(),
-    prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // Only salespeople can be a customer's sales in-charge.
+    prisma.user.findMany({ where: { role: "SALES" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     getAccountData(id),
     prisma.customer.findMany({ orderBy: { company: "asc" }, select: { id: true, company: true } }),
   ]);
