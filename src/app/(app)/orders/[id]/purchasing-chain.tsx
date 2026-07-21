@@ -136,7 +136,7 @@ export function PurchasingChain({
         const actionable = r.actions.filter((a) => a.canAct);
         const awaiting = r.actions.find((a) => !a.canAct);
         return (
-          <div key={r.id} className="rounded-md border p-3">
+          <div key={r.id} className="rounded-md border bg-card p-3">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium">
                 {r.deptLabel}

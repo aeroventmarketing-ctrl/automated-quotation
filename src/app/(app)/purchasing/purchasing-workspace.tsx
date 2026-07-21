@@ -107,8 +107,15 @@ export function PurchasingWorkspace({
         />
       )}
 
-      {filteredGroups.map((g) => (
-        <Card key={g.id}>
+      {filteredGroups.map((g, i) => (
+        <Card
+          key={g.id}
+          className={
+            i % 2 === 0
+              ? "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/20"
+              : "border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/20"
+          }
+        >
           <CardContent className="space-y-3 pt-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
