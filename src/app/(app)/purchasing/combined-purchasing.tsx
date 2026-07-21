@@ -28,6 +28,7 @@ export interface CombinableItem {
   mrfNo: string | null;
   items: string[];
   supplierCompanies: string[];
+  canDelete: boolean;
 }
 export interface SupplierSuggestion {
   company: string;
@@ -108,9 +109,23 @@ export function CombinedPurchasing({
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [building, setBuilding] = useState(false);
   const [presetCompany, setPresetCompany] = useState("");
+  const [delBusy, setDelBusy] = useState<string | null>(null);
 
   function toggle(id: string) {
     setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  async function deleteRequest(id: string) {
+    if (!window.confirm("Delete this material request? This permanently removes it.")) return;
+    setDelBusy(id);
+    try {
+      await deletePurchaseRequest(id);
+      setSel((s) => { const n = new Set(s); n.delete(id); return n; });
+      router.refresh();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDelBusy(null);
+    }
   }
   function acceptSuggestion(s: SupplierSuggestion) {
     setSel(new Set(s.prIds));
@@ -157,20 +172,32 @@ export function CombinedPurchasing({
               <p className="text-xs text-muted-foreground">Tick the open requests going to the same supplier — across any orders — then issue a single PO for all of them.</p>
               <div className="divide-y rounded-md border">
                 {combinable.map((c) => (
-                  <label key={c.id} className="flex cursor-pointer items-start gap-2 p-2 text-sm hover:bg-accent/40">
-                    <input type="checkbox" className="mt-1 accent-[#ED1C24]" checked={sel.has(c.id)} onChange={() => toggle(c.id)} />
-                    <span className="flex-1">
-                      <span className="font-medium">{c.deptLabel}</span>
-                      {c.mrfNo && <span className="ml-1 text-muted-foreground">MRF #{c.mrfNo}</span>}
-                      <span className="ml-1 text-xs text-muted-foreground">· {c.orderLabel}</span>
-                      <span className="block text-xs text-muted-foreground">{c.items.join(", ")}</span>
-                      {c.supplierCompanies.length > 0 && (
-                        <span className="mt-0.5 flex flex-wrap gap-1">
-                          {c.supplierCompanies.map((co) => <Badge key={co} variant="secondary" className="font-normal">{co}</Badge>)}
-                        </span>
-                      )}
-                    </span>
-                  </label>
+                  <div key={c.id} className="flex items-start gap-2 p-2 text-sm hover:bg-accent/40">
+                    <label className="flex flex-1 cursor-pointer items-start gap-2">
+                      <input type="checkbox" className="mt-1 accent-[#ED1C24]" checked={sel.has(c.id)} onChange={() => toggle(c.id)} />
+                      <span className="flex-1">
+                        <span className="font-medium">{c.deptLabel}</span>
+                        {c.mrfNo && <span className="ml-1 text-muted-foreground">MRF #{c.mrfNo}</span>}
+                        <span className="ml-1 text-xs text-muted-foreground">· {c.orderLabel}</span>
+                        <span className="block text-xs text-muted-foreground">{c.items.join(", ")}</span>
+                        {c.supplierCompanies.length > 0 && (
+                          <span className="mt-0.5 flex flex-wrap gap-1">
+                            {c.supplierCompanies.map((co) => <Badge key={co} variant="secondary" className="font-normal">{co}</Badge>)}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                    {c.canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => deleteRequest(c.id)}
+                        disabled={delBusy === c.id}
+                        className="mt-0.5 shrink-0 rounded-md border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                      >
+                        {delBusy === c.id ? "…" : "Delete"}
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

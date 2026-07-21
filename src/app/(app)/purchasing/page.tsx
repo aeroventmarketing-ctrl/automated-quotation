@@ -144,6 +144,7 @@ export default async function PurchasingPage() {
           mrfNo: mrfNoOf(pr.quotationId, pr.mrfId),
           items,
           supplierCompanies,
+          canDelete: canDeleteStatus(pr.status),
         };
       });
 
