@@ -45,10 +45,9 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
   const [editingId, setEditingId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  // A single combined role selection: either a base app role (SALES/ENGINEER/
-  // ADMIN) or one workflow role key. A base role sets app access; a workflow
-  // role gives the person that workflow role (with SALES-level app access).
-  const [roleSel, setRoleSel] = useState("SALES");
+  // App-access role (single) + any number of workflow roles (a user can hold several).
+  const [role, setRole] = useState("SALES");
+  const [wfRoles, setWfRoles] = useState<string[]>([]);
   const [salesCode, setSalesCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,15 +55,14 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
   const wfGroups = Array.from(new Set(workflowRoleOptions.map((r) => r.group)))
     .map((g) => ({ group: g, roles: workflowRoleOptions.filter((r) => r.group === g) }));
   const roleLabel = (key: string) => workflowRoleOptions.find((r) => r.key === key)?.label ?? key;
-  const isBase = (v: string) => ROLES.includes(v);
-  // The dropdown value for a user: their workflow role if they have one, else base role.
-  const roleValue = (u: U) => u.workflowRoles[0] ?? u.role;
+  const addWf = (key: string) => { if (key && !wfRoles.includes(key)) setWfRoles((rs) => [...rs, key]); };
+  const removeWf = (key: string) => setWfRoles((rs) => rs.filter((r) => r !== key));
 
   function reset() {
-    setEditingId(null); setEmail(""); setName(""); setRoleSel("SALES"); setSalesCode(""); setError(null);
+    setEditingId(null); setEmail(""); setName(""); setRole("SALES"); setWfRoles([]); setSalesCode(""); setError(null);
   }
   function edit(u: U) {
-    setEditingId(u.id); setEmail(u.email); setName(u.name); setRoleSel(roleValue(u)); setSalesCode(u.salesCode); setError(null);
+    setEditingId(u.id); setEmail(u.email); setName(u.name); setRole(u.role); setWfRoles(u.workflowRoles); setSalesCode(u.salesCode); setError(null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -72,11 +70,7 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
     setBusy(true);
     setError(null);
     try {
-      // Base role → set app access, clear workflow roles. Workflow role → keep
-      // SALES app access and assign that single workflow role.
-      const baseRole = isBase(roleSel) ? roleSel : "SALES";
-      const workflowRoles = isBase(roleSel) ? [] : [roleSel];
-      await upsertUser({ id: editingId ?? undefined, email, name, role: baseRole as never, salesCode, workflowRoles });
+      await upsertUser({ id: editingId ?? undefined, email, name, role: role as never, salesCode, workflowRoles: wfRoles });
       reset();
       router.refresh();
     } catch (e) {
@@ -216,16 +210,9 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <Label>Role</Label>
-            <Select value={roleSel} onChange={(e) => setRoleSel(e.target.value)}>
-              <optgroup label="App access">
-                {ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}
-              </optgroup>
-              {wfGroups.map((g) => (
-                <optgroup key={g.group} label={g.group}>
-                  {g.roles.map((r) => (<option key={r.key} value={r.key}>{r.label}</option>))}
-                </optgroup>
-              ))}
+            <Label>Role (app access)</Label>
+            <Select value={role} onChange={(e) => setRole(e.target.value)}>
+              {ROLES.map((r) => (<option key={r} value={r}>{r}</option>))}
             </Select>
           </div>
           <div className="space-y-1">
@@ -240,9 +227,34 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
               <Button variant="ghost" onClick={reset} disabled={busy}>Cancel</Button>
             )}
           </div>
+
+          {/* Workflow roles — add as many as needed from the dropdown; each shows as a removable chip. */}
+          <div className="space-y-1.5 md:col-span-5">
+            <Label>Workflow roles <span className="font-normal text-muted-foreground">— add one or more</span></Label>
+            <div className="flex flex-wrap items-center gap-2">
+              {wfRoles.map((k) => (
+                <span key={k} className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary">
+                  {roleLabel(k)}
+                  <button type="button" onClick={() => removeWf(k)} className="text-primary/70 hover:text-primary" aria-label={`Remove ${roleLabel(k)}`}>✕</button>
+                </span>
+              ))}
+              <Select value="" className="h-8 w-auto min-w-[13rem]" onChange={(e) => { addWf(e.target.value); e.target.value = ""; }}>
+                <option value="">+ Add workflow role…</option>
+                {wfGroups.map((g) => {
+                  const avail = g.roles.filter((r) => !wfRoles.includes(r.key));
+                  return avail.length ? (
+                    <optgroup key={g.group} label={g.group}>
+                      {avail.map((r) => (<option key={r.key} value={r.key}>{r.label}</option>))}
+                    </optgroup>
+                  ) : null;
+                })}
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">The app-access role controls sign-in &amp; menus; workflow roles decide who acts in Purchasing, Requisitions, Cash requests and orders. A person can hold several.</p>
+          </div>
           {error && <p className="text-sm text-destructive md:col-span-5">{error}</p>}
           <p className="text-xs text-muted-foreground md:col-span-5">
-            Note: pick an app-access role (Sales / Engineer / Admin) or a workflow role (Accounting, Purchaser, …); a workflow role gets Sales-level access. Matched by email — create the matching login in Supabase Authentication.
+            Note: matched by email — create the matching login in Supabase Authentication.
           </p>
         </CardContent>
       </Card>
