@@ -174,7 +174,7 @@ export async function buildPurchaseOrderWorkbook(
     ws.getCell(`A${lineRow}`).value = null;
     const lineCell = ws.getCell(`B${lineRow}`);
     lineCell.value = lineText;
-    lineCell.alignment = { horizontal: "left", vertical: "bottom" };
+    lineCell.alignment = { horizontal: "center", vertical: "bottom" };
     ws.getRow(lineRow).height = 3;
   }
   // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
