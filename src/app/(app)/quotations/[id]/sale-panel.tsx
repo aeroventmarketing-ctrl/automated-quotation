@@ -88,14 +88,18 @@ export function SalePanel({
   const hasComputation = (docs.computation?.length ?? 0) > 0 || (docs.inquiry_form?.length ?? 0) > 0;
   const hasQuotationDoc = (docs.quotation?.length ?? 0) > 0;
   const hasRfqDoc = (docs.rfq_boq?.length ?? 0) > 0;
-  const hasQualifyingPayment = payments.some((p) => (p.kind === "down" || p.kind === "full") && Number(p.amount) > 0);
+  // A qualifying payment is a down/full payment with an amount AND its proof of
+  // payment attached — Save sale stays locked until the proof is uploaded.
+  const isQualifyingKind = (p: SalePayment) => (p.kind === "down" || p.kind === "full") && Number(p.amount) > 0;
+  const hasQualifyingAmount = payments.some(isQualifyingKind);
+  const hasQualifyingPayment = payments.some((p) => isQualifyingKind(p) && !!p.proof);
   const missingToSave: string[] = [];
   if (!po) missingToSave.push("Purchase Order");
   if (!clientTerms) {
     if (!hasComputation) missingToSave.push("Computation");
     if (!hasQuotationDoc) missingToSave.push("Quotation");
     if (!hasRfqDoc) missingToSave.push("RFQ / BOQ");
-    if (!hasQualifyingPayment) missingToSave.push("a down or full payment");
+    if (!hasQualifyingPayment) missingToSave.push(hasQualifyingAmount ? "proof of payment" : "a down or full payment");
   }
   // Once a sale is already confirmed, saving stays open so the remaining
   // documents (Sales Invoice, OR/CR/AF, …) can be added anytime; the gate only
