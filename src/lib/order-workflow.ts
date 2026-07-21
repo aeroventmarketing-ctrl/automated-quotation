@@ -450,7 +450,7 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
     case "qa_plant_checked":
       return { action: "Transfer items to office", roles: ["logistics"] };
     case "qa_transferred":
-      return { action: "Sales 2nd QC & quantity check", roles: [], sales: true };
+      return { action: "Sales 2nd QC & quantity check", roles: ["quality_inspector_2"], sales: true };
     case "qa_sales_checked":
       return { action: "Prepare delivery documents", roles: ["accounting"] };
     case "delivery_docs_ready":

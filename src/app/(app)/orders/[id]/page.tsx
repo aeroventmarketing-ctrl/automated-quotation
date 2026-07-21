@@ -243,7 +243,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canQaTest: hasRole("technical_head") || hasRole("quality_inspector"),
     canQaPlant: hasRole("plant_manager"),
     canQaTransfer: hasRole("logistics"),
-    canQaSales: isSalesViewer,
+    canQaSales: isSalesViewer || hasRole("quality_inspector_2" as WorkflowRoleKey),
     canPrepDocs: hasRole("accounting"),
     canDeliver: hasRole("logistics"),
     canApproveDelivery: isSalesViewer,

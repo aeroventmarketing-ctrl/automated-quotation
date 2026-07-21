@@ -1515,8 +1515,13 @@ export async function qaSalesCheck(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
-  if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
+  const isSales =
+    isAdmin(user) ||
+    quote.preparedById === user.id ||
+    user.role === "SALES" ||
+    user.role === "ENGINEER" ||
+    userHasWorkflowRole(await getWorkflowRoles(), user.id, "quality_inspector_2" as WorkflowRoleKey);
+  if (!isSales) throw new Error("Only a Sales team member, a 2nd Quality Inspector or an admin can do this.");
   if (wf.stage !== "qa_transferred") throw new Error("The items haven't been transferred to the office yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_sales_checked", approvals: stamp(wf, "qa_sales_checked", user) });
 }
