@@ -249,9 +249,9 @@ function AccessoriesJobOrderForm({
               <span className="text-[10px] text-muted-foreground">Dimensions (value &amp; label, e.g. &ldquo;450 mm&rdquo; / &ldquo;Horizontal Blade&rdquo;)</span>
               {line.dimensions.map((d, di) => (
                 <div key={di} className="flex items-center gap-1.5">
-                  <Input className="h-7 text-xs" value={d.value} placeholder="450 mm" onChange={(e) => setDim(i, di, { value: e.target.value })} />
+                  <Input className="h-7 w-24 shrink-0 text-xs sm:w-32" value={d.value} placeholder="450 mm" onChange={(e) => setDim(i, di, { value: e.target.value })} />
                   <span className="text-[10px] text-muted-foreground">-</span>
-                  <Input className="h-7 flex-1 text-xs" value={d.label} placeholder="Horizontal Blade" onChange={(e) => setDim(i, di, { label: e.target.value })} />
+                  <Input className="h-7 min-w-0 flex-1 text-xs" value={d.label} placeholder="Horizontal Blade" onChange={(e) => setDim(i, di, { label: e.target.value })} />
                   {line.dimensions.length > 1 && (
                     <button type="button" onClick={() => removeDim(i, di)} className="text-muted-foreground hover:text-destructive">
                       <Trash2 className="h-3 w-3" />
