@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Printer, Pencil, Plus, Trash2, ArrowDownUp } from "lucide-react";
+import { Printer, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -209,7 +209,7 @@ function DuctJobOrderForm({
       </div>
       <div className="space-y-2">
         {f.segments.length === 0 && (
-          <p className="text-[11px] text-muted-foreground">No segments yet — add a straight duct or a reducer below.</p>
+          <p className="text-[11px] text-muted-foreground">No products yet — pick a type from &ldquo;Add product&rdquo; below to add one.</p>
         )}
         {f.segments.map((seg, i) => (
           <div key={i} className="space-y-1.5 rounded-md border bg-background p-2">
@@ -254,13 +254,16 @@ function DuctJobOrderForm({
             </div>
           </div>
         ))}
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => addSegment("Straight Duct")}>
-            <Plus className="mr-1 h-3 w-3" /> Straight duct
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => addSegment("Duct Reducer")}>
-            <ArrowDownUp className="mr-1 h-3 w-3" /> Reducer duct
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">Add product:</span>
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-sm font-medium"
+            value=""
+            onChange={(e) => { if (e.target.value) addSegment(e.target.value); }}
+          >
+            <option value="">Type…</option>
+            {DUCT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
         </div>
       </div>
 
