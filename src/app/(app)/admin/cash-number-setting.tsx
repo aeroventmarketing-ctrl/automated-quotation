@@ -21,8 +21,7 @@ export function CashNumberSetting({ current }: { current: number }) {
       const n = Math.floor(Number(next));
       if (!Number.isFinite(n) || n < 1) throw new Error("Enter a whole number of 1 or more.");
       const saved = await setCashNextNo({ next: n });
-      const year = new Date().getFullYear();
-      setMsg(`Saved. The next cash request will be CV-${year}-${String(saved).padStart(5, "0")}.`);
+      setMsg(`Saved. The next cash voucher will be No. ${String(saved).padStart(7, "0")}.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to save");
     } finally {
@@ -42,8 +41,8 @@ export function CashNumberSetting({ current }: { current: number }) {
           <Button className="h-8" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Set this to continue your existing series (e.g. 42 to carry on after CV-…-00041). The number is
-          formatted as CV-&lt;year&gt;-&lt;5 digits&gt; and increments by 1 for each cash request raised.
+          Set this to continue your physical voucher pad (e.g. 811 to carry on after No. 0000810). The number is
+          a 7-digit sequence (e.g. 0000811) and increments by 1 for each cash voucher raised.
         </p>
         {msg && <p className="text-xs text-emerald-700">{msg}</p>}
         {err && <p className="text-xs text-destructive">{err}</p>}

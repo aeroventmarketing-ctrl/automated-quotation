@@ -21,8 +21,9 @@ import {
 import { PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { round2 } from "@/lib/quote";
 
-/** Claim the next cash-voucher number, e.g. "CV-2026-00042". */
-async function nextCashNumber(tx: Prisma.TransactionClient, year: number): Promise<string> {
+/** Claim the next cash-voucher number — a plain 7-digit sequence, e.g. "0000810"
+ *  (matches AeroVent's physical cash-voucher pad). */
+async function nextCashNumber(tx: Prisma.TransactionClient): Promise<string> {
   const KEY = "cash_request_counter";
   const row = await tx.appSetting.findUnique({ where: { key: KEY } });
   const cur = typeof (row?.value as { n?: unknown } | null)?.n === "number" ? (row!.value as { n: number }).n : 0;
@@ -32,7 +33,7 @@ async function nextCashNumber(tx: Prisma.TransactionClient, year: number): Promi
     create: { key: KEY, value: { n } as Prisma.InputJsonValue },
     update: { value: { n } as Prisma.InputJsonValue },
   });
-  return `CV-${year}-${String(n).padStart(5, "0")}`;
+  return String(n).padStart(7, "0");
 }
 
 const num = (s: unknown): number => {
@@ -68,9 +69,8 @@ export async function createCashRequest(input: {
   const amount = input.amount && input.amount.trim() !== "" ? num(input.amount) : linesTotal;
   if (amount <= 0) throw new Error("Enter the amount being requested (greater than zero).");
 
-  const year = new Date().getFullYear();
   await prisma.$transaction(async (tx) => {
-    const number = await nextCashNumber(tx, year);
+    const number = await nextCashNumber(tx);
     await tx.cashRequest.create({
       data: {
         number,

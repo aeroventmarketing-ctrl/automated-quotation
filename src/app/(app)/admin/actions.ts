@@ -497,7 +497,7 @@ export async function setPoNextNo(input: z.infer<typeof poNextSchema>): Promise<
 
 // --- Cash Request (voucher) numbering ---------------------------------------
 // The cash-voucher counter stores { n } = the last issued sequence, so the next
-// number is n + 1. Format: "CV-<year>-<5 digits>".
+// number is n + 1. Format: a plain 7-digit sequence, e.g. "0000811".
 const CASH_COUNTER_KEY = "cash_request_counter";
 const cashNextSchema = z.object({ next: z.number().int().min(1) });
 /** Set the next cash-voucher sequence number (stored as n = next - 1). */
