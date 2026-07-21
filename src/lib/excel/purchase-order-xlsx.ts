@@ -151,10 +151,10 @@ export async function buildPurchaseOrderWorkbook(
   ws.getCell(`B${24 + N}`).value = po.remarks;
 
   ws.pageSetup.printArea = `A1:J${33 + N}`;
-  // Print margins (Excel dialog values are in centimetres; ExcelJS wants inches).
-  // Top 3, Left 3, Right 0, Bottom 0, Header 8, Footer 8 cm; centre horizontally.
-  const CM = 1 / 2.54;
-  ws.pageSetup.margins = { top: 3 * CM, bottom: 0, left: 3 * CM, right: 0, header: 8 * CM, footer: 8 * CM };
+  // Print margins (Excel dialog values are in millimetres; ExcelJS wants inches).
+  // Top 3, Left 3, Right 3, Bottom 0, Header 8, Footer 8 mm; centre horizontally.
+  const MM = 1 / 25.4;
+  ws.pageSetup.margins = { top: 3 * MM, bottom: 0, left: 3 * MM, right: 3 * MM, header: 8 * MM, footer: 8 * MM };
   ws.pageSetup.horizontalCentered = true;
   ws.pageSetup.verticalCentered = false;
 
