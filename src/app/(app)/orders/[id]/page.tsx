@@ -515,8 +515,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 canReceive={canReceive}
                 jobs={jobs}
               />
-              <div className="rounded-lg border bg-muted/50 p-3">
-                <div className="mb-2 text-xs font-semibold text-muted-foreground">Fans &amp; Blowers job order (Engineer)</div>
+              <div className="rounded-lg border border-sky-300 bg-sky-50 p-3 dark:border-sky-900 dark:bg-sky-950/30">
+                <div className="mb-2 text-xs font-semibold text-sky-800 dark:text-sky-300">Fans &amp; Blowers job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="fans" {...deptCtrl("fans")} />
                 <FansJobOrderPanel
                   orderId={quote.id}
@@ -527,8 +527,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   canAdd={canManageJO && !inProductionOrLater}
                 />
               </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <div className="mb-2 text-xs font-semibold text-muted-foreground">Duct job order (Engineer)</div>
+              <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+                <div className="mb-2 text-xs font-semibold text-emerald-800 dark:text-emerald-300">Duct job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="duct" {...deptCtrl("duct")} />
                 <DuctJobOrderPanel
                   orderId={quote.id}
@@ -539,8 +539,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   canAdd={canManageJO && !inProductionOrLater}
                 />
               </div>
-              <div className="rounded-lg border bg-muted/50 p-3">
-                <div className="mb-2 text-xs font-semibold text-muted-foreground">Accessories job order (Engineer)</div>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                <div className="mb-2 text-xs font-semibold text-amber-800 dark:text-amber-300">Accessories job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="accessories" {...deptCtrl("accessories")} />
                 <AccessoriesJobOrderPanel
                   orderId={quote.id}
@@ -551,8 +551,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   canAdd={canManageJO && !inProductionOrLater}
                 />
               </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <div className="mb-2 text-xs font-semibold text-muted-foreground">Motor controller job order (Engineer)</div>
+              <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 dark:border-violet-900 dark:bg-violet-950/30">
+                <div className="mb-2 text-xs font-semibold text-violet-800 dark:text-violet-300">Motor controller job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="motor" {...deptCtrl("motor")} />
                 <MotorControllerJobOrderPanel
                   orderId={quote.id}
