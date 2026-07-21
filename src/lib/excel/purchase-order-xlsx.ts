@@ -167,6 +167,16 @@ export async function buildPurchaseOrderWorkbook(
     nameCell.font = { name: "Arial", size: 9, bold: true };
     nameCell.alignment = { horizontal: "center", vertical: "bottom" };
   }
+  // Move the "___" signature line from column A into B, centred + bottom-aligned,
+  // clear the column-A original, and set the row height to 3.
+  {
+    const lineText = ws.getCell(`A${lineRow}`).value;
+    ws.getCell(`A${lineRow}`).value = null;
+    const lineCell = ws.getCell(`B${lineRow}`);
+    lineCell.value = lineText;
+    lineCell.alignment = { horizontal: "center", vertical: "bottom" };
+    ws.getRow(lineRow).height = 3;
+  }
   // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
   // centred (trim the template's leading spaces), and clear the column-A originals.
   {
