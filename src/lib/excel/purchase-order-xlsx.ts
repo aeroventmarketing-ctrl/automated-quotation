@@ -167,15 +167,14 @@ export async function buildPurchaseOrderWorkbook(
     nameCell.font = { name: "Arial", size: 9, bold: true };
     nameCell.alignment = { horizontal: "center", vertical: "bottom" };
   }
-  // The template's signature line is underscore *text* in column A (A30). Long
-  // underscore runs never bottom-align cleanly in a short row, so replace them
-  // with a real cell bottom border on B — always exactly at the bottom edge and
-  // spanning the full cell width (naturally centred). Clear the A-column text.
+  // Move the "___" signature line text from column A into B, centred + bottom-
+  // aligned, clear the column-A original, and set the row height to 3.
   {
-    ws.getCell(`A${lineRow}`).value = null;
+    const aCell = ws.getCell(`A${lineRow}`);
     const bCell = ws.getCell(`B${lineRow}`);
-    bCell.value = null;
-    bCell.border = { ...(bCell.border ?? {}), bottom: { style: "thin", color: { argb: "FF000000" } } };
+    bCell.value = aCell.value;
+    aCell.value = null;
+    bCell.alignment = { horizontal: "center", vertical: "bottom" };
     ws.getRow(lineRow).height = 3;
   }
   // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
