@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AiExtractPanel } from "@/components/intake/ai-extract-panel";
 import type { DraftItem } from "@/components/intake/types";
@@ -105,6 +105,20 @@ export function InquiryWorkspace({
 
   const catById = Object.fromEntries(catalogue.map((c) => [c.id, c]));
 
+  // Keep per-item UI state in sync with the items prop — after importing an RFQ,
+  // router.refresh() adds new items, which need their own state entry.
+  useEffect(() => {
+    setState((s) => {
+      let changed = false;
+      const next = { ...s };
+      for (const it of items) if (!next[it.id]) { next[it.id] = initState(it.parsedJson); changed = true; }
+      return changed ? next : s;
+    });
+  }, [items]);
+
+  // Read an item's state defensively (a just-added item may not be seeded yet).
+  const stateOf = (it: ItemLite): ItemState => state[it.id] ?? initState(it.parsedJson);
+
   // Add AI-extracted RFQ items to the inquiry, then reload so they appear below.
   async function addFromRfq(extracted: DraftItem[]) {
     setImportErr(null);
@@ -125,7 +139,7 @@ export function InquiryWorkspace({
   // Merge the editable duty inputs over the parsed requirement — this drives the
   // fan sizing (and the quote's stored requirement).
   function mergedReq(item: ItemLite): Record<string, unknown> {
-    const st = state[item.id];
+    const st = stateOf(item);
     const n = (s: string) => (s.trim() === "" ? null : Number(s.replace(/,/g, "")) || null);
     return {
       ...item.parsedJson,
@@ -165,9 +179,9 @@ export function InquiryWorkspace({
   async function createQuote() {
     setCreateError(null);
     const lines = items
-      .filter((it) => state[it.id].included)
+      .filter((it) => stateOf(it).included)
       .map((it) => {
-        const st = state[it.id];
+        const st = stateOf(it);
         const req = mergedReq(it);
         const cat = st.selectedCatalogueItemId ? catById[st.selectedCatalogueItemId] : null;
         if (cat) {
@@ -204,12 +218,10 @@ export function InquiryWorkspace({
       return;
     }
     // Block low-confidence selections that an engineer hasn't confirmed.
-    const unconfirmed = items.filter(
-      (it) =>
-        state[it.id].included &&
-        state[it.id].chosen?.requiresEngineerConfirmation &&
-        !state[it.id].engineerConfirmed,
-    );
+    const unconfirmed = items.filter((it) => {
+      const s = stateOf(it);
+      return s.included && s.chosen?.requiresEngineerConfirmation && !s.engineerConfirmed;
+    });
     if (unconfirmed.length > 0) {
       setCreateError(
         "One or more selections are outside the rated envelope and need an engineer to confirm before quoting.",
@@ -255,7 +267,7 @@ export function InquiryWorkspace({
       )}
 
       {items.map((item) => {
-        const st = state[item.id];
+        const st = stateOf(item);
         const p = item.parsedJson as Record<string, unknown>;
         const duty = toDutyPoint(mergedReq(item) as never);
         const selectedCat = st.selectedCatalogueItemId ? catById[st.selectedCatalogueItemId] : null;
