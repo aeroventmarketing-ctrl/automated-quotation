@@ -1,8 +1,8 @@
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, Eye } from "lucide-react";
 import { SALE_DOCS_BEFORE_PAYMENTS, afterPaymentDocTypes, deliveryUnsignedDocTypes, type SaleDoc, type SaleRecord } from "@/lib/sale";
 
-const link = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
-const download = (d: SaleDoc) => `${link(d)}&download=1&name=${encodeURIComponent(d.name)}`;
+const view = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
+const download = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}&download=1&name=${encodeURIComponent(d.name)}`;
 
 /**
  * Read-only list of the sale's documents (PO + every attached slot), shown on
@@ -37,8 +37,11 @@ export function SaleDocumentList({ sale, vatInclusive, showFinalPayment = false 
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {r.files.map((f) => (
                 <span key={f.path} className="inline-flex items-center gap-1.5">
-                  <a href={link(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                  <a href={view(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
                     <FileText className="h-3.5 w-3.5" /> {f.name}
+                  </a>
+                  <a href={view(f)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                    <Eye className="h-3.5 w-3.5" />
                   </a>
                   <a href={download(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
                     <Download className="h-3.5 w-3.5" />

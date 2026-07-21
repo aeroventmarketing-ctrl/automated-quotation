@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { getDocViewers } from "@/lib/doc-viewers";
+import { getCurrentUser } from "@/lib/auth";
+import { canViewSaleDocPath } from "@/lib/sale-doc-access";
 import { uploadToStorage, signedUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -54,19 +53,8 @@ export async function GET(req: NextRequest) {
 
   // View access: admins and the doc's owner (quote preparer / inquiry creator)
   // always; others only if the admin granted them document-view permission.
-  // Paths are "sales/<quotationId>/..." or "inquiries/<inquiryId>/...".
-  if (!isAdmin(user)) {
-    const [scope, ownerId] = path.split("/");
-    let isOwner = false;
-    if (scope === "sales" && ownerId) {
-      const quote = await prisma.quotation.findUnique({ where: { id: ownerId }, select: { preparedById: true } });
-      isOwner = quote?.preparedById === user.id;
-    } else if (scope === "inquiries" && ownerId) {
-      const inq = await prisma.inquiry.findUnique({ where: { id: ownerId }, select: { createdById: true } });
-      isOwner = inq?.createdById === user.id;
-    }
-    const allowed = isOwner || (await getDocViewers()).includes(user.id);
-    if (!allowed) return NextResponse.json({ error: "You don't have permission to view this document." }, { status: 403 });
+  if (!(await canViewSaleDocPath(user, path))) {
+    return NextResponse.json({ error: "You don't have permission to view this document." }, { status: 403 });
   }
   const wantsDownload = req.nextUrl.searchParams.get("download") !== null;
   const name = req.nextUrl.searchParams.get("name");

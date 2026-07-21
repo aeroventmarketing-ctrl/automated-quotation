@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Check, Upload, Trash2, Plus, FileText, Download } from "lucide-react";
+import { Check, Upload, Trash2, Plus, FileText, Download, Eye } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { recordSale, clearSale } from "../actions";
 import {
@@ -33,6 +33,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 // View opens the file inline; download forces a save with its original name.
 const docLink = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
+const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const docDownload = (d: SaleDoc) => `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
 
 export function SalePanel({
@@ -195,8 +196,11 @@ export function SalePanel({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           {files.map(({ doc: f, srcKey }) => (
             <div key={f.path} className="flex items-center gap-2">
-              <a href={docLink(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
+              <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
                 <FileText className="h-4 w-4" /> {f.name}
+              </a>
+              <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                <Eye className="h-4 w-4" />
               </a>
               <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
                 <Download className="h-4 w-4" />
@@ -265,8 +269,11 @@ export function SalePanel({
           <Label className="text-xs">Purchase Order (required)</Label>
           {po ? (
             <div className="flex items-center gap-2">
-              <a href={docLink(po)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
+              <a href={docView(po)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
                 <FileText className="h-4 w-4" /> {po.name}
+              </a>
+              <a href={docView(po)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View PO" aria-label="View PO">
+                <Eye className="h-4 w-4" />
               </a>
               <a href={docDownload(po)} className="text-muted-foreground hover:text-primary" title="Download PO" aria-label="Download PO">
                 <Download className="h-4 w-4" />
@@ -308,8 +315,11 @@ export function SalePanel({
               <div className="md:col-span-2">
                 {p.proof ? (
                   <div className="flex items-center gap-2">
-                    <a href={docLink(p.proof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary underline">
+                    <a href={docView(p.proof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary underline">
                       <FileText className="h-3.5 w-3.5" /> proof
+                    </a>
+                    <a href={docView(p.proof)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View proof" aria-label="View proof">
+                      <Eye className="h-3.5 w-3.5" />
                     </a>
                     <a href={docDownload(p.proof)} className="text-muted-foreground hover:text-primary" title="Download proof" aria-label="Download proof">
                       <Download className="h-3.5 w-3.5" />
