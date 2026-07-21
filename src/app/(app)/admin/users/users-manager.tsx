@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { upsertUser, deleteUser, reassignAndDeleteUser, setUserPassword, saveUserSignature } from "../actions";
 
-const ROLES = ["SALES", "ENGINEER", "ADMIN"];
+const ROLES = ["SALES", "ENGINEER", "ADMIN", "OTHER"];
 
 interface U { id: string; email: string; name: string; role: string; salesCode: string; signature: string | null; workflowRoles: string[] }
 interface WfRole { key: string; label: string; group: string }
@@ -45,24 +45,19 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
   const [editingId, setEditingId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  // App-access role (single) + any number of workflow roles (a user can hold several).
+  // App-access role only. Workflow roles are assigned in the section below.
   const [role, setRole] = useState("SALES");
-  const [wfRoles, setWfRoles] = useState<string[]>([]);
   const [salesCode, setSalesCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const wfGroups = Array.from(new Set(workflowRoleOptions.map((r) => r.group)))
-    .map((g) => ({ group: g, roles: workflowRoleOptions.filter((r) => r.group === g) }));
   const roleLabel = (key: string) => workflowRoleOptions.find((r) => r.key === key)?.label ?? key;
-  const addWf = (key: string) => { if (key && !wfRoles.includes(key)) setWfRoles((rs) => [...rs, key]); };
-  const removeWf = (key: string) => setWfRoles((rs) => rs.filter((r) => r !== key));
 
   function reset() {
-    setEditingId(null); setEmail(""); setName(""); setRole("SALES"); setWfRoles([]); setSalesCode(""); setError(null);
+    setEditingId(null); setEmail(""); setName(""); setRole("SALES"); setSalesCode(""); setError(null);
   }
   function edit(u: U) {
-    setEditingId(u.id); setEmail(u.email); setName(u.name); setRole(u.role); setWfRoles(u.workflowRoles); setSalesCode(u.salesCode); setError(null);
+    setEditingId(u.id); setEmail(u.email); setName(u.name); setRole(u.role); setSalesCode(u.salesCode); setError(null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -70,7 +65,7 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
     setBusy(true);
     setError(null);
     try {
-      await upsertUser({ id: editingId ?? undefined, email, name, role: role as never, salesCode, workflowRoles: wfRoles });
+      await upsertUser({ id: editingId ?? undefined, email, name, role: role as never, salesCode });
       reset();
       router.refresh();
     } catch (e) {
@@ -228,33 +223,9 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
             )}
           </div>
 
-          {/* Workflow roles — add as many as needed from the dropdown; each shows as a removable chip. */}
-          <div className="space-y-1.5 md:col-span-5">
-            <Label>Workflow roles <span className="font-normal text-muted-foreground">— add one or more</span></Label>
-            <div className="flex flex-wrap items-center gap-2">
-              {wfRoles.map((k) => (
-                <span key={k} className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary">
-                  {roleLabel(k)}
-                  <button type="button" onClick={() => removeWf(k)} className="text-primary/70 hover:text-primary" aria-label={`Remove ${roleLabel(k)}`}>✕</button>
-                </span>
-              ))}
-              <Select value="" className="h-8 w-auto min-w-[13rem]" onChange={(e) => { addWf(e.target.value); e.target.value = ""; }}>
-                <option value="">+ Add workflow role…</option>
-                {wfGroups.map((g) => {
-                  const avail = g.roles.filter((r) => !wfRoles.includes(r.key));
-                  return avail.length ? (
-                    <optgroup key={g.group} label={g.group}>
-                      {avail.map((r) => (<option key={r.key} value={r.key}>{r.label}</option>))}
-                    </optgroup>
-                  ) : null;
-                })}
-              </Select>
-            </div>
-            <p className="text-xs text-muted-foreground">The app-access role controls sign-in &amp; menus; workflow roles decide who acts in Purchasing, Requisitions, Cash requests and orders. A person can hold several.</p>
-          </div>
           {error && <p className="text-sm text-destructive md:col-span-5">{error}</p>}
           <p className="text-xs text-muted-foreground md:col-span-5">
-            Note: matched by email — create the matching login in Supabase Authentication.
+            The app-access role controls sign-in &amp; menus (choose <b>Other</b> for staff who are neither Sales nor Engineers, e.g. an Approver or Accountant). Assign their <b>workflow roles</b> in the section below. Matched by email — create the matching login in Supabase Authentication.
           </p>
         </CardContent>
       </Card>

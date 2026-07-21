@@ -20,6 +20,9 @@ enum Role {
   SALES
   ENGINEER
   ADMIN
+  // Sign-in-only access for staff who are neither Sales nor Engineers (e.g. an
+  // Approver or Accountant) — their abilities come from their workflow roles.
+  OTHER
 }
 
 enum Family {

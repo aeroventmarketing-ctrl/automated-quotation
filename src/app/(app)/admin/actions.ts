@@ -131,7 +131,7 @@ const userSchema = z.object({
   id: z.string().optional(),
   email: z.string().email(),
   name: z.string().min(1),
-  role: z.enum(["SALES", "ENGINEER", "ADMIN"]),
+  role: z.enum(["SALES", "ENGINEER", "ADMIN", "OTHER"]),
   // Single letter appended to quote numbers (e.g. "J").
   salesCode: z.string().trim().max(1).optional(),
   // Workflow (ERP) roles assigned to this user. Omitted = leave unchanged;
