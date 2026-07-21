@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Printer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CashRequestRow } from "@/lib/cash-request-row";
@@ -46,6 +48,11 @@ function CashRow({ r }: { r: CashRequestRow }) {
             <span className="font-mono text-xs text-muted-foreground">{r.number}</span>
             <Badge variant={r.variant}>{r.statusLabel}</Badge>
             {r.isRequestor && <span className="text-xs text-muted-foreground">· your request</span>}
+            {!["SUBMITTED", "REJECTED", "CANCELLED"].includes(r.status) && (
+              <Link href={`/cash-requests/${r.id}/voucher`} target="_blank" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                <Printer className="h-3.5 w-3.5" /> Print voucher
+              </Link>
+            )}
           </div>
           <div className="mt-0.5 font-medium">{r.purpose}</div>
           <div className="text-xs text-muted-foreground">
