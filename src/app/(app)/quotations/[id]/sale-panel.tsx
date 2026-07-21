@@ -73,6 +73,28 @@ export function SalePanel({
   // recorded — down payments and progress billings keep it highlighted.
   const paymentImportant = !payments.some((p) => p.kind === "full");
 
+  // "Save sale" unlocks only once the core sale documents are attached and a
+  // qualifying payment is recorded: PO + Computation + Quotation + RFQ/BOQ, plus
+  // a down or full payment (terms deals confirm on the PO alone, so no payment is
+  // required there). The Computation slot is satisfied by a computation OR the
+  // seeded inquiry-form file.
+  const hasComputation = (docs.computation?.length ?? 0) > 0 || (docs.inquiry_form?.length ?? 0) > 0;
+  const hasQuotationDoc = (docs.quotation?.length ?? 0) > 0;
+  const hasRfqDoc = (docs.rfq_boq?.length ?? 0) > 0;
+  const hasQualifyingPayment = payments.some((p) => (p.kind === "down" || p.kind === "full") && Number(p.amount) > 0);
+  const paymentOk = arrangement === "terms" || hasQualifyingPayment;
+  const missingToSave: string[] = [];
+  if (!po) missingToSave.push("Purchase Order");
+  if (!hasComputation) missingToSave.push("Computation");
+  if (!hasQuotationDoc) missingToSave.push("Quotation");
+  if (!hasRfqDoc) missingToSave.push("RFQ / BOQ");
+  if (!paymentOk) missingToSave.push("a down or full payment");
+  // Once a sale is already confirmed, saving stays open so the remaining
+  // documents (Sales Invoice, OR/CR/AF, …) can be added anytime; the gate only
+  // governs confirming a new sale.
+  const alreadyConfirmed = isSaleConfirmed(initialSale);
+  const canSave = alreadyConfirmed || missingToSave.length === 0;
+
   async function upload(file: File): Promise<SaleDoc | null> {
     const fd = new FormData();
     fd.append("file", file);
@@ -330,15 +352,22 @@ export function SalePanel({
         </div>
 
         {(canEdit || canClear) && (
-          <div className="flex items-center gap-2">
-            {canEdit && <Button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save sale"}</Button>}
-            {canClear && hasSaleData && (
-              <Button variant="outline" onClick={clearAll} disabled={busy}>Clear sale</Button>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              {canEdit && <Button onClick={save} disabled={busy || !canSave}>{busy ? "Saving…" : "Save sale"}</Button>}
+              {canClear && hasSaleData && (
+                <Button variant="outline" onClick={clearAll} disabled={busy}>Clear sale</Button>
+              )}
+              {canEdit && !canClear && hasSaleData && (
+                <span className="text-xs text-muted-foreground">Only accounting or an admin can clear this sale.</span>
+              )}
+              {msg && <span className="text-xs text-muted-foreground">{msg}</span>}
+            </div>
+            {canEdit && !canSave && (
+              <p className="text-xs text-amber-700">
+                Attach {missingToSave.join(", ")} to enable saving.
+              </p>
             )}
-            {canEdit && !canClear && hasSaleData && (
-              <span className="text-xs text-muted-foreground">Only accounting or an admin can clear this sale.</span>
-            )}
-            {msg && <span className="text-xs text-muted-foreground">{msg}</span>}
           </div>
         )}
         {!confirmed && (
