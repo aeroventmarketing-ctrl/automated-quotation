@@ -197,30 +197,17 @@ function MotorControllerJobOrderForm({
               <span className="text-[11px] font-mono text-muted-foreground">{i + 1}.</span>
               <select
                 className="h-7 flex-1 rounded-md border bg-background px-2 text-xs font-medium"
-                value={STARTER_TYPES.includes(line.starterType) ? line.starterType : (line.starterType ? "__custom__" : "")}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === "__custom__") setLine(i, { starterType: " " });
-                  else setLine(i, { starterType: v });
-                }}
+                value={line.starterType}
+                onChange={(e) => setLine(i, { starterType: e.target.value })}
               >
-                <option value="">Starter / control method…</option>
+                <option value="">Starter type…</option>
                 {STARTER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                <option value="__custom__">Custom…</option>
+                {line.starterType && !STARTER_TYPES.includes(line.starterType) && <option value={line.starterType}>{line.starterType}</option>}
               </select>
               <button type="button" onClick={() => removeLine(i)} className="text-muted-foreground hover:text-destructive">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-
-            {line.starterType !== "" && !STARTER_TYPES.includes(line.starterType) && (
-              <Input
-                className="h-7 text-xs"
-                value={line.starterType}
-                placeholder="Type the starter / control method"
-                onChange={(e) => setLine(i, { starterType: e.target.value })}
-              />
-            )}
 
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
               <label className="space-y-0.5">

@@ -11,17 +11,8 @@
  * running MC-JO series).
  */
 
-/** The starter / control methods a motor controller can use. */
-export const STARTER_TYPES = [
-  "Direct on line",
-  "Wye Delta Starter",
-  "Reduced Voltage Wye Delta Starter",
-  "Star-Delta Starter",
-  "Soft Starter",
-  "Variable Frequency Drive (VFD)",
-  "Auto-transformer Starter",
-  "Part-winding Starter",
-];
+/** The starter types a motor controller can use. */
+export const STARTER_TYPES = ["DOL", "Y/Δ", "Y/YY"];
 export const MC_PHASES = ["1", "3"];
 export const MC_UOMS = ["pc", "pcs", "set", "lot"];
 
