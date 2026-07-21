@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AiExtractPanel } from "@/components/intake/ai-extract-panel";
 import type { DraftItem } from "@/components/intake/types";
-import { addInquiryItems, verifyMyPassword } from "../actions";
+import { addInquiryItems, verifyAdminPassword } from "../actions";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,8 +105,10 @@ export function InquiryWorkspace({
   const router = useRouter();
   const [showImport, setShowImport] = useState(items.length === 0);
   const [importErr, setImportErr] = useState<string | null>(null);
-  // Admin-only RFQ import is locked until the admin re-enters their password.
-  const [unlocked, setUnlocked] = useState(false);
+  // The RFQ import is password-protected: an admin unlocks it with their email +
+  // login password. Admins are unlocked automatically.
+  const [unlocked, setUnlocked] = useState(isAdmin);
+  const [adminEmail, setAdminEmail] = useState("");
   const [pw, setPw] = useState("");
   const [pwErr, setPwErr] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -115,7 +117,7 @@ export function InquiryWorkspace({
     setPwErr(null);
     setVerifying(true);
     try {
-      const res = await verifyMyPassword(pw);
+      const res = await verifyAdminPassword(adminEmail, pw);
       if ("error" in res) { setPwErr(res.error); return; }
       setUnlocked(true);
       setPw("");
@@ -266,45 +268,44 @@ export function InquiryWorkspace({
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Requirements → Match → Select</h2>
 
-      {/* Generate items from an RFQ — admin only, password-protected. */}
-      {isAdmin && (
-        <Card>
-          <CardHeader className="flex-row items-center justify-between gap-3 pb-2">
-            <div>
-              <CardTitle className="flex items-center gap-1.5 text-sm"><Lock className="h-3.5 w-3.5 text-muted-foreground" /> Import from RFQ (AI)</CardTitle>
-              <p className="text-xs text-muted-foreground">Admin only. Upload a photo/scan of the RFQ (or paste its text) and AI turns it into line items you can size and quote.</p>
-            </div>
-            {unlocked && (
-              <Button variant="outline" size="sm" onClick={() => setShowImport((v) => !v)}>
-                {showImport ? "Hide" : "Upload RFQ / paste text"}
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="pt-0">
-            {!unlocked ? (
-              <div className="max-w-sm space-y-2">
-                <p className="text-xs text-muted-foreground">Enter your admin password (from the Users tab) to unlock this feature.</p>
-                <div className="flex gap-2">
-                  <Input type="password" autoComplete="current-password" placeholder="Admin password" value={pw}
-                    onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") unlock(); }} />
-                  <Button onClick={unlock} disabled={verifying || !pw}>{verifying ? "Checking…" : "Unlock"}</Button>
-                </div>
-                {pwErr && <p className="text-xs text-destructive">{pwErr}</p>}
+      {/* Generate items from an RFQ — password-protected; only an admin can unlock it. */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-3 pb-2">
+          <div>
+            <CardTitle className="flex items-center gap-1.5 text-sm">
+              {!unlocked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />} Import from RFQ (AI)
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Upload a photo/scan of the RFQ (or paste its text) and AI turns it into line items you can size and quote. Unlocked by an admin.</p>
+          </div>
+          {unlocked && (
+            <Button variant="outline" size="sm" onClick={() => setShowImport((v) => !v)}>
+              {showImport ? "Hide" : "Upload RFQ / paste text"}
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!unlocked ? (
+            <div className="max-w-sm space-y-2">
+              <p className="text-xs text-muted-foreground">This feature is locked. An admin unlocks it with their email &amp; password (set in the Users tab).</p>
+              <Input type="email" autoComplete="username" placeholder="Admin email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} />
+              <div className="flex gap-2">
+                <Input type="password" autoComplete="current-password" placeholder="Admin password" value={pw}
+                  onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") unlock(); }} />
+                <Button onClick={unlock} disabled={verifying || !adminEmail || !pw}>{verifying ? "Checking…" : "Unlock"}</Button>
               </div>
-            ) : showImport ? (
-              <>
-                <AiExtractPanel onExtracted={addFromRfq} />
-                {importErr && <p className="mt-2 text-sm text-destructive">{importErr}</p>}
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-      )}
+              {pwErr && <p className="text-xs text-destructive">{pwErr}</p>}
+            </div>
+          ) : showImport ? (
+            <>
+              <AiExtractPanel onExtracted={addFromRfq} />
+              {importErr && <p className="mt-2 text-sm text-destructive">{importErr}</p>}
+            </>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {items.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No line items yet — {isAdmin ? "unlock “Import from RFQ (AI)” above to add them, or" : "ask an admin to import the RFQ, or"} add them manually.
-        </p>
+        <p className="text-sm text-muted-foreground">No line items yet — use “Import from RFQ (AI)” above (an admin unlocks it), or add them manually.</p>
       )}
 
       {items.map((item) => {

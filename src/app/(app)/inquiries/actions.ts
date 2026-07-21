@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { z } from "zod";
 import { createClient as createSbClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { makeUnlockToken, RFQ_UNLOCK_COOKIE, RFQ_UNLOCK_TTL_MS } from "@/lib/rfq-unlock";
 import { findContactOwner } from "@/lib/client-ownership";
 import { setInquiryDocs } from "@/lib/inquiry-docs-store";
 import type { InquirySource } from "@prisma/client";
@@ -121,21 +123,32 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
 }
 
 /**
- * Verify the signed-in admin's own login password (the one set in the Users
- * tab / Supabase Auth) — used to unlock the admin-only RFQ AI import. Runs on a
- * stateless client so it never disturbs the current session.
+ * Unlock the RFQ AI import: an admin enters their email + login password (the
+ * one set in the Users tab / Supabase Auth). Anyone signed in may present these
+ * credentials, but the email must belong to an ADMIN and the password must be
+ * correct. On success a short-lived signed cookie is set so the (possibly
+ * non-admin) operator can then use the panel. Verification runs on a stateless
+ * client so the current session is never disturbed.
  */
-export async function verifyMyPassword(password: string): Promise<{ ok: true } | { error: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Not signed in." };
-  if (!isAdmin(user)) return { error: "Only an admin can use this." };
-  if (!password || !password.trim()) return { error: "Enter your password." };
+export async function verifyAdminPassword(email: string, password: string): Promise<{ ok: true } | { error: string }> {
+  const viewer = await getCurrentUser();
+  if (!viewer) return { error: "Not signed in." };
+  const em = (email ?? "").trim().toLowerCase();
+  if (!em || !password || !password.trim()) return { error: "Enter the admin email and password." };
+
+  const admin = await prisma.user.findUnique({ where: { email: em } });
+  if (!admin || !isAdmin(admin)) return { error: "That email isn't an admin account." };
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) return { error: "Auth isn't configured on the server." };
   const sb = createSbClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { error } = await sb.auth.signInWithPassword({ email: user.email, password });
-  if (error) return { error: "Incorrect password." };
+  const { error } = await sb.auth.signInWithPassword({ email: em, password });
+  if (error) return { error: "Incorrect admin password." };
+
+  (await cookies()).set(RFQ_UNLOCK_COOKIE, makeUnlockToken(), {
+    httpOnly: true, sameSite: "lax", secure: true, path: "/", maxAge: Math.floor(RFQ_UNLOCK_TTL_MS / 1000),
+  });
   return { ok: true };
 }
 
