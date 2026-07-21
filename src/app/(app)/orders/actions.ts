@@ -1416,7 +1416,7 @@ export async function notifyClientReady(quotationId: string): Promise<void> {
   if (!user) throw new Error("Unauthorized");
   const { quote, cls, wf } = await loadWorkflow(quotationId);
   const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
-  if (!isSales) throw new Error("Only Sales (the order's preparer) or an admin can do this.");
+  if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
   if (wf.stage !== "production_finished") throw new Error("The order isn't finished production yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_review", approvals: stamp(wf, "client_notified", user) });
 }
@@ -1489,7 +1489,7 @@ export async function qaSalesCheck(quotationId: string): Promise<void> {
   if (!user) throw new Error("Unauthorized");
   const { quote, cls, wf } = await loadWorkflow(quotationId);
   const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
-  if (!isSales) throw new Error("Only Sales (the order's preparer) or an admin can do this.");
+  if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
   if (wf.stage !== "qa_transferred") throw new Error("The items haven't been transferred to the office yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_sales_checked", approvals: stamp(wf, "qa_sales_checked", user) });
 }
@@ -1588,7 +1588,7 @@ export async function approveDelivery(quotationId: string): Promise<void> {
   if (!user) throw new Error("Unauthorized");
   const { quote, cls, wf } = await loadWorkflow(quotationId);
   const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
-  if (!isSales) throw new Error("Only Sales (the order's preparer) or an admin can do this.");
+  if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
   if (wf.stage !== "delivered") throw new Error("The order hasn't been delivered yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "delivery_confirmed", approvals: stamp(wf, "delivery_confirmed", user) });
 }
