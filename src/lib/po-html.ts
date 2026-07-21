@@ -88,20 +88,27 @@ export function renderPurchaseOrderHtml(po: PurchaseOrder, purchaser: PoPurchase
     max-width: 180px;
     max-height: 70px;
     object-fit: contain;
-    margin-bottom: -12px;
+    margin-bottom: -14px;   /* float above + overlap the name */
     z-index: 2;
   }
-  .name-line {
+  /* Models Excel cell B30: a fixed-height "row" whose contents are pinned to the
+     BOTTOM edge (Vertical Align = Bottom) via justify-content:flex-end, so the
+     underline sits exactly on the bottom boundary — never vertically centred,
+     no margin-top / absolute positioning. */
+  .sig-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 3px;
     width: 240px;
-    border-bottom: 2px solid #000;
-    text-align: center;
-    font-weight: 700;
-    font-size: 18px;
-    padding-bottom: 4px;
+    height: 30px;
     z-index: 1;
   }
-  .designation { margin-top: 10px; font-size: 17px; font-weight: 600; }
-  .company { margin-top: 8px; font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+  .sig-name { font-weight: 700; font-size: 18px; line-height: 1; text-align: center; }
+  .sig-underline { width: 100%; border-bottom: 2px solid #000; }
+  .designation { margin-top: 10px; font-size: 17px; font-weight: 600; text-align: center; }
+  .company { margin-top: 8px; font-size: 18px; font-weight: 700; letter-spacing: .5px; text-align: center; }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 8px 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
   .bar button { background: #ED1C24; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: system-ui, sans-serif; }
   .bar .hint { font-size: 12px; color: #cbd5e1; font-family: system-ui, sans-serif; }
@@ -145,8 +152,9 @@ export function renderPurchaseOrderHtml(po: PurchaseOrder, purchaser: PoPurchase
     ${po.remarks ? `<div class="rem"><span class="lbl">Payment terms / remarks</span><div>${esc(po.remarks)}</div></div>` : ""}
     <div class="signature-section">
       ${signImg ? `<img src="${esc(signImg)}" class="signature" alt="signature">` : ""}
-      <div class="name-line">
-        <span>${esc(signName)}</span>
+      <div class="sig-cell">
+        <span class="sig-name">${esc(signName)}</span>
+        <span class="sig-underline"></span>
       </div>
       <div class="designation">
         ${esc(signDesignation)}
