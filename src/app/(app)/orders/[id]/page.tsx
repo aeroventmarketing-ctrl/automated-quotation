@@ -179,7 +179,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   const canIssue =
     wf.stage === "released" &&
-    (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey)));
+    (adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey)));
 
   // The Plant Manager receives the released job orders before production begins.
   const canReceive =

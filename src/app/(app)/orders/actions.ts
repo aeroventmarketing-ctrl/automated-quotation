@@ -133,8 +133,8 @@ async function saveWorkflow(quotationId: string, cls: Record<string, unknown>, w
 export async function issueJobOrders(quotationId: string, deptKeys: string[]): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "technical_head" as WorkflowRoleKey))) {
-    throw new Error("Only the Technical Head or an admin can issue job orders.");
+  if (!(isAdmin(user) || user.role === "ENGINEER" || userHasWorkflowRole(await getWorkflowRoles(), user.id, "technical_head" as WorkflowRoleKey))) {
+    throw new Error("Only the Engineer, Technical Head or an admin can issue job orders.");
   }
   const depts = Array.from(new Set(deptKeys.filter((k) => DEPT_KEY_SET.has(k as ProductionDeptKey)))) as ProductionDeptKey[];
   if (depts.length === 0) throw new Error("Select at least one department.");
