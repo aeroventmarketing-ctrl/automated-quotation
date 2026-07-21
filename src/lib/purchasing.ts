@@ -92,6 +92,22 @@ export const PURCHASE_STEPS: PurchaseStepDef[] = [
 /** New chain steps whose sign-off rides in the PurchaseRequest.chainLog JSON. */
 export const CHAINLOG_STEPS = ["sign", "release_cash", "hand_purchaser", "confirm_cash", "assign_tasks", "logistics_confirm", "deliver", "warehouse_approve"] as const;
 
+/** The linear main chain, in order (excludes REJECTED / CANCELLED branches). */
+export const PR_MAIN_ORDER: PRStatus[] = [
+  "PENDING_APPROVAL", "APPROVED", "VOUCHER_READY", "VOUCHER_SIGNED", "CASH_RELEASED",
+  "WITH_PURCHASER", "CASH_CONFIRMED", "TASKED", "LOGISTICS_CONFIRMED",
+  "PURCHASED", "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED", "COMPLETED",
+];
+export function prMainIndex(status: PRStatus): number {
+  return PR_MAIN_ORDER.indexOf(status);
+}
+/** Earlier statuses an admin may roll a request back to (a rejected/cancelled one reopens to the start). */
+export function priorPurchaseStatuses(status: PRStatus): PRStatus[] {
+  if (status === "REJECTED" || status === "CANCELLED") return ["PENDING_APPROVAL"];
+  const idx = prMainIndex(status);
+  return idx <= 0 ? [] : PR_MAIN_ORDER.slice(0, idx);
+}
+
 export function purchaseStepsFrom(status: PRStatus): PurchaseStepDef[] {
   return PURCHASE_STEPS.filter((s) => s.from === status);
 }

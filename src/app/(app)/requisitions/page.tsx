@@ -60,7 +60,7 @@ export default async function RequisitionsPage() {
       },
       orderBy: { createdAt: "desc" },
     });
-    rows = prs.map((pr) => buildPurchaseChainRow(pr, { mrfNo: null, canManagePO: false, namesForRole, canAct }));
+    rows = prs.map((pr) => buildPurchaseChainRow(pr, { mrfNo: null, canManagePO: false, namesForRole, canAct, admin }));
   } catch {
     tableMissing = true;
   }

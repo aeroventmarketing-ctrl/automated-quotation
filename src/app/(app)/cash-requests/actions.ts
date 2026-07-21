@@ -12,6 +12,9 @@ import {
   canLiquidateAt,
   isCashCancellable,
   CASH_CATEGORIES,
+  CASH_MAIN_ORDER,
+  cashMainIndex,
+  priorCashStatuses,
   type CashRequestStatus,
   type CashCategoryKey,
 } from "@/lib/cash-request";
@@ -288,6 +291,38 @@ export async function resetCashAiRead(id: string): Promise<void> {
   const cur = coerceLiquidation(pr.liquidation);
   const next = { ...cur, aiReadCount: 0, aiReadEscalation: undefined };
   await prisma.cashRequest.update({ where: { id }, data: { liquidation: next as unknown as Prisma.InputJsonValue } });
+  revalidatePath("/cash-requests");
+}
+
+/**
+ * Admin-only override: roll a cash request back to an earlier stage. Sign-offs
+ * recorded after the target stage are cleared (and the liquidation is reset when
+ * rolling back before it), so the chain can be walked forward again.
+ */
+export async function adminRollbackCashRequest(id: string, toStatus: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can roll back the workflow.");
+  const target = toStatus as CashRequestStatus;
+  if (!CASH_MAIN_ORDER.includes(target)) throw new Error("Choose a valid earlier stage.");
+  const pr = await loadOr404(id);
+  if (!priorCashStatuses(pr.status as CashRequestStatus).includes(target)) {
+    throw new Error("Choose an earlier stage to roll back to.");
+  }
+  const tgtIdx = cashMainIndex(target);
+
+  const data: Prisma.CashRequestUpdateInput = { status: target };
+  if (tgtIdx < cashMainIndex("VOUCHER_READY")) { data.voucherByName = null; data.voucherAt = null; data.voucherRef = null; }
+  if (tgtIdx < cashMainIndex("CASH_RELEASED")) { data.decidedByName = null; data.decidedAt = null; data.decisionNote = null; data.releasedByName = null; data.releasedAt = null; }
+  if (tgtIdx < cashMainIndex("DISBURSED")) { data.disbursedByName = null; data.disbursedAt = null; }
+  if (tgtIdx < cashMainIndex("RECEIVED")) { data.receivedByName = null; data.receivedAt = null; }
+  if (tgtIdx < cashMainIndex("LIQUIDATED")) {
+    data.liquidation = {} as Prisma.InputJsonValue; // un-liquidate (also clears the settled stamp)
+  } else if (tgtIdx < cashMainIndex("SETTLED")) {
+    // Rolling back to LIQUIDATED: keep the liquidation record, drop the settled stamp.
+    const cur = coerceLiquidation(pr.liquidation);
+    data.liquidation = { ...cur, settled: undefined } as unknown as Prisma.InputJsonValue;
+  }
+  await prisma.cashRequest.update({ where: { id }, data });
   revalidatePath("/cash-requests");
 }
 

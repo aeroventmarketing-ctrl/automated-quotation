@@ -14,6 +14,7 @@ import {
   liquidationVariance,
   canLiquidateAt,
   isCashCancellable,
+  priorCashStatuses,
   type CashRequestStatus,
   type CashActor,
   type CashRequestLine,
@@ -78,6 +79,8 @@ export interface CashRequestRow {
   canSettleLiquidation: boolean;
   canEscalateLiquidation: boolean;
   canApproveLiquidation: boolean;
+  canOverride: boolean; // admin escape hatch — roll the chain back
+  priorStatuses: { key: string; label: string }[];
 }
 
 /** The CashRequest fields the builder reads (subset of the Prisma row). */
@@ -227,5 +230,7 @@ export function buildCashRequestRow(
     canSettleLiquidation: ctx.admin || ctx.hasRole("accounting"),
     canEscalateLiquidation: ctx.admin || isRequestor || ctx.hasRole("accounting"),
     canApproveLiquidation: ctx.admin || ctx.hasRole("payment_approver"),
+    canOverride: ctx.admin,
+    priorStatuses: ctx.admin ? priorCashStatuses(status).map((s) => ({ key: s, label: CASH_STATUS_LABEL[s] })) : [],
   };
 }

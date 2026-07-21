@@ -63,6 +63,20 @@ export const CASH_STEPS: CashStepDef[] = [
   { key: "confirm", from: "DISBURSED", to: "RECEIVED", by: "requestor", label: "Confirm cash received" },
 ];
 
+/** The linear main chain, in order (excludes REJECTED / CANCELLED branches). */
+export const CASH_MAIN_ORDER: CashRequestStatus[] = [
+  "SUBMITTED", "VOUCHER_READY", "CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED",
+];
+export function cashMainIndex(status: CashRequestStatus): number {
+  return CASH_MAIN_ORDER.indexOf(status);
+}
+/** Earlier statuses an admin may roll a request back to (a rejected/cancelled one reopens to the start). */
+export function priorCashStatuses(status: CashRequestStatus): CashRequestStatus[] {
+  if (status === "REJECTED" || status === "CANCELLED") return ["SUBMITTED"];
+  const idx = cashMainIndex(status);
+  return idx <= 0 ? [] : CASH_MAIN_ORDER.slice(0, idx);
+}
+
 export function cashStepsFrom(status: CashRequestStatus): CashStepDef[] {
   return CASH_STEPS.filter((s) => s.from === status);
 }

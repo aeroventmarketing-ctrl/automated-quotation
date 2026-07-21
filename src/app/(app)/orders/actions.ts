@@ -37,7 +37,7 @@ import {
   type MRFLineDisposition,
   type OrderConversation,
 } from "@/lib/order-workflow";
-import { purchaseStep, isCancellable, type PRStatus } from "@/lib/purchasing";
+import { purchaseStep, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
@@ -901,6 +901,47 @@ export async function settleReconciliation(purchaseRequestId: string, note?: str
     settled: { byName: user.name, role: settleRole ? workflowRoleLabel(settleRole) : admin ? "Admin" : "", at: new Date().toISOString(), note: note?.trim() || undefined },
   };
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/**
+ * Admin-only override: roll a purchase request back to an earlier stage in the
+ * chain. Sign-offs recorded after the target stage are cleared (the stamp
+ * columns and the chainLog entries), so the chain can be walked forward again.
+ */
+export async function adminRollbackPurchase(purchaseRequestId: string, toStatus: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can roll back the workflow.");
+  const target = toStatus as PRStatus;
+  if (!PR_MAIN_ORDER.includes(target)) throw new Error("Choose a valid earlier stage.");
+
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  if (!priorPurchaseStatuses(pr.status as PRStatus).includes(target)) {
+    throw new Error("Choose an earlier stage to roll back to.");
+  }
+  const tgtIdx = prMainIndex(target);
+
+  const data: Prisma.PurchaseRequestUpdateInput = { status: target };
+  const log = (pr.chainLog && typeof pr.chainLog === "object" ? { ...(pr.chainLog as Record<string, unknown>) } : {}) as Record<string, unknown>;
+  // Undo every transition that lands at (or after) the target — clear its stamp.
+  for (const step of PURCHASE_STEPS) {
+    if (step.key === "reject") continue;
+    if (prMainIndex(step.from) < tgtIdx) continue;
+    switch (step.key) {
+      case "approve": data.decidedById = null; data.decidedByName = null; data.decidedAt = null; data.decisionNote = null; break;
+      case "voucher": data.voucherByName = null; data.voucherAt = null; data.voucherRef = null; break;
+      case "buy": data.purchasedByName = null; data.purchasedAt = null; break;
+      case "check": data.checkedByName = null; data.checkedAt = null; break;
+      case "plant": data.plantApprovedByName = null; data.plantApprovedAt = null; break;
+      case "receive": data.receivedByName = null; data.receivedAt = null; break;
+      default: delete log[step.key]; break; // sign / release_cash / hand_purchaser / … (chainLog)
+    }
+  }
+  data.chainLog = log as Prisma.InputJsonValue;
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");

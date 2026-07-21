@@ -4,7 +4,7 @@
  * and the central Purchasing workspace (where the purchaser processes them).
  */
 import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
-import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
 import { round2 } from "@/lib/quote";
@@ -136,6 +136,8 @@ export interface PurchaseChainRow {
   canSettleReconcile: boolean;
   canEscalateReconcile: boolean;
   canApproveReconcile: boolean;
+  canOverride: boolean; // admin escape hatch — roll the chain back
+  priorStatuses: { key: string; label: string }[];
 }
 
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
@@ -243,6 +245,7 @@ export function buildPurchaseChainRow(
     canDelete?: boolean;
     namesForRole: (role: WorkflowRoleKey) => string[];
     canAct: (role: WorkflowRoleKey) => boolean;
+    admin?: boolean;
   },
 ): PurchaseChainRow {
   const status = pr.status as PRStatus;
@@ -296,5 +299,7 @@ export function buildPurchaseChainRow(
     canSettleReconcile,
     canEscalateReconcile,
     canApproveReconcile,
+    canOverride: ctx.admin ?? false,
+    priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
   };
 }

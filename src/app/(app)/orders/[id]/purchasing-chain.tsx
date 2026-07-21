@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest, deletePurchaseRequest } from "../actions";
 import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
 import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
+import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
@@ -47,6 +48,8 @@ interface PRRow {
   canSettleReconcile?: boolean;
   canEscalateReconcile?: boolean;
   canApproveReconcile?: boolean;
+  canOverride?: boolean;
+  priorStatuses?: { key: string; label: string }[];
 }
 
 export function PurchasingChain({
@@ -287,6 +290,8 @@ export function PurchasingChain({
                 )}
               </div>
             )}
+
+            {r.canOverride && <AdminPurchaseOverride prId={r.id} priorStatuses={r.priorStatuses ?? []} />}
           </div>
         );
       })}

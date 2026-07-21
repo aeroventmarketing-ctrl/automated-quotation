@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { CashRequestRow } from "@/lib/cash-request-row";
 import { advanceCashRequest, cancelCashRequest } from "./actions";
 import { CashLiquidationPanel } from "./cash-liquidation-panel";
+import { AdminCashOverride } from "./admin-cash-override";
 
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -111,6 +112,8 @@ function CashRow({ r }: { r: CashRequestRow }) {
         )}
         {err && <span className="text-xs text-destructive">{err}</span>}
       </div>
+
+      {r.canOverride && <AdminCashOverride id={r.id} priorStatuses={r.priorStatuses} />}
     </div>
   );
 }
