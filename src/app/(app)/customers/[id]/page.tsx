@@ -9,15 +9,17 @@ import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-ba
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LABEL } from "@/lib/sale";
 import { payableTotal } from "@/lib/quote";
-import { Plus } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
-import { addQuotation, setFollowUpOptOut } from "../actions";
+import { setFollowUpOptOut } from "../actions";
 import { CustomerHeader } from "./customer-header";
 import { AccountPanel } from "./account-panel";
 import { FollowUpOptOut } from "./follow-up-optout";
 import { ConversationPanel, type ConversationBoxData } from "./conversation-panel";
 import { TransferQuotation } from "./transfer-quotation";
 import { DeleteInquiry } from "./delete-inquiry";
+import { AddQuotation } from "./add-quotation";
+import { QuotationRowActions, OrderRowActions } from "./history-admin-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -234,6 +236,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                 <TableHead className="text-right">Order amount</TableHead>
                 <TableHead className="text-right">Collected</TableHead>
                 <TableHead>Date</TableHead>
+                {admin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -247,11 +250,16 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                   <TableCell className="text-right">{formatCurrency(q.deal, q.currency)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(q.collected, q.currency)}</TableCell>
                   <TableCell>{formatDate(q.createdAt)}</TableCell>
+                  {admin && (
+                    <TableCell className="text-right">
+                      <OrderRowActions customerId={customer.id} quotationId={q.id} />
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
               {orders.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">No confirmed orders yet.</TableCell>
+                  <TableCell colSpan={admin ? 7 : 6} className="text-center text-muted-foreground">No confirmed orders yet.</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -261,14 +269,9 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
 
       {/* Quotation history (all quotes) */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
           <CardTitle>Quotation history</CardTitle>
-          <form action={addQuotation.bind(null, customer.id)}>
-            <Button type="submit" size="sm">
-              <Plus className="h-4 w-4" />
-              Add quotation
-            </Button>
-          </form>
+          <AddQuotation customerId={customer.id} />
         </CardHeader>
         <CardContent className="pt-0">
           <Table>
@@ -293,11 +296,12 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                   <TableCell>{formatDate(q.createdAt)}</TableCell>
                   <TableCell><QuotationStatusBadge status={q.status} /></TableCell>
                   <TableCell className="text-right">
-                    {admin && otherCustomers.length > 0 ? (
-                      <div className="flex justify-end">
-                        <TransferQuotation quotationId={q.id} customers={otherCustomers} />
+                    {admin && (
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        {otherCustomers.length > 0 && <TransferQuotation quotationId={q.id} customers={otherCustomers} />}
+                        <QuotationRowActions customerId={customer.id} quotationId={q.id} />
                       </div>
-                    ) : null}
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -344,7 +348,13 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                   <TableCell><InquiryStatusBadge status={inq.status} /></TableCell>
                   {admin && (
                     <TableCell className="text-right">
-                      <div className="flex justify-end">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground">
+                          <Link href={`/inquiries/${inq.id}`}>
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </Link>
+                        </Button>
                         <DeleteInquiry inquiryId={inq.id} hasQuotes={inq._count.quotations > 0} />
                       </div>
                     </TableCell>

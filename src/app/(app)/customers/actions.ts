@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { nextQuoteNumber } from "@/lib/quote";
@@ -20,6 +21,8 @@ import {
   type AccountData,
   type ConversationEntry,
 } from "@/lib/account";
+import { getInquiryDocs, setInquiryDocs } from "@/lib/inquiry-docs-store";
+import { saleFromClassification, type SaleDoc } from "@/lib/sale";
 
 /**
  * Transfer a client account to another salesperson. Only the current sales
@@ -143,15 +146,48 @@ export async function transferQuotation(quotationId: string, targetCustomerId: s
   redirect(`/customers/${targetCustomerId}`);
 }
 
+const uploadedDocSchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  uploadedAt: z.string().optional(),
+});
+
+/**
+ * Resolve the inquiry a new quotation will attach to (reuse the newest, or create
+ * one), returning its id so the RFQ/BOQ can be uploaded under the real inquiry
+ * path before the quotation is created.
+ */
+export async function ensureInquiryForQuotation(customerId: string): Promise<string> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+  if (!customer) throw new Error("Customer not found");
+  let inquiry = await prisma.inquiry.findFirst({ where: { customerId }, orderBy: { createdAt: "desc" } });
+  if (!inquiry) {
+    inquiry = await prisma.inquiry.create({
+      data: { customerId, source: "OTHER", status: "DRAFTING", createdById: user.id },
+    });
+  }
+  return inquiry.id;
+}
+
 /**
  * Start a new quotation for a client from the profile. Quotations attach to an
  * inquiry, so the newest inquiry is reused (or a fresh one is created if the
  * client has none). A blank DRAFT quote is created on the default Fans and
  * Blowers template and the builder is opened so products can be added.
+ *
+ * Sales must attach the RFQ / BOQ first: the uploaded document is required and
+ * is filed against the inquiry's RFQ/BOQ slot (so it flows through to the
+ * quotation's Sale & payment documents).
  */
-export async function addQuotation(customerId: string) {
+export async function addQuotation(customerId: string, boqRfq: z.infer<typeof uploadedDocSchema>) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
+
+  const doc = uploadedDocSchema.parse(boqRfq);
+  if (!doc.path) throw new Error("Attach the RFQ / BOQ before adding a quotation.");
+  const saleDoc: SaleDoc = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt ?? new Date().toISOString() };
 
   const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
   if (!customer) throw new Error("Customer not found");
@@ -165,6 +201,10 @@ export async function addQuotation(customerId: string) {
       data: { customerId, source: "OTHER", status: "DRAFTING", createdById: user.id },
     });
   }
+
+  // File the uploaded RFQ / BOQ against the inquiry (append to its RFQ/BOQ slot).
+  const existingDocs = await getInquiryDocs(inquiry.id);
+  await setInquiryDocs(inquiry.id, { ...existingDocs, rfq_boq: [...(existingDocs.rfq_boq ?? []), saleDoc] });
 
   await ensureBuiltinTemplates();
   const templates = await prisma.quotationTemplate.findMany({
@@ -203,6 +243,50 @@ export async function addQuotation(customerId: string) {
 
   revalidatePath(`/customers/${customerId}`);
   redirect(`/quotations/${quotation.id}`);
+}
+
+/**
+ * Admin-only: permanently delete a quotation from a client's history (removes it
+ * from both the Order and Quotation history). Its line items cascade with it.
+ */
+export async function deleteCustomerQuotation(customerId: string, quotationId: string) {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Only an admin can delete a quotation.");
+  const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { id: true } });
+  if (!quote) throw new Error("Quotation not found.");
+  await prisma.quotation.delete({ where: { id: quotationId } });
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/quotations");
+  revalidatePath("/orders");
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Admin-only: remove a confirmed order — clears the sale record on the quotation
+ * so it reverts to a plain quotation (the quotation itself is kept). The inquiry
+ * returns to SENT.
+ */
+export async function clearCustomerOrder(customerId: string, quotationId: string) {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Only an admin can remove an order.");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, inquiryId: true, classification: true },
+  });
+  if (!quote) throw new Error("Quotation not found.");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const { ...rest } = cls;
+  delete (rest as Record<string, unknown>).sale;
+  await prisma.$transaction([
+    prisma.quotation.update({
+      where: { id: quotationId },
+      data: { classification: rest as unknown as Prisma.InputJsonObject },
+    }),
+    prisma.inquiry.update({ where: { id: quote.inquiryId }, data: { status: "SENT" } }),
+  ]);
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/orders");
+  revalidatePath("/dashboard");
 }
 
 /**
