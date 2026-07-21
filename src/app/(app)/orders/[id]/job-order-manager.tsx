@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { issueJobOrders, advanceJobOrder, receiveJobOrders, setJobOrderDue } from "../actions";
+import { receiveJobOrders, setJobOrderDue } from "../actions";
 
 interface JobRow {
   key: string;
@@ -59,18 +59,15 @@ export function JobOrderManager({
   stage,
   canIssue,
   canReceive,
-  allDepts,
   jobs,
 }: {
   orderId: string;
   stage: string;
   canIssue: boolean;
   canReceive: boolean;
-  allDepts: { key: string; label: string }[];
   jobs: JobRow[];
 }) {
   const router = useRouter();
-  const [sel, setSel] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -87,48 +84,18 @@ export function JobOrderManager({
     }
   }
 
-  // Phase 2 — issuance (order released, not yet in production).
-  if (stage === "released") {
-    if (!canIssue) {
-      return <p className="text-sm text-muted-foreground">Awaiting the Technical Head to issue job orders.</p>;
-    }
-    return (
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">Select the departments relevant to this order:</p>
-        <div className="flex flex-wrap gap-2">
-          {allDepts.map((d) => {
-            const on = sel.has(d.key);
-            return (
-              <button
-                key={d.key}
-                type="button"
-                onClick={() => {
-                  const next = new Set(sel);
-                  if (on) next.delete(d.key); else next.add(d.key);
-                  setSel(next);
-                }}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"}`}
-              >
-                {d.label}
-              </button>
-            );
-          })}
-        </div>
-        <Button
-          size="sm"
-          disabled={busy || sel.size === 0}
-          onClick={() => run(() => issueJobOrders(orderId, Array.from(sel)))}
-        >
-          {busy ? "Issuing…" : `Issue job orders${sel.size ? ` (${sel.size})` : ""}`}
-        </Button>
-        {err && <p className="text-xs text-destructive">{err}</p>}
-      </div>
-    );
-  }
-
-  // Phase 4 — production tracking.
+  // Overview: the Plant Manager's "Receive" step + a read-only status summary of
+  // the issued departments. Issuing and Start production / Mark finished are done
+  // per department on each job-order panel below.
   return (
     <div className="space-y-2">
+      {stage === "released" && jobs.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          {canIssue
+            ? "Issue each department's job order from its section below."
+            : "Awaiting the departments' job orders to be issued."}
+        </p>
+      )}
       {/* JO released → the Plant Manager must receive the JO before production. */}
       {stage === "in_production" && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
@@ -143,7 +110,6 @@ export function JobOrderManager({
           )}
         </div>
       )}
-      {jobs.length === 0 && <p className="text-sm text-muted-foreground">No job orders on this order.</p>}
       {jobs.map((j) => {
         const chip = deadlineChip(j.dueAt, j.status);
         return (
@@ -176,12 +142,6 @@ export function JobOrderManager({
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={STATUS_VARIANT[j.status]}>{STATUS_LABEL[j.status]}</Badge>
-            {j.canAdvance && j.nextTo && (
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy}
-                onClick={() => run(() => advanceJobOrder(orderId, j.key, j.nextTo!))}>
-                {busy ? "Saving…" : j.nextLabel}
-              </Button>
-            )}
           </div>
         </div>
         );

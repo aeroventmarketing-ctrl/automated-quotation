@@ -20,6 +20,7 @@ import {
   stagePhase,
   pendingStep,
   type OrderStage,
+  type ProductionDeptKey,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
@@ -31,6 +32,7 @@ import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-vi
 import { saleFromClassification, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
+import { DeptProductionControls } from "./dept-production-controls";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
 import { DuctJobOrderPanel } from "./duct-job-order-panel";
 import { formatDuctJoNumber } from "@/lib/duct-job-order";
@@ -178,7 +180,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     : [];
 
   const canIssue =
-    wf.stage === "released" &&
+    ["released", "in_production", "jo_received", "producing"].includes(wf.stage) &&
     (adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey)));
 
   // The Plant Manager receives the released job orders before production begins.
@@ -198,6 +200,22 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // can no longer be added once the order is In Production (or later).
   const canManageJO = adminViewer || viewer?.role === "ENGINEER";
   const inProductionOrLater = stageIndex(wf.stage) >= stageIndex("producing");
+
+  // Per-department production controls (Issue / Start production / Mark finished),
+  // shown on each department's job-order panel.
+  const deptCtrl = (deptKey: ProductionDeptKey) => {
+    const jo = wf.jobOrders[deptKey];
+    const status = jo?.status ?? null;
+    const nextTo: "in_production" | "finished" | null =
+      status === "issued" ? "in_production" : status === "in_production" ? "finished" : null;
+    const nextLabel = nextTo === "in_production" ? "Start production" : nextTo === "finished" ? "Mark finished" : null;
+    const canAdvance =
+      nextTo != null &&
+      (wf.stage === "jo_received" || wf.stage === "producing") &&
+      (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(deptKey) as WorkflowRoleKey)));
+    const awaitingReceive = status === "issued" && wf.stage === "in_production";
+    return { status, canIssue, canAdvance, nextTo, nextLabel, awaitingReceive };
+  };
 
   const jobs = PRODUCTION_DEPTS.filter((d) => wf.jobOrders[d.key]).map((d) => {
     const jo = wf.jobOrders[d.key]!;
@@ -495,11 +513,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 stage={wf.stage}
                 canIssue={canIssue}
                 canReceive={canReceive}
-                allDepts={PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))}
                 jobs={jobs}
               />
               <div className="border-t pt-3">
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">Fans &amp; Blowers job order (Engineer)</div>
+                <DeptProductionControls orderId={quote.id} deptKey="fans" {...deptCtrl("fans")} />
                 <FansJobOrderPanel
                   orderId={quote.id}
                   jobOrders={wf.fansJobOrders}
@@ -511,6 +529,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               </div>
               <div className="border-t pt-3">
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">Duct job order (Engineer)</div>
+                <DeptProductionControls orderId={quote.id} deptKey="duct" {...deptCtrl("duct")} />
                 <DuctJobOrderPanel
                   orderId={quote.id}
                   jobOrders={wf.ductJobOrders}
@@ -522,6 +541,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               </div>
               <div className="border-t pt-3">
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">Accessories job order (Engineer)</div>
+                <DeptProductionControls orderId={quote.id} deptKey="accessories" {...deptCtrl("accessories")} />
                 <AccessoriesJobOrderPanel
                   orderId={quote.id}
                   jobOrders={wf.accessoriesJobOrders}
@@ -533,6 +553,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               </div>
               <div className="border-t pt-3">
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">Motor controller job order (Engineer)</div>
+                <DeptProductionControls orderId={quote.id} deptKey="motor" {...deptCtrl("motor")} />
                 <MotorControllerJobOrderPanel
                   orderId={quote.id}
                   jobOrders={wf.motorJobOrders}

@@ -140,13 +140,24 @@ export async function issueJobOrders(quotationId: string, deptKeys: string[]): P
   if (depts.length === 0) throw new Error("Select at least one department.");
 
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "released") throw new Error("Job orders can only be issued once the order is released.");
+  // Departments can be issued at the "released" stage and topped up while
+  // production is underway, so each department's job order is issued from its own
+  // panel when its production head is ready.
+  const issuableStages = new Set(["released", "in_production", "jo_received", "producing"]);
+  if (!issuableStages.has(wf.stage)) throw new Error("Job orders can only be issued during Phase 2 (before production is finished).");
 
   const now = new Date().toISOString();
   const jobOrders = { ...wf.jobOrders };
-  for (const d of depts) jobOrders[d] = { status: "issued", issuedAt: now, issuedByName: user.name };
+  // Only issue departments that don't already have a job order — never disturb one
+  // that's already in production.
+  const added = depts.filter((d) => !jobOrders[d]);
+  if (added.length === 0) throw new Error("That department already has a job order.");
+  for (const d of added) jobOrders[d] = { status: "issued", issuedAt: now, issuedByName: user.name };
 
-  await saveWorkflow(quotationId, cls, { ...wf, stage: "in_production", jobOrders });
+  // The first issuance releases the order into production; later top-ups keep the
+  // current stage so departments already in production aren't reset.
+  const stage = wf.stage === "released" ? "in_production" : wf.stage;
+  await saveWorkflow(quotationId, cls, { ...wf, stage, jobOrders });
 }
 
 /**
