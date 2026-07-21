@@ -57,6 +57,9 @@ export function PurchaseOrderPanel({
     setCompany(s.company);
     setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
     if (s.address) setAddress(s.address);
+    // Auto-set the EWT toggle from the supplier's EWT-capable flag.
+    setWithEwt(s.ewt);
+    if (s.ewt && !(Number(ewtPct) > 0)) setEwtPct("1");
     setSupplierOpen(false);
     setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
   }

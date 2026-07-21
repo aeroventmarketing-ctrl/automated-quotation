@@ -21,6 +21,7 @@ export interface Supplier {
   zip: string; // ZIP Code (for BIR 2307)
   bankName: string; // Bank Name
   accountNumber: string; // Account Number
+  ewt: boolean; // EWT capable — issuing a PO to this supplier defaults to "with EWT"
 }
 
 /** The columns used for the import/export template (order matters). */
@@ -34,9 +35,24 @@ export const SUPPLIER_COLUMNS = [
   { key: "zip", label: "ZIP Code" },
   { key: "bankName", label: "Bank Name" },
   { key: "accountNumber", label: "Account Number" },
+  { key: "ewt", label: "EWT Capable (yes/no)" },
 ] as const;
 
 const norm = (s: string) => s.trim().toLowerCase();
+
+/**
+ * Parse a raw EWT value (boolean or a yes/no-ish string) into a tri-state:
+ * true / false / undefined (undefined = not specified, so callers can preserve
+ * an existing value on a partial import).
+ */
+export function parseEwt(v: unknown): boolean | undefined {
+  if (typeof v === "boolean") return v;
+  const s = String(v ?? "").trim().toLowerCase();
+  if (!s) return undefined;
+  if (["yes", "y", "true", "1", "with ewt", "with", "ewt", "ewt capable", "capable"].includes(s)) return true;
+  if (["no", "n", "false", "0", "without ewt", "without", "non-ewt", "not capable", "none"].includes(s)) return false;
+  return undefined;
+}
 
 /** Coerce one raw record into a Supplier (tolerates the legacy attention/address shape). */
 function coerceOne(r: unknown): Supplier | null {
@@ -57,6 +73,7 @@ function coerceOne(r: unknown): Supplier | null {
     // Legacy records stored the combined "paymentDetails" — carry it into Bank Name.
     bankName: String(o.bankName ?? o.paymentDetails ?? "").trim(),
     accountNumber: String(o.accountNumber ?? "").trim(),
+    ewt: parseEwt(o.ewt) ?? false,
   };
 }
 
@@ -95,6 +112,7 @@ export interface SupplierInput {
   zip?: string;
   bankName?: string;
   accountNumber?: string;
+  ewt?: boolean;
 }
 
 function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
@@ -108,6 +126,7 @@ function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
     zip: (input.zip ?? "").trim(),
     bankName: (input.bankName ?? "").trim(),
     accountNumber: (input.accountNumber ?? "").trim(),
+    ewt: input.ewt ?? false,
   };
 }
 
@@ -176,6 +195,8 @@ export async function bulkUpsertSuppliers(rows: SupplierInput[]): Promise<BulkRe
         zip: d.zip || list[idx].zip,
         bankName: d.bankName || list[idx].bankName,
         accountNumber: d.accountNumber || list[idx].accountNumber,
+        // Boolean: preserve the existing flag when the import didn't specify one.
+        ewt: raw.ewt ?? list[idx].ewt,
       };
       updated++;
     } else {
@@ -209,6 +230,7 @@ export async function rememberSupplier(input: { company: string; attention?: str
     zip: "",
     bankName: "",
     accountNumber: "",
+    ewt: false,
   });
   await writeSuppliers(list);
 }

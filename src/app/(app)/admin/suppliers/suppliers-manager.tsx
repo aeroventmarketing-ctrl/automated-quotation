@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SUPPLIER_COLUMNS, type Supplier, type BulkResult } from "@/lib/suppliers";
+import { SUPPLIER_COLUMNS, parseEwt, type Supplier, type BulkResult } from "@/lib/suppliers";
 
 type SaveFn = (input: {
   id?: string;
@@ -16,16 +16,18 @@ type SaveFn = (input: {
   zip: string;
   bankName: string;
   accountNumber: string;
+  ewt: boolean;
 }) => Promise<Supplier[]>;
 type DeleteFn = (id: string) => Promise<Supplier[]>;
-type BulkFn = (input: { rows: Array<Omit<Supplier, "id">> }) => Promise<BulkResult>;
+type BulkFn = (input: { rows: Array<Omit<Supplier, "id" | "ewt"> & { ewt?: boolean }> }) => Promise<BulkResult>;
 
 type Fields = Omit<Supplier, "id">;
-const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", tin: "", zip: "", bankName: "", accountNumber: "" };
+type StrField = Exclude<keyof Fields, "ewt">;
+const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", tin: "", zip: "", bankName: "", accountNumber: "", ewt: false };
 const HEADERS = SUPPLIER_COLUMNS.map((c) => c.label);
 
 const nk = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-const ALIASES: Record<keyof Fields, string[]> = {
+const ALIASES: Record<StrField, string[]> = {
   company: ["company name", "company", "supplier", "supplier name"],
   contactPerson: ["contact person", "contact", "attention", "person", "contact name"],
   contactNumber: ["contact number", "contact no", "number", "phone", "mobile", "telephone", "tel"],
@@ -36,21 +38,26 @@ const ALIASES: Record<keyof Fields, string[]> = {
   bankName: ["bank name", "bank", "bank details", "bank name and account number", "payment details"],
   accountNumber: ["account number", "account no", "account #", "acct number", "acct no", "account"],
 };
+const EWT_ALIASES = ["ewt capable (yes/no)", "ewt capable", "ewt", "ewt capable?", "with ewt", "ewt?"];
 
 function csvEscape(v: string) {
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
 /** Map a header row to field → column index, using aliases (exact then contains). */
-function mapHeaders(headers: string[]): Partial<Record<keyof Fields, number>> {
+function mapHeaders(headers: string[]): Partial<Record<StrField, number>> & { ewt?: number } {
   const H = headers.map(nk);
-  const map: Partial<Record<keyof Fields, number>> = {};
-  for (const field of Object.keys(ALIASES) as (keyof Fields)[]) {
+  const map: Partial<Record<StrField, number>> & { ewt?: number } = {};
+  for (const field of Object.keys(ALIASES) as StrField[]) {
     const aliases = ALIASES[field];
     let idx = H.findIndex((h) => aliases.includes(h));
     if (idx < 0) idx = H.findIndex((h) => aliases.some((a) => h.includes(a)));
     if (idx >= 0) map[field] = idx;
   }
+  // EWT column (exact match first, then contains "ewt").
+  let ei = H.findIndex((h) => EWT_ALIASES.includes(h));
+  if (ei < 0) ei = H.findIndex((h) => h.includes("ewt"));
+  if (ei >= 0) map.ewt = ei;
   return map;
 }
 
@@ -98,8 +105,10 @@ export function SuppliersManager({
     URL.revokeObjectURL(url);
   }
 
+  const ewtText = (b: boolean) => (b ? "yes" : "no");
+
   function downloadCsv() {
-    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber])];
+    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt)])];
     const csv = rows.map((r) => r.map((c) => csvEscape(c ?? "")).join(",")).join("\r\n");
     download("suppliers-template.csv", new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
   }
@@ -113,7 +122,7 @@ export function SuppliersManager({
       const ws = wb.addWorksheet("Suppliers");
       ws.addRow(HEADERS);
       ws.getRow(1).font = { bold: true };
-      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber]));
+      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt)]));
       ws.columns.forEach((c) => (c.width = 28));
       const buf = await wb.xlsx.writeBuffer();
       download("suppliers-template.xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -157,7 +166,7 @@ export function SuppliersManager({
       if (nonEmpty.length < 2) throw new Error("The file has no data rows.");
       const cols = mapHeaders(nonEmpty[0]);
       if (cols.company === undefined) throw new Error("Couldn't find a 'Company Name' column. Use the downloaded template.");
-      const get = (r: string[], f: keyof Fields) => (cols[f] !== undefined ? (r[cols[f]!] ?? "").trim() : "");
+      const get = (r: string[], f: StrField) => (cols[f] !== undefined ? (r[cols[f]!] ?? "").trim() : "");
       const data = nonEmpty.slice(1).map((r) => ({
         company: get(r, "company"),
         contactPerson: get(r, "contactPerson"),
@@ -168,6 +177,7 @@ export function SuppliersManager({
         zip: get(r, "zip"),
         bankName: get(r, "bankName"),
         accountNumber: get(r, "accountNumber"),
+        ewt: cols.ewt !== undefined ? parseEwt(r[cols.ewt]) : undefined,
       }));
       const result = await onBulkImport({ rows: data });
       setList(result.list);
@@ -213,6 +223,10 @@ export function SuppliersManager({
           <Input className="h-8" placeholder="ZIP Code" value={add.zip} onChange={(e) => setAdd({ ...add, zip: e.target.value })} />
           <Input className="h-8" placeholder="Bank Name" value={add.bankName} onChange={(e) => setAdd({ ...add, bankName: e.target.value })} />
           <Input className="h-8" placeholder="Account Number" value={add.accountNumber} onChange={(e) => setAdd({ ...add, accountNumber: e.target.value })} />
+          <label className="flex h-8 items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4" checked={add.ewt} onChange={(e) => setAdd({ ...add, ewt: e.target.checked })} />
+            EWT capable
+          </label>
         </div>
         <Button size="sm" className="h-8" disabled={busy || !add.company.trim()} onClick={() => run(() => onSave(add), () => setAdd(blank))}>
           {busy ? "Saving…" : "Add supplier"}
@@ -236,6 +250,7 @@ export function SuppliersManager({
                 <th className="py-2 px-3 font-medium">ZIP</th>
                 <th className="py-2 px-3 font-medium">Bank Name</th>
                 <th className="py-2 px-3 font-medium">Account Number</th>
+                <th className="py-2 px-3 font-medium">EWT</th>
                 <th className="py-2 px-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -252,6 +267,7 @@ export function SuppliersManager({
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.zip} onChange={(e) => setEdit({ ...edit, zip: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.bankName} onChange={(e) => setEdit({ ...edit, bankName: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.accountNumber} onChange={(e) => setEdit({ ...edit, accountNumber: e.target.value })} /></td>
+                    <td className="py-1.5 px-2 text-center"><input type="checkbox" className="h-4 w-4" checked={edit.ewt} onChange={(e) => setEdit({ ...edit, ewt: e.target.checked })} /></td>
                     <td className="py-1.5 px-3">
                       <div className="flex justify-end gap-1.5">
                         <Button size="sm" className="h-7 text-xs" disabled={busy || !edit.company.trim()} onClick={() => run(() => onSave({ id: s.id, ...edit }), () => setEditId(null))}>Save</Button>
@@ -271,8 +287,13 @@ export function SuppliersManager({
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.bankName)}</td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.accountNumber)}</td>
                     <td className="py-2 px-3">
+                      {s.ewt
+                        ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700">EWT</span>
+                        : <span className="text-xs text-muted-foreground">No</span>}
+                    </td>
+                    <td className="py-2 px-3">
                       <div className="flex justify-end gap-1.5">
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, tin: s.tin, zip: s.zip, bankName: s.bankName, accountNumber: s.accountNumber }); }}>Edit</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, tin: s.tin, zip: s.zip, bankName: s.bankName, accountNumber: s.accountNumber, ewt: s.ewt }); }}>Edit</Button>
                         <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={() => run(() => onDelete(s.id))}>Remove</Button>
                       </div>
                     </td>

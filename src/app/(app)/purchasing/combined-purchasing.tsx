@@ -462,7 +462,9 @@ function CombineForm({
   // Pre-fill line prices from the catalogue for the chosen supplier.
   const seededLines = withCatalogPrices(initialLines.length ? initialLines : [{ description: "", qty: "", unit: "", unitPrice: "" }], presetCompany, catalogPrices);
   const [lines, setLines] = useState<POLine[]>(seededLines);
-  const [withEwt, setWithEwt] = useState((initialEwtPct ?? 1) > 0);
+  // EWT default: an existing PO uses its stored % ; a fresh PO follows the preset
+  // supplier's EWT-capable flag (falling back to "with EWT").
+  const [withEwt, setWithEwt] = useState(initialEwtPct != null ? initialEwtPct > 0 : preset?.ewt ?? true);
   const [ewtPct, setEwtPct] = useState(String(initialEwtPct && initialEwtPct > 0 ? initialEwtPct : 1));
   const [remarks, setRemarks] = useState(initialRemarks ?? poDefaultRemarks);
   const [busy, setBusy] = useState(false);
@@ -484,6 +486,9 @@ function CombineForm({
     setCompany(s.company);
     setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
     if (s.address) setAddress(s.address);
+    // Auto-set the EWT toggle from the supplier's EWT-capable flag.
+    setWithEwt(s.ewt);
+    if (s.ewt && !(Number(ewtPct) > 0)) setEwtPct("1");
     setSupplierOpen(false);
     setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
   }
