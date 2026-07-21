@@ -513,20 +513,44 @@ export async function setCashNextNo(input: z.infer<typeof cashNextSchema>): Prom
   return d.next;
 }
 
-// --- Fans & Blowers Job Order numbering -------------------------------------
-const JO_COUNTER_KEY = "jo_counter";
+// --- Job Order numbering (per department) -----------------------------------
+// Each department keeps its own running base sequence in an AppSetting keyed
+// { last: <lastValue> }; the next number is last + 1. Setting "next" stores
+// last = next - 1.
 const joNextSchema = z.object({ next: z.number().int().min(1) });
-/** Set the next Job Order base sequence number (stored as last = next - 1). */
-export async function setJoNextNo(input: z.infer<typeof joNextSchema>): Promise<number> {
-  await assertAdmin();
-  const d = joNextSchema.parse(input);
+
+async function setJoCounter(key: string, next: number): Promise<number> {
   await prisma.appSetting.upsert({
-    where: { key: JO_COUNTER_KEY },
-    create: { key: JO_COUNTER_KEY, value: { last: d.next - 1 } },
-    update: { value: { last: d.next - 1 } },
+    where: { key },
+    create: { key, value: { last: next - 1 } },
+    update: { value: { last: next - 1 } },
   });
   revalidatePath("/admin");
-  return d.next;
+  return next;
+}
+
+/** Fans & Blowers Job Order (AFBM-JO…) next base sequence. */
+export async function setJoNextNo(input: z.infer<typeof joNextSchema>): Promise<number> {
+  await assertAdmin();
+  return setJoCounter("jo_counter", joNextSchema.parse(input).next);
+}
+
+/** Duct Job Order (DUCT-JO…) next base sequence. */
+export async function setDuctJoNextNo(input: z.infer<typeof joNextSchema>): Promise<number> {
+  await assertAdmin();
+  return setJoCounter("duct_jo_counter", joNextSchema.parse(input).next);
+}
+
+/** Accessories Job Order (ACCE-JO…) next base sequence. */
+export async function setAccJoNextNo(input: z.infer<typeof joNextSchema>): Promise<number> {
+  await assertAdmin();
+  return setJoCounter("acc_jo_counter", joNextSchema.parse(input).next);
+}
+
+/** Motor Controller Job Order (MC-JO…) next base sequence. */
+export async function setMcJoNextNo(input: z.infer<typeof joNextSchema>): Promise<number> {
+  await assertAdmin();
+  return setJoCounter("mc_jo_counter", joNextSchema.parse(input).next);
 }
 
 // --- Workflow (ERP) roles ---------------------------------------------------

@@ -17,7 +17,7 @@ import { JoNumberSetting } from "./jo-number-setting";
 import { CashNumberSetting } from "./cash-number-setting";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +44,16 @@ export default async function AdminOverviewPage() {
   const mrfNext = (Number((mrfRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
   const poRow = await prisma.appSetting.findUnique({ where: { key: "po_counter" } });
   const poNext = (Number((poRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
-  const joRow = await prisma.appSetting.findUnique({ where: { key: "jo_counter" } });
-  const joNext = (Number((joRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
+  const nextFromKey = async (key: string) => {
+    const row = await prisma.appSetting.findUnique({ where: { key } });
+    return (Number((row?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
+  };
+  const [joNext, ductJoNext, accJoNext, mcJoNext] = await Promise.all([
+    nextFromKey("jo_counter"),
+    nextFromKey("duct_jo_counter"),
+    nextFromKey("acc_jo_counter"),
+    nextFromKey("mc_jo_counter"),
+  ]);
   const cashRow = await prisma.appSetting.findUnique({ where: { key: "cash_request_counter" } });
   const cashNext = (Number((cashRow?.value as { n?: unknown } | null)?.n ?? 0) || 0) + 1;
   const [aiLimit, aiThisMonth] = await Promise.all([getAiUsageLimit(), currentMonthUsage()]);
@@ -168,6 +176,9 @@ export default async function AdminOverviewPage() {
       <MrfNumberSetting current={mrfNext} />
       <PoNumberSetting current={poNext} />
       <JoNumberSetting current={joNext} />
+      <JoNumberSetting current={ductJoNext} title="Job Order numbering (Duct)" prefix="DUCT-JO" onSave={setDuctJoNextNo} />
+      <JoNumberSetting current={accJoNext} title="Job Order numbering (Accessories)" prefix="ACCE-JO" onSave={setAccJoNextNo} />
+      <JoNumberSetting current={mcJoNext} title="Job Order numbering (Motor Controller)" prefix="MC-JO" onSave={setMcJoNextNo} />
       <CashNumberSetting current={cashNext} />
       <SpLockSetting
         title="Propeller Type static-pressure lock"
