@@ -515,7 +515,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 canReceive={canReceive}
                 jobs={jobs}
               />
-              <div className="border-t pt-3">
+              <div className="rounded-lg border bg-muted/50 p-3">
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">Fans &amp; Blowers job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="fans" {...deptCtrl("fans")} />
                 <FansJobOrderPanel
@@ -527,7 +527,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   canAdd={canManageJO && !inProductionOrLater}
                 />
               </div>
-              <div className="border-t pt-3">
+              <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">Duct job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="duct" {...deptCtrl("duct")} />
                 <DuctJobOrderPanel
@@ -539,7 +539,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   canAdd={canManageJO && !inProductionOrLater}
                 />
               </div>
-              <div className="border-t pt-3">
+              <div className="rounded-lg border bg-muted/50 p-3">
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">Accessories job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="accessories" {...deptCtrl("accessories")} />
                 <AccessoriesJobOrderPanel
@@ -551,7 +551,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   canAdd={canManageJO && !inProductionOrLater}
                 />
               </div>
-              <div className="border-t pt-3">
+              <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">Motor controller job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="motor" {...deptCtrl("motor")} />
                 <MotorControllerJobOrderPanel
