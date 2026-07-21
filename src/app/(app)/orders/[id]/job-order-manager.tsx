@@ -54,6 +54,20 @@ const STATUS_LABEL: Record<JobRow["status"], string> = {
   finished: "Finished",
 };
 
+// Per-department colours — must match the job-order section blocks on the page.
+const DEPT_BG: Record<string, string> = {
+  fans: "border-sky-300 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/30",
+  duct: "border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30",
+  accessories: "border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30",
+  motor: "border-violet-300 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/30",
+};
+const DEPT_TEXT: Record<string, string> = {
+  fans: "text-sky-800 dark:text-sky-300",
+  duct: "text-emerald-800 dark:text-emerald-300",
+  accessories: "text-amber-800 dark:text-amber-300",
+  motor: "text-violet-800 dark:text-violet-300",
+};
+
 export function JobOrderManager({
   orderId,
   stage,
@@ -113,10 +127,10 @@ export function JobOrderManager({
       {jobs.map((j) => {
         const chip = deadlineChip(j.dueAt, j.status);
         return (
-        <div key={j.key} className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3">
+        <div key={j.key} className={`flex flex-wrap items-start justify-between gap-3 rounded-md border p-3 ${DEPT_BG[j.key] ?? ""}`}>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">{j.label}</span>
+              <span className={`text-sm font-medium ${DEPT_TEXT[j.key] ?? ""}`}>{j.label}</span>
               {chip && <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${chip.cls}`}>{chip.text}</span>}
             </div>
             <div className="mt-0.5 space-y-0.5">
