@@ -5,7 +5,7 @@
  */
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
-import { formatAccessoryDimensions, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
+import { formatAccessoryDimensions, accessoriesJobRemarks, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
 
 const RED = "FFED1C24";
 const GREY = "FFF2F2F2";
@@ -137,7 +137,7 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
   r++;
   ws.mergeCells(`A${r}:${LAST}${r + 2}`);
   const note = ws.getCell(`A${r}`);
-  note.value = jo.note || "";
+  note.value = accessoriesJobRemarks(jo);
   note.font = { size: 10 };
   note.alignment = { horizontal: "left", vertical: "top", wrapText: true };
   note.border = allBorders;

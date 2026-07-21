@@ -42,6 +42,7 @@ export interface AccessoryLine {
   uom: string; // e.g. "pc"
   dimensions: AccessoryDimension[];
   material: string; // e.g. "Stainless Steel 304"
+  note: string; // per-product remarks
 }
 
 export interface AccessoriesJobOrder {
@@ -66,6 +67,7 @@ export const EMPTY_ACCESSORY_LINE: AccessoryLine = {
   // Rectangular / square accessories always carry two dimensions.
   dimensions: [{ value: "", label: "" }, { value: "", label: "" }],
   material: "",
+  note: "",
 };
 
 export const EMPTY_ACCESSORIES_JO: AccessoriesJobOrder = {
@@ -136,7 +138,17 @@ export function coerceAccessoryLine(value: unknown): AccessoryLine | null {
     uom: s("uom") || "pc",
     dimensions: twoDims,
     material: s("material"),
+    note: s("note"),
   };
+}
+
+/** Combined remarks for a JO — each product line's note (falls back to the
+ * legacy job-order-level note). Used for the order conversation log & print. */
+export function accessoriesJobRemarks(jo: AccessoriesJobOrder): string {
+  const lineNotes = jo.lines
+    .map((l, i) => (l.note.trim() ? `${i + 1}. ${l.note.trim()}` : ""))
+    .filter(Boolean);
+  return lineNotes.length ? lineNotes.join("\n") : jo.note.trim();
 }
 
 /** Defensively coerce raw JSON into an AccessoriesJobOrder. */

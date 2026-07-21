@@ -465,6 +465,7 @@ const accLineSchema = z.object({
   uom: z.string().trim().default(""),
   dimensions: z.array(accDimensionSchema).default([]),
   material: z.string().trim().default(""),
+  note: z.string().trim().default(""),
 });
 const accJoSchema = z.object({
   date: z.string().trim().default(""),
@@ -503,6 +504,7 @@ export async function saveAccessoriesJobOrder(
       uom: l.uom || "pc",
       dimensions: l.dimensions.filter((dim) => dim.value !== "" || dim.label !== ""),
       material: l.material,
+      note: l.note,
     }))
     .filter((l) => l.type !== "" || l.dimensions.length > 0);
 

@@ -278,17 +278,29 @@ function AccessoriesJobOrderForm({
 
             <div className="space-y-1">
               <span className="text-[10px] text-muted-foreground">Dimensions — two required (value &amp; label, e.g. &ldquo;450 mm&rdquo; / &ldquo;Horizontal Blade&rdquo;)</span>
-              {[0, 1].map((di) => {
-                const d = line.dimensions[di] ?? { value: "", label: "" };
-                return (
-                  <div key={di} className="flex items-center gap-1.5">
-                    <Input className="h-7 w-24 shrink-0 text-xs sm:w-32" value={d.value} placeholder="450 mm" onChange={(e) => setDim(i, di, { value: e.target.value })} />
-                    <span className="text-[10px] text-muted-foreground">-</span>
-                    <Input className="h-7 min-w-0 flex-1 text-xs" value={d.label} placeholder={di === 0 ? "Horizontal Blade" : "Neck size"} onChange={(e) => setDim(i, di, { label: e.target.value })} />
-                  </div>
-                );
-              })}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[0, 1].map((di) => {
+                  const d = line.dimensions[di] ?? { value: "", label: "" };
+                  return (
+                    <div key={di} className="flex items-center gap-1.5">
+                      <Input className="h-7 w-20 shrink-0 text-xs" value={d.value} placeholder="450 mm" onChange={(e) => setDim(i, di, { value: e.target.value })} />
+                      <span className="text-[10px] text-muted-foreground">-</span>
+                      <Input className="h-7 min-w-0 flex-1 text-xs" value={d.label} placeholder={di === 0 ? "Horizontal Blade" : "Neck size"} onChange={(e) => setDim(i, di, { label: e.target.value })} />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
+            <label className="block space-y-0.5">
+              <span className="text-[10px] text-muted-foreground">Note / Remarks</span>
+              <textarea
+                className="min-h-[38px] w-full rounded-md border bg-background px-2 py-1 text-xs"
+                value={line.note}
+                onChange={(e) => setLine(i, { note: e.target.value })}
+                placeholder="e.g. remarks for this product…"
+              />
+            </label>
 
             <p className="text-[11px] text-muted-foreground">{formatAccessoryLine(line)}</p>
           </div>
@@ -298,14 +310,7 @@ function AccessoriesJobOrderForm({
         </Button>
       </div>
 
-      <div className="text-xs font-semibold text-muted-foreground">Note / Remarks</div>
-      <textarea
-        className="min-h-[52px] w-full rounded-md border bg-background px-2 py-1.5 text-sm"
-        value={f.note}
-        onChange={(e) => set("note", e.target.value)}
-        placeholder="e.g. remarks from the client…"
-      />
-      <p className="text-[11px] text-muted-foreground">The note is printed on the job order and shown on the order for conversation &amp; remarks.</p>
+      <p className="text-[11px] text-muted-foreground">Each product&apos;s note is printed on the job order and shown on the order for conversation &amp; remarks.</p>
 
       <div className="text-xs font-semibold text-muted-foreground">Assignment</div>
       <label className="space-y-1 block">

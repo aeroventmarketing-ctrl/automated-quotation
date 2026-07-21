@@ -35,7 +35,7 @@ import { FansJobOrderPanel } from "./fans-job-order-panel";
 import { DuctJobOrderPanel } from "./duct-job-order-panel";
 import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { AccessoriesJobOrderPanel } from "./accessories-job-order-panel";
-import { formatAccessoriesJoNumber } from "@/lib/accessories-job-order";
+import { formatAccessoriesJoNumber, accessoriesJobRemarks } from "@/lib/accessories-job-order";
 import { MotorControllerJobOrderPanel } from "./motor-controller-job-order-panel";
 import { formatMotorControllerJoNumber } from "@/lib/motor-controller-job-order";
 import { ConversationLog } from "./conversation-log";
@@ -554,7 +554,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                     })),
                     ...wf.accessoriesJobOrders.map((a, i) => ({
                       label: wf.accJoBaseNo != null ? formatAccessoriesJoNumber(wf.accJoBaseNo, wf.accJoBaseYear ?? new Date().getFullYear(), i, wf.accessoriesJobOrders.length) : "Accessories JO",
-                      note: a.note.trim(),
+                      note: accessoriesJobRemarks(a).trim(),
                     })),
                     ...wf.motorJobOrders.map((m, i) => ({
                       label: wf.mcJoBaseNo != null ? formatMotorControllerJoNumber(wf.mcJoBaseNo, wf.mcJoBaseYear ?? new Date().getFullYear(), i, wf.motorJobOrders.length) : "Motor Controller JO",
