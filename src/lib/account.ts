@@ -39,6 +39,7 @@ export interface AccountData {
   history: AccountAssignment[]; // chronological; the open (endedAt=null) one is current
   conversations?: ConversationEntry[]; // logged follow-ups, chronological
   optOutFollowUp?: boolean; // when true, this client is skipped by automated follow-ups
+  terms?: boolean; // admin-set: a "terms" client — a PO alone can confirm the sale
 }
 
 /** The current sales in-charge (the open assignment), or null. */
@@ -58,11 +59,12 @@ function parseAccounts(config: unknown): Record<string, AccountData> {
     const rec = v as Record<string, unknown> | null;
     const hist = rec?.history;
     const convs = rec?.conversations;
-    if (Array.isArray(hist) || Array.isArray(convs) || rec?.optOutFollowUp != null) {
+    if (Array.isArray(hist) || Array.isArray(convs) || rec?.optOutFollowUp != null || rec?.terms != null) {
       out[cid] = {
         history: Array.isArray(hist) ? (hist as AccountAssignment[]) : [],
         conversations: Array.isArray(convs) ? (convs as ConversationEntry[]) : [],
         optOutFollowUp: rec?.optOutFollowUp === true,
+        terms: rec?.terms === true,
       };
     }
   }

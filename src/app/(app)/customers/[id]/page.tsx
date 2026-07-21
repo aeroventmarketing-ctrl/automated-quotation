@@ -20,6 +20,7 @@ import { TransferQuotation } from "./transfer-quotation";
 import { DeleteInquiry } from "./delete-inquiry";
 import { AddQuotation } from "./add-quotation";
 import { QuotationRowActions, OrderRowActions } from "./history-admin-actions";
+import { TermsToggle } from "./terms-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -209,18 +210,21 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
             {customer.notes && <div className="sm:col-span-2">{detail("Notes", customer.notes)}</div>}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader><CardTitle>Sales in-charge</CardTitle></CardHeader>
-          <CardContent>
-            <AccountPanel
-              customerId={customer.id}
-              currentOwnerName={ownerName}
-              history={historyEntries.map((h) => ({ name: h.name, startedAt: h.startedAt, endedAt: h.endedAt }))}
-              salespeople={salespeople}
-              canTransfer={canTransfer}
-            />
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <Card>
+            <CardHeader><CardTitle>Sales in-charge</CardTitle></CardHeader>
+            <CardContent>
+              <AccountPanel
+                customerId={customer.id}
+                currentOwnerName={ownerName}
+                history={historyEntries.map((h) => ({ name: h.name, startedAt: h.startedAt, endedAt: h.endedAt }))}
+                salespeople={salespeople}
+                canTransfer={canTransfer}
+              />
+            </CardContent>
+          </Card>
+          {admin && <TermsToggle customerId={customer.id} terms={accountData?.terms === true} />}
+        </div>
       </div>
 
       {/* Order history (confirmed sales) */}

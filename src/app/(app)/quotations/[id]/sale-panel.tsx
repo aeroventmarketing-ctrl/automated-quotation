@@ -42,6 +42,7 @@ export function SalePanel({
   initialSale,
   canEdit,
   canClear = false,
+  clientTerms = false,
   vatInclusive = true,
 }: {
   quotationId: string;
@@ -52,11 +53,18 @@ export function SalePanel({
   canEdit: boolean;
   /** Accounting or admin — may Clear the sale. */
   canClear?: boolean;
+  /** The client is on terms (admin-set): a PO alone confirms the sale and the
+   * document/payment gate on "Save sale" is relaxed to the PO only. */
+  clientTerms?: boolean;
   /** VAT-inclusive shows Sales Invoice + BIR 2307; exclusive hides them. */
   vatInclusive?: boolean;
 }) {
   const router = useRouter();
-  const [arrangement, setArrangement] = useState<SaleArrangement>(initialSale?.arrangement ?? "downpayment_full");
+  // A terms client is locked to the "Terms (PO)" arrangement so the PO alone
+  // confirms the sale everywhere it's read (isSaleConfirmed).
+  const [arrangement, setArrangement] = useState<SaleArrangement>(
+    clientTerms ? "terms" : initialSale?.arrangement ?? "downpayment_full",
+  );
   const [po, setPo] = useState<SaleDoc | null>(initialSale?.po ?? null);
   const [payments, setPayments] = useState<SalePayment[]>(initialSale?.payments ?? []);
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialSale?.docs ?? {});
@@ -73,22 +81,22 @@ export function SalePanel({
   // recorded — down payments and progress billings keep it highlighted.
   const paymentImportant = !payments.some((p) => p.kind === "full");
 
-  // "Save sale" unlocks only once the core sale documents are attached and a
-  // qualifying payment is recorded: PO + Computation + Quotation + RFQ/BOQ, plus
-  // a down or full payment (terms deals confirm on the PO alone, so no payment is
-  // required there). The Computation slot is satisfied by a computation OR the
-  // seeded inquiry-form file.
+  // "Save sale" gate. A TERMS client (admin-set) confirms on the Purchase Order
+  // alone. A regular client must attach the core documents — PO + Computation +
+  // Quotation + RFQ/BOQ — plus record a down or full payment. The Computation
+  // slot is satisfied by a computation OR the seeded inquiry-form file.
   const hasComputation = (docs.computation?.length ?? 0) > 0 || (docs.inquiry_form?.length ?? 0) > 0;
   const hasQuotationDoc = (docs.quotation?.length ?? 0) > 0;
   const hasRfqDoc = (docs.rfq_boq?.length ?? 0) > 0;
   const hasQualifyingPayment = payments.some((p) => (p.kind === "down" || p.kind === "full") && Number(p.amount) > 0);
-  const paymentOk = arrangement === "terms" || hasQualifyingPayment;
   const missingToSave: string[] = [];
   if (!po) missingToSave.push("Purchase Order");
-  if (!hasComputation) missingToSave.push("Computation");
-  if (!hasQuotationDoc) missingToSave.push("Quotation");
-  if (!hasRfqDoc) missingToSave.push("RFQ / BOQ");
-  if (!paymentOk) missingToSave.push("a down or full payment");
+  if (!clientTerms) {
+    if (!hasComputation) missingToSave.push("Computation");
+    if (!hasQuotationDoc) missingToSave.push("Quotation");
+    if (!hasRfqDoc) missingToSave.push("RFQ / BOQ");
+    if (!hasQualifyingPayment) missingToSave.push("a down or full payment");
+  }
   // Once a sale is already confirmed, saving stays open so the remaining
   // documents (Sales Invoice, OR/CR/AF, …) can be added anytime; the gate only
   // governs confirming a new sale.
@@ -230,9 +238,10 @@ export function SalePanel({
         <div className="grid gap-3 md:grid-cols-3">
           <div className="space-y-1">
             <Label className="text-xs">Payment arrangement</Label>
-            <Select value={arrangement} disabled={!canEdit} onChange={(e) => setArrangement(e.target.value as SaleArrangement)}>
+            <Select value={arrangement} disabled={!canEdit || clientTerms} onChange={(e) => setArrangement(e.target.value as SaleArrangement)}>
               {ARRANGEMENTS.map((a) => (<option key={a} value={a}>{ARRANGEMENT_LABEL[a]}</option>))}
             </Select>
+            {clientTerms && <p className="text-[11px] text-muted-foreground">Terms client — a PO alone confirms the sale.</p>}
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Deal value</Label>

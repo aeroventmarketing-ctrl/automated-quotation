@@ -2602,6 +2602,7 @@ export function QuotationBuilder({
   isAdmin = false,
   isPreparer = false,
   canClearSale = false,
+  clientTerms = false,
   orderInProduction = false,
   hasOrderWorkflow = false,
   revisionHistory = [],
@@ -2615,6 +2616,8 @@ export function QuotationBuilder({
   isAdmin?: boolean;
   isPreparer?: boolean;
   canClearSale?: boolean;
+  /** The client is on terms (admin-set) — a PO alone can confirm the sale. */
+  clientTerms?: boolean;
   /** The order tied to this quote is in production (or later) — revise is admin-only. */
   orderInProduction?: boolean;
   /** The quote is won/closed — show a link to its order workflow. */
@@ -5950,6 +5953,7 @@ export function QuotationBuilder({
           initialSale={quotation.sale}
           canEdit={(isPreparer || isAdmin) && quotation.status !== "DRAFT" && quotation.status !== "PENDING_APPROVAL"}
           canClear={canClearSale}
+          clientTerms={clientTerms}
           vatInclusive={quotation.vatMode === "INCLUSIVE"}
         />
       )}

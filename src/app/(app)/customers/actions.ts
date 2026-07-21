@@ -399,6 +399,24 @@ export async function setFollowUpOptOut(customerId: string, optOut: boolean): Pr
   return optOut;
 }
 
+/**
+ * Admin-only: mark a client as a "terms" client (or clear it). A terms client
+ * can confirm a sale — and enable "Save sale" — with only the Purchase Order
+ * attached; a regular client must submit all core documents first. The flag
+ * rides in the account registry (no schema change).
+ */
+export async function setCustomerTerms(customerId: string, terms: boolean): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Only an admin can change a client's terms setting.");
+  const accounts = await getAccountsRegistry();
+  const data: AccountData = accounts[customerId] ?? { history: [], conversations: [] };
+  data.terms = terms;
+  accounts[customerId] = data;
+  await saveAccountsRegistry(accounts);
+  revalidatePath(`/customers/${customerId}`);
+  return terms;
+}
+
 /** Remove a logged conversation. The person who logged it, or an admin, may delete it. */
 export async function deleteConversation(customerId: string, conversationId: string) {
   const user = await getCurrentUser();

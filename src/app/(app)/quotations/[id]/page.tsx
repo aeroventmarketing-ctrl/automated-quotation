@@ -9,6 +9,7 @@ import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { readPricing } from "@/lib/quote";
+import { getAccountData } from "@/lib/account";
 import { DuplicateToClient } from "./duplicate-to-client";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const assignments = await getWorkflowRoles();
   const canClearSale = !!user && (isAdmin(user) || userHasWorkflowRole(assignments, user.id, "accounting"));
 
+  // A "terms" client (admin-set) can confirm a sale on the PO alone.
+  const clientTerms = (await getAccountData(quotation.inquiry.customerId))?.terms === true;
+
   const catalog = Object.fromEntries(
     catItems.map((i) => [
       i.id,
@@ -84,6 +88,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       isAdmin={isAdmin(user)}
       isPreparer={!!user && user.id === quotation.preparedById}
       canClearSale={canClearSale}
+      clientTerms={clientTerms}
       orderInProduction={stageIndex(readOrderWorkflow(quotation.classification).stage) >= stageIndex("producing")}
       hasOrderWorkflow={quotation.inquiry.status === "WON" && isSaleConfirmed(saleFromClassification(quotation.classification))}
       propellerSpLock={propellerSpLock}
