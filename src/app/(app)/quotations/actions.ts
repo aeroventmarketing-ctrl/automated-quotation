@@ -32,7 +32,8 @@ const createSchema = z.object({
   vatMode: z.enum(["INCLUSIVE", "EXCLUSIVE", "EXCLUSIVE_PLUS"]).default("INCLUSIVE"),
   discountPct: z.number().min(0).max(100).default(0),
   headerUnits: z.record(z.string()).optional(),
-  lines: z.array(lineSchema).min(1),
+  // Lines are optional — a draft can be created empty and built in the editor.
+  lines: z.array(lineSchema).default([]),
 });
 
 /** Create a DRAFT quotation from chosen inquiry items. Pricing is deterministic. */

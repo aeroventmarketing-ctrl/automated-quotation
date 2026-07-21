@@ -236,10 +236,6 @@ export function InquiryWorkspace({
         };
       });
 
-    if (lines.length === 0) {
-      setCreateError("Include at least one item to create the quotation.");
-      return;
-    }
     // Block low-confidence selections that an engineer hasn't confirmed.
     const unconfirmed = items.filter((it) => {
       const s = stateOf(it);
