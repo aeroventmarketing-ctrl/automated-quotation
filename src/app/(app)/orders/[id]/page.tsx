@@ -36,6 +36,8 @@ import { DuctJobOrderPanel } from "./duct-job-order-panel";
 import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { AccessoriesJobOrderPanel } from "./accessories-job-order-panel";
 import { formatAccessoriesJoNumber } from "@/lib/accessories-job-order";
+import { MotorControllerJobOrderPanel } from "./motor-controller-job-order-panel";
+import { formatMotorControllerJoNumber } from "@/lib/motor-controller-job-order";
 import { ConversationLog } from "./conversation-log";
 import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
@@ -530,6 +532,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 />
               </div>
               <div className="border-t pt-3">
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">Motor controller job order (Engineer)</div>
+                <MotorControllerJobOrderPanel
+                  orderId={quote.id}
+                  jobOrders={wf.motorJobOrders}
+                  baseNo={wf.mcJoBaseNo}
+                  baseYear={wf.mcJoBaseYear}
+                  canManage={canManageJO}
+                  canAdd={canManageJO && !inProductionOrLater}
+                />
+              </div>
+              <div className="border-t pt-3">
                 <ConversationLog
                   orderId={quote.id}
                   conversations={wf.conversations}
@@ -542,6 +555,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                     ...wf.accessoriesJobOrders.map((a, i) => ({
                       label: wf.accJoBaseNo != null ? formatAccessoriesJoNumber(wf.accJoBaseNo, wf.accJoBaseYear ?? new Date().getFullYear(), i, wf.accessoriesJobOrders.length) : "Accessories JO",
                       note: a.note.trim(),
+                    })),
+                    ...wf.motorJobOrders.map((m, i) => ({
+                      label: wf.mcJoBaseNo != null ? formatMotorControllerJoNumber(wf.mcJoBaseNo, wf.mcJoBaseYear ?? new Date().getFullYear(), i, wf.motorJobOrders.length) : "Motor Controller JO",
+                      note: m.note.trim(),
                     })),
                   ].filter((r) => r.note !== "")}
                 />

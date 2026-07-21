@@ -47,6 +47,7 @@ import { applyStockChange } from "@/lib/inventory";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, isReducingDuctType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine } from "@/lib/accessories-job-order";
+import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
 
 interface StockMatch { stockItemId: string; qty: number }
 
@@ -526,6 +527,95 @@ export async function deleteAccessoriesJobOrder(quotationId: string, index: numb
   const { cls, wf } = await loadWorkflow(quotationId);
   const list = wf.accessoriesJobOrders.filter((_, i) => i !== index);
   await saveWorkflow(quotationId, cls, { ...wf, accessoriesJobOrders: list });
+}
+
+// --- Motor Controller Job Orders (Engineer) -------------------------------
+
+/** Next running Motor Controller JO base sequence (claimed once per order). */
+async function nextMcJoBaseNo(): Promise<number> {
+  const KEY = "mc_jo_counter";
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.appSetting.findUnique({ where: { key: KEY } });
+    const last = Number((row?.value as { last?: unknown } | null)?.last ?? 0) || 0;
+    const next = last + 1;
+    await tx.appSetting.upsert({
+      where: { key: KEY },
+      create: { key: KEY, value: { last: next } as Prisma.InputJsonValue },
+      update: { value: { last: next } as Prisma.InputJsonValue },
+    });
+    return next;
+  });
+}
+
+const mcLineSchema = z.object({
+  quantity: z.string().trim().default(""),
+  uom: z.string().trim().default(""),
+  starterType: z.string().trim().default(""),
+  hp: z.string().trim().default(""),
+  phase: z.string().trim().default(""),
+  voltage: z.string().trim().default(""),
+});
+const mcJoSchema = z.object({
+  date: z.string().trim().default(""),
+  project: z.string().trim().default(""),
+  dueDate: z.string().trim().default(""),
+  lines: z.array(mcLineSchema).default([]),
+  note: z.string().trim().default(""),
+  assignedPersonnel: z.string().trim().default(""),
+});
+
+/**
+ * The Engineer creates or edits a Motor Controller job order on an order. Pass
+ * index = null to add a new one, or an existing index to edit. The first Motor
+ * Controller JO on an order claims the running MC-JO base number.
+ */
+export async function saveMotorControllerJobOrder(
+  quotationId: string,
+  index: number | null,
+  input: z.infer<typeof mcJoSchema>,
+): Promise<void> {
+  await assertEngineer();
+  const d = mcJoSchema.parse(input);
+  const { cls, wf } = await loadWorkflow(quotationId);
+
+  const isNew = index == null || index < 0 || index >= wf.motorJobOrders.length;
+  if (isNew && stageIndex(wf.stage) >= stageIndex("producing")) {
+    throw new Error("The order is in production — new job orders can no longer be added.");
+  }
+
+  // Keep only lines that carry a starter type or a rating.
+  const lines: MotorControllerLine[] = d.lines
+    .map((l) => ({
+      quantity: l.quantity,
+      uom: l.uom || "pc",
+      starterType: l.starterType,
+      hp: l.hp,
+      phase: l.phase,
+      voltage: l.voltage,
+    }))
+    .filter((l) => l.starterType !== "" || l.hp !== "" || l.voltage !== "");
+
+  let mcJoBaseNo = wf.mcJoBaseNo;
+  let mcJoBaseYear = wf.mcJoBaseYear;
+  if (mcJoBaseNo == null) {
+    mcJoBaseNo = await nextMcJoBaseNo();
+    mcJoBaseYear = new Date().getFullYear();
+  }
+
+  const jo: MotorControllerJobOrder = { ...(coerceMotorControllerJobOrder({}) as MotorControllerJobOrder), ...d, lines };
+  const list = [...wf.motorJobOrders];
+  if (index != null && index >= 0 && index < list.length) list[index] = jo;
+  else list.push(jo);
+
+  await saveWorkflow(quotationId, cls, { ...wf, motorJobOrders: list, mcJoBaseNo, mcJoBaseYear });
+}
+
+/** Remove a Motor Controller job order by index. */
+export async function deleteMotorControllerJobOrder(quotationId: string, index: number): Promise<void> {
+  await assertEngineer();
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const list = wf.motorJobOrders.filter((_, i) => i !== index);
+  await saveWorkflow(quotationId, cls, { ...wf, motorJobOrders: list });
 }
 
 /**
