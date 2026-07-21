@@ -27,6 +27,15 @@ export const ACCESSORY_MATERIALS = [
   "Aluminum",
   "Stainless Steel 304",
 ];
+
+/** How a material prints on the job order — abbreviated + the " Material" suffix. */
+const MATERIAL_ABBREV: Record<string, string> = { "Galvanized Iron": "G.I." };
+export function formatMaterialText(material: string): string {
+  const m = material.trim();
+  if (!m) return "";
+  const label = MATERIAL_ABBREV[m] ?? m;
+  return /material$/i.test(label) ? label : `${label} Material`;
+}
 export const ACCESSORY_UOMS = ["pc", "pcs", "set", "length", "lot"];
 
 /** One labelled dimension of an accessory, e.g. value "450 mm", label "Horizontal Blade". */
@@ -106,9 +115,7 @@ export function formatAccessoryLine(line: AccessoryLine): string {
   const qtyUom = [line.quantity.trim(), line.uom.trim()].filter(Boolean).join(" ");
   const dims = formatAccessoryDimensions(line);
   const head = [qtyUom, dims].filter(Boolean).join(" - ");
-  const mat = line.material.trim();
-  const matText = mat ? (/material$/i.test(mat) ? mat : `${mat} Material`) : "";
-  return [head, line.type.trim(), matText].filter(Boolean).join(" / ");
+  return [head, line.type.trim(), formatMaterialText(line.material)].filter(Boolean).join(" / ");
 }
 
 /** Defensively coerce raw JSON into an AccessoryDimension. */

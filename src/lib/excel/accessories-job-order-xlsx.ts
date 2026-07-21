@@ -5,7 +5,7 @@
  */
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
-import { formatAccessoryDimensions, accessoriesJobRemarks, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
+import { formatAccessoryDimensions, accessoriesJobRemarks, formatMaterialText, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
 
 const RED = "FFED1C24";
 const GREY = "FFF2F2F2";
@@ -16,12 +16,6 @@ function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "long", day: "numeric" }).format(d);
-}
-
-function matText(mat: string): string {
-  const m = mat.trim();
-  if (!m) return "";
-  return /material$/i.test(m) ? m : `${m} Material`;
 }
 
 export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder): Promise<Buffer> {
@@ -115,7 +109,7 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
       ws.getCell(r, 2).value = [line.quantity, line.uom].filter(Boolean).join(" ");
       ws.getCell(r, 3).value = formatAccessoryDimensions(line);
       ws.getCell(r, 4).value = line.type;
-      ws.getCell(r, 5).value = matText(line.material);
+      ws.getCell(r, 5).value = formatMaterialText(line.material);
       for (let c = 1; c <= 5; c++) {
         const cell = ws.getCell(r, c);
         cell.font = { size: 10 };
