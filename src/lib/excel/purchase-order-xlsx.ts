@@ -167,14 +167,22 @@ export async function buildPurchaseOrderWorkbook(
     nameCell.font = { name: "Arial", size: 9, bold: true };
     nameCell.alignment = { horizontal: "center", vertical: "bottom" };
   }
-  // Move the "___" signature line from column A into B, centred + bottom-aligned,
-  // clear the column-A original, and set the row height to 3.
+  // Move the "___" signature line from column A into B. The line may be either a
+  // text value (underscores) or a cell border — move both. Centre + bottom-align
+  // any text, and set the row height to 3.
   {
-    const lineText = ws.getCell(`A${lineRow}`).value;
-    ws.getCell(`A${lineRow}`).value = null;
-    const lineCell = ws.getCell(`B${lineRow}`);
-    lineCell.value = lineText;
-    lineCell.alignment = { horizontal: "center", vertical: "bottom" };
+    const aCell = ws.getCell(`A${lineRow}`);
+    const bCell = ws.getCell(`B${lineRow}`);
+    // Text value (if any).
+    bCell.value = aCell.value;
+    aCell.value = null;
+    // Border (the visible "line" is usually A30's bottom border).
+    const aBorder = aCell.border;
+    if (aBorder && (aBorder.bottom || aBorder.top)) {
+      bCell.border = { ...(bCell.border ?? {}), bottom: aBorder.bottom, top: aBorder.top };
+      aCell.border = { ...aBorder, bottom: undefined, top: undefined };
+    }
+    bCell.alignment = { horizontal: "center", vertical: "bottom" };
     ws.getRow(lineRow).height = 3;
   }
   // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
