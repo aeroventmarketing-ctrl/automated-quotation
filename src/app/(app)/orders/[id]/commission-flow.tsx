@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, Download } from "lucide-react";
+import { Upload, FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { OrderCommissionFlow, WorkflowDoc } from "@/lib/order-workflow";
@@ -16,14 +16,18 @@ import {
 } from "../actions";
 
 const docLink = (d: WorkflowDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
+const docView = (d: WorkflowDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const docDownload = (d: WorkflowDoc) => `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
 
 function DocRow({ label, doc }: { label: string; doc: WorkflowDoc }) {
   return (
     <span className="inline-flex items-center gap-2 text-xs">
       <span className="text-muted-foreground">{label}:</span>
-      <a href={docLink(doc)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+      <a href={docView(doc)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
         <FileText className="h-3.5 w-3.5" /> {doc.name}
+      </a>
+      <a href={docView(doc)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+        <Eye className="h-3.5 w-3.5" />
       </a>
       <a href={docDownload(doc)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
         <Download className="h-3.5 w-3.5" />

@@ -1,3 +1,4 @@
+import { Readable } from "stream";
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getCurrentUser } from "@/lib/auth";
@@ -37,18 +38,22 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Spreadsheets → render to an HTML preview.
-  if (ext === "xlsx" || ext === "xlsm" || ext === "xls") {
+  // Spreadsheets / CSV → render to an HTML preview.
+  if (ext === "xlsx" || ext === "xlsm" || ext === "xls" || ext === "csv") {
     try {
       const { base64 } = await downloadFromStorage(path);
       const wb = new ExcelJS.Workbook();
-      await wb.xlsx.load(Buffer.from(base64, "base64") as unknown as ArrayBuffer);
+      if (ext === "csv") {
+        await wb.csv.read(Readable.from(Buffer.from(base64, "base64")));
+      } else {
+        await wb.xlsx.load(Buffer.from(base64, "base64") as unknown as ArrayBuffer);
+      }
       const html = renderXlsxAsHtml(wb, name);
       return new NextResponse(html, {
         headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
       });
     } catch {
-      // Fall through to the inline signed URL if the workbook can't be parsed.
+      // Fall through to the inline signed URL if the file can't be parsed.
     }
   }
 
