@@ -10,6 +10,8 @@ import {
   EMPTY_DUCT_SEGMENT,
   formatDuctJoNumber,
   formatSegmentDimensions,
+  isReducingDuctType,
+  DUCT_TYPES,
   DUCT_MATERIALS,
   DUCT_GAUGES,
   DUCT_UOMS,
@@ -141,13 +143,13 @@ function DuctJobOrderForm({
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof DuctJobOrder, v: string) => setF((p) => ({ ...p, [k]: v }));
 
-  const addSegment = (kind: DuctSegment["kind"]) => {
+  const addSegment = (type: string) => {
     setF((p) => {
       // Carry over material/gauge from the last segment for convenience.
       const last = p.segments[p.segments.length - 1];
       const seg: DuctSegment = {
         ...EMPTY_DUCT_SEGMENT,
-        kind,
+        type,
         material: last?.material || EMPTY_DUCT_SEGMENT.material,
         gauge: last?.gauge || EMPTY_DUCT_SEGMENT.gauge,
       };
@@ -215,11 +217,10 @@ function DuctJobOrderForm({
               <span className="text-[11px] font-mono text-muted-foreground">{i + 1}.</span>
               <select
                 className="h-7 rounded-md border bg-background px-2 text-xs font-medium"
-                value={seg.kind}
-                onChange={(e) => setSeg(i, { kind: e.target.value as DuctSegment["kind"] })}
+                value={seg.type}
+                onChange={(e) => setSeg(i, { type: e.target.value })}
               >
-                <option value="straight">Straight duct</option>
-                <option value="reducer">Reducer duct</option>
+                {DUCT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
               <span className="text-[11px] text-muted-foreground truncate">{formatSegmentDimensions(seg)}</span>
               <button type="button" onClick={() => removeSeg(i)} className="ml-auto text-muted-foreground hover:text-destructive">
@@ -229,7 +230,7 @@ function DuctJobOrderForm({
             <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
               <SegField label="Horizontal" value={seg.horizontal} onChange={(v) => setSeg(i, { horizontal: v })} />
               <SegField label="Vertical" value={seg.vertical} onChange={(v) => setSeg(i, { vertical: v })} />
-              {seg.kind === "reducer" ? (
+              {isReducingDuctType(seg.type) ? (
                 <>
                   <SegField label="→ Horizontal" value={seg.toHorizontal} onChange={(v) => setSeg(i, { toHorizontal: v })} />
                   <SegField label="→ Vertical" value={seg.toVertical} onChange={(v) => setSeg(i, { toVertical: v })} />
@@ -254,10 +255,10 @@ function DuctJobOrderForm({
           </div>
         ))}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => addSegment("straight")}>
+          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => addSegment("Straight Duct")}>
             <Plus className="mr-1 h-3 w-3" /> Straight duct
           </Button>
-          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => addSegment("reducer")}>
+          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => addSegment("Duct Reducer")}>
             <ArrowDownUp className="mr-1 h-3 w-3" /> Reducer duct
           </Button>
         </div>

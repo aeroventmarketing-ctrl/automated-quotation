@@ -12,6 +12,7 @@ import { COMPANY } from "@/lib/config";
 import {
   formatSegmentDimensions,
   segmentTypeLabel,
+  isReducingDuctType,
   type DuctJobOrder,
 } from "@/lib/duct-job-order";
 
@@ -135,8 +136,8 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
         cell.border = allBorders;
         if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
       }
-      // Reducer rows get a subtle emphasis on the type cell.
-      if (seg.kind === "reducer") ws.getCell(r, 3).font = { size: 10, bold: true, color: { argb: RED } };
+      // Size-transition rows get a subtle emphasis on the type cell.
+      if (isReducingDuctType(seg.type)) ws.getCell(r, 3).font = { size: 10, bold: true, color: { argb: RED } };
       row.height = 16;
       r++;
     });

@@ -11,15 +11,38 @@
  * DUCT-JO series).
  */
 
-/** One duct segment line. Straight and reducer share H×V×Length; a reducer adds
- * the "to" dimensions it steps down to over that length. */
+/**
+ * The duct product types a segment can be — the "Air Duct" group of the product
+ * taxonomy. Size-transition types (a reducer / square-to-round) additionally
+ * capture the "to" dimensions they step down to over the segment length.
+ */
+export const DUCT_TYPES = [
+  "Straight Duct",
+  "Duct Reducer",
+  "Duct Connector",
+  "Elbow Duct",
+  "Offset Duct",
+  "R-Duct",
+  "Square to Round Duct",
+  "Y-Duct",
+] as const;
+export type DuctType = (typeof DUCT_TYPES)[number];
+
+/** Types that transition between two cross-sections — they show "to" dimensions. */
+const REDUCING_DUCT_TYPES = new Set<string>(["Duct Reducer", "Square to Round Duct"]);
+export function isReducingDuctType(type: string): boolean {
+  return REDUCING_DUCT_TYPES.has(type);
+}
+
+/** One duct segment line. Every type carries H×V×Length; the size-transition
+ * types add the "to" dimensions it steps down to over that length. */
 export interface DuctSegment {
-  kind: "straight" | "reducer";
+  type: string; // one of DUCT_TYPES
   horizontal: string; // mm — the first (Horizontal) dimension
   vertical: string; // mm — the Vertical dimension
   length: string; // mm — segment length (for a reducer, the reducing length)
-  toHorizontal: string; // reducer only — Horizontal it reduces to
-  toVertical: string; // reducer only — Vertical it reduces to
+  toHorizontal: string; // size-transition types only — Horizontal it reduces to
+  toVertical: string; // size-transition types only — Vertical it reduces to
   material: string; // e.g. "G.I. Material"
   gauge: string; // e.g. "GA20"
 }
@@ -44,7 +67,7 @@ export const DUCT_GAUGES = ["GA26", "GA24", "GA22", "GA20", "GA18", "GA16"];
 export const DUCT_UOMS = ["set", "pc", "pcs", "length", "lot"];
 
 export const EMPTY_DUCT_SEGMENT: DuctSegment = {
-  kind: "straight",
+  type: "Straight Duct",
   horizontal: "",
   vertical: "",
   length: "",
@@ -84,7 +107,7 @@ export function formatSegmentDimensions(seg: DuctSegment): string {
   const h = seg.horizontal.trim();
   const v = seg.vertical.trim();
   const l = seg.length.trim();
-  if (seg.kind === "reducer") {
+  if (isReducingDuctType(seg.type)) {
     const th = seg.toHorizontal.trim();
     const tv = seg.toVertical.trim();
     return `${h} x ${v} to ${th} x ${tv} mm - ${l} mm length`;
@@ -92,9 +115,9 @@ export function formatSegmentDimensions(seg: DuctSegment): string {
   return `${h} x ${v} x ${l} mm`;
 }
 
-/** The kind label used on the printable job order. */
+/** The duct type label used on the printable job order. */
 export function segmentTypeLabel(seg: DuctSegment): string {
-  return seg.kind === "reducer" ? "Reducer duct" : "Straight duct";
+  return seg.type || "Straight Duct";
 }
 
 /** The full descriptive line for a segment (dimensions / type / material / gauge). */
@@ -109,8 +132,14 @@ export function coerceDuctSegment(value: unknown): DuctSegment | null {
   if (!value || typeof value !== "object") return null;
   const o = value as Record<string, unknown>;
   const s = (k: string) => (o[k] == null ? "" : String(o[k]));
+  // Legacy segments stored `kind: "straight" | "reducer"` — map to the type.
+  const type = o.type != null && String(o.type)
+    ? String(o.type)
+    : o.kind === "reducer"
+    ? "Duct Reducer"
+    : "Straight Duct";
   return {
-    kind: o.kind === "reducer" ? "reducer" : "straight",
+    type,
     horizontal: s("horizontal"),
     vertical: s("vertical"),
     length: s("length"),

@@ -45,7 +45,7 @@ import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
-import { coerceDuctJobOrder, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
+import { coerceDuctJobOrder, isReducingDuctType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 
 interface StockMatch { stockItemId: string; qty: number }
 
@@ -354,7 +354,7 @@ async function nextDuctJoBaseNo(): Promise<number> {
 }
 
 const ductSegmentSchema = z.object({
-  kind: z.enum(["straight", "reducer"]).default("straight"),
+  type: z.string().trim().default("Straight Duct"),
   horizontal: z.string().trim().default(""),
   vertical: z.string().trim().default(""),
   length: z.string().trim().default(""),
@@ -397,16 +397,19 @@ export async function saveDuctJobOrder(
 
   // Keep only segments that carry at least the leading dimensions.
   const segments: DuctSegment[] = d.segments
-    .map((s) => ({
-      kind: s.kind,
-      horizontal: s.horizontal,
-      vertical: s.vertical,
-      length: s.length,
-      toHorizontal: s.kind === "reducer" ? s.toHorizontal : "",
-      toVertical: s.kind === "reducer" ? s.toVertical : "",
-      material: s.material || "G.I. Material",
-      gauge: s.gauge || "GA20",
-    }))
+    .map((s) => {
+      const reducing = isReducingDuctType(s.type);
+      return {
+        type: s.type || "Straight Duct",
+        horizontal: s.horizontal,
+        vertical: s.vertical,
+        length: s.length,
+        toHorizontal: reducing ? s.toHorizontal : "",
+        toVertical: reducing ? s.toVertical : "",
+        material: s.material || "G.I. Material",
+        gauge: s.gauge || "GA20",
+      };
+    })
     .filter((s) => s.horizontal !== "" || s.vertical !== "" || s.length !== "");
 
   let ductJoBaseNo = wf.ductJoBaseNo;
