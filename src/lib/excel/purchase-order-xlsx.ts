@@ -161,11 +161,18 @@ export async function buildPurchaseOrderWorkbook(
   const lineRow = 29 + N; // the "___________" signature line (kept)
   // Printed name sits on its own row just above the signature line, centred in
   // column B (the "___" line stays on lineRow, below the name).
+  // NOTE: these signature cells (A29/B29/A30/B30/B31/B32) share ONE style object
+  // in the loaded template, so `cell.alignment = {...}` mutates that shared object
+  // and the last write wins for all of them. Assign a fresh `cell.style` per cell
+  // instead — that gives each cell its own style and keeps the alignments distinct.
   if (purchaserName) {
     const nameCell = ws.getCell(`B${lineRow - 1}`);
     nameCell.value = purchaserName;
-    nameCell.font = { name: "Arial", size: 9, bold: true };
-    nameCell.alignment = { horizontal: "center", vertical: "bottom" };
+    nameCell.style = {
+      ...nameCell.style,
+      font: { name: "Arial", size: 9, bold: true },
+      alignment: { horizontal: "center", vertical: "bottom" },
+    };
   }
   // Move the "___" signature line text from column A into B, centred + bottom-
   // aligned, clear the column-A original, and set the row height to 3.
@@ -174,7 +181,7 @@ export async function buildPurchaseOrderWorkbook(
     const bCell = ws.getCell(`B${lineRow}`);
     bCell.value = aCell.value;
     aCell.value = null;
-    bCell.alignment = { horizontal: "center", vertical: "bottom" };
+    bCell.style = { ...bCell.style, alignment: { horizontal: "center", vertical: "bottom" } };
     ws.getRow(lineRow).height = 3;
   }
   // Designation (row 30+N) and company "AEROVENT" (row 31+N): move to column B,
@@ -185,7 +192,7 @@ export async function buildPurchaseOrderWorkbook(
     if (des) {
       const desCell = ws.getCell(`B${lineRow + 1}`);
       desCell.value = des;
-      desCell.alignment = { horizontal: "center", vertical: "middle" };
+      desCell.style = { ...desCell.style, alignment: { horizontal: "center", vertical: "middle" } };
     }
   }
   {
@@ -194,7 +201,7 @@ export async function buildPurchaseOrderWorkbook(
     if (company) {
       const coCell = ws.getCell(`B${lineRow + 2}`);
       coCell.value = company;
-      coCell.alignment = { horizontal: "center", vertical: "middle" };
+      coCell.style = { ...coCell.style, alignment: { horizontal: "center", vertical: "middle" } };
     }
   }
   const sigUrl = (purchaser.signature ?? "").trim();
