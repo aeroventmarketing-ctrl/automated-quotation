@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge } from "@/components/status-badge";
 import { formatCurrency } from "@/lib/utils";
 import { toDutyPoint } from "@/lib/requirement";
-import { Sparkles, Cog, AlertTriangle } from "lucide-react";
+import { AIRFLOW_UNIT_LABELS, PRESSURE_UNIT_LABELS, normalizeAirflowUnit, normalizePressureUnit } from "@/lib/units";
+import { Cog, AlertTriangle } from "lucide-react";
 import type { SelectionResult } from "@/lib/selection";
-import type { MatchCandidate } from "@/lib/ai/schemas";
 import { isNextControlFlowError } from "@/lib/utils";
 import { lookupMotor, computeUnitPrice } from "@/lib/pricing/motors";
 import { createQuotationFromInquiry } from "../../quotations/actions";
@@ -38,27 +39,34 @@ interface ItemLite {
 }
 interface ItemState {
   included: boolean;
-  matchCandidates: MatchCandidate[] | null;
   selectedCatalogueItemId: string | null;
   selectionResults: SelectionResult[] | null;
   chosen: SelectionResult | null;
   engineerConfirmed: boolean;
-  loadingMatch: boolean;
   loadingSelect: boolean;
   error: string | null;
+  // Editable duty inputs (seeded from the parsed requirement).
+  airflow: string;
+  airflowUnit: string;
+  staticPressure: string;
+  pressureUnit: string;
 }
 
-function initState(): ItemState {
+const numOr = (v: unknown): string => (typeof v === "number" && Number.isFinite(v) ? String(v) : "");
+
+function initState(p: Record<string, unknown>): ItemState {
   return {
     included: true,
-    matchCandidates: null,
     selectedCatalogueItemId: null,
     selectionResults: null,
     chosen: null,
     engineerConfirmed: false,
-    loadingMatch: false,
     loadingSelect: false,
     error: null,
+    airflow: numOr(p.airflow),
+    airflowUnit: normalizeAirflowUnit(p.airflowUnit as string | null | undefined) ?? "cfm",
+    staticPressure: numOr(p.staticPressure),
+    pressureUnit: normalizePressureUnit(p.pressureUnit as string | null | undefined) ?? "pa",
   };
 }
 
@@ -82,7 +90,7 @@ export function InquiryWorkspace({
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialDocs);
   const docsMissing = inquiryDocsMissing(docs);
   const [state, setState] = useState<Record<string, ItemState>>(
-    Object.fromEntries(items.map((it) => [it.id, initState()])),
+    Object.fromEntries(items.map((it) => [it.id, initState(it.parsedJson)])),
   );
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
@@ -94,22 +102,18 @@ export function InquiryWorkspace({
     setState((s) => ({ ...s, [itemId]: { ...s[itemId], ...p } }));
   }
 
-  async function runMatch(item: ItemLite) {
-    patch(item.id, { loadingMatch: true, error: null });
-    try {
-      const res = await fetch("/api/ai/match", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requirement: item.parsedJson }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Match failed");
-      patch(item.id, { matchCandidates: data.candidates ?? [] });
-    } catch (e) {
-      patch(item.id, { error: e instanceof Error ? e.message : "Match failed" });
-    } finally {
-      patch(item.id, { loadingMatch: false });
-    }
+  // Merge the editable duty inputs over the parsed requirement — this drives the
+  // fan sizing (and the quote's stored requirement).
+  function mergedReq(item: ItemLite): Record<string, unknown> {
+    const st = state[item.id];
+    const n = (s: string) => (s.trim() === "" ? null : Number(s.replace(/,/g, "")) || null);
+    return {
+      ...item.parsedJson,
+      airflow: n(st.airflow),
+      airflowUnit: st.airflowUnit,
+      staticPressure: n(st.staticPressure),
+      pressureUnit: st.pressureUnit,
+    };
   }
 
   async function runSelect(item: ItemLite) {
@@ -118,7 +122,7 @@ export function InquiryWorkspace({
       const res = await fetch("/api/selection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requirement: item.parsedJson }),
+        body: JSON.stringify({ requirement: mergedReq(item) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Selection failed");
@@ -141,30 +145,42 @@ export function InquiryWorkspace({
   async function createQuote() {
     setCreateError(null);
     const lines = items
-      .filter((it) => state[it.id].included && state[it.id].selectedCatalogueItemId)
+      .filter((it) => state[it.id].included)
       .map((it) => {
         const st = state[it.id];
-        const cat = catById[st.selectedCatalogueItemId!];
-        const sizeStr = cat.sizeLabel ? ` (${cat.sizeLabel})` : "";
+        const req = mergedReq(it);
+        const cat = st.selectedCatalogueItemId ? catById[st.selectedCatalogueItemId] : null;
+        if (cat) {
+          const sizeStr = cat.sizeLabel ? ` (${cat.sizeLabel})` : "";
+          return {
+            catalogueItemId: cat.id,
+            // Prefer the catalogue's full standard description (with its Model: line).
+            descriptionSnapshot: cat.description || `${cat.modelCode} — ${cat.name}${sizeStr}`,
+            specsSnapshot: {
+              requirement: req,
+              selection: st.chosen ?? null,
+              blowerModel: cat.modelCode,
+              bodyPrice: cat.basePrice,
+              // Pre-fill the engine's suggested motor HP (engineer picks phase/volts).
+              ...(st.chosen ? { motorHp: st.chosen.motorHp } : {}),
+            } as Record<string, unknown>,
+            qty: it.qty,
+            selectionNote: st.chosen?.selectionNote ?? null,
+          };
+        }
+        // No model chosen — carry the requirement through as a manual line (the
+        // engineer fills the model & price on the quotation).
         return {
-          catalogueItemId: cat.id,
-          // Prefer the catalogue's full standard description (with its Model: line).
-          descriptionSnapshot: cat.description || `${cat.modelCode} — ${cat.name}${sizeStr}`,
-          specsSnapshot: {
-            requirement: it.parsedJson,
-            selection: st.chosen ?? null,
-            blowerModel: cat.modelCode,
-            bodyPrice: cat.basePrice,
-            // Pre-fill the engine's suggested motor HP (engineer picks phase/volts).
-            ...(st.chosen ? { motorHp: st.chosen.motorHp } : {}),
-          } as Record<string, unknown>,
+          catalogueItemId: null,
+          descriptionSnapshot: (it.rawText && it.rawText.trim()) || String((it.parsedJson.description as string | undefined) ?? "Custom item"),
+          specsSnapshot: { requirement: req } as Record<string, unknown>,
           qty: it.qty,
-          selectionNote: st.chosen?.selectionNote ?? null,
+          selectionNote: null,
         };
       });
 
     if (lines.length === 0) {
-      setCreateError("Pick a catalogue model for at least one included item.");
+      setCreateError("Include at least one item to create the quotation.");
       return;
     }
     // Block low-confidence selections that an engineer hasn't confirmed.
@@ -198,7 +214,7 @@ export function InquiryWorkspace({
       {items.map((item) => {
         const st = state[item.id];
         const p = item.parsedJson as Record<string, unknown>;
-        const duty = toDutyPoint(p as never);
+        const duty = toDutyPoint(mergedReq(item) as never);
         const selectedCat = st.selectedCatalogueItemId ? catById[st.selectedCatalogueItemId] : null;
 
         return (
@@ -225,16 +241,6 @@ export function InquiryWorkspace({
               {/* Parsed requirement + SI preview */}
               <div className="flex flex-wrap gap-2 text-xs">
                 <Badge variant="outline">Qty: {item.qty}</Badge>
-                {p.airflow != null && (
-                  <Badge variant="outline">
-                    Airflow: {String(p.airflow)} {String(p.airflowUnit ?? "")}
-                  </Badge>
-                )}
-                {p.staticPressure != null && (
-                  <Badge variant="outline">
-                    SP: {String(p.staticPressure)} {String(p.pressureUnit ?? "")}
-                  </Badge>
-                )}
                 {p.application != null && <Badge variant="outline">{String(p.application)}</Badge>}
                 {duty && (
                   <Badge variant="secondary">
@@ -245,61 +251,47 @@ export function InquiryWorkspace({
 
               {st.error && <p className="text-sm text-destructive">{st.error}</p>}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                {/* Catalogue matching */}
-                <div className="space-y-2">
+              <div>
+                {/* Fan sizing — enter the duty (volume flow + static pressure) and run selection. */}
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">1. Catalogue match</span>
-                    <Button size="sm" variant="outline" onClick={() => runMatch(item)} disabled={st.loadingMatch}>
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {st.loadingMatch ? "Matching…" : "AI match"}
-                    </Button>
-                  </div>
-                  {st.matchCandidates?.map((c) => {
-                    const cat = catById[c.catalogueItemId];
-                    if (!cat) return null;
-                    return (
-                      <button
-                        key={c.catalogueItemId}
-                        onClick={() => patch(item.id, { selectedCatalogueItemId: c.catalogueItemId })}
-                        className={`w-full rounded-md border p-2 text-left text-xs hover:bg-accent ${
-                          st.selectedCatalogueItemId === c.catalogueItemId ? "border-primary bg-accent" : ""
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{cat.modelCode} — {cat.name}</span>
-                          <Badge variant="secondary">{Math.round(c.confidence * 100)}%</Badge>
-                        </div>
-                        <p className="text-muted-foreground">{c.reason}</p>
-                      </button>
-                    );
-                  })}
-                  <div className="space-y-1">
-                    <span className="text-xs text-muted-foreground">Or pick manually:</span>
-                    <Select
-                      value={st.selectedCatalogueItemId ?? ""}
-                      onChange={(e) => patch(item.id, { selectedCatalogueItemId: e.target.value || null })}
-                    >
-                      <option value="">— select catalogue item —</option>
-                      {catalogue.map((c) => (
-                        <option key={c.id} value={c.id}>{c.modelCode} — {c.name}</option>
-                      ))}
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Fan selection */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">2. Fan sizing</span>
+                    <span className="text-sm font-medium">Fan sizing</span>
                     <Button size="sm" variant="outline" onClick={() => runSelect(item)} disabled={st.loadingSelect || !duty}>
                       <Cog className="h-3.5 w-3.5" />
                       {st.loadingSelect ? "Sizing…" : "Run selection"}
                     </Button>
                   </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-xs text-muted-foreground">
+                      <span>Volume flow</span>
+                      <div className="flex gap-2">
+                        <Input className="h-9" type="number" step="any" min={0} inputMode="decimal" placeholder="0"
+                          value={st.airflow} onChange={(e) => patch(item.id, { airflow: e.target.value })} />
+                        <Select className="h-9 w-28" value={st.airflowUnit} onChange={(e) => patch(item.id, { airflowUnit: e.target.value })}>
+                          {(Object.entries(AIRFLOW_UNIT_LABELS) as [string, string][]).map(([k, label]) => (
+                            <option key={k} value={k}>{label}</option>
+                          ))}
+                        </Select>
+                      </div>
+                    </label>
+                    <label className="space-y-1 text-xs text-muted-foreground">
+                      <span>Static pressure</span>
+                      <div className="flex gap-2">
+                        <Input className="h-9" type="number" step="any" min={0} inputMode="decimal" placeholder="0"
+                          value={st.staticPressure} onChange={(e) => patch(item.id, { staticPressure: e.target.value })} />
+                        <Select className="h-9 w-28" value={st.pressureUnit} onChange={(e) => patch(item.id, { pressureUnit: e.target.value })}>
+                          {(Object.entries(PRESSURE_UNIT_LABELS) as [string, string][]).map(([k, label]) => (
+                            <option key={k} value={k}>{label}</option>
+                          ))}
+                        </Select>
+                      </div>
+                    </label>
+                  </div>
+
                   {!duty && (
                     <p className="text-xs text-muted-foreground">
-                      Needs both airflow and static pressure to size a fan.
+                      Enter both volume flow and static pressure to size a fan — or leave them and proceed; the engineer completes the model on the quotation.
                     </p>
                   )}
                   {st.selectionResults?.length === 0 && (
