@@ -277,16 +277,12 @@ function AccessoriesJobOrderForm({
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] text-muted-foreground">Dimensions — two required (value &amp; label, e.g. &ldquo;450 mm&rdquo; / &ldquo;Horizontal Blade&rdquo;)</span>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <span className="text-[10px] text-muted-foreground">Dimensions — two required (e.g. &ldquo;450 mm&rdquo; x &ldquo;450 mm&rdquo;)</span>
+              <div className="grid grid-cols-2 gap-2">
                 {[0, 1].map((di) => {
                   const d = line.dimensions[di] ?? { value: "", label: "" };
                   return (
-                    <div key={di} className="flex items-center gap-1.5">
-                      <Input className="h-7 w-20 shrink-0 text-xs" value={d.value} placeholder="450 mm" onChange={(e) => setDim(i, di, { value: e.target.value })} />
-                      <span className="text-[10px] text-muted-foreground">-</span>
-                      <Input className="h-7 min-w-0 flex-1 text-xs" value={d.label} placeholder={di === 0 ? "Horizontal Blade" : "Neck size"} onChange={(e) => setDim(i, di, { label: e.target.value })} />
-                    </div>
+                    <Input key={di} className="h-7 text-xs" value={d.value} placeholder="450 mm" onChange={(e) => setDim(i, di, { value: e.target.value })} />
                   );
                 })}
               </div>
