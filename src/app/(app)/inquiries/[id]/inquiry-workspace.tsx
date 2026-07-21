@@ -80,7 +80,6 @@ export function InquiryWorkspace({
   projectName,
   items,
   catalogue,
-  templates,
   initialDocs = {},
   canEditDocs = true,
   isAdmin = false,
@@ -99,7 +98,6 @@ export function InquiryWorkspace({
   const [state, setState] = useState<Record<string, ItemState>>(
     Object.fromEntries(items.map((it) => [it.id, initState(it.parsedJson)])),
   );
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const router = useRouter();
@@ -256,7 +254,7 @@ export function InquiryWorkspace({
 
     setCreating(true);
     try {
-      await createQuotationFromInquiry({ inquiryId, templateId: templateId || undefined, projectName: projectName || undefined, vatMode: "INCLUSIVE", discountPct: 0, lines });
+      await createQuotationFromInquiry({ inquiryId, templateId: undefined, projectName: projectName || undefined, vatMode: "INCLUSIVE", discountPct: 0, lines });
     } catch (e) {
       if (isNextControlFlowError(e)) throw e; // let the redirect navigate
       setCreateError(e instanceof Error ? e.message : "Failed to create quotation");
@@ -461,24 +459,14 @@ export function InquiryWorkspace({
       {/* Required documents before a quotation can be made */}
       <InquiryDocsUploader inquiryId={inquiryId} docs={docs} onChange={setDocs} canEdit={canEditDocs} />
 
-      {/* Create quotation */}
+      {/* Create quotation — the template is chosen later in the quotation builder. */}
       <Card className="border-primary/40">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Template:</span>
-            <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)} className="w-56">
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex items-center gap-3">
-            {docsMissing.length > 0 && <span className="text-sm text-amber-600">Attach {docsMissing.join(" and ")} first</span>}
-            {createError && <span className="text-sm text-destructive">{createError}</span>}
-            <Button onClick={createQuote} disabled={creating || docsMissing.length > 0}>
-              {creating ? "Creating…" : "Create draft quotation"}
-            </Button>
-          </div>
+        <CardContent className="flex flex-wrap items-center justify-end gap-3 pt-6">
+          {docsMissing.length > 0 && <span className="text-sm text-amber-600">Attach {docsMissing.join(" and ")} first</span>}
+          {createError && <span className="text-sm text-destructive">{createError}</span>}
+          <Button onClick={createQuote} disabled={creating || docsMissing.length > 0}>
+            {creating ? "Creating…" : "Create draft quotation"}
+          </Button>
         </CardContent>
       </Card>
     </div>
