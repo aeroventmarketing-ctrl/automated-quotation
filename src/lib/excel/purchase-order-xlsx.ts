@@ -196,7 +196,7 @@ export async function buildPurchaseOrderWorkbook(
     if (des) {
       const desCell = ws.getCell(`B${outLine + 1}`);
       desCell.value = des;
-      desCell.style = { ...desCell.style, alignment: { horizontal: "center", vertical: "middle" } };
+      desCell.style = { ...desCell.style, font: { name: "Arial", size: 9, bold: true }, alignment: { horizontal: "center", vertical: "middle" } };
     }
   }
   {
@@ -205,7 +205,7 @@ export async function buildPurchaseOrderWorkbook(
     if (company) {
       const coCell = ws.getCell(`B${outLine + 2}`);
       coCell.value = company;
-      coCell.style = { ...coCell.style, alignment: { horizontal: "center", vertical: "middle" } };
+      coCell.style = { ...coCell.style, font: { name: "Arial", size: 9, bold: true }, alignment: { horizontal: "center", vertical: "middle" } };
     }
   }
   const sigUrl = (purchaser.signature ?? "").trim();
