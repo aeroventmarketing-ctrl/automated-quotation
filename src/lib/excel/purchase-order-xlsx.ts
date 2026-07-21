@@ -159,9 +159,10 @@ export async function buildPurchaseOrderWorkbook(
   const purchaserName = (purchaser.name ?? po.createdByName ?? "").trim();
   const purchaserDesignation = (purchaser.designation ?? "").trim();
   const lineRow = 29 + N; // the "___________" signature line (kept)
-  // Printed name sits centred on the line row, in column B (over the line).
+  // Printed name sits on its own row just above the signature line, centred in
+  // column B (the "___" line stays on lineRow, below the name).
   if (purchaserName) {
-    const nameCell = ws.getCell(`B${lineRow}`);
+    const nameCell = ws.getCell(`B${lineRow - 1}`);
     nameCell.value = purchaserName;
     nameCell.font = { name: "Arial", size: 9, bold: true };
     nameCell.alignment = { horizontal: "center", vertical: "bottom" };
@@ -196,8 +197,8 @@ export async function buildPurchaseOrderWorkbook(
     let w = maxW, h = Math.round(w / aspect);
     if (h > maxH) { h = maxH; w = Math.round(h * aspect); }
     const sigId = wb.addImage({ base64: sigUrl.split(",")[1], extension: ext as "png" | "jpeg" });
-    // Float the signature just above the printed name / line, centred over col B (0-indexed).
-    ws.addImage(sigId, { tl: { col: 0.9, row: lineRow - 3 }, ext: { width: w, height: h }, editAs: "oneCell" });
+    // Float the signature just above the printed name, centred over col B (0-indexed).
+    ws.addImage(sigId, { tl: { col: 0.9, row: lineRow - 4 }, ext: { width: w, height: h }, editAs: "oneCell" });
   }
 
   // --- BIR 2307 ---------------------------------------------------------------
