@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ScanLine, Search, X } from "lucide-react";
@@ -39,6 +39,26 @@ interface Item {
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+
+type SortKey = "name" | "quantity" | "available" | "reorderLevel" | "unitCost" | "value" | "status" | "location" | "category";
+type GroupKey = "none" | "location" | "category" | "status";
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "Name" },
+  { key: "quantity", label: "On hand" },
+  { key: "available", label: "Available" },
+  { key: "reorderLevel", label: "Reorder at" },
+  { key: "unitCost", label: "Unit cost" },
+  { key: "value", label: "Value" },
+  { key: "status", label: "Status" },
+  { key: "location", label: "Location" },
+  { key: "category", label: "Category" },
+];
+const GROUP_OPTIONS: { key: GroupKey; label: string }[] = [
+  { key: "none", label: "No grouping" },
+  { key: "location", label: "Location" },
+  { key: "category", label: "Category" },
+  { key: "status", label: "Status" },
+];
 
 /** Location picker: a dropdown of admin-managed locations, or a free-text box when none are configured. */
 function LocationField({ value, onChange, locations, className }: { value: string; onChange: (v: string) => void; locations: string[]; className?: string }) {
@@ -258,6 +278,47 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
         (it.location ?? "").toLowerCase().includes(q),
       );
 
+  // Sort & group controls.
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [dir, setDir] = useState<"asc" | "desc">("asc");
+  const [group, setGroup] = useState<GroupKey>("none");
+
+  const statusRank = (s: Item["status"]) => (s === "ok" ? 0 : s === "low" ? 1 : 2);
+  const sorted = useMemo(() => {
+    const mul = dir === "asc" ? 1 : -1;
+    const cmp = (a: Item, b: Item): number => {
+      switch (sortKey) {
+        case "quantity": return (a.quantity - b.quantity) * mul;
+        case "available": return (a.available - b.available) * mul;
+        case "reorderLevel": return (a.reorderLevel - b.reorderLevel) * mul;
+        case "unitCost": return (a.unitCost - b.unitCost) * mul;
+        case "value": return (a.value - b.value) * mul;
+        case "status": return (statusRank(a.status) - statusRank(b.status)) * mul || a.name.localeCompare(b.name);
+        case "location": return ((a.location ?? "").localeCompare(b.location ?? "") || a.name.localeCompare(b.name)) * mul;
+        case "category": return ((a.category ?? "").localeCompare(b.category ?? "") || a.name.localeCompare(b.name)) * mul;
+        default: return a.name.localeCompare(b.name) * mul;
+      }
+    };
+    return [...filtered].sort(cmp);
+  }, [filtered, sortKey, dir]);
+
+  const groupValue = (it: Item): string => {
+    switch (group) {
+      case "location": return it.location || "—";
+      case "category": return it.category || "—";
+      case "status": return it.status === "ok" ? "OK" : it.status === "low" ? "Low" : "Out";
+      default: return "";
+    }
+  };
+  const groups = useMemo(() => {
+    if (group === "none") return [{ key: "", rows: sorted }];
+    const map = new Map<string, Item[]>();
+    for (const it of sorted) { const k = groupValue(it); (map.get(k) ?? map.set(k, []).get(k)!).push(it); }
+    return [...map.entries()].map(([key, rows]) => ({ key, rows }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, group]);
+  const cols = canManage ? 11 : 10;
+
   async function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
     e.preventDefault();
@@ -369,15 +430,33 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
         </div>
       )}
 
-      {/* Text search across name / SKU / category / location. */}
-      <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="h-9 pl-8" placeholder="Search items by name, SKU, category or location…" value={query} onChange={(e) => setQuery(e.target.value)} />
-        {q !== "" && (
-          <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
-            <X className="h-4 w-4" />
-          </button>
-        )}
+      {/* Text search + sort / group controls. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[16rem] max-w-md flex-1">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="h-9 pl-8" placeholder="Search items by name, SKU, category or location…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          {q !== "" && (
+            <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          Group by
+          <select value={group} onChange={(e) => setGroup(e.target.value as GroupKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
+            {GROUP_OPTIONS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          Sort by
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
+            {SORT_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
+          className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-sm hover:bg-accent" title={dir === "asc" ? "Ascending" : "Descending"}>
+          {dir === "asc" ? "↑ Asc" : "↓ Desc"}
+        </button>
       </div>
 
       {items.length === 0 ? (
@@ -404,7 +483,19 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((it) => <StockRow key={it.id} item={it} canManage={canManage} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+              {groups.map((g) => (
+                <Fragment key={g.key || "all"}>
+                  {group !== "none" && (
+                    <TableRow className="bg-muted/40">
+                      <TableCell colSpan={cols} className="py-1.5">
+                        <span className="text-sm font-semibold">{g.key || "—"}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{g.rows.length} item{g.rows.length === 1 ? "" : "s"} · {peso(g.rows.reduce((a, r) => a + r.value, 0))}</span>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+                </Fragment>
+              ))}
             </TableBody>
           </Table>
         </div>
