@@ -238,6 +238,7 @@ function AccessoriesJobOrderForm({
               <label className="space-y-0.5 sm:col-span-2">
                 <span className="text-[10px] text-muted-foreground">Material</span>
                 <select className="h-7 w-full rounded-md border bg-background px-1 text-xs" value={line.material} onChange={(e) => setLine(i, { material: e.target.value })}>
+                  <option value="">Material…</option>
                   {ACCESSORY_MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
                   {line.material && !ACCESSORY_MATERIALS.includes(line.material) && <option value={line.material}>{line.material}</option>}
                 </select>

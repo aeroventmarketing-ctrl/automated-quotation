@@ -23,13 +23,9 @@ export const ACCESSORY_TYPE_SUGGESTIONS: string[] = Array.from(
 );
 
 export const ACCESSORY_MATERIALS = [
-  "G.I.",
-  "Stainless Steel 304",
-  "Stainless Steel 316",
+  "Galvanized Iron",
   "Aluminum",
-  "Extruded Aluminum",
-  "Black Iron",
-  "Pre-painted G.I.",
+  "Stainless Steel 304",
 ];
 export const ACCESSORY_UOMS = ["pc", "pcs", "set", "length", "lot"];
 
@@ -68,7 +64,7 @@ export const EMPTY_ACCESSORY_LINE: AccessoryLine = {
   quantity: "1",
   uom: "pc",
   dimensions: [{ value: "", label: "" }],
-  material: "G.I.",
+  material: "",
 };
 
 export const EMPTY_ACCESSORIES_JO: AccessoriesJobOrder = {
@@ -132,7 +128,7 @@ export function coerceAccessoryLine(value: unknown): AccessoryLine | null {
     quantity: s("quantity"),
     uom: s("uom") || "pc",
     dimensions: dimensions.length ? dimensions : [{ value: "", label: "" }],
-    material: s("material") || "G.I.",
+    material: s("material"),
   };
 }
 

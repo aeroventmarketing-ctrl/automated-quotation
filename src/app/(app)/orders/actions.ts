@@ -501,7 +501,7 @@ export async function saveAccessoriesJobOrder(
       quantity: l.quantity,
       uom: l.uom || "pc",
       dimensions: l.dimensions.filter((dim) => dim.value !== "" || dim.label !== ""),
-      material: l.material || "G.I.",
+      material: l.material,
     }))
     .filter((l) => l.type !== "" || l.dimensions.length > 0);
 
