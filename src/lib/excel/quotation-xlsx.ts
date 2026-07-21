@@ -279,17 +279,20 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   };
 
   for (const it of data.items) {
-    // Row height = text height + vertical breathing room. Estimate the wrapped
-    // line count from the merged D:H width. We deliberately assume a slightly
-    // NARROWER wrap width (~26 chars) and a taller per-line height so the row
-    // never clips on machines where Times New Roman is substituted (a taller
-    // fallback font) — clipped text was the reported issue. Clamped to Excel's
-    // 409pt max row height.
-    const descCharsPerLine = 26;
+    // Row height = wrapped text height + a fixed slug of breathing room. Estimate
+    // the wrapped line count from the merged D:H width (~30 usable chars of Times
+    // New Roman 10; we use 28 for a small safety margin against clipping). The
+    // per-line height matches the real text line height (~13pt) and the padding is
+    // a FLAT amount, NOT per-line — otherwise the slack compounds on tall rows and
+    // leaves too much space above/below (the reported issue) while a 2-line row
+    // still looks right. So a 2-line row ≈ 38pt (unchanged) and taller rows scale
+    // proportionally. The flat 12pt also absorbs a taller substituted font without
+    // clipping. Clamped to Excel's 409pt max row height.
+    const descCharsPerLine = 28;
     const wrappedLines = String(it.descriptionSnapshot)
       .split("\n")
       .reduce((acc, seg) => acc + Math.max(1, Math.ceil(seg.length / descCharsPerLine)), 0);
-    const rowH = Math.min(409, Math.max(30, wrappedLines * 15 + 8));
+    const rowH = Math.min(409, Math.max(30, wrappedLines * 13 + 12));
     guardPage(rowH); // may advance r past a break + fresh logo
 
     ws.mergeCells(`D${r}:H${r}`);
