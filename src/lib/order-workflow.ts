@@ -10,6 +10,7 @@
 import type { WorkflowRoleKey } from "@/lib/workflow-roles";
 import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, type DuctJobOrder } from "@/lib/duct-job-order";
+import { coerceAccessoriesJobOrder, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
 
 export type OrderStage =
   | "payment_review"
@@ -215,6 +216,12 @@ export interface OrderWorkflow {
   ductJobOrders: DuctJobOrder[];
   ductJoBaseNo?: number;
   ductJoBaseYear?: number;
+  // Detailed Accessories job orders. An order can carry several; they share a
+  // base number claimed once (accJoBaseNo/accJoBaseYear) in their own ACCE-JO
+  // series and get an a/b/c suffix when there is more than one.
+  accessoriesJobOrders: AccessoriesJobOrder[];
+  accJoBaseNo?: number;
+  accJoBaseYear?: number;
   // Sales' log of conversations with production heads about the order.
   conversations: OrderConversation[];
   // Post-close sales-commission sign-offs (approve → voucher → received).
@@ -340,6 +347,12 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   const ductJoBaseNo = typeof wf?.ductJoBaseNo === "number" ? (wf.ductJoBaseNo as number) : undefined;
   const ductJoBaseYear = typeof wf?.ductJoBaseYear === "number" ? (wf.ductJoBaseYear as number) : undefined;
 
+  const accessoriesJobOrders: AccessoriesJobOrder[] = Array.isArray(wf?.accessoriesJobOrders)
+    ? (wf.accessoriesJobOrders as unknown[]).map(coerceAccessoriesJobOrder).filter((x): x is AccessoriesJobOrder => !!x)
+    : [];
+  const accJoBaseNo = typeof wf?.accJoBaseNo === "number" ? (wf.accJoBaseNo as number) : undefined;
+  const accJoBaseYear = typeof wf?.accJoBaseYear === "number" ? (wf.accJoBaseYear as number) : undefined;
+
   const conversations: OrderConversation[] = Array.isArray(wf?.conversations)
     ? (wf.conversations as unknown[])
         .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
@@ -393,7 +406,7 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     else if (jos.some((j) => j.status === "in_production" || j.status === "finished")) stage = "producing";
   }
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, conversations, commission };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, conversations, commission };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */

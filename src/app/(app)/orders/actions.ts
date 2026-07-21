@@ -46,6 +46,7 @@ import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, isReducingDuctType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
+import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine } from "@/lib/accessories-job-order";
 
 interface StockMatch { stockItemId: string; qty: number }
 
@@ -433,6 +434,98 @@ export async function deleteDuctJobOrder(quotationId: string, index: number): Pr
   const { cls, wf } = await loadWorkflow(quotationId);
   const list = wf.ductJobOrders.filter((_, i) => i !== index);
   await saveWorkflow(quotationId, cls, { ...wf, ductJobOrders: list });
+}
+
+// --- Accessories Job Orders (Engineer) ------------------------------------
+
+/** Next running Accessories JO base sequence (claimed once per order). */
+async function nextAccJoBaseNo(): Promise<number> {
+  const KEY = "acc_jo_counter";
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.appSetting.findUnique({ where: { key: KEY } });
+    const last = Number((row?.value as { last?: unknown } | null)?.last ?? 0) || 0;
+    const next = last + 1;
+    await tx.appSetting.upsert({
+      where: { key: KEY },
+      create: { key: KEY, value: { last: next } as Prisma.InputJsonValue },
+      update: { value: { last: next } as Prisma.InputJsonValue },
+    });
+    return next;
+  });
+}
+
+const accDimensionSchema = z.object({
+  value: z.string().trim().default(""),
+  label: z.string().trim().default(""),
+});
+const accLineSchema = z.object({
+  type: z.string().trim().default(""),
+  quantity: z.string().trim().default(""),
+  uom: z.string().trim().default(""),
+  dimensions: z.array(accDimensionSchema).default([]),
+  material: z.string().trim().default(""),
+});
+const accJoSchema = z.object({
+  date: z.string().trim().default(""),
+  project: z.string().trim().default(""),
+  dueDate: z.string().trim().default(""),
+  lines: z.array(accLineSchema).default([]),
+  note: z.string().trim().default(""),
+  assignedPersonnel: z.string().trim().default(""),
+});
+
+/**
+ * The Engineer creates or edits an Accessories job order on an order. Pass
+ * index = null to add a new one, or an existing index to edit. The first
+ * Accessories JO on an order claims the running ACCE-JO base number.
+ */
+export async function saveAccessoriesJobOrder(
+  quotationId: string,
+  index: number | null,
+  input: z.infer<typeof accJoSchema>,
+): Promise<void> {
+  await assertEngineer();
+  const d = accJoSchema.parse(input);
+  const { cls, wf } = await loadWorkflow(quotationId);
+
+  const isNew = index == null || index < 0 || index >= wf.accessoriesJobOrders.length;
+  if (isNew && stageIndex(wf.stage) >= stageIndex("producing")) {
+    throw new Error("The order is in production — new job orders can no longer be added.");
+  }
+
+  // Keep only lines that carry a type or at least one dimension value; clean each
+  // line's dimensions down to the entries that have a value.
+  const lines: AccessoryLine[] = d.lines
+    .map((l) => ({
+      type: l.type,
+      quantity: l.quantity,
+      uom: l.uom || "pc",
+      dimensions: l.dimensions.filter((dim) => dim.value !== "" || dim.label !== ""),
+      material: l.material || "G.I.",
+    }))
+    .filter((l) => l.type !== "" || l.dimensions.length > 0);
+
+  let accJoBaseNo = wf.accJoBaseNo;
+  let accJoBaseYear = wf.accJoBaseYear;
+  if (accJoBaseNo == null) {
+    accJoBaseNo = await nextAccJoBaseNo();
+    accJoBaseYear = new Date().getFullYear();
+  }
+
+  const jo: AccessoriesJobOrder = { ...(coerceAccessoriesJobOrder({}) as AccessoriesJobOrder), ...d, lines };
+  const list = [...wf.accessoriesJobOrders];
+  if (index != null && index >= 0 && index < list.length) list[index] = jo;
+  else list.push(jo);
+
+  await saveWorkflow(quotationId, cls, { ...wf, accessoriesJobOrders: list, accJoBaseNo, accJoBaseYear });
+}
+
+/** Remove an Accessories job order by index. */
+export async function deleteAccessoriesJobOrder(quotationId: string, index: number): Promise<void> {
+  await assertEngineer();
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const list = wf.accessoriesJobOrders.filter((_, i) => i !== index);
+  await saveWorkflow(quotationId, cls, { ...wf, accessoriesJobOrders: list });
 }
 
 /**
