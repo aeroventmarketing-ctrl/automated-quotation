@@ -43,7 +43,9 @@ const createSchema = z.object({
   source: z.enum(["EMAIL", "PHONE", "WALK_IN", "PHOTO", "OTHER"]).default("OTHER"),
   projectName: z.string().optional(),
   notes: z.string().optional(),
-  items: z.array(itemSchema).min(1),
+  // Line items are optional at creation — they can be added later in the
+  // inquiry workspace (e.g. via the RFQ AI import).
+  items: z.array(itemSchema).default([]),
 });
 
 export async function createInquiry(input: z.infer<typeof createSchema>) {

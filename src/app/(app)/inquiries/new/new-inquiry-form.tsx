@@ -8,9 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ItemRows } from "@/components/intake/item-rows";
-import { AiExtractPanel } from "@/components/intake/ai-extract-panel";
-import { emptyDraft, type DraftItem } from "@/components/intake/types";
 import { isNextControlFlowError } from "@/lib/utils";
 import { createInquiry } from "../actions";
 
@@ -26,7 +23,6 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
   const [source, setSource] = useState<(typeof SOURCES)[number]>("EMAIL");
   const [projectName, setProjectName] = useState("");
   const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<DraftItem[]>([emptyDraft()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,11 +55,6 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
         return;
       }
     }
-    const cleanItems = items.filter((it) => it.rawText.trim() || it.parsedJson.description.trim());
-    if (cleanItems.length === 0) {
-      setError("Add at least one line item.");
-      return;
-    }
     setSaving(true);
     try {
       await createInquiry({
@@ -75,13 +66,9 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
         source,
         projectName,
         notes,
-        items: cleanItems.map((it) => ({
-          rawText: it.rawText || it.parsedJson.description,
-          qty: it.qty,
-          parsedJson: it.parsedJson as unknown as Record<string, unknown>,
-        })),
+        items: [],
       });
-      // createInquiry redirects on success.
+      // createInquiry redirects on success; line items are added in the workspace.
     } catch (e) {
       if (isNextControlFlowError(e)) throw e; // let the redirect navigate
       setError(e instanceof Error ? e.message : "Failed to save inquiry");
@@ -90,8 +77,8 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <div className="space-y-6 lg:col-span-2">
+    <div className="max-w-3xl space-y-6">
+      <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>Customer</CardTitle>
@@ -171,27 +158,14 @@ export function NewInquiryForm({ customers }: { customers: { id: string; company
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Line items</CardTitle>
-            <Button type="button" variant="outline" size="sm" onClick={() => setItems([...items, emptyDraft()])}>
-              + Add item
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <ItemRows items={items} onChange={setItems} />
-          </CardContent>
-        </Card>
+        <p className="text-xs text-muted-foreground">
+          Line items are added after saving — open the inquiry and use <strong>Import from RFQ (AI)</strong> (or add them manually) to build the quotation.
+        </p>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button onClick={submit} disabled={saving} size="lg">
           {saving ? "Saving…" : "Save inquiry"}
         </Button>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-muted-foreground">Quick intake (AI-assisted)</h3>
-        <AiExtractPanel onExtracted={(extracted) => setItems((prev) => [...prev.filter((p) => p.rawText || p.parsedJson.description), ...extracted])} />
       </div>
     </div>
   );
