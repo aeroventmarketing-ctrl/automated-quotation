@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { createClient as createSbClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { findContactOwner } from "@/lib/client-ownership";
@@ -117,6 +118,25 @@ export async function createInquiry(input: z.infer<typeof createSchema>) {
   revalidatePath("/inquiries");
   revalidatePath("/dashboard");
   redirect(`/inquiries/${inquiry.id}`);
+}
+
+/**
+ * Verify the signed-in admin's own login password (the one set in the Users
+ * tab / Supabase Auth) — used to unlock the admin-only RFQ AI import. Runs on a
+ * stateless client so it never disturbs the current session.
+ */
+export async function verifyMyPassword(password: string): Promise<{ ok: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in." };
+  if (!isAdmin(user)) return { error: "Only an admin can use this." };
+  if (!password || !password.trim()) return { error: "Enter your password." };
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) return { error: "Auth isn't configured on the server." };
+  const sb = createSbClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error } = await sb.auth.signInWithPassword({ email: user.email, password });
+  if (error) return { error: "Incorrect password." };
+  return { ok: true };
 }
 
 export async function addInquiryItems(

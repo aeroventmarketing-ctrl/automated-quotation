@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AiExtractPanel } from "@/components/intake/ai-extract-panel";
 import type { DraftItem } from "@/components/intake/types";
-import { addInquiryItems } from "../actions";
+import { addInquiryItems, verifyMyPassword } from "../actions";
+import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -82,6 +83,7 @@ export function InquiryWorkspace({
   templates,
   initialDocs = {},
   canEditDocs = true,
+  isAdmin = false,
 }: {
   inquiryId: string;
   projectName: string;
@@ -90,6 +92,7 @@ export function InquiryWorkspace({
   templates: { id: string; name: string }[];
   initialDocs?: Record<string, SaleDoc[]>;
   canEditDocs?: boolean;
+  isAdmin?: boolean;
 }) {
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialDocs);
   const docsMissing = inquiryDocsMissing(docs);
@@ -102,6 +105,26 @@ export function InquiryWorkspace({
   const router = useRouter();
   const [showImport, setShowImport] = useState(items.length === 0);
   const [importErr, setImportErr] = useState<string | null>(null);
+  // Admin-only RFQ import is locked until the admin re-enters their password.
+  const [unlocked, setUnlocked] = useState(false);
+  const [pw, setPw] = useState("");
+  const [pwErr, setPwErr] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  async function unlock() {
+    setPwErr(null);
+    setVerifying(true);
+    try {
+      const res = await verifyMyPassword(pw);
+      if ("error" in res) { setPwErr(res.error); return; }
+      setUnlocked(true);
+      setPw("");
+    } catch (e) {
+      setPwErr(e instanceof Error ? e.message : "Verification failed");
+    } finally {
+      setVerifying(false);
+    }
+  }
 
   const catById = Object.fromEntries(catalogue.map((c) => [c.id, c]));
 
@@ -243,27 +266,45 @@ export function InquiryWorkspace({
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Requirements → Match → Select</h2>
 
-      {/* Generate items from an RFQ — upload a photo/scan or paste text; AI extracts the line items. */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-3 pb-2">
-          <div>
-            <CardTitle className="text-sm">Import from RFQ (AI)</CardTitle>
-            <p className="text-xs text-muted-foreground">Upload a photo/scan of the RFQ (or paste its text) and AI turns it into line items you can size and quote.</p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => setShowImport((v) => !v)}>
-            {showImport ? "Hide" : "Upload RFQ / paste text"}
-          </Button>
-        </CardHeader>
-        {showImport && (
+      {/* Generate items from an RFQ — admin only, password-protected. */}
+      {isAdmin && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between gap-3 pb-2">
+            <div>
+              <CardTitle className="flex items-center gap-1.5 text-sm"><Lock className="h-3.5 w-3.5 text-muted-foreground" /> Import from RFQ (AI)</CardTitle>
+              <p className="text-xs text-muted-foreground">Admin only. Upload a photo/scan of the RFQ (or paste its text) and AI turns it into line items you can size and quote.</p>
+            </div>
+            {unlocked && (
+              <Button variant="outline" size="sm" onClick={() => setShowImport((v) => !v)}>
+                {showImport ? "Hide" : "Upload RFQ / paste text"}
+              </Button>
+            )}
+          </CardHeader>
           <CardContent className="pt-0">
-            <AiExtractPanel onExtracted={addFromRfq} />
-            {importErr && <p className="mt-2 text-sm text-destructive">{importErr}</p>}
+            {!unlocked ? (
+              <div className="max-w-sm space-y-2">
+                <p className="text-xs text-muted-foreground">Enter your admin password (from the Users tab) to unlock this feature.</p>
+                <div className="flex gap-2">
+                  <Input type="password" autoComplete="current-password" placeholder="Admin password" value={pw}
+                    onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") unlock(); }} />
+                  <Button onClick={unlock} disabled={verifying || !pw}>{verifying ? "Checking…" : "Unlock"}</Button>
+                </div>
+                {pwErr && <p className="text-xs text-destructive">{pwErr}</p>}
+              </div>
+            ) : showImport ? (
+              <>
+                <AiExtractPanel onExtracted={addFromRfq} />
+                {importErr && <p className="mt-2 text-sm text-destructive">{importErr}</p>}
+              </>
+            ) : null}
           </CardContent>
-        )}
-      </Card>
+        </Card>
+      )}
 
-      {items.length === 0 && !showImport && (
-        <p className="text-sm text-muted-foreground">No line items yet — use “Import from RFQ (AI)” above or add them from the inquiry.</p>
+      {items.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No line items yet — {isAdmin ? "unlock “Import from RFQ (AI)” above to add them, or" : "ask an admin to import the RFQ, or"} add them manually.
+        </p>
       )}
 
       {items.map((item) => {

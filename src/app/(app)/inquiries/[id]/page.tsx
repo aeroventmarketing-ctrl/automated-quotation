@@ -135,6 +135,7 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
         templates={sortTemplatesByName(templates).map((t) => ({ id: t.id, name: t.name }))}
         initialDocs={inquiryDocs}
         canEditDocs={canEditDocs}
+        isAdmin={isAdmin(viewer)}
       />
     </div>
   );

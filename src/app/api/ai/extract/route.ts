@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { EXTRACTION_SYSTEM_PROMPT, EXTRACTION_IMAGE_PROMPT, extractionUserPrompt } from "@/lib/ai/prompts";
 import { extractionResultSchema } from "@/lib/ai/schemas";
@@ -17,6 +17,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(user)) return NextResponse.json({ error: "Only an admin can use the RFQ AI import." }, { status: 403 });
 
   let body: z.infer<typeof bodySchema>;
   try {
