@@ -6,7 +6,7 @@
 import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { purchaseStepsFrom, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
-import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
+import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, quoteVatToReconcile, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
@@ -60,11 +60,13 @@ export interface PurchaseReconcileView {
   aiReadEscalated: string | null; // accounting informed the approver the AI limit was hit
 }
 
-export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileView {
+export function buildReconcileView(pr: PurchaseRequestLike, defaultVatMode: ReconcileVatMode = "inclusive"): PurchaseReconcileView {
   const r = coerceReconciliation(pr.reconciliation);
   const po = coercePurchaseOrder(pr.po);
   const poLines = (po?.lines ?? []).map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, poAmount: poLineAmount(l) }));
-  const vatMode = r.vatMode ?? "inclusive";
+  // Until the purchaser records the reconciliation, default the VAT mode from the
+  // quotation (EXCLUSIVE quotations → "exclusive") rather than always "inclusive".
+  const vatMode = r.vatMode ?? defaultVatMode;
   const factor = vatFactor(vatMode);
   const recorded = isReconciled(r);
 
@@ -246,6 +248,7 @@ export function buildPurchaseChainRow(
     namesForRole: (role: WorkflowRoleKey) => string[];
     canAct: (role: WorkflowRoleKey) => boolean;
     admin?: boolean;
+    quotationVatMode?: string | null;
   },
 ): PurchaseChainRow {
   const status = pr.status as PRStatus;
@@ -259,7 +262,7 @@ export function buildPurchaseChainRow(
   const canResolveReturn = ctx.canAct("purchaser") || ctx.canAct("warehouse");
   // Voucher reconciliation: the purchaser records the spend once bought;
   // accounting or the purchaser settle any change / overspend.
-  const reconcile = buildReconcileView(pr);
+  const reconcile = buildReconcileView(pr, quoteVatToReconcile(ctx.quotationVatMode));
   // Purchaser/accounting record it; the approver may also edit figures.
   const canRecordReconcile = canReconcileAt(status) && (ctx.canAct("purchaser") || ctx.canAct("accounting") || ctx.canAct("payment_approver"));
   const canSettleReconcile = ctx.canAct("accounting") || ctx.canAct("purchaser");

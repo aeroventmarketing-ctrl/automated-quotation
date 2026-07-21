@@ -7,7 +7,7 @@ import { purchaseStepsFrom, PR_STATUS_LABEL, isCancellable, type PRStatus } from
 import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
-import { canReconcileAt } from "@/lib/purchase-reconcile";
+import { canReconcileAt, quoteVatToReconcile } from "@/lib/purchase-reconcile";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
@@ -187,7 +187,7 @@ export default async function PurchasingPage() {
       const canRaiseReturn = canRaiseReturnAt(status) && (canAct("purchaser") || canAct("warehouse") || canAct("plant_manager"));
       const canResolveReturn = canAct("purchaser") || canAct("warehouse");
       // Voucher reconciliation rides on the anchor (the whole PO / voucher).
-      const reconcile = buildReconcileView(anchor);
+      const reconcile = buildReconcileView(anchor, quoteVatToReconcile(quoteById.get(anchor.quotationId ?? "")?.vatMode));
       const canRecordReconcile = canReconcileAt(status) && (canAct("purchaser") || canAct("accounting") || canAct("payment_approver"));
       const canSettleReconcile = canAct("accounting") || canAct("purchaser");
       const canEscalateReconcile = canAct("accounting") || canAct("purchaser");
@@ -235,7 +235,7 @@ export default async function PurchasingPage() {
         const rows = unbatched
           .filter((pr) => pr.quotationId === qid)
           .map((pr) =>
-            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin }),
+            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, quotationVatMode: q.vatMode }),
           );
         if (rows.length === 0) return null;
         const project = q.projectName ?? q.inquiry.projectName ?? "";
