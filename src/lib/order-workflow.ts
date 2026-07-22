@@ -415,9 +415,11 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   // Normalize the JO-Received → In Production → Production finished window so the
   // order stage always reflects actual job-order progress. This self-heals orders
   // whose job orders were started before the "In Production" stage existed (their
-  // stage was left at jo_received even though a job order is in production).
+  // stage was left at jo_received even though a job order is in production), and —
+  // importantly — promotes a "producing" order to "production_finished" as soon as
+  // every job order is finished, so Phase 5 opens without a manual nudge.
   let stage = storedStage;
-  if (stage === "jo_received") {
+  if (stage === "jo_received" || stage === "producing") {
     const jos = Object.values(jobOrders).filter(Boolean) as JobOrder[];
     if (jos.length > 0 && jos.every((j) => j.status === "finished")) stage = "production_finished";
     else if (jos.some((j) => j.status === "in_production" || j.status === "finished")) stage = "producing";
