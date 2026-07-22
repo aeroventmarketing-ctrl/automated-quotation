@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, Fragment } from "react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SUPPLIER_COLUMNS, parseEwt, type Supplier, type BulkResult } from "@/lib/suppliers";
@@ -75,6 +76,7 @@ export function SuppliersManager({
   const [list, setList] = useState<Supplier[]>(suppliers);
   const [add, setAdd] = useState<Fields>(blank);
   const [editId, setEditId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [edit, setEdit] = useState<Fields>(blank);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -276,8 +278,19 @@ export function SuppliersManager({
                     </td>
                   </tr>
                 ) : (
-                  <tr key={s.id} className="border-b last:border-0">
-                    <td className="py-2 px-3 font-medium">{s.company}</td>
+                  <Fragment key={s.id}>
+                  <tr className="border-b last:border-0">
+                    <td className="py-2 px-3 font-medium">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-left hover:text-primary hover:underline"
+                        onClick={() => setOpenId(openId === s.id ? null : s.id)}
+                        title="Show details"
+                      >
+                        <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${openId === s.id ? "rotate-90" : ""}`} />
+                        {s.company}
+                      </button>
+                    </td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.contactPerson)}</td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.contactNumber)}</td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.email)}</td>
@@ -298,6 +311,32 @@ export function SuppliersManager({
                       </div>
                     </td>
                   </tr>
+                  {openId === s.id && (
+                    <tr className="border-b last:border-0 bg-muted/20">
+                      <td colSpan={11} className="px-4 py-3">
+                        <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {([
+                            ["Company Name", s.company],
+                            ["Contact Person", s.contactPerson],
+                            ["Contact Number", s.contactNumber],
+                            ["Email Address", s.email],
+                            ["Address", s.address],
+                            ["TIN", s.tin],
+                            ["ZIP Code", s.zip],
+                            ["Bank Name", s.bankName],
+                            ["Account Number", s.accountNumber],
+                            ["EWT capable", s.ewt ? "Yes" : "No"],
+                          ] as [string, string][]).map(([label, value]) => (
+                            <div key={label} className="flex flex-col">
+                              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
+                              <span className="text-sm">{value || "—"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ),
               )}
             </tbody>
