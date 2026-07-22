@@ -213,7 +213,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const status = jo?.status ?? null;
     const nextTo: "in_production" | "finished" | null =
       status === "issued" ? "in_production" : status === "in_production" ? "finished" : null;
-    const nextLabel = nextTo === "in_production" ? "Start production" : nextTo === "finished" ? "Mark finished" : null;
+    const nextLabel = nextTo === "in_production" ? "Start production" : nextTo === "finished" ? "Mark Finished" : null;
     const canAdvance =
       nextTo != null &&
       (wf.stage === "jo_received" || wf.stage === "producing") &&
@@ -226,7 +226,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const jo = wf.jobOrders[d.key]!;
     const nextTo: "in_production" | "finished" | null =
       jo.status === "issued" ? "in_production" : jo.status === "in_production" ? "finished" : null;
-    const nextLabel = nextTo === "in_production" ? "Start production" : nextTo === "finished" ? "Mark finished" : null;
+    const nextLabel = nextTo === "in_production" ? "Start production" : nextTo === "finished" ? "Mark Finished" : null;
     const canAdvance =
       nextTo != null &&
       (wf.stage === "jo_received" || wf.stage === "producing") &&
