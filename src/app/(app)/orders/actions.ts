@@ -127,6 +127,14 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
         joBaseYear: wf.joBaseYear ?? year,
       };
     }
+    if (auto.duct.length && wf.ductJobOrders.length === 0) {
+      workflow = {
+        ...workflow,
+        ductJobOrders: auto.duct,
+        ductJoBaseNo: wf.ductJoBaseNo ?? (await nextDuctJoBaseNo()),
+        ductJoBaseYear: wf.ductJoBaseYear ?? year,
+      };
+    }
     if (auto.motor.length && wf.motorJobOrders.length === 0) {
       workflow = {
         ...workflow,

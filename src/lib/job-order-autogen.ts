@@ -11,7 +11,23 @@
  */
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
+import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
+
+/** Air Duct quotation types — they map 1:1 to the Duct JO segment types. */
+const AIR_DUCT_TYPES = new Set([
+  "Straight Duct", "Duct Connector", "Duct Reducer", "Elbow Duct",
+  "Offset Duct", "R-Duct", "Square to Round Duct", "Y-Duct",
+]);
+const isAirDuct = (s: Record<string, unknown>) =>
+  s.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(str(s.type));
+
+/** Map a quotation Air Duct material to a Duct JO material. */
+function ductMaterial(s: Record<string, unknown>): string {
+  const m = str(s.material);
+  if (/galvani/i.test(m)) return "G.I. Material";
+  return m || "G.I. Material";
+}
 
 /** The subset of a quotation item the generator reads. */
 export interface QuoteItemLike {
@@ -28,7 +44,10 @@ function specsOf(it: QuoteItemLike): Record<string, unknown> {
 
 const isMotorController = (s: Record<string, unknown>) => s.type === "Motor Controller";
 const isIsolator = (s: Record<string, unknown>) => s.type === "Spring Vibration Isolator";
-const isAccessory = (s: Record<string, unknown>) => s.category === "Ventilation Accessories" || isIsolator(s);
+// Accessories = ventilation accessories EXCEPT the Air Duct group (those go to the
+// Duct JO), plus spring vibration isolators.
+const isAccessory = (s: Record<string, unknown>) =>
+  (s.category === "Ventilation Accessories" && !isAirDuct(s)) || isIsolator(s);
 // A fan/blower line: any non-accessory, non-motor-controller product with a fan
 // category (Centrifugal / Axial / Propeller / Tubular…). Accessories are excluded.
 const isFan = (s: Record<string, unknown>) => {
@@ -50,6 +69,7 @@ function fanJoType(s: Record<string, unknown>): string {
 
 export interface AutoJobOrders {
   fans: FansJobOrder[];
+  duct: DuctJobOrder[];
   accessories: AccessoriesJobOrder[];
   motor: MotorControllerJobOrder[];
 }
@@ -64,11 +84,29 @@ export interface AutoJobOrders {
 export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: string; date: string }): AutoJobOrders {
   const motorLines: MotorControllerLine[] = [];
   const accessoryLines: AccessoryLine[] = [];
+  const ductSegments: DuctSegment[] = [];
   const fans: FansJobOrder[] = [];
 
   for (const it of items) {
     const s = specsOf(it);
     const qty = it.qty > 0 ? String(it.qty) : "1";
+    if (isAirDuct(s)) {
+      // One duct segment per quotation Air Duct line. The cross-section
+      // (width × height) and length come from the duct calculator; the reducer
+      // "reduces-to" sizes are left for the engineer (not captured on the quote).
+      ductSegments.push({
+        ...EMPTY_DUCT_SEGMENT,
+        type: str(s.type) || "Straight Duct",
+        horizontal: str(s.ductCalcWidth),
+        vertical: str(s.ductCalcHeight),
+        length: str(s.ductCalcLength),
+        toHorizontal: "",
+        toVertical: "",
+        material: ductMaterial(s),
+        gauge: str(s.ductGauge) || "GA20",
+      });
+      continue;
+    }
     if (isFan(s)) {
       // One Fans & Blowers JO per fan line. Populate the descriptive/geometry
       // fields that map directly from the quotation; the motor-table, pulley,
@@ -90,6 +128,8 @@ export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: stri
         orientation: str(s.orientation),
         rotation: str(s.rotation),
         capacity: cfm ? `${cfm} cfm${sp ? ` @ ${sp}" w.g.` : ""}` : "",
+        rpmCatalogue: str(s.rpm),
+        mounting: str(s.mounting),
         motorHp: str(s.motorHp),
         voltage: str(s.motorVolts),
       });
@@ -125,6 +165,9 @@ export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: stri
   const accessories: AccessoriesJobOrder[] = accessoryLines.length
     ? [{ ...(coerceAccessoriesJobOrder({}) as AccessoriesJobOrder), ...header, lines: accessoryLines }]
     : [];
+  const duct: DuctJobOrder[] = ductSegments.length
+    ? [{ ...(coerceDuctJobOrder({}) as DuctJobOrder), ...header, quantity: String(ductSegments.length), uom: "set", segments: ductSegments }]
+    : [];
 
-  return { fans, accessories, motor };
+  return { fans, duct, accessories, motor };
 }
