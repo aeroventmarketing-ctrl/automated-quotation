@@ -30,6 +30,7 @@ import {
   allJobOrdersFinished,
   type OrderStage,
   type OrderStepKey,
+  type OrderWorkflow,
   type ProductionDeptKey,
   type JobOrder,
   type MaterialRequest,
@@ -106,51 +107,10 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
     },
   };
 
-  // When payment is cleared (order → "For JO creation"), auto-generate the
-  // mappable job orders (Motor Controller, Accessories) from the quotation lines
-  // so the engineer only reviews/edits/approves. Never overwrite job orders that
-  // already exist for a department.
+  // When payment is cleared (order → "For JO creation"), auto-generate the job
+  // orders from the quotation lines so the engineer only reviews/edits/approves.
   if (step === "payment_cleared") {
-    const items = (quote.items ?? []).map((it) => ({
-      qty: Number(it.qty) || 0,
-      descriptionSnapshot: it.descriptionSnapshot ?? "",
-      specsSnapshot: it.specsSnapshot,
-    }));
-    const project = (quote.projectName ?? "").trim();
-    const auto = buildAutoJobOrders(items, { project, date: new Date().toISOString() });
-    const year = new Date().getFullYear();
-    if (auto.fans.length && wf.fansJobOrders.length === 0) {
-      workflow = {
-        ...workflow,
-        fansJobOrders: auto.fans,
-        joBaseNo: wf.joBaseNo ?? (await nextJoBaseNo()),
-        joBaseYear: wf.joBaseYear ?? year,
-      };
-    }
-    if (auto.duct.length && wf.ductJobOrders.length === 0) {
-      workflow = {
-        ...workflow,
-        ductJobOrders: auto.duct,
-        ductJoBaseNo: wf.ductJoBaseNo ?? (await nextDuctJoBaseNo()),
-        ductJoBaseYear: wf.ductJoBaseYear ?? year,
-      };
-    }
-    if (auto.motor.length && wf.motorJobOrders.length === 0) {
-      workflow = {
-        ...workflow,
-        motorJobOrders: auto.motor,
-        mcJoBaseNo: wf.mcJoBaseNo ?? (await nextMcJoBaseNo()),
-        mcJoBaseYear: wf.mcJoBaseYear ?? year,
-      };
-    }
-    if (auto.accessories.length && wf.accessoriesJobOrders.length === 0) {
-      workflow = {
-        ...workflow,
-        accessoriesJobOrders: auto.accessories,
-        accJoBaseNo: wf.accJoBaseNo ?? (await nextAccJoBaseNo()),
-        accJoBaseYear: wf.accJoBaseYear ?? year,
-      };
-    }
+    workflow = await mergeAutoJobOrders(workflow, wf, quote);
   }
 
   await prisma.quotation.update({
@@ -158,6 +118,75 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
     data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },
   });
   revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+}
+
+/** Quotation shape the job-order autogen reads. */
+type AutogenQuote = {
+  projectName: string | null;
+  items: { qty: number; descriptionSnapshot: string | null; specsSnapshot: unknown }[];
+};
+
+/**
+ * Merge auto-generated job orders (Fans, Duct, Motor Controller, Accessories)
+ * built from the quotation lines into a workflow object. A department is only
+ * populated when it currently has NO job orders, so this never overwrites manual
+ * work and is safe to run more than once. Base numbers are claimed on demand.
+ */
+async function mergeAutoJobOrders(
+  base: Record<string, unknown>,
+  wf: OrderWorkflow,
+  quote: AutogenQuote,
+): Promise<Record<string, unknown>> {
+  const items = (quote.items ?? []).map((it) => ({
+    qty: Number(it.qty) || 0,
+    descriptionSnapshot: it.descriptionSnapshot ?? "",
+    specsSnapshot: it.specsSnapshot,
+  }));
+  const auto = buildAutoJobOrders(items, { project: (quote.projectName ?? "").trim(), date: new Date().toISOString() });
+  const year = new Date().getFullYear();
+  let workflow = base;
+  if (auto.fans.length && wf.fansJobOrders.length === 0) {
+    workflow = { ...workflow, fansJobOrders: auto.fans, joBaseNo: wf.joBaseNo ?? (await nextJoBaseNo()), joBaseYear: wf.joBaseYear ?? year };
+  }
+  if (auto.duct.length && wf.ductJobOrders.length === 0) {
+    workflow = { ...workflow, ductJobOrders: auto.duct, ductJoBaseNo: wf.ductJoBaseNo ?? (await nextDuctJoBaseNo()), ductJoBaseYear: wf.ductJoBaseYear ?? year };
+  }
+  if (auto.motor.length && wf.motorJobOrders.length === 0) {
+    workflow = { ...workflow, motorJobOrders: auto.motor, mcJoBaseNo: wf.mcJoBaseNo ?? (await nextMcJoBaseNo()), mcJoBaseYear: wf.mcJoBaseYear ?? year };
+  }
+  if (auto.accessories.length && wf.accessoriesJobOrders.length === 0) {
+    workflow = { ...workflow, accessoriesJobOrders: auto.accessories, accJoBaseNo: wf.accJoBaseNo ?? (await nextAccJoBaseNo()), accJoBaseYear: wf.accJoBaseYear ?? year };
+  }
+  return workflow;
+}
+
+/**
+ * Manually (re)generate job orders from the quotation for an order that's already
+ * at the JO-creation stage — e.g. one cleared before auto-generation existed, or
+ * when a department was left empty. Only fills empty departments.
+ */
+export async function autofillJobOrders(quotationId: string): Promise<void> {
+  await assertEngineer();
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: {
+      classification: true,
+      projectName: true,
+      items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
+    },
+  });
+  if (!quote) throw new Error("Order not found");
+  const wf = readOrderWorkflow(quote.classification);
+  if (stageIndex(wf.stage) < stageIndex("released")) {
+    throw new Error("Job orders can be generated once the order's payment is cleared.");
+  }
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const workflow = await mergeAutoJobOrders({ ...wf }, wf, quote);
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },
+  });
   revalidatePath(`/orders/${quotationId}`);
 }
 

@@ -34,6 +34,7 @@ import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { DeptProductionControls } from "./dept-production-controls";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
+import { AutofillJobOrdersButton } from "./autofill-jo-button";
 import { DuctJobOrderPanel } from "./duct-job-order-panel";
 import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { AccessoriesJobOrderPanel } from "./accessories-job-order-panel";
@@ -515,6 +516,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 canReceive={canReceive}
                 jobs={jobs}
               />
+              {canManageJO && !inProductionOrLater && <AutofillJobOrdersButton orderId={quote.id} />}
               <div className="rounded-lg border border-sky-300 bg-sky-50 p-3 dark:border-sky-900 dark:bg-sky-950/30">
                 <div className="mb-2 text-xs font-semibold text-sky-800 dark:text-sky-300">Fans &amp; Blowers job order (Engineer)</div>
                 <DeptProductionControls orderId={quote.id} deptKey="fans" {...deptCtrl("fans")} />
