@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Printer, Pencil, Plus, Trash2 } from "lucide-react";
+import { Printer, Pencil, Plus, Trash2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -95,8 +95,16 @@ export function DuctJobOrderPanel({
                   {[jo.project, jo.segments.length ? `${jo.segments.length} segment${jo.segments.length > 1 ? "s" : ""}` : null, jo.dueDate && `due ${jo.dueDate}`].filter(Boolean).join(" · ")}
                 </span>
                 <a
+                  href={`/orders/${orderId}/jo-duct/${i}/xlsx?view=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto inline-flex items-center gap-1 rounded-md border px-2 py-1.5 font-semibold text-muted-foreground hover:bg-muted"
+                >
+                  <Eye className="h-3.5 w-3.5" /> View
+                </a>
+                <a
                   href={`/orders/${orderId}/jo-duct/${i}/xlsx`}
-                  className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a]"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a]"
                 >
                   <Printer className="h-3.5 w-3.5" /> Print Job Order
                 </a>

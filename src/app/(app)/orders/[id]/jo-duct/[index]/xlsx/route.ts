@@ -3,11 +3,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { readOrderWorkflow } from "@/lib/order-workflow";
 import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { buildDuctJobOrderWorkbook } from "@/lib/excel/duct-job-order-xlsx";
+import { joXlsxResponse } from "@/lib/job-order-response";
 
 export const dynamic = "force-dynamic";
 
-/** GET a Duct Job Order as a filled .xlsx. */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string; index: string }> }) {
+/** GET a Duct Job Order as a filled .xlsx (or an HTML preview with ?view=1). */
+export async function GET(req: Request, { params }: { params: Promise<{ id: string; index: string }> }) {
   const { id, index } = await params;
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
@@ -27,11 +28,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const buffer = await buildDuctJobOrderWorkbook({ ...jo, joNumber });
 
   const filename = `${(joNumber || "Duct-Job-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
-  return new Response(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return joXlsxResponse(req, buffer, filename);
 }

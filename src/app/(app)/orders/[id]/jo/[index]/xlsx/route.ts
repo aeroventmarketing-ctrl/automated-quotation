@@ -5,11 +5,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { readOrderWorkflow } from "@/lib/order-workflow";
 import { formatJoNumber, joTypeDef, joTypeLabel } from "@/lib/job-order";
 import { buildFansJobOrderWorkbook } from "@/lib/excel/job-order-xlsx";
+import { joXlsxResponse } from "@/lib/job-order-response";
 
 export const dynamic = "force-dynamic";
 
-/** GET a Fans & Blowers Job Order as a filled .xlsx (Centrifugal Blower + Source). */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string; index: string }> }) {
+/** GET a Fans & Blowers Job Order as a filled .xlsx (or an HTML preview with ?view=1). */
+export async function GET(req: Request, { params }: { params: Promise<{ id: string; index: string }> }) {
   const { id, index } = await params;
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
@@ -37,11 +38,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const buffer = await buildFansJobOrderWorkbook(template, { ...jo, joNumber });
 
   const filename = `${(joNumber || "Job-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
-  return new Response(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return joXlsxResponse(req, buffer, filename);
 }
