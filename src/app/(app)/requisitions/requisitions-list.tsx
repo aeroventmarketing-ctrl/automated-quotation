@@ -63,13 +63,17 @@ export function RequisitionsList({
   const [sort, setSort] = useState<SortKey>("newest");
   const [group, setGroup] = useState<GroupKey>("none");
 
+  // A material/MRF requisition stays "pending" until its Purchase Order exists.
+  const bucketOf = (r: RequisitionRow) => statusBucket(r.status, { isDept: r.isDept, hasPo: !!r.po });
+
   const counts: Record<Tab, number> = { pending: 0, approved: 0, rejected: 0, cancelled: 0, all: 0 };
-  for (const r of rows) counts[statusBucket(r.status)]++;
+  for (const r of rows) counts[bucketOf(r)]++;
   counts.all = rows.length;
 
   const visible = useMemo(() => {
+    const bkt = (r: RequisitionRow) => statusBucket(r.status, { isDept: r.isDept, hasPo: !!r.po });
     const q = query.trim().toLowerCase();
-    let list = rows.filter((r) => tab === "all" || statusBucket(r.status) === tab);
+    let list = rows.filter((r) => tab === "all" || bkt(r) === tab);
     if (q) {
       list = list.filter((r) =>
         [r.deptLabel, r.requestor, r.note ?? "", r.statusLabel, ...r.items].join("  ").toLowerCase().includes(q),
@@ -83,7 +87,7 @@ export function RequisitionsList({
         case "department":
           return a.deptLabel.localeCompare(b.deptLabel) || b.createdAt.localeCompare(a.createdAt);
         case "status":
-          return BUCKET_ORDER[statusBucket(a.status)] - BUCKET_ORDER[statusBucket(b.status)] || b.createdAt.localeCompare(a.createdAt);
+          return BUCKET_ORDER[bkt(a)] - BUCKET_ORDER[bkt(b)] || b.createdAt.localeCompare(a.createdAt);
         case "newest":
         default:
           return b.createdAt.localeCompare(a.createdAt);

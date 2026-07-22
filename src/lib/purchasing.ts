@@ -46,11 +46,19 @@ export const PR_STATUS_LABEL: Record<PRStatus, string> = {
 
 /** The tab a PO belongs to, grouping the fine-grained chain statuses. */
 export type PRBucket = "pending" | "approved" | "rejected" | "cancelled";
-export function statusBucket(status: PRStatus): PRBucket {
+/**
+ * The tab a purchase request belongs to. A material/department requisition is
+ * kept in "pending" until its Purchase Order actually exists: the Plant Manager
+ * approving the MRF (→ APPROVED) only clears it FOR purchasing — the purchase
+ * itself isn't approved until the Purchase Order is created, so it must not sit
+ * in "Approved" while it still shows "Approved — awaiting Purchase Order".
+ */
+export function statusBucket(status: PRStatus, ctx?: { isDept?: boolean; hasPo?: boolean }): PRBucket {
   if (status === "PENDING_APPROVAL") return "pending";
   if (status === "REJECTED") return "rejected";
   if (status === "CANCELLED") return "cancelled";
-  return "approved"; // APPROVED, VOUCHER_READY, PURCHASED, CHECKED, RECEIVED, COMPLETED
+  if (ctx?.isDept && status === "APPROVED" && !ctx.hasPo) return "pending";
+  return "approved"; // APPROVED (with PO), VOUCHER_READY, PURCHASED, CHECKED, RECEIVED, COMPLETED
 }
 
 /** A PO can be cancelled by the purchaser up until it's received into stock. */

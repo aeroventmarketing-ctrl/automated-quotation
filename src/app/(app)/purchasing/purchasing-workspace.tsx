@@ -58,17 +58,19 @@ export function PurchasingWorkspace({
 }) {
   const [tab, setTab] = useState<Tab>("pending");
   const inTab = (bucket: PRBucket) => tab === "all" || tab === bucket;
+  // A material/MRF requisition stays "pending" until its Purchase Order exists.
+  const rowBucket = (r: PurchaseChainRow) => statusBucket(r.status, { isDept: r.isDept, hasPo: !!r.po });
 
   // Counts per tab (POs = combined-PO cards + individual request rows).
   const counts: Record<Tab, number> = { pending: 0, approved: 0, rejected: 0, cancelled: 0, all: 0 };
   for (const b of batches) counts[statusBucket(b.status)]++;
-  for (const g of orderGroups) for (const r of g.rows) counts[statusBucket(r.status)]++;
+  for (const g of orderGroups) for (const r of g.rows) counts[rowBucket(r)]++;
   counts.all = counts.pending + counts.approved + counts.rejected + counts.cancelled;
 
   const showBuilder = tab === "pending" || tab === "all";
   const filteredBatches = batches.filter((b) => inTab(statusBucket(b.status)));
   const filteredGroups = orderGroups
-    .map((g) => ({ ...g, rows: g.rows.filter((r) => inTab(statusBucket(r.status))) }))
+    .map((g) => ({ ...g, rows: g.rows.filter((r) => inTab(rowBucket(r))) }))
     .filter((g) => g.rows.length > 0);
 
   const nothing = filteredBatches.length === 0 && filteredGroups.length === 0 && !(showBuilder && combinable.length > 0);
