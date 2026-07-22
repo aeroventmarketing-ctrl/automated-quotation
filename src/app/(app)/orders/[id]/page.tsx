@@ -367,6 +367,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       note: m.note,
       status: m.status,
       poStatus,
+      // Whether the purchase request already carries a supplier PO — lets the card
+      // distinguish "approved, awaiting PO" from "approved, awaiting voucher".
+      hasPo: linkedPr ? !!coercePurchaseOrder(linkedPr.po) : false,
       linkedPrId: linkedPr?.id ?? null,
       // The Plant Manager (or admin) approves/rejects a material request that is
       // still awaiting approval — right here on the Phase 3 MRF card.

@@ -24,6 +24,7 @@ interface ReqRow {
   poStatus?: string | null;
   poStatusLabel?: string | null;
   poStatusVariant?: "secondary" | "warning" | "success" | "destructive" | null;
+  hasPo?: boolean;
   linkedPrId?: string | null;
   canApproveMaterials?: boolean;
   raisedByName: string;
@@ -229,10 +230,17 @@ export function MaterialRequests({
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Awaiting the Plant Manager's approval — the amber "For
                       purchasing" only appears once they approve (step 16). */}
+                  {/* Badge mirrors the purchasing chain so the order and Purchasing
+                      stay in sync: pending → Plant Manager approval, then the live
+                      purchase-chain status (approved → PO → voucher → … → completed). */}
                   {r.poStatus === "PENDING_APPROVAL" ? (
                     <Badge variant="secondary">Awaiting Plant Manager approval</Badge>
                   ) : r.poStatus === "REJECTED" ? (
                     <Badge variant="destructive">Materials request rejected</Badge>
+                  ) : r.poStatus && r.poStatusLabel ? (
+                    <Badge variant={r.poStatusVariant ?? "warning"}>
+                      {r.poStatus === "APPROVED" && !r.hasPo ? "Approved — awaiting Purchase Order" : r.poStatusLabel}
+                    </Badge>
                   ) : (
                     <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>
                   )}
