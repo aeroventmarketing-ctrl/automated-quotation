@@ -84,7 +84,7 @@ export const PURCHASE_STEPS: PurchaseStepDef[] = [
   { key: "buy", from: "LOGISTICS_CONFIRMED", to: "PURCHASED", role: "purchaser", label: "Item bought" },
   { key: "check", from: "PURCHASED", to: "CHECKED", role: "purchaser", label: "Check & approve purchased item" },
   { key: "deliver", from: "CHECKED", to: "DELIVERED", role: "logistics", label: "Deliver to Warehouseman" },
-  { key: "warehouse_approve", from: "DELIVERED", to: "RECEIVED", role: "warehouse", label: "Warehouseman receive and approve" },
+  { key: "warehouse_approve", from: "DELIVERED", to: "RECEIVED", role: "warehouse", label: "Warehouseman Received and Approved" },
   { key: "plant", from: "RECEIVED", to: "PLANT_APPROVED", role: "plant_manager", label: "Plant Manager final approval" },
   { key: "receive", from: "PLANT_APPROVED", to: "COMPLETED", role: "warehouse", label: "Receive & add to stock" },
 ];
