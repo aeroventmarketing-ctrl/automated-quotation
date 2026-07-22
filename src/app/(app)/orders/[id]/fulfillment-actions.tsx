@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { closeDocsState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
@@ -87,7 +87,7 @@ export function FulfillmentActions({
       {stage === "production_finished" &&
         (perms.canNotify ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => notifyClientReady(orderId))}>
-            {busy ? "Saving…" : "Notify client — order ready"}
+            {busy ? "Saving…" : "Notify Client - Order Ready"}
           </Button>
         ) : awaiting("Sales to notify the client"))}
 
@@ -103,8 +103,11 @@ export function FulfillmentActions({
                 <span className="min-w-[13rem] font-medium">{p.label}</span>
                 {p.proof ? (
                   <span className="inline-flex items-center gap-1.5">
-                    <a href={`/api/sale-uploads?path=${encodeURIComponent(p.proof.path)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                    <a href={`/api/sale-uploads/view?path=${encodeURIComponent(p.proof.path)}&name=${encodeURIComponent(p.proof.name)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
                       <FileText className="h-3.5 w-3.5" /> {p.proof.name}
+                    </a>
+                    <a href={`/api/sale-uploads/view?path=${encodeURIComponent(p.proof.path)}&name=${encodeURIComponent(p.proof.name)}`} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                      <Eye className="h-3.5 w-3.5" />
                     </a>
                     <a href={`/api/sale-uploads?path=${encodeURIComponent(p.proof.path)}&download=1&name=${encodeURIComponent(p.proof.name)}`} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
                       <Download className="h-3.5 w-3.5" />
@@ -202,8 +205,11 @@ export function FulfillmentActions({
                   <span className="min-w-[13rem] font-medium">{t.label}</span>
                   {files.map((f) => (
                     <span key={f.path} className="inline-flex items-center gap-1.5">
-                      <a href={`/api/sale-uploads?path=${encodeURIComponent(f.path)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                      <a href={`/api/sale-uploads/view?path=${encodeURIComponent(f.path)}&name=${encodeURIComponent(f.name)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
                         <FileText className="h-3.5 w-3.5" /> {f.name}
+                      </a>
+                      <a href={`/api/sale-uploads/view?path=${encodeURIComponent(f.path)}&name=${encodeURIComponent(f.name)}`} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                        <Eye className="h-3.5 w-3.5" />
                       </a>
                       <a href={`/api/sale-uploads?path=${encodeURIComponent(f.path)}&download=1&name=${encodeURIComponent(f.name)}`} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
                         <Download className="h-3.5 w-3.5" />
