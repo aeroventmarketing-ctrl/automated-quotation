@@ -51,10 +51,12 @@ const isAccessory = (s: Record<string, unknown>) =>
   (s.category === "Ventilation Accessories" && !isAirDuct(s)) || isIsolator(s);
 // A fan/blower line: any non-accessory, non-motor-controller product with a fan
 // category (Centrifugal / Axial / Propeller / Tubular…). Accessories are excluded.
+// Fan/blower categories: Centrifugal / Axial / Propeller / Tubular Inline /
+// Cabinet Type (plus panel/roof/blower/fan wording as a safety net).
 const isFan = (s: Record<string, unknown>) => {
   const cat = str(s.category).toLowerCase();
   if (isMotorController(s) || isAccessory(s)) return false;
-  return /centrifugal|axial|propeller|tubular|panel|roof|blower|fan/.test(cat + " " + str(s.type).toLowerCase());
+  return /centrifugal|axial|propeller|tubular|cabinet|panel|roof|blower|fan/.test(cat + " " + str(s.type).toLowerCase());
 };
 
 /** Map a quotation fan type/category to one of the Fans & Blowers JO templates. */
