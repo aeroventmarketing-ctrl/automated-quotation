@@ -119,7 +119,7 @@ export function JobOrderManager({
           {canReceive && (
             <Button size="sm" className="h-7 text-xs" disabled={busy}
               onClick={() => run(() => receiveJobOrders(orderId))}>
-              {busy ? "Receiving…" : "Receive job orders"}
+              {busy ? "Receiving…" : "Job Orders Received"}
             </Button>
           )}
         </div>
