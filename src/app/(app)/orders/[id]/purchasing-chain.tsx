@@ -50,6 +50,7 @@ interface PRRow {
   canApproveReconcile?: boolean;
   canOverride?: boolean;
   priorStatuses?: { key: string; label: string }[];
+  isDept?: boolean;
 }
 
 export function PurchasingChain({
@@ -175,9 +176,12 @@ export function PurchasingChain({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {/* Approval/rejection/voucher can't proceed until the PO exists —
                     hide those buttons (rather than showing them disabled) and
-                    show a hint instead, so nothing dead is clickable. */}
+                    show a hint instead, so nothing dead is clickable. EXCEPTION:
+                    a warehouse/material requisition is approved (or rejected) by
+                    the Plant Manager as the request itself (step 16), before the
+                    Purchaser prepares the PO (step 17) — so those don't wait for a PO. */}
                 {actionable
-                  .filter((a) => !(((a.key === "approve" || a.key === "reject" || a.key === "voucher")) && !r.po))
+                  .filter((a) => !((a.key === "voucher" || ((a.key === "approve" || a.key === "reject") && !r.isDept)) && !r.po))
                   .map((a) => (
                     <Button
                       key={a.key}
@@ -190,7 +194,7 @@ export function PurchasingChain({
                       {busy === r.id + a.key ? "Saving…" : a.label}
                     </Button>
                   ))}
-                {actionable.some((a) => a.key === "approve" || a.key === "reject" || a.key === "voucher") && !r.po && (
+                {actionable.some((a) => a.key === "voucher" || ((a.key === "approve" || a.key === "reject") && !r.isDept)) && !r.po && (
                   <span className="text-xs text-muted-foreground">Create the Purchase Order first.</span>
                 )}
               </div>

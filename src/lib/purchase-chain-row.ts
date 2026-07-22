@@ -141,6 +141,9 @@ export interface PurchaseChainRow {
   canApproveReconcile: boolean;
   canOverride: boolean; // admin escape hatch — roll the chain back
   priorStatuses: { key: string; label: string }[];
+  // A warehouse/material requisition — the Plant Manager approves the request
+  // itself (step 16), so approve/reject don't wait for a Purchase Order.
+  isDept: boolean;
 }
 
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
@@ -310,5 +313,6 @@ export function buildPurchaseChainRow(
     canApproveReconcile,
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
+    isDept,
   };
 }

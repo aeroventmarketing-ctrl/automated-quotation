@@ -1091,9 +1091,12 @@ export async function advancePurchaseRequest(
   // The supplier Purchase Order must be issued before the request can be
   // approved/rejected or the voucher & check readied — everything downstream is
   // drawn against the PO. (Replenishment top-ups have no PO panel, so this only
-  // gates order-linked purchase requests.)
-  const poRequiredSteps = new Set(["approve", "reject", "voucher"]);
-  if (poRequiredSteps.has(stepKey) && pr.kind !== "replenishment" && !coercePurchaseOrder(pr.po)) {
+  // gates order-linked purchase requests.) EXCEPTION: a warehouse/material
+  // requisition is approved (or rejected) by the Plant Manager as the request
+  // itself (step 16), before the Purchaser prepares the PO (step 17) — so its
+  // approve/reject don't wait for a PO; only its voucher step does.
+  const needsPo = stepKey === "voucher" || ((stepKey === "approve" || stepKey === "reject") && !isDeptRequisition(pr));
+  if (needsPo && pr.kind !== "replenishment" && !coercePurchaseOrder(pr.po)) {
     throw new Error("Create the Purchase Order first.");
   }
 
