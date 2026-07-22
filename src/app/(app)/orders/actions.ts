@@ -37,6 +37,7 @@ import {
   type MRFLineDisposition,
   type OrderConversation,
 } from "@/lib/order-workflow";
+import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { purchaseStep, effectiveStepRole, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
@@ -74,7 +75,12 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
 
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, classification: true },
+    select: {
+      id: true,
+      classification: true,
+      projectName: true,
+      items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
+    },
   });
   if (!quote) throw new Error("Order not found");
 
@@ -91,7 +97,7 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
   }
 
   const cls = (quote.classification as Record<string, unknown>) ?? {};
-  const workflow = {
+  let workflow: Record<string, unknown> = {
     ...wf,
     stage: def.to,
     approvals: {
@@ -99,6 +105,37 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
       [step]: { by: user.id, byName: user.name, at: new Date().toISOString() },
     },
   };
+
+  // When payment is cleared (order → "For JO creation"), auto-generate the
+  // mappable job orders (Motor Controller, Accessories) from the quotation lines
+  // so the engineer only reviews/edits/approves. Never overwrite job orders that
+  // already exist for a department.
+  if (step === "payment_cleared") {
+    const items = (quote.items ?? []).map((it) => ({
+      qty: Number(it.qty) || 0,
+      descriptionSnapshot: it.descriptionSnapshot ?? "",
+      specsSnapshot: it.specsSnapshot,
+    }));
+    const project = (quote.projectName ?? "").trim();
+    const auto = buildAutoJobOrders(items, { project, date: new Date().toISOString() });
+    const year = new Date().getFullYear();
+    if (auto.motor.length && wf.motorJobOrders.length === 0) {
+      workflow = {
+        ...workflow,
+        motorJobOrders: auto.motor,
+        mcJoBaseNo: wf.mcJoBaseNo ?? (await nextMcJoBaseNo()),
+        mcJoBaseYear: wf.mcJoBaseYear ?? year,
+      };
+    }
+    if (auto.accessories.length && wf.accessoriesJobOrders.length === 0) {
+      workflow = {
+        ...workflow,
+        accessoriesJobOrders: auto.accessories,
+        accJoBaseNo: wf.accJoBaseNo ?? (await nextAccJoBaseNo()),
+        accJoBaseYear: wf.accJoBaseYear ?? year,
+      };
+    }
+  }
 
   await prisma.quotation.update({
     where: { id: quotationId },
