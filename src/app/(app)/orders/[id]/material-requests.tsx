@@ -25,6 +25,7 @@ interface ReqRow {
   poStatusLabel?: string | null;
   poStatusVariant?: "secondary" | "warning" | "success" | "destructive" | null;
   hasPo?: boolean;
+  poApproved?: boolean;
   linkedPrId?: string | null;
   canApproveMaterials?: boolean;
   raisedByName: string;
@@ -239,7 +240,11 @@ export function MaterialRequests({
                     <Badge variant="destructive">Materials request rejected</Badge>
                   ) : r.poStatus && r.poStatusLabel ? (
                     <Badge variant={r.poStatusVariant ?? "warning"}>
-                      {r.poStatus === "APPROVED" && !r.hasPo ? "Approved — awaiting Purchase Order" : r.poStatusLabel}
+                      {r.poStatus === "APPROVED" && !r.hasPo
+                        ? "Approved — awaiting Purchase Order"
+                        : r.poStatus === "APPROVED" && r.hasPo && !r.poApproved
+                        ? "Plant Manager approved — awaiting purchase approval"
+                        : r.poStatusLabel}
                     </Badge>
                   ) : (
                     <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>

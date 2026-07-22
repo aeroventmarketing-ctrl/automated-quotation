@@ -64,14 +64,14 @@ export function RequisitionsList({
   const [group, setGroup] = useState<GroupKey>("none");
 
   // A material/MRF requisition stays "pending" until its Purchase Order exists.
-  const bucketOf = (r: RequisitionRow) => statusBucket(r.status, { isDept: r.isDept, hasPo: !!r.po });
+  const bucketOf = (r: RequisitionRow) => statusBucket(r.status, { isDept: r.isDept, poApproved: r.poApproved });
 
   const counts: Record<Tab, number> = { pending: 0, approved: 0, rejected: 0, cancelled: 0, all: 0 };
   for (const r of rows) counts[bucketOf(r)]++;
   counts.all = rows.length;
 
   const visible = useMemo(() => {
-    const bkt = (r: RequisitionRow) => statusBucket(r.status, { isDept: r.isDept, hasPo: !!r.po });
+    const bkt = (r: RequisitionRow) => statusBucket(r.status, { isDept: r.isDept, poApproved: r.poApproved });
     const q = query.trim().toLowerCase();
     let list = rows.filter((r) => tab === "all" || bkt(r) === tab);
     if (q) {

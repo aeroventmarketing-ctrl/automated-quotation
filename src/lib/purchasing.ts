@@ -48,17 +48,20 @@ export const PR_STATUS_LABEL: Record<PRStatus, string> = {
 export type PRBucket = "pending" | "approved" | "rejected" | "cancelled";
 /**
  * The tab a purchase request belongs to. A material/department requisition is
- * kept in "pending" until its Purchase Order actually exists: the Plant Manager
- * approving the MRF (→ APPROVED) only clears it FOR purchasing — the purchase
- * itself isn't approved until the Purchase Order is created, so it must not sit
- * in "Approved" while it still shows "Approved — awaiting Purchase Order".
+ * kept in "pending" until the Approver approves its Purchase Order: the Plant
+ * Manager approving the MRF (→ APPROVED) only clears it FOR purchasing, and the
+ * Purchaser still has to raise the PO and the Approver still has to approve it
+ * (chainLog.approve_po). Only then does it belong under "Approved".
  */
-export function statusBucket(status: PRStatus, ctx?: { isDept?: boolean; hasPo?: boolean }): PRBucket {
+export function statusBucket(status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }): PRBucket {
   if (status === "PENDING_APPROVAL") return "pending";
   if (status === "REJECTED") return "rejected";
   if (status === "CANCELLED") return "cancelled";
-  if (ctx?.isDept && status === "APPROVED" && !ctx.hasPo) return "pending";
-  return "approved"; // APPROVED (with PO), VOUCHER_READY, PURCHASED, CHECKED, RECEIVED, COMPLETED
+  // A department/MRF requisition at APPROVED is only Plant-Manager-approved — it
+  // still awaits the Approver's purchase-order approval (recorded in chainLog),
+  // so keep it pending until that approval lands.
+  if (ctx?.isDept && status === "APPROVED" && !ctx.poApproved) return "pending";
+  return "approved"; // VOUCHER_READY, PURCHASED, CHECKED, RECEIVED, COMPLETED (+ approved dept & non-dept APPROVED)
 }
 
 /** A PO can be cancelled by the purchaser up until it's received into stock. */
@@ -78,10 +81,22 @@ export interface PurchaseStepDef {
   label: string;
 }
 
-/** The chain, in order. PENDING_APPROVAL offers both approve and reject. */
+/**
+ * The chain, in order. PENDING_APPROVAL offers both approve and reject. For a
+ * material/department requisition the Plant Manager's approval (approve) only
+ * clears the MRF; the Purchaser then raises the PO and the Approver approves it
+ * (approve_po, recorded in chainLog while the status stays APPROVED) before
+ * accounting readies the voucher. Order-linked (non-department) requests skip
+ * that second gate — their single "approve" IS the Approver's PO approval.
+ */
 export const PURCHASE_STEPS: PurchaseStepDef[] = [
   { key: "approve", from: "PENDING_APPROVAL", to: "APPROVED", role: "payment_approver", label: "Approve purchase" },
   { key: "reject", from: "PENDING_APPROVAL", to: "REJECTED", role: "payment_approver", label: "Reject" },
+  // The Approver's PO approval keeps the status at APPROVED (it's recorded in
+  // chainLog.approve_po) so no new enum value / DB migration is needed; the
+  // voucher step then unlocks. reject_po sends it to REJECTED.
+  { key: "approve_po", from: "APPROVED", to: "APPROVED", role: "payment_approver", label: "Approve purchase" },
+  { key: "reject_po", from: "APPROVED", to: "REJECTED", role: "payment_approver", label: "Reject" },
   { key: "voucher", from: "APPROVED", to: "VOUCHER_READY", role: "accounting", label: "Voucher & Check Prepared" },
   { key: "sign", from: "VOUCHER_READY", to: "VOUCHER_SIGNED", role: "payment_approver", label: "Voucher & Check Signed" },
   { key: "release_cash", from: "VOUCHER_SIGNED", to: "CASH_RELEASED", role: "payment_approver", label: "Cash & Check Released" },
@@ -116,8 +131,28 @@ export function priorPurchaseStatuses(status: PRStatus): PRStatus[] {
   return idx <= 0 ? [] : PR_MAIN_ORDER.slice(0, idx);
 }
 
-export function purchaseStepsFrom(status: PRStatus): PurchaseStepDef[] {
-  return PURCHASE_STEPS.filter((s) => s.from === status);
+/**
+ * The steps available from a status. For a material/department requisition the
+ * APPROVED status has two sub-stages: before the Approver approves the PO it
+ * offers approve_po / reject_po; once approved (chainLog.approve_po, passed as
+ * `poApproved`) it offers the voucher. An order-linked request goes straight
+ * from APPROVED to the voucher.
+ */
+export function purchaseStepsFrom(status: PRStatus, isDept = false, poApproved = false): PurchaseStepDef[] {
+  if (status === "APPROVED") {
+    if (isDept && !poApproved) return PURCHASE_STEPS.filter((s) => s.key === "approve_po" || s.key === "reject_po");
+    return PURCHASE_STEPS.filter((s) => s.key === "voucher");
+  }
+  // Other statuses are single-branch transitions keyed by `from` (the approve_po
+  // / reject_po / voucher steps that list from=APPROVED are handled above).
+  return PURCHASE_STEPS.filter((s) => s.from === status && s.key !== "approve_po" && s.key !== "reject_po" && s.key !== "voucher");
+}
+
+/** Whether the Approver has approved the raised PO (recorded in chainLog). */
+export function isPoApproved(chainLog: unknown): boolean {
+  if (!chainLog || typeof chainLog !== "object") return false;
+  const e = (chainLog as Record<string, unknown>).approve_po;
+  return !!(e && typeof e === "object" && (e as Record<string, unknown>).byName);
 }
 
 /**

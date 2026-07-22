@@ -65,7 +65,7 @@ export function PurchasingWorkspace({
   const [tab, setTab] = useState<Tab>("pending");
   const inTab = (bucket: PRBucket) => tab === "all" || tab === bucket;
   // A material/MRF requisition stays "pending" until its Purchase Order exists.
-  const rowBucket = (r: PurchaseChainRow) => statusBucket(r.status, { isDept: r.isDept, hasPo: !!r.po });
+  const rowBucket = (r: PurchaseChainRow) => statusBucket(r.status, { isDept: r.isDept, poApproved: r.poApproved });
 
   // Cross-order selection: tick material requests across every order to total
   // their PO amounts and approve them together.
@@ -95,9 +95,9 @@ export function PurchasingWorkspace({
   // buy, …). Never bulk-reject, and never "receive" (that needs the per-item
   // stock-matching panel). Approve/voucher need the PO to exist first.
   const forwardStep = (r: PurchaseChainRow) => {
-    const a = r.actions.find((x) => x.canAct && x.key !== "reject" && x.key !== "receive");
+    const a = r.actions.find((x) => x.canAct && x.key !== "reject" && x.key !== "reject_po" && x.key !== "receive");
     if (!a) return null;
-    const needsPo = a.key === "voucher" || (a.key === "approve" && !r.isDept);
+    const needsPo = a.key === "voucher" || a.key === "approve_po" || (a.key === "approve" && !r.isDept);
     if (needsPo && !r.po) return null;
     return a;
   };

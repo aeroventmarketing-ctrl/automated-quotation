@@ -40,7 +40,7 @@ import {
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
-import { purchaseStep, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc, type SalePayment } from "@/lib/sale";
@@ -1119,22 +1119,28 @@ export async function advancePurchaseRequest(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
 
-  // Department / material requisitions are approved/rejected by the Plant Manager (step 16).
-  const stepRole = effectiveStepRole(step, isDeptRequisition(pr));
+  const isDept = isDeptRequisition(pr);
+  // Department / material requisitions: the Plant Manager approves the MRF
+  // (approve), then the Approver approves the raised PO (approve_po).
+  const stepRole = effectiveStepRole(step, isDept);
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, stepRole))) {
     throw new Error(`Only ${workflowRoleLabel(stepRole)} or an admin can do this.`);
   }
 
-  if (pr.status !== step.from) throw new Error("That step isn't available at the current status.");
+  if (!purchaseStepsFrom(pr.status as PRStatus, isDept, isPoApproved(pr.chainLog)).some((s) => s.key === stepKey)) {
+    throw new Error("That step isn't available at the current status.");
+  }
 
-  // The supplier Purchase Order must be issued before the request can be
-  // approved/rejected or the voucher & check readied — everything downstream is
-  // drawn against the PO. (Replenishment top-ups have no PO panel, so this only
-  // gates order-linked purchase requests.) EXCEPTION: a warehouse/material
-  // requisition is approved (or rejected) by the Plant Manager as the request
-  // itself (step 16), before the Purchaser prepares the PO (step 17) — so its
-  // approve/reject don't wait for a PO; only its voucher step does.
-  const needsPo = stepKey === "voucher" || ((stepKey === "approve" || stepKey === "reject") && !isDeptRequisition(pr));
+  // The supplier Purchase Order must be issued before the purchase can be
+  // approved by the Approver (approve_po) or the voucher & check readied —
+  // everything downstream is drawn against the PO. For an order-linked request
+  // the single "approve"/"reject" IS the PO approval, so it also needs the PO;
+  // a department MRF's Plant-Manager approve/reject comes before the PO exists.
+  // (Replenishment top-ups have no PO panel, so this only gates real POs.)
+  const needsPo =
+    stepKey === "voucher" ||
+    stepKey === "approve_po" ||
+    ((stepKey === "approve" || stepKey === "reject") && !isDept);
   if (needsPo && pr.kind !== "replenishment" && !coercePurchaseOrder(pr.po)) {
     throw new Error("Create the Purchase Order first.");
   }
@@ -1154,6 +1160,8 @@ export async function advancePurchaseRequest(
       data.voucherAt = now;
       if (note) data.voucherRef = note;
       break;
+    case "approve_po":
+    case "reject_po":
     case "sign":
     case "release_cash":
     case "hand_purchaser":
@@ -1164,6 +1172,7 @@ export async function advancePurchaseRequest(
     case "warehouse_approve": {
       const log = (pr.chainLog && typeof pr.chainLog === "object" ? pr.chainLog : {}) as Record<string, unknown>;
       data.chainLog = { ...log, [stepKey]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue;
+      if (note && (stepKey === "approve_po" || stepKey === "reject_po")) data.decisionNote = note;
       break;
     }
     case "buy":
@@ -1446,7 +1455,7 @@ export async function adminRollbackPurchase(purchaseRequestId: string, toStatus:
   const log = (pr.chainLog && typeof pr.chainLog === "object" ? { ...(pr.chainLog as Record<string, unknown>) } : {}) as Record<string, unknown>;
   // Undo every transition that lands at (or after) the target — clear its stamp.
   for (const step of PURCHASE_STEPS) {
-    if (step.key === "reject") continue;
+    if (step.key === "reject" || step.key === "reject_po") continue;
     if (prMainIndex(step.from) < tgtIdx) continue;
     switch (step.key) {
       case "approve": data.decidedById = null; data.decidedByName = null; data.decidedAt = null; data.decisionNote = null; break;

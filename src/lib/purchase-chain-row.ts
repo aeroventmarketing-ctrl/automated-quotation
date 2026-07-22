@@ -4,7 +4,7 @@
  * and the central Purchasing workspace (where the purchaser processes them).
  */
 import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
-import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
 import { round2 } from "@/lib/quote";
@@ -144,6 +144,9 @@ export interface PurchaseChainRow {
   // A warehouse/material requisition — the Plant Manager approves the request
   // itself (step 16), so approve/reject don't wait for a Purchase Order.
   isDept: boolean;
+  // The Approver has approved the raised PO (chainLog.approve_po). For a dept
+  // requisition this is what moves it from "pending" to "approved".
+  poApproved: boolean;
 }
 
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
@@ -221,11 +224,19 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
   const logistics = workflowRoleLabel("logistics");
   const warehouse = workflowRoleLabel("warehouse");
   const plant = workflowRoleLabel("plant_manager");
-  // Department / material requisitions are approved/rejected by the Plant Manager (step 16).
+  // Department / material requisitions are approved/rejected by the Plant Manager
+  // (the MRF approval); the Approver then approves the raised PO (approve_po).
   const decider = isDeptRequisition(pr) ? plant : approver;
+  // A rejection at the PO stage (reject_po) means the first decision was an
+  // approval — so the decided-by line stays "Approved" and the rejection shows
+  // as its own line below.
+  const rejectedAtPo = !!log["reject_po"];
+  const firstLabel = status === "REJECTED" && !rejectedAtPo ? "Rejected" : "Approved";
   return [
     stamp("Requested", "Requestor", pr.createdByName, pr.createdAt),
-    stamp(status === "REJECTED" ? "Rejected" : "Approved", decider, pr.decidedByName, pr.decidedAt),
+    stamp(firstLabel, decider, pr.decidedByName, pr.decidedAt),
+    lstamp("Purchase order approved", approver, "approve_po"),
+    lstamp("Purchase order rejected", approver, "reject_po"),
     stamp("Voucher & checks prepared", acct, pr.voucherByName, pr.voucherAt),
     lstamp("Check & voucher signed", approver, "sign"),
     lstamp("Cash released", approver, "release_cash"),
@@ -277,7 +288,8 @@ export function buildPurchaseChainRow(
   const canEscalateReconcile = ctx.canAct("accounting") || ctx.canAct("purchaser");
   const canApproveReconcile = ctx.canAct("payment_approver");
   const isDept = isDeptRequisition(pr);
-  const actions = purchaseStepsFrom(status).map((step) => {
+  const poApproved = isPoApproved(pr.chainLog);
+  const actions = purchaseStepsFrom(status, isDept, poApproved).map((step) => {
     const role = effectiveStepRole(step, isDept);
     const names = ctx.namesForRole(role);
     return {
@@ -314,5 +326,6 @@ export function buildPurchaseChainRow(
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,
+    poApproved,
   };
 }

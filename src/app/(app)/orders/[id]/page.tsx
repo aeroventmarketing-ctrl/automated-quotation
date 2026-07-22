@@ -22,7 +22,7 @@ import {
   type OrderStage,
   type ProductionDeptKey,
 } from "@/lib/order-workflow";
-import { purchaseStepsFrom, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
@@ -439,6 +439,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       // Whether the purchase request already carries a supplier PO — lets the card
       // distinguish "approved, awaiting PO" from "approved, awaiting voucher".
       hasPo: linkedPr ? !!coercePurchaseOrder(linkedPr.po) : false,
+      // Whether the Approver has approved the raised PO (chainLog.approve_po).
+      poApproved: linkedPr ? isPoApproved(linkedPr.chainLog) : false,
       linkedPrId: linkedPr?.id ?? null,
       // The Plant Manager (or admin) approves/rejects a material request that is
       // still awaiting approval — right here on the Phase 3 MRF card.
@@ -476,13 +478,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const status = pr.status as PRStatus;
     const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
     const trail = buildPurchaseTrail(pr);
-    const actions = purchaseStepsFrom(status).map((step) => {
-      const names = namesForRole(step.role);
+    const prIsDept = isDeptRequisition(pr);
+    const actions = purchaseStepsFrom(status, prIsDept, isPoApproved(pr.chainLog)).map((step) => {
+      const role = effectiveStepRole(step, prIsDept);
+      const names = namesForRole(role);
       return {
         key: step.key,
         label: step.label,
-        roleLabel: `${workflowRoleLabel(step.role)}${names.length ? ` (${names.join(", ")})` : ""}`,
-        canAct: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, step.role)),
+        roleLabel: `${workflowRoleLabel(role)}${names.length ? ` (${names.join(", ")})` : ""}`,
+        canAct: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role)),
       };
     });
     return {

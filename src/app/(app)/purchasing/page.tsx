@@ -3,7 +3,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
-import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
@@ -178,7 +178,7 @@ export default async function PurchasingPage() {
       const status = anchor.status as PRStatus;
       const trail = buildPurchaseTrail(anchor);
       const bIsDept = isDeptRequisition(anchor);
-      const actions = purchaseStepsFrom(status).map((step) => {
+      const actions = purchaseStepsFrom(status, bIsDept, isPoApproved(anchor.chainLog)).map((step) => {
         const role = effectiveStepRole(step, bIsDept);
         const names = namesForRole(role);
         return { key: step.key, label: step.label, canAct: canAct(role), roleLabel: `${workflowRoleLabel(role)}${names.length ? ` (${names.join(", ")})` : ""}` };

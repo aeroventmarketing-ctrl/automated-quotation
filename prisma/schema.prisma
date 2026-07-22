@@ -292,7 +292,7 @@ model AppSetting {
 enum PurchaseRequestStatus {
   PENDING_APPROVAL // purchaser prepared the list, awaiting approver
   REJECTED         // approver rejected
-  APPROVED         // approved, awaiting voucher/check
+  APPROVED         // dept MRF: Plant-Manager-approved (awaits the Approver's PO approval, recorded in chainLog.approve_po); order-linked: approved, awaiting voucher
   VOUCHER_READY    // accounting prepared voucher + checks, awaiting signing
   VOUCHER_SIGNED   // approver signed check & voucher
   CASH_RELEASED    // approver released cash

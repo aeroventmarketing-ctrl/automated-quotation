@@ -54,6 +54,7 @@ interface PRRow {
   canOverride?: boolean;
   priorStatuses?: { key: string; label: string }[];
   isDept?: boolean;
+  poApproved?: boolean;
 }
 
 export function PurchasingChain({
@@ -204,7 +205,15 @@ export function PurchasingChain({
         // still pending, and "awaiting voucher" doesn't apply until the PO exists.
         const requisitionNeedsApproval = !!r.isDept && r.status === "PENDING_APPROVAL";
         const requisitionAwaitingPO = !!r.isDept && r.status === "APPROVED" && !r.po;
-        const statusLabel = requisitionAwaitingPO ? "Approved — awaiting Purchase Order" : r.statusLabel;
+        // Dept/MRF at APPROVED with a PO but not yet PO-approved: the Plant
+        // Manager approved the MRF and the PO is raised — now it awaits the
+        // Approver's purchase-order approval.
+        const requisitionAwaitingApproval = !!r.isDept && r.status === "APPROVED" && !!r.po && !r.poApproved;
+        const statusLabel = requisitionAwaitingPO
+          ? "Approved — awaiting Purchase Order"
+          : requisitionAwaitingApproval
+          ? "Plant Manager approved — awaiting purchase approval"
+          : r.statusLabel;
         // Standalone department requisitions (Requisitions page): the Plant Manager
         // approves/rejects here, since there's no order Materials tab to do it on.
         const deptApproveActions =
@@ -285,12 +294,12 @@ export function PurchasingChain({
                     the Plant Manager as the request itself (step 16), before the
                     Purchaser prepares the PO (step 17) — so those don't wait for a PO. */}
                 {actionable
-                  .filter((a) => !((a.key === "voucher" || ((a.key === "approve" || a.key === "reject") && !r.isDept)) && !r.po))
+                  .filter((a) => !((a.key === "voucher" || a.key === "approve_po" || a.key === "reject_po" || ((a.key === "approve" || a.key === "reject") && !r.isDept)) && !r.po))
                   .map((a) => (
                     <Button
                       key={a.key}
                       size="sm"
-                      variant={a.key === "reject" ? "outline" : "default"}
+                      variant={a.key === "reject" || a.key === "reject_po" ? "outline" : "default"}
                       className="h-7 text-xs"
                       disabled={busy === r.id + a.key}
                       onClick={() => (a.key === "receive" ? setReceivingId(r.id) : run(r.id, a.key))}
@@ -298,7 +307,7 @@ export function PurchasingChain({
                       {busy === r.id + a.key ? "Saving…" : a.label}
                     </Button>
                   ))}
-                {actionable.some((a) => a.key === "voucher" || ((a.key === "approve" || a.key === "reject") && !r.isDept)) && !r.po && (
+                {actionable.some((a) => a.key === "voucher" || a.key === "approve_po" || a.key === "reject_po" || ((a.key === "approve" || a.key === "reject") && !r.isDept)) && !r.po && (
                   <span className="text-xs text-muted-foreground">Create the Purchase Order first.</span>
                 )}
               </div>
