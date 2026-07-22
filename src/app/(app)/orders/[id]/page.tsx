@@ -23,7 +23,15 @@ import {
   type OrderStage,
   type ProductionDeptKey,
 } from "@/lib/order-workflow";
-import { deliveredByDescription, qcByDescription } from "@/lib/delivery";
+import {
+  BATCH_STEPS,
+  batchProgress,
+  batchedByDescription,
+  deliveredByDescription as batchDeliveredByDescription,
+  isBatchDelivered,
+  isBatchComplete,
+  type BatchRole,
+} from "@/lib/delivery-batch";
 import { DeliveriesPanel } from "./deliveries-panel";
 import { purchaseStepsFrom, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
@@ -340,37 +348,56 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const phase6Active =
     wf.stage === "closed" && !!commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete;
 
-  // Quality check & partial delivery — available once the first department has
-  // finished, so finished items can be QC'd and delivered in batches while the
-  // rest are still made. Only QC-passed quantities are deliverable.
+  // Delivery batches — available once the first department has finished. Each
+  // batch of finished items runs the 13-step per-batch pipeline; several batches
+  // run in parallel so one department's items can go while others are still made.
   const showDeliveries = anyJobOrderFinished(wf);
-  const deliveredMap = deliveredByDescription(wf.deliveries);
-  const qcMap = qcByDescription(wf.qualityChecks);
+  const batchedMap = batchedByDescription(wf.deliveryBatches);
+  const batchDeliveredMap = batchDeliveredByDescription(wf.deliveryBatches);
   const orderedAgg = new Map<string, number>();
   for (const it of quote.items) {
     const key = it.descriptionSnapshot.trim();
     if (key) orderedAgg.set(key, (orderedAgg.get(key) ?? 0) + it.qty);
   }
-  const orderedItems = [...orderedAgg.entries()].map(([description, ordered]) => ({
+  const deliveryItems = [...orderedAgg.entries()].map(([description, ordered]) => ({
     description,
     ordered,
-    qcPassed: qcMap.get(description.toLowerCase()) ?? 0,
-    delivered: deliveredMap.get(description.toLowerCase()) ?? 0,
+    batched: batchedMap.get(description.toLowerCase()) ?? 0,
+    delivered: batchDeliveredMap.get(description.toLowerCase()) ?? 0,
   }));
-  const deliveriesView = wf.deliveries.map((dv) => ({
-    id: dv.id, date: dv.date, drNumber: dv.drNumber, lines: dv.lines, note: dv.note, deliveredByName: dv.deliveredByName, paymentAmount: dv.paymentAmount,
-  }));
-  const qualityChecksView = wf.qualityChecks.map((q) => ({
-    id: q.id, date: q.date, lines: q.lines, note: q.note, checkedByName: q.checkedByName,
-  }));
-  const canQualityCheck =
-    adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey));
-  const canDeliverManage =
+  const isPreparer = viewer != null && viewer.id === quote.preparedById;
+  const canActStep = (role: BatchRole): boolean =>
     adminViewer ||
+    (role === "sales" ? isPreparer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
+  const canCreateBatch =
+    adminViewer ||
+    isPreparer ||
     (viewer != null &&
       (userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey) ||
-        userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey) ||
-        viewer.id === quote.preparedById));
+        userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey)));
+  const deliveryBatchViews = wf.deliveryBatches.map((b) => {
+    const steps = BATCH_STEPS.map((s) => {
+      const st = b.steps[s.key];
+      return { key: s.key, label: s.label, done: !!st, byName: st?.byName, at: st?.at ? fmtWhen(st.at) : undefined };
+    });
+    const { next } = batchProgress(b);
+    const nextView = next && !b.cancelled
+      ? { key: next.key, label: next.label, roleLabel: next.role === "sales" ? "Sales" : workflowRoleLabel(next.role), canAct: canActStep(next.role), collectsPayment: !!next.collectsPayment }
+      : null;
+    return {
+      id: b.id,
+      drNumber: b.drNumber,
+      createdByName: b.createdByName,
+      lines: b.lines,
+      paymentAmount: b.paymentAmount,
+      cancelled: !!b.cancelled,
+      delivered: isBatchDelivered(b),
+      complete: isBatchComplete(b),
+      steps,
+      next: nextView,
+      canCancel: adminViewer || b.createdByName === viewer?.name || isPreparer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey)),
+    };
+  });
 
   // Materials (Phase 3, part 1): raise MRFs (dept head, during production) and
   // warehouse issue/escalate.
@@ -676,23 +703,21 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
-      {/* Quality check & partial delivery — opens once the first department has
-          finished. Items must pass QC before they can be delivered; batches can go
-          out as they're checked (e.g. 20 of 50 now, 30 later). */}
+      {/* Delivery batches — opens once the first department has finished. Group
+          finished items into a batch and run each through the 13-step pipeline
+          (inform → bill → pay → QC → transfer → deliver → approve → surrender). */}
       {showDeliveries && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Quality check &amp; delivery</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Deliveries</CardTitle></CardHeader>
           <CardContent>
             <p className="mb-3 text-xs text-muted-foreground">
-              Quality-check finished items, then deliver them to the client — part of the order can go now (e.g. 20 of 50) and the rest later. Only quality-checked items can be delivered; the order is marked Delivered once every item is fully delivered.
+              Open a delivery batch from finished items — any items or partial quantities (e.g. 20 of 50) — and run it through the 13-step process. Batches run in parallel, so one department&apos;s items can be delivered while others are still made. The order is marked Delivered once every item has been delivered.
             </p>
             <DeliveriesPanel
               orderId={quote.id}
-              items={orderedItems}
-              deliveries={deliveriesView}
-              qualityChecks={qualityChecksView}
-              canQC={canQualityCheck}
-              canDeliver={canDeliverManage}
+              items={deliveryItems}
+              batches={deliveryBatchViews}
+              canCreate={canCreateBatch}
               currency={quote.currency}
               outstanding={Math.max(0, value - collectedTotal(saleForClose))}
             />

@@ -40,6 +40,16 @@ import {
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { deliveredByDescription, qcByDescription, type DeliveryRecord, type QualityCheckRecord } from "@/lib/delivery";
+import {
+  BATCH_STEPS,
+  BATCH_DELIVERED_STEP,
+  batchStepDef,
+  batchProgress,
+  batchedByDescription,
+  deliveredByDescription as batchDeliveredByDescription,
+  type DeliveryBatch,
+  type BatchStamp,
+} from "@/lib/delivery-batch";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
@@ -1201,6 +1211,204 @@ export async function deleteDelivery(quotationId: string, deliveryId: string): P
       classification: {
         ...cls,
         workflow: { ...wf, deliveries },
+        ...(saleUpdate ? { sale: saleUpdate } : {}),
+      } as unknown as Prisma.InputJsonObject,
+    },
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
+// --- Delivery batches (13-step per-batch fulfillment) ------------------------
+
+const batchCreateSchema = z.object({
+  drNumber: z.string().optional(),
+  lines: z.array(z.object({ description: z.string(), qty: z.coerce.number() })),
+});
+const batchStepSchema = z.object({
+  note: z.string().optional(),
+  payment: z.coerce.number().optional(),
+  paymentNote: z.string().optional(),
+});
+
+/** Ordered totals per item (lower-cased description key). */
+function orderedByDescription(items: { qty: number; descriptionSnapshot: string }[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const it of items) {
+    const k = it.descriptionSnapshot.trim().toLowerCase();
+    m.set(k, (m.get(k) ?? 0) + it.qty);
+  }
+  return m;
+}
+
+/**
+ * Open a delivery batch from finished items — any items / partial quantities not
+ * already committed to another batch. The batch then runs the 13-step pipeline.
+ * Sales (the order's preparer), Logistics, Warehouse or an admin may open one.
+ */
+export async function createDeliveryBatch(
+  quotationId: string,
+  input: z.infer<typeof batchCreateSchema>,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { classification: true, preparedById: true, items: { select: { qty: true, descriptionSnapshot: true } } },
+  });
+  if (!quote) throw new Error("Order not found");
+  const roles = await getWorkflowRoles();
+  const allowed =
+    isAdmin(user) ||
+    quote.preparedById === user.id ||
+    userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
+  if (!allowed) throw new Error("Only Sales, Logistics, Warehouse or an admin can open a delivery batch.");
+  const d = batchCreateSchema.parse(input);
+  const wf = readOrderWorkflow(quote.classification);
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+
+  const lines = d.lines
+    .map((l) => ({ description: l.description.trim(), qty: Number.isFinite(l.qty) ? Math.max(0, Math.floor(l.qty)) : 0 }))
+    .filter((l) => l.description && l.qty > 0);
+  if (lines.length === 0) throw new Error("Add at least one item to the delivery batch.");
+
+  const ordered = orderedByDescription(quote.items);
+  const batched = batchedByDescription(wf.deliveryBatches);
+  for (const l of lines) {
+    const k = l.description.toLowerCase();
+    const ord = ordered.get(k);
+    if (ord != null) {
+      const available = ord - (batched.get(k) ?? 0);
+      if (l.qty > available) throw new Error(`Only ${available} of "${l.description}" left to batch.`);
+    }
+  }
+
+  const batch: DeliveryBatch = {
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    createdByName: user.name,
+    drNumber: (d.drNumber ?? "").trim(),
+    lines,
+    steps: {},
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, deliveryBatches: [...wf.deliveryBatches, batch] });
+}
+
+/** Advance a delivery batch by completing its next step (role-gated). */
+export async function advanceDeliveryBatch(
+  quotationId: string,
+  batchId: string,
+  stepKey: string,
+  input: z.infer<typeof batchStepSchema>,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { classification: true, preparedById: true, items: { select: { qty: true, descriptionSnapshot: true } } },
+  });
+  if (!quote) throw new Error("Order not found");
+  const wf = readOrderWorkflow(quote.classification);
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+
+  const batch = wf.deliveryBatches.find((b) => b.id === batchId);
+  if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
+  const stepDef = batchStepDef(stepKey);
+  if (!stepDef) throw new Error("Unknown step.");
+  const { next } = batchProgress(batch);
+  if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");
+
+  // Permission — "sales" is the order's preparer; every other step a workflow role.
+  const roles = await getWorkflowRoles();
+  const allowed =
+    isAdmin(user) ||
+    (stepDef.role === "sales"
+      ? quote.preparedById === user.id
+      : userHasWorkflowRole(roles, user.id, stepDef.role as WorkflowRoleKey));
+  if (!allowed) {
+    const who = stepDef.role === "sales" ? "Sales" : workflowRoleLabel(stepDef.role);
+    throw new Error(`Only ${who} or an admin can do this step.`);
+  }
+  const d = batchStepSchema.parse(input);
+
+  // The "paid" step records a partial payment (a "progress" sale payment).
+  let saleUpdate: Record<string, unknown> | null = null;
+  let paymentFields: { paymentAmount: number; paymentId: string } | null = null;
+  if (stepDef.collectsPayment) {
+    const amount = Number.isFinite(d.payment) ? Math.max(0, d.payment as number) : 0;
+    if (amount > 0) {
+      const sale = saleFromClassification(cls);
+      if (!sale) throw new Error("Record the sale before collecting a payment.");
+      const paymentId = randomUUID();
+      const payment: SalePayment = { id: paymentId, kind: "progress", amount, date: new Date().toISOString(), note: (d.paymentNote ?? "").trim() || undefined };
+      saleUpdate = { ...sale, payments: [...sale.payments, payment] };
+      paymentFields = { paymentAmount: amount, paymentId };
+    }
+  }
+
+  const batchStamp: BatchStamp = { byName: user.name, at: new Date().toISOString(), ...((d.note ?? "").trim() ? { note: (d.note ?? "").trim() } : {}) };
+  const updated: DeliveryBatch = { ...batch, steps: { ...batch.steps, [stepKey]: batchStamp }, ...(paymentFields ?? {}) };
+  const deliveryBatches = wf.deliveryBatches.map((b) => (b.id === batchId ? updated : b));
+
+  // When this step is the delivery itself, auto-mark the order Delivered once every
+  // ordered item has been delivered across batches.
+  let advance: Record<string, unknown> = {};
+  if (stepKey === BATCH_DELIVERED_STEP) {
+    const ordered = orderedByDescription(quote.items);
+    const deliveredNow = batchDeliveredByDescription(deliveryBatches);
+    const allDelivered = ordered.size > 0 && [...ordered.entries()].every(([k, ord]) => (deliveredNow.get(k) ?? 0) >= ord);
+    if (allDelivered && stageIndex(wf.stage) < stageIndex("delivered")) {
+      advance = { stage: "delivered" as OrderStage, approvals: stamp(wf, "delivered", user) };
+    }
+  }
+
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: {
+      classification: {
+        ...cls,
+        workflow: { ...wf, deliveryBatches, ...advance },
+        ...(saleUpdate ? { sale: saleUpdate } : {}),
+      } as unknown as Prisma.InputJsonObject,
+    },
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
+/** Cancel a delivery batch (releases its items back to the pool). Creator or admin. */
+export async function cancelDeliveryBatch(quotationId: string, batchId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const batch = wf.deliveryBatches.find((b) => b.id === batchId);
+  if (!batch) throw new Error("Delivery batch not found.");
+  const roles = await getWorkflowRoles();
+  const allowed =
+    isAdmin(user) ||
+    batch.createdByName === user.name ||
+    quote.preparedById === user.id ||
+    userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
+  if (!allowed) throw new Error("Only the batch's creator, Sales, Logistics or an admin can cancel it.");
+
+  // Drop any linked payment collected on the batch.
+  let saleUpdate: Record<string, unknown> | null = null;
+  if (batch.paymentId) {
+    const sale = saleFromClassification(cls);
+    if (sale) saleUpdate = { ...sale, payments: sale.payments.filter((p) => p.id !== batch.paymentId) };
+  }
+  const deliveryBatches = wf.deliveryBatches.map((b) =>
+    b.id === batchId ? { ...b, cancelled: true, cancelledAt: new Date().toISOString() } : b,
+  );
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: {
+      classification: {
+        ...cls,
+        workflow: { ...wf, deliveryBatches },
         ...(saleUpdate ? { sale: saleUpdate } : {}),
       } as unknown as Prisma.InputJsonObject,
     },

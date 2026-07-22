@@ -13,6 +13,7 @@ import { coerceDuctJobOrder, type DuctJobOrder } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder } from "@/lib/motor-controller-job-order";
 import { coerceDeliveries, coerceQualityChecks, type DeliveryRecord, type QualityCheckRecord } from "@/lib/delivery";
+import { coerceDeliveryBatches, type DeliveryBatch } from "@/lib/delivery-batch";
 
 export type OrderStage =
   | "payment_review"
@@ -240,6 +241,9 @@ export interface OrderWorkflow {
   // Quality-check sign-offs on finished items. Only quantities that have passed
   // QC may be delivered; recorded per item so batches can be released as they finish.
   qualityChecks: QualityCheckRecord[];
+  // Delivery batches — each a set of finished items run through the 13-step
+  // per-batch fulfillment pipeline (inform → bill → pay → QC → transfer → deliver).
+  deliveryBatches: DeliveryBatch[];
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -430,8 +434,9 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
 
   const deliveries = coerceDeliveries(wf?.deliveries);
   const qualityChecks = coerceQualityChecks(wf?.qualityChecks);
+  const deliveryBatches = coerceDeliveryBatches(wf?.deliveryBatches);
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveries, qualityChecks };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveries, qualityChecks, deliveryBatches };
 }
 
 /** True once at least one department's job order is finished — the point where a

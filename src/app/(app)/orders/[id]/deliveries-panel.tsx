@@ -2,81 +2,74 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Truck, Trash2, BadgeCheck } from "lucide-react";
+import { PackagePlus, Trash2, CheckCircle2, Circle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { recordDelivery, deleteDelivery, recordQualityCheck, deleteQualityCheck } from "../actions";
+import { createDeliveryBatch, advanceDeliveryBatch, cancelDeliveryBatch } from "../actions";
 
 export interface OrderedItem {
   description: string;
   ordered: number;
-  qcPassed: number; // cumulative passed quality check
-  delivered: number; // cumulative already delivered
+  batched: number; // committed to non-cancelled batches
+  delivered: number; // delivered (batch reached the delivery step)
 }
-export interface DeliveryView {
+export interface BatchStepView {
+  key: string;
+  label: string;
+  done: boolean;
+  byName?: string;
+  at?: string;
+}
+export interface BatchView {
   id: string;
-  date: string;
   drNumber: string;
+  createdByName: string;
   lines: { description: string; qty: number }[];
-  note: string;
-  deliveredByName: string;
   paymentAmount?: number;
+  cancelled: boolean;
+  delivered: boolean;
+  complete: boolean;
+  steps: BatchStepView[];
+  next: { key: string; label: string; roleLabel: string; canAct: boolean; collectsPayment: boolean } | null;
+  canCancel: boolean;
 }
-export interface QcView {
-  id: string;
-  date: string;
-  lines: { description: string; qty: number }[];
-  note: string;
-  checkedByName: string;
-}
-
-type Mode = null | "qc" | "deliver";
 
 /**
- * Quality check & partial delivery. Finished items must pass QC before they can
- * be delivered, and only QC-passed quantities are deliverable — so a client can
- * take checked batches (e.g. 20 of 50) while the rest are still being made.
+ * Delivery batches — open a batch of finished items and run it through the
+ * 13-step pipeline (inform client → bill → collect & clear payment → quality
+ * testing → Plant Manager QC → transfer → Sales re-check → documents → deliver →
+ * approve proof → surrender documents). Batches run in parallel.
  */
 export function DeliveriesPanel({
   orderId,
   items,
-  deliveries,
-  qualityChecks,
-  canQC,
-  canDeliver,
+  batches,
+  canCreate,
   currency,
   outstanding,
 }: {
   orderId: string;
   items: OrderedItem[];
-  deliveries: DeliveryView[];
-  qualityChecks: QcView[];
-  canQC: boolean;
-  canDeliver: boolean;
+  batches: BatchView[];
+  canCreate: boolean;
   currency: string;
   outstanding: number;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>(null);
+  const [creating, setCreating] = useState(false);
   const [qty, setQty] = useState<Record<string, string>>({});
   const [drNumber, setDrNumber] = useState("");
-  const [note, setNote] = useState("");
-  const [payment, setPayment] = useState("");
-  const [paymentNote, setPaymentNote] = useState("");
+  // Per-batch inline payment entry (for the "paid" step).
+  const [payFor, setPayFor] = useState<string | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payNote, setPayNote] = useState("");
 
-  // Per-item availability: how much can still be QC'd / delivered.
-  const qcRemaining = (it: OrderedItem) => Math.max(0, it.ordered - it.qcPassed);
-  const deliverable = (it: OrderedItem) => Math.max(0, it.qcPassed - it.delivered);
-  const remaining = (it: OrderedItem) => Math.max(0, it.ordered - it.delivered);
-  const capFor = (it: OrderedItem) => (mode === "qc" ? qcRemaining(it) : deliverable(it));
+  const available = (it: OrderedItem) => Math.max(0, it.ordered - it.batched);
 
-  const allQcDone = items.length > 0 && items.every((it) => qcRemaining(it) <= 0);
-  const fullyDelivered = items.length > 0 && items.every((it) => remaining(it) <= 0);
-
-  const enteredLines = useMemo(
+  const newLines = useMemo(
     () =>
       items
         .map((it) => ({ description: it.description, qty: Math.floor(Number(qty[it.description] ?? "")) || 0 }))
@@ -84,48 +77,8 @@ export function DeliveriesPanel({
     [items, qty],
   );
 
-  function reset() {
-    setMode(null);
-    setQty({});
-    setDrNumber("");
-    setNote("");
-    setPayment("");
-    setPaymentNote("");
-    setErr(null);
-  }
-
-  async function submit() {
-    if (enteredLines.length === 0) {
-      setErr("Enter a quantity for at least one item.");
-      return;
-    }
-    setBusy(true);
-    setErr(null);
-    try {
-      if (mode === "qc") {
-        await recordQualityCheck(orderId, { note, lines: enteredLines });
-      } else {
-        await recordDelivery(orderId, { drNumber, note, lines: enteredLines, payment: Number(payment) || 0, paymentNote });
-      }
-      reset();
-      router.refresh();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeDelivery(id: string) {
-    if (!window.confirm("Remove this delivery record?")) return;
-    await run(() => deleteDelivery(orderId, id));
-  }
-  async function removeQc(id: string) {
-    if (!window.confirm("Remove this quality-check record?")) return;
-    await run(() => deleteQualityCheck(orderId, id));
-  }
-  async function run(fn: () => Promise<void>) {
-    setBusy(true);
+  async function run(key: string, fn: () => Promise<void>) {
+    setBusy(key);
     setErr(null);
     try {
       await fn();
@@ -133,49 +86,76 @@ export function DeliveriesPanel({
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
+  async function submitCreate() {
+    if (newLines.length === 0) {
+      setErr("Add a quantity for at least one item.");
+      return;
+    }
+    await run("create", async () => {
+      await createDeliveryBatch(orderId, { drNumber, lines: newLines });
+      setCreating(false);
+      setQty({});
+      setDrNumber("");
+    });
+  }
+
+  async function advance(batchId: string, stepKey: string, collectsPayment: boolean) {
+    if (collectsPayment && payFor !== batchId) {
+      setPayFor(batchId);
+      setPayAmount("");
+      setPayNote("");
+      return;
+    }
+    await run(batchId + stepKey, async () => {
+      await advanceDeliveryBatch(orderId, batchId, stepKey, {
+        payment: collectsPayment ? Number(payAmount) || 0 : undefined,
+        paymentNote: collectsPayment ? payNote : undefined,
+      });
+      setPayFor(null);
+    });
+  }
+
+  const anyAvailable = items.some((it) => available(it) > 0);
+
   return (
     <div className="space-y-3">
-      {/* Ordered / QC passed / delivered / remaining */}
+      {/* Item availability */}
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[520px] border-collapse text-sm">
           <thead>
             <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
               <th className="px-3 py-1.5 font-medium">Item</th>
               <th className="px-3 py-1.5 text-right font-medium">Ordered</th>
-              <th className="px-3 py-1.5 text-right font-medium">QC passed</th>
+              <th className="px-3 py-1.5 text-right font-medium">In batches</th>
               <th className="px-3 py-1.5 text-right font-medium">Delivered</th>
-              <th className="px-3 py-1.5 text-right font-medium">Remaining</th>
-              {mode && <th className="px-3 py-1.5 text-right font-medium">{mode === "qc" ? "QC now" : "Deliver now"}</th>}
+              <th className="px-3 py-1.5 text-right font-medium">Available</th>
+              {creating && <th className="px-3 py-1.5 text-right font-medium">Add</th>}
             </tr>
           </thead>
           <tbody>
             {items.map((it) => {
-              const cap = capFor(it);
+              const avail = available(it);
               return (
                 <tr key={it.description} className="border-b last:border-0">
                   <td className="px-3 py-1.5">{it.description}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{it.ordered}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{it.qcPassed}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{it.batched}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{it.delivered}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">
-                    {remaining(it) <= 0 ? <span className="text-emerald-600">0</span> : <span className="font-medium">{remaining(it)}</span>}
+                    {avail <= 0 ? <span className="text-emerald-600">0</span> : <span className="font-medium">{avail}</span>}
                   </td>
-                  {mode && (
+                  {creating && (
                     <td className="px-3 py-1.5 text-right">
                       <input
-                        type="number"
-                        min={0}
-                        max={cap}
-                        step={1}
-                        disabled={busy || cap <= 0}
+                        type="number" min={0} max={avail} step={1} disabled={busy != null || avail <= 0}
                         value={qty[it.description] ?? ""}
                         onChange={(e) => setQty((q) => ({ ...q, [it.description]: e.target.value }))}
                         className="h-8 w-20 rounded-md border bg-background px-2 text-right text-sm disabled:opacity-50"
-                        placeholder={cap <= 0 ? "—" : `≤${cap}`}
+                        placeholder={avail <= 0 ? "—" : `≤${avail}`}
                       />
                     </td>
                   )}
@@ -186,110 +166,84 @@ export function DeliveriesPanel({
         </table>
       </div>
 
-      {mode === "deliver" && (
+      {creating ? (
         <div className="space-y-2 rounded-md border p-3">
+          <input value={drNumber} onChange={(e) => setDrNumber(e.target.value)} placeholder="DR / batch reference (optional)" className="h-9 w-full rounded-md border bg-background px-2 text-sm" />
           <div className="flex flex-wrap items-center gap-2">
-            <input value={drNumber} onChange={(e) => setDrNumber(e.target.value)} placeholder="DR / reference no. (optional)" className="h-9 w-52 rounded-md border bg-background px-2 text-sm" />
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-9 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm" />
-          </div>
-          <div className="flex flex-wrap items-center gap-2 border-t pt-2">
-            <label className="text-xs text-muted-foreground">Payment collected</label>
-            <input type="number" min={0} step="0.01" value={payment} onChange={(e) => setPayment(e.target.value)} placeholder="0.00" className="h-9 w-32 rounded-md border bg-background px-2 text-right text-sm" />
-            <input value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} placeholder="Payment note / OR no. (optional)" className="h-9 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm" />
-            <span className="text-[11px] text-muted-foreground">Outstanding: {formatCurrency(outstanding, currency)}</span>
+            <Button size="sm" className="h-8" disabled={busy != null || newLines.length === 0} onClick={submitCreate}>{busy === "create" ? "Opening…" : "Open batch"}</Button>
+            <Button size="sm" variant="ghost" className="h-8" disabled={busy != null} onClick={() => { setCreating(false); setQty({}); setDrNumber(""); }}>Cancel</Button>
           </div>
         </div>
-      )}
-      {mode === "qc" && (
-        <div className="rounded-md border p-3">
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="QC note (optional)" className="h-9 w-full rounded-md border bg-background px-2 text-sm" />
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        {mode ? (
-          <>
-            <Button size="sm" className="h-8" disabled={busy || enteredLines.length === 0} onClick={submit}>
-              {busy ? "Saving…" : mode === "qc" ? "Pass quality check" : "Record delivery"}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-8" disabled={busy} onClick={reset}>Cancel</Button>
-          </>
-        ) : (
-          <>
-            {canQC && (
-              <Button size="sm" variant="outline" className="h-8 text-xs" disabled={allQcDone} onClick={() => setMode("qc")}>
-                <BadgeCheck className="mr-1 h-3.5 w-3.5" /> {allQcDone ? "All items quality-checked" : "Mark quality checked"}
-              </Button>
-            )}
-            {canDeliver && (
-              <Button size="sm" variant="outline" className="h-8 text-xs" disabled={fullyDelivered || items.every((it) => deliverable(it) <= 0)} onClick={() => setMode("deliver")}>
-                <Truck className="mr-1 h-3.5 w-3.5" /> {fullyDelivered ? "All items delivered" : "Record a delivery"}
-              </Button>
-            )}
-          </>
-        )}
-      </div>
-      {!mode && canDeliver && !fullyDelivered && items.every((it) => deliverable(it) <= 0) && (
-        <p className="text-[11px] text-muted-foreground">Items must pass quality check before they can be delivered.</p>
+      ) : (
+        canCreate && (
+          <Button size="sm" variant="outline" className="h-8 text-xs" disabled={!anyAvailable} onClick={() => setCreating(true)}>
+            <PackagePlus className="mr-1 h-3.5 w-3.5" /> {anyAvailable ? "Open delivery batch" : "All items in a batch"}
+          </Button>
+        )
       )}
       {err && <p className="text-xs text-destructive">{err}</p>}
 
-      {/* QC history */}
-      {qualityChecks.length > 0 && (
-        <div>
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quality checks</div>
-          <ul className="space-y-2">
-            {qualityChecks.map((c) => (
-              <li key={c.id} className="rounded-md border bg-muted/20 p-2 text-xs">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="success">QC passed</Badge>
-                  <span className="text-muted-foreground">{c.date}</span>
-                  <span className="ml-auto text-muted-foreground">by {c.checkedByName}</span>
-                  {canQC && (
-                    <button type="button" disabled={busy} onClick={() => removeQc(c.id)} className="text-muted-foreground hover:text-destructive" title="Remove">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-                <ul className="ml-4 mt-1 list-disc text-muted-foreground">
-                  {c.lines.map((l, i) => <li key={i}>{l.qty} · {l.description}</li>)}
-                </ul>
-                {c.note && <p className="mt-1 text-muted-foreground"><span className="font-medium">Note:</span> {c.note}</p>}
-              </li>
-            ))}
+      {/* Batches */}
+      {batches.map((b) => (
+        <div key={b.id} className={`rounded-md border p-3 ${b.cancelled ? "opacity-60" : ""}`}>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <Badge variant={b.cancelled ? "destructive" : b.complete ? "success" : b.delivered ? "success" : "secondary"}>
+              {b.cancelled ? "Cancelled" : b.complete ? "Completed" : b.drNumber ? `DR ${b.drNumber}` : "Batch"}
+            </Badge>
+            {b.paymentAmount != null && b.paymentAmount > 0 && (
+              <Badge variant="success">Collected {formatCurrency(b.paymentAmount, currency)}</Badge>
+            )}
+            <span className="text-xs text-muted-foreground">opened by {b.createdByName}</span>
+            {b.canCancel && !b.cancelled && !b.complete && (
+              <button type="button" disabled={busy != null} onClick={() => { if (window.confirm("Cancel this delivery batch?")) run(b.id + "cancel", () => cancelDeliveryBatch(orderId, b.id)); }} className="ml-auto text-muted-foreground hover:text-destructive" title="Cancel batch">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <ul className="ml-1 mb-2 text-xs text-muted-foreground">
+            {b.lines.map((l, i) => <li key={i}>{l.qty} · {l.description}</li>)}
           </ul>
-        </div>
-      )}
 
-      {/* Delivery history */}
-      {deliveries.length > 0 && (
-        <div>
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Deliveries</div>
-          <ul className="space-y-2">
-            {deliveries.map((d) => (
-              <li key={d.id} className="rounded-md border bg-muted/20 p-2 text-xs">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{d.drNumber ? `DR ${d.drNumber}` : "Delivery"}</Badge>
-                  <span className="text-muted-foreground">{d.date}</span>
-                  {d.paymentAmount != null && d.paymentAmount > 0 && (
-                    <Badge variant="success">Collected {formatCurrency(d.paymentAmount, currency)}</Badge>
-                  )}
-                  <span className="ml-auto text-muted-foreground">by {d.deliveredByName}</span>
-                  {canDeliver && (
-                    <button type="button" disabled={busy} onClick={() => removeDelivery(d.id)} className="text-muted-foreground hover:text-destructive" title="Remove">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-                <ul className="ml-4 mt-1 list-disc text-muted-foreground">
-                  {d.lines.map((l, i) => <li key={i}>{l.qty} · {l.description}</li>)}
-                </ul>
-                {d.note && <p className="mt-1 text-muted-foreground"><span className="font-medium">Note:</span> {d.note}</p>}
+          {/* 13-step progress */}
+          <ol className="space-y-0.5 text-xs">
+            {b.steps.map((s) => (
+              <li key={s.key} className={`flex items-center gap-1.5 ${s.done ? "text-foreground" : "text-muted-foreground/60"}`}>
+                {s.done ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Circle className="h-3.5 w-3.5" />}
+                <span>{s.label}</span>
+                {s.done && s.byName && <span className="text-muted-foreground">— {s.byName}{s.at ? ` · ${s.at}` : ""}</span>}
               </li>
             ))}
-          </ul>
+          </ol>
+
+          {/* Next step action */}
+          {!b.cancelled && b.next && (
+            <div className="mt-2">
+              {b.next.canAct ? (
+                payFor === b.id && b.next.collectsPayment ? (
+                  <div className="space-y-2 rounded-md border p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs text-muted-foreground">Payment collected</label>
+                      <input type="number" min={0} step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="0.00" className="h-8 w-32 rounded-md border bg-background px-2 text-right text-sm" />
+                      <input value={payNote} onChange={(e) => setPayNote(e.target.value)} placeholder="OR no. / note (optional)" className="h-8 flex-1 min-w-[9rem] rounded-md border bg-background px-2 text-sm" />
+                      <span className="text-[11px] text-muted-foreground">Outstanding: {formatCurrency(outstanding, currency)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" className="h-7 text-xs" disabled={busy != null} onClick={() => advance(b.id, b.next!.key, true)}>{busy === b.id + b.next.key ? "Saving…" : "Record payment"}</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy != null} onClick={() => setPayFor(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button size="sm" className="h-7 text-xs" disabled={busy != null} onClick={() => advance(b.id, b.next!.key, b.next!.collectsPayment)}>
+                    {busy === b.id + b.next.key ? "Saving…" : b.next.label}
+                  </Button>
+                )
+              ) : (
+                <p className="text-xs text-muted-foreground">Waiting on {b.next.roleLabel} — {b.next.label}</p>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
