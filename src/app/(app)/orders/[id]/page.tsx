@@ -19,10 +19,11 @@ import {
   stageLabel,
   stagePhase,
   pendingStep,
+  anyJobOrderFinished,
   type OrderStage,
   type ProductionDeptKey,
 } from "@/lib/order-workflow";
-import { deliveredByDescription } from "@/lib/delivery";
+import { deliveredByDescription, qcByDescription } from "@/lib/delivery";
 import { DeliveriesPanel } from "./deliveries-panel";
 import { purchaseStepsFrom, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
@@ -339,12 +340,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const phase6Active =
     wf.stage === "closed" && !!commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete;
 
-  // Partial deliveries — only after Phase 5's quality check clears and the delivery
-  // documents are ready (production finished → client informed → final payment →
-  // QC → delivery). Within that window the client may still take finished items in
-  // batches (e.g. 20 of 50 now, 30 later).
-  const showDeliveries = stageIndex(wf.stage) >= stageIndex("delivery_docs_ready");
+  // Quality check & partial delivery — available once the first department has
+  // finished, so finished items can be QC'd and delivered in batches while the
+  // rest are still made. Only QC-passed quantities are deliverable.
+  const showDeliveries = anyJobOrderFinished(wf);
   const deliveredMap = deliveredByDescription(wf.deliveries);
+  const qcMap = qcByDescription(wf.qualityChecks);
   const orderedAgg = new Map<string, number>();
   for (const it of quote.items) {
     const key = it.descriptionSnapshot.trim();
@@ -353,11 +354,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const orderedItems = [...orderedAgg.entries()].map(([description, ordered]) => ({
     description,
     ordered,
+    qcPassed: qcMap.get(description.toLowerCase()) ?? 0,
     delivered: deliveredMap.get(description.toLowerCase()) ?? 0,
   }));
   const deliveriesView = wf.deliveries.map((dv) => ({
     id: dv.id, date: dv.date, drNumber: dv.drNumber, lines: dv.lines, note: dv.note, deliveredByName: dv.deliveredByName, paymentAmount: dv.paymentAmount,
   }));
+  const qualityChecksView = wf.qualityChecks.map((q) => ({
+    id: q.id, date: q.date, lines: q.lines, note: q.note, checkedByName: q.checkedByName,
+  }));
+  const canQualityCheck =
+    adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey));
   const canDeliverManage =
     adminViewer ||
     (viewer != null &&
@@ -669,6 +676,30 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
+      {/* Quality check & partial delivery — opens once the first department has
+          finished. Items must pass QC before they can be delivered; batches can go
+          out as they're checked (e.g. 20 of 50 now, 30 later). */}
+      {showDeliveries && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Quality check &amp; delivery</CardTitle></CardHeader>
+          <CardContent>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Quality-check finished items, then deliver them to the client — part of the order can go now (e.g. 20 of 50) and the rest later. Only quality-checked items can be delivered; the order is marked Delivered once every item is fully delivered.
+            </p>
+            <DeliveriesPanel
+              orderId={quote.id}
+              items={orderedItems}
+              deliveries={deliveriesView}
+              qualityChecks={qualityChecksView}
+              canQC={canQualityCheck}
+              canDeliver={canDeliverManage}
+              currency={quote.currency}
+              outstanding={Math.max(0, value - collectedTotal(saleForClose))}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Phase 5 — final payment, quality, delivery & documents */}
       {showFulfillment && (
         <Card>
@@ -681,17 +712,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             )}
             <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={recordedPayments} />
             {saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode === "INCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
-            {/* Deliveries — only once QC has cleared and delivery documents are
-                ready. The client can take finished items in batches (e.g. 20 of 50). */}
-            {showDeliveries && (
-              <div className="rounded-md border bg-muted/10 p-3">
-                <div className="mb-1 text-sm font-medium">Deliveries</div>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  Deliver finished items to the client — part of the order can go now (e.g. 20 of 50) and the rest later. The order is marked Delivered once every item is fully delivered.
-                </p>
-                <DeliveriesPanel orderId={quote.id} items={orderedItems} deliveries={deliveriesView} canManage={canDeliverManage} currency={quote.currency} outstanding={Math.max(0, value - collectedTotal(saleForClose))} />
-              </div>
-            )}
           </CardContent>
         </Card>
       )}

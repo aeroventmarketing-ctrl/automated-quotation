@@ -12,7 +12,7 @@ import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, type DuctJobOrder } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder } from "@/lib/motor-controller-job-order";
-import { coerceDeliveries, type DeliveryRecord } from "@/lib/delivery";
+import { coerceDeliveries, coerceQualityChecks, type DeliveryRecord, type QualityCheckRecord } from "@/lib/delivery";
 
 export type OrderStage =
   | "payment_review"
@@ -237,6 +237,9 @@ export interface OrderWorkflow {
   // Partial deliveries — the client can take finished items before the whole
   // order is done (e.g. 20 of 50 now, 30 later). Each entry is a Delivery Receipt.
   deliveries: DeliveryRecord[];
+  // Quality-check sign-offs on finished items. Only quantities that have passed
+  // QC may be delivered; recorded per item so batches can be released as they finish.
+  qualityChecks: QualityCheckRecord[];
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -426,8 +429,9 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   }
 
   const deliveries = coerceDeliveries(wf?.deliveries);
+  const qualityChecks = coerceQualityChecks(wf?.qualityChecks);
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveries };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveries, qualityChecks };
 }
 
 /** True once at least one department's job order is finished — the point where a

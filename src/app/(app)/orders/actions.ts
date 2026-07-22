@@ -39,7 +39,7 @@ import {
   type OrderConversation,
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
-import { deliveredByDescription, type DeliveryRecord } from "@/lib/delivery";
+import { deliveredByDescription, qcByDescription, type DeliveryRecord, type QualityCheckRecord } from "@/lib/delivery";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
@@ -973,7 +973,83 @@ function mrfItemLine(it: MRFItem): string {
   return [qtyUnit, it.description].filter(Boolean).join(" · ") + (it.remark ? ` (${it.remark})` : "");
 }
 
-// --- Partial deliveries ------------------------------------------------------
+// --- Quality checks & partial deliveries -------------------------------------
+
+const qcInputSchema = z.object({
+  date: z.string().optional(),
+  note: z.string().optional(),
+  lines: z.array(z.object({ description: z.string(), qty: z.coerce.number() })),
+});
+
+/** Who may pass / undo a quality check: the Plant Manager or an admin. */
+async function canQualityCheck(userId: string): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || user.id !== userId) return false;
+  if (isAdmin(user)) return true;
+  const roles = await getWorkflowRoles();
+  return userHasWorkflowRole(roles, userId, "plant_manager" as WorkflowRoleKey);
+}
+
+/**
+ * Record a quality-check sign-off on finished items. Only quantities that pass QC
+ * become deliverable. Checked per item so batches (e.g. 20 of 50) can be released
+ * as they finish — QC can't exceed the ordered quantity.
+ */
+export async function recordQualityCheck(
+  quotationId: string,
+  input: z.infer<typeof qcInputSchema>,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(await canQualityCheck(user.id))) throw new Error("Only the Plant Manager or an admin can quality-check items.");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { classification: true, items: { select: { qty: true, descriptionSnapshot: true } } },
+  });
+  if (!quote) throw new Error("Order not found");
+  const d = qcInputSchema.parse(input);
+  const wf = readOrderWorkflow(quote.classification);
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+
+  const lines = d.lines
+    .map((l) => ({ description: l.description.trim(), qty: Number.isFinite(l.qty) ? Math.max(0, l.qty) : 0 }))
+    .filter((l) => l.description && l.qty > 0);
+  if (lines.length === 0) throw new Error("Enter at least one item quantity to quality-check.");
+
+  const ordered = new Map<string, number>();
+  for (const it of quote.items) {
+    const k = it.descriptionSnapshot.trim().toLowerCase();
+    ordered.set(k, (ordered.get(k) ?? 0) + it.qty);
+  }
+  const alreadyQc = qcByDescription(wf.qualityChecks);
+  for (const l of lines) {
+    const k = l.description.toLowerCase();
+    const ord = ordered.get(k);
+    if (ord != null) {
+      const remaining = ord - (alreadyQc.get(k) ?? 0);
+      if (l.qty > remaining) throw new Error(`Quality-checking ${l.qty} of "${l.description}" exceeds the ${remaining} not yet checked.`);
+    }
+  }
+
+  const record: QualityCheckRecord = {
+    id: randomUUID(),
+    date: (d.date && d.date.trim()) || joToday(),
+    lines,
+    note: (d.note ?? "").trim(),
+    checkedByName: user.name,
+    createdAt: new Date().toISOString(),
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, qualityChecks: [...wf.qualityChecks, record] });
+}
+
+/** Remove a quality-check record (correcting a mistake). Plant Manager or admin. */
+export async function deleteQualityCheck(quotationId: string, checkId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(await canQualityCheck(user.id))) throw new Error("Only the Plant Manager or an admin can remove a quality check.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  await saveWorkflow(quotationId, cls, { ...wf, qualityChecks: wf.qualityChecks.filter((q) => q.id !== checkId) });
+}
 
 const deliveryInputSchema = z.object({
   date: z.string().optional(),
@@ -1023,19 +1099,24 @@ export async function recordDelivery(
     .filter((l) => l.description && l.qty > 0);
   if (lines.length === 0) throw new Error("Enter at least one item quantity to deliver.");
 
-  // Ordered totals and already-delivered totals per item — guard against over-delivery.
+  // Ordered totals, QC-passed totals and already-delivered totals per item — an
+  // item can only be delivered up to the quantity that has passed quality check.
   const ordered = new Map<string, number>();
   for (const it of quote.items) {
     const k = it.descriptionSnapshot.trim().toLowerCase();
     ordered.set(k, (ordered.get(k) ?? 0) + it.qty);
   }
   const already = deliveredByDescription(wf.deliveries);
+  const qcPassed = qcByDescription(wf.qualityChecks);
   for (const l of lines) {
     const k = l.description.toLowerCase();
-    const ord = ordered.get(k);
-    if (ord != null) {
-      const remaining = ord - (already.get(k) ?? 0);
-      if (l.qty > remaining) throw new Error(`Delivering ${l.qty} of "${l.description}" exceeds the ${remaining} remaining.`);
+    const deliverable = (qcPassed.get(k) ?? 0) - (already.get(k) ?? 0);
+    if (l.qty > deliverable) {
+      throw new Error(
+        deliverable <= 0
+          ? `"${l.description}" must pass quality check before it can be delivered.`
+          : `Delivering ${l.qty} of "${l.description}" exceeds the ${deliverable} quality-checked and undelivered.`,
+      );
     }
   }
 
