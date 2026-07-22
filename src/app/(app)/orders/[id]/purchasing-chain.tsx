@@ -14,7 +14,8 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
-import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
+import { poTotals, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { CatalogSuppliers, CatalogPrices } from "@/lib/po-catalog";
@@ -107,6 +108,27 @@ export function PurchasingChain({
   const [err, setErr] = useState<string | null>(null);
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [poEditId, setPoEditId] = useState<string | null>(null);
+  // Selection for summing PO amounts across requisitions (tick the MRFs to total).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleSel = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  // Rows that carry a Purchase Order can be selected and summed.
+  const poRows = requests.filter((r) => r.po);
+  const selectedPoRows = poRows.filter((r) => selected.has(r.id));
+  const selTotals = selectedPoRows.reduce(
+    (acc, r) => {
+      const t = poTotals(r.po!);
+      return { total: acc.total + t.total, ewt: acc.ewt + t.ewt, net: acc.net + t.net };
+    },
+    { total: 0, ewt: 0, net: 0 },
+  );
+  const allSelected = poRows.length > 0 && selectedPoRows.length === poRows.length;
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(poRows.map((r) => r.id)));
 
   async function cancel(prId: string) {
     if (!window.confirm("Cancel this purchase order / request?")) return;
@@ -282,8 +304,20 @@ export function PurchasingChain({
               ) : r.po ? (
                 <div className="flex flex-wrap items-end justify-between gap-2 text-xs">
                   <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-[#ED1C24]"
+                      checked={selected.has(r.id)}
+                      onChange={() => toggleSel(r.id)}
+                      title="Select this PO to add to the total"
+                      aria-label={`Select PO ${r.po.poNumber}`}
+                    />
                     <Badge variant="success">PO {r.po.poNumber}</Badge>
                     {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
+                    <span className="font-semibold tabular-nums">{formatCurrency(poTotals(r.po).total, "PHP")}</span>
+                    {poHasEwt(r.po) && (
+                      <span className="text-muted-foreground tabular-nums">· Net {formatCurrency(poTotals(r.po).net, "PHP")}</span>
+                    )}
                     <a
                       href={viewHref(r.id)}
                       target="_blank"
@@ -340,6 +374,26 @@ export function PurchasingChain({
           </div>
         );
       })}
+
+      {/* Tick the POs above to add up their amounts (e.g. the total to release
+          for several material requests at once). */}
+      {poRows.length > 0 && (
+        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs backdrop-blur">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={toggleAll} className="font-medium text-primary hover:underline">
+              {allSelected ? "Clear all" : "Select all"}
+            </button>
+            <span className="text-muted-foreground">
+              {selectedPoRows.length} of {poRows.length} PO{poRows.length > 1 ? "s" : ""} selected
+            </span>
+          </div>
+          <div className="tabular-nums">
+            <span className="font-semibold">Total {formatCurrency(selTotals.total, "PHP")}</span>
+            {selTotals.ewt > 0 && <span className="text-muted-foreground"> · less EWT {formatCurrency(selTotals.ewt, "PHP")}</span>}
+            <span className="ml-1 font-semibold text-foreground"> · Net {formatCurrency(selTotals.net, "PHP")}</span>
+          </div>
+        </div>
+      )}
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );
