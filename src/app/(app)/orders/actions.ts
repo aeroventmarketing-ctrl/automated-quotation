@@ -1914,7 +1914,11 @@ export async function setMultiDelivery(quotationId: string): Promise<void> {
   if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
     throw new Error("Only Sales or an admin can choose multiple-batch delivery.");
   }
-  if (wf.stage !== "production_finished") throw new Error("Choose the delivery method once production is finished, before the single delivery starts.");
+  // Available once production has started (producing) through production finished —
+  // but not after the single-batch delivery has begun.
+  if (wf.stage !== "producing" && wf.stage !== "production_finished") {
+    throw new Error("Choose multiple-batch delivery once production has started, before the single delivery begins.");
+  }
   await saveWorkflow(quotationId, cls, { ...wf, deliveryMode: "multi" });
 }
 

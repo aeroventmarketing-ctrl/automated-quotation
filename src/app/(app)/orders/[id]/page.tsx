@@ -353,11 +353,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     (wf.deliveryMode === "multi" || closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete);
 
   // Multiple-batch delivery — a separate opt-in mode (never active alongside the
-  // single-batch Phase 5 flow). Chosen once at production_finished by Sales/admin.
+  // single-batch Phase 5 flow). Chosen by Sales/admin as soon as production has
+  // started (so finished items can go out while the rest is still being made),
+  // right up until the single-batch delivery begins.
   const isPreparerViewer = viewer != null && viewer.id === quote.preparedById;
   const multiMode = wf.deliveryMode === "multi";
   const canManageMulti = adminViewer || isPreparerViewer;
-  const showMultiEntry = wf.stage === "production_finished" && !multiMode && canManageMulti;
+  const showMultiEntry =
+    (wf.stage === "producing" || wf.stage === "production_finished") && !multiMode && canManageMulti;
   const mbOrdered = new Map<string, number>();
   for (const it of quote.items) {
     const k = it.descriptionSnapshot.trim();
@@ -701,6 +704,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
+      {/* Multiple-batch delivery — offered as soon as production starts, so finished
+          items can go out in batches while the rest is still being made. */}
+      {showMultiEntry && (
+        <Card className="border-primary/30">
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Deliver in multiple batches?</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              For large orders delivered in parts. Switch to multiple-batch delivery to send out finished items now — while the rest of the order is still in production — and run each batch through its own payment, quality check and delivery. The single-delivery flow won&apos;t be used for this order.
+            </p>
+            <MultiDeliveryEntry orderId={quote.id} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Phase 5 — final payment, quality, delivery & documents (single delivery) */}
       {showFulfillment && !multiMode && (
         <Card>
@@ -713,8 +730,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             )}
             <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={recordedPayments} />
             {saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode === "INCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
-            {/* One-time choice: deliver this order in multiple batches instead. */}
-            {showMultiEntry && <MultiDeliveryEntry orderId={quote.id} />}
           </CardContent>
         </Card>
       )}
