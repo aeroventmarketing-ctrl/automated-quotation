@@ -26,9 +26,9 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
     views: [{ showGridLines: false, style: "pageBreakPreview", zoomScale: 120, zoomScaleNormal: 120 }],
   });
 
-  // # | Qty | Dimensions | Product type | Material
-  ws.columns = [{ width: 5 }, { width: 8 }, { width: 40 }, { width: 20 }, { width: 18 }];
-  const LAST = "E";
+  // # | Quantity | Unit | Dimensions | Product type | Material
+  ws.columns = [{ width: 5 }, { width: 8 }, { width: 7 }, { width: 34 }, { width: 20 }, { width: 18 }];
+  const LAST = "F";
 
   const thin = { style: "thin" as const, color: { argb: BORDER } };
   const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
@@ -60,15 +60,15 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
     const row = ws.getRow(r);
     ws.getCell(`A${r}`).value = label;
     ws.getCell(`A${r}`).font = { bold: true, size: 10 };
-    ws.mergeCells(`B${r}:C${r}`);
+    ws.mergeCells(`B${r}:D${r}`);
     ws.getCell(`B${r}`).value = value;
     ws.getCell(`B${r}`).font = { size: 10 };
     if (label2 != null) {
-      ws.getCell(`D${r}`).value = label2;
-      ws.getCell(`D${r}`).font = { bold: true, size: 10 };
-      ws.getCell(`D${r}`).alignment = { horizontal: "right" };
-      ws.getCell(`E${r}`).value = value2 ?? "";
-      ws.getCell(`E${r}`).font = { size: 10 };
+      ws.getCell(`E${r}`).value = label2;
+      ws.getCell(`E${r}`).font = { bold: true, size: 10 };
+      ws.getCell(`E${r}`).alignment = { horizontal: "right" };
+      ws.getCell(`F${r}`).value = value2 ?? "";
+      ws.getCell(`F${r}`).font = { size: 10 };
     }
     row.height = 16;
     r++;
@@ -76,19 +76,21 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
   infoRow("JO No.:", jo.joNumber, "Date:", fmtDate(jo.date));
   infoRow("Project:", jo.project, "Due:", fmtDate(jo.dueDate));
   ws.getCell("B5").font = { bold: true, size: 11, color: { argb: RED } };
-  ws.getCell("E6").font = { bold: true, size: 10, color: { argb: RED } };
+  ws.getCell("F6").font = { bold: true, size: 10, color: { argb: RED } };
 
   r++; // spacer
 
   // --- Lines table --------------------------------------------------------
   const headerRow = r;
-  const headers = ["#", "Qty", "Dimensions", "Product type", "Material"];
+  // # | Quantity | Unit | Dimensions | Product type | Material
+  const DIM_COL = 3; // 0-based index of the dimensions column (left-aligned)
+  const headers = ["#", "Quantity", "Unit", "Dimensions", "Product type", "Material"];
   headers.forEach((h, i) => {
     const cell = ws.getCell(headerRow, i + 1);
     cell.value = h;
     cell.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: RED } };
-    cell.alignment = { horizontal: i === 2 ? "left" : "center", vertical: "middle", wrapText: true };
+    cell.alignment = { horizontal: i === DIM_COL ? "left" : "center", vertical: "middle", wrapText: true };
     cell.border = allBorders;
   });
   ws.getRow(headerRow).height = 22;
@@ -106,18 +108,19 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
     jo.lines.forEach((line, i) => {
       const row = ws.getRow(r);
       ws.getCell(r, 1).value = i + 1;
-      ws.getCell(r, 2).value = [line.quantity, line.uom].filter(Boolean).join(" ");
-      ws.getCell(r, 3).value = formatAccessoryDimensions(line);
-      ws.getCell(r, 4).value = line.type;
-      ws.getCell(r, 5).value = formatMaterialText(line.material);
-      for (let c = 1; c <= 5; c++) {
+      ws.getCell(r, 2).value = line.quantity;
+      ws.getCell(r, 3).value = line.uom;
+      ws.getCell(r, 4).value = formatAccessoryDimensions(line);
+      ws.getCell(r, 5).value = line.type;
+      ws.getCell(r, 6).value = formatMaterialText(line.material);
+      for (let c = 1; c <= 6; c++) {
         const cell = ws.getCell(r, c);
         cell.font = { size: 10 };
-        cell.alignment = { horizontal: c === 3 ? "left" : "center", vertical: "middle", wrapText: c === 3 || c === 4 };
+        cell.alignment = { horizontal: c === DIM_COL + 1 ? "left" : "center", vertical: "middle", wrapText: c === DIM_COL + 1 || c === DIM_COL + 2 };
         cell.border = allBorders;
         if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
       }
-      ws.getCell(r, 4).font = { size: 10, bold: true, color: { argb: RED } };
+      ws.getCell(r, 5).font = { size: 10, bold: true, color: { argb: RED } };
       row.height = 18;
       r++;
     });
