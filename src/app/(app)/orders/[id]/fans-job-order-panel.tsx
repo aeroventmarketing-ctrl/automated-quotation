@@ -344,9 +344,6 @@ function JoTypeChooser({ onPick, onCancel }: { onPick: (key: string) => void; on
           );
         })}
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        Only Centrifugal Blower is set up so far. Send the Excel template for any other type and it will be enabled here.
-      </p>
       <Button size="sm" variant="outline" className="h-8" onClick={onCancel}>Cancel</Button>
     </div>
   );
