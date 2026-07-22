@@ -30,6 +30,28 @@ function ductMaterial(s: Record<string, unknown>): string {
   return m || "G.I. Material";
 }
 
+/** mm per one entered size unit (matches the quotation duct calculator's trade
+ *  ratio — inches use 25, not 25.4). */
+const ACC_MM_PER_UNIT: Record<string, number> = { mm: 1, cm: 10, inches: 25 };
+
+/** Quotation duct gauge ("18", "18 ga", 20…) → Duct JO gauge option ("GA18"). */
+function ductGaugeLabel(s: Record<string, unknown>): string {
+  const g = str(s.gauge).replace(/[^0-9]/g, "");
+  return g ? `GA${g}` : "GA20";
+}
+
+/**
+ * Straight Duct standard section length, expressed in the entered size unit so it
+ * lines up with the Width/Height numbers. Flanged bodies are 1.1 m, no-flange 1.2 m.
+ */
+function straightDuctLength(s: Record<string, unknown>): string {
+  const unit = str(s.sizeUnit) || "inches";
+  const perUnit = ACC_MM_PER_UNIT[unit] ?? 25;
+  const stdMm = (s.ductNoFlange === true ? 1.2 : 1.1) * 1000;
+  if (!perUnit) return "";
+  return String(Math.round((stdMm / perUnit) * 100) / 100);
+}
+
 /** The subset of a quotation item the generator reads. */
 export interface QuoteItemLike {
   qty: number;
@@ -107,19 +129,26 @@ export function buildAutoJobOrders(
     const s = specsOf(it);
     const qty = it.qty > 0 ? String(it.qty) : "1";
     if (isAirDuct(s)) {
-      // One duct segment per quotation Air Duct line. The cross-section
-      // (width × height) and length come from the duct calculator; the reducer
-      // "reduces-to" sizes are left for the engineer (not captured on the quote).
+      // One duct segment per quotation Air Duct line. The quotation calculator
+      // stores the cross-section as Width "A" = ductCalcWidth and Height "B" =
+      // ductCalcLength (the field names are historical). Map them straight across:
+      //   Horizontal ← Width "A", Vertical ← Height "B".
+      // Length: a Straight Duct / Duct Connector uses the standard section length
+      // (1.1 m flanged / 1.2 m no-flange); an Offset Duct carries its own "L" in
+      // ductCalcHeight. Reducer-like types have no single length, left for the
+      // engineer. The reducer "reduces-to" sizes aren't captured on the quote.
+      const type = str(s.type) || "Straight Duct";
+      const isStraight = type === "Straight Duct" || type === "Duct Connector";
       ductSegments.push({
         ...EMPTY_DUCT_SEGMENT,
-        type: str(s.type) || "Straight Duct",
+        type,
         horizontal: str(s.ductCalcWidth),
-        vertical: str(s.ductCalcHeight),
-        length: str(s.ductCalcLength),
+        vertical: str(s.ductCalcLength),
+        length: isStraight ? straightDuctLength(s) : type === "Offset Duct" ? str(s.ductCalcHeight) : "",
         toHorizontal: "",
         toVertical: "",
         material: ductMaterial(s),
-        gauge: str(s.ductGauge) || "GA20",
+        gauge: ductGaugeLabel(s),
       });
       continue;
     }
