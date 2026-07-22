@@ -21,8 +21,6 @@ import {
 import { saveDuctJobOrder, deleteDuctJobOrder } from "../actions";
 import { JobOrderApproval } from "./jo-approval";
 
-const SELECT_CLS = "h-8 w-full rounded-md border bg-background px-2 text-sm";
-
 function todayISO(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -187,7 +185,7 @@ function DuctJobOrderForm({
       <div className="text-sm font-medium">{index != null ? "Edit" : "New"} Duct Job Order</div>
 
       <div className="text-xs font-semibold text-muted-foreground">Header</div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <label className="space-y-1">
           <span className="text-[11px] text-muted-foreground">Project</span>
           <Input className="h-8" value={f.project} onChange={(e) => set("project", e.target.value)} placeholder="e.g. CEB" />
@@ -200,18 +198,6 @@ function DuctJobOrderForm({
           <span className="text-[11px] text-muted-foreground">Due date</span>
           <Input className="h-8" type="date" value={f.dueDate} onChange={(e) => set("dueDate", e.target.value)} />
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="space-y-1">
-            <span className="text-[11px] text-muted-foreground">Qty</span>
-            <Input className="h-8" value={f.quantity} onChange={(e) => set("quantity", e.target.value)} />
-          </label>
-          <label className="space-y-1">
-            <span className="text-[11px] text-muted-foreground">UOM</span>
-            <select className={SELECT_CLS} value={f.uom} onChange={(e) => set("uom", e.target.value)}>
-              {DUCT_UOMS.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
-          </label>
-        </div>
       </div>
 
       <div className="flex items-center justify-between">
@@ -223,7 +209,7 @@ function DuctJobOrderForm({
         )}
         {f.segments.map((seg, i) => (
           <div key={i} className="space-y-1.5 rounded-md border bg-background p-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-mono text-muted-foreground">{i + 1}.</span>
               <select
                 className="h-7 rounded-md border bg-background px-2 text-xs font-medium"
@@ -231,6 +217,18 @@ function DuctJobOrderForm({
                 onChange={(e) => setSeg(i, { type: e.target.value })}
               >
                 {DUCT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                Qty
+                <Input className="h-7 w-14 text-xs" value={seg.quantity} onChange={(e) => setSeg(i, { quantity: e.target.value })} inputMode="numeric" />
+              </label>
+              <select
+                className="h-7 rounded-md border bg-background px-1 text-xs"
+                value={seg.uom}
+                onChange={(e) => setSeg(i, { uom: e.target.value })}
+                aria-label="Unit"
+              >
+                {DUCT_UOMS.map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
               <span className="text-[11px] text-muted-foreground truncate">{formatSegmentDimensions(seg)}</span>
               <button type="button" onClick={() => removeSeg(i)} className="ml-auto text-muted-foreground hover:text-destructive">

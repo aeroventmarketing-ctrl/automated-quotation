@@ -142,6 +142,8 @@ export function buildAutoJobOrders(
       ductSegments.push({
         ...EMPTY_DUCT_SEGMENT,
         type,
+        quantity: qty,
+        uom: "pc",
         horizontal: str(s.ductCalcWidth),
         vertical: str(s.ductCalcLength),
         length: isStraight ? straightDuctLength(s) : type === "Offset Duct" ? str(s.ductCalcHeight) : "",

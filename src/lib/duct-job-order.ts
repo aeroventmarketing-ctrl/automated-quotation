@@ -38,6 +38,8 @@ export function isReducingDuctType(type: string): boolean {
  * types add the "to" dimensions it steps down to over that length. */
 export interface DuctSegment {
   type: string; // one of DUCT_TYPES
+  quantity: string; // how many of this product line
+  uom: string; // unit of quantity, e.g. "pc"
   horizontal: string; // mm — the first (Horizontal) dimension
   vertical: string; // mm — the Vertical dimension
   length: string; // mm — segment length (for a reducer, the reducing length)
@@ -71,6 +73,8 @@ export const DUCT_UOMS = ["set", "pc", "pcs", "length", "lot"];
 
 export const EMPTY_DUCT_SEGMENT: DuctSegment = {
   type: "Straight Duct",
+  quantity: "",
+  uom: "pc",
   horizontal: "",
   vertical: "",
   length: "",
@@ -145,6 +149,8 @@ export function coerceDuctSegment(value: unknown): DuctSegment | null {
     : "Straight Duct";
   return {
     type,
+    quantity: s("quantity"),
+    uom: s("uom") || "pc",
     horizontal: s("horizontal"),
     vertical: s("vertical"),
     length: s("length"),

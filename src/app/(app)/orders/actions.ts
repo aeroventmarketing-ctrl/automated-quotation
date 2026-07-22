@@ -519,6 +519,8 @@ async function nextDuctJoBaseNo(): Promise<number> {
 
 const ductSegmentSchema = z.object({
   type: z.string().trim().default("Straight Duct"),
+  quantity: z.string().trim().default(""),
+  uom: z.string().trim().default("pc"),
   horizontal: z.string().trim().default(""),
   vertical: z.string().trim().default(""),
   length: z.string().trim().default(""),
@@ -565,6 +567,8 @@ export async function saveDuctJobOrder(
       const reducing = isReducingDuctType(s.type);
       return {
         type: s.type || "Straight Duct",
+        quantity: s.quantity,
+        uom: s.uom || "pc",
         horizontal: s.horizontal,
         vertical: s.vertical,
         length: s.length,

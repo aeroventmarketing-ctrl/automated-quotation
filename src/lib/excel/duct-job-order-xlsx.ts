@@ -129,9 +129,10 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
     jo.segments.forEach((seg, i) => {
       const row = ws.getRow(r);
       ws.getCell(r, 1).value = i + 1;
-      // Quantity / unit are JO-level; show them on the first line-item row.
-      ws.getCell(r, 2).value = i === 0 ? jo.quantity : "";
-      ws.getCell(r, 3).value = i === 0 ? jo.uom : "";
+      // Quantity / unit are per product line. Fall back to the legacy JO-level
+      // quantity on the first row for older job orders saved before per-row qty.
+      ws.getCell(r, 2).value = seg.quantity || (i === 0 ? jo.quantity : "");
+      ws.getCell(r, 3).value = seg.uom || (i === 0 ? jo.uom : "");
       ws.getCell(r, 4).value = formatSegmentDimensions(seg);
       ws.getCell(r, 5).value = segmentTypeLabel(seg);
       ws.getCell(r, 6).value = seg.material;
