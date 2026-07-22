@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
@@ -21,8 +21,11 @@ interface ReqRow {
   items: MRFItem[];
   note?: string | null;
   status: "requested" | "issued" | "purchasing" | "partial" | "cancelled";
+  poStatus?: string | null;
   poStatusLabel?: string | null;
   poStatusVariant?: "secondary" | "warning" | "success" | "destructive" | null;
+  linkedPrId?: string | null;
+  canApproveMaterials?: boolean;
   raisedByName: string;
   date: string;
   handledByName?: string;
@@ -224,9 +227,19 @@ export function MaterialRequests({
                   MRF #{r.formNo} · {r.deptLabel}
                 </span>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>
-                  {r.poStatusLabel && r.poStatusVariant && (
-                    <Badge variant={r.poStatusVariant}>PO: {r.poStatusLabel}</Badge>
+                  {/* Awaiting the Plant Manager's approval — the amber "For
+                      purchasing" only appears once they approve (step 16). */}
+                  {r.poStatus === "PENDING_APPROVAL" ? (
+                    <Badge variant="secondary">Awaiting Plant Manager approval</Badge>
+                  ) : r.poStatus === "REJECTED" ? (
+                    <Badge variant="destructive">Materials request rejected</Badge>
+                  ) : (
+                    <>
+                      <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>
+                      {r.poStatusLabel && r.poStatusVariant && (
+                        <Badge variant={r.poStatusVariant}>PO: {r.poStatusLabel}</Badge>
+                      )}
+                    </>
                   )}
                   <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                     <Eye className="h-3.5 w-3.5" /> View
@@ -268,6 +281,22 @@ export function MaterialRequests({
                 Requested by {r.raisedByName} · {r.date}
                 {r.handledByName ? ` · handled by ${r.handledByName}${r.handledWhen ? ` · ${r.handledWhen}` : ""}` : ""}
               </p>
+              {/* Plant Manager approval (step 16): once the warehouse escalates a
+                  request for purchasing, the Plant Manager approves it here before
+                  it becomes "For purchasing" and the Purchaser prepares the PO. */}
+              {r.canApproveMaterials && r.linkedPrId && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button size="sm" className="h-7 text-xs" disabled={busy}
+                    onClick={() => run(() => advancePurchaseRequest(r.linkedPrId!, "approve"))}>
+                    Approve materials request
+                  </Button>
+                  <button type="button" disabled={busy}
+                    className="text-xs font-medium text-muted-foreground hover:text-destructive"
+                    onClick={() => { if (window.confirm(`Reject materials request MRF #${r.formNo}?`)) run(() => advancePurchaseRequest(r.linkedPrId!, "reject")); }}>
+                    Reject
+                  </button>
+                </div>
+              )}
               {r.status === "requested" && (r.canHandle || r.canCancel) && issuingId !== r.id && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {r.canHandle && (

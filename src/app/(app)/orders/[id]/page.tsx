@@ -351,6 +351,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   for (const pr of purchaseRequests) if (pr.mrfId) prByMrf.set(pr.mrfId, pr);
   const prBadge = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
     s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" || s === "CANCELLED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
+  // A material requisition is approved (or rejected) by the Plant Manager — the
+  // "For purchasing" state only starts once they approve (workflow step 16).
+  const canApprovePlant =
+    adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey));
   const materialReqs = wf.materialRequests.map((m) => {
     const linkedPr = prByMrf.get(m.id);
     const poStatus = linkedPr ? (linkedPr.status as PRStatus) : null;
@@ -362,6 +366,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       items: m.items,
       note: m.note,
       status: m.status,
+      poStatus,
+      linkedPrId: linkedPr?.id ?? null,
+      // The Plant Manager (or admin) approves/rejects a material request that is
+      // still awaiting approval — right here on the Phase 3 MRF card.
+      canApproveMaterials: canApprovePlant && poStatus === "PENDING_APPROVAL",
       poStatusLabel: poStatus ? PR_STATUS_LABEL[poStatus] : null,
       poStatusVariant: poStatus ? prBadge(poStatus) : null,
       raisedByName: m.raisedByName,
