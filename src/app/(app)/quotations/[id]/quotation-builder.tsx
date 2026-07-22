@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -286,6 +287,7 @@ interface Quote {
   templateId: string;
   templateName: string;
   customer: string;
+  customerId: string;
   preparedBy: string;
   approvedBy: string | null;
   items: Line[];
@@ -4892,7 +4894,8 @@ export function QuotationBuilder({
             </h1>
           )}
           <p className="text-sm text-muted-foreground">
-            {quotation.customer} · prepared by {quotation.preparedBy}
+            <Link href={`/customers/${quotation.customerId}`} className="font-medium text-primary hover:underline">{quotation.customer}</Link>
+            {" · "}prepared by {quotation.preparedBy}
             {quotation.approvedBy ? ` · approved by ${quotation.approvedBy}` : ""}
           </p>
         </div>

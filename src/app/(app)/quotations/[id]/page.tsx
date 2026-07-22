@@ -140,6 +140,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         templateId: quotation.templateId,
         templateName: quotation.template.name,
         customer: quotation.inquiry.customer.company,
+        customerId: quotation.inquiry.customer.id,
         preparedBy: quotation.preparedBy.name,
         approvedBy: quotation.approvedBy?.name ?? null,
         items: quotation.items.map((it) => {
