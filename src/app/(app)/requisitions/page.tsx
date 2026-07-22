@@ -49,7 +49,7 @@ export default async function RequisitionsPage() {
   const canAct = (role: WorkflowRoleKey): boolean => admin || has(role);
 
   // The viewer's requisitions (their departments; purchaser/admin see all active).
-  let rows: ReturnType<typeof buildPurchaseChainRow>[] = [];
+  let rows: (ReturnType<typeof buildPurchaseChainRow> & { createdAt: string; requestor: string })[] = [];
   let tableMissing = false;
   try {
     const prs = await prisma.purchaseRequest.findMany({
@@ -59,7 +59,11 @@ export default async function RequisitionsPage() {
       },
       orderBy: { createdAt: "desc" },
     });
-    rows = prs.map((pr) => buildPurchaseChainRow(pr, { mrfNo: null, canManagePO: false, namesForRole, canAct, admin }));
+    rows = prs.map((pr) => ({
+      ...buildPurchaseChainRow(pr, { mrfNo: null, canManagePO: false, namesForRole, canAct, admin }),
+      createdAt: pr.createdAt.toISOString(),
+      requestor: pr.createdByName,
+    }));
   } catch {
     tableMissing = true;
   }
