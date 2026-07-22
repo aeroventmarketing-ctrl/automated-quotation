@@ -119,6 +119,14 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
     const project = (quote.projectName ?? "").trim();
     const auto = buildAutoJobOrders(items, { project, date: new Date().toISOString() });
     const year = new Date().getFullYear();
+    if (auto.fans.length && wf.fansJobOrders.length === 0) {
+      workflow = {
+        ...workflow,
+        fansJobOrders: auto.fans,
+        joBaseNo: wf.joBaseNo ?? (await nextJoBaseNo()),
+        joBaseYear: wf.joBaseYear ?? year,
+      };
+    }
     if (auto.motor.length && wf.motorJobOrders.length === 0) {
       workflow = {
         ...workflow,

@@ -11,6 +11,7 @@
  */
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
+import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 
 /** The subset of a quotation item the generator reads. */
 export interface QuoteItemLike {
@@ -28,8 +29,27 @@ function specsOf(it: QuoteItemLike): Record<string, unknown> {
 const isMotorController = (s: Record<string, unknown>) => s.type === "Motor Controller";
 const isIsolator = (s: Record<string, unknown>) => s.type === "Spring Vibration Isolator";
 const isAccessory = (s: Record<string, unknown>) => s.category === "Ventilation Accessories" || isIsolator(s);
+// A fan/blower line: any non-accessory, non-motor-controller product with a fan
+// category (Centrifugal / Axial / Propeller / Tubular…). Accessories are excluded.
+const isFan = (s: Record<string, unknown>) => {
+  const cat = str(s.category).toLowerCase();
+  if (isMotorController(s) || isAccessory(s)) return false;
+  return /centrifugal|axial|propeller|tubular|panel|roof|blower|fan/.test(cat + " " + str(s.type).toLowerCase());
+};
+
+/** Map a quotation fan type/category to one of the Fans & Blowers JO templates. */
+function fanJoType(s: Record<string, unknown>): string {
+  const t = (str(s.type) + " " + str(s.category)).toLowerCase();
+  if (t.includes("didw")) return "centrifugal_blower_didw";
+  if (t.includes("inline")) return "centrifugal_inline_blower";
+  if (t.includes("panel")) return "panel_fan";
+  if (t.includes("roof")) return "power_roof";
+  if (t.includes("axial")) return "tubeaxial_vaneaxial";
+  return "centrifugal_blower";
+}
 
 export interface AutoJobOrders {
+  fans: FansJobOrder[];
   accessories: AccessoriesJobOrder[];
   motor: MotorControllerJobOrder[];
 }
@@ -44,10 +64,37 @@ export interface AutoJobOrders {
 export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: string; date: string }): AutoJobOrders {
   const motorLines: MotorControllerLine[] = [];
   const accessoryLines: AccessoryLine[] = [];
+  const fans: FansJobOrder[] = [];
 
   for (const it of items) {
     const s = specsOf(it);
     const qty = it.qty > 0 ? String(it.qty) : "1";
+    if (isFan(s)) {
+      // One Fans & Blowers JO per fan line. Populate the descriptive/geometry
+      // fields that map directly from the quotation; the motor-table, pulley,
+      // RPM and lead-time fields stay blank for the engineer to complete.
+      const cfm = str(s.capacity_cfm);
+      const sp = str(s.staticPressure_inwg) || str(s.staticPressure_pa);
+      const driveType = str(s.driveType);
+      fans.push({
+        ...(coerceFansJobOrder({}) as FansJobOrder),
+        type: fanJoType(s),
+        date: opts.date,
+        project: opts.project,
+        make: str(s.make) || "Standard",
+        quantity: qty,
+        bladeDiameter: str(s.inches),
+        bladeType: str(s.bladeType),
+        driveType,
+        directDrive: /direct/i.test(driveType),
+        orientation: str(s.orientation),
+        rotation: str(s.rotation),
+        capacity: cfm ? `${cfm} cfm${sp ? ` @ ${sp}" w.g.` : ""}` : "",
+        motorHp: str(s.motorHp),
+        voltage: str(s.motorVolts),
+      });
+      continue;
+    }
     if (isMotorController(s)) {
       motorLines.push({
         quantity: qty,
@@ -79,5 +126,5 @@ export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: stri
     ? [{ ...(coerceAccessoriesJobOrder({}) as AccessoriesJobOrder), ...header, lines: accessoryLines }]
     : [];
 
-  return { accessories, motor };
+  return { fans, accessories, motor };
 }
