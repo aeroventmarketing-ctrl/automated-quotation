@@ -167,14 +167,18 @@ export function buildAutoJobOrders(
       continue;
     }
     if (isMotorController(s)) {
-      motorLines.push({
-        quantity: qty,
-        uom: "pc",
-        starterType: str(s.starterType),
-        hp: str(s.motorHp),
-        phase: str(s.motorPh) || "3",
-        voltage: str(s.motorVolts),
-      });
+      // VFD controllers are bought-in, not fabricated — they get no job order.
+      // Only Motor Starters (DOL / Y-Δ / Y-YY, stored in `drive`) produce a JO.
+      if (!/variable frequency|vfd/i.test(str(s.bladeType))) {
+        motorLines.push({
+          quantity: qty,
+          uom: "pc",
+          starterType: str(s.drive) || str(s.starterType),
+          hp: str(s.motorHp),
+          phase: str(s.motorPh) || "3",
+          voltage: str(s.motorVolts),
+        });
+      }
     } else if (isAccessory(s)) {
       accessoryLines.push({
         type: str(s.type),
