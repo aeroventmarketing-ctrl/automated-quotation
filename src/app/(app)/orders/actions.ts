@@ -41,7 +41,6 @@ import {
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { deliveredByDescription, qcByDescription, type DeliveryRecord, type QualityCheckRecord } from "@/lib/delivery";
 import {
-  BATCH_STEPS,
   BATCH_DELIVERED_STEP,
   batchStepDef,
   batchProgress,
@@ -1224,6 +1223,7 @@ export async function deleteDelivery(quotationId: string, deliveryId: string): P
 
 const batchCreateSchema = z.object({
   drNumber: z.string().optional(),
+  paymentMode: z.enum(["prepay", "cod"]).optional(),
   lines: z.array(z.object({ description: z.string(), qty: z.coerce.number() })),
 });
 const batchStepSchema = z.object({
@@ -1290,6 +1290,7 @@ export async function createDeliveryBatch(
     createdAt: new Date().toISOString(),
     createdByName: user.name,
     drNumber: (d.drNumber ?? "").trim(),
+    paymentMode: d.paymentMode === "cod" ? "cod" : "prepay",
     lines,
     steps: {},
   };
@@ -1315,7 +1316,7 @@ export async function advanceDeliveryBatch(
 
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
-  const stepDef = batchStepDef(stepKey);
+  const stepDef = batchStepDef(batch.paymentMode, stepKey);
   if (!stepDef) throw new Error("Unknown step.");
   const { next } = batchProgress(batch);
   if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");

@@ -24,6 +24,7 @@ export interface BatchStepView {
 export interface BatchView {
   id: string;
   drNumber: string;
+  paymentModeLabel: string;
   createdByName: string;
   lines: { description: string; qty: number }[];
   paymentAmount?: number;
@@ -62,6 +63,7 @@ export function DeliveriesPanel({
   const [creating, setCreating] = useState(false);
   const [qty, setQty] = useState<Record<string, string>>({});
   const [drNumber, setDrNumber] = useState("");
+  const [paymentMode, setPaymentMode] = useState<"prepay" | "cod">("prepay");
   // Per-batch inline payment entry (for the "paid" step).
   const [payFor, setPayFor] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -96,10 +98,11 @@ export function DeliveriesPanel({
       return;
     }
     await run("create", async () => {
-      await createDeliveryBatch(orderId, { drNumber, lines: newLines });
+      await createDeliveryBatch(orderId, { drNumber, paymentMode, lines: newLines });
       setCreating(false);
       setQty({});
       setDrNumber("");
+      setPaymentMode("prepay");
     });
   }
 
@@ -168,7 +171,14 @@ export function DeliveriesPanel({
 
       {creating ? (
         <div className="space-y-2 rounded-md border p-3">
-          <input value={drNumber} onChange={(e) => setDrNumber(e.target.value)} placeholder="DR / batch reference (optional)" className="h-9 w-full rounded-md border bg-background px-2 text-sm" />
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs text-muted-foreground">Payment</label>
+            <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "prepay" | "cod")} className="h-9 rounded-md border bg-background px-2 text-sm">
+              <option value="prepay">Payment before delivery</option>
+              <option value="cod">Cash on delivery</option>
+            </select>
+            <input value={drNumber} onChange={(e) => setDrNumber(e.target.value)} placeholder="DR / batch reference (optional)" className="h-9 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm" />
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" className="h-8" disabled={busy != null || newLines.length === 0} onClick={submitCreate}>{busy === "create" ? "Opening…" : "Open batch"}</Button>
             <Button size="sm" variant="ghost" className="h-8" disabled={busy != null} onClick={() => { setCreating(false); setQty({}); setDrNumber(""); }}>Cancel</Button>
@@ -190,6 +200,7 @@ export function DeliveriesPanel({
             <Badge variant={b.cancelled ? "destructive" : b.complete ? "success" : b.delivered ? "success" : "secondary"}>
               {b.cancelled ? "Cancelled" : b.complete ? "Completed" : b.drNumber ? `DR ${b.drNumber}` : "Batch"}
             </Badge>
+            <Badge variant="secondary">{b.paymentModeLabel}</Badge>
             {b.paymentAmount != null && b.paymentAmount > 0 && (
               <Badge variant="success">Collected {formatCurrency(b.paymentAmount, currency)}</Badge>
             )}

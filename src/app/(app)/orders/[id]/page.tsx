@@ -24,12 +24,13 @@ import {
   type ProductionDeptKey,
 } from "@/lib/order-workflow";
 import {
-  BATCH_STEPS,
+  batchSteps,
   batchProgress,
   batchedByDescription,
   deliveredByDescription as batchDeliveredByDescription,
   isBatchDelivered,
   isBatchComplete,
+  PAYMENT_MODE_LABEL,
   type BatchRole,
 } from "@/lib/delivery-batch";
 import { DeliveriesPanel } from "./deliveries-panel";
@@ -376,7 +377,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       (userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey) ||
         userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey)));
   const deliveryBatchViews = wf.deliveryBatches.map((b) => {
-    const steps = BATCH_STEPS.map((s) => {
+    const steps = batchSteps(b.paymentMode).map((s) => {
       const st = b.steps[s.key];
       return { key: s.key, label: s.label, done: !!st, byName: st?.byName, at: st?.at ? fmtWhen(st.at) : undefined };
     });
@@ -387,6 +388,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     return {
       id: b.id,
       drNumber: b.drNumber,
+      paymentModeLabel: PAYMENT_MODE_LABEL[b.paymentMode],
       createdByName: b.createdByName,
       lines: b.lines,
       paymentAmount: b.paymentAmount,

@@ -24,15 +24,23 @@ export interface BatchStamp {
   note?: string;
 }
 
+/**
+ * When the client pays for the batch:
+ *  - "prepay" — Payment first before delivery (bill → pay → check → approve → …).
+ *  - "cod"    — Cash on Delivery (deliver & collect at the door → check → approve).
+ */
+export type PaymentMode = "prepay" | "cod";
+
 export interface DeliveryBatch {
   id: string;
   createdAt: string;
   createdByName: string;
   drNumber: string;
+  paymentMode: PaymentMode;
   lines: BatchLine[];
-  // Per-step sign-offs, keyed by BATCH_STEPS[].key.
+  // Per-step sign-offs, keyed by step key.
   steps: Record<string, BatchStamp>;
-  // Payment collected at the "paid" step (a linked "progress" sale payment).
+  // Payment collected at the payment step (a linked "progress" sale payment).
   paymentAmount?: number;
   paymentId?: string;
   cancelled?: boolean;
@@ -50,43 +58,69 @@ export interface BatchStepDef {
   label: string; // the action button
   done: string; // the past-tense trail label
   role: BatchRole;
-  /** The "paid" step also records a payment amount. */
+  /** The payment step also records a payment amount (prepay: "paid"; COD: "delivered"). */
   collectsPayment?: boolean;
 }
 
-/** The 13-step pipeline, in order. */
-export const BATCH_STEPS: BatchStepDef[] = [
-  { key: "client_notified", label: "Inform client of the order", done: "Client informed", role: "sales" },
-  { key: "billed", label: "Issue billing statement", done: "Billing statement issued", role: "accounting" },
-  { key: "paid", label: "Record client payment", done: "Payment recorded", role: "accounting", collectsPayment: true },
-  { key: "payment_checked", label: "Check payment", done: "Payment checked", role: "accounting" },
-  { key: "payment_approved", label: "Approve payment", done: "Payment approved", role: "payment_approver" },
-  { key: "qc_tested", label: "Quality testing", done: "Quality tested", role: "technical_head" },
-  { key: "plant_checked", label: "Plant Manager quality & quantity check", done: "Plant QC & quantity passed", role: "plant_manager" },
-  { key: "transferred", label: "Transfer to office", done: "Transferred to office", role: "logistics" },
-  { key: "sales_checked", label: "Sales 2nd quality & quantity check", done: "Sales re-checked", role: "sales" },
-  { key: "docs_ready", label: "Prepare DR / SI / OR & approve delivery", done: "Delivery documents ready", role: "accounting" },
-  { key: "delivered", label: "Deliver & upload proof of delivery", done: "Delivered", role: "logistics" },
-  { key: "proof_approved", label: "Approve proof of delivery", done: "Proof of delivery approved", role: "sales" },
-  { key: "docs_surrendered", label: "Surrender signed documents to Accounting", done: "Documents surrendered", role: "logistics" },
-];
+// Every step definition, keyed. Ordered into a pipeline per payment mode below.
+const S: Record<string, BatchStepDef> = {
+  client_notified: { key: "client_notified", label: "Inform client of the order", done: "Client informed", role: "sales" },
+  billed: { key: "billed", label: "Issue billing statement", done: "Billing statement issued", role: "accounting" },
+  paid: { key: "paid", label: "Record client payment", done: "Payment recorded", role: "accounting", collectsPayment: true },
+  payment_checked: { key: "payment_checked", label: "Check payment", done: "Payment checked", role: "accounting" },
+  payment_approved: { key: "payment_approved", label: "Approve payment", done: "Payment approved", role: "payment_approver" },
+  qc_tested: { key: "qc_tested", label: "Quality testing", done: "Quality tested", role: "technical_head" },
+  plant_checked: { key: "plant_checked", label: "Plant Manager quality & quantity check", done: "Plant QC & quantity passed", role: "plant_manager" },
+  transferred: { key: "transferred", label: "Transfer to office", done: "Transferred to office", role: "logistics" },
+  sales_checked: { key: "sales_checked", label: "Sales 2nd quality & quantity check", done: "Sales re-checked", role: "sales" },
+  docs_ready: { key: "docs_ready", label: "Prepare DR / SI / OR & approve delivery", done: "Delivery documents ready", role: "accounting" },
+  deliver_prepay: { key: "delivered", label: "Deliver & upload proof of delivery", done: "Delivered", role: "logistics" },
+  deliver_cod: { key: "delivered", label: "Deliver & collect payment (COD) + proof", done: "Delivered & payment collected", role: "logistics", collectsPayment: true },
+  proof_approved: { key: "proof_approved", label: "Approve proof of delivery", done: "Proof of delivery approved", role: "sales" },
+  docs_surrendered: { key: "docs_surrendered", label: "Surrender signed documents to Accounting", done: "Documents surrendered", role: "logistics" },
+};
+
+/** The step sequence for a batch, by payment mode. */
+export function batchSteps(mode: PaymentMode): BatchStepDef[] {
+  if (mode === "cod") {
+    // Cash on Delivery — quality first, then deliver & collect, then clear payment.
+    return [
+      S.client_notified, S.billed,
+      S.qc_tested, S.plant_checked, S.transferred, S.sales_checked, S.docs_ready,
+      S.deliver_cod, S.payment_checked, S.payment_approved, S.proof_approved, S.docs_surrendered,
+    ];
+  }
+  // Payment first before delivery.
+  return [
+    S.client_notified, S.billed,
+    S.paid, S.payment_checked, S.payment_approved,
+    S.qc_tested, S.plant_checked, S.transferred, S.sales_checked, S.docs_ready,
+    S.deliver_prepay, S.proof_approved, S.docs_surrendered,
+  ];
+}
+
+export const PAYMENT_MODE_LABEL: Record<PaymentMode, string> = {
+  prepay: "Payment before delivery",
+  cod: "Cash on delivery",
+};
 
 export const BATCH_DELIVERED_STEP = "delivered";
 export const BATCH_FINAL_STEP = "docs_surrendered";
-const STEP_KEYS = BATCH_STEPS.map((s) => s.key);
+const ALL_STEP_KEYS = new Set(Object.values(S).map((s) => s.key));
 
-export function batchStepDef(key: string): BatchStepDef | undefined {
-  return BATCH_STEPS.find((s) => s.key === key);
+export function batchStepDef(mode: PaymentMode, key: string): BatchStepDef | undefined {
+  return batchSteps(mode).find((s) => s.key === key);
 }
 
 /** Index of the last completed step (−1 if none), and the next step to do (or null). */
 export function batchProgress(b: DeliveryBatch): { lastDone: number; next: BatchStepDef | null } {
+  const steps = batchSteps(b.paymentMode);
   let lastDone = -1;
-  for (let i = 0; i < BATCH_STEPS.length; i++) {
-    if (b.steps[BATCH_STEPS[i].key]) lastDone = i;
+  for (let i = 0; i < steps.length; i++) {
+    if (b.steps[steps[i].key]) lastDone = i;
     else break;
   }
-  const next = lastDone + 1 < BATCH_STEPS.length ? BATCH_STEPS[lastDone + 1] : null;
+  const next = lastDone + 1 < steps.length ? steps[lastDone + 1] : null;
   return { lastDone, next };
 }
 
@@ -126,7 +160,7 @@ export function coerceDeliveryBatch(value: unknown): DeliveryBatch | null {
   const steps: Record<string, BatchStamp> = {};
   if (o.steps && typeof o.steps === "object") {
     for (const [k, v] of Object.entries(o.steps as Record<string, unknown>)) {
-      if (STEP_KEYS.includes(k)) {
+      if (ALL_STEP_KEYS.has(k)) {
         const s = coerceStamp(v);
         if (s) steps[k] = s;
       }
@@ -138,6 +172,7 @@ export function coerceDeliveryBatch(value: unknown): DeliveryBatch | null {
     createdAt: str(o.createdAt),
     createdByName: str(o.createdByName),
     drNumber: str(o.drNumber),
+    paymentMode: o.paymentMode === "cod" ? "cod" : "prepay",
     lines,
     steps,
     ...(paymentAmount > 0 ? { paymentAmount, paymentId: str(o.paymentId) || undefined } : {}),
