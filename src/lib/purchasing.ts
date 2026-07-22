@@ -77,7 +77,7 @@ export const PURCHASE_STEPS: PurchaseStepDef[] = [
   { key: "voucher", from: "APPROVED", to: "VOUCHER_READY", role: "accounting", label: "Voucher & Check Prepared" },
   { key: "sign", from: "VOUCHER_READY", to: "VOUCHER_SIGNED", role: "payment_approver", label: "Voucher & Check Signed" },
   { key: "release_cash", from: "VOUCHER_SIGNED", to: "CASH_RELEASED", role: "payment_approver", label: "Cash & Check Released" },
-  { key: "hand_purchaser", from: "CASH_RELEASED", to: "WITH_PURCHASER", role: "accounting", label: "Give cash & check to Purchaser" },
+  { key: "hand_purchaser", from: "CASH_RELEASED", to: "WITH_PURCHASER", role: "accounting", label: "Give Cash & Check to Purchaser" },
   { key: "confirm_cash", from: "WITH_PURCHASER", to: "CASH_CONFIRMED", role: "purchaser", label: "Confirm cash & check received" },
   { key: "assign_tasks", from: "CASH_CONFIRMED", to: "TASKED", role: "purchaser", label: "Give to Logistics Head & distribute tasks" },
   { key: "logistics_confirm", from: "TASKED", to: "LOGISTICS_CONFIRMED", role: "logistics", label: "Confirm cash received by Logistics Head" },
