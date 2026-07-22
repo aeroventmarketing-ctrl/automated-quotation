@@ -66,6 +66,7 @@ export function PurchasingChain({
   scanProducts = [],
   readOnly = false,
   poRoute = "order",
+  hideRequisitionApproval = false,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -87,6 +88,13 @@ export function PurchasingChain({
    * Server Component can't pass a function prop to this Client Component.
    */
   poRoute?: "order" | "purchasing";
+  /**
+   * Hide the initial approve/reject buttons for material/department requisitions.
+   * Order material requests are approved by the Plant Manager on the order's
+   * Phase 3 Materials tab (workflow step 16), so the Purchasing workspace doesn't
+   * duplicate that action for them.
+   */
+  hideRequisitionApproval?: boolean;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -136,8 +144,13 @@ export function PurchasingChain({
   return (
     <div className="space-y-3">
       {requests.map((r) => {
-        const actionable = r.actions.filter((a) => a.canAct);
-        const awaiting = r.actions.find((a) => !a.canAct);
+        // Order material requests are approved on the order's Phase 3 Materials
+        // tab — drop their approve/reject here so it isn't done in two places.
+        const hideApproval = hideRequisitionApproval && !!r.isDept;
+        const shownActions = hideApproval ? r.actions.filter((a) => a.key !== "approve" && a.key !== "reject") : r.actions;
+        const actionable = shownActions.filter((a) => a.canAct);
+        const awaiting = shownActions.find((a) => !a.canAct);
+        const awaitingPlantApproval = hideApproval && r.status === "PENDING_APPROVAL";
         return (
           <div key={r.id} className="rounded-md border bg-card p-3">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -200,6 +213,8 @@ export function PurchasingChain({
               </div>
             ) : awaiting ? (
               <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
+            ) : awaitingPlantApproval ? (
+              <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval on the order&rsquo;s Materials tab.</div>
             ) : null}
 
             {/* Supplier returns — disapproved items sent back for replacement.

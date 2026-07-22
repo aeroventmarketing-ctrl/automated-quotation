@@ -10,7 +10,7 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { RequisitionForm } from "./requisition-form";
-import { PurchasingChain } from "../orders/[id]/purchasing-chain";
+import { RequisitionsList } from "./requisitions-list";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +55,6 @@ export default async function RequisitionsPage() {
     const prs = await prisma.purchaseRequest.findMany({
       where: {
         kind: "department",
-        status: { notIn: ["COMPLETED"] },
         ...(admin || purchaser ? {} : { dept: { in: ownDeptKeys } }),
       },
       orderBy: { createdAt: "desc" },
@@ -79,23 +78,15 @@ export default async function RequisitionsPage() {
         {tableMissing ? (
           <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Purchasing isn&apos;t set up yet.</CardContent></Card>
         ) : rows.length === 0 ? (
-          <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No open requisitions.</CardContent></Card>
+          <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No requisitions yet.</CardContent></Card>
         ) : (
-          <Card>
-            <CardContent className="pt-6">
-              <PurchasingChain
-                requests={rows}
-                stockItems={stockItems}
-                orderId=""
-                poDefaultRemarks={COMPANY.poDefaultRemarks}
-                suppliers={suppliers}
-                paymentTerms={paymentTerms}
-                canManagePO={false}
-                readOnly
-                poRoute="purchasing"
-              />
-            </CardContent>
-          </Card>
+          <RequisitionsList
+            rows={rows}
+            stockItems={stockItems}
+            suppliers={suppliers}
+            paymentTerms={paymentTerms}
+            poDefaultRemarks={COMPANY.poDefaultRemarks}
+          />
         )}
       </div>
     </div>

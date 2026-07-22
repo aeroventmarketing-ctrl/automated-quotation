@@ -135,6 +135,7 @@ export function PurchasingWorkspace({
               catalogSuppliers={catalogSuppliers}
               catalogPrices={catalogPrices}
               scanProducts={scanProducts}
+              hideRequisitionApproval
             />
           </CardContent>
         </Card>
