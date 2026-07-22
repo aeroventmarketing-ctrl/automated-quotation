@@ -85,8 +85,8 @@ export const PURCHASE_STEPS: PurchaseStepDef[] = [
   { key: "check", from: "PURCHASED", to: "CHECKED", role: "purchaser", label: "Check & Approve Purchased Item" },
   { key: "deliver", from: "CHECKED", to: "DELIVERED", role: "logistics", label: "Deliver to Warehouseman" },
   { key: "warehouse_approve", from: "DELIVERED", to: "RECEIVED", role: "warehouse", label: "Warehouseman Received and Approved" },
-  { key: "plant", from: "RECEIVED", to: "PLANT_APPROVED", role: "plant_manager", label: "Plant Manager final approval" },
-  { key: "receive", from: "PLANT_APPROVED", to: "COMPLETED", role: "warehouse", label: "Receive & add to stock" },
+  { key: "plant", from: "RECEIVED", to: "PLANT_APPROVED", role: "plant_manager", label: "Plant Manager Final Approval" },
+  { key: "receive", from: "PLANT_APPROVED", to: "COMPLETED", role: "warehouse", label: "Receive & Add Stock" },
 ];
 
 /** New chain steps whose sign-off rides in the PurchaseRequest.chainLog JSON. */
