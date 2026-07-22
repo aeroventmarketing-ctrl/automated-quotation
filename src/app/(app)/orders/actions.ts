@@ -62,6 +62,12 @@ const COMMISSION_RATE_PCT = 1.5;
  * the step's workflow role (or be an admin), and the order must be at the step's
  * "from" stage. Records the sign-off (who + when) and moves the stage forward.
  */
+/** Today's date (Asia/Manila) as YYYY-MM-DD — stamped on a job order when it's
+ *  created or revised, and matches the JO form's date input format. */
+function joToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
 export async function advanceOrderStage(quotationId: string, step: OrderStepKey): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -155,7 +161,7 @@ async function mergeAutoJobOrders(
   const auto = buildAutoJobOrders(items, {
     project: (quote.projectName ?? "").trim(),
     orderNumber: quote.quoteNumber ?? "",
-    date: new Date().toISOString(),
+    date: joToday(),
     motorBrand: await getFanMotorBrand(),
   });
   const year = new Date().getFullYear();
@@ -442,7 +448,7 @@ export async function saveFansJobOrder(
     joBaseYear = new Date().getFullYear();
   }
 
-  const jo: FansJobOrder = { ...(coerceFansJobOrder({}) as FansJobOrder), ...d };
+  const jo: FansJobOrder = { ...(coerceFansJobOrder({}) as FansJobOrder), ...d, date: joToday() };
   const list = [...wf.fansJobOrders];
   if (index != null && index >= 0 && index < list.length) list[index] = jo;
   else list.push(jo);
@@ -542,7 +548,7 @@ export async function saveDuctJobOrder(
     ductJoBaseYear = new Date().getFullYear();
   }
 
-  const jo: DuctJobOrder = { ...(coerceDuctJobOrder({}) as DuctJobOrder), ...d, segments };
+  const jo: DuctJobOrder = { ...(coerceDuctJobOrder({}) as DuctJobOrder), ...d, date: joToday(), segments };
   const list = [...wf.ductJobOrders];
   if (index != null && index >= 0 && index < list.length) list[index] = jo;
   else list.push(jo);
@@ -636,7 +642,7 @@ export async function saveAccessoriesJobOrder(
     accJoBaseYear = new Date().getFullYear();
   }
 
-  const jo: AccessoriesJobOrder = { ...(coerceAccessoriesJobOrder({}) as AccessoriesJobOrder), ...d, lines };
+  const jo: AccessoriesJobOrder = { ...(coerceAccessoriesJobOrder({}) as AccessoriesJobOrder), ...d, date: joToday(), lines };
   const list = [...wf.accessoriesJobOrders];
   if (index != null && index >= 0 && index < list.length) list[index] = jo;
   else list.push(jo);
@@ -725,7 +731,7 @@ export async function saveMotorControllerJobOrder(
     mcJoBaseYear = new Date().getFullYear();
   }
 
-  const jo: MotorControllerJobOrder = { ...(coerceMotorControllerJobOrder({}) as MotorControllerJobOrder), ...d, lines };
+  const jo: MotorControllerJobOrder = { ...(coerceMotorControllerJobOrder({}) as MotorControllerJobOrder), ...d, date: joToday(), lines };
   const list = [...wf.motorJobOrders];
   if (index != null && index >= 0 && index < list.length) list[index] = jo;
   else list.push(jo);
