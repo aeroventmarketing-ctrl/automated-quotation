@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const isIso = (s: Record<string, unknown>) => s.type === "Spring Vibration Isolator";
   const isAcc = (s: Record<string, unknown>) => s.category === "Ventilation Accessories";
 
-  const items: XlsxLine[] = q.items.map((it) => {
+  const items: XlsxLine[] = q.items.map((it, index) => {
     const s = (it.specsSnapshot as Record<string, unknown>) ?? {};
     // Native rating → header unit. KDK is watts (power_w); everything else HP.
     let motorHp: number | string | null;
@@ -65,7 +65,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       motorHp = null;
     }
     return {
-      itemLabel: typeof s.itemLabel === "string" && s.itemLabel ? s.itemLabel : "",
+      // Auto-number: use the edited Item label if set, else the sequential number.
+      itemLabel: typeof s.itemLabel === "string" && s.itemLabel ? s.itemLabel : String(index + 1),
       descriptionSnapshot: it.descriptionSnapshot,
       qty: it.qty,
       unitPrice: Number(it.unitPrice),
