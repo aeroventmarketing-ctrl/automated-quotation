@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock } from "lucide-react";
+import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { payableTotal, round2 } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
-import { readOrderWorkflow, ORDER_STAGES, PRODUCTION_DEPTS, type OrderStage } from "@/lib/order-workflow";
+import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, type OrderStage } from "@/lib/order-workflow";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +93,7 @@ export default async function ManagementPage() {
   const [wonQuotes, stockItems, commissions, prPending] = await Promise.all([
     prisma.quotation.findMany({
       where: { inquiry: { status: "WON" } },
-      select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { company: true } } } } },
+      select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" } }).catch(() => []),
     prisma.commission.findMany({ where: { paid: false } }).catch(() => []),
@@ -110,6 +110,8 @@ export default async function ManagementPage() {
   const prodActive = new Map<string, number>();
   // Unfinished job orders with a deadline within 3 days or already past.
   const atRisk: { orderId: string; company: string; quoteNumber: string; dept: string; dueAt: string; days: number }[] = [];
+  // Orders whose collected amount (cash + EWT) doesn't yet settle the deal value.
+  const unbalanced: { orderId: string; customerId: string; company: string; quoteNumber: string; value: number; collected: number; balance: number; delivered: boolean; closed: boolean }[] = [];
   let orderCount = 0;
   let outstanding = 0;
   let openOrders = 0;
@@ -136,7 +138,22 @@ export default async function ManagementPage() {
     billed = round2(billed + value);
     collected = round2(collected + paid);
     const balance = round2(value - paid);
-    if (balance > 0.005) outstanding = round2(outstanding + balance);
+    if (balance > 0.005) {
+      outstanding = round2(outstanding + balance);
+      unbalanced.push({
+        orderId: q.id,
+        customerId: q.inquiry?.customer?.id ?? "",
+        company: q.inquiry?.customer?.company ?? "—",
+        quoteNumber: q.quoteNumber,
+        value,
+        collected: paid,
+        balance,
+        // Delivered (or later) with a balance = collection is overdue; closed =
+        // the order finished yet the payment was never fully settled/reconciled.
+        delivered: stageIndex(wf.stage) >= stageIndex("delivered"),
+        closed: wf.stage === "closed",
+      });
+    }
 
     if (wf.stage === "in_production" || wf.stage === "jo_received" || wf.stage === "producing") {
       for (const d of PRODUCTION_DEPTS) {
@@ -157,6 +174,11 @@ export default async function ManagementPage() {
   atRisk.sort((a, b) => a.days - b.days);
   const overdueCount = atRisk.filter((a) => a.days < 0).length;
   const dueSoonCount = atRisk.filter((a) => a.days >= 0).length;
+
+  // Delivered-but-unpaid orders are the urgent ones — surface them first, then by
+  // the largest balance.
+  unbalanced.sort((a, b) => Number(b.delivered) - Number(a.delivered) || b.balance - a.balance);
+  const deliveredUnpaid = unbalanced.filter((u) => u.delivered).length;
 
   const lowStock = stockItems.filter((i) => {
     const q = Number(i.quantity);
@@ -328,6 +350,66 @@ export default async function ManagementPage() {
               })}
               {atRisk.length > 8 && <li className="pt-1 text-xs text-muted-foreground">+ {atRisk.length - 8} more</li>}
             </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Unreconciled payments — orders whose collected amount (cash + EWT)
+          doesn't settle the deal value. Each row opens the client. */}
+      <Card className={`shadow-sm ${unbalanced.length > 0 ? "border-amber-300 dark:border-amber-900" : ""}`}>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Coins className="h-4 w-4 text-muted-foreground" /> Unreconciled payments
+            {unbalanced.length > 0 && (
+              <span className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                {unbalanced.length}
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {unbalanced.length === 0 ? (
+            <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
+              Every confirmed order is fully paid &amp; reconciled.
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 flex flex-wrap gap-6">
+                <div>
+                  <div className="text-3xl font-bold tabular-nums">{formatCurrency(outstanding, CURRENCY)}</div>
+                  <div className="text-xs text-muted-foreground">Total unreconciled</div>
+                </div>
+                {deliveredUnpaid > 0 && (
+                  <div>
+                    <div className="text-3xl font-bold tabular-nums text-destructive">{deliveredUnpaid}</div>
+                    <div className="text-xs text-muted-foreground">Delivered but unpaid</div>
+                  </div>
+                )}
+              </div>
+              <p className="mb-2 text-[11px] text-muted-foreground">A balance may just be un-recorded EWT (record it as &ldquo;EWT withheld&rdquo; on the sale) or an uncollected amount. Click a row to open the client and check the details.</p>
+              <ul className="divide-y">
+                {unbalanced.slice(0, 10).map((u) => {
+                  const tag = u.closed ? "Closed · unpaid" : u.delivered ? "Delivered · unpaid" : "In progress";
+                  const cls = u.delivered ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-amber-400 bg-amber-50 text-amber-700";
+                  const href = u.customerId ? `/customers/${u.customerId}` : `/orders/${u.orderId}`;
+                  return (
+                    <li key={u.orderId}>
+                      <Link href={href} className="-mx-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-1.5 text-sm hover:bg-accent">
+                        <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>{tag}</span>
+                        <span className="min-w-0 truncate font-medium">{u.company}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{u.quoteNumber}</span>
+                        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                          {formatCurrency(u.collected, CURRENCY)} / {formatCurrency(u.value, CURRENCY)}
+                        </span>
+                        <span className="shrink-0 font-semibold tabular-nums text-destructive">{formatCurrency(u.balance, CURRENCY)} due</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+                {unbalanced.length > 10 && <li className="pt-1 text-xs text-muted-foreground">+ {unbalanced.length - 10} more</li>}
+              </ul>
+            </>
           )}
         </CardContent>
       </Card>
