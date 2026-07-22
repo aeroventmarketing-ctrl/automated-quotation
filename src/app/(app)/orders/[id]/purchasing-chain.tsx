@@ -178,7 +178,11 @@ export function PurchasingChain({
               </div>
             )}
             {readOnly ? (
-              r.status !== "REJECTED" && r.status !== "COMPLETED" && r.actions[0] ? (
+              requisitionNeedsApproval ? (
+                <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval on the order&rsquo;s Materials tab.</div>
+              ) : requisitionAwaitingPO ? (
+                <div className="mt-2 text-xs text-muted-foreground">Waiting on the Purchaser to prepare the Purchase Order — process in Purchasing</div>
+              ) : r.status !== "REJECTED" && r.status !== "COMPLETED" && r.actions[0] ? (
                 <div className="mt-2 text-xs text-muted-foreground">Waiting on {r.actions[0].roleLabel} — process in Purchasing</div>
               ) : null
             ) : receivingId === r.id ? (

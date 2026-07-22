@@ -22,7 +22,7 @@ import {
   type OrderStage,
   type ProductionDeptKey,
 } from "@/lib/order-workflow";
-import { purchaseStepsFrom, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
@@ -427,6 +427,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       po: coercePurchaseOrder(pr.po),
       poDefaultLines: prItems.map(poLineFromPRItem),
       canManagePO,
+      isDept: isDeptRequisition(pr),
       returns: buildReturnViews(pr),
       canRaiseReturn: false,
       canResolveReturn: false,
