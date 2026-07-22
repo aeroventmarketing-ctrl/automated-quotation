@@ -72,6 +72,7 @@ export function PurchasingChain({
   hideRequisitionApproval = false,
   selectedIds,
   onToggleSelect,
+  deptApprovalHere = false,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -107,6 +108,13 @@ export function PurchasingChain({
    */
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  /**
+   * These are standalone department requisitions (raised from Requisitions, not
+   * an order) — so the Plant Manager approves/rejects them right here rather than
+   * on a non-existent order Materials tab. Renders the approve/reject buttons in
+   * the otherwise read-only list.
+   */
+  deptApprovalHere?: boolean;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -197,6 +205,12 @@ export function PurchasingChain({
         const requisitionNeedsApproval = !!r.isDept && r.status === "PENDING_APPROVAL";
         const requisitionAwaitingPO = !!r.isDept && r.status === "APPROVED" && !r.po;
         const statusLabel = requisitionAwaitingPO ? "Approved — awaiting Purchase Order" : r.statusLabel;
+        // Standalone department requisitions (Requisitions page): the Plant Manager
+        // approves/rejects here, since there's no order Materials tab to do it on.
+        const deptApproveActions =
+          deptApprovalHere && r.status === "PENDING_APPROVAL"
+            ? r.actions.filter((a) => (a.key === "approve" || a.key === "reject") && a.canAct)
+            : [];
         return (
           <div key={r.id} className="rounded-md border bg-card p-3">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -224,7 +238,26 @@ export function PurchasingChain({
               </div>
             )}
             {readOnly ? (
-              requisitionNeedsApproval ? (
+              deptApprovalHere && requisitionNeedsApproval ? (
+                deptApproveActions.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {deptApproveActions.map((a) => (
+                      <Button
+                        key={a.key}
+                        size="sm"
+                        variant={a.key === "reject" ? "outline" : "default"}
+                        className="h-7 text-xs"
+                        disabled={busy === r.id + a.key}
+                        onClick={() => run(r.id, a.key)}
+                      >
+                        {busy === r.id + a.key ? "Saving…" : a.key === "approve" ? "Approve Material Request" : a.label}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval.</div>
+                )
+              ) : requisitionNeedsApproval ? (
                 <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval on the order&rsquo;s Materials tab.</div>
               ) : requisitionAwaitingPO ? (
                 <div className="mt-2 text-xs text-muted-foreground">Waiting on the Purchaser to prepare the Purchase Order — process in Purchasing</div>

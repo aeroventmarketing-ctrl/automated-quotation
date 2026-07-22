@@ -165,7 +165,7 @@ export function RequisitionsList({
             )}
             <Card>
               <CardContent className="pt-6">
-                <PurchasingChain requests={g.rows} orderId="" canManagePO={false} readOnly poRoute="purchasing" {...chainProps} />
+                <PurchasingChain requests={g.rows} orderId="" canManagePO={false} readOnly poRoute="purchasing" deptApprovalHere {...chainProps} />
               </CardContent>
             </Card>
           </div>
