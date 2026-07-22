@@ -19,21 +19,9 @@ import {
   stageLabel,
   stagePhase,
   pendingStep,
-  anyJobOrderFinished,
   type OrderStage,
   type ProductionDeptKey,
 } from "@/lib/order-workflow";
-import {
-  batchSteps,
-  batchProgress,
-  batchedByDescription,
-  deliveredByDescription as batchDeliveredByDescription,
-  isBatchDelivered,
-  isBatchComplete,
-  PAYMENT_MODE_LABEL,
-  type BatchRole,
-} from "@/lib/delivery-batch";
-import { DeliveriesPanel } from "./deliveries-panel";
 import { purchaseStepsFrom, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
@@ -41,7 +29,7 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
-import { saleFromClassification, collectedTotal, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
+import { saleFromClassification, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { DeptProductionControls } from "./dept-production-controls";
@@ -94,11 +82,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const [quote, viewer, assignments, purchaseRequests, stockItemsRaw, allUsers, suppliers, paymentTerms, hideOrderProgress] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
-      include: {
-        inquiry: { include: { customer: true } },
-        preparedBy: true,
-        items: { select: { qty: true, descriptionSnapshot: true } },
-      },
+      include: { inquiry: { include: { customer: true } }, preparedBy: true },
     }),
     getCurrentUser(),
     getWorkflowRoles(),
@@ -348,65 +332,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     : null;
   const phase6Active =
     wf.stage === "closed" && !!commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete;
-
-  // Delivery batches — available once the first department has finished. Each
-  // batch of finished items runs the 13-step per-batch pipeline; several batches
-  // run in parallel so one department's items can go while others are still made.
-  const showDeliveries = anyJobOrderFinished(wf);
-  const batchedMap = batchedByDescription(wf.deliveryBatches);
-  const batchDeliveredMap = batchDeliveredByDescription(wf.deliveryBatches);
-  const orderedAgg = new Map<string, number>();
-  for (const it of quote.items) {
-    const key = it.descriptionSnapshot.trim();
-    if (key) orderedAgg.set(key, (orderedAgg.get(key) ?? 0) + it.qty);
-  }
-  const deliveryItems = [...orderedAgg.entries()].map(([description, ordered]) => ({
-    description,
-    ordered,
-    batched: batchedMap.get(description.toLowerCase()) ?? 0,
-    delivered: batchDeliveredMap.get(description.toLowerCase()) ?? 0,
-  }));
-  const isPreparer = viewer != null && viewer.id === quote.preparedById;
-  const canActStep = (role: BatchRole): boolean =>
-    adminViewer ||
-    (role === "sales" ? isPreparer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
-  const canCreateBatch =
-    adminViewer ||
-    isPreparer ||
-    (viewer != null &&
-      (userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey) ||
-        userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey)));
-  const deliveryBatchViews = wf.deliveryBatches.map((b) => {
-    const steps = batchSteps(b.paymentMode).map((s) => {
-      const st = b.steps[s.key];
-      return {
-        key: s.key,
-        label: s.label,
-        roleLabel: s.role === "sales" ? "Sales" : workflowRoleLabel(s.role),
-        done: !!st,
-        byName: st?.byName,
-        at: st?.at ? fmtWhen(st.at) : undefined,
-      };
-    });
-    const { next } = batchProgress(b);
-    const nextView = next && !b.cancelled
-      ? { key: next.key, label: next.label, roleLabel: next.role === "sales" ? "Sales" : workflowRoleLabel(next.role), canAct: canActStep(next.role), collectsPayment: !!next.collectsPayment }
-      : null;
-    return {
-      id: b.id,
-      drNumber: b.drNumber,
-      paymentModeLabel: PAYMENT_MODE_LABEL[b.paymentMode],
-      createdByName: b.createdByName,
-      lines: b.lines,
-      paymentAmount: b.paymentAmount,
-      cancelled: !!b.cancelled,
-      delivered: isBatchDelivered(b),
-      complete: isBatchComplete(b),
-      steps,
-      next: nextView,
-      canCancel: adminViewer || b.createdByName === viewer?.name || isPreparer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey)),
-    };
-  });
 
   // Materials (Phase 3, part 1): raise MRFs (dept head, during production) and
   // warehouse issue/escalate.
@@ -708,28 +633,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </CardHeader>
           <CardContent>
             <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} readOnly />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Delivery batches — opens once the first department has finished. Group
-          finished items into a batch and run each through the 13-step pipeline
-          (inform → bill → pay → QC → transfer → deliver → approve → surrender). */}
-      {showDeliveries && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Deliveries</CardTitle></CardHeader>
-          <CardContent>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Open a delivery batch from finished items — any items or partial quantities (e.g. 20 of 50) — and run it through the 13-step process. Batches run in parallel, so one department&apos;s items can be delivered while others are still made. The order is marked Delivered once every item has been delivered.
-            </p>
-            <DeliveriesPanel
-              orderId={quote.id}
-              items={deliveryItems}
-              batches={deliveryBatchViews}
-              canCreate={canCreateBatch}
-              currency={quote.currency}
-              outstanding={Math.max(0, value - collectedTotal(saleForClose))}
-            />
           </CardContent>
         </Card>
       )}

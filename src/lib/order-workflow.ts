@@ -12,8 +12,6 @@ import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, type DuctJobOrder } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder } from "@/lib/motor-controller-job-order";
-import { coerceDeliveries, coerceQualityChecks, type DeliveryRecord, type QualityCheckRecord } from "@/lib/delivery";
-import { coerceDeliveryBatches, type DeliveryBatch } from "@/lib/delivery-batch";
 
 export type OrderStage =
   | "payment_review"
@@ -235,15 +233,6 @@ export interface OrderWorkflow {
   conversations: OrderConversation[];
   // Post-close sales-commission sign-offs (approve → voucher → received).
   commission?: OrderCommissionFlow;
-  // Partial deliveries — the client can take finished items before the whole
-  // order is done (e.g. 20 of 50 now, 30 later). Each entry is a Delivery Receipt.
-  deliveries: DeliveryRecord[];
-  // Quality-check sign-offs on finished items. Only quantities that have passed
-  // QC may be delivered; recorded per item so batches can be released as they finish.
-  qualityChecks: QualityCheckRecord[];
-  // Delivery batches — each a set of finished items run through the 13-step
-  // per-batch fulfillment pipeline (inform → bill → pay → QC → transfer → deliver).
-  deliveryBatches: DeliveryBatch[];
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -422,9 +411,9 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   // Normalize the JO-Received → In Production → Production finished window so the
   // order stage always reflects actual job-order progress. This self-heals orders
   // whose job orders were started before the "In Production" stage existed (their
-  // stage was left at jo_received even though a job order is in production), and —
-  // importantly — promotes a "producing" order to "production_finished" as soon as
-  // every job order is finished, so Phase 5 opens without a manual nudge.
+  // stage was left at jo_received even though a job order is in production), and
+  // promotes a "producing" order to "production_finished" once every job order is
+  // finished, so Phase 5 opens without a manual nudge.
   let stage = storedStage;
   if (stage === "jo_received" || stage === "producing") {
     const jos = Object.values(jobOrders).filter(Boolean) as JobOrder[];
@@ -432,17 +421,7 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     else if (jos.some((j) => j.status === "in_production" || j.status === "finished")) stage = "producing";
   }
 
-  const deliveries = coerceDeliveries(wf?.deliveries);
-  const qualityChecks = coerceQualityChecks(wf?.qualityChecks);
-  const deliveryBatches = coerceDeliveryBatches(wf?.deliveryBatches);
-
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveries, qualityChecks, deliveryBatches };
-}
-
-/** True once at least one department's job order is finished — the point where a
- *  client can start taking finished items (partial delivery). */
-export function anyJobOrderFinished(wf: OrderWorkflow): boolean {
-  return (Object.values(wf.jobOrders).filter(Boolean) as JobOrder[]).some((j) => j.status === "finished");
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */
