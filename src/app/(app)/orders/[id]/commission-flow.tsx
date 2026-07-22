@@ -148,11 +148,11 @@ export function CommissionFlow({
       ) : !flow.receivedAt ? (
         canAccounting ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => receiveCommission(orderId))}>
-            {busy ? "Saving…" : "Mark commission received"}
+            {busy ? "Saving…" : "Mark Commission Received"}
           </Button>
         ) : awaiting("Accounting to mark the commission received")
       ) : !flow.signedVoucherDoc ? (
-        canAccounting ? uploadLabel("Upload signed voucher") : awaiting("Accounting to file the signed voucher")
+        canAccounting ? uploadLabel("Upload Signed Voucher") : awaiting("Accounting to file the signed voucher")
       ) : (
         <p className="text-sm text-emerald-600">Commission complete — signed voucher filed by {flow.filedByName}.</p>
       )}
