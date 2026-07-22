@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest } from "../actions";
@@ -227,6 +228,9 @@ export function MaterialRequests({
                   {r.poStatusLabel && r.poStatusVariant && (
                     <Badge variant={r.poStatusVariant}>PO: {r.poStatusLabel}</Badge>
                   )}
+                  <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <Eye className="h-3.5 w-3.5" /> View
+                  </Link>
                   <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="text-xs text-primary hover:underline">Print</Link>
                 </div>
               </div>
