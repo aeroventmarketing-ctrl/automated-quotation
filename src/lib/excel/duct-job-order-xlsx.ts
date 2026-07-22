@@ -35,15 +35,17 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
     views: [{ showGridLines: false, style: "pageBreakPreview", zoomScale: 120, zoomScaleNormal: 120 }],
   });
 
-  // Column layout: # | Dimensions | Duct type | Material | Gauge
+  // Column layout: # | Quantity | Unit | Dimensions | Duct type | Material | Gauge
   ws.columns = [
     { width: 5 },
-    { width: 46 },
+    { width: 11 },
+    { width: 8 },
+    { width: 32 },
     { width: 16 },
     { width: 16 },
     { width: 10 },
   ];
-  const LAST = "E";
+  const LAST = "G";
 
   const thin = { style: "thin" as const, color: { argb: BORDER } };
   const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
@@ -75,39 +77,41 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
     const row = ws.getRow(r);
     ws.getCell(`A${r}`).value = label;
     ws.getCell(`A${r}`).font = { bold: true, size: 10 };
-    ws.mergeCells(`B${r}:C${r}`);
+    ws.mergeCells(`B${r}:D${r}`);
     ws.getCell(`B${r}`).value = value;
     ws.getCell(`B${r}`).font = { size: 10 };
     if (label2 != null) {
-      ws.getCell(`D${r}`).value = label2;
-      ws.getCell(`D${r}`).font = { bold: true, size: 10 };
-      ws.getCell(`D${r}`).alignment = { horizontal: "right" };
-      ws.getCell(`E${r}`).value = value2 ?? "";
-      ws.getCell(`E${r}`).font = { size: 10 };
+      ws.getCell(`E${r}`).value = label2;
+      ws.getCell(`E${r}`).font = { bold: true, size: 10 };
+      ws.getCell(`E${r}`).alignment = { horizontal: "right" };
+      ws.mergeCells(`F${r}:G${r}`);
+      ws.getCell(`F${r}`).value = value2 ?? "";
+      ws.getCell(`F${r}`).font = { size: 10 };
     }
     row.height = 16;
     r++;
   };
   infoRow("JO No.:", jo.joNumber, "Date:", fmtDate(jo.date));
   infoRow("Project:", jo.project, "Due date:", fmtDate(jo.dueDate));
-  infoRow("Quantity:", [jo.quantity, jo.uom].filter(Boolean).join(" "));
 
   // Make the JO number stand out.
   ws.getCell("B5").font = { bold: true, size: 11, color: { argb: RED } };
   // Make the due date stand out.
-  ws.getCell("E6").font = { bold: true, size: 10, color: { argb: RED } };
+  ws.getCell("F6").font = { bold: true, size: 10, color: { argb: RED } };
 
   r++; // spacer
 
   // --- Segments table -----------------------------------------------------
   const headerRow = r;
-  const headers = ["#", "(Horizontal x Vertical x Length)", "Duct type", "Material", "Gauge"];
+  // # | Quantity | Unit | Dimensions | Duct type | Material | Gauge
+  const DIM_COL = 3; // 0-based index of the dimensions column (left-aligned)
+  const headers = ["#", "Quantity", "Unit", "(Horizontal x Vertical x Length)", "Duct type", "Material", "Gauge"];
   headers.forEach((h, i) => {
     const cell = ws.getCell(headerRow, i + 1);
     cell.value = h;
     cell.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: RED } };
-    cell.alignment = { horizontal: i === 1 ? "left" : "center", vertical: "middle", wrapText: true };
+    cell.alignment = { horizontal: i === DIM_COL ? "left" : "center", vertical: "middle", wrapText: true };
     cell.border = allBorders;
   });
   ws.getRow(headerRow).height = 22;
@@ -125,19 +129,22 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
     jo.segments.forEach((seg, i) => {
       const row = ws.getRow(r);
       ws.getCell(r, 1).value = i + 1;
-      ws.getCell(r, 2).value = formatSegmentDimensions(seg);
-      ws.getCell(r, 3).value = segmentTypeLabel(seg);
-      ws.getCell(r, 4).value = seg.material;
-      ws.getCell(r, 5).value = seg.gauge;
-      for (let c = 1; c <= 5; c++) {
+      // Quantity / unit are JO-level; show them on the first line-item row.
+      ws.getCell(r, 2).value = i === 0 ? jo.quantity : "";
+      ws.getCell(r, 3).value = i === 0 ? jo.uom : "";
+      ws.getCell(r, 4).value = formatSegmentDimensions(seg);
+      ws.getCell(r, 5).value = segmentTypeLabel(seg);
+      ws.getCell(r, 6).value = seg.material;
+      ws.getCell(r, 7).value = seg.gauge;
+      for (let c = 1; c <= 7; c++) {
         const cell = ws.getCell(r, c);
         cell.font = { size: 10 };
-        cell.alignment = { horizontal: c === 2 ? "left" : "center", vertical: "middle", wrapText: c === 2 };
+        cell.alignment = { horizontal: c === DIM_COL + 1 ? "left" : "center", vertical: "middle", wrapText: c === DIM_COL + 1 };
         cell.border = allBorders;
         if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
       }
       // Size-transition rows get a subtle emphasis on the type cell.
-      if (isReducingDuctType(seg.type)) ws.getCell(r, 3).font = { size: 10, bold: true, color: { argb: RED } };
+      if (isReducingDuctType(seg.type)) ws.getCell(r, 5).font = { size: 10, bold: true, color: { argb: RED } };
       row.height = 16;
       r++;
     });
@@ -159,14 +166,18 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
 
   r += 2;
   // --- Signatures ---------------------------------------------------------
+  const sigTop = { top: { style: "thin" as const, color: { argb: "FF000000" } } };
+  // "Prepared by" underline spans B:D, "Received by" spans E:G.
+  ws.mergeCells(`B${r}:D${r}`);
   ws.getCell(`B${r}`).value = "Prepared by";
   ws.getCell(`B${r}`).font = { size: 9 };
   ws.getCell(`B${r}`).alignment = { horizontal: "center" };
-  ws.getCell(`B${r}`).border = { top: { style: "thin", color: { argb: "FF000000" } } };
-  ws.getCell(`D${r}`).value = "Received by";
-  ws.getCell(`D${r}`).font = { size: 9 };
-  ws.getCell(`D${r}`).alignment = { horizontal: "center" };
-  ws.getCell(`D${r}`).border = { top: { style: "thin", color: { argb: "FF000000" } } };
+  for (const col of ["B", "C", "D"]) ws.getCell(`${col}${r}`).border = sigTop;
+  ws.mergeCells(`E${r}:G${r}`);
+  ws.getCell(`E${r}`).value = "Received by";
+  ws.getCell(`E${r}`).font = { size: 9 };
+  ws.getCell(`E${r}`).alignment = { horizontal: "center" };
+  for (const col of ["E", "F", "G"]) ws.getCell(`${col}${r}`).border = sigTop;
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
