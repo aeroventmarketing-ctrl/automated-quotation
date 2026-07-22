@@ -46,9 +46,9 @@ function specsOf(it: QuoteItemLike): Record<string, unknown> {
 const isMotorController = (s: Record<string, unknown>) => s.type === "Motor Controller";
 const isIsolator = (s: Record<string, unknown>) => s.type === "Spring Vibration Isolator";
 // Accessories = ventilation accessories EXCEPT the Air Duct group (those go to the
-// Duct JO), plus spring vibration isolators.
+// Duct JO) and EXCEPT spring vibration isolators (not a job-order product).
 const isAccessory = (s: Record<string, unknown>) =>
-  (s.category === "Ventilation Accessories" && !isAirDuct(s)) || isIsolator(s);
+  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isIsolator(s);
 // A fan/blower line: any non-accessory, non-motor-controller product with a fan
 // category (Centrifugal / Axial / Propeller / Tubular…). Accessories are excluded.
 // Fan/blower categories: Centrifugal / Axial / Propeller / Tubular Inline /
@@ -180,11 +180,10 @@ export function buildAutoJobOrders(
         type: str(s.type),
         quantity: qty,
         uom: "pc",
-        // Dimensions live in the description; the engineer fills the labelled
-        // fields. Carry the description into the per-line note for context.
+        // Dimensions and the Note/Remarks are left for the engineer to fill in.
         dimensions: [],
         material: str(s.material),
-        note: str(it.descriptionSnapshot),
+        note: "",
       });
     }
   }
