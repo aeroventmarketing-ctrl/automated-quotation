@@ -330,6 +330,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         flow: wf.commission ?? {},
       }
     : null;
+  const phase6Active =
+    wf.stage === "closed" && !!commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete;
 
   // Materials (Phase 3, part 1): raise MRFs (dept head, during production) and
   // warehouse issue/escalate.
@@ -650,9 +652,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </CardContent>
         </Card>
       )}
+      {/* Phase 5 — upcoming placeholder until production is finished. */}
+      {!showFulfillment && (
+        <Card className="border-dashed opacity-70">
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Phase 5 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
+          <CardContent><p className="text-sm text-muted-foreground">Opens once production is finished — final payment, quality check, delivery and closing documents.</p></CardContent>
+        </Card>
+      )}
 
       {/* Phase 6 — sales commission (once the order is closed with complete docs) */}
-      {wf.stage === "closed" && commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete && (
+      {phase6Active && commissionInfo && (
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 6 · Sales commission</CardTitle></CardHeader>
           <CardContent>
@@ -667,6 +676,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               canAccounting={perms.canAccountingComm}
             />
           </CardContent>
+        </Card>
+      )}
+      {/* Phase 6 — upcoming placeholder until the order is closed with complete docs. */}
+      {!phase6Active && (
+        <Card className="border-dashed opacity-70">
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Phase 6 · Sales commission</CardTitle></CardHeader>
+          <CardContent><p className="text-sm text-muted-foreground">Opens once the order is closed with all closing documents complete — the sales commission voucher, approval and release.</p></CardContent>
         </Card>
       )}
 
