@@ -91,6 +91,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       clientTerms={clientTerms}
       orderInProduction={stageIndex(readOrderWorkflow(quotation.classification).stage) >= stageIndex("producing")}
       hasOrderWorkflow={quotation.inquiry.status === "WON" && isSaleConfirmed(saleFromClassification(quotation.classification))}
+      orderPaid={stageIndex(readOrderWorkflow(quotation.classification).stage) >= stageIndex("released")}
       propellerSpLock={propellerSpLock}
       axialSpLock={axialSpLock}
       revisionHistory={(() => {

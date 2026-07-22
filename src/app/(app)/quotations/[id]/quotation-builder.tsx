@@ -2607,6 +2607,7 @@ export function QuotationBuilder({
   clientTerms = false,
   orderInProduction = false,
   hasOrderWorkflow = false,
+  orderPaid = false,
   revisionHistory = [],
   catalog,
   propellerSpLock = true,
@@ -2624,6 +2625,8 @@ export function QuotationBuilder({
   orderInProduction?: boolean;
   /** The quote is won/closed — show a link to its order workflow. */
   hasOrderWorkflow?: boolean;
+  /** The client has ordered and paid (payment cleared) — the workflow is live. */
+  orderPaid?: boolean;
   revisionHistory?: RevisionSnapshot[];
   catalog: Record<string, CatalogEntry>;
   propellerSpLock?: boolean;
@@ -4900,7 +4903,8 @@ export function QuotationBuilder({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {hasOrderWorkflow && (
+          {/* Workflow link — only once the client has ordered and paid (payment cleared). */}
+          {orderPaid && (
             <a href={`/orders/${quotation.id}`} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
               Go to workflow →
             </a>
