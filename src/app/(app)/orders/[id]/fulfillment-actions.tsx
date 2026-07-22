@@ -257,7 +257,7 @@ export function FulfillmentActions({
             <p className="text-sm font-medium">Confirm documents received</p>
             <p className="text-xs text-muted-foreground">Logistics has surrendered the signed documents. Accounting confirms receipt before the order can be filed and closed.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => confirmDocsReceived(orderId))}>
-              {busy ? "Saving…" : "Confirm documents received"}
+              {busy ? "Saving…" : "Confirm Documents Received"}
             </Button>
           </div>
         ) : awaiting("Accounting to confirm it received the documents"))}
