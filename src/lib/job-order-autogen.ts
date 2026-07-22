@@ -9,7 +9,7 @@
  * table-driven and are populated in a later phase; the engineer still adds those
  * manually for now.
  */
-import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine } from "@/lib/accessories-job-order";
+import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine, type AccessoryDimension } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
 import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
@@ -71,6 +71,24 @@ const isIsolator = (s: Record<string, unknown>) => s.type === "Spring Vibration 
 // Duct JO) and EXCEPT spring vibration isolators (not a job-order product).
 const isAccessory = (s: Record<string, unknown>) =>
   s.category === "Ventilation Accessories" && !isAirDuct(s) && !isIsolator(s);
+
+/**
+ * The two labelled dimensions for an accessory line, carried across from the
+ * quotation's sized fields (sizeL × sizeW in sizeUnit) — the same width/length
+ * a grille, diffuser or louver is quoted with. A round terminal carries a single
+ * Ø dimension. Values only; the engineer labels them (e.g. "Neck size"). Returns
+ * two blanks when the line has no entered size.
+ */
+function accessoryDimensions(s: Record<string, unknown>): AccessoryDimension[] {
+  const unit = str(s.sizeUnit) || "mm";
+  const l = str(s.sizeL);
+  const w = str(s.sizeW);
+  const blank: AccessoryDimension = { value: "", label: "" };
+  if (str(s.shape) === "Round") {
+    return [l ? { value: `Ø${l} ${unit}`, label: "" } : blank, blank];
+  }
+  return [l ? { value: `${l} ${unit}`, label: "" } : blank, w ? { value: `${w} ${unit}`, label: "" } : blank];
+}
 // A fan/blower line: any non-accessory, non-motor-controller product with a fan
 // category (Centrifugal / Axial / Propeller / Tubular…). Accessories are excluded.
 // Fan/blower categories: Centrifugal / Axial / Propeller / Tubular Inline /
@@ -215,8 +233,9 @@ export function buildAutoJobOrders(
         type: str(s.type),
         quantity: qty,
         uom: "pc",
-        // Dimensions and the Note/Remarks are left for the engineer to fill in.
-        dimensions: [],
+        // Carry the sized dimensions across from the quotation (grilles,
+        // diffusers, louvers, …); the labels are left for the engineer to fill.
+        dimensions: accessoryDimensions(s),
         material: str(s.material),
         note: "",
       });
