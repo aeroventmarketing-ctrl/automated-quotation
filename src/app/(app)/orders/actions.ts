@@ -43,7 +43,18 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
+import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc, type SalePayment } from "@/lib/sale";
+import {
+  MB_DELIVERED_STEP,
+  MB_FINAL_STEP,
+  mbStepDef,
+  mbProgress,
+  mbBatchedByDescription,
+  mbDeliveredByDescription,
+  isMbFiled,
+  type MultiDeliveryBatch,
+  type MBStamp,
+} from "@/lib/delivery-multibatch";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
@@ -1841,6 +1852,197 @@ export async function addPaymentTerm(text: string): Promise<PaymentTerm[]> {
 /** Record a fulfillment sign-off (who + when) under the given step key. */
 function stamp(wf: { approvals: Record<string, unknown> }, key: string, user: { id: string; name: string }) {
   return { ...wf.approvals, [key]: { by: user.id, byName: user.name, at: new Date().toISOString() } };
+}
+
+// --- Multiple-batch delivery (separate from the single-batch Phase 5 flow) ---
+
+const mbCreateSchema = z.object({
+  drNumber: z.string().optional(),
+  lines: z.array(z.object({ description: z.string(), qty: z.coerce.number() })),
+});
+const mbStepSchema = z.object({
+  note: z.string().optional(),
+  payment: z.coerce.number().optional(),
+  paymentNote: z.string().optional(),
+});
+
+/** Sales (the order's preparer) or an admin. */
+async function canManageMultiDelivery(userId: string, preparedById: string | null): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || user.id !== userId) return false;
+  return isAdmin(user) || userId === preparedById;
+}
+function orderedMap(items: { qty: number; descriptionSnapshot: string }[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const it of items) {
+    const k = it.descriptionSnapshot.trim().toLowerCase();
+    m.set(k, (m.get(k) ?? 0) + it.qty);
+  }
+  return m;
+}
+
+/** Switch the order to multiple-batch delivery (only at production_finished, before
+ *  the single-batch flow has started). Sales or admin. */
+export async function setMultiDelivery(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
+    throw new Error("Only Sales or an admin can choose multiple-batch delivery.");
+  }
+  if (wf.stage !== "production_finished") throw new Error("Choose the delivery method once production is finished, before the single delivery starts.");
+  await saveWorkflow(quotationId, cls, { ...wf, deliveryMode: "multi" });
+}
+
+/** Open a delivery batch from finished items (any items / partial quantities). */
+export async function createMultiBatch(quotationId: string, input: z.infer<typeof mbCreateSchema>): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { classification: true, preparedById: true, items: { select: { qty: true, descriptionSnapshot: true } } },
+  });
+  if (!quote) throw new Error("Order not found");
+  if (!(await canManageMultiDelivery(user.id, quote.preparedById))) throw new Error("Only Sales or an admin can open a delivery batch.");
+  const d = mbCreateSchema.parse(input);
+  const wf = readOrderWorkflow(quote.classification);
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  if (wf.deliveryMode !== "multi") throw new Error("This order isn't in multiple-batch delivery mode.");
+
+  const lines = d.lines
+    .map((l) => ({ description: l.description.trim(), qty: Number.isFinite(l.qty) ? Math.max(0, Math.floor(l.qty)) : 0 }))
+    .filter((l) => l.description && l.qty > 0);
+  if (lines.length === 0) throw new Error("Add at least one item to the delivery batch.");
+
+  const ordered = orderedMap(quote.items);
+  const batched = mbBatchedByDescription(wf.deliveryBatches);
+  for (const l of lines) {
+    const k = l.description.toLowerCase();
+    const ord = ordered.get(k);
+    if (ord != null) {
+      const available = ord - (batched.get(k) ?? 0);
+      if (l.qty > available) throw new Error(`Only ${available} of "${l.description}" left to batch.`);
+    }
+  }
+
+  const batch: MultiDeliveryBatch = {
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    createdByName: user.name,
+    drNumber: (d.drNumber ?? "").trim(),
+    lines,
+    steps: {},
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, deliveryBatches: [...wf.deliveryBatches, batch] });
+}
+
+/** Advance a delivery batch by completing its next step (role-gated). */
+export async function advanceMultiBatch(quotationId: string, batchId: string, stepKey: string, input: z.infer<typeof mbStepSchema>): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { classification: true, preparedById: true, items: { select: { qty: true, descriptionSnapshot: true } } },
+  });
+  if (!quote) throw new Error("Order not found");
+  const wf = readOrderWorkflow(quote.classification);
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+
+  const batch = wf.deliveryBatches.find((b) => b.id === batchId);
+  if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
+  const stepDef = mbStepDef(stepKey);
+  if (!stepDef) throw new Error("Unknown step.");
+  const { next } = mbProgress(batch);
+  if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");
+
+  const roles = await getWorkflowRoles();
+  const allowed =
+    isAdmin(user) ||
+    (stepDef.role === "sales" ? quote.preparedById === user.id : userHasWorkflowRole(roles, user.id, stepDef.role as WorkflowRoleKey));
+  if (!allowed) {
+    const who = stepDef.role === "sales" ? "Sales" : workflowRoleLabel(stepDef.role);
+    throw new Error(`Only ${who} or an admin can do this step.`);
+  }
+  const d = mbStepSchema.parse(input);
+
+  // The "Payment checked" step records the batch's partial payment.
+  let saleUpdate: Record<string, unknown> | null = null;
+  let paymentFields: { paymentAmount: number; paymentId: string } | null = null;
+  if (stepDef.collectsPayment) {
+    const amount = Number.isFinite(d.payment) ? Math.max(0, d.payment as number) : 0;
+    if (amount > 0) {
+      const sale = saleFromClassification(cls);
+      if (!sale) throw new Error("Record the sale before collecting a payment.");
+      const paymentId = randomUUID();
+      const payment: SalePayment = { id: paymentId, kind: "progress", amount, date: new Date().toISOString(), note: (d.paymentNote ?? "").trim() || undefined };
+      saleUpdate = { ...sale, payments: [...sale.payments, payment] };
+      paymentFields = { paymentAmount: amount, paymentId };
+    }
+  }
+
+  const mbStamp: MBStamp = { byName: user.name, at: new Date().toISOString(), ...((d.note ?? "").trim() ? { note: (d.note ?? "").trim() } : {}) };
+  const updated: MultiDeliveryBatch = { ...batch, steps: { ...batch.steps, [stepKey]: mbStamp }, ...(paymentFields ?? {}) };
+  const deliveryBatches = wf.deliveryBatches.map((b) => (b.id === batchId ? updated : b));
+
+  // Close the order once every item is delivered AND every batch is filed.
+  let advance: Record<string, unknown> = {};
+  if (stepKey === MB_DELIVERED_STEP || stepKey === MB_FINAL_STEP) {
+    const ordered = orderedMap(quote.items);
+    const deliveredNow = mbDeliveredByDescription(deliveryBatches);
+    const allDelivered = ordered.size > 0 && [...ordered.entries()].every(([k, ord]) => (deliveredNow.get(k) ?? 0) >= ord);
+    const active = deliveryBatches.filter((b) => !b.cancelled);
+    const allFiled = active.length > 0 && active.every((b) => isMbFiled(b));
+    if (allDelivered && allFiled && stageIndex(wf.stage) < stageIndex("closed")) {
+      advance = { stage: "closed" as OrderStage, approvals: stamp(wf, "documents_filed", user) };
+    } else if (allDelivered && stageIndex(wf.stage) < stageIndex("delivered")) {
+      advance = { stage: "delivered" as OrderStage, approvals: stamp(wf, "delivered", user) };
+    }
+  }
+
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: {
+      classification: {
+        ...cls,
+        workflow: { ...wf, deliveryBatches, ...advance },
+        ...(saleUpdate ? { sale: saleUpdate } : {}),
+      } as unknown as Prisma.InputJsonObject,
+    },
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
+/** Cancel a delivery batch (releases its items). Creator, Sales or admin. */
+export async function cancelMultiBatch(quotationId: string, batchId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const batch = wf.deliveryBatches.find((b) => b.id === batchId);
+  if (!batch) throw new Error("Delivery batch not found.");
+  if (!(isAdmin(user) || batch.createdByName === user.name || quote.preparedById === user.id)) {
+    throw new Error("Only the batch's creator, Sales or an admin can cancel it.");
+  }
+  let saleUpdate: Record<string, unknown> | null = null;
+  if (batch.paymentId) {
+    const sale = saleFromClassification(cls);
+    if (sale) saleUpdate = { ...sale, payments: sale.payments.filter((p) => p.id !== batch.paymentId) };
+  }
+  const deliveryBatches = wf.deliveryBatches.map((b) => (b.id === batchId ? { ...b, cancelled: true, cancelledAt: new Date().toISOString() } : b));
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: {
+      classification: {
+        ...cls,
+        workflow: { ...wf, deliveryBatches },
+        ...(saleUpdate ? { sale: saleUpdate } : {}),
+      } as unknown as Prisma.InputJsonObject,
+    },
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
 }
 
 // --- Admin: roll back the workflow / an approver's approval -----------------

@@ -29,7 +29,18 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
-import { saleFromClassification, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
+import { saleFromClassification, collectedTotal, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
+import {
+  MULTIBATCH_STEPS,
+  mbProgress,
+  mbBatchedByDescription,
+  mbDeliveredByDescription,
+  isMbDelivered,
+  isMbFiled,
+  type MBRole,
+} from "@/lib/delivery-multibatch";
+import { MultiBatchPanel } from "./multi-batch-panel";
+import { MultiDeliveryEntry } from "./multi-delivery-entry";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { DeptProductionControls } from "./dept-production-controls";
@@ -82,7 +93,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const [quote, viewer, assignments, purchaseRequests, stockItemsRaw, allUsers, suppliers, paymentTerms, hideOrderProgress] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
-      include: { inquiry: { include: { customer: true } }, preparedBy: true },
+      include: {
+        inquiry: { include: { customer: true } },
+        preparedBy: true,
+        items: { select: { qty: true, descriptionSnapshot: true } },
+      },
     }),
     getCurrentUser(),
     getWorkflowRoles(),
@@ -332,6 +347,51 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     : null;
   const phase6Active =
     wf.stage === "closed" && !!commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete;
+
+  // Multiple-batch delivery — a separate opt-in mode (never active alongside the
+  // single-batch Phase 5 flow). Chosen once at production_finished by Sales/admin.
+  const isPreparerViewer = viewer != null && viewer.id === quote.preparedById;
+  const multiMode = wf.deliveryMode === "multi";
+  const canManageMulti = adminViewer || isPreparerViewer;
+  const showMultiEntry = wf.stage === "production_finished" && !multiMode && canManageMulti;
+  const mbOrdered = new Map<string, number>();
+  for (const it of quote.items) {
+    const k = it.descriptionSnapshot.trim();
+    if (k) mbOrdered.set(k, (mbOrdered.get(k) ?? 0) + it.qty);
+  }
+  const mbBatchedMap = mbBatchedByDescription(wf.deliveryBatches);
+  const mbDeliveredMap = mbDeliveredByDescription(wf.deliveryBatches);
+  const mbItems = [...mbOrdered.entries()].map(([description, ordered]) => ({
+    description,
+    ordered,
+    batched: mbBatchedMap.get(description.toLowerCase()) ?? 0,
+    delivered: mbDeliveredMap.get(description.toLowerCase()) ?? 0,
+  }));
+  const canActMbStep = (role: MBRole): boolean =>
+    adminViewer || (role === "sales" ? isPreparerViewer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
+  const mbBatchViews = wf.deliveryBatches.map((b) => {
+    const steps = MULTIBATCH_STEPS.map((s) => {
+      const st = b.steps[s.key];
+      return { key: s.key, label: s.done, roleLabel: s.role === "sales" ? "Sales" : workflowRoleLabel(s.role), done: !!st, byName: st?.byName, at: st?.at ? fmtWhen(st.at) : undefined };
+    });
+    const { next } = mbProgress(b);
+    const nextView = next && !b.cancelled
+      ? { key: next.key, label: next.label, roleLabel: next.role === "sales" ? "Sales" : workflowRoleLabel(next.role), canAct: canActMbStep(next.role), collectsPayment: !!next.collectsPayment }
+      : null;
+    return {
+      id: b.id,
+      drNumber: b.drNumber,
+      createdByName: b.createdByName,
+      lines: b.lines,
+      paymentAmount: b.paymentAmount,
+      cancelled: !!b.cancelled,
+      delivered: isMbDelivered(b),
+      filed: isMbFiled(b),
+      steps,
+      next: nextView,
+      canCancel: adminViewer || b.createdByName === viewer?.name || isPreparerViewer,
+    };
+  });
 
   // Materials (Phase 3, part 1): raise MRFs (dept head, during production) and
   // warehouse issue/escalate.
@@ -637,8 +697,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
-      {/* Phase 5 — final payment, quality, delivery & documents */}
-      {showFulfillment && (
+      {/* Phase 5 — final payment, quality, delivery & documents (single delivery) */}
+      {showFulfillment && !multiMode && (
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -649,14 +709,28 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             )}
             <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={recordedPayments} />
             {saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode === "INCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
+            {/* One-time choice: deliver this order in multiple batches instead. */}
+            {showMultiEntry && <MultiDeliveryEntry orderId={quote.id} />}
           </CardContent>
         </Card>
       )}
       {/* Phase 5 — upcoming placeholder until production is finished. */}
-      {!showFulfillment && (
+      {!showFulfillment && !multiMode && (
         <Card className="border-dashed opacity-70">
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Phase 5 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
           <CardContent><p className="text-sm text-muted-foreground">Opens once production is finished — final payment, quality check, delivery and closing documents.</p></CardContent>
+        </Card>
+      )}
+      {/* Phase 5 (multiple deliveries) — each batch runs the full delivery sequence. */}
+      {multiMode && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Multiple-batch delivery</CardTitle></CardHeader>
+          <CardContent>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed.
+            </p>
+            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={mbBatchViews} canManage={canManageMulti} currency={quote.currency} outstanding={Math.max(0, value - collectedTotal(saleForClose))} />
+          </CardContent>
         </Card>
       )}
 

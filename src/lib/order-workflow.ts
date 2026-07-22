@@ -12,6 +12,7 @@ import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, type DuctJobOrder } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder } from "@/lib/motor-controller-job-order";
+import { coerceMultiBatches, type MultiDeliveryBatch } from "@/lib/delivery-multibatch";
 
 export type OrderStage =
   | "payment_review"
@@ -233,6 +234,11 @@ export interface OrderWorkflow {
   conversations: OrderConversation[];
   // Post-close sales-commission sign-offs (approve → voucher → received).
   commission?: OrderCommissionFlow;
+  // Multiple-batch delivery (a separate, opt-in mode for large orders). When
+  // deliveryMode is "multi" the order is delivered in batches instead of the
+  // single-batch Phase 5 flow. Both are never active at once.
+  deliveryMode?: "multi";
+  deliveryBatches: MultiDeliveryBatch[];
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -421,7 +427,10 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     else if (jos.some((j) => j.status === "in_production" || j.status === "finished")) stage = "producing";
   }
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission };
+  const deliveryMode = wf?.deliveryMode === "multi" ? "multi" as const : undefined;
+  const deliveryBatches = coerceMultiBatches(wf?.deliveryBatches);
+
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, deliveryBatches };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */
