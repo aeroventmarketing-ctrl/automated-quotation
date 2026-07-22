@@ -44,7 +44,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
+import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
@@ -980,6 +980,9 @@ const deliveryInputSchema = z.object({
   drNumber: z.string().optional(),
   note: z.string().optional(),
   lines: z.array(z.object({ description: z.string(), qty: z.coerce.number() })),
+  // Optional partial payment collected on this delivery.
+  payment: z.coerce.number().optional(),
+  paymentNote: z.string().optional(),
 });
 
 /** Who may record / remove a delivery: Logistics, Warehouse, the Sales preparer, or an admin. */
@@ -1036,14 +1039,36 @@ export async function recordDelivery(
     }
   }
 
+  const date = (d.date && d.date.trim()) || joToday();
+
+  // Optional partial payment collected with this delivery → a "progress" sale
+  // payment (counts toward Collected / Outstanding), linked to the delivery.
+  const paymentAmount = Number.isFinite(d.payment) ? Math.max(0, d.payment as number) : 0;
+  let saleUpdate: Record<string, unknown> | null = null;
+  let paymentId: string | undefined;
+  if (paymentAmount > 0) {
+    const sale = saleFromClassification(cls);
+    if (!sale) throw new Error("Record the sale before collecting a payment.");
+    paymentId = randomUUID();
+    const payment: SalePayment = {
+      id: paymentId,
+      kind: "progress",
+      amount: paymentAmount,
+      date: new Date().toISOString(),
+      note: (d.paymentNote ?? "").trim() || undefined,
+    };
+    saleUpdate = { ...sale, payments: [...sale.payments, payment] };
+  }
+
   const record: DeliveryRecord = {
     id: randomUUID(),
-    date: (d.date && d.date.trim()) || joToday(),
+    date,
     drNumber: (d.drNumber ?? "").trim(),
     lines,
     note: (d.note ?? "").trim(),
     deliveredByName: user.name,
     createdAt: new Date().toISOString(),
+    ...(paymentAmount > 0 ? { paymentAmount, paymentId } : {}),
   };
   const deliveries = [...wf.deliveries, record];
 
@@ -1055,10 +1080,23 @@ export async function recordDelivery(
       ? { stage: "delivered" as OrderStage, approvals: stamp(wf, "delivered", user) }
       : {};
 
-  await saveWorkflow(quotationId, cls, { ...wf, deliveries, ...advance });
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: {
+      classification: {
+        ...cls,
+        workflow: { ...wf, deliveries, ...advance },
+        ...(saleUpdate ? { sale: saleUpdate } : {}),
+      } as unknown as Prisma.InputJsonObject,
+    },
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
 }
 
-/** Remove a recorded delivery (correcting a mistake). Same permissions as recording. */
+/** Remove a recorded delivery (correcting a mistake). Same permissions as
+ *  recording. Any partial payment collected with it is removed too. */
 export async function deleteDelivery(quotationId: string, deliveryId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -1066,7 +1104,29 @@ export async function deleteDelivery(quotationId: string, deliveryId: string): P
   if (!(await canDeliver(user.id, quote.preparedById))) {
     throw new Error("Only Logistics, Warehouse, Sales or an admin can remove a delivery.");
   }
-  await saveWorkflow(quotationId, cls, { ...wf, deliveries: wf.deliveries.filter((dv) => dv.id !== deliveryId) });
+  const removed = wf.deliveries.find((dv) => dv.id === deliveryId);
+  const deliveries = wf.deliveries.filter((dv) => dv.id !== deliveryId);
+
+  // Drop the linked "progress" sale payment, if any.
+  let saleUpdate: Record<string, unknown> | null = null;
+  if (removed?.paymentId) {
+    const sale = saleFromClassification(cls);
+    if (sale) saleUpdate = { ...sale, payments: sale.payments.filter((p) => p.id !== removed.paymentId) };
+  }
+
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: {
+      classification: {
+        ...cls,
+        workflow: { ...wf, deliveries },
+        ...(saleUpdate ? { sale: saleUpdate } : {}),
+      } as unknown as Prisma.InputJsonObject,
+    },
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
 }
 
 interface LineDisposition {

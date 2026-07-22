@@ -31,7 +31,7 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
-import { saleFromClassification, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
+import { saleFromClassification, collectedTotal, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { DeptProductionControls } from "./dept-production-controls";
@@ -356,7 +356,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     delivered: deliveredMap.get(description.toLowerCase()) ?? 0,
   }));
   const deliveriesView = wf.deliveries.map((dv) => ({
-    id: dv.id, date: dv.date, drNumber: dv.drNumber, lines: dv.lines, note: dv.note, deliveredByName: dv.deliveredByName,
+    id: dv.id, date: dv.date, drNumber: dv.drNumber, lines: dv.lines, note: dv.note, deliveredByName: dv.deliveredByName, paymentAmount: dv.paymentAmount,
   }));
   const canDeliverManage =
     adminViewer ||
@@ -689,7 +689,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 <p className="mb-3 text-xs text-muted-foreground">
                   Deliver finished items to the client — part of the order can go now (e.g. 20 of 50) and the rest later. The order is marked Delivered once every item is fully delivered.
                 </p>
-                <DeliveriesPanel orderId={quote.id} items={orderedItems} deliveries={deliveriesView} canManage={canDeliverManage} />
+                <DeliveriesPanel orderId={quote.id} items={orderedItems} deliveries={deliveriesView} canManage={canDeliverManage} currency={quote.currency} outstanding={Math.max(0, value - collectedTotal(saleForClose))} />
               </div>
             )}
           </CardContent>

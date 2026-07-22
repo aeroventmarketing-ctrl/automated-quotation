@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Truck, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatCurrency } from "@/lib/utils";
 import { recordDelivery, deleteDelivery } from "../actions";
 
 export interface OrderedItem {
@@ -19,6 +20,7 @@ export interface DeliveryView {
   lines: { description: string; qty: number }[];
   note: string;
   deliveredByName: string;
+  paymentAmount?: number;
 }
 
 /**
@@ -31,11 +33,15 @@ export function DeliveriesPanel({
   items,
   deliveries,
   canManage,
+  currency,
+  outstanding,
 }: {
   orderId: string;
   items: OrderedItem[];
   deliveries: DeliveryView[];
   canManage: boolean;
+  currency: string;
+  outstanding: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -44,6 +50,8 @@ export function DeliveriesPanel({
   const [qty, setQty] = useState<Record<string, string>>({});
   const [drNumber, setDrNumber] = useState("");
   const [note, setNote] = useState("");
+  const [payment, setPayment] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
 
   const remainingOf = (it: OrderedItem) => Math.max(0, it.ordered - it.delivered);
   const fullyDelivered = items.length > 0 && items.every((it) => remainingOf(it) <= 0);
@@ -61,6 +69,8 @@ export function DeliveriesPanel({
     setQty({});
     setDrNumber("");
     setNote("");
+    setPayment("");
+    setPaymentNote("");
     setErr(null);
   }
 
@@ -72,7 +82,13 @@ export function DeliveriesPanel({
     setBusy(true);
     setErr(null);
     try {
-      await recordDelivery(orderId, { drNumber, note, lines: enteredLines });
+      await recordDelivery(orderId, {
+        drNumber,
+        note,
+        lines: enteredLines,
+        payment: Number(payment) || 0,
+        paymentNote,
+      });
       reset();
       router.refresh();
     } catch (e) {
@@ -159,6 +175,26 @@ export function DeliveriesPanel({
               className="h-9 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm"
             />
           </div>
+          {/* Optional partial payment collected with this delivery. */}
+          <div className="flex flex-wrap items-center gap-2 border-t pt-2">
+            <label className="text-xs text-muted-foreground">Payment collected</label>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={payment}
+              onChange={(e) => setPayment(e.target.value)}
+              placeholder="0.00"
+              className="h-9 w-32 rounded-md border bg-background px-2 text-right text-sm"
+            />
+            <input
+              value={paymentNote}
+              onChange={(e) => setPaymentNote(e.target.value)}
+              placeholder="Payment note / OR no. (optional)"
+              className="h-9 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm"
+            />
+            <span className="text-[11px] text-muted-foreground">Outstanding: {formatCurrency(outstanding, currency)}</span>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" className="h-8" disabled={busy || enteredLines.length === 0} onClick={submit}>
               {busy ? "Saving…" : "Record delivery"}
@@ -183,6 +219,9 @@ export function DeliveriesPanel({
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">{d.drNumber ? `DR ${d.drNumber}` : "Delivery"}</Badge>
                 <span className="text-muted-foreground">{d.date}</span>
+                {d.paymentAmount != null && d.paymentAmount > 0 && (
+                  <Badge variant="success">Collected {formatCurrency(d.paymentAmount, currency)}</Badge>
+                )}
                 <span className="ml-auto text-muted-foreground">by {d.deliveredByName}</span>
                 {canManage && (
                   <button type="button" disabled={busy} onClick={() => remove(d.id)} className="text-muted-foreground hover:text-destructive" title="Remove">

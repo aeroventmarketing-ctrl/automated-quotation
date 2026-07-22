@@ -24,6 +24,11 @@ export interface DeliveryRecord {
   note: string;
   deliveredByName: string;
   createdAt: string; // ISO timestamp
+  // Optional partial payment collected with this delivery. The amount is recorded
+  // as a "progress" sale payment (so it counts toward Collected / Outstanding);
+  // paymentId links to that sale payment so removing the delivery removes it too.
+  paymentAmount?: number;
+  paymentId?: string;
 }
 
 const num = (v: unknown): number => {
@@ -48,6 +53,7 @@ export function coerceDeliveryRecord(value: unknown): DeliveryRecord | null {
     ? (o.lines as unknown[]).map(coerceDeliveryLine).filter((l): l is DeliveryLine => !!l)
     : [];
   if (!str(o.id) || lines.length === 0) return null;
+  const paymentAmount = num(o.paymentAmount);
   return {
     id: str(o.id),
     date: str(o.date),
@@ -56,6 +62,7 @@ export function coerceDeliveryRecord(value: unknown): DeliveryRecord | null {
     note: str(o.note),
     deliveredByName: str(o.deliveredByName),
     createdAt: str(o.createdAt),
+    ...(paymentAmount > 0 ? { paymentAmount, paymentId: str(o.paymentId) || undefined } : {}),
   };
 }
 
