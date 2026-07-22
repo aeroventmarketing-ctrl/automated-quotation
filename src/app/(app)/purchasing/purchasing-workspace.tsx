@@ -90,25 +90,35 @@ export function PurchasingWorkspace({
       },
       { total: 0, ewt: 0, net: 0 },
     );
-  // Approvable = pending approval, actionable by this user, and (for order-linked
-  // requests) a PO already exists to approve against.
-  const approvableRows = selectedRows.filter(
-    (r) =>
-      r.status === "PENDING_APPROVAL" &&
-      (r.isDept || !!r.po) &&
-      r.actions.some((a) => a.key === "approve" && a.canAct),
-  );
+  // The next forward step this user can run on a request — approve when it's
+  // pending, otherwise whatever the current stage's action is (voucher, sign,
+  // buy, …). Never bulk-reject, and never "receive" (that needs the per-item
+  // stock-matching panel). Approve/voucher need the PO to exist first.
+  const forwardStep = (r: PurchaseChainRow) => {
+    const a = r.actions.find((x) => x.canAct && x.key !== "reject" && x.key !== "receive");
+    if (!a) return null;
+    const needsPo = a.key === "voucher" || (a.key === "approve" && !r.isDept);
+    if (needsPo && !r.po) return null;
+    return a;
+  };
+  const actionableRows = selectedRows
+    .map((r) => ({ r, step: forwardStep(r) }))
+    .filter((x): x is { r: PurchaseChainRow; step: NonNullable<ReturnType<typeof forwardStep>> } => x.step !== null);
+  // Label the button after the shared step (e.g. "Approve purchase"); fall back
+  // to a generic label when the selection spans different stages.
+  const stepKeys = [...new Set(actionableRows.map((x) => x.step.key))];
+  const bulkLabel = actionableRows.length === 0 ? "Approve selected" : stepKeys.length === 1 ? actionableRows[0].step.label : "Advance selected";
 
   async function bulkApprove() {
-    if (approvableRows.length === 0) return;
-    if (!window.confirm(`Approve ${approvableRows.length} material request(s)?`)) return;
+    if (actionableRows.length === 0) return;
+    if (!window.confirm(`${bulkLabel} — ${actionableRows.length} request(s)?`)) return;
     setApproving(true);
     setBulkMsg(null);
     let ok = 0;
     let failed = 0;
-    for (const r of approvableRows) {
+    for (const { r, step } of actionableRows) {
       try {
-        await advancePurchaseRequest(r.id, "approve");
+        await advancePurchaseRequest(r.id, step.key);
         ok++;
       } catch {
         failed++;
@@ -116,7 +126,7 @@ export function PurchasingWorkspace({
     }
     setApproving(false);
     setSelected(new Set());
-    setBulkMsg(`${ok} approved${failed ? ` · ${failed} could not be approved` : ""}.`);
+    setBulkMsg(`${ok} done${failed ? ` · ${failed} could not be processed` : ""}.`);
     router.refresh();
   }
 
@@ -230,11 +240,11 @@ export function PurchasingWorkspace({
             <Button
               size="sm"
               className="h-8"
-              disabled={approving || approvableRows.length === 0}
+              disabled={approving || actionableRows.length === 0}
               onClick={bulkApprove}
-              title={approvableRows.length === 0 ? "None of the selected requests are awaiting your approval" : undefined}
+              title={actionableRows.length === 0 ? "None of the selected requests have a step you can act on" : undefined}
             >
-              {approving ? "Approving…" : `Approve selected${approvableRows.length ? ` (${approvableRows.length})` : ""}`}
+              {approving ? "Processing…" : `${bulkLabel}${actionableRows.length ? ` (${actionableRows.length})` : ""}`}
             </Button>
           </div>
         </div>
