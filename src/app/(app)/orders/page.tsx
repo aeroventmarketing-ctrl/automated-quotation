@@ -90,6 +90,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         id: q.id,
         quoteNumber: q.quoteNumber,
         company: q.inquiry.customer.company,
+        customerId: q.inquiry.customer.id,
         project: q.projectName ?? q.inquiry.projectName ?? "",
         dateMs: d.getTime(),
         dateText: formatDate(d),

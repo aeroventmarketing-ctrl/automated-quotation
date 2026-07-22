@@ -12,6 +12,7 @@ export interface OrderRow {
   id: string;
   quoteNumber: string;
   company: string;
+  customerId: string;
   project: string;
   dateMs: number;
   dateText: string;
@@ -234,7 +235,7 @@ function GroupRows({ groupKey, rows, showHeader, currency, progressHidden }: { g
             <Link href={`/quotations/${o.id}`} className="font-medium text-primary hover:underline">{o.quoteNumber}</Link>
           </TableCell>
           <TableCell>
-            <div className="font-medium">{o.company}</div>
+            <Link href={`/customers/${o.customerId}`} className="font-medium text-primary hover:underline">{o.company}</Link>
             {o.project && <div className="text-xs text-muted-foreground">{o.project}</div>}
           </TableCell>
           <TableCell className="whitespace-nowrap text-sm">{o.dateText}</TableCell>
