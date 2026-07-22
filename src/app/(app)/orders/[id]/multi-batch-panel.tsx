@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { SaleDoc } from "@/lib/sale";
-import { createMultiBatch, advanceMultiBatch, cancelMultiBatch } from "../actions";
+import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment } from "../actions";
 
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 
@@ -50,6 +50,7 @@ export function MultiBatchPanel({
   items,
   batches,
   canManage,
+  canCollect,
   currency,
   orderAmount,
   amountPaid,
@@ -58,6 +59,8 @@ export function MultiBatchPanel({
   items: MBItem[];
   batches: MBBatchView[];
   canManage: boolean;
+  /** Sales / Accounting / admin — may record payments against the balance. */
+  canCollect: boolean;
   currency: string;
   orderAmount: number;
   amountPaid: number;
@@ -73,8 +76,13 @@ export function MultiBatchPanel({
   const [payNote, setPayNote] = useState("");
   const [payProof, setPayProof] = useState<SaleDoc | null>(null);
   const [uploading, setUploading] = useState(false);
+  // Order-level "collect the balance" form (not tied to a batch).
+  const [collecting, setCollecting] = useState(false);
+  const [collectAmount, setCollectAmount] = useState("");
+  const [collectNote, setCollectNote] = useState("");
+  const [collectProof, setCollectProof] = useState<SaleDoc | null>(null);
 
-  async function uploadProof(file: File) {
+  async function uploadProof(file: File, setter: (d: SaleDoc) => void) {
     setUploading(true);
     setErr(null);
     try {
@@ -84,12 +92,21 @@ export function MultiBatchPanel({
       const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      setPayProof(data as SaleDoc);
+      setter(data as SaleDoc);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploading(false);
     }
+  }
+
+  async function collectPayment() {
+    const amount = Number(collectAmount) || 0;
+    if (amount <= 0) { setErr("Enter a payment amount greater than zero."); return; }
+    await run("collect", async () => {
+      await recordOrderPayment(orderId, { amount, note: collectNote, proof: collectProof });
+      setCollecting(false); setCollectAmount(""); setCollectNote(""); setCollectProof(null);
+    });
   }
 
   const available = (it: MBItem) => Math.max(0, it.ordered - it.batched);
@@ -151,6 +168,61 @@ export function MultiBatchPanel({
 
   return (
     <div className="space-y-3">
+      {/* Order-level payment (accounts receivable) — collect the remaining
+          balance any time, including after every batch is delivered. */}
+      <div className="rounded-md border bg-muted/20 p-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <span className="text-muted-foreground">Order amount: <span className="font-semibold tabular-nums text-foreground">{formatCurrency(orderAmount, currency)}</span></span>
+          <span className="text-muted-foreground">Amount paid: <span className="font-semibold tabular-nums text-emerald-600">{formatCurrency(amountPaid, currency)}</span></span>
+          <span className="text-muted-foreground">Remaining: <span className="font-semibold tabular-nums text-foreground">{formatCurrency(remaining, currency)}</span></span>
+          <Badge variant={payVariant}>{payStatus}</Badge>
+          {canCollect && remaining > 0 && !collecting && (
+            <Button size="sm" variant="outline" className="ml-auto h-8 text-xs" disabled={busy != null} onClick={() => { setCollecting(true); setErr(null); }}>
+              Record payment
+            </Button>
+          )}
+        </div>
+        {remaining > 0 && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            The order has an outstanding balance. Record collections here until it is fully paid — this works even after every batch has been delivered.
+          </p>
+        )}
+        {collecting && (
+          <div className="mt-2 space-y-2 rounded-md border bg-background p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-muted-foreground">Payment collected</label>
+              <input type="number" min={0} step="0.01" value={collectAmount} onChange={(e) => setCollectAmount(e.target.value)} placeholder="0.00" className="h-8 w-32 rounded-md border bg-background px-2 text-right text-sm" />
+              <input value={collectNote} onChange={(e) => setCollectNote(e.target.value)} placeholder="OR no. / note (optional)" className="h-8 flex-1 min-w-[9rem] rounded-md border bg-background px-2 text-sm" />
+              <span className="text-[11px] text-muted-foreground">Remaining: {formatCurrency(remaining, currency)}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {collectProof ? (
+                <span className="inline-flex items-center gap-1.5 text-xs">
+                  <a href={docView(collectProof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                    <FileText className="h-3.5 w-3.5" /> {collectProof.name}
+                  </a>
+                  <a href={docView(collectProof)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                    <Eye className="h-3.5 w-3.5" />
+                  </a>
+                  <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => setCollectProof(null)} aria-label="Remove">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ) : (
+                <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs hover:bg-accent">
+                  <Upload className="h-3.5 w-3.5" /> {uploading ? "Uploading…" : "Upload payment details"}
+                  <input type="file" className="hidden" disabled={uploading || busy != null} onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0], setCollectProof)} />
+                </label>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="h-7 text-xs" disabled={busy != null || uploading} onClick={collectPayment}>{busy === "collect" ? "Saving…" : "Record payment"}</Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy != null} onClick={() => { setCollecting(false); setCollectProof(null); }}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[520px] border-collapse text-sm">
           <thead>
@@ -276,7 +348,7 @@ export function MultiBatchPanel({
                       ) : (
                         <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs hover:bg-accent">
                           <Upload className="h-3.5 w-3.5" /> {uploading ? "Uploading…" : "Upload payment details"}
-                          <input type="file" className="hidden" disabled={uploading || busy != null} onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                          <input type="file" className="hidden" disabled={uploading || busy != null} onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0], setPayProof)} />
                         </label>
                       )}
                     </div>

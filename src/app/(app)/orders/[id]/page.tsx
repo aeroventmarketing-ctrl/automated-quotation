@@ -754,7 +754,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <p className="mb-3 text-xs text-muted-foreground">
               Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed.
             </p>
-            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={mbBatchViews} canManage={canManageMulti} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
+            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={mbBatchViews} canManage={canManageMulti} canCollect={canManageMulti || perms.canCheckPay} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
           </CardContent>
         </Card>
       )}

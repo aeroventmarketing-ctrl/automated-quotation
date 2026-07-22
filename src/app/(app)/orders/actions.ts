@@ -2093,6 +2093,49 @@ export async function cancelMultiBatch(quotationId: string, batchId: string): Pr
   revalidatePath(`/quotations/${quotationId}`);
 }
 
+const recordPaymentSchema = z.object({
+  amount: z.coerce.number(),
+  note: z.string().optional(),
+  proof: z.object({ path: z.string(), name: z.string(), uploadedAt: z.string() }).nullish(),
+});
+
+/**
+ * Record a payment against the order's outstanding balance, independent of any
+ * delivery batch — used to collect the remaining balance when a partially-paid
+ * order has already been (fully) delivered (accounts receivable). Sales (the
+ * order's preparer), Accounting or an admin.
+ */
+export async function recordOrderPayment(quotationId: string, input: z.infer<typeof recordPaymentSchema>): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { classification: true, preparedById: true } });
+  if (!quote) throw new Error("Order not found");
+  const roles = await getWorkflowRoles();
+  const allowed = isAdmin(user) || quote.preparedById === user.id || userHasWorkflowRole(roles, user.id, "accounting");
+  if (!allowed) throw new Error("Only Sales, Accounting or an admin can record a payment.");
+  const d = recordPaymentSchema.parse(input);
+  const amount = Number.isFinite(d.amount) ? Math.max(0, d.amount) : 0;
+  if (amount <= 0) throw new Error("Enter a payment amount greater than zero.");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const sale = saleFromClassification(cls);
+  if (!sale) throw new Error("Record the sale before collecting a payment.");
+  const payment: SalePayment = {
+    id: randomUUID(),
+    kind: "progress",
+    amount,
+    date: new Date().toISOString(),
+    note: (d.note ?? "").trim() || undefined,
+    proof: d.proof ?? null,
+  };
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, sale: { ...sale, payments: [...sale.payments, payment] } } as unknown as Prisma.InputJsonObject },
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
 // --- Admin: roll back the workflow / an approver's approval -----------------
 
 /**
