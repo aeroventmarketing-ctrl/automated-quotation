@@ -257,7 +257,7 @@ export const ORDER_STEPS = {
     requiredRole: "accounting" as WorkflowRoleKey,
     from: "payment_review" as OrderStage,
     to: "docs_checked" as OrderStage,
-    label: "Mark documents checked",
+    label: "Documents Checked",
   },
   payment_cleared: {
     requiredRole: "payment_approver" as WorkflowRoleKey,
