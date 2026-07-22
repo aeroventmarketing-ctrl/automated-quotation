@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PackagePlus, Trash2, CheckCircle2, Circle } from "lucide-react";
+import { PackagePlus, Trash2, CheckCircle2, Circle, Upload, Eye, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
+import type { SaleDoc } from "@/lib/sale";
 import { createMultiBatch, advanceMultiBatch, cancelMultiBatch } from "../actions";
+
+const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 
 export interface MBItem {
   description: string;
@@ -28,6 +31,7 @@ export interface MBBatchView {
   createdByName: string;
   lines: { description: string; qty: number }[];
   paymentAmount?: number;
+  paymentProof?: SaleDoc | null;
   cancelled: boolean;
   delivered: boolean;
   filed: boolean;
@@ -65,6 +69,26 @@ export function MultiBatchPanel({
   const [payFor, setPayFor] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
+  const [payProof, setPayProof] = useState<SaleDoc | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function uploadProof(file: File) {
+    setUploading(true);
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("quotationId", orderId);
+      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setPayProof(data as SaleDoc);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const available = (it: MBItem) => Math.max(0, it.ordered - it.batched);
   const newLines = useMemo(
@@ -95,10 +119,14 @@ export function MultiBatchPanel({
   }
 
   async function advance(batchId: string, stepKey: string, collectsPayment: boolean) {
-    if (collectsPayment && payFor !== batchId) { setPayFor(batchId); setPayAmount(""); setPayNote(""); return; }
+    if (collectsPayment && payFor !== batchId) { setPayFor(batchId); setPayAmount(""); setPayNote(""); setPayProof(null); return; }
     await run(batchId + stepKey, async () => {
-      await advanceMultiBatch(orderId, batchId, stepKey, { payment: collectsPayment ? Number(payAmount) || 0 : undefined, paymentNote: collectsPayment ? payNote : undefined });
-      setPayFor(null);
+      await advanceMultiBatch(orderId, batchId, stepKey, {
+        payment: collectsPayment ? Number(payAmount) || 0 : undefined,
+        paymentNote: collectsPayment ? payNote : undefined,
+        paymentProof: collectsPayment ? payProof : undefined,
+      });
+      setPayFor(null); setPayProof(null);
     });
   }
 
@@ -164,6 +192,11 @@ export function MultiBatchPanel({
               {b.cancelled ? "Cancelled" : b.filed ? "Completed" : b.drNumber ? `DR ${b.drNumber}` : "Batch"}
             </Badge>
             {b.paymentAmount != null && b.paymentAmount > 0 && <Badge variant="success">Collected {formatCurrency(b.paymentAmount, currency)}</Badge>}
+            {b.paymentProof && (
+              <a href={docView(b.paymentProof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline" title="View payment details">
+                <Eye className="h-3.5 w-3.5" /> Payment details
+              </a>
+            )}
             <span className="text-xs text-muted-foreground">opened by {b.createdByName}</span>
             {b.canCancel && !b.cancelled && !b.filed && (
               <button type="button" disabled={busy != null} onClick={() => { if (window.confirm("Cancel this delivery batch?")) run(b.id + "cancel", () => cancelMultiBatch(orderId, b.id)); }} className="ml-auto text-muted-foreground hover:text-destructive" title="Cancel batch">
@@ -197,9 +230,30 @@ export function MultiBatchPanel({
                       <input value={payNote} onChange={(e) => setPayNote(e.target.value)} placeholder="OR no. / note (optional)" className="h-8 flex-1 min-w-[9rem] rounded-md border bg-background px-2 text-sm" />
                       <span className="text-[11px] text-muted-foreground">Outstanding: {formatCurrency(outstanding, currency)}</span>
                     </div>
+                    {/* Payment details / proof — uploaded now, viewable without downloading. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {payProof ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs">
+                          <a href={docView(payProof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                            <FileText className="h-3.5 w-3.5" /> {payProof.name}
+                          </a>
+                          <a href={docView(payProof)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                            <Eye className="h-3.5 w-3.5" />
+                          </a>
+                          <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => setPayProof(null)} aria-label="Remove">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      ) : (
+                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs hover:bg-accent">
+                          <Upload className="h-3.5 w-3.5" /> {uploading ? "Uploading…" : "Upload payment details"}
+                          <input type="file" className="hidden" disabled={uploading || busy != null} onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                        </label>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
-                      <Button size="sm" className="h-7 text-xs" disabled={busy != null} onClick={() => advance(b.id, b.next!.key, true)}>{busy === b.id + b.next.key ? "Saving…" : "Record payment"}</Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy != null} onClick={() => setPayFor(null)}>Cancel</Button>
+                      <Button size="sm" className="h-7 text-xs" disabled={busy != null || uploading} onClick={() => advance(b.id, b.next!.key, true)}>{busy === b.id + b.next.key ? "Saving…" : "Record payment"}</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy != null} onClick={() => { setPayFor(null); setPayProof(null); }}>Cancel</Button>
                     </div>
                   </div>
                 ) : (

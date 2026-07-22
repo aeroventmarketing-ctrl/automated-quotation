@@ -1901,6 +1901,8 @@ const mbStepSchema = z.object({
   note: z.string().optional(),
   payment: z.coerce.number().optional(),
   paymentNote: z.string().optional(),
+  // Proof of the collected payment (uploaded via /api/sale-uploads).
+  paymentProof: z.object({ path: z.string(), name: z.string(), uploadedAt: z.string() }).nullish(),
 });
 
 /** Sales (the order's preparer) or an admin. */
@@ -2015,7 +2017,7 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
       const sale = saleFromClassification(cls);
       if (!sale) throw new Error("Record the sale before collecting a payment.");
       const paymentId = randomUUID();
-      const payment: SalePayment = { id: paymentId, kind: "progress", amount, date: new Date().toISOString(), note: (d.paymentNote ?? "").trim() || undefined };
+      const payment: SalePayment = { id: paymentId, kind: "progress", amount, date: new Date().toISOString(), note: (d.paymentNote ?? "").trim() || undefined, proof: d.paymentProof ?? null };
       saleUpdate = { ...sale, payments: [...sale.payments, payment] };
       paymentFields = { paymentAmount: amount, paymentId };
     }

@@ -376,6 +376,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   }));
   const canActMbStep = (role: MBRole): boolean =>
     adminViewer || (role === "sales" ? isPreparerViewer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
+  const mbPaymentById = new Map((saleForClose?.payments ?? []).map((p) => [p.id, p] as const));
   const mbBatchViews = wf.deliveryBatches.map((b) => {
     const steps = MULTIBATCH_STEPS.map((s) => {
       const st = b.steps[s.key];
@@ -391,6 +392,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       createdByName: b.createdByName,
       lines: b.lines,
       paymentAmount: b.paymentAmount,
+      paymentProof: b.paymentId ? mbPaymentById.get(b.paymentId)?.proof ?? null : null,
       cancelled: !!b.cancelled,
       delivered: isMbDelivered(b),
       filed: isMbFiled(b),
