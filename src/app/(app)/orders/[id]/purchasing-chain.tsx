@@ -70,6 +70,8 @@ export function PurchasingChain({
   readOnly = false,
   poRoute = "order",
   hideRequisitionApproval = false,
+  selectedIds,
+  onToggleSelect,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -98,6 +100,13 @@ export function PurchasingChain({
    * duplicate that action for them.
    */
   hideRequisitionApproval?: boolean;
+  /**
+   * Controlled selection (the cross-order Purchasing workspace owns the set so it
+   * can sum & bulk-approve across every order). When omitted, the chain manages
+   * its own selection and shows its own per-chain total bar.
+   */
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -108,18 +117,24 @@ export function PurchasingChain({
   const [err, setErr] = useState<string | null>(null);
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [poEditId, setPoEditId] = useState<string | null>(null);
-  // Selection for summing PO amounts across requisitions (tick the MRFs to total).
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const toggleSel = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+  // Selection for summing PO amounts (tick the MRFs to total). Controlled by the
+  // parent when `selectedIds` is passed (the Purchasing workspace sums/approves
+  // across orders); otherwise this chain keeps its own selection + summary bar.
+  const [internalSel, setInternalSel] = useState<Set<string>>(new Set());
+  const controlled = !!selectedIds;
+  const sel = selectedIds ?? internalSel;
+  const toggleSel =
+    onToggleSelect ??
+    ((id: string) =>
+      setInternalSel((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      }));
 
   // Rows that carry a Purchase Order can be selected and summed.
   const poRows = requests.filter((r) => r.po);
-  const selectedPoRows = poRows.filter((r) => selected.has(r.id));
+  const selectedPoRows = poRows.filter((r) => sel.has(r.id));
   const selTotals = selectedPoRows.reduce(
     (acc, r) => {
       const t = poTotals(r.po!);
@@ -128,7 +143,8 @@ export function PurchasingChain({
     { total: 0, ewt: 0, net: 0 },
   );
   const allSelected = poRows.length > 0 && selectedPoRows.length === poRows.length;
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(poRows.map((r) => r.id)));
+  const toggleAll = () =>
+    setInternalSel(allSelected ? new Set() : new Set(poRows.map((r) => r.id)));
 
   async function cancel(prId: string) {
     if (!window.confirm("Cancel this purchase order / request?")) return;
@@ -184,9 +200,17 @@ export function PurchasingChain({
         return (
           <div key={r.id} className="rounded-md border bg-card p-3">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 accent-[#ED1C24]"
+                  checked={sel.has(r.id)}
+                  onChange={() => toggleSel(r.id)}
+                  title="Select this material request"
+                  aria-label={`Select ${r.deptLabel}${r.mrfNo ? ` MRF #${r.mrfNo}` : ""}`}
+                />
                 {r.deptLabel}
-                {r.mrfNo && <span className="ml-2 font-normal text-muted-foreground">MRF #{r.mrfNo}</span>}
+                {r.mrfNo && <span className="font-normal text-muted-foreground">MRF #{r.mrfNo}</span>}
               </span>
               <Badge variant={r.variant}>{statusLabel}</Badge>
             </div>
@@ -304,14 +328,6 @@ export function PurchasingChain({
               ) : r.po ? (
                 <div className="flex flex-wrap items-end justify-between gap-2 text-xs">
                   <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 accent-[#ED1C24]"
-                      checked={selected.has(r.id)}
-                      onChange={() => toggleSel(r.id)}
-                      title="Select this PO to add to the total"
-                      aria-label={`Select PO ${r.po.poNumber}`}
-                    />
                     <Badge variant="success">PO {r.po.poNumber}</Badge>
                     {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
                     <span className="font-semibold tabular-nums">{formatCurrency(poTotals(r.po).total, "PHP")}</span>
@@ -376,8 +392,9 @@ export function PurchasingChain({
       })}
 
       {/* Tick the POs above to add up their amounts (e.g. the total to release
-          for several material requests at once). */}
-      {poRows.length > 0 && (
+          for several material requests at once). Hidden when a parent controls
+          selection (the workspace shows one combined cross-order bar instead). */}
+      {!controlled && poRows.length > 0 && (
         <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs backdrop-blur">
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={toggleAll} className="font-medium text-primary hover:underline">

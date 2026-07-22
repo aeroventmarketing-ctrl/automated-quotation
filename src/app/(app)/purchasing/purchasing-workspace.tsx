@@ -2,11 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { statusBucket, type PRBucket } from "@/lib/purchasing";
+import { poTotals } from "@/lib/purchase-order";
+import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PurchaseChainRow } from "@/lib/purchase-chain-row";
+import { advancePurchaseRequest } from "../orders/actions";
 import type { CatalogPrices, CatalogSuppliers } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
@@ -56,10 +61,64 @@ export function PurchasingWorkspace({
   catalogSuppliers: CatalogSuppliers;
   scanProducts: ScanProduct[];
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
   const inTab = (bucket: PRBucket) => tab === "all" || tab === bucket;
   // A material/MRF requisition stays "pending" until its Purchase Order exists.
   const rowBucket = (r: PurchaseChainRow) => statusBucket(r.status, { isDept: r.isDept, hasPo: !!r.po });
+
+  // Cross-order selection: tick material requests across every order to total
+  // their PO amounts and approve them together.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [approving, setApproving] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const allRows = orderGroups.flatMap((g) => g.rows);
+  const selectedRows = allRows.filter((r) => selected.has(r.id));
+  const selTotals = selectedRows
+    .filter((r) => r.po)
+    .reduce(
+      (acc, r) => {
+        const t = poTotals(r.po!);
+        return { total: acc.total + t.total, ewt: acc.ewt + t.ewt, net: acc.net + t.net };
+      },
+      { total: 0, ewt: 0, net: 0 },
+    );
+  // Approvable = pending approval, actionable by this user, and (for order-linked
+  // requests) a PO already exists to approve against.
+  const approvableRows = selectedRows.filter(
+    (r) =>
+      r.status === "PENDING_APPROVAL" &&
+      (r.isDept || !!r.po) &&
+      r.actions.some((a) => a.key === "approve" && a.canAct),
+  );
+
+  async function bulkApprove() {
+    if (approvableRows.length === 0) return;
+    if (!window.confirm(`Approve ${approvableRows.length} material request(s)?`)) return;
+    setApproving(true);
+    setBulkMsg(null);
+    let ok = 0;
+    let failed = 0;
+    for (const r of approvableRows) {
+      try {
+        await advancePurchaseRequest(r.id, "approve");
+        ok++;
+      } catch {
+        failed++;
+      }
+    }
+    setApproving(false);
+    setSelected(new Set());
+    setBulkMsg(`${ok} approved${failed ? ` · ${failed} could not be approved` : ""}.`);
+    router.refresh();
+  }
 
   // Counts per tab (POs = combined-PO cards + individual request rows).
   const counts: Record<Tab, number> = { pending: 0, approved: 0, rejected: 0, cancelled: 0, all: 0 };
@@ -138,6 +197,8 @@ export function PurchasingWorkspace({
               catalogPrices={catalogPrices}
               scanProducts={scanProducts}
               hideRequisitionApproval
+              selectedIds={selected}
+              onToggleSelect={toggleSelect}
             />
           </CardContent>
         </Card>
@@ -145,6 +206,38 @@ export function PurchasingWorkspace({
 
       {nothing && (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}purchase orders.</CardContent></Card>
+      )}
+
+      {/* Cross-order selection bar — totals the ticked material requests across
+          every order and lets an approver approve them together. */}
+      {selected.size > 0 && (
+        <div className="sticky bottom-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="font-medium">{selected.size} selected</span>
+            <button type="button" onClick={() => setSelected(new Set())} className="text-xs font-medium text-primary hover:underline">
+              Clear
+            </button>
+            {selectedRows.some((r) => r.po) && (
+              <span className="tabular-nums text-muted-foreground">
+                Total <span className="font-semibold text-foreground">{formatCurrency(selTotals.total, "PHP")}</span>
+                {selTotals.ewt > 0 && <> · less EWT {formatCurrency(selTotals.ewt, "PHP")}</>}
+                {" · "}Net <span className="font-semibold text-foreground">{formatCurrency(selTotals.net, "PHP")}</span>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {bulkMsg && <span className="text-xs text-muted-foreground">{bulkMsg}</span>}
+            <Button
+              size="sm"
+              className="h-8"
+              disabled={approving || approvableRows.length === 0}
+              onClick={bulkApprove}
+              title={approvableRows.length === 0 ? "None of the selected requests are awaiting your approval" : undefined}
+            >
+              {approving ? "Approving…" : `Approve selected${approvableRows.length ? ` (${approvableRows.length})` : ""}`}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
