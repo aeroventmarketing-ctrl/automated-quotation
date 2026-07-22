@@ -19,9 +19,12 @@ import {
   stageLabel,
   stagePhase,
   pendingStep,
+  anyJobOrderFinished,
   type OrderStage,
   type ProductionDeptKey,
 } from "@/lib/order-workflow";
+import { deliveredByDescription } from "@/lib/delivery";
+import { DeliveriesPanel } from "./deliveries-panel";
 import { purchaseStepsFrom, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
@@ -82,7 +85,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const [quote, viewer, assignments, purchaseRequests, stockItemsRaw, allUsers, suppliers, paymentTerms, hideOrderProgress] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
-      include: { inquiry: { include: { customer: true } }, preparedBy: true },
+      include: {
+        inquiry: { include: { customer: true } },
+        preparedBy: true,
+        items: { select: { qty: true, descriptionSnapshot: true } },
+      },
     }),
     getCurrentUser(),
     getWorkflowRoles(),
@@ -332,6 +339,30 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     : null;
   const phase6Active =
     wf.stage === "closed" && !!commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete;
+
+  // Partial deliveries — available once the first department has finished, so the
+  // client can take finished items (e.g. 20 of 50) before the whole order is done.
+  const showDeliveries = anyJobOrderFinished(wf);
+  const deliveredMap = deliveredByDescription(wf.deliveries);
+  const orderedAgg = new Map<string, number>();
+  for (const it of quote.items) {
+    const key = it.descriptionSnapshot.trim();
+    if (key) orderedAgg.set(key, (orderedAgg.get(key) ?? 0) + it.qty);
+  }
+  const orderedItems = [...orderedAgg.entries()].map(([description, ordered]) => ({
+    description,
+    ordered,
+    delivered: deliveredMap.get(description.toLowerCase()) ?? 0,
+  }));
+  const deliveriesView = wf.deliveries.map((dv) => ({
+    id: dv.id, date: dv.date, drNumber: dv.drNumber, lines: dv.lines, note: dv.note, deliveredByName: dv.deliveredByName,
+  }));
+  const canDeliverManage =
+    adminViewer ||
+    (viewer != null &&
+      (userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey) ||
+        userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey) ||
+        viewer.id === quote.preparedById));
 
   // Materials (Phase 3, part 1): raise MRFs (dept head, during production) and
   // warehouse issue/escalate.
@@ -633,6 +664,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </CardHeader>
           <CardContent>
             <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} readOnly />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Deliveries — partial deliveries of finished items, available once the
+          first department has finished (before the whole order is done). */}
+      {showDeliveries && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Deliveries</CardTitle></CardHeader>
+          <CardContent>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Deliver finished items as they&apos;re ready — the client can take part of the order now (e.g. 20 of 50) and the rest when done.
+            </p>
+            <DeliveriesPanel orderId={quote.id} items={orderedItems} deliveries={deliveriesView} canManage={canDeliverManage} />
           </CardContent>
         </Card>
       )}

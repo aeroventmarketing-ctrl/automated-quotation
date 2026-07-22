@@ -39,6 +39,7 @@ import {
   type OrderConversation,
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
+import { deliveredByDescription, type DeliveryRecord } from "@/lib/delivery";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
@@ -970,6 +971,92 @@ export async function cancelMaterialRequest(quotationId: string, requestId: stri
 function mrfItemLine(it: MRFItem): string {
   const qtyUnit = [it.qty, it.unit].filter(Boolean).join(" ");
   return [qtyUnit, it.description].filter(Boolean).join(" · ") + (it.remark ? ` (${it.remark})` : "");
+}
+
+// --- Partial deliveries ------------------------------------------------------
+
+const deliveryInputSchema = z.object({
+  date: z.string().optional(),
+  drNumber: z.string().optional(),
+  note: z.string().optional(),
+  lines: z.array(z.object({ description: z.string(), qty: z.coerce.number() })),
+});
+
+/** Who may record / remove a delivery: Logistics, Warehouse, the Sales preparer, or an admin. */
+async function canDeliver(userId: string, preparedById: string | null): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || user.id !== userId) return false;
+  if (isAdmin(user)) return true;
+  if (userId === preparedById) return true;
+  const roles = await getWorkflowRoles();
+  return userHasWorkflowRole(roles, userId, "logistics" as WorkflowRoleKey) || userHasWorkflowRole(roles, userId, "warehouse" as WorkflowRoleKey);
+}
+
+/**
+ * Record a partial delivery (a Delivery Receipt): the finished items and how many
+ * left on this trip. Quantities are validated against what's ordered and already
+ * delivered so an item can't be over-delivered.
+ */
+export async function recordDelivery(
+  quotationId: string,
+  input: z.infer<typeof deliveryInputSchema>,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { classification: true, preparedById: true, items: { select: { qty: true, descriptionSnapshot: true } } },
+  });
+  if (!quote) throw new Error("Order not found");
+  if (!(await canDeliver(user.id, quote.preparedById))) {
+    throw new Error("Only Logistics, Warehouse, Sales or an admin can record a delivery.");
+  }
+  const d = deliveryInputSchema.parse(input);
+  const wf = readOrderWorkflow(quote.classification);
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+
+  const lines = d.lines
+    .map((l) => ({ description: l.description.trim(), qty: Number.isFinite(l.qty) ? Math.max(0, l.qty) : 0 }))
+    .filter((l) => l.description && l.qty > 0);
+  if (lines.length === 0) throw new Error("Enter at least one item quantity to deliver.");
+
+  // Ordered totals and already-delivered totals per item — guard against over-delivery.
+  const ordered = new Map<string, number>();
+  for (const it of quote.items) {
+    const k = it.descriptionSnapshot.trim().toLowerCase();
+    ordered.set(k, (ordered.get(k) ?? 0) + it.qty);
+  }
+  const already = deliveredByDescription(wf.deliveries);
+  for (const l of lines) {
+    const k = l.description.toLowerCase();
+    const ord = ordered.get(k);
+    if (ord != null) {
+      const remaining = ord - (already.get(k) ?? 0);
+      if (l.qty > remaining) throw new Error(`Delivering ${l.qty} of "${l.description}" exceeds the ${remaining} remaining.`);
+    }
+  }
+
+  const record: DeliveryRecord = {
+    id: randomUUID(),
+    date: (d.date && d.date.trim()) || joToday(),
+    drNumber: (d.drNumber ?? "").trim(),
+    lines,
+    note: (d.note ?? "").trim(),
+    deliveredByName: user.name,
+    createdAt: new Date().toISOString(),
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, deliveries: [...wf.deliveries, record] });
+}
+
+/** Remove a recorded delivery (correcting a mistake). Same permissions as recording. */
+export async function deleteDelivery(quotationId: string, deliveryId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!(await canDeliver(user.id, quote.preparedById))) {
+    throw new Error("Only Logistics, Warehouse, Sales or an admin can remove a delivery.");
+  }
+  await saveWorkflow(quotationId, cls, { ...wf, deliveries: wf.deliveries.filter((dv) => dv.id !== deliveryId) });
 }
 
 interface LineDisposition {

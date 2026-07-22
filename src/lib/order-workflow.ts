@@ -12,6 +12,7 @@ import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, type DuctJobOrder } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder } from "@/lib/motor-controller-job-order";
+import { coerceDeliveries, type DeliveryRecord } from "@/lib/delivery";
 
 export type OrderStage =
   | "payment_review"
@@ -233,6 +234,9 @@ export interface OrderWorkflow {
   conversations: OrderConversation[];
   // Post-close sales-commission sign-offs (approve → voucher → received).
   commission?: OrderCommissionFlow;
+  // Partial deliveries — the client can take finished items before the whole
+  // order is done (e.g. 20 of 50 now, 30 later). Each entry is a Delivery Receipt.
+  deliveries: DeliveryRecord[];
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -419,7 +423,15 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
     else if (jos.some((j) => j.status === "in_production" || j.status === "finished")) stage = "producing";
   }
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission };
+  const deliveries = coerceDeliveries(wf?.deliveries);
+
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveries };
+}
+
+/** True once at least one department's job order is finished — the point where a
+ *  client can start taking finished items (partial delivery). */
+export function anyJobOrderFinished(wf: OrderWorkflow): boolean {
+  return (Object.values(wf.jobOrders).filter(Boolean) as JobOrder[]).some((j) => j.status === "finished");
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */
