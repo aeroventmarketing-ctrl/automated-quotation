@@ -126,6 +126,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             {(quote.projectName || quote.inquiry.projectName) && ` · ${quote.projectName ?? quote.inquiry.projectName}`}
             {" · "}
             {formatCurrency(value, quote.currency)}
+            {" · "}
+            <span className="font-medium text-foreground">{quote.inquiry.customer.company}</span>
           </p>
         </div>
         <Card>
@@ -441,6 +443,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             {(quote.projectName || quote.inquiry.projectName) && ` · ${quote.projectName ?? quote.inquiry.projectName}`}
             {" · "}
             {formatCurrency(value, quote.currency)}
+            {" · "}
+            <span className="font-medium text-foreground">{quote.inquiry.customer.company}</span>
           </p>
         </div>
         <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{stageLabel(wf.stage)}</Badge>
