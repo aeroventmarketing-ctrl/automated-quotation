@@ -17,6 +17,7 @@ export interface OrderedItem {
 export interface BatchStepView {
   key: string;
   label: string;
+  roleLabel: string;
   done: boolean;
   byName?: string;
   at?: string;
@@ -218,9 +219,10 @@ export function DeliveriesPanel({
           {/* 13-step progress */}
           <ol className="space-y-0.5 text-xs">
             {b.steps.map((s) => (
-              <li key={s.key} className={`flex items-center gap-1.5 ${s.done ? "text-foreground" : "text-muted-foreground/60"}`}>
+              <li key={s.key} className={`flex flex-wrap items-center gap-1.5 ${s.done ? "text-foreground" : "text-muted-foreground/60"}`}>
                 {s.done ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Circle className="h-3.5 w-3.5" />}
                 <span>{s.label}</span>
+                <span className={s.done ? "text-muted-foreground" : "text-muted-foreground/60"}>({s.roleLabel})</span>
                 {s.done && s.byName && <span className="text-muted-foreground">— {s.byName}{s.at ? ` · ${s.at}` : ""}</span>}
               </li>
             ))}

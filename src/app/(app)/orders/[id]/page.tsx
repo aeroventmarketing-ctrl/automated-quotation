@@ -379,7 +379,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const deliveryBatchViews = wf.deliveryBatches.map((b) => {
     const steps = batchSteps(b.paymentMode).map((s) => {
       const st = b.steps[s.key];
-      return { key: s.key, label: s.label, done: !!st, byName: st?.byName, at: st?.at ? fmtWhen(st.at) : undefined };
+      return {
+        key: s.key,
+        label: s.label,
+        roleLabel: s.role === "sales" ? "Sales" : workflowRoleLabel(s.role),
+        done: !!st,
+        byName: st?.byName,
+        at: st?.at ? fmtWhen(st.at) : undefined,
+      };
     });
     const { next } = batchProgress(b);
     const nextView = next && !b.cancelled
