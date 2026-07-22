@@ -128,21 +128,21 @@ export function CommissionFlow({
       {!flow.approvedAt ? (
         canApprove ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => approveCommission(orderId))}>
-            {busy ? "Saving…" : "Approve commission amount"}
+            {busy ? "Saving…" : "Approve Commission Amount"}
           </Button>
         ) : awaiting("an admin / the Payment Approver to approve the commission amount")
       ) : !flow.voucherAt ? (
-        canAccounting ? uploadLabel("Upload commission voucher") : awaiting("Accounting to upload the commission voucher")
+        canAccounting ? uploadLabel("Upload Commission Voucher") : awaiting("Accounting to upload the commission voucher")
       ) : !flow.voucherApprovedAt ? (
         canApprove ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => approveCommissionVoucher(orderId))}>
-            {busy ? "Saving…" : "Approve commission voucher"}
+            {busy ? "Saving…" : "Approve Commission Voucher"}
           </Button>
         ) : awaiting("an admin / the Payment Approver to approve the voucher")
       ) : !flow.budgetReleasedAt ? (
         canApprove ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => releaseCommissionBudget(orderId))}>
-            {busy ? "Saving…" : "Release commission budget"}
+            {busy ? "Saving…" : "Release Commission Budget"}
           </Button>
         ) : awaiting("an admin / the Payment Approver to release the budget")
       ) : !flow.receivedAt ? (

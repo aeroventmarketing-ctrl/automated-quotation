@@ -141,7 +141,7 @@ export function CloseDocuments({
         ) : canFile ? (
           <div className="flex flex-wrap items-center gap-3">
             <Button size="sm" disabled={busy} onClick={close} className="bg-amber-500 text-white hover:bg-amber-600">
-              {busy ? "Saving…" : "File documents — close order (incomplete)"}
+              {busy ? "Saving…" : "File Documents-Close Order (Incomplete)"}
             </Button>
             <p className="max-w-md text-xs text-muted-foreground">
               <span className="font-medium text-amber-700">Closing documents — incomplete.</span>{" "}
@@ -165,7 +165,7 @@ export function CloseDocuments({
             onClick={close}
             className={state.complete ? undefined : "bg-amber-500 text-white hover:bg-amber-600"}
           >
-            {busy ? "Saving…" : state.complete ? "File documents — close order" : "File documents — close order (incomplete)"}
+            {busy ? "Saving…" : state.complete ? "File Documents-Close Order" : "File Documents-Close Order (Incomplete)"}
           </Button>
         </div>
       ) : (
