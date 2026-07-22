@@ -156,22 +156,30 @@ async function mergeAutoJobOrders(
     motorBrand: await getFanMotorBrand(),
   });
   const year = new Date().getFullYear();
-  // Apply a department when it's empty (fill-empty), or — in regenerate mode —
-  // when it has no approved job orders yet (approved ones are never overwritten).
-  const shouldApply = (existing: { approvedByName?: string }[]) =>
-    mode === "regenerate-unapproved" ? noneApproved(existing) : existing.length === 0;
+  const regen = mode === "regenerate-unapproved";
+  // A department may be touched when it's empty (fill-empty), or — in regenerate
+  // mode — when none of its job orders are approved yet. In regenerate mode we
+  // ALWAYS set the department to the fresh output (even when empty), so a job
+  // order whose source lines are gone (e.g. a VFD-only motor controller) is
+  // removed instead of lingering.
+  const canTouch = (existing: { approvedByName?: string }[]) =>
+    regen ? noneApproved(existing) : existing.length === 0;
   let workflow = base;
-  if (auto.fans.length && shouldApply(wf.fansJobOrders)) {
-    workflow = { ...workflow, fansJobOrders: auto.fans, joBaseNo: wf.joBaseNo ?? (await nextJoBaseNo()), joBaseYear: wf.joBaseYear ?? year };
+  if (canTouch(wf.fansJobOrders)) {
+    if (auto.fans.length) workflow = { ...workflow, fansJobOrders: auto.fans, joBaseNo: wf.joBaseNo ?? (await nextJoBaseNo()), joBaseYear: wf.joBaseYear ?? year };
+    else if (regen) workflow = { ...workflow, fansJobOrders: [] };
   }
-  if (auto.duct.length && shouldApply(wf.ductJobOrders)) {
-    workflow = { ...workflow, ductJobOrders: auto.duct, ductJoBaseNo: wf.ductJoBaseNo ?? (await nextDuctJoBaseNo()), ductJoBaseYear: wf.ductJoBaseYear ?? year };
+  if (canTouch(wf.ductJobOrders)) {
+    if (auto.duct.length) workflow = { ...workflow, ductJobOrders: auto.duct, ductJoBaseNo: wf.ductJoBaseNo ?? (await nextDuctJoBaseNo()), ductJoBaseYear: wf.ductJoBaseYear ?? year };
+    else if (regen) workflow = { ...workflow, ductJobOrders: [] };
   }
-  if (auto.motor.length && shouldApply(wf.motorJobOrders)) {
-    workflow = { ...workflow, motorJobOrders: auto.motor, mcJoBaseNo: wf.mcJoBaseNo ?? (await nextMcJoBaseNo()), mcJoBaseYear: wf.mcJoBaseYear ?? year };
+  if (canTouch(wf.motorJobOrders)) {
+    if (auto.motor.length) workflow = { ...workflow, motorJobOrders: auto.motor, mcJoBaseNo: wf.mcJoBaseNo ?? (await nextMcJoBaseNo()), mcJoBaseYear: wf.mcJoBaseYear ?? year };
+    else if (regen) workflow = { ...workflow, motorJobOrders: [] };
   }
-  if (auto.accessories.length && shouldApply(wf.accessoriesJobOrders)) {
-    workflow = { ...workflow, accessoriesJobOrders: auto.accessories, accJoBaseNo: wf.accJoBaseNo ?? (await nextAccJoBaseNo()), accJoBaseYear: wf.accJoBaseYear ?? year };
+  if (canTouch(wf.accessoriesJobOrders)) {
+    if (auto.accessories.length) workflow = { ...workflow, accessoriesJobOrders: auto.accessories, accJoBaseNo: wf.accJoBaseNo ?? (await nextAccJoBaseNo()), accJoBaseYear: wf.accJoBaseYear ?? year };
+    else if (regen) workflow = { ...workflow, accessoriesJobOrders: [] };
   }
   return workflow;
 }
