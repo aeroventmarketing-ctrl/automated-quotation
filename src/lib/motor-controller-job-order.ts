@@ -40,6 +40,9 @@ export interface MotorControllerJobOrder {
   note: string;
   // App-only — not printed on the job order.
   assignedPersonnel: string;
+  // Engineer/admin review sign-off (empty until approved).
+  approvedByName: string;
+  approvedAt: string;
 }
 
 export const EMPTY_MOTOR_CONTROLLER_LINE: MotorControllerLine = {
@@ -59,6 +62,8 @@ export const EMPTY_MOTOR_CONTROLLER_JO: MotorControllerJobOrder = {
   lines: [],
   note: "",
   assignedPersonnel: "",
+  approvedByName: "",
+  approvedAt: "",
 };
 
 /**
@@ -123,5 +128,7 @@ export function coerceMotorControllerJobOrder(value: unknown): MotorControllerJo
     lines,
     note: s("note"),
     assignedPersonnel: s("assignedPersonnel"),
+    approvedByName: s("approvedByName"),
+    approvedAt: s("approvedAt"),
   };
 }

@@ -19,6 +19,7 @@ import {
   type DuctSegment,
 } from "@/lib/duct-job-order";
 import { saveDuctJobOrder, deleteDuctJobOrder } from "../actions";
+import { JobOrderApproval } from "./jo-approval";
 
 const SELECT_CLS = "h-8 w-full rounded-md border bg-background px-2 text-sm";
 
@@ -110,6 +111,7 @@ export function DuctJobOrderPanel({
                   </>
                 )}
               </div>
+              <JobOrderApproval orderId={orderId} dept="duct" index={i} approvedByName={jo.approvedByName} canApprove={canManage} />
               {jo.note && <p className="text-[11px] text-muted-foreground"><span className="font-medium">Note:</span> {jo.note}</p>}
             </li>
           ))}

@@ -676,6 +676,39 @@ export async function deleteMotorControllerJobOrder(quotationId: string, index: 
   await saveWorkflow(quotationId, cls, { ...wf, motorJobOrders: list });
 }
 
+// --- Job order review / approval (Engineer or admin) ------------------------
+export type JobOrderDept = "fans" | "duct" | "accessories" | "motor";
+const JO_DEPT_FIELD: Record<JobOrderDept, "fansJobOrders" | "ductJobOrders" | "accessoriesJobOrders" | "motorJobOrders"> = {
+  fans: "fansJobOrders",
+  duct: "ductJobOrders",
+  accessories: "accessoriesJobOrders",
+  motor: "motorJobOrders",
+};
+
+/**
+ * Engineer/admin review sign-off on a single job order. `approve=false` reopens
+ * it (clears the stamp). Editing a job order also clears its approval, so an
+ * edited order must be re-approved.
+ */
+export async function setJobOrderApproval(
+  quotationId: string,
+  dept: JobOrderDept,
+  index: number,
+  approve: boolean,
+): Promise<void> {
+  const user = await assertEngineer();
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const field = JO_DEPT_FIELD[dept];
+  const list = [...(wf[field] as { approvedByName: string; approvedAt: string }[])];
+  if (index < 0 || index >= list.length) throw new Error("Job order not found");
+  list[index] = {
+    ...list[index],
+    approvedByName: approve ? user.name : "",
+    approvedAt: approve ? new Date().toISOString() : "",
+  };
+  await saveWorkflow(quotationId, cls, { ...wf, [field]: list });
+}
+
 /**
  * A production department's head raises a Material Request Form against the order
  * (during production). The warehouse then issues or escalates it.

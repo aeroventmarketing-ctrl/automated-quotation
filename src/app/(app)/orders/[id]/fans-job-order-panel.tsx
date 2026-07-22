@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatJoNumber, EMPTY_FANS_JO, JO_TYPES, joTypeLabel, joTypeReady, type FansJobOrder } from "@/lib/job-order";
 import { saveFansJobOrder, deleteFansJobOrder } from "../actions";
+import { JobOrderApproval } from "./jo-approval";
 
 // Option lists taken straight from the template's lookup tables so selections
 // always match its VLOOKUPs.
@@ -301,6 +302,8 @@ export function FansJobOrderPanel({
                   </button>
                 </>
               )}
+              <span className="basis-full" />
+              <JobOrderApproval orderId={orderId} dept="fans" index={i} approvedByName={jo.approvedByName} canApprove={canManage} />
             </li>
           ))}
         </ul>

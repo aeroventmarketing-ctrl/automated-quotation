@@ -17,6 +17,7 @@ import {
   type AccessoryLine,
 } from "@/lib/accessories-job-order";
 import { saveAccessoriesJobOrder, deleteAccessoriesJobOrder } from "../actions";
+import { JobOrderApproval } from "./jo-approval";
 
 function todayISO(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -105,6 +106,7 @@ export function AccessoriesJobOrderPanel({
                   </>
                 )}
               </div>
+              <JobOrderApproval orderId={orderId} dept="accessories" index={i} approvedByName={jo.approvedByName} canApprove={canManage} />
               {jo.note && <p className="text-[11px] text-muted-foreground"><span className="font-medium">Note:</span> {jo.note}</p>}
             </li>
           ))}

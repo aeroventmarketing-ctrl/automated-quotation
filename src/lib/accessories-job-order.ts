@@ -75,6 +75,9 @@ export interface AccessoriesJobOrder {
   note: string;
   // App-only — not printed on the job order.
   assignedPersonnel: string;
+  // Engineer/admin review sign-off (empty until approved).
+  approvedByName: string;
+  approvedAt: string;
 }
 
 export const EMPTY_ACCESSORY_DIMENSION: AccessoryDimension = { value: "", label: "" };
@@ -97,6 +100,8 @@ export const EMPTY_ACCESSORIES_JO: AccessoriesJobOrder = {
   lines: [],
   note: "",
   assignedPersonnel: "",
+  approvedByName: "",
+  approvedAt: "",
 };
 
 /**
@@ -184,5 +189,7 @@ export function coerceAccessoriesJobOrder(value: unknown): AccessoriesJobOrder |
     lines,
     note: s("note"),
     assignedPersonnel: s("assignedPersonnel"),
+    approvedByName: s("approvedByName"),
+    approvedAt: s("approvedAt"),
   };
 }

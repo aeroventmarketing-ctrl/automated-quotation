@@ -60,6 +60,9 @@ export interface DuctJobOrder {
   note: string;
   // App-only — not printed on the job order.
   assignedPersonnel: string;
+  // Engineer/admin review sign-off (empty until approved).
+  approvedByName: string;
+  approvedAt: string;
 }
 
 export const DUCT_MATERIALS = ["G.I. Material", "Stainless Steel", "Aluminum", "Black Iron", "PVC"];
@@ -87,6 +90,8 @@ export const EMPTY_DUCT_JO: DuctJobOrder = {
   segments: [],
   note: "",
   assignedPersonnel: "",
+  approvedByName: "",
+  approvedAt: "",
 };
 
 /**
@@ -168,5 +173,7 @@ export function coerceDuctJobOrder(value: unknown): DuctJobOrder | null {
     segments,
     note: s("note"),
     assignedPersonnel: s("assignedPersonnel"),
+    approvedByName: s("approvedByName"),
+    approvedAt: s("approvedAt"),
   };
 }
