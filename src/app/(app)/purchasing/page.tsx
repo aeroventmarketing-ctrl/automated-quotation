@@ -129,9 +129,11 @@ export default async function PurchasingPage() {
     const batched = allPrs.filter((pr) => poBatchId(pr.po));
     const unbatched = allPrs.filter((pr) => !poBatchId(pr.po));
 
-    // Combinable: pending approval, no PO yet.
+    // Combinable: pending approval, no PO yet — but NOT material/department
+    // requisitions, which the Plant Manager must approve (step 16) before any PO
+    // is prepared (step 17).
     combinable = unbatched
-      .filter((pr) => pr.status === "PENDING_APPROVAL" && !coercePurchaseOrder(pr.po))
+      .filter((pr) => pr.status === "PENDING_APPROVAL" && !coercePurchaseOrder(pr.po) && !isDeptRequisition(pr))
       .map((pr) => {
         const items = Array.isArray(pr.items) ? (pr.items as string[]) : [];
         // Candidate suppliers = union of the suppliers that stock this request's items.

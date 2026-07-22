@@ -1588,6 +1588,11 @@ export async function savePurchaseOrder(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   if (pr.status === "REJECTED") throw new Error("This purchase request was rejected.");
+  // A material/department requisition needs the Plant Manager's approval (step 16)
+  // before the Purchaser prepares the purchase order (step 17).
+  if (pr.status === "PENDING_APPROVAL" && isDeptRequisition(pr)) {
+    throw new Error("The Plant Manager must approve this material request before a purchase order can be created.");
+  }
 
   const lines = d.lines.filter((l) => l.description.trim() !== "");
   if (lines.length === 0) throw new Error("Add at least one line to the purchase order.");
@@ -1643,6 +1648,8 @@ export async function createCombinedPO(
   for (const pr of prs) {
     if (pr.status !== "PENDING_APPROVAL") throw new Error("Every request must be awaiting approval to combine.");
     if (coercePurchaseOrder(pr.po)) throw new Error("One of the requests already has a purchase order.");
+    // Material/department requisitions need the Plant Manager's approval first.
+    if (isDeptRequisition(pr)) throw new Error("A material requisition must be approved by the Plant Manager before its purchase order can be prepared.");
   }
 
   const poNumber = await nextPoNo();

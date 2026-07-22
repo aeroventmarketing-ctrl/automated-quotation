@@ -153,6 +153,12 @@ export function PurchasingChain({
         const actionable = shownActions.filter((a) => a.canAct);
         const awaiting = shownActions.find((a) => !a.canAct);
         const awaitingPlantApproval = hideApproval && r.status === "PENDING_APPROVAL";
+        // A material/department requisition's PO is only created after the Plant
+        // Manager approves the request — the Purchaser can't create it while it's
+        // still pending, and "awaiting voucher" doesn't apply until the PO exists.
+        const requisitionNeedsApproval = !!r.isDept && r.status === "PENDING_APPROVAL";
+        const requisitionAwaitingPO = !!r.isDept && r.status === "APPROVED" && !r.po;
+        const statusLabel = requisitionAwaitingPO ? "Approved — awaiting Purchase Order" : r.statusLabel;
         return (
           <div key={r.id} className="rounded-md border bg-card p-3">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -160,7 +166,7 @@ export function PurchasingChain({
                 {r.deptLabel}
                 {r.mrfNo && <span className="ml-2 font-normal text-muted-foreground">MRF #{r.mrfNo}</span>}
               </span>
-              <Badge variant={r.variant}>{r.statusLabel}</Badge>
+              <Badge variant={r.variant}>{statusLabel}</Badge>
             </div>
             <ul className="ml-4 list-disc text-sm text-muted-foreground">
               {r.items.map((it, i) => <li key={i}>{it}</li>)}
@@ -249,8 +255,10 @@ export function PurchasingChain({
               />
             )}
 
-            {/* Supplier Purchase Order — a rejected request can't get a new PO. */}
-            {(r.status !== "REJECTED" || r.po) && (
+            {/* Supplier Purchase Order — a rejected request can't get a new PO, and
+                a material/department requisition can't get one until the Plant
+                Manager has approved the request (step 16 before step 17). */}
+            {(r.status !== "REJECTED" || r.po) && !requisitionNeedsApproval && (
             <div className="mt-2 border-t pt-2">
               {!readOnly && poEditId === r.id ? (
                 <PurchaseOrderPanel
