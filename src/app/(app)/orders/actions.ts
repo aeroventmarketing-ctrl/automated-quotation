@@ -80,6 +80,7 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
     select: {
       id: true,
       classification: true,
+      quoteNumber: true,
       projectName: true,
       items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
     },
@@ -124,6 +125,7 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
 
 /** Quotation shape the job-order autogen reads. */
 type AutogenQuote = {
+  quoteNumber: string;
   projectName: string | null;
   items: { qty: number; descriptionSnapshot: string | null; specsSnapshot: unknown }[];
 };
@@ -152,6 +154,7 @@ async function mergeAutoJobOrders(
   }));
   const auto = buildAutoJobOrders(items, {
     project: (quote.projectName ?? "").trim(),
+    orderNumber: quote.quoteNumber ?? "",
     date: new Date().toISOString(),
     motorBrand: await getFanMotorBrand(),
   });
@@ -196,6 +199,7 @@ export async function autofillJobOrders(quotationId: string): Promise<void> {
     where: { id: quotationId },
     select: {
       classification: true,
+      quoteNumber: true,
       projectName: true,
       items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
     },

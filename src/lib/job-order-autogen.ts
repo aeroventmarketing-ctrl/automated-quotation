@@ -94,7 +94,7 @@ export interface AutoJobOrders {
  */
 export function buildAutoJobOrders(
   items: QuoteItemLike[],
-  opts: { project: string; date: string; motorBrand?: string },
+  opts: { project: string; date: string; motorBrand?: string; orderNumber?: string },
 ): AutoJobOrders {
   // Admin-set default motor brand (varies with product availability).
   const motorBrand = opts.motorBrand === "Hyundai" ? "Hyundai" : "TECO";
@@ -192,7 +192,9 @@ export function buildAutoJobOrders(
     }
   }
 
-  const header = { date: opts.date, project: opts.project, dueDate: "", note: "", assignedPersonnel: "" };
+  // Duct / Accessories / Motor Controller: put the order number in the Project
+  // box for reference (Fans uses its own fan-code Project set, above).
+  const header = { date: opts.date, project: (opts.orderNumber ?? opts.project ?? "").trim(), dueDate: "", note: "", assignedPersonnel: "" };
   const motor: MotorControllerJobOrder[] = motorLines.length
     ? [{ ...(coerceMotorControllerJobOrder({}) as MotorControllerJobOrder), ...header, lines: motorLines }]
     : [];
