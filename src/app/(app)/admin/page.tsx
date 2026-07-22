@@ -15,6 +15,8 @@ import { MrfNumberSetting } from "./mrf-number-setting";
 import { PoNumberSetting } from "./po-number-setting";
 import { JoNumberSetting } from "./jo-number-setting";
 import { CashNumberSetting } from "./cash-number-setting";
+import { FanMotorBrandSetting } from "./fan-motor-brand-setting";
+import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
 import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo } from "./actions";
@@ -56,6 +58,7 @@ export default async function AdminOverviewPage() {
   ]);
   const cashRow = await prisma.appSetting.findUnique({ where: { key: "cash_request_counter" } });
   const cashNext = (Number((cashRow?.value as { n?: unknown } | null)?.n ?? 0) || 0) + 1;
+  const fanMotorBrand = await getFanMotorBrand();
   const [aiLimit, aiThisMonth] = await Promise.all([getAiUsageLimit(), currentMonthUsage()]);
   const aiAlert = evaluateUsageAlert(aiThisMonth, aiLimit);
 
@@ -179,6 +182,7 @@ export default async function AdminOverviewPage() {
       <JoNumberSetting current={ductJoNext} title="Job Order numbering (Duct)" prefix="DUCT-JO" onSave={setDuctJoNextNo} />
       <JoNumberSetting current={accJoNext} title="Job Order numbering (Accessories)" prefix="ACCE-JO" onSave={setAccJoNextNo} />
       <JoNumberSetting current={mcJoNext} title="Job Order numbering (Motor Controller)" prefix="MC-JO" onSave={setMcJoNextNo} />
+      <FanMotorBrandSetting current={fanMotorBrand} />
       <CashNumberSetting current={cashNext} />
       <SpLockSetting
         title="Propeller Type static-pressure lock"

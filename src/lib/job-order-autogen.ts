@@ -90,7 +90,12 @@ export interface AutoJobOrders {
  * are claimed from the running counter and formatted (with the a/b/c suffix) when
  * the workflow is saved / rendered, exactly like a manually-added job order.
  */
-export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: string; date: string }): AutoJobOrders {
+export function buildAutoJobOrders(
+  items: QuoteItemLike[],
+  opts: { project: string; date: string; motorBrand?: string },
+): AutoJobOrders {
+  // Admin-set default motor brand (varies with product availability).
+  const motorBrand = opts.motorBrand === "Hyundai" ? "Hyundai" : "TECO";
   const motorLines: MotorControllerLine[] = [];
   const accessoryLines: AccessoryLine[] = [];
   const ductSegments: DuctSegment[] = [];
@@ -124,9 +129,8 @@ export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: stri
       const sp = str(s.staticPressure_inwg) || str(s.staticPressure_pa);
       const isDirect = /direct/i.test(str(s.drive));
       const joType = fanJoType(s);
-      // Motor cascade (standard brand = TECO): brand → phase label → HP key.
+      // Motor cascade (admin-set brand default): brand → phase label → HP key.
       const phaseTok = str(s.motorPh).startsWith("1") ? "1PH" : "3PH";
-      const motorBrand = "TECO";
       const motorPhAlias = phaseTok === "1PH" ? "Single Phase" : "Three Phase";
       const motorHp = str(s.motorHp) ? findFanMotorHp(motorBrand, phaseTok, str(s.motorHp)) : "";
       fans.push({

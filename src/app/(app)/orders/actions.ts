@@ -39,6 +39,7 @@ import {
   type OrderConversation,
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
+import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, effectiveStepRole, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
@@ -143,7 +144,11 @@ async function mergeAutoJobOrders(
     descriptionSnapshot: it.descriptionSnapshot ?? "",
     specsSnapshot: it.specsSnapshot,
   }));
-  const auto = buildAutoJobOrders(items, { project: (quote.projectName ?? "").trim(), date: new Date().toISOString() });
+  const auto = buildAutoJobOrders(items, {
+    project: (quote.projectName ?? "").trim(),
+    date: new Date().toISOString(),
+    motorBrand: await getFanMotorBrand(),
+  });
   const year = new Date().getFullYear();
   let workflow = base;
   if (auto.fans.length && wf.fansJobOrders.length === 0) {

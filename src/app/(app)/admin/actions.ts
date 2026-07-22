@@ -16,6 +16,7 @@ import { setDocViewers } from "@/lib/doc-viewers";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
+import { setFanMotorBrand } from "@/lib/fan-motor-brand";
 import { saveAiUsageLimit } from "@/lib/ai/usage";
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -551,6 +552,17 @@ export async function setAccJoNextNo(input: z.infer<typeof joNextSchema>): Promi
 export async function setMcJoNextNo(input: z.infer<typeof joNextSchema>): Promise<number> {
   await assertAdmin();
   return setJoCounter("mc_jo_counter", joNextSchema.parse(input).next);
+}
+
+// --- Fans JO default motor brand --------------------------------------------
+const fanBrandSchema = z.object({ brand: z.enum(["TECO", "Hyundai"]) });
+/** Set the default motor brand used when auto-generating Fans & Blowers JOs. */
+export async function saveFanMotorBrandAction(input: z.infer<typeof fanBrandSchema>): Promise<string> {
+  await assertAdmin();
+  const d = fanBrandSchema.parse(input);
+  const saved = await setFanMotorBrand(d.brand);
+  revalidatePath("/admin");
+  return saved;
 }
 
 // --- Workflow (ERP) roles ---------------------------------------------------
