@@ -134,10 +134,16 @@ type AutogenQuote = {
  * populated when it currently has NO job orders, so this never overwrites manual
  * work and is safe to run more than once. Base numbers are claimed on demand.
  */
+/** True if none of the job orders in a department have been approved yet. */
+function noneApproved(list: { approvedByName?: string }[]): boolean {
+  return !list.some((j) => (j.approvedByName ?? "").trim());
+}
+
 async function mergeAutoJobOrders(
   base: Record<string, unknown>,
   wf: OrderWorkflow,
   quote: AutogenQuote,
+  mode: "fill-empty" | "regenerate-unapproved" = "fill-empty",
 ): Promise<Record<string, unknown>> {
   const items = (quote.items ?? []).map((it) => ({
     qty: Number(it.qty) || 0,
@@ -150,17 +156,21 @@ async function mergeAutoJobOrders(
     motorBrand: await getFanMotorBrand(),
   });
   const year = new Date().getFullYear();
+  // Apply a department when it's empty (fill-empty), or — in regenerate mode —
+  // when it has no approved job orders yet (approved ones are never overwritten).
+  const shouldApply = (existing: { approvedByName?: string }[]) =>
+    mode === "regenerate-unapproved" ? noneApproved(existing) : existing.length === 0;
   let workflow = base;
-  if (auto.fans.length && wf.fansJobOrders.length === 0) {
+  if (auto.fans.length && shouldApply(wf.fansJobOrders)) {
     workflow = { ...workflow, fansJobOrders: auto.fans, joBaseNo: wf.joBaseNo ?? (await nextJoBaseNo()), joBaseYear: wf.joBaseYear ?? year };
   }
-  if (auto.duct.length && wf.ductJobOrders.length === 0) {
+  if (auto.duct.length && shouldApply(wf.ductJobOrders)) {
     workflow = { ...workflow, ductJobOrders: auto.duct, ductJoBaseNo: wf.ductJoBaseNo ?? (await nextDuctJoBaseNo()), ductJoBaseYear: wf.ductJoBaseYear ?? year };
   }
-  if (auto.motor.length && wf.motorJobOrders.length === 0) {
+  if (auto.motor.length && shouldApply(wf.motorJobOrders)) {
     workflow = { ...workflow, motorJobOrders: auto.motor, mcJoBaseNo: wf.mcJoBaseNo ?? (await nextMcJoBaseNo()), mcJoBaseYear: wf.mcJoBaseYear ?? year };
   }
-  if (auto.accessories.length && wf.accessoriesJobOrders.length === 0) {
+  if (auto.accessories.length && shouldApply(wf.accessoriesJobOrders)) {
     workflow = { ...workflow, accessoriesJobOrders: auto.accessories, accJoBaseNo: wf.accJoBaseNo ?? (await nextAccJoBaseNo()), accJoBaseYear: wf.accJoBaseYear ?? year };
   }
   return workflow;
@@ -168,8 +178,9 @@ async function mergeAutoJobOrders(
 
 /**
  * Manually (re)generate job orders from the quotation for an order that's already
- * at the JO-creation stage — e.g. one cleared before auto-generation existed, or
- * when a department was left empty. Only fills empty departments.
+ * at the JO-creation stage. Regenerates any department whose job orders are not
+ * yet approved (approved ones are never touched), so it refreshes stale/partial
+ * auto-fills with the latest mapping.
  */
 export async function autofillJobOrders(quotationId: string): Promise<void> {
   await assertEngineer();
@@ -187,7 +198,7 @@ export async function autofillJobOrders(quotationId: string): Promise<void> {
     throw new Error("Job orders can be generated once the order's payment is cleared.");
   }
   const cls = (quote.classification as Record<string, unknown>) ?? {};
-  const workflow = await mergeAutoJobOrders({ ...wf }, wf, quote);
+  const workflow = await mergeAutoJobOrders({ ...wf }, wf, quote, "regenerate-unapproved");
   await prisma.quotation.update({
     where: { id: quotationId },
     data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },

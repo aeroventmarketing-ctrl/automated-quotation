@@ -35,7 +35,8 @@ export function AutofillJobOrdersButton({ orderId }: { orderId: string }) {
         <Sparkles className="mr-1 h-3.5 w-3.5" /> {busy ? "Generating…" : "Auto-fill job orders from quotation"}
       </Button>
       <span className="text-[11px] text-muted-foreground">
-        Fills empty departments (Fans, Duct, Accessories, Motor Controller) from the paid quotation. Won&apos;t overwrite existing job orders.
+        (Re)generates Fans, Duct, Accessories &amp; Motor Controller job orders from the paid quotation. Refreshes any that
+        aren&apos;t approved yet; approved job orders are never overwritten.
       </span>
       {err && <span className="text-xs text-destructive">{err}</span>}
     </div>
