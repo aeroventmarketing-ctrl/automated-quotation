@@ -124,6 +124,17 @@ export function effectiveStepRole(step: PurchaseStepDef, isDepartment: boolean):
   return step.role;
 }
 
+/**
+ * A warehouse / material requisition — one whose initial approval (and rejection)
+ * belongs to the Plant Manager (workflow step 16), not the Payment Approver. This
+ * covers both standalone department requisitions (kind "department") and the
+ * purchase requests escalated from an order's Material Request Form (they carry an
+ * `mrfId`): in both cases the warehouseman asked for materials that aren't on hand.
+ */
+export function isDeptRequisition(pr: { kind?: string | null; mrfId?: string | null }): boolean {
+  return pr.kind === "department" || pr.mrfId != null;
+}
+
 export function purchaseStep(key: string): PurchaseStepDef | undefined {
   return PURCHASE_STEPS.find((s) => s.key === key);
 }

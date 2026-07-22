@@ -40,7 +40,7 @@ import {
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
-import { purchaseStep, effectiveStepRole, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStep, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
@@ -1080,8 +1080,8 @@ export async function advancePurchaseRequest(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
 
-  // Department requisitions are approved/rejected by the Plant Manager (step 16).
-  const stepRole = effectiveStepRole(step, pr.kind === "department");
+  // Department / material requisitions are approved/rejected by the Plant Manager (step 16).
+  const stepRole = effectiveStepRole(step, isDeptRequisition(pr));
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, stepRole))) {
     throw new Error(`Only ${workflowRoleLabel(stepRole)} or an admin can do this.`);
   }
@@ -1727,8 +1727,8 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
   if (!step) throw new Error("Unknown step");
   const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
   if (!anchor) throw new Error("Purchase request not found");
-  // Department requisitions are approved/rejected by the Plant Manager (step 16).
-  const stepRole = effectiveStepRole(step, anchor.kind === "department");
+  // Department / material requisitions are approved/rejected by the Plant Manager (step 16).
+  const stepRole = effectiveStepRole(step, isDeptRequisition(anchor));
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, stepRole))) {
     throw new Error(`Only ${workflowRoleLabel(stepRole)} or an admin can do this.`);
   }
