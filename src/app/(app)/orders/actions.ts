@@ -1045,7 +1045,17 @@ export async function recordDelivery(
     deliveredByName: user.name,
     createdAt: new Date().toISOString(),
   };
-  await saveWorkflow(quotationId, cls, { ...wf, deliveries: [...wf.deliveries, record] });
+  const deliveries = [...wf.deliveries, record];
+
+  // Auto-mark the order Delivered once every ordered item is fully delivered.
+  const deliveredNow = deliveredByDescription(deliveries);
+  const allDelivered = ordered.size > 0 && [...ordered.entries()].every(([k, ord]) => (deliveredNow.get(k) ?? 0) >= ord);
+  const advance =
+    allDelivered && stageIndex(wf.stage) < stageIndex("delivered")
+      ? { stage: "delivered" as OrderStage, approvals: stamp(wf, "delivered", user) }
+      : {};
+
+  await saveWorkflow(quotationId, cls, { ...wf, deliveries, ...advance });
 }
 
 /** Remove a recorded delivery (correcting a mistake). Same permissions as recording. */
