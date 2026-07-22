@@ -69,6 +69,30 @@ const DEPT_KEY_SET = new Set(PRODUCTION_DEPTS.map((d) => d.key));
 const COMMISSION_RATE_PCT = 1.5;
 
 /**
+ * Create the sales-commission row for a closed order (idempotent — never
+ * overwrites an existing one, keeping its paid state). Guarded so a missing table
+ * never blocks closing the order. Used by both the single-batch close and the
+ * multiple-batch close.
+ */
+async function ensureCommissionRow(quotationId: string): Promise<void> {
+  try {
+    const q = await prisma.quotation.findUnique({ where: { id: quotationId }, include: { preparedBy: true } });
+    if (!q) return;
+    const orderValue = payableTotal(q);
+    const amount = round2((orderValue * COMMISSION_RATE_PCT) / 100);
+    const now = new Date();
+    const salesMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    await prisma.commission.upsert({
+      where: { quotationId },
+      create: { quotationId, salespersonId: q.preparedById, salespersonName: q.preparedBy.name, orderValue, ratePct: COMMISSION_RATE_PCT, amount, salesMonth },
+      update: {},
+    });
+  } catch {
+    // Commission table not set up yet — closing the order still succeeds.
+  }
+}
+
+/**
  * Advance an order through a Phase 1 approval step. The signed-in user must hold
  * the step's workflow role (or be an admin), and the order must be at the step's
  * "from" stage. Records the sign-off (who + when) and moves the stage forward.
@@ -1986,6 +2010,7 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
 
   // Close the order once every item is delivered AND every batch is filed.
   let advance: Record<string, unknown> = {};
+  let closedNow = false;
   if (stepKey === MB_DELIVERED_STEP || stepKey === MB_FINAL_STEP) {
     const ordered = orderedMap(quote.items);
     const deliveredNow = mbDeliveredByDescription(deliveryBatches);
@@ -1994,6 +2019,7 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
     const allFiled = active.length > 0 && active.every((b) => isMbFiled(b));
     if (allDelivered && allFiled && stageIndex(wf.stage) < stageIndex("closed")) {
       advance = { stage: "closed" as OrderStage, approvals: stamp(wf, "documents_filed", user) };
+      closedNow = true;
     } else if (allDelivered && stageIndex(wf.stage) < stageIndex("delivered")) {
       advance = { stage: "delivered" as OrderStage, approvals: stamp(wf, "delivered", user) };
     }
@@ -2009,7 +2035,10 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
       } as unknown as Prisma.InputJsonObject,
     },
   });
+  // Multi-batch order just closed — create the sales commission (like the single-batch close).
+  if (closedNow) await ensureCommissionRow(quotationId);
   revalidatePath("/orders");
+  revalidatePath("/commissions");
   revalidatePath(`/orders/${quotationId}`);
   revalidatePath(`/quotations/${quotationId}`);
 }

@@ -346,7 +346,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       }
     : null;
   const phase6Active =
-    wf.stage === "closed" && !!commissionInfo && closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete;
+    wf.stage === "closed" &&
+    !!commissionInfo &&
+    // Multi-batch handles closing documents per batch, so the order-level
+    // closing-docs gate only applies to the single-batch flow.
+    (wf.deliveryMode === "multi" || closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete);
 
   // Multiple-batch delivery — a separate opt-in mode (never active alongside the
   // single-batch Phase 5 flow). Chosen once at production_finished by Sales/admin.
