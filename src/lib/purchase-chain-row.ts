@@ -4,7 +4,7 @@
  * and the central Purchasing workspace (where the purchaser processes them).
  */
 import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
-import { purchaseStepsFrom, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, effectiveStepRole, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
 import { round2 } from "@/lib/quote";
@@ -146,6 +146,7 @@ export interface PurchaseChainRow {
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
 export interface PurchaseRequestLike {
   id: string;
+  kind?: string | null;
   dept: string | null;
   items: unknown;
   note: string | null;
@@ -216,9 +217,11 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
   const logistics = workflowRoleLabel("logistics");
   const warehouse = workflowRoleLabel("warehouse");
   const plant = workflowRoleLabel("plant_manager");
+  // Department requisitions are approved/rejected by the Plant Manager (step 16).
+  const decider = pr.kind === "department" ? plant : approver;
   return [
     stamp("Requested", "Requestor", pr.createdByName, pr.createdAt),
-    stamp(status === "REJECTED" ? "Rejected" : "Approved", approver, pr.decidedByName, pr.decidedAt),
+    stamp(status === "REJECTED" ? "Rejected" : "Approved", decider, pr.decidedByName, pr.decidedAt),
     stamp("Voucher & checks prepared", acct, pr.voucherByName, pr.voucherAt),
     lstamp("Check & voucher signed", approver, "sign"),
     lstamp("Cash released", approver, "release_cash"),
@@ -269,13 +272,15 @@ export function buildPurchaseChainRow(
   // Discrepancy authorisation: accounting/purchaser escalate; the approver approves.
   const canEscalateReconcile = ctx.canAct("accounting") || ctx.canAct("purchaser");
   const canApproveReconcile = ctx.canAct("payment_approver");
+  const isDept = pr.kind === "department";
   const actions = purchaseStepsFrom(status).map((step) => {
-    const names = ctx.namesForRole(step.role);
+    const role = effectiveStepRole(step, isDept);
+    const names = ctx.namesForRole(role);
     return {
       key: step.key,
       label: step.label,
-      roleLabel: `${workflowRoleLabel(step.role)}${names.length ? ` (${names.join(", ")})` : ""}`,
-      canAct: ctx.canAct(step.role),
+      roleLabel: `${workflowRoleLabel(role)}${names.length ? ` (${names.join(", ")})` : ""}`,
+      canAct: ctx.canAct(role),
     };
   });
   return {

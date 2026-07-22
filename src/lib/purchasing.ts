@@ -112,6 +112,18 @@ export function purchaseStepsFrom(status: PRStatus): PurchaseStepDef[] {
   return PURCHASE_STEPS.filter((s) => s.from === status);
 }
 
+/**
+ * The role that acts on a step for a given request. For a department (warehouse)
+ * requisition — raised when supplies aren't available — the initial approval /
+ * rejection is done by the Plant Manager (workflow step 16) rather than the
+ * Payment Approver. Every other step, and all order-linked requests, are
+ * unchanged.
+ */
+export function effectiveStepRole(step: PurchaseStepDef, isDepartment: boolean): WorkflowRoleKey {
+  if (isDepartment && (step.key === "approve" || step.key === "reject")) return "plant_manager";
+  return step.role;
+}
+
 export function purchaseStep(key: string): PurchaseStepDef | undefined {
   return PURCHASE_STEPS.find((s) => s.key === key);
 }

@@ -37,7 +37,7 @@ import {
   type MRFLineDisposition,
   type OrderConversation,
 } from "@/lib/order-workflow";
-import { purchaseStep, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStep, effectiveStepRole, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc } from "@/lib/sale";
@@ -928,12 +928,15 @@ export async function advancePurchaseRequest(
   const step = purchaseStep(stepKey);
   if (!step) throw new Error("Unknown step");
 
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, step.role))) {
-    throw new Error(`Only ${workflowRoleLabel(step.role)} or an admin can do this.`);
-  }
-
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
+
+  // Department requisitions are approved/rejected by the Plant Manager (step 16).
+  const stepRole = effectiveStepRole(step, pr.kind === "department");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, stepRole))) {
+    throw new Error(`Only ${workflowRoleLabel(stepRole)} or an admin can do this.`);
+  }
+
   if (pr.status !== step.from) throw new Error("That step isn't available at the current status.");
 
   // The supplier Purchase Order must be issued before the request can be
@@ -1573,11 +1576,13 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
   if (!user) throw new Error("Unauthorized");
   const step = purchaseStep(stepKey);
   if (!step) throw new Error("Unknown step");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, step.role))) {
-    throw new Error(`Only ${workflowRoleLabel(step.role)} or an admin can do this.`);
-  }
   const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
   if (!anchor) throw new Error("Purchase request not found");
+  // Department requisitions are approved/rejected by the Plant Manager (step 16).
+  const stepRole = effectiveStepRole(step, anchor.kind === "department");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, stepRole))) {
+    throw new Error(`Only ${workflowRoleLabel(stepRole)} or an admin can do this.`);
+  }
   const ids = poMemberIds(anchor.po);
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
