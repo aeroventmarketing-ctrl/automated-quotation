@@ -119,7 +119,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <ArrowLeft className="h-3.5 w-3.5" /> Orders
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">{quote.inquiry.customer.company}</h1>
+          <h1 className="text-2xl font-bold">
+            <Link href={`/customers/${quote.inquiry.customer.id}`} className="hover:underline">{quote.inquiry.customer.company}</Link>
+          </h1>
           <p className="text-sm text-muted-foreground">
             Order{" "}
             <Link href={`/quotations/${quote.id}`} className="text-primary hover:underline">{quote.quoteNumber}</Link>
@@ -127,7 +129,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             {" · "}
             {formatCurrency(value, quote.currency)}
             {" · "}
-            <span className="font-medium text-foreground">{quote.inquiry.customer.company}</span>
+            <Link href={`/customers/${quote.inquiry.customer.id}`} className="font-medium text-primary hover:underline">{quote.inquiry.customer.company}</Link>
           </p>
         </div>
         <Card>
@@ -436,7 +438,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">{quote.inquiry.customer.company}</h1>
+          <h1 className="text-2xl font-bold">
+            <Link href={`/customers/${quote.inquiry.customer.id}`} className="hover:underline">{quote.inquiry.customer.company}</Link>
+          </h1>
           <p className="text-sm text-muted-foreground">
             Order{" "}
             <Link href={`/quotations/${quote.id}`} className="text-primary hover:underline">{quote.quoteNumber}</Link>
@@ -444,7 +448,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             {" · "}
             {formatCurrency(value, quote.currency)}
             {" · "}
-            <span className="font-medium text-foreground">{quote.inquiry.customer.company}</span>
+            <Link href={`/customers/${quote.inquiry.customer.id}`} className="font-medium text-primary hover:underline">{quote.inquiry.customer.company}</Link>
           </p>
         </div>
         <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{stageLabel(wf.stage)}</Badge>
