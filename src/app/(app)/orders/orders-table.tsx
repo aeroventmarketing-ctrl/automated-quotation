@@ -91,12 +91,14 @@ export function OrdersTable({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return base;
-    // Order-number match ignores spaces & dashes, so "2026 - AFBM0012",
-    // "2026-AFBM0012" and "2026afbm0012" all find the same order.
-    const qCompact = q.replace(/[\s-]/g, "");
+    // Order-number match ignores every separator (spaces, hyphens, en/em dashes,
+    // slashes…), so "2026 - AFBM0012", "2026-AFBM0012" and "2026afbm0012" all find
+    // the same order regardless of how the number was punctuated.
+    const compact = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/gi, "");
+    const qCompact = compact(q);
     return base.filter((o) => {
       if ([o.quoteNumber, o.company, o.project, o.dateText, o.sales].some((f) => (f ?? "").toLowerCase().includes(q))) return true;
-      return qCompact.length > 0 && (o.quoteNumber ?? "").toLowerCase().replace(/[\s-]/g, "").includes(qCompact);
+      return qCompact.length > 0 && compact(o.quoteNumber ?? "").includes(qCompact);
     });
   }, [base, query]);
 
