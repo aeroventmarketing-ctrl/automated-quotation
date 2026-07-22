@@ -288,7 +288,7 @@ export function MaterialRequests({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Button size="sm" className="h-7 text-xs" disabled={busy}
                     onClick={() => run(() => advancePurchaseRequest(r.linkedPrId!, "approve"))}>
-                    Approve materials request
+                    Approve Material Request
                   </Button>
                   <button type="button" disabled={busy}
                     className="text-xs font-medium text-muted-foreground hover:text-destructive"
