@@ -234,12 +234,7 @@ export function MaterialRequests({
                   ) : r.poStatus === "REJECTED" ? (
                     <Badge variant="destructive">Materials request rejected</Badge>
                   ) : (
-                    <>
-                      <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>
-                      {r.poStatusLabel && r.poStatusVariant && (
-                        <Badge variant={r.poStatusVariant}>PO: {r.poStatusLabel}</Badge>
-                      )}
-                    </>
+                    <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>
                   )}
                   <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                     <Eye className="h-3.5 w-3.5" /> View

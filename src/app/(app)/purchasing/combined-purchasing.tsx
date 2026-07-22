@@ -15,6 +15,7 @@ import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedP
 import { PurchaseReturnsPanel } from "./purchase-returns-panel";
 import { PurchaseReconcilePanel } from "./purchase-reconcile-panel";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
+import { canReconcileAt } from "@/lib/purchase-reconcile";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
@@ -369,15 +370,18 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         canResolveReturn={batch.canResolveReturn}
       />
 
-      {/* Voucher reconciliation — actual spend vs the issued voucher for this PO. */}
-      <PurchaseReconcilePanel
-        prId={batch.anchorId}
-        reconcile={batch.reconcile}
-        canRecord={batch.canRecordReconcile}
-        canSettle={batch.canSettleReconcile}
-        canEscalate={batch.canEscalateReconcile}
-        canApprove={batch.canApproveReconcile}
-      />
+      {/* Voucher reconciliation — actual spend vs the issued voucher for this PO.
+          Only once the item is purchased (or already recorded); hidden earlier. */}
+      {(canReconcileAt(batch.status) || batch.reconcile.recorded != null) && (
+        <PurchaseReconcilePanel
+          prId={batch.anchorId}
+          reconcile={batch.reconcile}
+          canRecord={batch.canRecordReconcile}
+          canSettle={batch.canSettleReconcile}
+          canEscalate={batch.canEscalateReconcile}
+          canApprove={batch.canApproveReconcile}
+        />
+      )}
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">
         <span className="text-muted-foreground">

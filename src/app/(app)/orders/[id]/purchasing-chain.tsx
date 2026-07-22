@@ -10,6 +10,8 @@ import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
 import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
 import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
+import { canReconcileAt } from "@/lib/purchase-reconcile";
+import type { PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import type { POLine, PurchaseOrder } from "@/lib/purchase-order";
@@ -230,10 +232,12 @@ export function PurchasingChain({
             />
 
             {/* Voucher reconciliation — actual spend vs the issued voucher.
+                Only meaningful once the item is purchased (or already recorded),
+                so it stays hidden through approval / PO / voucher preparation.
                 Interactivity is driven by the row's own reconcile permissions,
                 not the chain's read-only flag, so it works on monitoring
                 surfaces (e.g. Requisitions) for whoever may reconcile. */}
-            {r.reconcile && (
+            {r.reconcile && (canReconcileAt(r.status as PRStatus) || r.reconcile.recorded != null) && (
               <PurchaseReconcilePanel
                 prId={r.id}
                 reconcile={r.reconcile}
