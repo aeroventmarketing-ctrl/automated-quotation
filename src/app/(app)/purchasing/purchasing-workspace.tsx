@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { statusBucket, type PRBucket } from "@/lib/purchasing";
@@ -33,6 +34,34 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "cancelled", label: "Cancelled" },
   { key: "all", label: "All" },
 ];
+
+type SortKey = "default" | "customer" | "amount_desc" | "amount_asc";
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "default", label: "Default order" },
+  { key: "customer", label: "Customer (A–Z)" },
+  { key: "amount_desc", label: "Amount (high→low)" },
+  { key: "amount_asc", label: "Amount (low→high)" },
+];
+
+type GroupKey = "none" | "customer" | "status";
+const GROUPS: { key: GroupKey; label: string }[] = [
+  { key: "none", label: "No grouping" },
+  { key: "customer", label: "Group by customer" },
+  { key: "status", label: "Group by status" },
+];
+const BUCKET_ORDER: Record<PRBucket, number> = { pending: 0, approved: 1, rejected: 2, cancelled: 3 };
+const BUCKET_LABEL: Record<PRBucket, string> = { pending: "Pending", approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" };
+
+/** Loose text match: substring, plus a separators-ignored match so "AFBM 0002"
+ *  finds "AFBM00002-…". */
+function textMatch(haystack: string, query: string): boolean {
+  const q = query.trim();
+  if (!q) return true;
+  const h = haystack.toLowerCase();
+  if (h.includes(q.toLowerCase())) return true;
+  const cq = q.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return cq.length > 0 && h.replace(/[^a-z0-9]/g, "").includes(cq);
+}
 
 export function PurchasingWorkspace({
   batches,
@@ -137,12 +166,57 @@ export function PurchasingWorkspace({
   counts.all = counts.pending + counts.approved + counts.rejected + counts.cancelled;
 
   const showBuilder = tab === "pending" || tab === "all";
-  const filteredBatches = batches.filter((b) => inTab(statusBucket(b.status)));
-  const filteredGroups = orderGroups
-    .map((g) => ({ ...g, rows: g.rows.filter((r) => inTab(rowBucket(r))) }))
-    .filter((g) => g.rows.length > 0);
 
-  const nothing = filteredBatches.length === 0 && filteredGroups.length === 0 && !(showBuilder && combinable.length > 0);
+  // Search / sort / group over the batches and per-order requisition cards.
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("default");
+  const [group, setGroup] = useState<GroupKey>("none");
+
+  const batchText = (b: BatchCard) =>
+    [b.poNumber, b.supplierCompany, ...b.members.flatMap((m) => [m.orderLabel, m.deptLabel, m.mrfNo ?? "", ...m.items])].join("  ");
+  const batchAmount = (b: BatchCard) => poTotals({ lines: b.lines, ewtPct: b.ewtPct, ewtMode: b.ewtMode, ewtAmount: b.ewtAmount }).total;
+  const groupText = (g: OrderGroup) =>
+    [g.title, g.subtitle, ...g.rows.flatMap((r) => [r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""])].join("  ");
+  const groupAmount = (g: OrderGroup) => g.rows.reduce((s, r) => s + (r.po ? poTotals(r.po).total : 0), 0);
+  const groupBucket = (g: OrderGroup): PRBucket =>
+    (["pending", "approved", "rejected", "cancelled"] as PRBucket[])[
+      g.rows.reduce((min, r) => Math.min(min, BUCKET_ORDER[rowBucket(r)]), 3)
+    ];
+
+  const filteredBatches = batches
+    .filter((b) => inTab(statusBucket(b.status)))
+    .filter((b) => textMatch(batchText(b), query));
+
+  let filteredGroups = orderGroups
+    .map((g) => ({ ...g, rows: g.rows.filter((r) => inTab(rowBucket(r))) }))
+    .filter((g) => g.rows.length > 0)
+    .filter((g) => textMatch(groupText(g), query));
+
+  if (sort !== "default") {
+    filteredGroups = [...filteredGroups].sort((a, b) => {
+      if (sort === "customer") return a.title.localeCompare(b.title) || a.subtitle.localeCompare(b.subtitle);
+      if (sort === "amount_desc") return groupAmount(b) - groupAmount(a);
+      return groupAmount(a) - groupAmount(b); // amount_asc
+    });
+  }
+
+  // Cluster the order cards into sections when grouping is on (a single unnamed
+  // section otherwise). Section order follows the sorted group order.
+  const sections: { key: string; groups: typeof filteredGroups }[] =
+    group === "none"
+      ? [{ key: "", groups: filteredGroups }]
+      : (() => {
+          const map = new Map<string, typeof filteredGroups>();
+          for (const g of filteredGroups) {
+            const key = group === "customer" ? g.title : BUCKET_LABEL[groupBucket(g)];
+            const arr = map.get(key) ?? [];
+            arr.push(g);
+            map.set(key, arr);
+          }
+          return [...map.entries()].map(([key, groups]) => ({ key, groups }));
+        })();
+
+  const nothing = filteredBatches.length === 0 && filteredGroups.length === 0 && !(showBuilder && combinable.length > 0 && !query.trim());
 
   return (
     <div className="space-y-3">
@@ -162,11 +236,35 @@ export function PurchasingWorkspace({
         ))}
       </div>
 
-      {(filteredBatches.length > 0 || (showBuilder && combinable.length > 0)) && (
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[14rem] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search order #, PO #, supplier, department, item…"
+            className="h-9 w-full rounded-md border bg-background pl-8 pr-3 text-sm"
+          />
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          Sort
+          <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-9 rounded-md border bg-background px-2 text-sm text-foreground">
+            {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          Group
+          <select value={group} onChange={(e) => setGroup(e.target.value as GroupKey)} className="h-9 rounded-md border bg-background px-2 text-sm text-foreground">
+            {GROUPS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {(filteredBatches.length > 0 || (showBuilder && combinable.length > 0 && !query.trim())) && (
         <CombinedPurchasing
-          combinable={showBuilder ? combinable : []}
+          combinable={showBuilder && !query.trim() ? combinable : []}
           batches={filteredBatches}
-          suggestions={showBuilder ? suggestions : []}
+          suggestions={showBuilder && !query.trim() ? suggestions : []}
           suppliers={suppliers}
           paymentTerms={paymentTerms}
           stockItems={stockItems}
@@ -178,41 +276,57 @@ export function PurchasingWorkspace({
         />
       )}
 
-      {filteredGroups.map((g, i) => (
-        <Card
-          key={g.id}
-          className={
-            i % 2 === 0
-              ? "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/20"
-              : "border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/20"
-          }
-        >
-          <CardContent className="space-y-3 pt-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <Link href={`/orders/${g.id}`} className="font-semibold hover:underline">{g.title}</Link>
-                <span className="ml-2 text-xs text-muted-foreground">{g.subtitle}</span>
+      {(() => {
+        let idx = 0; // running index for alternating card colours across sections
+        return sections.map((section) => (
+          <div key={section.key || "all"} className="space-y-3">
+            {section.key && (
+              <div className="flex items-center gap-2 px-1 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {section.key}
+                <span className="text-muted-foreground/70">({section.groups.length})</span>
               </div>
-              <Link href={`/orders/${g.id}`} className="text-xs font-medium text-primary hover:underline">Open order →</Link>
-            </div>
-            <PurchasingChain
-              requests={g.rows}
-              stockItems={stockItems}
-              orderId={g.id}
-              poDefaultRemarks={poDefaultRemarks}
-              suppliers={suppliers}
-              paymentTerms={paymentTerms}
-              canManagePO={canManagePO}
-              catalogSuppliers={catalogSuppliers}
-              catalogPrices={catalogPrices}
-              scanProducts={scanProducts}
-              hideRequisitionApproval
-              selectedIds={selected}
-              onToggleSelect={toggleSelect}
-            />
-          </CardContent>
-        </Card>
-      ))}
+            )}
+            {section.groups.map((g) => {
+              const even = idx++ % 2 === 0;
+              return (
+                <Card
+                  key={g.id}
+                  className={
+                    even
+                      ? "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/20"
+                      : "border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/20"
+                  }
+                >
+                  <CardContent className="space-y-3 pt-6">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <Link href={`/orders/${g.id}`} className="font-semibold hover:underline">{g.title}</Link>
+                        <span className="ml-2 text-xs text-muted-foreground">{g.subtitle}</span>
+                      </div>
+                      <Link href={`/orders/${g.id}`} className="text-xs font-medium text-primary hover:underline">Open order →</Link>
+                    </div>
+                    <PurchasingChain
+                      requests={g.rows}
+                      stockItems={stockItems}
+                      orderId={g.id}
+                      poDefaultRemarks={poDefaultRemarks}
+                      suppliers={suppliers}
+                      paymentTerms={paymentTerms}
+                      canManagePO={canManagePO}
+                      catalogSuppliers={catalogSuppliers}
+                      catalogPrices={catalogPrices}
+                      scanProducts={scanProducts}
+                      hideRequisitionApproval
+                      selectedIds={selected}
+                      onToggleSelect={toggleSelect}
+                    />
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ));
+      })()}
 
       {nothing && (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}purchase orders.</CardContent></Card>
