@@ -84,12 +84,11 @@ export function PurchaseOrderPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [ewtPct, setEwtPct] = useState(String(po?.ewtPct && po.ewtPct > 0 ? po.ewtPct : 1));
-  const [withEwt, setWithEwt] = useState((po?.ewtPct ?? 1) > 0);
-  function setEwtMode(mode: string) {
-    const on = mode === "with";
-    setWithEwt(on);
-    if (on && !(Number(ewtPct) > 0)) setEwtPct("1");
-  }
+  const [ewtMethod, setEwtMethod] = useState<"percent" | "amount">(po?.ewtMode === "amount" ? "amount" : "percent");
+  const [ewtAmount, setEwtAmount] = useState(String(po?.ewtAmount && po.ewtAmount > 0 ? po.ewtAmount : ""));
+  // EWT applicability is auto-detected from the supplier (its EWT-capable flag),
+  // set by pickSupplier — there is no manual with/without toggle.
+  const [withEwt, setWithEwt] = useState((po?.ewtPct ?? 1) > 0 || (po?.ewtAmount ?? 0) > 0);
   const [remarks, setRemarks] = useState(po?.remarks ?? defaultRemarks);
   const [terms, setTerms] = useState<PaymentTerm[]>(paymentTerms);
   const [termBusy, setTermBusy] = useState(false);
@@ -136,8 +135,9 @@ export function PurchaseOrderPanel({
     setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
   }
 
-  const effectiveEwtPct = withEwt ? Number(ewtPct) || 0 : 0;
-  const totals = poTotals({ lines, ewtPct: effectiveEwtPct });
+  const effectiveEwtPct = withEwt && ewtMethod === "percent" ? Number(ewtPct) || 0 : 0;
+  const effectiveEwtAmount = withEwt && ewtMethod === "amount" ? Number(ewtAmount) || 0 : 0;
+  const totals = poTotals({ lines, ewtPct: effectiveEwtPct, ewtMode: ewtMethod, ewtAmount: effectiveEwtAmount });
 
   async function save() {
     setBusy(true);
@@ -148,6 +148,8 @@ export function PurchaseOrderPanel({
         date,
         lines,
         ewtPct: effectiveEwtPct,
+        ewtMode: ewtMethod,
+        ewtAmount: effectiveEwtAmount,
         remarks,
       });
       router.refresh();
@@ -252,20 +254,28 @@ export function PurchaseOrderPanel({
       <div className="ml-auto max-w-xs space-y-1 text-sm">
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">EWT</span>
-          <select
-            className="h-7 rounded-md border bg-background px-2 text-xs"
-            value={withEwt ? "with" : "without"}
-            onChange={(e) => setEwtMode(e.target.value)}
-          >
-            <option value="with">With EWT</option>
-            <option value="without">Without EWT</option>
-          </select>
+          {withEwt ? (
+            <select
+              className="h-7 rounded-md border bg-background px-2 text-xs"
+              value={ewtMethod}
+              onChange={(e) => setEwtMethod(e.target.value as "percent" | "amount")}
+            >
+              <option value="percent">By percent</option>
+              <option value="amount">By amount</option>
+            </select>
+          ) : (
+            <span className="text-xs text-muted-foreground">Not EWT-registered</span>
+          )}
         </div>
         <div className="flex justify-between"><span className="text-muted-foreground">Total amount</span><span className="tabular-nums">{formatCurrency(totals.total, "PHP")}</span></div>
         {withEwt && (
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1 text-muted-foreground">Less EWT
-              <Input className="h-6 w-14 text-right" value={ewtPct} onChange={(e) => setEwtPct(e.target.value)} />%
+              {ewtMethod === "percent" ? (
+                <><Input className="h-6 w-14 text-right" value={ewtPct} onChange={(e) => setEwtPct(e.target.value)} />%</>
+              ) : (
+                <>&#8369;<Input className="h-6 w-20 text-right" value={ewtAmount} onChange={(e) => setEwtAmount(e.target.value)} /></>
+              )}
             </span>
             <span className="tabular-nums">{formatCurrency(totals.ewt, "PHP")}</span>
           </div>

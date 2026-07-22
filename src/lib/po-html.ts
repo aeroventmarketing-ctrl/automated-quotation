@@ -4,7 +4,7 @@
  * .xlsx (with the BIR 2307); this is a clean read-only view of the PO itself.
  */
 import { COMPANY } from "@/lib/config";
-import { poLineAmount, poTotals, type PurchaseOrder } from "@/lib/purchase-order";
+import { poLineAmount, poTotals, poHasEwt, poEwtLabel, type PurchaseOrder } from "@/lib/purchase-order";
 
 function esc(s: string): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -146,7 +146,7 @@ export function renderPurchaseOrderHtml(po: PurchaseOrder, purchaser: PoPurchase
     </table>
     <div class="totals">
       <div><span>Total amount</span><span>${peso(totals.total)}</span></div>
-      ${po.ewtPct > 0 ? `<div><span>Less EWT (${po.ewtPct}%)</span><span>${peso(totals.ewt)}</span></div>` : ""}
+      ${poHasEwt(po) ? `<div><span>${esc(poEwtLabel(po))}</span><span>${peso(totals.ewt)}</span></div>` : ""}
       <div class="net"><span>Net amount</span><span>${peso(totals.net)}</span></div>
     </div>
     ${po.remarks ? `<div class="rem"><span class="lbl">Payment terms / remarks</span><div>${esc(po.remarks)}</div></div>` : ""}

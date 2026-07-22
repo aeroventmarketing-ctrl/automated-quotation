@@ -8,7 +8,7 @@
  */
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { poLineAmount, poTotals, type PurchaseOrder } from "@/lib/purchase-order";
+import { poLineAmount, poTotals, poHasEwt, poEwtLabel, type PurchaseOrder } from "@/lib/purchase-order";
 import { round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { imageDataUrlSize } from "@/lib/signature";
@@ -145,8 +145,8 @@ export async function buildPurchaseOrderWorkbook(
   // hide it (hidden rows don't print) so only TOTAL and NET remain.
   ws.getCell(`J${20 + N}`).value = totals.total;
   ws.getCell(`J${22 + N}`).value = totals.net;
-  if ((po.ewtPct ?? 0) > 0) {
-    ws.getCell(`A${21 + N}`).value = `LESS EWT ${po.ewtPct}%`;
+  if (poHasEwt(po)) {
+    ws.getCell(`A${21 + N}`).value = poEwtLabel(po);
     ws.getCell(`J${21 + N}`).value = totals.ewt;
   } else {
     ws.getRow(21 + N).hidden = true;

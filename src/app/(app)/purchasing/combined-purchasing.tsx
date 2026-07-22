@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
-import { poLineAmount, poTotals, poLineFromPRItem, type POLine } from "@/lib/purchase-order";
+import { poLineAmount, poTotals, poHasEwt, poLineFromPRItem, type POLine, type EwtMode } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
@@ -54,6 +54,8 @@ export interface BatchCard {
   supplierAttention: string;
   supplierAddress: string;
   ewtPct: number;
+  ewtMode: EwtMode;
+  ewtAmount: number;
   remarks: string;
   status: PRStatus;
   statusLabel: string;
@@ -230,7 +232,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
   const [err, setErr] = useState<string | null>(null);
   const [receiving, setReceiving] = useState(false);
   const [editing, setEditing] = useState(false);
-  const totals = poTotals({ lines: batch.lines, ewtPct: batch.ewtPct });
+  const totals = poTotals({ lines: batch.lines, ewtPct: batch.ewtPct, ewtMode: batch.ewtMode, ewtAmount: batch.ewtAmount });
   const actionable = batch.actions.filter((a) => a.canAct);
   const awaiting = batch.actions.find((a) => !a.canAct);
   const editable = batch.canManagePO && (["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(batch.status);
@@ -268,6 +270,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           initialAttention={batch.supplierAttention}
           initialAddress={batch.supplierAddress}
           initialEwtPct={batch.ewtPct}
+          initialEwtMode={batch.ewtMode}
+          initialEwtAmount={batch.ewtAmount}
           initialRemarks={batch.remarks}
           suppliers={suppliers}
           paymentTerms={paymentTerms}
@@ -378,7 +382,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">
         <span className="text-muted-foreground">
           Total {formatCurrency(totals.total, "PHP")}
-          {batch.ewtPct > 0 && <> · less EWT {formatCurrency(totals.ewt, "PHP")}</>}
+          {poHasEwt(batch) && <> · less EWT {formatCurrency(totals.ewt, "PHP")}</>}
           {" · "}<span className="font-semibold text-foreground">Net {formatCurrency(totals.net, "PHP")}</span>
         </span>
         <div className="flex items-center gap-2">
@@ -424,6 +428,8 @@ function CombineForm({
   initialAttention,
   initialAddress,
   initialEwtPct,
+  initialEwtMode,
+  initialEwtAmount,
   initialRemarks,
   suppliers,
   paymentTerms,
@@ -442,6 +448,8 @@ function CombineForm({
   initialAttention?: string;
   initialAddress?: string;
   initialEwtPct?: number;
+  initialEwtMode?: EwtMode;
+  initialEwtAmount?: number;
   initialRemarks?: string;
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
@@ -449,7 +457,7 @@ function CombineForm({
   catalogPrices: CatalogPrices;
   catalogSuppliers: CatalogSuppliers;
   scanProducts?: ScanProduct[];
-  onSubmit: (input: { supplier: { company: string; attention: string; address: string }; date: string; lines: POLine[]; ewtPct: number; remarks: string }) => Promise<void>;
+  onSubmit: (input: { supplier: { company: string; attention: string; address: string }; date: string; lines: POLine[]; ewtPct: number; ewtMode: EwtMode; ewtAmount: number; remarks: string }) => Promise<void>;
   onCancel: () => void;
   onDone: () => void;
 }) {
@@ -464,8 +472,10 @@ function CombineForm({
   const [lines, setLines] = useState<POLine[]>(seededLines);
   // EWT default: an existing PO uses its stored % ; a fresh PO follows the preset
   // supplier's EWT-capable flag (falling back to "with EWT").
-  const [withEwt, setWithEwt] = useState(initialEwtPct != null ? initialEwtPct > 0 : preset?.ewt ?? true);
+  const [withEwt, setWithEwt] = useState(initialEwtPct != null || initialEwtAmount != null ? (initialEwtPct ?? 0) > 0 || (initialEwtAmount ?? 0) > 0 : preset?.ewt ?? true);
   const [ewtPct, setEwtPct] = useState(String(initialEwtPct && initialEwtPct > 0 ? initialEwtPct : 1));
+  const [ewtMethod, setEwtMethod] = useState<EwtMode>(initialEwtMode === "amount" ? "amount" : "percent");
+  const [ewtAmount, setEwtAmount] = useState(String(initialEwtAmount && initialEwtAmount > 0 ? initialEwtAmount : ""));
   const [remarks, setRemarks] = useState(initialRemarks ?? poDefaultRemarks);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -522,14 +532,15 @@ function CombineForm({
     return { ok: false, message: `${product.name} isn't on the PO yet.` };
   }
 
-  const effectiveEwt = withEwt ? Number(ewtPct) || 0 : 0;
-  const totals = poTotals({ lines, ewtPct: effectiveEwt });
+  const effectiveEwt = withEwt && ewtMethod === "percent" ? Number(ewtPct) || 0 : 0;
+  const effectiveEwtAmount = withEwt && ewtMethod === "amount" ? Number(ewtAmount) || 0 : 0;
+  const totals = poTotals({ lines, ewtPct: effectiveEwt, ewtMode: ewtMethod, ewtAmount: effectiveEwtAmount });
 
   async function submit() {
     if (company.trim() === "") { setErr("Enter the supplier."); return; }
     setBusy(true); setErr(null);
     try {
-      await onSubmit({ supplier: { company, attention, address }, date, lines, ewtPct: effectiveEwt, remarks });
+      await onSubmit({ supplier: { company, attention, address }, date, lines, ewtPct: effectiveEwt, ewtMode: ewtMethod, ewtAmount: effectiveEwtAmount, remarks });
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -618,17 +629,25 @@ function CombineForm({
       <div className="ml-auto max-w-xs space-y-1 text-sm">
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">EWT</span>
-          <select className="h-7 rounded-md border bg-background px-2 text-xs" value={withEwt ? "with" : "without"}
-            onChange={(e) => { const on = e.target.value === "with"; setWithEwt(on); if (on && !(Number(ewtPct) > 0)) setEwtPct("1"); }}>
-            <option value="with">With EWT</option>
-            <option value="without">Without EWT</option>
-          </select>
+          {withEwt ? (
+            <select className="h-7 rounded-md border bg-background px-2 text-xs" value={ewtMethod}
+              onChange={(e) => setEwtMethod(e.target.value as EwtMode)}>
+              <option value="percent">By percent</option>
+              <option value="amount">By amount</option>
+            </select>
+          ) : (
+            <span className="text-xs text-muted-foreground">Not EWT-registered</span>
+          )}
         </div>
         <div className="flex justify-between"><span className="text-muted-foreground">Total amount</span><span className="tabular-nums">{formatCurrency(totals.total, "PHP")}</span></div>
         {withEwt && (
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1 text-muted-foreground">Less EWT
-              <Input className="h-6 w-14 text-right" value={ewtPct} onChange={(e) => setEwtPct(e.target.value)} />%
+              {ewtMethod === "percent" ? (
+                <><Input className="h-6 w-14 text-right" value={ewtPct} onChange={(e) => setEwtPct(e.target.value)} />%</>
+              ) : (
+                <>&#8369;<Input className="h-6 w-20 text-right" value={ewtAmount} onChange={(e) => setEwtAmount(e.target.value)} /></>
+              )}
             </span>
             <span className="tabular-nums">{formatCurrency(totals.ewt, "PHP")}</span>
           </div>

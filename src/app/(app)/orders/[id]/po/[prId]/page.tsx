@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { formatDate } from "@/lib/utils";
-import { coercePurchaseOrder, poLineAmount, poTotals } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLineAmount, poTotals, poHasEwt, poEwtLabel } from "@/lib/purchase-order";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -98,9 +98,9 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
               <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">TOTAL AMOUNT</td>
               <td className="border border-black px-2 py-1 text-right font-semibold tabular-nums">{peso(totals.total)}</td>
             </tr>
-            {po.ewtPct > 0 && (
+            {poHasEwt(po) && (
               <tr>
-                <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">LESS EWT {po.ewtPct}%</td>
+                <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">{poEwtLabel(po)}</td>
                 <td className="border border-black px-2 py-1 text-right tabular-nums">{peso(totals.ewt)}</td>
               </tr>
             )}

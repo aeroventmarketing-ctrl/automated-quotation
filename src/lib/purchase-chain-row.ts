@@ -3,7 +3,7 @@
  * PurchaseRequest. Shared by the per-order Phase 3 box (read-only monitoring)
  * and the central Purchasing workspace (where the purchaser processes them).
  */
-import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { purchaseStepsFrom, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
@@ -65,9 +65,9 @@ export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileVi
   const po = coercePurchaseOrder(pr.po);
   const poLines = (po?.lines ?? []).map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, poAmount: poLineAmount(l) }));
   // Until the purchaser records the reconciliation, default the VAT mode from the
-  // PO: a PO with no EWT (0%) is a VAT-exclusive purchase; one that withholds EWT
-  // is VAT-inclusive.
-  const vatMode = r.vatMode ?? (po && (po.ewtPct ?? 0) === 0 ? "exclusive" : "inclusive");
+  // PO: a PO with no EWT is a VAT-exclusive purchase; one that withholds EWT
+  // (by percent or a flat amount) is VAT-inclusive.
+  const vatMode = r.vatMode ?? (po && !poHasEwt(po) ? "exclusive" : "inclusive");
   const factor = vatFactor(vatMode);
   const recorded = isReconciled(r);
 

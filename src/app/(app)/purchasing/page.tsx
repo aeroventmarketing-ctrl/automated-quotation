@@ -200,6 +200,8 @@ export default async function PurchasingPage() {
         supplierAttention: po?.supplier.attention ?? "",
         supplierAddress: po?.supplier.address ?? "",
         ewtPct: po?.ewtPct ?? 0,
+        ewtMode: po?.ewtMode ?? "percent",
+        ewtAmount: po?.ewtAmount ?? 0,
         remarks: po?.remarks ?? "",
         status,
         statusLabel: PR_STATUS_LABEL[status],

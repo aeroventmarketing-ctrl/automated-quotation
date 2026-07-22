@@ -1392,6 +1392,8 @@ const poInputSchema = z.object({
     )
     .default([]),
   ewtPct: z.number().min(0).max(100).default(1),
+  ewtMode: z.enum(["percent", "amount"]).default("percent"),
+  ewtAmount: z.number().min(0).default(0),
   remarks: z.string().trim().default(""),
 });
 
@@ -1442,6 +1444,8 @@ export async function savePurchaseOrder(
     supplier: d.supplier,
     lines,
     ewtPct: d.ewtPct,
+    ewtMode: d.ewtMode,
+    ewtAmount: d.ewtAmount,
     remarks: d.remarks || COMPANY.poDefaultRemarks,
     createdByName: existing?.createdByName ?? user.name,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
@@ -1494,6 +1498,8 @@ export async function createCombinedPO(
     supplier: d.supplier,
     lines,
     ewtPct: d.ewtPct,
+    ewtMode: d.ewtMode,
+    ewtAmount: d.ewtAmount,
     remarks: d.remarks || COMPANY.poDefaultRemarks,
     createdByName: user.name,
     createdAt: now,
@@ -1542,6 +1548,8 @@ export async function updateCombinedPO(
     supplier: d.supplier,
     lines,
     ewtPct: d.ewtPct,
+    ewtMode: d.ewtMode,
+    ewtAmount: d.ewtAmount,
     remarks: d.remarks || COMPANY.poDefaultRemarks,
     createdByName: existing?.createdByName ?? user.name,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
