@@ -263,7 +263,7 @@ export const ORDER_STEPS = {
     requiredRole: "payment_approver" as WorkflowRoleKey,
     from: "docs_checked" as OrderStage,
     to: "released" as OrderStage,
-    label: "Clear payment & create JO",
+    label: "Payment Cleared",
   },
 } as const;
 
@@ -459,7 +459,7 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
     case "payment_review":
       return { action: "Check order documents", roles: ["accounting"] };
     case "docs_checked":
-      return { action: "Clear payment & create JO", roles: ["payment_approver"] };
+      return { action: "Payment Cleared", roles: ["payment_approver"] };
     case "released":
       return { action: "Issue job orders", roles: ["technical_head"] };
     case "in_production":
