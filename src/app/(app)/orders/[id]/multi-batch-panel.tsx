@@ -91,11 +91,16 @@ export function MultiBatchPanel({
   }
 
   const available = (it: MBItem) => Math.max(0, it.ordered - it.batched);
+  const enteredQty = (it: MBItem) => Math.floor(Number(qty[it.description] ?? "")) || 0;
   const newLines = useMemo(
     () => items.map((it) => ({ description: it.description, qty: Math.floor(Number(qty[it.description] ?? "")) || 0 })).filter((l) => l.qty > 0),
     [items, qty],
   );
   const anyAvailable = items.some((it) => available(it) > 0);
+  // Items whose entered quantity is more than what's left to batch — block the
+  // submit with a clear message instead of letting the server reject it (whose
+  // message Next hides in production).
+  const overLimit = items.filter((it) => enteredQty(it) > available(it));
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -112,6 +117,11 @@ export function MultiBatchPanel({
 
   async function submitCreate() {
     if (newLines.length === 0) { setErr("Add a quantity for at least one item."); return; }
+    if (overLimit.length > 0) {
+      const it = overLimit[0];
+      setErr(`"${it.description}" — only ${available(it)} left to batch (you entered ${enteredQty(it)}).`);
+      return;
+    }
     await run("create", async () => {
       await createMultiBatch(orderId, { drNumber, lines: newLines });
       setCreating(false); setQty({}); setDrNumber("");
@@ -158,7 +168,8 @@ export function MultiBatchPanel({
                     <td className="px-3 py-1.5 text-right">
                       <input type="number" min={0} max={avail} step={1} disabled={busy != null || avail <= 0}
                         value={qty[it.description] ?? ""} onChange={(e) => setQty((q) => ({ ...q, [it.description]: e.target.value }))}
-                        className="h-8 w-20 rounded-md border bg-background px-2 text-right text-sm disabled:opacity-50" placeholder={avail <= 0 ? "—" : `≤${avail}`} />
+                        className={`h-8 w-20 rounded-md border bg-background px-2 text-right text-sm disabled:opacity-50 ${enteredQty(it) > avail ? "border-destructive text-destructive focus-visible:ring-destructive" : ""}`}
+                        placeholder={avail <= 0 ? "—" : `≤${avail}`} />
                     </td>
                   )}
                 </tr>
@@ -172,7 +183,7 @@ export function MultiBatchPanel({
         <div className="space-y-2 rounded-md border p-3">
           <input value={drNumber} onChange={(e) => setDrNumber(e.target.value)} placeholder="DR / batch reference (optional)" className="h-9 w-full rounded-md border bg-background px-2 text-sm" />
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" className="h-8" disabled={busy != null || newLines.length === 0} onClick={submitCreate}>{busy === "create" ? "Opening…" : "Open batch"}</Button>
+            <Button size="sm" className="h-8" disabled={busy != null || newLines.length === 0 || overLimit.length > 0} onClick={submitCreate}>{busy === "create" ? "Opening…" : "Open batch"}</Button>
             <Button size="sm" variant="ghost" className="h-8" disabled={busy != null} onClick={() => { setCreating(false); setQty({}); setDrNumber(""); }}>Cancel</Button>
           </div>
         </div>
