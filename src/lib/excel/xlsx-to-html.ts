@@ -13,22 +13,70 @@ function esc(s: string): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** Best-effort readable text for a cell value (rich text, hyperlink, formula, date). */
-function cellText(value: ExcelJS.CellValue): string {
+/** Format a JS Date as a plain "Month D, YYYY" (UTC, to match the stored serial). */
+function fmtDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" }).format(d);
+}
+
+/** An Excel date serial (days since 1899-12-30) → JS Date at UTC midnight. */
+function serialToDate(serial: number): Date {
+  return new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000);
+}
+
+/** Whether a number format renders a date (has y/m/d tokens and no numeric # / 0). */
+function looksLikeDateFmt(fmt: string | undefined): boolean {
+  if (!fmt) return false;
+  const f = fmt.replace(/\[[^\]]*\]/g, "").replace(/"[^"]*"/g, "");
+  return /[ymd]/i.test(f) && !/[#0]/.test(f);
+}
+
+// A formula that is nothing but a single (optionally sheet-qualified, optionally
+// absolute) cell reference, e.g. "Source!B69", "'Centrifugal Blower'!$A$1", "B12".
+const SINGLE_REF_RE = /^'?([^'!]+?)'?!?\$?([A-Z]+)\$?(\d+)$/;
+
+/** Best-effort readable text for a plain (non-formula) cell value. */
+function cellText(value: ExcelJS.CellValue, numFmt?: string): string {
   if (value == null) return "";
-  if (value instanceof Date) {
-    return new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", day: "numeric" }).format(value);
-  }
+  if (value instanceof Date) return fmtDate(value);
   if (typeof value === "object") {
     const v = value as unknown as Record<string, unknown>;
     if (Array.isArray(v.richText)) return (v.richText as { text: string }[]).map((t) => t.text).join("");
     if (typeof v.text === "string") return v.text; // hyperlink label
-    if ("result" in v && v.result != null) return String(v.result); // formula → cached result
-    if ("formula" in v) return "";
     return "";
   }
-  if (typeof value === "number") return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (typeof value === "number") {
+    if (looksLikeDateFmt(numFmt)) return fmtDate(serialToDate(value));
+    return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
   return String(value);
+}
+
+/**
+ * Display text for a cell, resolving formulas. The Fans & Blowers job order is a
+ * template of pure formulas over a hidden "Source" sheet; ExcelJS can't evaluate
+ * formulas, so a plain read shows the template's STALE cached sample values. For
+ * a formula that is a single cell reference (the header: JO#, dates, project, …)
+ * we follow it to the live value we wrote into Source. VLOOKUP / arithmetic
+ * formulas can't be resolved, so those fall back to the cached result.
+ */
+function resolveCellText(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet, cell: ExcelJS.Cell, depth = 0): string {
+  const value = cell.value;
+  const numFmt = (cell as unknown as { numFmt?: string }).numFmt;
+  if (value && typeof value === "object" && "formula" in (value as object)) {
+    const v = value as unknown as { formula?: string; result?: unknown };
+    const ref = typeof v.formula === "string" ? SINGLE_REF_RE.exec(v.formula.replace(/\s+/g, "")) : null;
+    if (ref && depth < 6) {
+      const target = ref[1] && ref[1] !== ws.name ? wb.getWorksheet(ref[1]) : ws;
+      if (target) return resolveCellText(wb, target, target.getCell(`${ref[2]}${ref[3]}`), depth + 1);
+    }
+    const res = v.result;
+    if (res == null) return "";
+    if (res instanceof Date) return fmtDate(res);
+    if (typeof res === "object") return ""; // formula error (e.g. #N/A)
+    if (typeof res === "number" && looksLikeDateFmt(numFmt)) return fmtDate(serialToDate(res));
+    return typeof res === "number" ? res.toLocaleString("en-US", { maximumFractionDigits: 2 }) : String(res);
+  }
+  return cellText(value, numFmt);
 }
 
 /** Parse "B12" → { col, row } (1-based). */
@@ -40,7 +88,7 @@ function parseAddr(addr: string): { col: number; row: number } {
   return { col, row: Number(m[2]) };
 }
 
-function renderSheet(ws: ExcelJS.Worksheet): string {
+function renderSheet(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet): string {
   const rowCount = Math.min(ws.actualRowCount || ws.rowCount || 0, MAX_ROWS);
   const colCount = Math.min(ws.actualColumnCount || ws.columnCount || 0, MAX_COLS);
   if (rowCount === 0 || colCount === 0) return `<p class="empty">(empty sheet)</p>`;
@@ -68,7 +116,7 @@ function renderSheet(ws: ExcelJS.Worksheet): string {
       const key = `${c},${r}`;
       if (skip.has(key)) continue;
       const cell = ws.getCell(r, c);
-      const text = cellText(cell.value);
+      const text = resolveCellText(wb, ws, cell);
       const align = cell.alignment?.horizontal;
       const bold = cell.font?.bold ? " b" : "";
       const sp = span.get(key);
@@ -85,8 +133,13 @@ function renderSheet(ws: ExcelJS.Worksheet): string {
 }
 
 export function renderXlsxAsHtml(wb: ExcelJS.Workbook, title: string): string {
-  const sheets = wb.worksheets
-    .map((ws) => `<section><h2>${esc(ws.name)}</h2>${renderSheet(ws)}</section>`)
+  // Skip hidden sheets — e.g. the job order's "Source" lookup sheet, which drives
+  // the printable sheet's formulas but is never meant to be seen. Fall back to all
+  // sheets if every sheet happens to be hidden.
+  const visible = wb.worksheets.filter((ws) => ws.state !== "hidden" && ws.state !== "veryHidden");
+  const shown = visible.length ? visible : wb.worksheets;
+  const sheets = shown
+    .map((ws) => `<section><h2>${esc(ws.name)}</h2>${renderSheet(wb, ws)}</section>`)
     .join("");
   return `<!doctype html>
 <html lang="en"><head>
