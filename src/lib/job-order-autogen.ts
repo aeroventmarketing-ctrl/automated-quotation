@@ -13,6 +13,7 @@ import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
 import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
+import { findFanMotorHp } from "@/lib/fan-motor-table";
 
 /** Air Duct quotation types — they map 1:1 to the Duct JO segment types. */
 const AIR_DUCT_TYPES = new Set([
@@ -123,6 +124,11 @@ export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: stri
       const sp = str(s.staticPressure_inwg) || str(s.staticPressure_pa);
       const isDirect = /direct/i.test(str(s.drive));
       const joType = fanJoType(s);
+      // Motor cascade (standard brand = TECO): brand → phase label → HP key.
+      const phaseTok = str(s.motorPh).startsWith("1") ? "1PH" : "3PH";
+      const motorBrand = "TECO";
+      const motorPhAlias = phaseTok === "1PH" ? "Single Phase" : "Three Phase";
+      const motorHp = str(s.motorHp) ? findFanMotorHp(motorBrand, phaseTok, str(s.motorHp)) : "";
       fans.push({
         ...(coerceFansJobOrder({}) as FansJobOrder),
         type: joType,
@@ -147,6 +153,10 @@ export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: stri
         enclosure: s.exproof ? "Explosion Proof" : "TEFC",
         frequency: "60",
         voltage: str(s.motorVolts),
+        // Motor: standard TECO brand; phase + HP cascade from the quotation.
+        motorBrand,
+        motorPhAlias,
+        motorHp,
       });
       continue;
     }
