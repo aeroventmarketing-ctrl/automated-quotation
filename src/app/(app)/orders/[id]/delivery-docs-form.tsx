@@ -106,7 +106,7 @@ export function DeliveryDocsForm({
         })}
       </div>
 
-      <Button size="sm" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save documents & approve delivery"}</Button>
+      <Button size="sm" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save Documents & Approve Delivery"}</Button>
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );

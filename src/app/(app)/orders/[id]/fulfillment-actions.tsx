@@ -181,7 +181,7 @@ export function FulfillmentActions({
             <p className="text-sm font-medium">Sales 2nd quality &amp; quantity check</p>
             <p className="text-xs text-muted-foreground">The Sales in-charge makes a 2nd quality and quantity check — any Sales team member or the Sales head can cover if the in-charge is absent or on leave.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaSalesCheck(orderId))}>
-              {busy ? "Saving…" : "Quality & quantity re-checked"}
+              {busy ? "Saving…" : "Quality & Quantity Re-Checked"}
             </Button>
           </div>
         ) : awaiting("the Sales in-charge (or any Sales team member) to make the 2nd quality & quantity check"))}
@@ -233,7 +233,7 @@ export function FulfillmentActions({
             <p className="text-sm font-medium">Approve proof of delivery</p>
             <p className="text-xs text-muted-foreground">Sales approves the proof of delivery and marks the delivery successful.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => approveDelivery(orderId))}>
-              {busy ? "Saving…" : "Approve POD — successful delivery"}
+              {busy ? "Saving…" : "Approve POD-Successful Delivery"}
             </Button>
           </div>
         ) : awaiting("Sales to approve the proof of delivery"))}
@@ -244,7 +244,7 @@ export function FulfillmentActions({
             <p className="text-sm font-medium">Surrender signed documents</p>
             <p className="text-xs text-muted-foreground">Logistics surrenders the client-signed documents to accounting.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => surrenderDeliveryDocs(orderId))}>
-              {busy ? "Saving…" : "Documents surrendered to accounting"}
+              {busy ? "Saving…" : "Documents Surrendered to Accounting"}
             </Button>
           </div>
         ) : awaiting("Logistics to surrender the signed documents to accounting"))}

@@ -78,7 +78,7 @@ export function DeliveredForm({ orderId, initialFiles }: { orderId: string; init
           <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
         </label>
       </div>
-      <Button size="sm" disabled={busy} onClick={deliver}>{busy ? "Saving…" : "Mark delivered"}</Button>
+      <Button size="sm" disabled={busy} onClick={deliver}>{busy ? "Saving…" : "Mark Delivered"}</Button>
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );
