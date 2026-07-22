@@ -22,11 +22,12 @@ import {
   SALE_DOCS_BEFORE_PAYMENTS,
   afterPaymentDocTypes,
   collectedTotal,
+  ewtWithheld,
   isSaleConfirmed,
 } from "@/lib/sale";
 
 const ARRANGEMENTS: SaleArrangement[] = ["downpayment_full", "downpayment_progress", "terms"];
-const PAYMENT_KINDS: PaymentKind[] = ["down", "full", "progress"];
+const PAYMENT_KINDS: PaymentKind[] = ["down", "full", "progress", "ewt"];
 const newId = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -76,6 +77,8 @@ export function SalePanel({
   const draft: SaleRecord = { arrangement, po, payments };
   const confirmed = isSaleConfirmed(draft);
   const collected = collectedTotal(draft);
+  const ewt = ewtWithheld(draft);
+  const cashCollected = collected - ewt;
   const balance = Math.max(0, dealTotal - collected);
   const hasSaleData = !!(po || payments.length > 0 || Object.keys(docs).length > 0 || note);
   // "Add payment" stays turquoise (still collecting) until a full payment is
@@ -261,6 +264,11 @@ export function SalePanel({
               <span className="font-semibold text-green-700">{formatCurrency(collected, currency)}</span>
               <span className="text-muted-foreground">/ {formatCurrency(balance, currency)} due</span>
             </div>
+            {ewt > 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                Cash {formatCurrency(cashCollected, currency)} + EWT withheld {formatCurrency(ewt, currency)} (BIR 2307)
+              </p>
+            )}
           </div>
         </div>
 

@@ -6,7 +6,10 @@
  */
 
 export type SaleArrangement = "downpayment_full" | "downpayment_progress" | "terms";
-export type PaymentKind = "down" | "full" | "progress";
+// "ewt" is not cash — it's the Expanded Withholding Tax the client withheld and
+// remits to BIR on the company's behalf (backed by a BIR 2307). Counting it
+// settles the deal value: cash received + EWT withheld = deal value.
+export type PaymentKind = "down" | "full" | "progress" | "ewt";
 
 export interface SaleDoc {
   path: string; // Supabase Storage path
@@ -130,6 +133,7 @@ export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = {
   down: "Down payment",
   full: "Full payment",
   progress: "Progress billing",
+  ewt: "EWT withheld (BIR 2307)",
 };
 
 /**
@@ -151,9 +155,14 @@ export function docCheckMissing(sale: SaleRecord | null | undefined): string[] {
   return missing;
 }
 
-/** Total amount actually collected so far. */
+/** Total settling the deal value so far — cash payments plus any EWT withheld. */
 export function collectedTotal(sale: SaleRecord | null | undefined): number {
   return (sale?.payments ?? []).reduce((a, p) => a + (Number(p.amount) || 0), 0);
+}
+
+/** The portion of the collected total that is EWT withheld (not cash). */
+export function ewtWithheld(sale: SaleRecord | null | undefined): number {
+  return (sale?.payments ?? []).filter((p) => p.kind === "ewt").reduce((a, p) => a + (Number(p.amount) || 0), 0);
 }
 
 /**

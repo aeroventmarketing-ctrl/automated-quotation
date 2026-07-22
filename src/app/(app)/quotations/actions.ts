@@ -546,7 +546,7 @@ const saleSchema = z.object({
     .array(
       z.object({
         id: z.string(),
-        kind: z.enum(["down", "full", "progress"]),
+        kind: z.enum(["down", "full", "progress", "ewt"]),
         amount: z.number().nonnegative(),
         date: z.string(),
         proof: saleDocSchema.nullable().optional(),
