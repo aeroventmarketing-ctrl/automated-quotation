@@ -130,14 +130,14 @@ export function FulfillmentActions({
       {stage === "final_pay_review" &&
         (perms.canCheckPay ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => checkFinalPayment(orderId))}>
-            {busy ? "Saving…" : "Final payment checked"}
+            {busy ? "Saving…" : "Final Payment Checked"}
           </Button>
         ) : awaiting("Accounting to check the final payment"))}
 
       {stage === "final_pay_checked" &&
         (perms.canConfirmPay ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => confirmFinalPayment(orderId))}>
-            {busy ? "Saving…" : "Confirm final payment"}
+            {busy ? "Saving…" : "Final Payment Confirmed"}
           </Button>
         ) : awaiting("the Payment Approver to confirm"))}
 
@@ -148,7 +148,7 @@ export function FulfillmentActions({
             <p className="text-sm font-medium">Quality testing</p>
             <p className="text-xs text-muted-foreground">The item undergoes quality testing by the Technical Head or an approved Quality Inspector.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaTest(orderId))}>
-              {busy ? "Saving…" : "Quality tested — pass"}
+              {busy ? "Saving…" : "Quality Tested-Passed"}
             </Button>
           </div>
         ) : awaiting("the Technical Head / Quality Inspector to test quality"))}
@@ -159,7 +159,7 @@ export function FulfillmentActions({
             <p className="text-sm font-medium">Plant Manager quality &amp; quantity check</p>
             <p className="text-xs text-muted-foreground">The Plant Manager quality- and quantity-checks the order; only approved quality is transferred to the office.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaPlantCheck(orderId))}>
-              {busy ? "Saving…" : "Quality & quantity approved"}
+              {busy ? "Saving…" : "Quality & Quantity Approved"}
             </Button>
           </div>
         ) : awaiting("the Plant Manager to quality & quantity check"))}
@@ -170,7 +170,7 @@ export function FulfillmentActions({
             <p className="text-sm font-medium">Transfer items to office</p>
             <p className="text-xs text-muted-foreground">Logistics transfers the approved items to the office.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaTransfer(orderId))}>
-              {busy ? "Saving…" : "Transferred to office"}
+              {busy ? "Saving…" : "Transferred to Office"}
             </Button>
           </div>
         ) : awaiting("Logistics to transfer the items to the office"))}
