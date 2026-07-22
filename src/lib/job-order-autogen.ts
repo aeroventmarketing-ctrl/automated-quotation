@@ -67,6 +67,14 @@ function fanJoType(s: Record<string, unknown>): string {
   return "centrifugal_blower";
 }
 
+// Fans JO "Project" is a fan-code dropdown; the code is embedded in the model
+// (e.g. AV4025**CEB**15K3F2T → "CEB"). Longest first so combos win over prefixes.
+const FAN_PROJECT_CODES = ["CFABCAB", "CABSISW", "CEBCAB", "CFAB", "CEB", "CAB"];
+function fanProjectCode(s: Record<string, unknown>, description: string): string {
+  const model = (str(s.model) || (/model:\s*([A-Za-z0-9]+)/i.exec(description)?.[1] ?? "")).toUpperCase();
+  return FAN_PROJECT_CODES.find((c) => model.includes(c)) ?? "";
+}
+
 export interface AutoJobOrders {
   fans: FansJobOrder[];
   duct: DuctJobOrder[];
@@ -113,24 +121,31 @@ export function buildAutoJobOrders(items: QuoteItemLike[], opts: { project: stri
       // RPM and lead-time fields stay blank for the engineer to complete.
       const cfm = str(s.capacity_cfm);
       const sp = str(s.staticPressure_inwg) || str(s.staticPressure_pa);
-      const driveType = str(s.driveType);
+      const isDirect = /direct/i.test(str(s.drive));
+      const joType = fanJoType(s);
       fans.push({
         ...(coerceFansJobOrder({}) as FansJobOrder),
-        type: fanJoType(s),
+        type: joType,
         date: opts.date,
-        project: opts.project,
+        // Project = fan code from the model (matches the JO's Project dropdown).
+        project: fanProjectCode(s, it.descriptionSnapshot),
         make: str(s.make) || "Standard",
         quantity: qty,
+        // UOM option values differ by template (centrifugal uses "pcs", the
+        // others "pcs.").
+        uom: joType === "centrifugal_blower" || joType === "centrifugal_blower_didw" ? "pcs" : "pcs.",
         bladeDiameter: str(s.inches),
         bladeType: str(s.bladeType),
-        driveType,
-        directDrive: /direct/i.test(driveType),
+        driveType: str(s.drive) ? (isDirect ? "Direct" : "Belt") : "",
+        directDrive: isDirect,
         orientation: str(s.orientation),
         rotation: str(s.rotation),
         capacity: cfm ? `${cfm} cfm${sp ? ` @ ${sp}" w.g.` : ""}` : "",
         rpmCatalogue: str(s.rpm),
         mounting: str(s.mounting),
-        motorHp: str(s.motorHp),
+        // Enclosure: EX motor → Explosion Proof, else TEFC. Frequency: PH standard.
+        enclosure: s.exproof ? "Explosion Proof" : "TEFC",
+        frequency: "60",
         voltage: str(s.motorVolts),
       });
       continue;
