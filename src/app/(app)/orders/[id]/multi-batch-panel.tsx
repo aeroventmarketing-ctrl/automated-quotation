@@ -51,14 +51,16 @@ export function MultiBatchPanel({
   batches,
   canManage,
   currency,
-  outstanding,
+  orderAmount,
+  amountPaid,
 }: {
   orderId: string;
   items: MBItem[];
   batches: MBBatchView[];
   canManage: boolean;
   currency: string;
-  outstanding: number;
+  orderAmount: number;
+  amountPaid: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -101,6 +103,13 @@ export function MultiBatchPanel({
   // submit with a clear message instead of letting the server reject it (whose
   // message Next hides in production).
   const overLimit = items.filter((it) => enteredQty(it) > available(it));
+
+  // Order-level payment picture, shown on every batch so whoever handles it sees
+  // how much of the whole order is still owed.
+  const remaining = Math.max(0, orderAmount - amountPaid);
+  const fullyPaid = orderAmount > 0 && amountPaid >= orderAmount;
+  const payStatus = fullyPaid ? "Fully paid" : amountPaid > 0 ? "Partially paid" : "Unpaid";
+  const payVariant: "success" | "warning" | "destructive" = fullyPaid ? "success" : amountPaid > 0 ? "warning" : "destructive";
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -219,6 +228,15 @@ export function MultiBatchPanel({
             {b.lines.map((l, i) => <li key={i}>{l.qty} · {l.description}</li>)}
           </ul>
 
+          {/* Order-level payment summary (same on every batch) — order amount,
+              amount paid across the order, remaining, and paid/unpaid status. */}
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs">
+            <span className="text-muted-foreground">Order amount: <span className="font-medium tabular-nums text-foreground">{formatCurrency(orderAmount, currency)}</span></span>
+            <span className="text-muted-foreground">Amount paid: <span className="font-medium tabular-nums text-emerald-600">{formatCurrency(amountPaid, currency)}</span></span>
+            <span className="text-muted-foreground">Remaining: <span className="font-medium tabular-nums text-foreground">{formatCurrency(remaining, currency)}</span></span>
+            <Badge variant={payVariant}>{payStatus}</Badge>
+          </div>
+
           <ol className="space-y-0.5 text-xs">
             {b.steps.map((s) => (
               <li key={s.key} className={`flex flex-wrap items-center gap-1.5 ${s.done ? "text-foreground" : "text-muted-foreground/60"}`}>
@@ -239,7 +257,7 @@ export function MultiBatchPanel({
                       <label className="text-xs text-muted-foreground">Payment collected</label>
                       <input type="number" min={0} step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="0.00" className="h-8 w-32 rounded-md border bg-background px-2 text-right text-sm" />
                       <input value={payNote} onChange={(e) => setPayNote(e.target.value)} placeholder="OR no. / note (optional)" className="h-8 flex-1 min-w-[9rem] rounded-md border bg-background px-2 text-sm" />
-                      <span className="text-[11px] text-muted-foreground">Outstanding: {formatCurrency(outstanding, currency)}</span>
+                      <span className="text-[11px] text-muted-foreground">Outstanding: {formatCurrency(remaining, currency)}</span>
                     </div>
                     {/* Payment details / proof — uploaded now, viewable without downloading. */}
                     <div className="flex flex-wrap items-center gap-2">
