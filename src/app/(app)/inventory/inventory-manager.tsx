@@ -11,7 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
 import { BulkImport } from "./bulk-import";
-import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation, assignMissingSkus } from "./actions";
+import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation, assignMissingSkus, transferStock } from "./actions";
 
 interface Reservation {
   id: string;
@@ -77,7 +77,7 @@ function LocationField({ value, onChange, locations, className }: { value: strin
 
 function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item: Item; canManage: boolean; locations: string[]; scanTarget: string | null; scanNonce: number }) {
   const router = useRouter();
-  const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "reserve" | "label">("none");
+  const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "reserve" | "transfer" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
   const [flash, setFlash] = useState(false);
 
@@ -105,6 +105,10 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
   const [resvQty, setResvQty] = useState("");
   const [resvRef, setResvRef] = useState("");
   const [resvNote, setResvNote] = useState("");
+  // Transfer fields
+  const [xferQty, setXferQty] = useState("");
+  const [xferTo, setXferTo] = useState("");
+  const [xferNote, setXferNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -127,6 +131,12 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
     if (!(n > 0)) { setErr("Enter a quantity."); return; }
     if (resvRef.trim() === "") { setErr("Enter what it's reserved for."); return; }
     run(() => reserveStock({ stockItemId: item.id, qty: n, forRef: resvRef, note: resvNote || undefined }).then(() => { setResvQty(""); setResvRef(""); setResvNote(""); }), true);
+  }
+  function transfer() {
+    const n = Number(xferQty);
+    if (!(n > 0)) { setErr("Enter a quantity."); return; }
+    if (xferTo.trim() === "") { setErr("Choose a destination location."); return; }
+    run(() => transferStock({ stockItemId: item.id, qty: n, toLocation: xferTo.trim(), note: xferNote || undefined }).then(() => { setXferQty(""); setXferTo(""); setXferNote(""); }));
   }
 
   return (
@@ -154,6 +164,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
             <div className="flex justify-end gap-1">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}>Label</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "reserve" ? "none" : "reserve"))}>Reserve{item.reservations.length ? ` (${item.reservations.length})` : ""}</Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "transfer" ? "none" : "transfer"))}>Transfer</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>Edit</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "adjust" ? "none" : "adjust"))}>Adjust</Button>
             </div>
@@ -216,6 +227,20 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
                   ))}
                 </ul>
               )}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+      {panel === "transfer" && canManage && (
+        <TableRow>
+          <TableCell colSpan={11} className="bg-muted/30">
+            <div className="flex flex-wrap items-end gap-2 py-1">
+              <label className="text-xs text-muted-foreground">Transfer qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={xferQty} onChange={(e) => setXferQty(e.target.value)} /></label>
+              <label className="text-xs text-muted-foreground">To location<div><LocationField value={xferTo} onChange={setXferTo} locations={locations.filter((l) => l.toLowerCase() !== (item.location ?? "").toLowerCase())} /></div></label>
+              <label className="text-xs text-muted-foreground">Note<Input className="h-8 w-44" placeholder="optional" value={xferNote} onChange={(e) => setXferNote(e.target.value)} /></label>
+              <Button size="sm" className="h-8" disabled={busy} onClick={transfer}>{busy ? "…" : "Transfer"}</Button>
+              <span className="text-xs text-muted-foreground">from {item.location || "—"} · {fmt(item.available)} {item.unit} available</span>
+              {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
           </TableCell>
         </TableRow>
