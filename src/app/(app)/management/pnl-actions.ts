@@ -254,7 +254,9 @@ export interface PnlSaleLine {
   officeCost: number | null; // supplier cost booked to Office (bought-in), null if unmatched
 }
 export interface PnlSaleDetail {
+  quotationId: string;
   quoteNumber: string;
+  customerId: string | null;
   customer: string;
   recognizedAt: string; // Manila YYYY-MM-DD
   basis: "PO date" | "Payment date";
@@ -293,10 +295,11 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const quotations = await prisma.quotation.findMany({
     where: cutoff ? { createdAt: cutoff } : undefined,
     select: {
+      id: true,
       quoteNumber: true,
       discountPct: true,
       classification: true,
-      inquiry: { select: { customer: { select: { company: true } } } },
+      inquiry: { select: { customer: { select: { id: true, company: true } } } },
       items: { select: { unitPrice: true, qty: true, specsSnapshot: true, descriptionSnapshot: true } },
     },
   });
@@ -335,7 +338,9 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     }
     if (!lines.length) continue;
     sales.push({
+      quotationId: q.id,
       quoteNumber: q.quoteNumber,
+      customerId: q.inquiry?.customer?.id ?? null,
       customer: q.inquiry?.customer?.company ?? "—",
       recognizedAt: ymd,
       basis: sale!.arrangement === "terms" ? "PO date" : "Payment date",

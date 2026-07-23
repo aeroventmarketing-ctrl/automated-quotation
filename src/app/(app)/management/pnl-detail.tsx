@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getPnlDetail, type PnlDetail } from "./pnl-actions";
 import { DEPT_LABEL } from "@/lib/department-pnl";
@@ -60,8 +61,12 @@ export function PnlDetailView({ from, to }: { from: string; to: string }) {
                         {i === 0 && (
                           <div className="leading-tight">
                             <div className="font-medium">{s.recognizedAt}</div>
-                            <div className="font-mono text-[11px]">{s.quoteNumber}</div>
-                            <div className="text-muted-foreground">{s.customer}</div>
+                            <Link href={`/quotations/${s.quotationId}`} className="block font-mono text-[11px] text-primary hover:underline">{s.quoteNumber}</Link>
+                            {s.customerId ? (
+                              <Link href={`/customers/${s.customerId}`} className="block text-primary hover:underline">{s.customer}</Link>
+                            ) : (
+                              <div className="text-muted-foreground">{s.customer}</div>
+                            )}
                             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.basis}</div>
                           </div>
                         )}
