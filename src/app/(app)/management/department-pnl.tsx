@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { getDepartmentPnl, type PnlReport } from "./pnl-actions";
-import { PnlDetailView } from "./pnl-detail";
+import { Fragment, useMemo, useState, useTransition, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
+import { getDepartmentPnl, getPnlDetail, type PnlReport, type PnlDetail } from "./pnl-actions";
+import { PnlFullDetail, DeptDrill } from "./pnl-detail";
+import type { DeptKey } from "@/lib/department-pnl";
 import { formatCurrency } from "@/lib/utils";
 
 const MS_PH = 8 * 3600 * 1000;
@@ -34,8 +36,25 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
   const [month, setMonth] = useState(currentYm);
   const [customFrom, setCustomFrom] = useState(report.from);
   const [customTo, setCustomTo] = useState(report.to);
-  const [showDetail, setShowDetail] = useState(false);
+  const [openKey, setOpenKey] = useState<DeptKey | "company" | null>(null);
+  const [detail, setDetail] = useState<PnlDetail | null>(null);
+  const [detailFor, setDetailFor] = useState<string | null>(null);
+  const [detailPending, startDetail] = useTransition();
   const [pending, startTransition] = useTransition();
+
+  const periodKey = `${report.from}:${report.to}`;
+  const ensureDetail = () => {
+    if (detailFor === periodKey) return;
+    startDetail(async () => {
+      const d = await getPnlDetail(report.from, report.to);
+      setDetail(d);
+      setDetailFor(`${d.from}:${d.to}`);
+    });
+  };
+  const toggleRow = (key: DeptKey | "company") => {
+    setOpenKey((cur) => (cur === key ? null : key));
+    ensureDetail();
+  };
 
   const monthOptions = useMemo(() => {
     const out: string[] = [];
@@ -47,7 +66,12 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
   }, [y, m]);
 
   const load = (from: string, to: string) =>
-    startTransition(async () => setReport(await getDepartmentPnl(from, to)));
+    startTransition(async () => {
+      setReport(await getDepartmentPnl(from, to));
+      setOpenKey(null);
+      setDetail(null);
+      setDetailFor(null);
+    });
 
   const onMonth = (ym: string) => {
     setMonth(ym);
@@ -56,6 +80,14 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
   };
 
   const profit = report.totals.income >= 0;
+  const detailReady = detail != null && detailFor === periodKey;
+  const drillCell = (body: ReactNode) => (
+    <tr>
+      <td colSpan={4} className="bg-muted/20 px-3 py-3">
+        {detailReady ? body : <p className="text-xs text-muted-foreground">{detailPending ? "Loading detail…" : "…"}</p>}
+      </td>
+    </tr>
+  );
 
   return (
     <div className="space-y-4">
@@ -118,7 +150,7 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
         </div>
       </div>
 
-      {/* Per-department table */}
+      {/* Per-department table — click a row to drill into its sales, expenses & VAT */}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[30rem] text-sm">
           <thead>
@@ -131,28 +163,36 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
           </thead>
           <tbody>
             {report.rows.map((r) => (
-              <tr key={r.key} className="border-b last:border-0">
-                <td className="py-2">
-                  <span className="inline-flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.color }} />
-                    <span className="font-medium">{r.label}</span>
-                    {!r.production && <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Sales &amp; ops</span>}
-                  </span>
-                </td>
-                <td className="py-2 text-right tabular-nums">{formatCurrency(r.sales)}</td>
-                <td className="py-2 text-right tabular-nums text-muted-foreground">{formatCurrency(r.expenses)}</td>
-                <td className={`py-2 text-right font-medium tabular-nums ${r.income >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>{formatCurrency(r.income)}</td>
-              </tr>
+              <Fragment key={r.key}>
+                <tr className="cursor-pointer border-b last:border-0 hover:bg-muted/40" onClick={() => toggleRow(r.key)}>
+                  <td className="py-2">
+                    <span className="inline-flex items-center gap-2">
+                      <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${openKey === r.key ? "rotate-90" : ""}`} />
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.color }} />
+                      <span className="font-medium">{r.label}</span>
+                      {!r.production && <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Sales &amp; ops</span>}
+                    </span>
+                  </td>
+                  <td className="py-2 text-right tabular-nums">{formatCurrency(r.sales)}</td>
+                  <td className="py-2 text-right tabular-nums text-muted-foreground">{formatCurrency(r.expenses)}</td>
+                  <td className={`py-2 text-right font-medium tabular-nums ${r.income >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>{formatCurrency(r.income)}</td>
+                </tr>
+                {openKey === r.key && drillCell(detail && <DeptDrill detail={detail} deptKey={r.key} />)}
+              </Fragment>
             ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 font-semibold">
-              <td className="py-2">Company</td>
+            <tr className="cursor-pointer border-t-2 font-semibold hover:bg-muted/40" onClick={() => toggleRow("company")}>
+              <td className="py-2">
+                <span className="inline-flex items-center gap-2">
+                  <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${openKey === "company" ? "rotate-90" : ""}`} />
+                  Company
+                </span>
+              </td>
               <td className="py-2 text-right tabular-nums">{formatCurrency(report.totals.sales)}</td>
               <td className="py-2 text-right tabular-nums">{formatCurrency(report.totals.expenses)}</td>
               <td className={`py-2 text-right tabular-nums ${profit ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>{formatCurrency(report.totals.income)}</td>
             </tr>
-          </tfoot>
+            {openKey === "company" && drillCell(detail && <PnlFullDetail detail={detail} />)}
+          </tbody>
         </table>
       </div>
 
@@ -175,22 +215,11 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
         </div>
       </div>
 
-      {/* Audit drill-down */}
-      <div>
-        <button
-          onClick={() => setShowDetail((v) => !v)}
-          className="text-xs font-medium text-primary hover:underline"
-        >
-          {showDetail ? "Hide sales & expense detail" : "Show sales & expense detail"}
-        </button>
-        {showDetail && <PnlDetailView key={`${report.from}:${report.to}`} from={report.from} to={report.to} />}
-      </div>
-
       {/* Notes */}
       <div className="space-y-1 rounded-md bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground">
         <div>
           {rangeLabel(report.from, report.to)} · {report.salesCount} sale{report.salesCount === 1 ? "" : "s"} recognised
-          {" "}(Terms clients on PO date, others on payment date).
+          {" "}(Terms clients on PO date, others on payment date). Click a department — or Company — for its sales, expenses and VAT.
         </div>
         <div>
           Sales are net of VAT: production lines keep net ÷ 1.3 with the balance to Office; bought-in goods (KDK, AlphaAir, VFD, induction motors) are Office sales, with their Products-tab supplier cost (net) booked as an Office expense. Expenses also include material POs (net), cash vouchers released in the period, and payroll.
