@@ -16,6 +16,8 @@ import { getDepartmentPnl, type PnlReport } from "./pnl-actions";
 import { PayrollEditor } from "./payroll-editor";
 import { canManagePayroll, getPayrollMonth } from "./payroll-actions";
 import type { DeptSplit } from "@/lib/department-pnl";
+import { FanCogsEditor } from "./fan-cogs-editor";
+import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -159,12 +161,20 @@ export default async function ManagementPage() {
   // Payroll editor — Admin / Approver only. Null payroll = table not migrated.
   let canEditPayroll = false;
   let initialPayroll: DeptSplit | null = null;
+  let initialFanCogs: FanCogsRowView[] | null = null;
   if (viewer) {
     try {
       canEditPayroll = await canManagePayroll(viewer);
       if (canEditPayroll) initialPayroll = await getPayrollMonth(pnlYm);
     } catch {
       initialPayroll = null;
+    }
+    if (canEditPayroll) {
+      try {
+        initialFanCogs = await listFanCogs();
+      } catch {
+        initialFanCogs = null;
+      }
     }
   }
 
@@ -459,6 +469,23 @@ export default async function ManagementPage() {
               <PayrollEditor initialMonth={pnlYm} initial={initialPayroll} />
             ) : (
               <p className="py-6 text-center text-sm text-muted-foreground">Payroll isn&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0026_payroll</code> migration to enable it.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Fan-body COGS — manual cost table (Admin / Approver). Fills in the Fans
+          department's share of every fan sale in the P&L above. */}
+      {canEditPayroll && (
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm"><Factory className="h-4 w-4 text-muted-foreground" /> Fan-body COGS</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {initialFanCogs ? (
+              <FanCogsEditor initial={initialFanCogs} />
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">The COGS table isn&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0027_fan_body_cogs</code> migration to enable it.</p>
             )}
           </CardContent>
         </Card>

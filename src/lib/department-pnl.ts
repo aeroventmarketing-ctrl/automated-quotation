@@ -132,6 +132,38 @@ export function lineSalesSplit(specs: Specs, lineNet: number, cogs = 0): DeptSpl
   return split;
 }
 
+// --- Fan-body COGS lookup -------------------------------------------------
+export interface FanCogsRow {
+  modelCode: string | null;
+  size: string | null; // blade diameter (inches) as a string
+  material: string | null;
+  cost: number;
+}
+
+/**
+ * Build a fan-body COGS resolver from the cost rows. A fan line matches by exact
+ * (or contained) model code first — an override — otherwise by size + material.
+ * Returns 0 when nothing matches, which leaves that fan line's net in Office.
+ */
+export function fanCogsLookup(rows: FanCogsRow[]): (specs: Specs) => number {
+  const byModel = new Map<string, number>();
+  const bySizeMat = new Map<string, number>();
+  const norm = (v: unknown) => str(v).toLowerCase();
+  for (const r of rows) {
+    if (r.modelCode) byModel.set(norm(r.modelCode), r.cost);
+    if (r.size || r.material) bySizeMat.set(`${norm(r.size)}|${norm(r.material)}`, r.cost);
+  }
+  return (specs: Specs): number => {
+    const model = norm(specs.model);
+    if (model) {
+      if (byModel.has(model)) return byModel.get(model)!;
+      for (const [code, cost] of byModel) if (code && model.includes(code)) return cost;
+    }
+    const key = `${norm(specs.inches ?? specs.size)}|${norm(specs.material)}`;
+    return bySizeMat.get(key) ?? 0;
+  };
+}
+
 // --- Sale recognition -----------------------------------------------------
 /**
  * The date a confirmed sale is recognised: a Terms (PO) client is booked on the

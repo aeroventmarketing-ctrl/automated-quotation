@@ -15,10 +15,12 @@ import {
   lineSalesSplit,
   lineRouting,
   saleRecognitionDate,
+  fanCogsLookup,
   manilaYMD,
   ymdInRange,
   type DeptKey,
   type DeptSplit,
+  type FanCogsRow,
 } from "@/lib/department-pnl";
 
 const VAT_RATE = config.vatRate || 0.12;
@@ -67,6 +69,16 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   let salesCount = 0;
   let fanLinesPending = 0;
 
+  // Fan-body COGS table (empty until 0027_fan_body_cogs is applied).
+  let cogsRows: FanCogsRow[] = [];
+  try {
+    const rows = await prisma.fanBodyCogs.findMany();
+    cogsRows = rows.map((r) => ({ modelCode: r.modelCode, size: r.size, material: r.material, cost: Number(r.cost) || 0 }));
+  } catch {
+    cogsRows = [];
+  }
+  const cogsOf = fanCogsLookup(cogsRows);
+
   // --- Sales ---------------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
     select: {
@@ -88,8 +100,12 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         : {}) as Record<string, unknown>;
       const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
       if (net === 0) continue;
-      if (lineRouting(specs).routing === "fan") fanLinesPending += 1;
-      addSplit(sales, lineSalesSplit(specs, net, 0));
+      let cogs = 0;
+      if (lineRouting(specs).routing === "fan") {
+        cogs = cogsOf(specs);
+        if (cogs <= 0) fanLinesPending += 1;
+      }
+      addSplit(sales, lineSalesSplit(specs, net, cogs));
     }
   }
 

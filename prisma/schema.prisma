@@ -471,6 +471,27 @@ model Payroll {
   @@index([month])
 }
 
+/**
+ * Fan-body cost of goods sold for the departmental P&L. A fan line's body COGS
+ * is what the Fans department records as its sale; the Office keeps the rest.
+ * Looked up by exact model code first (an override), else by size + material.
+ * `size` is the blade diameter in inches as a plain string (e.g. "40").
+ */
+model FanBodyCogs {
+  id            String   @id @default(cuid())
+  modelCode     String? // exact-match override (e.g. a fan code); null for size/material rows
+  size          String? // blade diameter (inches) as a string
+  material      String?
+  cost          Decimal  @db.Decimal(14, 2) @default(0)
+  note          String?
+  createdByName String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([modelCode])
+  @@index([size, material])
+}
+
 /** Warehouse stock. Quantities are decimals so partial units (m, kg) work. */
 enum StockMovementKind {
   RECEIPT    // stock in (e.g. purchased items received)
