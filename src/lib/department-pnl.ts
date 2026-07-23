@@ -23,6 +23,7 @@ import { round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { isSaleConfirmed, type SaleRecord } from "@/lib/sale";
+import { fanTagOf, fanBodyFactored } from "@/lib/fan-body-factors";
 
 export type DeptKey = "fans" | "duct" | "accessories" | "motor" | "office";
 
@@ -151,27 +152,49 @@ export interface FanCogsRow {
   cost: number;
 }
 
+/** Canonical numeric key for a size ("12.0" and "12" both → "12"). */
+const sizeKey = (v: unknown): string => {
+  const n = Number(str(v));
+  return Number.isFinite(n) && str(v) !== "" ? String(n) : "";
+};
+
 /**
- * Build a fan-body COGS resolver from the cost rows. A fan line matches by exact
- * (or contained) model code first — an override — otherwise by size + material.
+ * Build a fan-body COGS resolver from the cost rows. Three kinds of row, in
+ * priority order:
+ *  1. fan code + size (both set) — a base cost from the fabricated-fan matrix.
+ *     The same body factors (material, customized, double-wall, …) that scale
+ *     the price scale this base too, via fanBodyFactored.
+ *  2. model code only — a fixed override matched when the line's model contains
+ *     it (used as-is, no factors).
+ *  3. size + material — a fixed fallback (used as-is, no factors).
  * Returns 0 when nothing matches, which leaves that fan line's net in Office.
  */
 export function fanCogsLookup(rows: FanCogsRow[]): (specs: Specs) => number {
-  const byModel = new Map<string, number>();
-  const bySizeMat = new Map<string, number>();
   const norm = (v: unknown) => str(v).toLowerCase();
+  const codeSize = new Map<string, number>(); // `${code}|${size}` -> base cost
+  const overrides: { code: string; cost: number }[] = [];
+  const bySizeMat = new Map<string, number>();
   for (const r of rows) {
-    if (r.modelCode) byModel.set(norm(r.modelCode), r.cost);
-    if (r.size || r.material) bySizeMat.set(`${norm(r.size)}|${norm(r.material)}`, r.cost);
+    const code = norm(r.modelCode);
+    const sk = sizeKey(r.size);
+    if (code && sk) codeSize.set(`${code}|${sk}`, r.cost);
+    else if (code) overrides.push({ code, cost: r.cost });
+    else if (r.size || r.material) bySizeMat.set(`${sk}|${norm(r.material)}`, r.cost);
   }
+  overrides.sort((a, b) => b.code.length - a.code.length); // longest (most specific) first
   return (specs: Specs): number => {
-    const model = norm(specs.model);
-    if (model) {
-      if (byModel.has(model)) return byModel.get(model)!;
-      for (const [code, cost] of byModel) if (code && model.includes(code)) return cost;
+    // 1. fabricated-fan matrix — base cost by code + size, then apply factors.
+    const tag = norm(fanTagOf(specs));
+    const sk = sizeKey(specs.inches ?? specs.size);
+    if (tag && sk) {
+      const base = codeSize.get(`${tag}|${sk}`);
+      if (base != null) return round2(fanBodyFactored(base, specs));
     }
-    const key = `${norm(specs.inches ?? specs.size)}|${norm(specs.material)}`;
-    return bySizeMat.get(key) ?? 0;
+    // 2. fixed model-code override.
+    const model = norm(specs.model);
+    if (model) for (const o of overrides) if (o.code && model.includes(o.code)) return o.cost;
+    // 3. fixed size + material fallback.
+    return bySizeMat.get(`${sk}|${norm(specs.material)}`) ?? 0;
   };
 }
 

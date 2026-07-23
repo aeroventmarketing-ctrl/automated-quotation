@@ -84,3 +84,34 @@ export async function deleteFanCogs(id: string): Promise<void> {
   await prisma.fanBodyCogs.delete({ where: { id } }).catch(() => {});
   revalidatePath("/management");
 }
+
+export interface FanCogsBulkRow {
+  modelCode: string; // fan code, e.g. "CEB"
+  size: string; // numeric size string, e.g. "12.25"
+  cost: number;
+}
+
+/**
+ * Bulk upsert fabricated-fan COGS rows keyed by (code, size). An existing row
+ * for the same code+size is updated; otherwise a new one is created. Returns how
+ * many were added / updated.
+ */
+export async function bulkUpsertFanCogs(rows: FanCogsBulkRow[]): Promise<{ added: number; updated: number }> {
+  const user = await requireManager();
+  let added = 0;
+  let updated = 0;
+  for (const r of rows) {
+    const modelCode = clean(r.modelCode);
+    const size = clean(r.size);
+    const cost = Math.max(0, Number(r.cost) || 0);
+    if (!modelCode || !size) continue;
+    const res = await prisma.fanBodyCogs.updateMany({ where: { modelCode, size }, data: { cost } });
+    if (res.count > 0) updated += res.count;
+    else {
+      await prisma.fanBodyCogs.create({ data: { modelCode, size, cost, createdByName: user.name } });
+      added += 1;
+    }
+  }
+  revalidatePath("/management");
+  return { added, updated };
+}
