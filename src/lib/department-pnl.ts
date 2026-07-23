@@ -105,9 +105,9 @@ export function lineRouting(specs: Specs): { dept: DeptKey; routing: Routing } {
   // Fabricated ventilation accessories & air ducts.
   if (isAirDuct(specs)) return { dept: "duct", routing: "production_markup" };
   if (isAccessory(specs)) return { dept: "accessories", routing: "production_markup" };
-  // Bought-in / resale goods — the whole net is an Office sale, its supplier
-  // cost an Office expense. Must precede the fabricated-fan check so a branded
-  // "…Fan" (AlphaAir, MAXAIR, KDK) isn't mistaken for a fabricated fan.
+  // Bought-in / resale goods (KDK, AlphaAir, Aerovent "Other Products") — Office
+  // keeps the margin: selling net less the supplier cost. Must precede the
+  // fabricated-fan check so a branded "…Fan" isn't mistaken for a fabricated fan.
   if (isOtherProducts(specs)) return { dept: "office", routing: "office_full" };
   // Fabricated fans & blowers (Centrifugal / Axial / Propeller / …).
   if (isFan(specs)) return { dept: "fans", routing: "fan" };
