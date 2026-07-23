@@ -532,3 +532,37 @@ model Product {
 
   @@index([name])
 }
+
+enum ScheduleStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/**
+ * Shared team calendar. Any user may add a schedule (starts PENDING); an
+ * Engineer, Admin or Approver approves or rejects it. Times are stored in UTC;
+ * an all-day entry uses startAt at 00:00 of the day.
+ */
+model Schedule {
+  id            String         @id @default(cuid())
+  title         String
+  details       String?
+  category      String         @default("general") // general | meeting | delivery | production | payment | maintenance | other
+  startAt       DateTime
+  endAt         DateTime?
+  allDay        Boolean        @default(true)
+  location      String?
+  status        ScheduleStatus @default(PENDING)
+  createdById   String
+  createdByName String
+  decidedById   String?
+  decidedByName String?
+  decidedAt     DateTime?
+  decisionNote  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([startAt])
+  @@index([status])
+}

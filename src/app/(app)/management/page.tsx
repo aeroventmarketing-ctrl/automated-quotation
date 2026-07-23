@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins } from "lucide-react";
+import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,10 @@ import { formatCurrency } from "@/lib/utils";
 import { payableTotal, round2 } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
 import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, type OrderStage } from "@/lib/order-workflow";
+import { getCurrentUser, canApprove } from "@/lib/auth";
+import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { ScheduleCalendar } from "./schedule-calendar";
+import type { ScheduleView } from "@/lib/schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +106,37 @@ export default async function ManagementPage() {
 
   // Orders (by quotation id) that currently have an open purchase request → Phase 4.
   const openPrQuoteIds = new Set(prPending.map((p) => p.quotationId).filter((x): x is string => !!x));
+
+  // Team calendar — anyone may add; an Engineer / Admin / Approver approves.
+  const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
+  const canApproveSchedule =
+    viewer != null && (canApprove(viewer) || userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey));
+  let scheduleRows: ScheduleView[] = [];
+  let scheduleMissing = false;
+  try {
+    const since = new Date(Date.now() - 180 * 86_400_000); // keep ~6 months of history
+    const rows = await prisma.schedule.findMany({ where: { startAt: { gte: since } }, orderBy: { startAt: "asc" } });
+    scheduleRows = rows.map((s) => ({
+      id: s.id,
+      title: s.title,
+      details: s.details,
+      category: s.category,
+      startAt: s.startAt.toISOString(),
+      endAt: s.endAt?.toISOString() ?? null,
+      allDay: s.allDay,
+      location: s.location,
+      status: s.status,
+      createdByName: s.createdByName,
+      decidedByName: s.decidedByName,
+      decidedAt: s.decidedAt?.toISOString() ?? null,
+      decisionNote: s.decisionNote,
+      isOwner: viewer?.id === s.createdById,
+      canEdit: canApproveSchedule || viewer?.id === s.createdById,
+      canDecide: canApproveSchedule,
+    }));
+  } catch {
+    scheduleMissing = true;
+  }
 
   // Today in Manila (PH) for consistent deadline maths regardless of server TZ.
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -244,6 +279,21 @@ export default async function ManagementPage() {
           );
         })}
       </div>
+
+      {/* Team calendar — everyone can add a schedule; an Engineer / Admin /
+          Approver approves. */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /> Team calendar</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {scheduleMissing ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0025_schedules</code> migration to enable it.</p>
+          ) : (
+            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} />
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Order pipeline — donut by phase + stage bars */}
