@@ -58,6 +58,41 @@ function addSplit(into: DeptSplit, from: DeptSplit) {
 }
 
 /**
+ * Build the fan-body COGS and Office-cost resolvers shared by the summary and
+ * the detail views. Both degrade to "no match" (0) if their tables/data are
+ * missing, so callers never throw.
+ */
+async function buildCostResolvers() {
+  let cogsRows: FanCogsRow[] = [];
+  try {
+    const rows = await prisma.fanBodyCogs.findMany();
+    cogsRows = rows.map((r) => ({ modelCode: r.modelCode, size: r.size, material: r.material, cost: Number(r.cost) || 0 }));
+  } catch {
+    cogsRows = [];
+  }
+  const cogsOf = fanCogsLookup(cogsRows);
+
+  const [products, suppliers] = await Promise.all([getProducts().catch(() => []), getSuppliers().catch(() => [])]);
+  const vatById = new Map(suppliers.map((s) => [s.id, s.ewt] as const));
+  const vatByCompany = new Map(suppliers.map((s) => [s.company.trim().toLowerCase(), s.ewt] as const));
+  const netCost = (price: number, supplierId: string, company: string): number => {
+    const incl = vatById.get(supplierId) ?? vatByCompany.get((company || "").trim().toLowerCase()) ?? true;
+    return incl ? price / (1 + VAT_RATE) : price;
+  };
+  const costEntries: OfficeCostEntry[] = products
+    .map((p) => {
+      const costs = p.suppliers
+        .filter((l) => (l.price ?? 0) > 0)
+        .map((l) => round2(netCost(l.price!, l.supplierId, l.company)));
+      return { name: p.name, sku: p.sku, unitCost: costs.length ? Math.min(...costs) : 0 };
+    })
+    .filter((e) => e.unitCost > 0);
+  const officeCostOf = officeCostLookup(costEntries);
+
+  return { cogsOf, officeCostOf };
+}
+
+/**
  * Build the departmental P&L for [from, to] (Manila YYYY-MM-DD, inclusive).
  * Sales come from confirmed quotations recognised in the window; expenses from
  * purchase requests and cash requests whose cash was released in the window.
@@ -79,35 +114,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   let officeCostUnmatched = 0;
   const officeUnmatched = new Set<string>();
 
-  // Fan-body COGS table (empty until 0027_fan_body_cogs is applied).
-  let cogsRows: FanCogsRow[] = [];
-  try {
-    const rows = await prisma.fanBodyCogs.findMany();
-    cogsRows = rows.map((r) => ({ modelCode: r.modelCode, size: r.size, material: r.material, cost: Number(r.cost) || 0 }));
-  } catch {
-    cogsRows = [];
-  }
-  const cogsOf = fanCogsLookup(cogsRows);
-
-  // Office cost of bought-in goods, from the Products tab. Each product's net
-  // unit cost is its cheapest supplier price, converted to net using the
-  // supplier's VAT status — an EWT-capable supplier prices VAT-inclusive.
-  const [products, suppliers] = await Promise.all([getProducts().catch(() => []), getSuppliers().catch(() => [])]);
-  const vatById = new Map(suppliers.map((s) => [s.id, s.ewt] as const));
-  const vatByCompany = new Map(suppliers.map((s) => [s.company.trim().toLowerCase(), s.ewt] as const));
-  const netCost = (price: number, supplierId: string, company: string): number => {
-    const incl = vatById.get(supplierId) ?? vatByCompany.get((company || "").trim().toLowerCase()) ?? true;
-    return incl ? price / (1 + VAT_RATE) : price;
-  };
-  const costEntries: OfficeCostEntry[] = products
-    .map((p) => {
-      const costs = p.suppliers
-        .filter((l) => (l.price ?? 0) > 0)
-        .map((l) => round2(netCost(l.price!, l.supplierId, l.company)));
-      return { name: p.name, sku: p.sku, unitCost: costs.length ? Math.min(...costs) : 0 };
-    })
-    .filter((e) => e.unitCost > 0);
-  const officeCostOf = officeCostLookup(costEntries);
+  const { cogsOf, officeCostOf } = await buildCostResolvers();
 
   // --- Sales ---------------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
@@ -207,4 +214,151 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   );
 
   return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending, officeCostUnmatched, officeUnmatchedItems: [...officeUnmatched].sort() };
+}
+
+// --- Drill-down detail (spot-check / audit) -------------------------------
+export interface PnlSaleLine {
+  label: string;
+  qty: number;
+  net: number; // discounted net sale for the line
+  routing: "fan" | "production_markup" | "office_full";
+  dept: DeptKey; // the production department (office for bought-in)
+  deptShare: number; // amount credited to the production department
+  officeShare: number; // amount credited to Office
+  cogs: number | null; // fan-body COGS used (fan lines)
+  officeCost: number | null; // supplier cost booked to Office (bought-in), null if unmatched
+}
+export interface PnlSaleDetail {
+  quoteNumber: string;
+  customer: string;
+  recognizedAt: string; // Manila YYYY-MM-DD
+  basis: "PO date" | "Payment date";
+  net: number;
+  lines: PnlSaleLine[];
+}
+export interface PnlExpenseItem {
+  dept: DeptKey;
+  source: "Purchase order" | "Cash voucher" | "Payroll";
+  ref: string;
+  date: string; // Manila YYYY-MM-DD (or YYYY-MM for payroll)
+  amount: number;
+}
+export interface PnlDetail {
+  from: string;
+  to: string;
+  sales: PnlSaleDetail[];
+  expenses: PnlExpenseItem[];
+}
+
+/**
+ * Line-by-line breakdown for [from, to] so the summary P&L can be audited: each
+ * confirmed sale with its per-line department/Office split, and each expense
+ * with its source, department and date.
+ */
+export async function getPnlDetail(from: string, to: string): Promise<PnlDetail> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error("Invalid date range.");
+  const [lo, hi] = from <= to ? [from, to] : [to, from];
+
+  const { cogsOf, officeCostOf } = await buildCostResolvers();
+
+  // --- Sales detail --------------------------------------------------------
+  const quotations = await prisma.quotation.findMany({
+    select: {
+      quoteNumber: true,
+      discountPct: true,
+      classification: true,
+      inquiry: { select: { customer: { select: { company: true } } } },
+      items: { select: { unitPrice: true, qty: true, specsSnapshot: true, descriptionSnapshot: true } },
+    },
+  });
+  const sales: PnlSaleDetail[] = [];
+  for (const q of quotations) {
+    const sale = saleFromClassification(q.classification);
+    const recAt = saleRecognitionDate(sale);
+    if (!recAt) continue;
+    const ymd = manilaYMD(recAt);
+    if (!ymdInRange(ymd, lo, hi)) continue;
+    const disc = Number(q.discountPct) || 0;
+    const lines: PnlSaleLine[] = [];
+    for (const it of q.items) {
+      const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Record<string, unknown>;
+      const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
+      if (net === 0) continue;
+      const { dept, routing } = lineRouting(specs);
+      let cogs: number | null = null;
+      let officeCost: number | null = null;
+      let deptShare = 0;
+      let officeShare = 0;
+      if (routing === "fan") {
+        cogs = round2(Math.min(Math.max(cogsOf(specs), 0), net));
+        deptShare = cogs;
+        officeShare = round2(net - cogs);
+      } else if (routing === "office_full") {
+        officeShare = net;
+        const unit = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
+        officeCost = unit > 0 ? round2(unit * it.qty * (1 - disc / 100)) : null;
+      } else {
+        deptShare = round2(net / 1.3);
+        officeShare = round2(net - deptShare);
+      }
+      const label = [str(specs.brand), str(specs.type)].filter(Boolean).join(" ") || it.descriptionSnapshot.slice(0, 60);
+      lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost });
+    }
+    if (!lines.length) continue;
+    sales.push({
+      quoteNumber: q.quoteNumber,
+      customer: q.inquiry?.customer?.company ?? "—",
+      recognizedAt: ymd,
+      basis: sale!.arrangement === "terms" ? "PO date" : "Payment date",
+      net: round2(lines.reduce((a, l) => a + l.net, 0)),
+      lines,
+    });
+  }
+  sales.sort((a, b) => a.recognizedAt.localeCompare(b.recognizedAt) || a.quoteNumber.localeCompare(b.quoteNumber));
+
+  // --- Expense detail ------------------------------------------------------
+  const expenses: PnlExpenseItem[] = [];
+  const prs = await prisma.purchaseRequest.findMany({
+    where: { dept: { not: null }, status: { not: "CANCELLED" } },
+    select: { dept: true, po: true, chainLog: true },
+  });
+  for (const pr of prs) {
+    const releasedAt = coerceChainLog(pr.chainLog).release_cash?.at;
+    if (!releasedAt || !ymdInRange(manilaYMD(releasedAt), lo, hi)) continue;
+    const dept = pr.dept as DeptKey;
+    if (!PROD_DEPT_KEYS.has(dept)) continue;
+    const po = coercePurchaseOrder(pr.po);
+    if (!po) continue;
+    expenses.push({ dept, source: "Purchase order", ref: po.poNumber, date: manilaYMD(releasedAt), amount: round2(poTotals(po).total / (1 + VAT_RATE)) });
+  }
+  const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
+  const crs = await prisma.cashRequest.findMany({
+    where: { releasedAt: { not: null } },
+    select: { number: true, dept: true, amount: true, releasedAt: true, status: true },
+  });
+  for (const cr of crs) {
+    if (!RELEASED.has(cr.status) || !cr.releasedAt) continue;
+    if (!ymdInRange(manilaYMD(cr.releasedAt.toISOString()), lo, hi)) continue;
+    const dept: DeptKey = cr.dept && PROD_DEPT_KEYS.has(cr.dept as DeptKey) ? (cr.dept as DeptKey) : "office";
+    expenses.push({ dept, source: "Cash voucher", ref: cr.number, date: manilaYMD(cr.releasedAt.toISOString()), amount: round2(Number(cr.amount) || 0) });
+  }
+  try {
+    const months: string[] = [];
+    for (let d = new Date(`${lo.slice(0, 7)}-01T00:00:00Z`); d <= new Date(`${hi.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 1)) {
+      months.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+    }
+    const rows = await prisma.payroll.findMany({ where: { month: { in: months } } });
+    for (const p of rows) {
+      const amt = Number(p.amount) || 0;
+      if (amt <= 0) continue;
+      expenses.push({ dept: p.dept as DeptKey, source: "Payroll", ref: p.month, date: p.month, amount: round2(amt) });
+    }
+  } catch {
+    // payroll table not migrated — skip
+  }
+  expenses.sort((a, b) => a.date.localeCompare(b.date) || a.dept.localeCompare(b.dept));
+
+  return { from: lo, to: hi, sales, expenses };
 }

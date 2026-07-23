@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { getDepartmentPnl, type PnlReport } from "./pnl-actions";
+import { PnlDetailView } from "./pnl-detail";
 import { formatCurrency } from "@/lib/utils";
 
 const MS_PH = 8 * 3600 * 1000;
@@ -33,6 +34,7 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
   const [month, setMonth] = useState(currentYm);
   const [customFrom, setCustomFrom] = useState(report.from);
   const [customTo, setCustomTo] = useState(report.to);
+  const [showDetail, setShowDetail] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const monthOptions = useMemo(() => {
@@ -152,6 +154,17 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      {/* Audit drill-down */}
+      <div>
+        <button
+          onClick={() => setShowDetail((v) => !v)}
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          {showDetail ? "Hide sales & expense detail" : "Show sales & expense detail"}
+        </button>
+        {showDetail && <PnlDetailView key={`${report.from}:${report.to}`} from={report.from} to={report.to} />}
       </div>
 
       {/* Notes */}
