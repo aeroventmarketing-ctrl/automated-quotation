@@ -21,6 +21,7 @@ import {
   fanCogsLookup,
   officeCostLookup,
   officeLineHaystack,
+  productLabel,
   manilaYMD,
   ymdInRange,
   type DeptKey,
@@ -31,7 +32,6 @@ import {
 
 const VAT_RATE = config.vatRate || 0.12;
 const PROD_DEPT_KEYS = new Set<DeptKey>(["fans", "duct", "accessories", "motor"]);
-const str = (v: unknown): string => (v == null ? "" : String(v)).trim();
 
 export interface PnlRow {
   key: DeptKey;
@@ -168,7 +168,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
           if (hit.vatInclusive) inputVat = round2(inputVat + round2(cost * VAT_RATE));
         } else {
           officeCostUnmatched += 1;
-          const label = [str(specs.brand), str(specs.type)].filter(Boolean).join(" ") || it.descriptionSnapshot.slice(0, 60);
+          const label = productLabel(specs, it.descriptionSnapshot);
           if (label) officeUnmatched.add(label);
         }
       }
@@ -333,7 +333,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         deptShare = round2(net / 1.3);
         officeShare = round2(net - deptShare);
       }
-      const label = [str(specs.brand), str(specs.type)].filter(Boolean).join(" ") || it.descriptionSnapshot.slice(0, 60);
+      const label = productLabel(specs, it.descriptionSnapshot);
       lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost });
     }
     if (!lines.length) continue;

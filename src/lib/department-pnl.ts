@@ -87,6 +87,14 @@ const isFan = (s: Specs) => {
 // distinction rides in bladeType or the series field, depending on the quote.
 const isVfd = (s: Specs) => /variable frequency|vfd/i.test(`${str(s.bladeType)} ${str(s.series)} ${str(s.drive)}`);
 
+/** A readable label for a line — brand + type + model (e.g. "KDK Cabinet Fan · 25NFB"). */
+export function productLabel(specs: Specs, description = ""): string {
+  const model = str(specs.model) || str(specs.blowerModel);
+  const head = [str(specs.brand), str(specs.type)].filter(Boolean).join(" ");
+  const label = [head, model].filter(Boolean).join(" · ");
+  return label || description.slice(0, 60);
+}
+
 export type Routing = "fan" | "production_markup" | "office_full";
 
 /** Which department a line belongs to, and how its net is split with Office. */
