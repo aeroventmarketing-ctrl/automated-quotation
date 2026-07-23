@@ -52,6 +52,7 @@ export interface PnlReport {
   fanLinesPending: number; // fan lines booked entirely to Office (no COGS yet)
   officeCostUnmatched: number; // bought-in lines with no Products-tab cost matched
   officeUnmatchedItems: string[]; // distinct labels of those unmatched goods
+  vat: { output: number; input: number; payable: number }; // VAT for BIR (not in profit)
 }
 
 function addSplit(into: DeptSplit, from: DeptSplit) {
@@ -76,21 +77,27 @@ async function buildCostResolvers() {
   const [products, suppliers] = await Promise.all([getProducts().catch(() => []), getSuppliers().catch(() => [])]);
   const vatById = new Map(suppliers.map((s) => [s.id, s.ewt] as const));
   const vatByCompany = new Map(suppliers.map((s) => [s.company.trim().toLowerCase(), s.ewt] as const));
-  const netCost = (price: number, supplierId: string, company: string): number => {
-    const incl = vatById.get(supplierId) ?? vatByCompany.get((company || "").trim().toLowerCase()) ?? true;
-    return incl ? price / (1 + VAT_RATE) : price;
-  };
+  // An EWT-capable supplier prices VAT-inclusive; default to VAT-inclusive when unknown.
+  const supplierVatInclusive = (company: string): boolean => vatByCompany.get((company || "").trim().toLowerCase()) ?? true;
+  const vatFor = (supplierId: string, company: string): boolean => vatById.get(supplierId) ?? supplierVatInclusive(company);
+
+  // Each product's cheapest net cost, carrying whether that supplier prices
+  // VAT-inclusive (so the caller can credit the input VAT).
   const costEntries: OfficeCostEntry[] = products
     .map((p) => {
-      const costs = p.suppliers
-        .filter((l) => (l.price ?? 0) > 0)
-        .map((l) => round2(netCost(l.price!, l.supplierId, l.company)));
-      return { name: p.name, sku: p.sku, unitCost: costs.length ? Math.min(...costs) : 0 };
+      let best: OfficeCostEntry | null = null;
+      for (const l of p.suppliers) {
+        if (!(l.price && l.price > 0)) continue;
+        const incl = vatFor(l.supplierId, l.company);
+        const unitCost = round2(incl ? l.price / (1 + VAT_RATE) : l.price);
+        if (!best || unitCost < best.unitCost) best = { name: p.name, sku: p.sku, unitCost, vatInclusive: incl };
+      }
+      return best;
     })
-    .filter((e) => e.unitCost > 0);
+    .filter((e): e is OfficeCostEntry => e != null && e.unitCost > 0);
   const officeCostOf = officeCostLookup(costEntries);
 
-  return { cogsOf, officeCostOf };
+  return { cogsOf, officeCostOf, supplierVatInclusive };
 }
 
 /**
@@ -114,8 +121,10 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   let fanLinesPending = 0;
   let officeCostUnmatched = 0;
   const officeUnmatched = new Set<string>();
+  let outputVat = 0;
+  let inputVat = 0;
 
-  const { cogsOf, officeCostOf } = await buildCostResolvers();
+  const { cogsOf, officeCostOf, supplierVatInclusive } = await buildCostResolvers();
   const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales ---------------------------------------------------------------
@@ -123,6 +132,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     where: cutoff ? { createdAt: cutoff } : undefined,
     select: {
       discountPct: true,
+      vatMode: true,
       classification: true,
       items: { select: { unitPrice: true, qty: true, specsSnapshot: true, descriptionSnapshot: true } },
     },
@@ -134,12 +144,15 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     if (!ymdInRange(manilaYMD(recAt), lo, hi)) continue;
     salesCount += 1;
     const disc = Number(q.discountPct) || 0;
+    // A VAT-exclusive quote charges the client no VAT — no output VAT on it.
+    const chargesVat = q.vatMode !== "EXCLUSIVE";
     for (const it of q.items) {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object"
         ? it.specsSnapshot
         : {}) as Record<string, unknown>;
       const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
       if (net === 0) continue;
+      if (chargesVat) outputVat = round2(outputVat + round2(net * VAT_RATE));
       const routing = lineRouting(specs).routing;
       let cogs = 0;
       if (routing === "fan") {
@@ -148,9 +161,11 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
       } else if (routing === "office_full") {
         // Bought-in good: its supplier cost is an Office expense. Discount the
         // cost proportionally so it lines up with the discounted sale.
-        const unitCost = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
-        if (unitCost > 0) {
-          expenses.office = round2(expenses.office + round2(unitCost * it.qty * (1 - disc / 100)));
+        const hit = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
+        if (hit) {
+          const cost = round2(hit.unitCost * it.qty * (1 - disc / 100));
+          expenses.office = round2(expenses.office + cost);
+          if (hit.vatInclusive) inputVat = round2(inputVat + round2(cost * VAT_RATE));
         } else {
           officeCostUnmatched += 1;
           const label = [str(specs.brand), str(specs.type)].filter(Boolean).join(" ") || it.descriptionSnapshot.slice(0, 60);
@@ -175,8 +190,13 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     if (!PROD_DEPT_KEYS.has(dept)) continue;
     const po = coercePurchaseOrder(pr.po);
     if (!po) continue;
-    const net = round2(poTotals(po).total / (1 + VAT_RATE));
+    // VAT-inclusive supplier (EWT-capable) → strip VAT to net and credit input
+    // VAT; a non-VAT supplier's price is already net.
+    const incl = supplierVatInclusive(po.supplier.company);
+    const gross = poTotals(po).total;
+    const net = incl ? round2(gross / (1 + VAT_RATE)) : round2(gross);
     expenses[dept] = round2(expenses[dept] + net);
+    if (incl) inputVat = round2(inputVat + round2(net * VAT_RATE));
   }
 
   // --- Expenses: cash requests (vouchers) ---------------------------------
@@ -216,7 +236,9 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     { sales: 0, expenses: 0, income: 0 },
   );
 
-  return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending, officeCostUnmatched, officeUnmatchedItems: [...officeUnmatched].sort() };
+  const vat = { output: outputVat, input: inputVat, payable: round2(outputVat - inputVat) };
+
+  return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending, officeCostUnmatched, officeUnmatchedItems: [...officeUnmatched].sort(), vat };
 }
 
 // --- Drill-down detail (spot-check / audit) -------------------------------
@@ -264,7 +286,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error("Invalid date range.");
   const [lo, hi] = from <= to ? [from, to] : [to, from];
 
-  const { cogsOf, officeCostOf } = await buildCostResolvers();
+  const { cogsOf, officeCostOf, supplierVatInclusive } = await buildCostResolvers();
   const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales detail --------------------------------------------------------
@@ -302,8 +324,8 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         officeShare = round2(net - cogs);
       } else if (routing === "office_full") {
         officeShare = net;
-        const unit = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
-        officeCost = unit > 0 ? round2(unit * it.qty * (1 - disc / 100)) : null;
+        const hit = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
+        officeCost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : null;
       } else {
         deptShare = round2(net / 1.3);
         officeShare = round2(net - deptShare);
@@ -336,7 +358,9 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     if (!PROD_DEPT_KEYS.has(dept)) continue;
     const po = coercePurchaseOrder(pr.po);
     if (!po) continue;
-    expenses.push({ dept, source: "Purchase order", ref: po.poNumber, date: manilaYMD(releasedAt), amount: round2(poTotals(po).total / (1 + VAT_RATE)) });
+    const incl = supplierVatInclusive(po.supplier.company);
+    const gross = poTotals(po).total;
+    expenses.push({ dept, source: "Purchase order", ref: po.poNumber, date: manilaYMD(releasedAt), amount: incl ? round2(gross / (1 + VAT_RATE)) : round2(gross) });
   }
   const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const crs = await prisma.cashRequest.findMany({

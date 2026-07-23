@@ -156,6 +156,25 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
         </table>
       </div>
 
+      {/* VAT for BIR — a pass-through, kept out of the profit figures above. */}
+      <div className="rounded-lg border p-3">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">VAT (for BIR — not in the profit above)</div>
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div>
+            <div className="text-xs text-muted-foreground">Output VAT (on sales)</div>
+            <div className="mt-0.5 font-medium tabular-nums">{formatCurrency(report.vat.output)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Input VAT (on purchases)</div>
+            <div className="mt-0.5 font-medium tabular-nums">− {formatCurrency(report.vat.input)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Net VAT payable</div>
+            <div className={`mt-0.5 font-semibold tabular-nums ${report.vat.payable >= 0 ? "" : "text-emerald-700 dark:text-emerald-400"}`}>{formatCurrency(report.vat.payable)}</div>
+          </div>
+        </div>
+      </div>
+
       {/* Audit drill-down */}
       <div>
         <button
@@ -175,6 +194,9 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
         </div>
         <div>
           Sales are net of VAT: production lines keep net ÷ 1.3 with the balance to Office; bought-in goods (KDK, AlphaAir, VFD, induction motors) are Office sales, with their Products-tab supplier cost (net) booked as an Office expense. Expenses also include material POs (net), cash vouchers released in the period, and payroll.
+        </div>
+        <div>
+          VAT is a pass-through, kept out of profit. Output VAT is 12% of VAT-charged sales (VAT-exclusive quotes excluded). Input VAT is 12% of purchases from VAT-inclusive (EWT-capable) suppliers — material POs and bought-in goods; cash vouchers and payroll carry none.
         </div>
         {report.fanLinesPending > 0 && (
           <div className="text-amber-700 dark:text-amber-500">

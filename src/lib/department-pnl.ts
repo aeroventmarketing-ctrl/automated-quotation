@@ -203,6 +203,12 @@ export interface OfficeCostEntry {
   name: string;
   sku: string | null;
   unitCost: number; // net (VAT-exclusive) supplier cost per unit
+  vatInclusive: boolean; // whether the chosen supplier prices VAT-inclusive (creditable input VAT)
+}
+
+export interface OfficeCostHit {
+  unitCost: number;
+  vatInclusive: boolean;
 }
 
 const normText = (s: unknown) => str(s).toLowerCase().replace(/\s+/g, " ");
@@ -211,21 +217,21 @@ const normText = (s: unknown) => str(s).toLowerCase().replace(/\s+/g, " ");
  * Build a resolver that finds a bought-in line's net unit cost from the Products
  * table. A line matches a product by SKU (if present in the line text) or by its
  * product name appearing in the line text; the longest name wins so a specific
- * match beats a generic one. Returns 0 when nothing matches.
+ * match beats a generic one. Returns null when nothing matches.
  */
-export function officeCostLookup(entries: OfficeCostEntry[]): (haystack: string) => number {
+export function officeCostLookup(entries: OfficeCostEntry[]): (haystack: string) => OfficeCostHit | null {
   const prepared = entries
-    .map((e) => ({ n: normText(e.name), sku: e.sku ? normText(e.sku) : null, cost: e.unitCost }))
+    .map((e) => ({ n: normText(e.name), sku: e.sku ? normText(e.sku) : null, hit: { unitCost: e.unitCost, vatInclusive: e.vatInclusive } }))
     .filter((e) => e.n.length >= 3 || e.sku)
     .sort((a, b) => b.n.length - a.n.length);
-  return (haystackRaw: string): number => {
+  return (haystackRaw: string): OfficeCostHit | null => {
     const h = normText(haystackRaw);
-    if (!h) return 0;
+    if (!h) return null;
     for (const e of prepared) {
-      if (e.sku && h.includes(e.sku)) return e.cost;
-      if (e.n.length >= 3 && h.includes(e.n)) return e.cost;
+      if (e.sku && h.includes(e.sku)) return e.hit;
+      if (e.n.length >= 3 && h.includes(e.n)) return e.hit;
     }
-    return 0;
+    return null;
   };
 }
 
