@@ -3,6 +3,8 @@ import { X } from "lucide-react";
 import { Prisma, InquiryStatus, InquirySource } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
+import { TestModeBanner } from "@/components/test-mode-banner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InquiriesTable } from "./inquiries-table";
@@ -57,8 +59,10 @@ export default async function InquiriesPage({
     ...(statusMatches.length ? [{ status: { in: statusMatches } }] : []),
     ...(sourceMatches.length ? [{ source: { in: sourceMatches } }] : []),
   ];
+  // Test mode hides pre-cutoff inquiries (kept, not deleted).
+  const cutoff = testModeCreatedAtFilter(await getTestMode());
   const where: Prisma.InquiryWhereInput = {
-    AND: [status ? { status } : {}, q ? { OR: searchOr } : {}],
+    AND: [status ? { status } : {}, q ? { OR: searchOr } : {}, cutoff ? { createdAt: cutoff } : {}],
   };
 
   const [inquiries, total, user] = await Promise.all([
@@ -97,6 +101,9 @@ export default async function InquiriesPage({
           <Link href="/inquiries/new">+ New Inquiry</Link>
         </Button>
       </div>
+
+      <TestModeBanner on={!!cutoff} />
+
 
       {status && (
         <div className="flex items-center gap-2 text-sm">

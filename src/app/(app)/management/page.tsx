@@ -18,6 +18,8 @@ import { canManagePayroll, getPayrollMonth } from "./payroll-actions";
 import type { DeptSplit } from "@/lib/department-pnl";
 import { FanCogsEditor } from "./fan-cogs-editor";
 import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
+import { getTestMode } from "@/lib/test-mode";
+import { TestModeBanner } from "@/components/test-mode-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -147,6 +149,7 @@ export default async function ManagementPage() {
 
   // Today in Manila (PH) for consistent deadline maths regardless of server TZ.
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const testMode = await getTestMode();
 
   // Departmental P&L — default to the current Manila month.
   const pnlYm = phToday.slice(0, 7);
@@ -292,6 +295,8 @@ export default async function ManagementPage() {
           Live
         </span>
       </div>
+
+      <TestModeBanner on={testMode.on} since={testMode.since} />
 
       {/* KPI tiles */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

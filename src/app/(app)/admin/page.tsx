@@ -7,6 +7,7 @@ import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { getNotificationsEnabled } from "@/lib/notification-settings";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
+import { getTestMode } from "@/lib/test-mode";
 import { getStockLocations } from "@/lib/stock-locations";
 import { getAiUsageLimit, currentMonthUsage, evaluateUsageAlert } from "@/lib/ai/usage";
 import { StockLocationsSetting } from "./stock-locations-setting";
@@ -19,7 +20,7 @@ import { FanMotorBrandSetting } from "./fan-motor-brand-setting";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function AdminOverviewPage() {
     getStockLocations(),
     getDocCheckGateEnabled(),
   ]);
+  const testMode = await getTestMode();
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
   const mrfNext = (Number((mrfRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
@@ -213,6 +215,12 @@ export default async function AdminOverviewPage() {
         description="When enabled, an order's documents can only be marked checked once the Purchase Order, Computation, Quotation, and RFQ/BOQ are attached. Turn off (e.g. while testing) to allow marking documents checked without the attachments."
         enabled={docCheckGate}
         onSave={saveDocCheckGateSetting}
+      />
+      <SpLockSetting
+        title="Test mode — hide existing clients, inquiries & quotations"
+        description="When enabled, every client, inquiry and quotation that already exists is hidden (not deleted) across the app, and the departmental P&L ignores them — so you can create a few test sales and read the P&L against a clean slate. New records you create while it's on stay visible. Turn it off to bring everything back exactly as it was."
+        enabled={testMode.on}
+        onSave={saveTestModeSetting}
       />
       <StockLocationsSetting initial={stockLocations} onSave={saveStockLocationsAction} />
       <FollowUpSetting

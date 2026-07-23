@@ -9,6 +9,7 @@ import { coerceChainLog } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
+import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { payrollExpenseForRange } from "./payroll-actions";
 import {
   PNL_DEPARTMENTS,
@@ -115,9 +116,11 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   const officeUnmatched = new Set<string>();
 
   const { cogsOf, officeCostOf } = await buildCostResolvers();
+  const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales ---------------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
+    where: cutoff ? { createdAt: cutoff } : undefined,
     select: {
       discountPct: true,
       classification: true,
@@ -161,7 +164,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   // --- Expenses: purchase requests (material POs) --------------------------
   // Booked to the requesting department, net of VAT, on the cash-released date.
   const prs = await prisma.purchaseRequest.findMany({
-    where: { dept: { not: null }, status: { not: "CANCELLED" } },
+    where: { dept: { not: null }, status: { not: "CANCELLED" }, ...(cutoff ? { createdAt: cutoff } : {}) },
     select: { dept: true, po: true, chainLog: true },
   });
   for (const pr of prs) {
@@ -180,7 +183,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   // Released cash, booked to its department (or Office when unassigned).
   const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const crs = await prisma.cashRequest.findMany({
-    where: { releasedAt: { not: null } },
+    where: { releasedAt: { not: null }, ...(cutoff ? { createdAt: cutoff } : {}) },
     select: { dept: true, amount: true, releasedAt: true, status: true },
   });
   for (const cr of crs) {
@@ -262,9 +265,11 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const [lo, hi] = from <= to ? [from, to] : [to, from];
 
   const { cogsOf, officeCostOf } = await buildCostResolvers();
+  const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales detail --------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
+    where: cutoff ? { createdAt: cutoff } : undefined,
     select: {
       quoteNumber: true,
       discountPct: true,
@@ -321,7 +326,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   // --- Expense detail ------------------------------------------------------
   const expenses: PnlExpenseItem[] = [];
   const prs = await prisma.purchaseRequest.findMany({
-    where: { dept: { not: null }, status: { not: "CANCELLED" } },
+    where: { dept: { not: null }, status: { not: "CANCELLED" }, ...(cutoff ? { createdAt: cutoff } : {}) },
     select: { dept: true, po: true, chainLog: true },
   });
   for (const pr of prs) {
@@ -335,7 +340,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   }
   const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const crs = await prisma.cashRequest.findMany({
-    where: { releasedAt: { not: null } },
+    where: { releasedAt: { not: null }, ...(cutoff ? { createdAt: cutoff } : {}) },
     select: { number: true, dept: true, amount: true, releasedAt: true, status: true },
   });
   for (const cr of crs) {

@@ -11,6 +11,7 @@ import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
 import { setHideOrderProgress } from "@/lib/order-progress-visibility";
 import { setNotificationsEnabled } from "@/lib/notification-settings";
 import { setDocCheckGateEnabled } from "@/lib/doc-check-gate";
+import { setTestMode } from "@/lib/test-mode";
 import { setStockLocations } from "@/lib/stock-locations";
 import { setDocViewers } from "@/lib/doc-viewers";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
@@ -427,6 +428,16 @@ export async function saveDocCheckGateSetting(input: z.infer<typeof spLockSchema
   revalidatePath("/admin");
   revalidatePath("/orders");
   return d.enabled;
+}
+
+// --- Test mode: hide existing clients / inquiries / quotations ---------------
+export async function saveTestModeSetting(input: z.infer<typeof spLockSchema>): Promise<boolean> {
+  await assertAdmin();
+  const d = spLockSchema.parse(input);
+  const tm = await setTestMode(d.enabled);
+  // Everything that reads the hidden records needs to re-render.
+  for (const p of ["/admin", "/management", "/customers", "/inquiries", "/quotations", "/dashboard"]) revalidatePath(p);
+  return tm.on;
 }
 
 // --- Stock locations (dropdown list for Inventory) --------------------------

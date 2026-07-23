@@ -3,6 +3,8 @@ import { X } from "lucide-react";
 import { Prisma, QuotationStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
+import { TestModeBanner } from "@/components/test-mode-banner";
 import { Card, CardContent } from "@/components/ui/card";
 import { quoteSignature, type SigItem } from "@/lib/quote-signature";
 import { QuotationsTable } from "./quotations-table";
@@ -56,8 +58,10 @@ export default async function QuotationsPage({
     { preparedBy: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
     ...(statusMatches.length ? [{ status: { in: statusMatches } }] : []),
   ];
+  // Test mode hides pre-cutoff quotations (kept, not deleted).
+  const cutoff = testModeCreatedAtFilter(await getTestMode());
   const where: Prisma.QuotationWhereInput = {
-    AND: [todayOnly ? { createdAt: { gte: startOfDay } } : {}, q ? { OR: searchOr } : {}],
+    AND: [todayOnly ? { createdAt: { gte: startOfDay } } : {}, q ? { OR: searchOr } : {}, cutoff ? { createdAt: cutoff } : {}],
   };
 
   const [quotations, total, user] = await Promise.all([
@@ -115,6 +119,8 @@ export default async function QuotationsPage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Quotations</h1>
+
+      <TestModeBanner on={!!cutoff} />
 
       {todayOnly && (
         <div className="flex items-center gap-2 text-sm">
