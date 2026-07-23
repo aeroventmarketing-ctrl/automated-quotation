@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays } from "lucide-react";
+import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,8 @@ import { getCurrentUser, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { ScheduleCalendar } from "./schedule-calendar";
 import type { ScheduleView } from "@/lib/schedule";
+import { DepartmentPnl } from "./department-pnl";
+import { getDepartmentPnl, type PnlReport } from "./pnl-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -140,6 +142,17 @@ export default async function ManagementPage() {
 
   // Today in Manila (PH) for consistent deadline maths regardless of server TZ.
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+
+  // Departmental P&L — default to the current Manila month.
+  const pnlYm = phToday.slice(0, 7);
+  const [pnlYear, pnlMonth] = pnlYm.split("-").map(Number);
+  const pnlTo = `${pnlYm}-${String(new Date(Date.UTC(pnlYear, pnlMonth, 0)).getUTCDate()).padStart(2, "0")}`;
+  let initialPnl: PnlReport | null = null;
+  try {
+    initialPnl = await getDepartmentPnl(`${pnlYm}-01`, pnlTo);
+  } catch {
+    initialPnl = null;
+  }
 
   const stageCount = new Map<OrderStage, number>();
   const prodActive = new Map<string, number>();
@@ -400,6 +413,22 @@ export default async function ManagementPage() {
             <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0025_schedules</code> migration to enable it.</p>
           ) : (
             <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Departmental P&L — sales, expenses and income per profit centre
+          (the four production departments + Office). Monthly by default with a
+          custom date range. */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm"><Scale className="h-4 w-4 text-muted-foreground" /> Departmental P&amp;L</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {initialPnl ? (
+            <DepartmentPnl initial={initialPnl} />
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">The departmental P&amp;L couldn&rsquo;t be loaded.</p>
           )}
         </CardContent>
       </Card>
