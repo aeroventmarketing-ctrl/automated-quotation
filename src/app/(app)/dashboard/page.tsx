@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
+import { TestModeBanner } from "@/components/test-mode-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
@@ -58,16 +60,21 @@ export default async function DashboardPage() {
   since6mo.setDate(1);
   since6mo.setMonth(since6mo.getMonth() - (MONTHS - 1));
 
+  // Test mode hides pre-cutoff records from the dashboard too (kept, not deleted).
+  const testMode = await getTestMode();
+  const cutoff = testModeCreatedAtFilter(testMode);
+
   const [byStatus, quotesToday, recentInquiries, quotes] = await Promise.all([
-    prisma.inquiry.groupBy({ by: ["status"], _count: true }),
-    prisma.quotation.count({ where: { createdAt: { gte: startOfDay } } }),
+    prisma.inquiry.groupBy({ by: ["status"], _count: true, ...(cutoff ? { where: { createdAt: cutoff } } : {}) }),
+    prisma.quotation.count({ where: { createdAt: { gte: startOfDay, ...(cutoff ?? {}) } } }),
     prisma.inquiry.findMany({
+      where: cutoff ? { createdAt: cutoff } : undefined,
       orderBy: { createdAt: "desc" },
       take: 8,
       include: { customer: true, _count: { select: { items: true } } },
     }),
     prisma.quotation.findMany({
-      where: { createdAt: { gte: since6mo } },
+      where: { createdAt: { gte: since6mo, ...(cutoff ?? {}) } },
       select: {
         createdAt: true,
         total: true,
@@ -240,6 +247,8 @@ export default async function DashboardPage() {
           <Link href="/inquiries/new">+ New Inquiry</Link>
         </Button>
       </div>
+
+      <TestModeBanner on={testMode.on} since={testMode.since} />
 
       {/* Each box drills into its details: the status boxes open the inquiries
           list pre-filtered to that stage, and "Quotes drafted today" opens the
