@@ -452,6 +452,25 @@ model Commission {
   @@index([paid])
 }
 
+/**
+ * Manual departmental payroll for the profit-centre P&L. One row per department
+ * per month (Manila YYYY-MM); the departmental P&L adds it to that department's
+ * expenses. Dept is one of fans | duct | accessories | motor | office.
+ */
+model Payroll {
+  id            String   @id @default(cuid())
+  dept          String
+  month         String // YYYY-MM (Manila)
+  amount        Decimal  @db.Decimal(14, 2) @default(0)
+  note          String?
+  createdByName String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([dept, month])
+  @@index([month])
+}
+
 /** Warehouse stock. Quantities are decimals so partial units (m, kg) work. */
 enum StockMovementKind {
   RECEIPT    // stock in (e.g. purchased items received)

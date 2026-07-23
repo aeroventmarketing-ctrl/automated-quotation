@@ -7,6 +7,7 @@ import { config } from "@/lib/config";
 import { saleFromClassification } from "@/lib/sale";
 import { coerceChainLog } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { payrollExpenseForRange } from "./payroll-actions";
 import {
   PNL_DEPARTMENTS,
   zeroSplit,
@@ -124,6 +125,10 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     const dept: DeptKey = cr.dept && PROD_DEPT_KEYS.has(cr.dept as DeptKey) ? (cr.dept as DeptKey) : "office";
     expenses[dept] = round2(expenses[dept] + (Number(cr.amount) || 0));
   }
+
+  // --- Expenses: manual departmental payroll (months overlapping the range) ---
+  const payroll = await payrollExpenseForRange(lo.slice(0, 7), hi.slice(0, 7));
+  for (const k of Object.keys(expenses) as DeptKey[]) expenses[k] = round2(expenses[k] + payroll[k]);
 
   const rows: PnlRow[] = PNL_DEPARTMENTS.map((d) => ({
     key: d.key,

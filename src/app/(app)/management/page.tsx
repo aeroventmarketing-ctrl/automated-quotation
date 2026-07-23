@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale } from "lucide-react";
+import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale, Banknote } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,9 @@ import { ScheduleCalendar } from "./schedule-calendar";
 import type { ScheduleView } from "@/lib/schedule";
 import { DepartmentPnl } from "./department-pnl";
 import { getDepartmentPnl, type PnlReport } from "./pnl-actions";
+import { PayrollEditor } from "./payroll-editor";
+import { canManagePayroll, getPayrollMonth } from "./payroll-actions";
+import type { DeptSplit } from "@/lib/department-pnl";
 
 export const dynamic = "force-dynamic";
 
@@ -152,6 +155,17 @@ export default async function ManagementPage() {
     initialPnl = await getDepartmentPnl(`${pnlYm}-01`, pnlTo);
   } catch {
     initialPnl = null;
+  }
+  // Payroll editor — Admin / Approver only. Null payroll = table not migrated.
+  let canEditPayroll = false;
+  let initialPayroll: DeptSplit | null = null;
+  if (viewer) {
+    try {
+      canEditPayroll = await canManagePayroll(viewer);
+      if (canEditPayroll) initialPayroll = await getPayrollMonth(pnlYm);
+    } catch {
+      initialPayroll = null;
+    }
   }
 
   const stageCount = new Map<OrderStage, number>();
@@ -432,6 +446,23 @@ export default async function ManagementPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Departmental payroll — manual monthly entry (Admin / Approver), feeds
+          the P&L expenses above. */}
+      {canEditPayroll && (
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm"><Banknote className="h-4 w-4 text-muted-foreground" /> Departmental payroll</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {initialPayroll ? (
+              <PayrollEditor initialMonth={pnlYm} initial={initialPayroll} />
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">Payroll isn&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0026_payroll</code> migration to enable it.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Unreconciled payments — orders whose collected amount (cash + EWT)
           doesn't settle the deal value. Each row opens the client. */}
