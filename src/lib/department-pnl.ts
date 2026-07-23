@@ -212,26 +212,54 @@ export interface OfficeCostHit {
 }
 
 const normText = (s: unknown) => str(s).toLowerCase().replace(/\s+/g, " ");
+// Generic words that don't help identify a product.
+const COST_STOP = new Set(["fan", "fans", "the", "and", "brand", "model", "type", "with", "for", "pc", "pcs", "unit", "units", "set", "sets"]);
+const tokenize = (text: unknown): string[] =>
+  normText(text).split(/[^a-z0-9]+/).filter((t) => t.length >= 2 && !COST_STOP.has(t));
+const hasDigit = (t: string) => /\d/.test(t);
+
+interface PreparedCost {
+  tokens: string[]; // significant name tokens
+  codes: string[]; // model-code tokens (contain a digit)
+  sku: string | null; // compacted sku
+  hit: OfficeCostHit;
+}
 
 /**
  * Build a resolver that finds a bought-in line's net unit cost from the Products
- * table. A line matches a product by SKU (if present in the line text) or by its
- * product name appearing in the line text; the longest name wins so a specific
- * match beats a generic one. Returns null when nothing matches.
+ * table. Matching, strongest first:
+ *   1. the product SKU appears in the line;
+ *   2. a product model code (e.g. "25NSB") matches a token in the line — so a
+ *      KDK/AlphaAir line is priced by its exact model, not just brand + type;
+ *   3. every word of a model-less product name is present in the line (order-
+ *      independent, so "AlphaAir Duct Canvass Connector" matches
+ *      "Duct Canvass Connector - AlphaAir").
+ * A product that carries a model code is matched ONLY by that code, so a
+ * different model of the same brand is never priced by the wrong cost.
+ * Returns null when nothing matches.
  */
 export function officeCostLookup(entries: OfficeCostEntry[]): (haystack: string) => OfficeCostHit | null {
-  const prepared = entries
-    .map((e) => ({ n: normText(e.name), sku: e.sku ? normText(e.sku) : null, hit: { unitCost: e.unitCost, vatInclusive: e.vatInclusive } }))
-    .filter((e) => e.n.length >= 3 || e.sku)
-    .sort((a, b) => b.n.length - a.n.length);
+  const prepared: PreparedCost[] = entries.map((e) => {
+    const tokens = tokenize(e.name);
+    return {
+      tokens,
+      codes: tokens.filter(hasDigit),
+      sku: e.sku ? normText(e.sku).replace(/[^a-z0-9]/g, "") : null,
+      hit: { unitCost: e.unitCost, vatInclusive: e.vatInclusive },
+    };
+  });
   return (haystackRaw: string): OfficeCostHit | null => {
-    const h = normText(haystackRaw);
-    if (!h) return null;
-    for (const e of prepared) {
-      if (e.sku && h.includes(e.sku)) return e.hit;
-      if (e.n.length >= 3 && h.includes(e.n)) return e.hit;
+    const lineTokens = new Set(tokenize(haystackRaw));
+    const lineCompact = normText(haystackRaw).replace(/[^a-z0-9]/g, "");
+    let best: { score: number; hit: OfficeCostHit } | null = null;
+    for (const p of prepared) {
+      let score = 0;
+      if (p.sku && p.sku.length >= 4 && lineCompact.includes(p.sku)) score = 1000 + p.tokens.length;
+      else if (p.codes.length && p.codes.some((c) => lineTokens.has(c))) score = 500 + p.tokens.length;
+      else if (!p.codes.length && p.tokens.length >= 2 && p.tokens.every((t) => lineTokens.has(t))) score = 100 + p.tokens.length;
+      if (score > 0 && (!best || score > best.score)) best = { score, hit: p.hit };
     }
-    return null;
+    return best?.hit ?? null;
   };
 }
 
