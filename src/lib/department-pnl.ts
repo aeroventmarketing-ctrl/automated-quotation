@@ -74,23 +74,34 @@ const isMotorController = (s: Specs) => s.type === "Motor Controller";
 const isIsolator = (s: Specs) => s.type === "Spring Vibration Isolator";
 const isAccessory = (s: Specs) =>
   s.category === "Ventilation Accessories" && !isAirDuct(s) && !isIsolator(s);
+// Bought-in / resale goods sit under the "Other Products" category (KDK,
+// AlphaAir, MAXAIR, induction motors, dust collectors, VAV, inline/jet fans …).
+const isOtherProducts = (s: Specs) => str(s.category) === "Other Products";
 const isFan = (s: Specs) => {
-  if (isMotorController(s) || isAccessory(s)) return false;
+  if (isMotorController(s) || isAccessory(s) || isOtherProducts(s)) return false;
   const hay = (str(s.category) + " " + str(s.type)).toLowerCase();
   return /centrifugal|axial|propeller|tubular|cabinet|panel|roof|blower|fan/.test(hay);
 };
-// A VFD controller is bought-in (like KDK); a Motor Starter is fabricated.
-const isVfd = (s: Specs) => /variable frequency|vfd/i.test(str(s.bladeType));
+// A VFD controller is bought-in (like KDK); a Motor Starter is fabricated. The
+// distinction rides in bladeType or the series field, depending on the quote.
+const isVfd = (s: Specs) => /variable frequency|vfd/i.test(`${str(s.bladeType)} ${str(s.series)} ${str(s.drive)}`);
 
 export type Routing = "fan" | "production_markup" | "office_full";
 
 /** Which department a line belongs to, and how its net is split with Office. */
 export function lineRouting(specs: Specs): { dept: DeptKey; routing: Routing } {
-  if (isFan(specs)) return { dept: "fans", routing: "fan" };
-  if (isAirDuct(specs)) return { dept: "duct", routing: "production_markup" };
-  if (isAccessory(specs)) return { dept: "accessories", routing: "production_markup" };
+  // Motor Controller: fabricated Starter → Motor dept; VFD (bought-in) → Office.
   if (isMotorController(specs))
     return isVfd(specs) ? { dept: "office", routing: "office_full" } : { dept: "motor", routing: "production_markup" };
+  // Fabricated ventilation accessories & air ducts.
+  if (isAirDuct(specs)) return { dept: "duct", routing: "production_markup" };
+  if (isAccessory(specs)) return { dept: "accessories", routing: "production_markup" };
+  // Bought-in / resale goods — the whole net is an Office sale, its supplier
+  // cost an Office expense. Must precede the fabricated-fan check so a branded
+  // "…Fan" (AlphaAir, MAXAIR, KDK) isn't mistaken for a fabricated fan.
+  if (isOtherProducts(specs)) return { dept: "office", routing: "office_full" };
+  // Fabricated fans & blowers (Centrifugal / Axial / Propeller / …).
+  if (isFan(specs)) return { dept: "fans", routing: "fan" };
   return { dept: "office", routing: "office_full" };
 }
 

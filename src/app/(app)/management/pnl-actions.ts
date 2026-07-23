@@ -30,6 +30,7 @@ import {
 
 const VAT_RATE = config.vatRate || 0.12;
 const PROD_DEPT_KEYS = new Set<DeptKey>(["fans", "duct", "accessories", "motor"]);
+const str = (v: unknown): string => (v == null ? "" : String(v)).trim();
 
 export interface PnlRow {
   key: DeptKey;
@@ -49,6 +50,7 @@ export interface PnlReport {
   salesCount: number;
   fanLinesPending: number; // fan lines booked entirely to Office (no COGS yet)
   officeCostUnmatched: number; // bought-in lines with no Products-tab cost matched
+  officeUnmatchedItems: string[]; // distinct labels of those unmatched goods
 }
 
 function addSplit(into: DeptSplit, from: DeptSplit) {
@@ -75,6 +77,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   let salesCount = 0;
   let fanLinesPending = 0;
   let officeCostUnmatched = 0;
+  const officeUnmatched = new Set<string>();
 
   // Fan-body COGS table (empty until 0027_fan_body_cogs is applied).
   let cogsRows: FanCogsRow[] = [];
@@ -140,6 +143,8 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
           expenses.office = round2(expenses.office + round2(unitCost * it.qty * (1 - disc / 100)));
         } else {
           officeCostUnmatched += 1;
+          const label = [str(specs.brand), str(specs.type)].filter(Boolean).join(" ") || it.descriptionSnapshot.slice(0, 60);
+          if (label) officeUnmatched.add(label);
         }
       }
       addSplit(sales, lineSalesSplit(specs, net, cogs));
@@ -201,5 +206,5 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     { sales: 0, expenses: 0, income: 0 },
   );
 
-  return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending, officeCostUnmatched };
+  return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending, officeCostUnmatched, officeUnmatchedItems: [...officeUnmatched].sort() };
 }

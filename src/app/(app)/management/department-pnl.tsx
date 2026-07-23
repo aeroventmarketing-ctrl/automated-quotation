@@ -170,7 +170,10 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
         )}
         {report.officeCostUnmatched > 0 && (
           <div className="text-amber-700 dark:text-amber-500">
-            {report.officeCostUnmatched} bought-in line{report.officeCostUnmatched === 1 ? " has" : "s have"} no matching Products-tab cost — Office income is overstated until the product (with a supplier price) is on file.
+            {report.officeCostUnmatched} bought-in line{report.officeCostUnmatched === 1 ? " has" : "s have"} no matching Products-tab supplier cost — Office income is overstated until the product (with a supplier price) is on file.
+            {report.officeUnmatchedItems.length > 0 && (
+              <span> Needs a supplier price: {report.officeUnmatchedItems.join(", ")}.</span>
+            )}
           </div>
         )}
       </div>
