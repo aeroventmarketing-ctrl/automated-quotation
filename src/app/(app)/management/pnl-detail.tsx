@@ -168,6 +168,7 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                   <th className="py-1.5 pr-2 text-left font-medium">Date · Quote · Customer</th>
                   <th className="py-1.5 px-2 text-left font-medium">Item</th>
                   <th className="py-1.5 px-2 text-right font-medium">Line net</th>
+                  {isOffice && <th className="py-1.5 px-2 text-right font-medium">Less cost</th>}
                   <th className="py-1.5 pl-2 text-right font-medium">To {DEPT_LABEL[deptKey]}</th>
                 </tr>
               </thead>
@@ -177,11 +178,16 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                     <td className="py-1 pr-2"><SaleRef s={r.s} /></td>
                     <td className="py-1 px-2">{r.l.label}{r.l.qty > 1 ? ` ×${r.l.qty}` : ""}<span className="ml-1 text-[10px] text-muted-foreground">{ROUTING_LABEL[r.l.routing] ?? ""}</span></td>
                     <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(r.l.net)}</td>
+                    {isOffice && (
+                      <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
+                        {r.l.routing === "office_full" ? (r.l.officeCost != null ? `− ${formatCurrency(r.l.officeCost)}` : <span className="text-amber-600">no cost</span>) : "—"}
+                      </td>
+                    )}
                     <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(r.amt)}</td>
                   </tr>
                 ))}
                 <tr className="border-t-2 font-semibold">
-                  <td className="py-1 pr-2" colSpan={3}>Total sales</td>
+                  <td className="py-1 pr-2" colSpan={isOffice ? 4 : 3}>Total sales</td>
                   <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(salesTotal)}</td>
                 </tr>
               </tbody>

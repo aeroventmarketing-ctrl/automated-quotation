@@ -152,27 +152,29 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         : {}) as Record<string, unknown>;
       const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
       if (net === 0) continue;
+      // Output VAT is charged on the full selling price regardless of the split.
       if (chargesVat) outputVat = round2(outputVat + round2(net * VAT_RATE));
       const routing = lineRouting(specs).routing;
-      let cogs = 0;
-      if (routing === "fan") {
-        cogs = cogsOf(specs);
-        if (cogs <= 0) fanLinesPending += 1;
-      } else if (routing === "office_full") {
-        // Bought-in good: its supplier cost is an Office expense. Discount the
-        // cost proportionally so it lines up with the discounted sale.
+      if (routing === "office_full") {
+        // Bought-in good: Office keeps the margin — selling net less the supplier
+        // cost. The cost is netted here (not booked as a separate expense); its
+        // input VAT is still creditable.
         const hit = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
-        if (hit) {
-          const cost = round2(hit.unitCost * it.qty * (1 - disc / 100));
-          expenses.office = round2(expenses.office + cost);
-          if (hit.vatInclusive) inputVat = round2(inputVat + round2(cost * VAT_RATE));
-        } else {
+        const cost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : 0;
+        sales.office = round2(sales.office + round2(net - cost));
+        if (hit?.vatInclusive && cost) inputVat = round2(inputVat + round2(cost * VAT_RATE));
+        if (!hit) {
           officeCostUnmatched += 1;
           const label = productLabel(specs, it.descriptionSnapshot);
           if (label) officeUnmatched.add(label);
         }
+      } else if (routing === "fan") {
+        const cogs = cogsOf(specs);
+        if (cogs <= 0) fanLinesPending += 1;
+        addSplit(sales, lineSalesSplit(specs, net, cogs));
+      } else {
+        addSplit(sales, lineSalesSplit(specs, net, 0));
       }
-      addSplit(sales, lineSalesSplit(specs, net, cogs));
     }
   }
 
@@ -332,17 +334,19 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         deptShare = cogs;
         officeShare = round2(net - cogs);
       } else if (routing === "office_full") {
-        officeShare = net;
         const hit = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
         officeCost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : null;
+        officeShare = round2(net - (officeCost ?? 0)); // margin: selling less supplier cost
         if (hit?.vatInclusive && officeCost) inputVatByDept.office = round2(inputVatByDept.office + round2(officeCost * VAT_RATE));
       } else {
         deptShare = round2(net / 1.3);
         officeShare = round2(net - deptShare);
       }
       if (chargesVat) {
+        // Output VAT is on the full selling price — for a bought-in line the whole
+        // net is the Office's sale, not the netted margin.
         outputVatByDept[dept] = round2(outputVatByDept[dept] + round2(deptShare * VAT_RATE));
-        outputVatByDept.office = round2(outputVatByDept.office + round2(officeShare * VAT_RATE));
+        outputVatByDept.office = round2(outputVatByDept.office + round2((routing === "office_full" ? net : officeShare) * VAT_RATE));
       }
       const label = productLabel(specs, it.descriptionSnapshot);
       lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost });
