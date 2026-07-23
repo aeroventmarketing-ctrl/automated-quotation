@@ -87,11 +87,11 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   const cogsOf = fanCogsLookup(cogsRows);
 
   // Office cost of bought-in goods, from the Products tab. Each product's net
-  // unit cost is its cheapest supplier price, converted to net using that
-  // supplier's VAT-inclusive flag.
+  // unit cost is its cheapest supplier price, converted to net using the
+  // supplier's VAT status — an EWT-capable supplier prices VAT-inclusive.
   const [products, suppliers] = await Promise.all([getProducts().catch(() => []), getSuppliers().catch(() => [])]);
-  const vatById = new Map(suppliers.map((s) => [s.id, s.vatInclusive] as const));
-  const vatByCompany = new Map(suppliers.map((s) => [s.company.trim().toLowerCase(), s.vatInclusive] as const));
+  const vatById = new Map(suppliers.map((s) => [s.id, s.ewt] as const));
+  const vatByCompany = new Map(suppliers.map((s) => [s.company.trim().toLowerCase(), s.ewt] as const));
   const netCost = (price: number, supplierId: string, company: string): number => {
     const incl = vatById.get(supplierId) ?? vatByCompany.get((company || "").trim().toLowerCase()) ?? true;
     return incl ? price / (1 + VAT_RATE) : price;

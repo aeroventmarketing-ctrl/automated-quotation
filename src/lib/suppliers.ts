@@ -22,7 +22,6 @@ export interface Supplier {
   bankName: string; // Bank Name
   accountNumber: string; // Account Number
   ewt: boolean; // EWT capable — issuing a PO to this supplier defaults to "with EWT"
-  vatInclusive: boolean; // whether this supplier's prices already include 12% VAT
 }
 
 /** The columns used for the import/export template (order matters). */
@@ -37,7 +36,6 @@ export const SUPPLIER_COLUMNS = [
   { key: "bankName", label: "Bank Name" },
   { key: "accountNumber", label: "Account Number" },
   { key: "ewt", label: "EWT Capable (yes/no)" },
-  { key: "vatInclusive", label: "VAT Inclusive (yes/no)" },
 ] as const;
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -53,16 +51,6 @@ export function parseEwt(v: unknown): boolean | undefined {
   if (!s) return undefined;
   if (["yes", "y", "true", "1", "with ewt", "with", "ewt", "ewt capable", "capable"].includes(s)) return true;
   if (["no", "n", "false", "0", "without ewt", "without", "non-ewt", "not capable", "none"].includes(s)) return false;
-  return undefined;
-}
-
-/** Parse a raw VAT-inclusive value (boolean or yes/no-ish string), tri-state. */
-export function parseVat(v: unknown): boolean | undefined {
-  if (typeof v === "boolean") return v;
-  const s = String(v ?? "").trim().toLowerCase();
-  if (!s) return undefined;
-  if (["yes", "y", "true", "1", "inclusive", "vat inclusive", "incl", "with vat", "vat", "vatable"].includes(s)) return true;
-  if (["no", "n", "false", "0", "exclusive", "vat exclusive", "excl", "without vat", "non-vat", "net", "zero-rated"].includes(s)) return false;
   return undefined;
 }
 
@@ -86,8 +74,6 @@ function coerceOne(r: unknown): Supplier | null {
     bankName: String(o.bankName ?? o.paymentDetails ?? "").trim(),
     accountNumber: String(o.accountNumber ?? "").trim(),
     ewt: parseEwt(o.ewt) ?? false,
-    // Default to VAT-inclusive when unset (most supplier invoices include VAT).
-    vatInclusive: parseVat(o.vatInclusive) ?? true,
   };
 }
 
@@ -127,7 +113,6 @@ export interface SupplierInput {
   bankName?: string;
   accountNumber?: string;
   ewt?: boolean;
-  vatInclusive?: boolean;
 }
 
 function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
@@ -142,7 +127,6 @@ function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
     bankName: (input.bankName ?? "").trim(),
     accountNumber: (input.accountNumber ?? "").trim(),
     ewt: input.ewt ?? false,
-    vatInclusive: input.vatInclusive ?? true,
   };
 }
 
@@ -213,7 +197,6 @@ export async function bulkUpsertSuppliers(rows: SupplierInput[]): Promise<BulkRe
         accountNumber: d.accountNumber || list[idx].accountNumber,
         // Boolean: preserve the existing flag when the import didn't specify one.
         ewt: raw.ewt ?? list[idx].ewt,
-        vatInclusive: raw.vatInclusive ?? list[idx].vatInclusive,
       };
       updated++;
     } else {
@@ -248,7 +231,6 @@ export async function rememberSupplier(input: { company: string; attention?: str
     bankName: "",
     accountNumber: "",
     ewt: false,
-    vatInclusive: true,
   });
   await writeSuppliers(list);
 }
