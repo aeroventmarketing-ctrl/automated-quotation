@@ -280,21 +280,6 @@ export default async function ManagementPage() {
         })}
       </div>
 
-      {/* Team calendar — everyone can add a schedule; an Engineer / Admin /
-          Approver approves. */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /> Team calendar</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {scheduleMissing ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0025_schedules</code> migration to enable it.</p>
-          ) : (
-            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} />
-          )}
-        </CardContent>
-      </Card>
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Order pipeline — donut by phase + stage bars */}
         <Card className="shadow-sm lg:col-span-2">
@@ -400,6 +385,21 @@ export default async function ManagementPage() {
               })}
               {atRisk.length > 8 && <li className="pt-1 text-xs text-muted-foreground">+ {atRisk.length - 8} more</li>}
             </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Team calendar — everyone can add a schedule; an Engineer / Admin /
+          Approver approves. */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /> Team calendar</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {scheduleMissing ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0025_schedules</code> migration to enable it.</p>
+          ) : (
+            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} />
           )}
         </CardContent>
       </Card>
