@@ -4,7 +4,7 @@ import { useRef, useState, Fragment } from "react";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SUPPLIER_COLUMNS, parseEwt, type Supplier, type BulkResult } from "@/lib/suppliers";
+import { SUPPLIER_COLUMNS, parseEwt, parseVat, type Supplier, type BulkResult } from "@/lib/suppliers";
 
 type SaveFn = (input: {
   id?: string;
@@ -18,13 +18,14 @@ type SaveFn = (input: {
   bankName: string;
   accountNumber: string;
   ewt: boolean;
+  vatInclusive: boolean;
 }) => Promise<Supplier[]>;
 type DeleteFn = (id: string) => Promise<Supplier[]>;
-type BulkFn = (input: { rows: Array<Omit<Supplier, "id" | "ewt"> & { ewt?: boolean }> }) => Promise<BulkResult>;
+type BulkFn = (input: { rows: Array<Omit<Supplier, "id" | "ewt" | "vatInclusive"> & { ewt?: boolean; vatInclusive?: boolean }> }) => Promise<BulkResult>;
 
 type Fields = Omit<Supplier, "id">;
-type StrField = Exclude<keyof Fields, "ewt">;
-const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", tin: "", zip: "", bankName: "", accountNumber: "", ewt: false };
+type StrField = Exclude<keyof Fields, "ewt" | "vatInclusive">;
+const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", tin: "", zip: "", bankName: "", accountNumber: "", ewt: false, vatInclusive: true };
 const HEADERS = SUPPLIER_COLUMNS.map((c) => c.label);
 
 const nk = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -40,15 +41,16 @@ const ALIASES: Record<StrField, string[]> = {
   accountNumber: ["account number", "account no", "account #", "acct number", "acct no", "account"],
 };
 const EWT_ALIASES = ["ewt capable (yes/no)", "ewt capable", "ewt", "ewt capable?", "with ewt", "ewt?"];
+const VAT_ALIASES = ["vat inclusive (yes/no)", "vat inclusive", "vat", "vat inclusive?", "vatable", "vat?"];
 
 function csvEscape(v: string) {
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
 /** Map a header row to field → column index, using aliases (exact then contains). */
-function mapHeaders(headers: string[]): Partial<Record<StrField, number>> & { ewt?: number } {
+function mapHeaders(headers: string[]): Partial<Record<StrField, number>> & { ewt?: number; vatInclusive?: number } {
   const H = headers.map(nk);
-  const map: Partial<Record<StrField, number>> & { ewt?: number } = {};
+  const map: Partial<Record<StrField, number>> & { ewt?: number; vatInclusive?: number } = {};
   for (const field of Object.keys(ALIASES) as StrField[]) {
     const aliases = ALIASES[field];
     let idx = H.findIndex((h) => aliases.includes(h));
@@ -59,6 +61,10 @@ function mapHeaders(headers: string[]): Partial<Record<StrField, number>> & { ew
   let ei = H.findIndex((h) => EWT_ALIASES.includes(h));
   if (ei < 0) ei = H.findIndex((h) => h.includes("ewt"));
   if (ei >= 0) map.ewt = ei;
+  // VAT-inclusive column (exact match first, then contains "vat").
+  let vi = H.findIndex((h) => VAT_ALIASES.includes(h));
+  if (vi < 0) vi = H.findIndex((h) => h.includes("vat"));
+  if (vi >= 0) map.vatInclusive = vi;
   return map;
 }
 
@@ -110,7 +116,7 @@ export function SuppliersManager({
   const ewtText = (b: boolean) => (b ? "yes" : "no");
 
   function downloadCsv() {
-    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt)])];
+    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt), ewtText(s.vatInclusive)])];
     const csv = rows.map((r) => r.map((c) => csvEscape(c ?? "")).join(",")).join("\r\n");
     download("suppliers-template.csv", new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
   }
@@ -124,7 +130,7 @@ export function SuppliersManager({
       const ws = wb.addWorksheet("Suppliers");
       ws.addRow(HEADERS);
       ws.getRow(1).font = { bold: true };
-      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt)]));
+      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt), ewtText(s.vatInclusive)]));
       ws.columns.forEach((c) => (c.width = 28));
       const buf = await wb.xlsx.writeBuffer();
       download("suppliers-template.xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -180,6 +186,7 @@ export function SuppliersManager({
         bankName: get(r, "bankName"),
         accountNumber: get(r, "accountNumber"),
         ewt: cols.ewt !== undefined ? parseEwt(r[cols.ewt]) : undefined,
+        vatInclusive: cols.vatInclusive !== undefined ? parseVat(r[cols.vatInclusive]) : undefined,
       }));
       const result = await onBulkImport({ rows: data });
       setList(result.list);
@@ -229,6 +236,10 @@ export function SuppliersManager({
             <input type="checkbox" className="h-4 w-4" checked={add.ewt} onChange={(e) => setAdd({ ...add, ewt: e.target.checked })} />
             EWT capable
           </label>
+          <label className="flex h-8 items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4" checked={add.vatInclusive} onChange={(e) => setAdd({ ...add, vatInclusive: e.target.checked })} />
+            VAT inclusive
+          </label>
         </div>
         <Button size="sm" className="h-8" disabled={busy || !add.company.trim()} onClick={() => run(() => onSave(add), () => setAdd(blank))}>
           {busy ? "Saving…" : "Add supplier"}
@@ -240,7 +251,7 @@ export function SuppliersManager({
         <p className="text-sm text-muted-foreground">No suppliers yet. Add one above, import in bulk, or issue a Purchase Order to save one automatically.</p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[1360px] border-collapse text-sm">
+          <table className="w-full min-w-[1460px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                 <th className="py-2 px-3 font-medium">Company Name</th>
@@ -253,6 +264,7 @@ export function SuppliersManager({
                 <th className="py-2 px-3 font-medium">Bank Name</th>
                 <th className="py-2 px-3 font-medium">Account Number</th>
                 <th className="py-2 px-3 font-medium">EWT</th>
+                <th className="py-2 px-3 font-medium">VAT</th>
                 <th className="py-2 px-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -270,6 +282,7 @@ export function SuppliersManager({
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.bankName} onChange={(e) => setEdit({ ...edit, bankName: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.accountNumber} onChange={(e) => setEdit({ ...edit, accountNumber: e.target.value })} /></td>
                     <td className="py-1.5 px-2 text-center"><input type="checkbox" className="h-4 w-4" checked={edit.ewt} onChange={(e) => setEdit({ ...edit, ewt: e.target.checked })} /></td>
+                    <td className="py-1.5 px-2 text-center"><input type="checkbox" className="h-4 w-4" checked={edit.vatInclusive} onChange={(e) => setEdit({ ...edit, vatInclusive: e.target.checked })} /></td>
                     <td className="py-1.5 px-3">
                       <div className="flex justify-end gap-1.5">
                         <Button size="sm" className="h-7 text-xs" disabled={busy || !edit.company.trim()} onClick={() => run(() => onSave({ id: s.id, ...edit }), () => setEditId(null))}>Save</Button>
@@ -305,15 +318,20 @@ export function SuppliersManager({
                         : <span className="text-xs text-muted-foreground">No</span>}
                     </td>
                     <td className="py-2 px-3">
+                      {s.vatInclusive
+                        ? <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-700">Incl.</span>
+                        : <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">Excl.</span>}
+                    </td>
+                    <td className="py-2 px-3">
                       <div className="flex justify-end gap-1.5">
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, tin: s.tin, zip: s.zip, bankName: s.bankName, accountNumber: s.accountNumber, ewt: s.ewt }); }}>Edit</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, tin: s.tin, zip: s.zip, bankName: s.bankName, accountNumber: s.accountNumber, ewt: s.ewt, vatInclusive: s.vatInclusive }); }}>Edit</Button>
                         <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={() => run(() => onDelete(s.id))}>Remove</Button>
                       </div>
                     </td>
                   </tr>
                   {openId === s.id && (
                     <tr className="border-b last:border-0 bg-muted/20">
-                      <td colSpan={11} className="px-4 py-3">
+                      <td colSpan={12} className="px-4 py-3">
                         <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
                           {([
                             ["Company Name", s.company],
@@ -326,6 +344,7 @@ export function SuppliersManager({
                             ["Bank Name", s.bankName],
                             ["Account Number", s.accountNumber],
                             ["EWT capable", s.ewt ? "Yes" : "No"],
+                            ["VAT inclusive", s.vatInclusive ? "Yes" : "No"],
                           ] as [string, string][]).map(([label, value]) => (
                             <div key={label} className="flex flex-col">
                               <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>

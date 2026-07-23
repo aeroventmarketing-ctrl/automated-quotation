@@ -164,6 +164,45 @@ export function fanCogsLookup(rows: FanCogsRow[]): (specs: Specs) => number {
   };
 }
 
+// --- Office cost lookup (bought-in goods) ---------------------------------
+export interface OfficeCostEntry {
+  name: string;
+  sku: string | null;
+  unitCost: number; // net (VAT-exclusive) supplier cost per unit
+}
+
+const normText = (s: unknown) => str(s).toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * Build a resolver that finds a bought-in line's net unit cost from the Products
+ * table. A line matches a product by SKU (if present in the line text) or by its
+ * product name appearing in the line text; the longest name wins so a specific
+ * match beats a generic one. Returns 0 when nothing matches.
+ */
+export function officeCostLookup(entries: OfficeCostEntry[]): (haystack: string) => number {
+  const prepared = entries
+    .map((e) => ({ n: normText(e.name), sku: e.sku ? normText(e.sku) : null, cost: e.unitCost }))
+    .filter((e) => e.n.length >= 3 || e.sku)
+    .sort((a, b) => b.n.length - a.n.length);
+  return (haystackRaw: string): number => {
+    const h = normText(haystackRaw);
+    if (!h) return 0;
+    for (const e of prepared) {
+      if (e.sku && h.includes(e.sku)) return e.cost;
+      if (e.n.length >= 3 && h.includes(e.n)) return e.cost;
+    }
+    return 0;
+  };
+}
+
+/** The text a bought-in line is matched against (description + key specs). */
+export function officeLineHaystack(description: string, specs: Specs): string {
+  return [description, specs.model, specs.brand, specs.type, specs.blowerModel]
+    .map((v) => str(v))
+    .filter(Boolean)
+    .join(" ");
+}
+
 // --- Sale recognition -----------------------------------------------------
 /**
  * The date a confirmed sale is recognised: a Terms (PO) client is booked on the

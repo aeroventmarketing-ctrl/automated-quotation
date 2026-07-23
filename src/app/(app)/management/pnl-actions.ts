@@ -7,6 +7,8 @@ import { config } from "@/lib/config";
 import { saleFromClassification } from "@/lib/sale";
 import { coerceChainLog } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { getProducts } from "@/lib/product-catalog";
+import { getSuppliers } from "@/lib/suppliers";
 import { payrollExpenseForRange } from "./payroll-actions";
 import {
   PNL_DEPARTMENTS,
@@ -16,11 +18,14 @@ import {
   lineRouting,
   saleRecognitionDate,
   fanCogsLookup,
+  officeCostLookup,
+  officeLineHaystack,
   manilaYMD,
   ymdInRange,
   type DeptKey,
   type DeptSplit,
   type FanCogsRow,
+  type OfficeCostEntry,
 } from "@/lib/department-pnl";
 
 const VAT_RATE = config.vatRate || 0.12;
@@ -43,6 +48,7 @@ export interface PnlReport {
   totals: { sales: number; expenses: number; income: number };
   salesCount: number;
   fanLinesPending: number; // fan lines booked entirely to Office (no COGS yet)
+  officeCostUnmatched: number; // bought-in lines with no Products-tab cost matched
 }
 
 function addSplit(into: DeptSplit, from: DeptSplit) {
@@ -68,6 +74,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   const expenses = zeroSplit();
   let salesCount = 0;
   let fanLinesPending = 0;
+  let officeCostUnmatched = 0;
 
   // Fan-body COGS table (empty until 0027_fan_body_cogs is applied).
   let cogsRows: FanCogsRow[] = [];
@@ -79,12 +86,32 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   }
   const cogsOf = fanCogsLookup(cogsRows);
 
+  // Office cost of bought-in goods, from the Products tab. Each product's net
+  // unit cost is its cheapest supplier price, converted to net using that
+  // supplier's VAT-inclusive flag.
+  const [products, suppliers] = await Promise.all([getProducts().catch(() => []), getSuppliers().catch(() => [])]);
+  const vatById = new Map(suppliers.map((s) => [s.id, s.vatInclusive] as const));
+  const vatByCompany = new Map(suppliers.map((s) => [s.company.trim().toLowerCase(), s.vatInclusive] as const));
+  const netCost = (price: number, supplierId: string, company: string): number => {
+    const incl = vatById.get(supplierId) ?? vatByCompany.get((company || "").trim().toLowerCase()) ?? true;
+    return incl ? price / (1 + VAT_RATE) : price;
+  };
+  const costEntries: OfficeCostEntry[] = products
+    .map((p) => {
+      const costs = p.suppliers
+        .filter((l) => (l.price ?? 0) > 0)
+        .map((l) => round2(netCost(l.price!, l.supplierId, l.company)));
+      return { name: p.name, sku: p.sku, unitCost: costs.length ? Math.min(...costs) : 0 };
+    })
+    .filter((e) => e.unitCost > 0);
+  const officeCostOf = officeCostLookup(costEntries);
+
   // --- Sales ---------------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
     select: {
       discountPct: true,
       classification: true,
-      items: { select: { unitPrice: true, qty: true, specsSnapshot: true } },
+      items: { select: { unitPrice: true, qty: true, specsSnapshot: true, descriptionSnapshot: true } },
     },
   });
   for (const q of quotations) {
@@ -100,10 +127,20 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         : {}) as Record<string, unknown>;
       const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
       if (net === 0) continue;
+      const routing = lineRouting(specs).routing;
       let cogs = 0;
-      if (lineRouting(specs).routing === "fan") {
+      if (routing === "fan") {
         cogs = cogsOf(specs);
         if (cogs <= 0) fanLinesPending += 1;
+      } else if (routing === "office_full") {
+        // Bought-in good: its supplier cost is an Office expense. Discount the
+        // cost proportionally so it lines up with the discounted sale.
+        const unitCost = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
+        if (unitCost > 0) {
+          expenses.office = round2(expenses.office + round2(unitCost * it.qty * (1 - disc / 100)));
+        } else {
+          officeCostUnmatched += 1;
+        }
       }
       addSplit(sales, lineSalesSplit(specs, net, cogs));
     }
@@ -164,5 +201,5 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     { sales: 0, expenses: 0, income: 0 },
   );
 
-  return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending };
+  return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending, officeCostUnmatched };
 }

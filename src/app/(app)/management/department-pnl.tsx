@@ -161,11 +161,16 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
           {" "}(Terms clients on PO date, others on payment date).
         </div>
         <div>
-          Sales are net of VAT: production lines keep net ÷ 1.3 with the balance to Office; bought-in goods (KDK, AlphaAir, VFD, induction motors) are Office sales. Expenses are material POs (net) and cash vouchers released in the period.
+          Sales are net of VAT: production lines keep net ÷ 1.3 with the balance to Office; bought-in goods (KDK, AlphaAir, VFD, induction motors) are Office sales, with their Products-tab supplier cost (net) booked as an Office expense. Expenses also include material POs (net), cash vouchers released in the period, and payroll.
         </div>
         {report.fanLinesPending > 0 && (
           <div className="text-amber-700 dark:text-amber-500">
-            {report.fanLinesPending} fan line{report.fanLinesPending === 1 ? " is" : "s are"} booked entirely to Office — fan-body COGS and payroll are added in the next stage.
+            {report.fanLinesPending} fan line{report.fanLinesPending === 1 ? " is" : "s are"} booked entirely to Office — add a matching fan-body COGS (by model code, or size + material) to attribute them to Fans.
+          </div>
+        )}
+        {report.officeCostUnmatched > 0 && (
+          <div className="text-amber-700 dark:text-amber-500">
+            {report.officeCostUnmatched} bought-in line{report.officeCostUnmatched === 1 ? " has" : "s have"} no matching Products-tab cost — Office income is overstated until the product (with a supplier price) is on file.
           </div>
         )}
       </div>
