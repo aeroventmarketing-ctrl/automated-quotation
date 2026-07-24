@@ -21,6 +21,7 @@ import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
 import { getTestMode } from "@/lib/test-mode";
 import { TestModeBanner } from "@/components/test-mode-banner";
 import { ActivityBell } from "@/components/activity-bell";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -286,6 +287,8 @@ export default async function ManagementPage() {
 
   return (
     <div className="space-y-6">
+      {/* Gentler interval than the operational pages — the P&L is query-heavy. */}
+      <AutoRefresh seconds={30} />
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Management Dashboard</h1>
