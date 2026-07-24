@@ -15,6 +15,7 @@ import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/
 import { readOrderWorkflow, nextOrderStep, stageLabel, pendingStep, ORDER_STAGES, PRODUCTION_DEPTS, deptLabel, type OrderStage } from "@/lib/order-workflow";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
+import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { OrdersTable } from "./orders-table";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   ]);
   const adminViewer = isAdmin(viewer);
   const progressHidden = progressHiddenFor(hideOrderProgress, viewer, adminViewer, assignments);
+  const restricted = isClientRestricted(viewer, assignments);
 
   const orders = quotes
     .map((q) => {
@@ -89,15 +91,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       return {
         id: q.id,
         quoteNumber: q.quoteNumber,
-        company: q.inquiry.customer.company,
-        customerId: q.inquiry.customer.id,
-        project: q.projectName ?? q.inquiry.projectName ?? "",
+        // Restricted (shop-floor) viewers never receive client identity or amounts.
+        company: restricted ? CLIENT_HIDDEN : q.inquiry.customer.company,
+        customerId: restricted ? "" : q.inquiry.customer.id,
+        project: restricted ? "" : q.projectName ?? q.inquiry.projectName ?? "",
         dateMs: d.getTime(),
         dateText: formatDate(d),
         currency: q.currency,
-        value,
-        collected,
-        balance,
+        value: restricted ? 0 : value,
+        collected: restricted ? 0 : collected,
+        balance: restricted ? 0 : balance,
         arrangement: ARRANGEMENT_LABEL[sale.arrangement],
         status,
         sales: q.preparedBy.name,
@@ -119,12 +122,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const totalCollected = round2(orders.reduce((a, o) => a + o.collected, 0));
   const totalOutstanding = round2(orders.reduce((a, o) => a + o.balance, 0));
 
-  const tiles = [
-    { label: "Orders", value: String(orders.length) },
-    { label: "Order value", value: formatCurrency(totalValue, currency) },
-    { label: "Collected", value: formatCurrency(totalCollected, currency) },
-    { label: "Outstanding", value: formatCurrency(totalOutstanding, currency) },
-  ];
+  const tiles = restricted
+    ? [{ label: "Orders", value: String(orders.length) }]
+    : [
+        { label: "Orders", value: String(orders.length) },
+        { label: "Order value", value: formatCurrency(totalValue, currency) },
+        { label: "Collected", value: formatCurrency(totalCollected, currency) },
+        { label: "Outstanding", value: formatCurrency(totalOutstanding, currency) },
+      ];
 
   return (
     <div className="space-y-6">
@@ -156,6 +161,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             <OrdersTable
               orders={orders}
               progressHidden={progressHidden}
+              restricted={restricted}
               initialStage={stageParam}
               initialStageLabel={stageParam ? stageLabel(stageParam) : undefined}
               initialDept={deptParam}

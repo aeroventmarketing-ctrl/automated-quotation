@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { payableTotal } from "@/lib/quote";
+import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import {
   readOrderWorkflow,
@@ -123,6 +124,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // between the quotation Sale panel and this order's close step.
   const saleForClose = saleFromClassification(quote.classification);
   const value = payableTotal(quote);
+  // Shop-floor roles must not see client identity or purchase amounts.
+  const restricted = isClientRestricted(viewer, assignments);
+  const custName = restricted ? CLIENT_HIDDEN : quote.inquiry.customer.company;
 
   // Admin toggle: hide workflow progress from Sales & Engineer (who hold no
   // workflow role). They still see the order header and financials.
@@ -135,16 +139,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Link>
         <div>
           <h1 className="text-2xl font-bold">
-            <Link href={`/customers/${quote.inquiry.customer.id}`} className="hover:underline">{quote.inquiry.customer.company}</Link>
+            {restricted ? custName : <Link href={`/customers/${quote.inquiry.customer.id}`} className="hover:underline">{custName}</Link>}
           </h1>
           <p className="text-sm text-muted-foreground">
             Order{" "}
             <Link href={`/quotations/${quote.id}`} className="text-primary hover:underline">{quote.quoteNumber}</Link>
-            {(quote.projectName || quote.inquiry.projectName) && ` · ${quote.projectName ?? quote.inquiry.projectName}`}
-            {" · "}
-            {formatCurrency(value, quote.currency)}
-            {" · "}
-            <Link href={`/customers/${quote.inquiry.customer.id}`} className="font-medium text-primary hover:underline">{quote.inquiry.customer.company}</Link>
+            {!restricted && (quote.projectName || quote.inquiry.projectName) && ` · ${quote.projectName ?? quote.inquiry.projectName}`}
+            {!restricted && (
+              <>
+                {" · "}
+                {formatCurrency(value, quote.currency)}
+                {" · "}
+                <Link href={`/customers/${quote.inquiry.customer.id}`} className="font-medium text-primary hover:underline">{custName}</Link>
+              </>
+            )}
           </p>
         </div>
         <Card>
@@ -527,16 +535,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">
-            <Link href={`/customers/${quote.inquiry.customer.id}`} className="hover:underline">{quote.inquiry.customer.company}</Link>
+            {restricted ? custName : <Link href={`/customers/${quote.inquiry.customer.id}`} className="hover:underline">{custName}</Link>}
           </h1>
           <p className="text-sm text-muted-foreground">
             Order{" "}
             <Link href={`/quotations/${quote.id}`} className="text-primary hover:underline">{quote.quoteNumber}</Link>
-            {(quote.projectName || quote.inquiry.projectName) && ` · ${quote.projectName ?? quote.inquiry.projectName}`}
-            {" · "}
-            {formatCurrency(value, quote.currency)}
-            {" · "}
-            <Link href={`/customers/${quote.inquiry.customer.id}`} className="font-medium text-primary hover:underline">{quote.inquiry.customer.company}</Link>
+            {!restricted && (quote.projectName || quote.inquiry.projectName) && ` · ${quote.projectName ?? quote.inquiry.projectName}`}
+            {!restricted && (
+              <>
+                {" · "}
+                {formatCurrency(value, quote.currency)}
+                {" · "}
+                <Link href={`/customers/${quote.inquiry.customer.id}`} className="font-medium text-primary hover:underline">{custName}</Link>
+              </>
+            )}
           </p>
         </div>
         <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{stageLabel(wf.stage)}</Badge>

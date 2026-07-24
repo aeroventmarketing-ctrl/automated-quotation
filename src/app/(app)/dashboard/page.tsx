@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { TestModeBanner } from "@/components/test-mode-banner";
+import { getWorkflowRoles } from "@/lib/workflow-roles";
+import { isClientRestricted } from "@/lib/client-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
@@ -48,6 +50,32 @@ const saleDate = (sale: SaleRecord, fallback: Date): Date => {
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
+
+  // Shop-floor roles must not see client identity or sales amounts — the sales
+  // dashboard is entirely that, so show them a simple landing to their areas.
+  const restrictedAssignments = await getWorkflowRoles();
+  if (isClientRestricted(user, restrictedAssignments)) {
+    const areas = [
+      { href: "/orders", label: "Orders" },
+      { href: "/inventory", label: "Inventory" },
+      { href: "/requisitions", label: "Requisitions" },
+      { href: "/purchasing", label: "Purchasing" },
+    ];
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold">Welcome{user?.name ? `, ${user.name}` : ""}.</h1>
+          <p className="text-sm text-muted-foreground">Jump to your work areas.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {areas.map((a) => (
+            <Link key={a.href} href={a.href} className="rounded-lg border p-4 text-center font-medium hover:bg-accent">{a.label}</Link>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const since14 = new Date(startOfDay);

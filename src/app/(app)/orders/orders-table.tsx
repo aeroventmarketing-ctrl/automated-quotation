@@ -60,6 +60,7 @@ const statusVariant = (s: string): "success" | "warning" | "secondary" => (s ===
 export function OrdersTable({
   orders,
   progressHidden,
+  restricted = false,
   initialStage,
   initialStageLabel,
   initialDept,
@@ -67,6 +68,7 @@ export function OrdersTable({
 }: {
   orders: OrderRow[];
   progressHidden: boolean;
+  restricted?: boolean;
   initialStage?: string;
   initialStageLabel?: string;
   initialDept?: string;
@@ -213,7 +215,7 @@ export function OrdersTable({
               </TableRow>
             ) : (
               groups.map((g) => (
-                <GroupRows key={g.key} groupKey={g.key} rows={g.rows} showHeader={group !== "none"} currency={currency} progressHidden={progressHidden} />
+                <GroupRows key={g.key} groupKey={g.key} rows={g.rows} showHeader={group !== "none"} currency={currency} progressHidden={progressHidden} restricted={restricted} />
               ))
             )}
           </TableBody>
@@ -223,7 +225,7 @@ export function OrdersTable({
   );
 }
 
-function GroupRows({ groupKey, rows, showHeader, currency, progressHidden }: { groupKey: string; rows: OrderRow[]; showHeader: boolean; currency: string; progressHidden: boolean }) {
+function GroupRows({ groupKey, rows, showHeader, currency, progressHidden, restricted }: { groupKey: string; rows: OrderRow[]; showHeader: boolean; currency: string; progressHidden: boolean; restricted: boolean }) {
   const total = rows.reduce((a, o) => a + o.value, 0);
   return (
     <>
@@ -231,7 +233,7 @@ function GroupRows({ groupKey, rows, showHeader, currency, progressHidden }: { g
         <TableRow className="bg-muted/40">
           <TableCell colSpan={10} className="py-1.5">
             <span className="text-sm font-semibold">{groupKey || "—"}</span>
-            <span className="ml-2 text-xs text-muted-foreground">{rows.length} order{rows.length === 1 ? "" : "s"} · {formatCurrency(total, currency)}</span>
+            <span className="ml-2 text-xs text-muted-foreground">{rows.length} order{rows.length === 1 ? "" : "s"}{restricted ? "" : ` · ${formatCurrency(total, currency)}`}</span>
           </TableCell>
         </TableRow>
       )}
@@ -241,14 +243,18 @@ function GroupRows({ groupKey, rows, showHeader, currency, progressHidden }: { g
             <Link href={`/quotations/${o.id}`} className="font-medium text-primary hover:underline">{o.quoteNumber}</Link>
           </TableCell>
           <TableCell>
-            <Link href={`/customers/${o.customerId}`} className="font-medium text-primary hover:underline">{o.company}</Link>
-            {o.project && <div className="text-xs text-muted-foreground">{o.project}</div>}
+            {restricted ? (
+              <span className="text-muted-foreground">{o.company}</span>
+            ) : (
+              <Link href={`/customers/${o.customerId}`} className="font-medium text-primary hover:underline">{o.company}</Link>
+            )}
+            {!restricted && o.project && <div className="text-xs text-muted-foreground">{o.project}</div>}
           </TableCell>
           <TableCell className="whitespace-nowrap text-sm">{o.dateText}</TableCell>
           <TableCell className="text-xs text-muted-foreground">{o.arrangement}</TableCell>
-          <TableCell className="text-right tabular-nums">{formatCurrency(o.value, o.currency)}</TableCell>
-          <TableCell className="text-right tabular-nums">{formatCurrency(o.collected, o.currency)}</TableCell>
-          <TableCell className="text-right tabular-nums">{formatCurrency(o.balance, o.currency)}</TableCell>
+          <TableCell className="text-right tabular-nums">{restricted ? "—" : formatCurrency(o.value, o.currency)}</TableCell>
+          <TableCell className="text-right tabular-nums">{restricted ? "—" : formatCurrency(o.collected, o.currency)}</TableCell>
+          <TableCell className="text-right tabular-nums">{restricted ? "—" : formatCurrency(o.balance, o.currency)}</TableCell>
           <TableCell><Badge variant={statusVariant(o.status)}>{o.status}</Badge></TableCell>
           <TableCell>
             <OrderStageActions
