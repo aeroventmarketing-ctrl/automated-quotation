@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { payableTotal } from "@/lib/quote";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
-import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import {
   readOrderWorkflow,
   ORDER_STAGES,
@@ -174,6 +174,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const names = namesForRole(role);
     return `${workflowRoleLabel(role)}${names.length ? ` — ${names.join(", ")}` : " (unassigned)"}`;
   };
+  // Workflow role key → assigned approver names, for the blinking "awaiting
+  // approval" highlights (fulfillment & commission).
+  const approvers: Record<string, string[]> = Object.fromEntries(
+    WORKFLOW_ROLE_KEYS.map((k) => [k, namesForRole(k as WorkflowRoleKey)]),
+  );
   // The designation (job title) each approval step is performed in. Shown next
   // to the approver's name on every sign-off.
   const APPROVAL_DESIGNATION: Record<string, string> = {
@@ -747,7 +752,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} />
             {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode === "INCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>
@@ -788,6 +793,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               canApprove={perms.canApproveComm}
               canAccounting={perms.canAccountingComm}
               admin={adminViewer}
+              approvers={approvers}
             />
           </CardContent>
         </Card>

@@ -12,6 +12,7 @@ import {
   type ScheduleView,
   type ScheduleStatus,
 } from "@/lib/schedule";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import { createSchedule, updateSchedule, deleteSchedule, decideSchedule } from "./schedule-actions";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -149,7 +150,7 @@ export function ScheduleCalendar({
         </div>
         <div className="text-lg font-bold tracking-tight">{monthName(view.y, view.m)} <span className="font-normal text-muted-foreground">{view.y}</span></div>
         {canApprove && pendingCount > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">{pendingCount} pending approval</span>
+          <span className="animate-approver-blink inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">{pendingCount} pending approval</span>
         )}
         <Button size="sm" className="ml-auto h-8" onClick={() => openAdd(dayKey(today.y, today.m, today.d))}>
           <Plus className="mr-1 h-4 w-4" /> Add schedule
@@ -294,6 +295,9 @@ export function ScheduleCalendar({
                   {detail.status === "APPROVED" ? "Approved" : "Rejected"} by {detail.decidedByName}
                   {detail.decisionNote ? ` — ${detail.decisionNote}` : ""}
                 </div>
+              )}
+              {detail.status === "PENDING" && (
+                <ApproverHighlight role="Engineer / Admin / Approver" detail="to approve this schedule" />
               )}
               {err && <p className="text-xs text-destructive">{err}</p>}
               <div className="flex flex-wrap items-center gap-2 border-t pt-3">

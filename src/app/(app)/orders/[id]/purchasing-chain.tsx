@@ -6,6 +6,7 @@ import { Printer, Pencil, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest, deletePurchaseRequest } from "../actions";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
 import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
 import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override";
@@ -271,7 +272,7 @@ export function PurchasingChain({
               ) : requisitionAwaitingPO ? (
                 <div className="mt-2 text-xs text-muted-foreground">Waiting on the Purchaser to prepare the Purchase Order — process in Purchasing</div>
               ) : r.status !== "REJECTED" && r.status !== "COMPLETED" && r.actions[0] ? (
-                <div className="mt-2 text-xs text-muted-foreground">Waiting on {r.actions[0].roleLabel} — process in Purchasing</div>
+                <div className="mt-2"><ApproverHighlight role={r.actions[0].roleLabel} detail="— process in Purchasing" /></div>
               ) : null
             ) : receivingId === r.id ? (
               <StockMatchPanel
@@ -312,7 +313,7 @@ export function PurchasingChain({
                 )}
               </div>
             ) : awaiting ? (
-              <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
+              <div className="mt-2"><ApproverHighlight role={awaiting.roleLabel} /></div>
             ) : awaitingPlantApproval ? (
               <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval on the order&rsquo;s Materials tab.</div>
             ) : null}

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Printer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import type { CashRequestRow } from "@/lib/cash-request-row";
 import { advanceCashRequest, cancelCashRequest } from "./actions";
 import { CashLiquidationPanel } from "./cash-liquidation-panel";
@@ -86,7 +87,8 @@ function CashRow({ r }: { r: CashRequestRow }) {
                 {busy === a.key ? "…" : a.label}
               </Button>
             ) : (
-              <span key={a.key} className="text-xs text-muted-foreground">Awaiting {a.actorLabel}</span>
+              <ApproverHighlight key={a.key} role={a.actorLabel} />
+
             ),
           )}
         </div>

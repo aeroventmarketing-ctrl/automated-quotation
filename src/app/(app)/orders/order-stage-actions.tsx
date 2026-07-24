@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import { advanceOrderStage } from "./actions";
 import type { OrderStage, OrderStepKey } from "@/lib/order-workflow";
 
@@ -41,6 +42,7 @@ export function OrderStageActions({
   canAct,
   blockedReason = null,
   awaiting,
+  awaitingNames = [],
   hideStage,
 }: {
   orderId: string;
@@ -51,6 +53,7 @@ export function OrderStageActions({
   canAct: boolean;
   blockedReason?: string | null;
   awaiting: string | null;
+  awaitingNames?: string[];
   hideStage?: boolean;
 }) {
   const router = useRouter();
@@ -88,7 +91,7 @@ export function OrderStageActions({
         </div>
       )}
       {!(nextStep && canAct) && awaiting && (
-        <div className="text-[11px] text-muted-foreground">Awaiting {awaiting}</div>
+        <ApproverHighlight role={awaiting} names={awaitingNames} />
       )}
       <div>
         <Link href={`/orders/${orderId}`} className="text-[11px] text-primary hover:underline">

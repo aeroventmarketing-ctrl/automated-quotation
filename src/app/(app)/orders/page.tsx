@@ -12,6 +12,7 @@ import {
   type SaleRecord,
 } from "@/lib/sale";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel } from "@/lib/workflow-roles";
+import { getApproverDirectory } from "@/lib/approver-directory";
 import { readOrderWorkflow, nextOrderStep, stageLabel, pendingStep, ORDER_STAGES, PRODUCTION_DEPTS, deptLabel, type OrderStage } from "@/lib/order-workflow";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
@@ -52,6 +53,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     getHideOrderProgress().catch(() => false),
     getDocCheckGateEnabled().catch(() => true),
   ]);
+  const approverDir = await getApproverDirectory();
   const adminViewer = isAdmin(viewer);
   const progressHidden = progressHiddenFor(hideOrderProgress, viewer, adminViewer, assignments);
   const restricted = await isClientRestricted(viewer, assignments);
@@ -80,6 +82,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             ? pend.roles.map(workflowRoleLabel).join(", ")
             : null
         : null;
+      // The people currently assigned to the pending role(s) — named + blinking.
+      const awaitingNames = pend && !pend.sales
+        ? [...new Set(pend.roles.flatMap((r) => approverDir.namesFor(r)))]
+        : [];
 
       // Departments with an active (unfinished) job order — for the dept filter.
       const inProd = wf.stage === "in_production" || wf.stage === "jo_received" || wf.stage === "producing";
@@ -112,6 +118,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         canAct,
         blockedReason,
         awaiting: awaitingAll,
+        awaitingNames,
       };
     })
     .filter((o): o is NonNullable<typeof o> => o != null)

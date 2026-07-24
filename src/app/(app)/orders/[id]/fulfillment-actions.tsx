@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ApproverHighlight } from "@/components/approver-highlight";
+import { workflowRoleLabel } from "@/lib/workflow-roles";
 import { closeDocsState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
@@ -54,6 +56,7 @@ export function FulfillmentActions({
   canEditCloseDocs,
   recordedPayments = [],
   admin = false,
+  approvers = {},
 }: {
   orderId: string;
   stage: string;
@@ -63,6 +66,8 @@ export function FulfillmentActions({
   canEditCloseDocs: boolean;
   recordedPayments?: RecordedPayment[];
   admin?: boolean;
+  /** Workflow role key → assigned approver names, for the blinking highlight. */
+  approvers?: Record<string, string[]>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -81,7 +86,15 @@ export function FulfillmentActions({
     }
   }
 
-  const awaiting = (who: string) => <p className="text-sm text-muted-foreground">Awaiting {who}.</p>;
+  // A blinking, highlighted "awaiting approval" affordance that names the role(s)
+  // and the assigned people. `roleKeys` resolve to names via the `approvers` map;
+  // `salesRole` adds the Sales team (which isn't a workflow role). `detail` is the
+  // action ("to confirm the final payment").
+  const awaiting = (detail: string, roleKeys: string[] = [], salesRole = false) => {
+    const names = [...new Set(roleKeys.flatMap((r) => approvers[r] ?? []))];
+    const roleLabel = [salesRole ? "Sales" : null, ...roleKeys.map(workflowRoleLabel)].filter(Boolean).join(" / ");
+    return <ApproverHighlight role={roleLabel || undefined} names={names} detail={detail} />;
+  };
 
   return (
     <div className="space-y-2">
@@ -91,7 +104,7 @@ export function FulfillmentActions({
           <Button size="sm" disabled={busy} onClick={() => run(() => notifyClientReady(orderId))}>
             {busy ? "Saving…" : "Notify Client - Order Ready"}
           </Button>
-        ) : awaiting("Sales to notify the client"))}
+        ) : awaiting("to notify the client the order is ready", [], true))}
 
       {/* Payments already recorded on the sale (incl. a one-time full payment) —
           read-only proof links so the approver can view the payment made before
@@ -134,14 +147,14 @@ export function FulfillmentActions({
           <Button size="sm" disabled={busy} onClick={() => run(() => checkFinalPayment(orderId))}>
             {busy ? "Saving…" : "Final Payment Checked"}
           </Button>
-        ) : awaiting("Accounting to check the final payment"))}
+        ) : awaiting("to check the final payment", ["accounting"]))}
 
       {stage === "final_pay_checked" &&
         (perms.canConfirmPay ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => confirmFinalPayment(orderId))}>
             {busy ? "Saving…" : "Final Payment Confirmed"}
           </Button>
-        ) : awaiting("the Payment Approver to confirm"))}
+        ) : awaiting("to confirm the final payment", ["payment_approver"]))}
 
       {/* Quality assurance & transfer (after final payment is confirmed) */}
       {stage === "final_pay_cleared" &&
@@ -153,7 +166,7 @@ export function FulfillmentActions({
               {busy ? "Saving…" : "Quality Tested-Passed"}
             </Button>
           </div>
-        ) : awaiting("the Technical Head / Quality Inspector to test quality"))}
+        ) : awaiting("to test quality", ["technical_head", "quality_inspector"]))}
 
       {stage === "qa_tested" &&
         (perms.canQaPlant ? (
@@ -164,7 +177,7 @@ export function FulfillmentActions({
               {busy ? "Saving…" : "Quality & Quantity Approved"}
             </Button>
           </div>
-        ) : awaiting("the Plant Manager to quality & quantity check"))}
+        ) : awaiting("to quality & quantity check", ["plant_manager"]))}
 
       {stage === "qa_plant_checked" &&
         (perms.canQaTransfer ? (
@@ -175,7 +188,7 @@ export function FulfillmentActions({
               {busy ? "Saving…" : "Transferred to Office"}
             </Button>
           </div>
-        ) : awaiting("Logistics to transfer the items to the office"))}
+        ) : awaiting("to transfer the items to the office", ["logistics"]))}
 
       {stage === "qa_transferred" &&
         (perms.canQaSales ? (
@@ -186,13 +199,13 @@ export function FulfillmentActions({
               {busy ? "Saving…" : "Quality & Quantity Re-Checked"}
             </Button>
           </div>
-        ) : awaiting("the Sales in-charge (or any Sales team member) to make the 2nd quality & quantity check"))}
+        ) : awaiting("to make the 2nd quality & quantity check", ["quality_inspector_2"], true))}
 
       {/* Phase 6 */}
       {stage === "qa_sales_checked" &&
         (perms.canPrepDocs ? (
           <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} admin={admin} />
-        ) : awaiting("Accounting to prepare the delivery documents"))}
+        ) : awaiting("to prepare the delivery documents", ["accounting"]))}
 
       {stage === "delivery_docs_ready" && (
         <div className="space-y-2">
@@ -224,7 +237,7 @@ export function FulfillmentActions({
           </div>
           {perms.canDeliver ? (
             <DeliveredForm orderId={orderId} initialFiles={closeDocs["pod"] ?? []} admin={admin} />
-          ) : awaiting("Logistics to deliver")}
+          ) : awaiting("to deliver", ["logistics"])}
         </div>
       )}
 
@@ -238,7 +251,7 @@ export function FulfillmentActions({
               {busy ? "Saving…" : "Approve POD-Successful Delivery"}
             </Button>
           </div>
-        ) : awaiting("Sales to approve the proof of delivery"))}
+        ) : awaiting("to approve the proof of delivery", [], true))}
 
       {stage === "delivery_confirmed" &&
         (perms.canSurrender ? (
@@ -249,7 +262,7 @@ export function FulfillmentActions({
               {busy ? "Saving…" : "Documents Surrendered to Accounting"}
             </Button>
           </div>
-        ) : awaiting("Logistics to surrender the signed documents to accounting"))}
+        ) : awaiting("to surrender the signed documents to accounting", ["logistics"]))}
 
       {/* Two-party handshake: Logistics surrendered; Accounting must confirm
           receipt before the file-and-close step appears. */}
@@ -262,7 +275,7 @@ export function FulfillmentActions({
               {busy ? "Saving…" : "Confirm Documents Received"}
             </Button>
           </div>
-        ) : awaiting("Accounting to confirm it received the documents"))}
+        ) : awaiting("to confirm it received the documents", ["accounting"]))}
 
       {stage === "docs_received" && (
         <CloseDocuments

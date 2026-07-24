@@ -33,3 +33,20 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Blinking highlight for pending-approval affordances — draws the eye to who
+   must approve. Honours prefers-reduced-motion (falls back to a static
+   highlight). Used by the <ApproverHighlight> component. */
+@layer utilities {
+  @keyframes approver-blink {
+    0%, 45% { opacity: 1; }
+    50%, 95% { opacity: 0.25; }
+    100% { opacity: 1; }
+  }
+  .animate-approver-blink {
+    animation: approver-blink 1.2s steps(1, end) infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-approver-blink { animation: none; }
+  }
+}

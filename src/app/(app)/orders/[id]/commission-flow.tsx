@@ -6,6 +6,8 @@ import { Upload, FileText, Download, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { OrderCommissionFlow, WorkflowDoc } from "@/lib/order-workflow";
+import { workflowRoleLabel } from "@/lib/workflow-roles";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import {
   approveCommission,
   uploadCommissionVoucher,
@@ -56,6 +58,7 @@ export function CommissionFlow({
   canApprove,
   canAccounting,
   admin = false,
+  approvers = {},
 }: {
   orderId: string;
   amount: number;
@@ -66,6 +69,7 @@ export function CommissionFlow({
   canApprove: boolean;
   canAccounting: boolean;
   admin?: boolean;
+  approvers?: Record<string, string[]>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -104,7 +108,11 @@ export function CommissionFlow({
     </label>
   );
 
-  const awaiting = (who: string) => <p className="text-sm text-muted-foreground">Awaiting {who}.</p>;
+  const awaiting = (detail: string, roleKeys: string[] = []) => {
+    const names = [...new Set(roleKeys.flatMap((r) => approvers[r] ?? []))];
+    const roleLabel = roleKeys.map(workflowRoleLabel).join(" / ");
+    return <ApproverHighlight role={roleLabel || undefined} names={names} detail={detail} />;
+  };
 
   // Completed sign-offs trail.
   const trail = [
@@ -138,29 +146,29 @@ export function CommissionFlow({
           <Button size="sm" disabled={busy} onClick={() => run(() => approveCommission(orderId))}>
             {busy ? "Saving…" : "Approve Commission Amount"}
           </Button>
-        ) : awaiting("an admin / the Payment Approver to approve the commission amount")
+        ) : awaiting("to approve the commission amount", ["payment_approver"])
       ) : !flow.voucherAt ? (
-        canAccounting ? uploadLabel("Upload Commission Voucher") : awaiting("Accounting to upload the commission voucher")
+        canAccounting ? uploadLabel("Upload Commission Voucher") : awaiting("to upload the commission voucher", ["accounting"])
       ) : !flow.voucherApprovedAt ? (
         canApprove ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => approveCommissionVoucher(orderId))}>
             {busy ? "Saving…" : "Approve Commission Voucher"}
           </Button>
-        ) : awaiting("an admin / the Payment Approver to approve the voucher")
+        ) : awaiting("to approve the voucher", ["payment_approver"])
       ) : !flow.budgetReleasedAt ? (
         canApprove ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => releaseCommissionBudget(orderId))}>
             {busy ? "Saving…" : "Release Commission Budget"}
           </Button>
-        ) : awaiting("an admin / the Payment Approver to release the budget")
+        ) : awaiting("to release the budget", ["payment_approver"])
       ) : !flow.receivedAt ? (
         canAccounting ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => receiveCommission(orderId))}>
             {busy ? "Saving…" : "Mark Commission Received"}
           </Button>
-        ) : awaiting("Accounting to mark the commission received")
+        ) : awaiting("to mark the commission received", ["accounting"])
       ) : !flow.signedVoucherDoc ? (
-        canAccounting ? uploadLabel("Upload Signed Voucher") : awaiting("Accounting to file the signed voucher")
+        canAccounting ? uploadLabel("Upload Signed Voucher") : awaiting("to file the signed voucher", ["accounting"])
       ) : (
         <p className="text-sm text-emerald-600">Commission complete — signed voucher filed by {flow.filedByName}.</p>
       )}

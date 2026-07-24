@@ -31,6 +31,7 @@ export interface OrderRow {
   canAct: boolean;
   blockedReason: string | null;
   awaiting: string | null;
+  awaitingNames?: string[];
 }
 
 type SortKey = "date" | "value" | "collected" | "balance" | "company" | "status" | "stage" | "sales";
@@ -266,6 +267,7 @@ function GroupRows({ groupKey, rows, showHeader, currency, progressHidden, restr
               canAct={o.canAct}
               blockedReason={o.blockedReason}
               awaiting={o.awaiting}
+              awaitingNames={o.awaitingNames}
               hideStage={progressHidden}
             />
           </TableCell>
