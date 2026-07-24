@@ -15,6 +15,7 @@ import { isSaleConfirmed, saleFromClassification, type SaleRecord } from "@/lib/
 import { getInquiryDocs } from "@/lib/inquiry-docs-store";
 import { inquiryDocsMissing } from "@/lib/inquiry-docs";
 import { findDuplicateQuotes, type DuplicateMatch } from "@/lib/quote-duplicates";
+import { logActivity } from "@/lib/activity-log";
 
 const lineSchema = z.object({
   catalogueItemId: z.string().nullable().optional(),
@@ -570,7 +571,14 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
   const data = saleSchema.parse(input);
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, inquiryId: true, preparedById: true, classification: true },
+    select: {
+      id: true,
+      inquiryId: true,
+      preparedById: true,
+      classification: true,
+      quoteNumber: true,
+      inquiry: { select: { customer: { select: { company: true } } } },
+    },
   });
   if (!quote) throw new Error("Quotation not found");
   if (quote.preparedById !== user.id && !isAdmin(user))
@@ -592,6 +600,16 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
       data: { status: confirmed ? "WON" : "SENT" },
     }),
   ]);
+  if (confirmed) {
+    await logActivity(user, {
+      action: "sale.recorded",
+      category: "quotation",
+      summary: `Sale won — ${quote.inquiry?.customer?.company ?? "customer"} (${quote.quoteNumber})`,
+      entity: "quotation",
+      entityId: quotationId,
+      href: `/quotations/${quotationId}`,
+    });
+  }
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
 }

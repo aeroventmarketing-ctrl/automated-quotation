@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { logActivity } from "@/lib/activity-log";
 
 async function requireInventoryManager() {
   const user = await getCurrentUser();
@@ -145,6 +146,15 @@ export async function importStockItems(
       errors.push(`Row ${r + 1} (“${name}”): ${e instanceof Error ? e.message.slice(0, 140) : "could not be imported."}`);
     }
   }
+  if (created > 0) {
+    await logActivity(user, {
+      action: "inventory.import",
+      category: "inventory",
+      summary: `Imported ${created} stock item${created === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped)` : ""}`,
+      entity: "inventory",
+      href: "/inventory",
+    });
+  }
   revalidatePath("/inventory");
   return { created, skipped, errors: errors.slice(0, 20) };
 }
@@ -273,6 +283,7 @@ const adjustSchema = z.object({
 export async function adjustStock(input: z.infer<typeof adjustSchema>): Promise<void> {
   const user = await requireInventoryManager();
   const d = adjustSchema.parse(input);
+  let logInfo: { name: string; unit: string; balanceAfter: number } | null = null;
   await prisma.$transaction(async (tx) => {
     const item = await tx.stockItem.findUnique({ where: { id: d.stockItemId } });
     if (!item) throw new Error("Stock item not found");
@@ -292,6 +303,19 @@ export async function adjustStock(input: z.infer<typeof adjustSchema>): Promise<
     await tx.stockMovement.create({
       data: { stockItemId: item.id, kind: d.kind, delta, balanceAfter, reason: d.reason || null, byName: user.name },
     });
+    logInfo = { name: item.name, unit: item.unit, balanceAfter };
   });
+  if (logInfo) {
+    const info = logInfo as { name: string; unit: string; balanceAfter: number };
+    const verb = d.kind === "RECEIPT" ? "Received" : d.kind === "ISSUE" ? "Issued" : "Adjusted";
+    await logActivity(user, {
+      action: `inventory.${d.kind.toLowerCase()}`,
+      category: "inventory",
+      summary: `${verb} stock: ${info.name} → ${info.balanceAfter} ${info.unit} on hand`,
+      entity: "inventory",
+      entityId: d.stockItemId,
+      href: "/inventory",
+    });
+  }
   revalidatePath("/inventory");
 }

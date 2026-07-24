@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { logActivity } from "@/lib/activity-log";
 import { SCHEDULE_CATEGORIES } from "@/lib/schedule";
 import type { User } from "@prisma/client";
 
@@ -71,6 +72,13 @@ export async function createSchedule(input: ScheduleInput): Promise<void> {
       ...(approver ? { decidedById: user.id, decidedByName: user.name, decidedAt: now } : {}),
     },
   });
+  await logActivity(user, {
+    action: "schedule.create",
+    category: "schedule",
+    summary: `Added schedule “${d.title}”${approver ? "" : " (pending approval)"}`,
+    entity: "schedule",
+    href: "/calendar",
+  });
   revalidatePath("/management");
   revalidatePath("/calendar");
 }
@@ -119,7 +127,7 @@ export async function deleteSchedule(id: string): Promise<void> {
 export async function decideSchedule(id: string, decision: "approve" | "reject", note?: string): Promise<void> {
   const user = await requireUser();
   if (!(await isScheduleApprover(user))) throw new Error("Only an Engineer, Admin or Approver can approve schedules.");
-  await prisma.schedule.update({
+  const s = await prisma.schedule.update({
     where: { id },
     data: {
       status: decision === "approve" ? "APPROVED" : "REJECTED",
@@ -128,6 +136,13 @@ export async function decideSchedule(id: string, decision: "approve" | "reject",
       decidedAt: new Date(),
       decisionNote: note?.trim() || null,
     },
+  });
+  await logActivity(user, {
+    action: `schedule.${decision}`,
+    category: "schedule",
+    summary: `${decision === "approve" ? "Approved" : "Rejected"} schedule “${s.title}”`,
+    entity: "schedule",
+    href: "/calendar",
   });
   revalidatePath("/management");
   revalidatePath("/calendar");

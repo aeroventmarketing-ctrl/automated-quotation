@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { TestModeBanner } from "@/components/test-mode-banner";
+import { ActivityBell } from "@/components/activity-bell";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
 import { isClientRestricted } from "@/lib/client-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -271,9 +272,12 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold">Sales Dashboard</h1>
           <p className="text-muted-foreground">Welcome back, {user?.name}.</p>
         </div>
-        <Button asChild>
-          <Link href="/inquiries/new">+ New Inquiry</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <ActivityBell />
+          <Button asChild>
+            <Link href="/inquiries/new">+ New Inquiry</Link>
+          </Button>
+        </div>
       </div>
 
       <TestModeBanner on={testMode.on} since={testMode.since} />

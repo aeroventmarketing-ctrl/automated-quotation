@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { logActivity } from "@/lib/activity-log";
 import {
   cashStep,
   coerceLiquidation,
@@ -86,6 +87,13 @@ export async function createCashRequest(input: {
       },
     });
   });
+  await logActivity(user, {
+    action: "cash.request.submit",
+    category: "cash",
+    summary: `Cash request submitted: ${purpose} (₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+    entity: "cash",
+    href: "/cash-requests",
+  });
   revalidatePath("/cash-requests");
 }
 
@@ -150,6 +158,14 @@ export async function advanceCashRequest(id: string, stepKey: string, note?: str
       break;
   }
   await prisma.cashRequest.update({ where: { id }, data });
+  await logActivity(user, {
+    action: `cash.${stepKey}`,
+    category: "cash",
+    summary: `${step.label} — cash request ${pr.number}`,
+    entity: "cash",
+    entityId: id,
+    href: "/cash-requests",
+  });
   revalidatePath("/cash-requests");
 }
 

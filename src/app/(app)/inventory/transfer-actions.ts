@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { isProductionHead, isPurchaserRole, coerceStockDoc, type StockDoc } from "@/lib/stock-transfer";
+import { logActivity } from "@/lib/activity-log";
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
@@ -62,6 +63,7 @@ const initiateSchema = z.object({
 export async function initiateTransfer(input: z.infer<typeof initiateSchema>): Promise<void> {
   const user = await requireInventoryManager();
   const d = initiateSchema.parse(input);
+  let transferInfo: { name: string; unit: string; from: string; to: string } | null = null;
   await prisma.$transaction(async (tx) => {
     const item = await tx.stockItem.findUnique({ where: { id: d.stockItemId } });
     if (!item) throw new Error("Stock item not found");
@@ -83,7 +85,18 @@ export async function initiateTransfer(input: z.infer<typeof initiateSchema>): P
     await tx.stockTransfer.create({
       data: { stockItemId: item.id, itemName: item.name, unit: item.unit, qty: d.qty, fromLocation, toLocation, note: d.note || null, initiatedById: user.id, initiatedByName: user.name },
     });
+    transferInfo = { name: item.name, unit: item.unit, from: fromLocation, to: toLocation };
   });
+  if (transferInfo) {
+    const info = transferInfo as { name: string; unit: string; from: string; to: string };
+    await logActivity(user, {
+      action: "inventory.transfer.initiate",
+      category: "inventory",
+      summary: `Stock transfer started: ${d.qty} ${info.unit} ${info.name} (${info.from} → ${info.to})`,
+      entity: "inventory",
+      href: "/inventory",
+    });
+  }
   revalidatePath("/inventory");
 }
 
@@ -100,6 +113,7 @@ export async function confirmTransferReceipt(transferId: string, slot: "prod_hea
   if (slot === "prod_head" && !(admin || isProductionHead(roles, user.id))) throw new Error("Only a production head can confirm this side.");
   if (slot === "purchaser" && !(admin || isPurchaserRole(roles, user.id))) throw new Error("Only the purchaser can confirm this side.");
 
+  let confirmInfo: { name: string; received: boolean } | null = null;
   await prisma.$transaction(async (tx) => {
     const t = await tx.stockTransfer.findUnique({ where: { id: transferId } });
     if (!t) throw new Error("Transfer not found");
@@ -137,17 +151,32 @@ export async function confirmTransferReceipt(transferId: string, slot: "prod_hea
       data.destStockItemId = destId; data.status = "RECEIVED"; data.receivedAt = now;
     }
     await tx.stockTransfer.update({ where: { id: transferId }, data });
+    confirmInfo = { name: t.itemName, received: bothConfirmed };
   });
+  if (confirmInfo) {
+    const info = confirmInfo as { name: string; received: boolean };
+    await logActivity(user, {
+      action: info.received ? "inventory.transfer.received" : "inventory.transfer.confirm",
+      category: "inventory",
+      summary: info.received
+        ? `Stock transfer received into stock: ${info.name}`
+        : `Stock transfer confirmed (${slot === "prod_head" ? "production head" : "purchaser"}): ${info.name}`,
+      entity: "inventory",
+      href: "/inventory",
+    });
+  }
   revalidatePath("/inventory");
 }
 
 /** Recall an in-transit transfer — the quantity returns to the source. */
 export async function cancelTransfer(transferId: string): Promise<void> {
   const user = await requireInventoryManager();
+  let cancelName = "";
   await prisma.$transaction(async (tx) => {
     const t = await tx.stockTransfer.findUnique({ where: { id: transferId } });
     if (!t) throw new Error("Transfer not found");
     if (t.status !== "IN_TRANSIT") throw new Error("Only an in-transit transfer can be cancelled.");
+    cancelName = t.itemName;
     if (t.stockItemId) {
       const src = await tx.stockItem.findUnique({ where: { id: t.stockItemId } });
       if (src) {
@@ -157,6 +186,13 @@ export async function cancelTransfer(transferId: string): Promise<void> {
       }
     }
     await tx.stockTransfer.update({ where: { id: transferId }, data: { status: "CANCELLED", cancelledByName: user.name, cancelledAt: new Date() } });
+  });
+  await logActivity(user, {
+    action: "inventory.transfer.cancel",
+    category: "inventory",
+    summary: `Stock transfer cancelled${cancelName ? `: ${cancelName}` : ""}`,
+    entity: "inventory",
+    href: "/inventory",
   });
   revalidatePath("/inventory");
 }

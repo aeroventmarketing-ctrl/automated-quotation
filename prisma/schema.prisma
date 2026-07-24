@@ -285,6 +285,28 @@ model AppSetting {
 }
 
 /**
+ * System activity feed. One row per notable action (approvals, stage changes,
+ * lifecycle events) across the ERP. Powers the notification bell on the
+ * dashboards. Append-only; never blocks the underlying action if it fails.
+ */
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String // machine key, e.g. "order.stage.advance", "schedule.approve"
+  category  String   @default("general") // order | schedule | cash | purchase | inventory | quotation | commission | admin | general
+  summary   String // human-readable one-liner shown in the bell
+  entity    String? // entity type, e.g. "order", "schedule"
+  entityId  String? // id of the entity (for linking)
+  href      String? // deep link to the entity
+  actorId   String?
+  actorName String   @default("System")
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([category])
+}
+
+/**
  * Purchasing chain for the order-to-delivery workflow (Phase 3, steps 8-13).
  * One row per material request escalated to purchasing. The status walks the
  * approval chain; each step stamps who did it and when.

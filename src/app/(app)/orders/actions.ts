@@ -12,6 +12,7 @@ import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberProduct } from "@/lib/product-catalog";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
+import { logActivity } from "@/lib/activity-log";
 import {
   getWorkflowRoles,
   userHasWorkflowRole,
@@ -103,6 +104,16 @@ function joToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
+/** A short "order <quoteNumber>" label for activity summaries (best-effort). */
+async function orderRefLabel(quotationId: string): Promise<string> {
+  try {
+    const q = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { quoteNumber: true } });
+    return q?.quoteNumber ? `order ${q.quoteNumber}` : "an order";
+  } catch {
+    return "an order";
+  }
+}
+
 export async function advanceOrderStage(quotationId: string, step: OrderStepKey): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -159,6 +170,14 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
   await prisma.quotation.update({
     where: { id: quotationId },
     data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },
+  });
+  await logActivity(user, {
+    action: "order.stage.advance",
+    category: "order",
+    summary: `${def.label} — order ${quote.quoteNumber}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
   });
   revalidatePath("/orders");
   revalidatePath(`/orders/${quotationId}`);
@@ -309,6 +328,14 @@ export async function issueJobOrders(quotationId: string, deptKeys: string[]): P
   // current stage so departments already in production aren't reset.
   const stage = wf.stage === "released" ? "in_production" : wf.stage;
   await saveWorkflow(quotationId, cls, { ...wf, stage, jobOrders });
+  await logActivity(user, {
+    action: "order.jo.issue",
+    category: "order",
+    summary: `Issued job order${added.length > 1 ? "s" : ""} (${added.map(deptLabel).join(", ")}) — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
 }
 
 /**
@@ -324,6 +351,14 @@ export async function receiveJobOrders(quotationId: string): Promise<void> {
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "in_production") throw new Error("Job orders can only be received once they are released.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "jo_received", approvals: stamp(wf, "jo_received", user) });
+  await logActivity(user, {
+    action: "order.jo.received",
+    category: "order",
+    summary: `Received job orders — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
 }
 
 /**
@@ -366,6 +401,14 @@ export async function advanceJobOrder(
   if (allJobOrdersFinished(nextWf)) nextWf.stage = "production_finished";
 
   await saveWorkflow(quotationId, cls, nextWf);
+  await logActivity(user, {
+    action: "order.jo.advance",
+    category: "order",
+    summary: `${deptLabel(deptKey)}: ${to === "in_production" ? "started" : "finished"} production — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
 }
 
 /**
@@ -817,6 +860,14 @@ export async function setJobOrderApproval(
     approvedAt: approve ? new Date().toISOString() : "",
   };
   await saveWorkflow(quotationId, cls, { ...wf, [field]: list });
+  await logActivity(user, {
+    action: "order.jo.approval",
+    category: "order",
+    summary: `${approve ? "Approved" : "Reopened"} ${deptLabel(dept as ProductionDeptKey)} job order — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
 }
 
 /**
@@ -1193,6 +1244,14 @@ export async function advancePurchaseRequest(
       break;
   }
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
+  await logActivity(user, {
+    action: `purchase.${stepKey}`,
+    category: "purchase",
+    summary: `${step.label} — ${pr.quotationId ? await orderRefLabel(pr.quotationId) : "purchase request"}`,
+    entity: "purchase",
+    entityId: purchaseRequestId,
+    href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+  });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
 }
