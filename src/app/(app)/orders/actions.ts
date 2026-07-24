@@ -1441,6 +1441,37 @@ export async function removeReconciliationReceipt(purchaseRequestId: string, pat
   revalidatePath("/requisitions");
 }
 
+/** Append a receipt to a recorded reconciliation. Admin-only. */
+export async function addReconciliationReceipt(purchaseRequestId: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
+  await assertUploadAdmin();
+  if (!doc || typeof doc.path !== "string" || typeof doc.name !== "string") throw new Error("Invalid file.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const cur = coerceReconciliation(pr.reconciliation);
+  const clean = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt ?? new Date().toISOString() };
+  const next = { ...cur, receipts: [...(cur.receipts ?? []), clean] };
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/** Replace one reconciliation receipt (by path) with a newly-uploaded one. Admin-only. */
+export async function replaceReconciliationReceipt(purchaseRequestId: string, oldPath: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
+  await assertUploadAdmin();
+  if (!doc || typeof doc.path !== "string" || typeof doc.name !== "string") throw new Error("Invalid file.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const cur = coerceReconciliation(pr.reconciliation);
+  const clean = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt ?? new Date().toISOString() };
+  const receipts = (cur.receipts ?? []).map((d) => (d.path === oldPath ? clean : d));
+  const next = { ...cur, receipts };
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
 /** Remove a resolved supplier-return's replacement proof. Admin-only. */
 export async function removePurchaseReturnProof(purchaseRequestId: string, returnId: string, path: string): Promise<void> {
   await assertUploadAdmin();

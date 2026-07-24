@@ -352,6 +352,7 @@ export default async function PurchasingPage() {
                     suppliers={suppliers}
                     paymentTerms={paymentTerms}
                     canManagePO={canManagePO}
+                    admin={admin}
                     catalogSuppliers={Object.fromEntries(suppliersByProduct)}
                     catalogPrices={catalogPrices}
                     scanProducts={scanProducts}

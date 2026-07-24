@@ -723,7 +723,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <Link href="/purchasing" className="text-xs font-medium text-primary hover:underline">Process in Purchasing →</Link>
           </CardHeader>
           <CardContent>
-            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} readOnly />
+            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={adminViewer} readOnly />
           </CardContent>
         </Card>
       )}

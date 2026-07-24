@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Scale, Upload, Sparkles } from "lucide-react";
+import { Scale, Upload, Sparkles, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CashLiquidationView } from "@/lib/cash-request-row";
 import type { SaleDoc } from "@/lib/sale";
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { UploadLink } from "@/components/upload-link";
-import { recordCashLiquidation, settleCashLiquidation, escalateCashLiquidation, approveCashLiquidation, escalateCashAiRead, resetCashAiRead, removeCashLiquidationReceipt } from "./actions";
+import { recordCashLiquidation, settleCashLiquidation, escalateCashLiquidation, approveCashLiquidation, escalateCashAiRead, resetCashAiRead, removeCashLiquidationReceipt, addCashLiquidationReceipt, replaceCashLiquidationReceipt } from "./actions";
 
 // Mirrors balanceTolerance() on the server so an AI-read receipt that tallies
 // within a small margin reads as "balanced", not a discrepancy.
@@ -97,6 +97,29 @@ export function CashLiquidationPanel({
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setReceipts((rs) => [...rs, data as SaleDoc]);
     } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
+    finally { setBusy(null); }
+  }
+
+  // Admin management of the RECORDED receipts (add / replace / delete in place).
+  async function uploadRaw(file: File): Promise<SaleDoc> {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("cashRequestId", id);
+    const res = await fetch("/api/cash-uploads", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+    return data as SaleDoc;
+  }
+  async function addRecordedReceipt(file: File) {
+    setBusy("addrcpt"); setErr(null);
+    try { await addCashLiquidationReceipt(id, await uploadRaw(file)); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed to add receipt"); }
+    finally { setBusy(null); }
+  }
+  async function replaceRecordedReceipt(oldPath: string, file: File) {
+    setBusy(`rp-${oldPath}`); setErr(null);
+    try { await replaceCashLiquidationReceipt(id, oldPath, await uploadRaw(file)); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed to replace receipt"); }
     finally { setBusy(null); }
   }
 
@@ -285,25 +308,38 @@ export function CashLiquidationPanel({
               Open the receipt above and confirm it actually matches before relying on this tally.
             </p>
           )}
-          {liquidation.receipts.length > 0 && (
+          {(liquidation.receipts.length > 0 || admin) && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="text-muted-foreground">Receipts:</span>
               {liquidation.receipts.map((f) => (
-                <UploadLink
-                  key={f.path}
-                  doc={f}
-                  base="/api/cash-uploads"
-                  size="xs"
-                  busy={busy === `rm-${f.path}`}
-                  onRemove={admin ? async () => {
-                    if (!window.confirm(`Remove receipt "${f.name}"?`)) return;
-                    setBusy(`rm-${f.path}`); setErr(null);
-                    try { await removeCashLiquidationReceipt(id, f.path); router.refresh(); }
-                    catch (e) { setErr(e instanceof Error ? e.message : "Failed to remove"); }
-                    finally { setBusy(null); }
-                  } : undefined}
-                />
+                <span key={f.path} className="inline-flex items-center gap-1">
+                  <UploadLink
+                    doc={f}
+                    base="/api/cash-uploads"
+                    size="xs"
+                    busy={busy === `rm-${f.path}`}
+                    onRemove={admin ? async () => {
+                      if (!window.confirm(`Remove receipt "${f.name}"?`)) return;
+                      setBusy(`rm-${f.path}`); setErr(null);
+                      try { await removeCashLiquidationReceipt(id, f.path); router.refresh(); }
+                      catch (e) { setErr(e instanceof Error ? e.message : "Failed to remove"); }
+                      finally { setBusy(null); }
+                    } : undefined}
+                  />
+                  {admin && (
+                    <label className="cursor-pointer text-muted-foreground hover:text-primary" title="Replace / modify" aria-label="Replace">
+                      <Pencil className="h-3.5 w-3.5" />
+                      <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy != null} onChange={(e) => e.target.files?.[0] && replaceRecordedReceipt(f.path, e.target.files[0])} />
+                    </label>
+                  )}
+                </span>
               ))}
+              {admin && (
+                <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 font-medium hover:bg-accent">
+                  <Upload className="h-3.5 w-3.5" /> {busy === "addrcpt" ? "Uploading…" : "Add receipt"}
+                  <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy != null} onChange={(e) => e.target.files?.[0] && addRecordedReceipt(e.target.files[0])} />
+                </label>
+              )}
             </div>
           )}
           {liquidation.note && <p className="text-xs text-muted-foreground">Note: {liquidation.note}</p>}

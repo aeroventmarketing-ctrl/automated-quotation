@@ -246,13 +246,42 @@ export async function recordCashLiquidation(
   revalidatePath("/cash-requests");
 }
 
-/** Remove one uploaded liquidation receipt by its storage path. Admin-only. */
-export async function removeCashLiquidationReceipt(id: string, path: string): Promise<void> {
+async function assertUploadAdmin() {
   const user = await getCurrentUser();
   if (!user || !isAdmin(user)) throw new Error("Only an admin can delete or modify uploaded documents.");
+}
+
+/** Remove one uploaded liquidation receipt by its storage path. Admin-only. */
+export async function removeCashLiquidationReceipt(id: string, path: string): Promise<void> {
+  await assertUploadAdmin();
   const pr = await loadOr404(id);
   const cur = coerceLiquidation(pr.liquidation);
   const next = { ...cur, receipts: (cur.receipts ?? []).filter((d) => d.path !== path) };
+  await prisma.cashRequest.update({ where: { id }, data: { liquidation: next as unknown as Prisma.InputJsonValue } });
+  revalidatePath("/cash-requests");
+}
+
+/** Append a receipt to a recorded liquidation. Admin-only. */
+export async function addCashLiquidationReceipt(id: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
+  await assertUploadAdmin();
+  if (!doc || typeof doc.path !== "string" || typeof doc.name !== "string") throw new Error("Invalid file.");
+  const pr = await loadOr404(id);
+  const cur = coerceLiquidation(pr.liquidation);
+  const clean = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt ?? new Date().toISOString() };
+  const next = { ...cur, receipts: [...(cur.receipts ?? []), clean] };
+  await prisma.cashRequest.update({ where: { id }, data: { liquidation: next as unknown as Prisma.InputJsonValue } });
+  revalidatePath("/cash-requests");
+}
+
+/** Replace one liquidation receipt (by path) with a newly-uploaded one. Admin-only. */
+export async function replaceCashLiquidationReceipt(id: string, oldPath: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
+  await assertUploadAdmin();
+  if (!doc || typeof doc.path !== "string" || typeof doc.name !== "string") throw new Error("Invalid file.");
+  const pr = await loadOr404(id);
+  const cur = coerceLiquidation(pr.liquidation);
+  const clean = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt ?? new Date().toISOString() };
+  const receipts = (cur.receipts ?? []).map((d) => (d.path === oldPath ? clean : d));
+  const next = { ...cur, receipts };
   await prisma.cashRequest.update({ where: { id }, data: { liquidation: next as unknown as Prisma.InputJsonValue } });
   revalidatePath("/cash-requests");
 }

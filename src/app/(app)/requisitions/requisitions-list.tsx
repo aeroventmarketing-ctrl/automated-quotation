@@ -51,12 +51,14 @@ export function RequisitionsList({
   suppliers,
   paymentTerms,
   poDefaultRemarks,
+  admin = false,
 }: {
   rows: RequisitionRow[];
   stockItems: StockOpt[];
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   poDefaultRemarks: string;
+  admin?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("pending");
   const [query, setQuery] = useState("");
@@ -109,7 +111,7 @@ export function RequisitionsList({
     return [...map.entries()].map(([key, rs]) => ({ key, rows: rs }));
   }, [visible, group]);
 
-  const chainProps = { stockItems, suppliers, paymentTerms, poDefaultRemarks };
+  const chainProps = { stockItems, suppliers, paymentTerms, poDefaultRemarks, admin };
 
   return (
     <div className="space-y-3">

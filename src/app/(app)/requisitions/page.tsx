@@ -90,6 +90,7 @@ export default async function RequisitionsPage() {
             suppliers={suppliers}
             paymentTerms={paymentTerms}
             poDefaultRemarks={COMPANY.poDefaultRemarks}
+            admin={admin}
           />
         )}
       </div>

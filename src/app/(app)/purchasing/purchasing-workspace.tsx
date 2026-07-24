@@ -316,6 +316,7 @@ export function PurchasingWorkspace({
                       suppliers={suppliers}
                       paymentTerms={paymentTerms}
                       canManagePO={canManagePO}
+                      admin={admin}
                       catalogSuppliers={catalogSuppliers}
                       catalogPrices={catalogPrices}
                       scanProducts={scanProducts}

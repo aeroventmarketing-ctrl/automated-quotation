@@ -75,6 +75,7 @@ export function PurchasingChain({
   selectedIds,
   onToggleSelect,
   deptApprovalHere = false,
+  admin = false,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -83,6 +84,7 @@ export function PurchasingChain({
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   canManagePO: boolean;
+  admin?: boolean;
   catalogSuppliers?: CatalogSuppliers;
   catalogPrices?: CatalogPrices;
   /** Catalogue for the PO editor's "Scan product barcode" quick-add. */
@@ -328,6 +330,7 @@ export function PurchasingChain({
               canRaiseReturn={r.canRaiseReturn ?? false}
               canResolveReturn={r.canResolveReturn ?? false}
               readOnly={!(r.canRaiseReturn || r.canResolveReturn)}
+              admin={admin}
             />
 
             {/* Voucher reconciliation — actual spend vs the issued voucher.
@@ -345,6 +348,7 @@ export function PurchasingChain({
                 canEscalate={r.canEscalateReconcile ?? false}
                 canApprove={r.canApproveReconcile ?? false}
                 readOnly={!(r.canRecordReconcile || r.canSettleReconcile || r.canEscalateReconcile || r.canApproveReconcile)}
+                admin={admin}
               />
             )}
 
