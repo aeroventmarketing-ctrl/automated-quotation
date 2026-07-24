@@ -246,13 +246,11 @@ export async function recordCashLiquidation(
   revalidatePath("/cash-requests");
 }
 
-/** Remove one uploaded liquidation receipt by its storage path. */
+/** Remove one uploaded liquidation receipt by its storage path. Admin-only. */
 export async function removeCashLiquidationReceipt(id: string, path: string): Promise<void> {
   const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
-  const admin = isAdmin(user);
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can delete or modify uploaded documents.");
   const pr = await loadOr404(id);
-  if (!(admin || pr.requestedById === user.id)) throw new Error("Only the requestor or an admin can remove a receipt.");
   const cur = coerceLiquidation(pr.liquidation);
   const next = { ...cur, receipts: (cur.receipts ?? []).filter((d) => d.path !== path) };
   await prisma.cashRequest.update({ where: { id }, data: { liquidation: next as unknown as Prisma.InputJsonValue } });

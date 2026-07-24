@@ -81,6 +81,7 @@ export interface CashRequestRow {
   canEscalateLiquidation: boolean;
   canApproveLiquidation: boolean;
   canOverride: boolean; // admin escape hatch — roll the chain back
+  admin: boolean; // viewer is an admin (delete/modify of uploads is admin-only)
   priorStatuses: { key: string; label: string }[];
 }
 
@@ -228,6 +229,7 @@ export function buildCashRequestRow(
     actions,
     isRequestor,
     canCancel: (ctx.admin || (isRequestor && status === "SUBMITTED")) && isCashCancellable(status),
+    admin: ctx.admin,
     liquidation,
     canRecordLiquidation: canLiquidateAt(status) && (isRequestor || ctx.admin),
     canSettleLiquidation: ctx.admin || ctx.hasRole("accounting"),

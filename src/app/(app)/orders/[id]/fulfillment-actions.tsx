@@ -53,6 +53,7 @@ export function FulfillmentActions({
   vatInclusive,
   canEditCloseDocs,
   recordedPayments = [],
+  admin = false,
 }: {
   orderId: string;
   stage: string;
@@ -61,6 +62,7 @@ export function FulfillmentActions({
   vatInclusive: boolean;
   canEditCloseDocs: boolean;
   recordedPayments?: RecordedPayment[];
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -124,7 +126,7 @@ export function FulfillmentActions({
 
       {/* Final payment proof — uploaded for the approver to review, then archived. */}
       {(stage === "final_pay_review" || stage === "final_pay_checked") && (
-        <FinalPaymentProof orderId={orderId} initialFiles={closeDocs["final_payment"] ?? []} canEdit={canEditCloseDocs} />
+        <FinalPaymentProof orderId={orderId} initialFiles={closeDocs["final_payment"] ?? []} canEdit={canEditCloseDocs} admin={admin} />
       )}
 
       {stage === "final_pay_review" &&
@@ -189,7 +191,7 @@ export function FulfillmentActions({
       {/* Phase 6 */}
       {stage === "qa_sales_checked" &&
         (perms.canPrepDocs ? (
-          <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} />
+          <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} admin={admin} />
         ) : awaiting("Accounting to prepare the delivery documents"))}
 
       {stage === "delivery_docs_ready" && (
@@ -221,7 +223,7 @@ export function FulfillmentActions({
             })}
           </div>
           {perms.canDeliver ? (
-            <DeliveredForm orderId={orderId} initialFiles={closeDocs["pod"] ?? []} />
+            <DeliveredForm orderId={orderId} initialFiles={closeDocs["pod"] ?? []} admin={admin} />
           ) : awaiting("Logistics to deliver")}
         </div>
       )}
@@ -269,6 +271,7 @@ export function FulfillmentActions({
           vatInclusive={vatInclusive}
           canEdit={canEditCloseDocs}
           canFile={perms.canFile}
+          admin={admin}
         />
       )}
 
@@ -281,6 +284,7 @@ export function FulfillmentActions({
           vatInclusive={vatInclusive}
           canEdit={canEditCloseDocs}
           canFile={perms.canFile}
+          admin={admin}
           closed
         />
       )}

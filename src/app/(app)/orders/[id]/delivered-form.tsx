@@ -13,7 +13,7 @@ const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponen
 const docDownload = (d: SaleDoc) => `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
 
 /** Logistics uploads the proof-of-delivery files (multiple) then marks delivered. */
-export function DeliveredForm({ orderId, initialFiles }: { orderId: string; initialFiles: SaleDoc[] }) {
+export function DeliveredForm({ orderId, initialFiles, admin = false }: { orderId: string; initialFiles: SaleDoc[]; admin?: boolean }) {
   const router = useRouter();
   const [files, setFiles] = useState<SaleDoc[]>(initialFiles);
   const [busy, setBusy] = useState(false);
@@ -72,9 +72,11 @@ export function DeliveredForm({ orderId, initialFiles }: { orderId: string; init
             <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
               <Download className="h-4 w-4" />
             </a>
-            <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(f.path)} disabled={busy} aria-label="Remove">
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {admin && (
+              <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(f.path)} disabled={busy} aria-label="Remove">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ))}
         <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">

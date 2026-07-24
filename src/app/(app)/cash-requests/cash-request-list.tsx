@@ -101,6 +101,7 @@ function CashRow({ r }: { r: CashRequestRow }) {
           canSettle={r.canSettleLiquidation}
           canEscalate={r.canEscalateLiquidation}
           canApprove={r.canApproveLiquidation}
+          admin={r.admin}
         />
       )}
 

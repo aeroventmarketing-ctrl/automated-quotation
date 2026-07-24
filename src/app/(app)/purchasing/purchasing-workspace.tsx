@@ -76,6 +76,7 @@ export function PurchasingWorkspace({
   catalogPrices,
   catalogSuppliers,
   scanProducts,
+  admin = false,
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -89,6 +90,7 @@ export function PurchasingWorkspace({
   catalogPrices: CatalogPrices;
   catalogSuppliers: CatalogSuppliers;
   scanProducts: ScanProduct[];
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
@@ -273,6 +275,7 @@ export function PurchasingWorkspace({
           catalogPrices={catalogPrices}
           catalogSuppliers={catalogSuppliers}
           scanProducts={scanProducts}
+          admin={admin}
         />
       )}
 

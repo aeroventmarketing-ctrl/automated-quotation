@@ -36,6 +36,7 @@ export function CashLiquidationPanel({
   canSettle,
   canEscalate,
   canApprove,
+  admin = false,
 }: {
   id: string;
   released: number;
@@ -44,6 +45,7 @@ export function CashLiquidationPanel({
   canSettle: boolean;
   canEscalate: boolean;
   canApprove: boolean;
+  admin?: boolean;
 }) {
   const router = useRouter();
   const recorded = liquidation.lines !== null;
@@ -293,7 +295,7 @@ export function CashLiquidationPanel({
                   base="/api/cash-uploads"
                   size="xs"
                   busy={busy === `rm-${f.path}`}
-                  onRemove={canRecord ? async () => {
+                  onRemove={admin ? async () => {
                     if (!window.confirm(`Remove receipt "${f.name}"?`)) return;
                     setBusy(`rm-${f.path}`); setErr(null);
                     try { await removeCashLiquidationReceipt(id, f.path); router.refresh(); }

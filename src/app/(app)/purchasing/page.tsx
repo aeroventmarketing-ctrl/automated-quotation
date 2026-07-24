@@ -333,6 +333,7 @@ export default async function PurchasingPage() {
               catalogPrices={catalogPrices}
               catalogSuppliers={Object.fromEntries(suppliersByProduct)}
               scanProducts={scanProducts}
+              admin={admin}
             />
           </section>
 

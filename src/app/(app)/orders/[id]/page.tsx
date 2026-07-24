@@ -401,6 +401,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       lines: b.lines,
       paymentAmount: b.paymentAmount,
       paymentProof: b.paymentId ? mbPaymentById.get(b.paymentId)?.proof ?? null : null,
+      paymentId: b.paymentId ?? null,
       cancelled: !!b.cancelled,
       delivered: isMbDelivered(b),
       filed: isMbFiled(b),
@@ -746,7 +747,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode === "INCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} />
             {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode === "INCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>
@@ -766,7 +767,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <p className="mb-3 text-xs text-muted-foreground">
               Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed.
             </p>
-            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null })) : mbBatchViews} canManage={canManageMulti} canCollect={!restricted && (canManageMulti || perms.canCheckPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} restricted={restricted} />
+            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null })) : mbBatchViews} canManage={canManageMulti} canCollect={!restricted && (canManageMulti || perms.canCheckPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} restricted={restricted} admin={adminViewer} />
           </CardContent>
         </Card>
       )}
@@ -786,6 +787,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               flow={commissionInfo.flow}
               canApprove={perms.canApproveComm}
               canAccounting={perms.canAccountingComm}
+              admin={adminViewer}
             />
           </CardContent>
         </Card>

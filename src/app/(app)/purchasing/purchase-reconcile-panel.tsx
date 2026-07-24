@@ -36,6 +36,7 @@ export function PurchaseReconcilePanel({
   canEscalate = false,
   canApprove = false,
   readOnly = false,
+  admin = false,
 }: {
   prId: string;
   reconcile: PurchaseReconcileView;
@@ -44,6 +45,7 @@ export function PurchaseReconcilePanel({
   canEscalate?: boolean;
   canApprove?: boolean;
   readOnly?: boolean;
+  admin?: boolean;
 }) {
   const router = useRouter();
   const recorded = reconcile.lines !== null;
@@ -338,7 +340,7 @@ export function PurchaseReconcilePanel({
                   base="/api/purchase-uploads"
                   size="xs"
                   busy={busy === `rm-${f.path}`}
-                  onRemove={!readOnly && canRecord ? async () => {
+                  onRemove={admin ? async () => {
                     if (!window.confirm(`Remove receipt "${f.name}"?`)) return;
                     setBusy(`rm-${f.path}`); setErr(null);
                     try { await removeReconciliationReceipt(prId, f.path); router.refresh(); }

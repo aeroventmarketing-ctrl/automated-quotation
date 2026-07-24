@@ -21,10 +21,12 @@ export function FinalPaymentProof({
   orderId,
   initialFiles,
   canEdit,
+  admin = false,
 }: {
   orderId: string;
   initialFiles: SaleDoc[];
   canEdit: boolean;
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [files, setFiles] = useState<SaleDoc[]>(initialFiles);
@@ -74,7 +76,7 @@ export function FinalPaymentProof({
             <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
               <Download className="h-4 w-4" />
             </a>
-            {canEdit && (
+            {admin && (
               <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(f.path)} disabled={busy} aria-label="Remove">
                 <Trash2 className="h-4 w-4" />
               </button>

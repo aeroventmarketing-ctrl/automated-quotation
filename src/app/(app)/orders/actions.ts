@@ -104,6 +104,13 @@ function joToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
+/** Deleting or modifying an uploaded document is admin-only, system-wide. */
+async function assertUploadAdmin() {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can delete or modify uploaded documents.");
+  return user;
+}
+
 /** A short "order <quoteNumber>" label for activity summaries (best-effort). */
 async function orderRefLabel(quotationId: string): Promise<string> {
   try {
@@ -1421,14 +1428,9 @@ export async function recordReconciliation(
   revalidatePath("/requisitions");
 }
 
-/** Remove one uploaded reconciliation receipt by its storage path. */
+/** Remove one uploaded reconciliation receipt by its storage path. Admin-only. */
 export async function removeReconciliationReceipt(purchaseRequestId: string, path: string): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
-  const admin = isAdmin(user);
-  const assignments = await getWorkflowRoles();
-  const recRole = (["purchaser", "accounting", "payment_approver"] as WorkflowRoleKey[]).some((r) => userHasWorkflowRole(assignments, user.id, r));
-  if (!(admin || recRole)) throw new Error("Only the Purchaser, Accounting, the Approver or an admin can remove a receipt.");
+  await assertUploadAdmin();
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   const cur = coerceReconciliation(pr.reconciliation);
@@ -1437,6 +1439,49 @@ export async function removeReconciliationReceipt(purchaseRequestId: string, pat
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
+}
+
+/** Remove a resolved supplier-return's replacement proof. Admin-only. */
+export async function removePurchaseReturnProof(purchaseRequestId: string, returnId: string, path: string): Promise<void> {
+  await assertUploadAdmin();
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const list = coercePurchaseReturns(pr.returns);
+  const entry = list.find((r) => r.id === returnId);
+  if (!entry) throw new Error("Return not found.");
+  entry.proof = (entry.proof ?? []).filter((d) => d.path !== path);
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { returns: list as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/** Remove a commission voucher document (unsigned "voucher" or "signed"). Admin-only. */
+export async function removeCommissionVoucher(quotationId: string, which: "voucher" | "signed"): Promise<void> {
+  await assertUploadAdmin();
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.commission) throw new Error("No commission record.");
+  const commission = { ...(wf.commission as Record<string, unknown>) };
+  delete commission[which === "voucher" ? "voucherDoc" : "signedVoucherDoc"];
+  await saveWorkflow(quotationId, cls, { ...wf, commission });
+  revalidatePath(`/orders/${quotationId}`);
+}
+
+/** Remove the proof attached to a multi-batch delivery payment. Admin-only. */
+export async function removeMultiBatchProof(quotationId: string, paymentId: string): Promise<void> {
+  await assertUploadAdmin();
+  const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { classification: true } });
+  if (!quote) throw new Error("Order not found");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const sale = saleFromClassification(cls);
+  if (!sale) throw new Error("No sale record.");
+  const payments = (sale.payments ?? []).map((p: SalePayment) => (p.id === paymentId ? { ...p, proof: null } : p));
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, sale: { ...sale, payments } } as unknown as Prisma.InputJsonObject },
+  });
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath(`/quotations/${quotationId}`);
 }
 
 /**
@@ -2446,6 +2491,7 @@ export async function saveCloseDoc(quotationId: string, key: string, doc: { path
 
 /** Remove a closing document. */
 export async function removeCloseDoc(quotationId: string, key: string, path: string): Promise<void> {
+  await assertUploadAdmin();
   const { cls, sale } = await loadForCloseDoc(quotationId, key);
   const docs = { ...(sale.docs ?? {}) };
   docs[key] = (docs[key] ?? []).filter((d) => d.path !== path);

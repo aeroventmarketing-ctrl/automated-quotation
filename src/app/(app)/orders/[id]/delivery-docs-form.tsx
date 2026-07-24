@@ -22,10 +22,12 @@ export function DeliveryDocsForm({
   orderId,
   initialDocs,
   vatInclusive,
+  admin = false,
 }: {
   orderId: string;
   initialDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialDocs);
@@ -96,9 +98,11 @@ export function DeliveryDocsForm({
                   <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
                     <Download className="h-4 w-4" />
                   </a>
-                  <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(t.key, f.path)} disabled={busy} aria-label="Remove">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {admin && (
+                    <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(t.key, f.path)} disabled={busy} aria-label="Remove">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </span>
               ))}
               <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">

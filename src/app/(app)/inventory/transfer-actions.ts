@@ -207,7 +207,8 @@ export async function attachTransferProof(transferId: string, doc: StockDoc): Pr
 }
 
 export async function removeTransferProof(transferId: string): Promise<void> {
-  await requireTransferParty();
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can delete or modify uploaded documents.");
   await prisma.stockTransfer.update({ where: { id: transferId }, data: { proof: Prisma.DbNull } });
   revalidatePath("/inventory");
 }

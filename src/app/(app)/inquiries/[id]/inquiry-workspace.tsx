@@ -453,7 +453,7 @@ export function InquiryWorkspace({
       })}
 
       {/* Required documents before a quotation can be made */}
-      <InquiryDocsUploader inquiryId={inquiryId} docs={docs} onChange={setDocs} canEdit={canEditDocs} />
+      <InquiryDocsUploader inquiryId={inquiryId} docs={docs} onChange={setDocs} canEdit={canEditDocs} admin={isAdmin} />
 
       {/* Create quotation — the template is chosen later in the quotation builder. */}
       <Card className="border-primary/40">

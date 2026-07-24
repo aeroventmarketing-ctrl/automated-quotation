@@ -23,6 +23,7 @@ export function CloseDocuments({
   vatInclusive,
   canEdit,
   canFile,
+  admin = false,
   closed = false,
 }: {
   orderId: string;
@@ -30,6 +31,7 @@ export function CloseDocuments({
   vatInclusive: boolean;
   canEdit: boolean;
   canFile: boolean;
+  admin?: boolean;
   /** The order already closed but its documents are still incomplete. */
   closed?: boolean;
 }) {
@@ -115,7 +117,7 @@ export function CloseDocuments({
                     <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
                       <Download className="h-4 w-4" />
                     </a>
-                    {canEdit && (
+                    {admin && (
                       <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(t.key, f.path)} disabled={busy} aria-label="Remove">
                         <Trash2 className="h-4 w-4" />
                       </button>

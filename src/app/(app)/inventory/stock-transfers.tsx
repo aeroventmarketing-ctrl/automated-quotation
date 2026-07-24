@@ -22,7 +22,7 @@ function Handshake({ label, byName, at }: { label: string; byName: string | null
   );
 }
 
-function TransferRow({ t }: { t: StockTransferView }) {
+function TransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -79,7 +79,7 @@ function TransferRow({ t }: { t: StockTransferView }) {
             <a href={viewUrl(t.proof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">{t.proof.name}</a>
             <a href={viewUrl(t.proof)} target="_blank" rel="noopener noreferrer" title="View" className="text-muted-foreground hover:text-primary"><Eye className="h-4 w-4" /></a>
             <a href={dlUrl(t.proof)} title="Download" className="text-muted-foreground hover:text-primary"><Download className="h-4 w-4" /></a>
-            {t.canUpload && <button type="button" title="Remove" disabled={busy} className="text-muted-foreground hover:text-destructive" onClick={() => run(() => removeTransferProof(t.id))}><Trash2 className="h-4 w-4" /></button>}
+            {admin && <button type="button" title="Remove" disabled={busy} className="text-muted-foreground hover:text-destructive" onClick={() => run(() => removeTransferProof(t.id))}><Trash2 className="h-4 w-4" /></button>}
           </span>
         ) : t.canUpload ? (
           <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs hover:bg-accent">
@@ -109,7 +109,7 @@ function TransferRow({ t }: { t: StockTransferView }) {
   );
 }
 
-export function StockTransfers({ transfers, missing }: { transfers: StockTransferView[]; missing?: boolean }) {
+export function StockTransfers({ transfers, missing, admin = false }: { transfers: StockTransferView[]; missing?: boolean; admin?: boolean }) {
   if (missing) {
     return <p className="py-4 text-center text-sm text-muted-foreground">Stock transfers aren&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0028_stock_transfer</code> migration to enable them.</p>;
   }
@@ -124,13 +124,13 @@ export function StockTransfers({ transfers, missing }: { transfers: StockTransfe
           {active.length > 0 && (
             <div className="space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Awaiting receipt ({active.length})</div>
-              {active.map((t) => <TransferRow key={t.id} t={t} />)}
+              {active.map((t) => <TransferRow key={t.id} t={t} admin={admin} />)}
             </div>
           )}
           {past.length > 0 && (
             <details className="space-y-2">
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">Completed &amp; cancelled ({past.length})</summary>
-              <div className="mt-2 space-y-2">{past.map((t) => <TransferRow key={t.id} t={t} />)}</div>
+              <div className="mt-2 space-y-2">{past.map((t) => <TransferRow key={t.id} t={t} admin={admin} />)}</div>
             </details>
           )}
         </>

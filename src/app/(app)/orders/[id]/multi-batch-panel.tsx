@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { SaleDoc } from "@/lib/sale";
-import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment } from "../actions";
+import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof } from "../actions";
 
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 
@@ -32,6 +32,7 @@ export interface MBBatchView {
   lines: { description: string; qty: number }[];
   paymentAmount?: number;
   paymentProof?: SaleDoc | null;
+  paymentId?: string | null;
   cancelled: boolean;
   delivered: boolean;
   filed: boolean;
@@ -55,6 +56,7 @@ export function MultiBatchPanel({
   orderAmount,
   amountPaid,
   restricted = false,
+  admin = false,
 }: {
   orderId: string;
   items: MBItem[];
@@ -67,6 +69,7 @@ export function MultiBatchPanel({
   amountPaid: number;
   /** Shop-floor viewer — hide all client purchase amounts. */
   restricted?: boolean;
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -291,9 +294,16 @@ export function MultiBatchPanel({
             </Badge>
             {!restricted && b.paymentAmount != null && b.paymentAmount > 0 && <Badge variant="success">Collected {formatCurrency(b.paymentAmount, currency)}</Badge>}
             {b.paymentProof && (
-              <a href={docView(b.paymentProof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline" title="View payment details">
-                <Eye className="h-3.5 w-3.5" /> Payment details
-              </a>
+              <span className="inline-flex items-center gap-1.5">
+                <a href={docView(b.paymentProof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline" title="View payment details">
+                  <Eye className="h-3.5 w-3.5" /> Payment details
+                </a>
+                {admin && b.paymentId && (
+                  <button type="button" disabled={busy != null} onClick={() => { if (window.confirm("Remove this payment proof?")) run(b.id + "rmproof", () => removeMultiBatchProof(orderId, b.paymentId!)); }} className="text-muted-foreground hover:text-destructive" title="Remove payment proof" aria-label="Remove payment proof">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </span>
             )}
             <span className="text-xs text-muted-foreground">opened by {b.createdByName}</span>
             {b.canCancel && !b.cancelled && !b.filed && (

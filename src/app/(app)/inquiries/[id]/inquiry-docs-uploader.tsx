@@ -17,11 +17,13 @@ export function InquiryDocsUploader({
   docs,
   onChange,
   canEdit,
+  admin = false,
 }: {
   inquiryId: string;
   docs: Record<string, SaleDoc[]>;
   onChange: (docs: Record<string, SaleDoc[]>) => void;
   canEdit: boolean;
+  admin?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function InquiryDocsUploader({
                     </a>
                     <a href={view(f)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View"><Eye className="h-4 w-4" /></a>
                     <a href={download(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download"><Download className="h-4 w-4" /></a>
-                    {canEdit && (
+                    {admin && (
                       <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(t.key, f.path)} disabled={busy} aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
                     )}
                   </div>

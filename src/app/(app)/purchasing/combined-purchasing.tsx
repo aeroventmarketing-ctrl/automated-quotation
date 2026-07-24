@@ -95,6 +95,7 @@ export function CombinedPurchasing({
   catalogPrices = {},
   catalogSuppliers = {},
   scanProducts = [],
+  admin = false,
 }: {
   combinable: CombinableItem[];
   batches: BatchCard[];
@@ -107,6 +108,7 @@ export function CombinedPurchasing({
   catalogPrices?: CatalogPrices;
   catalogSuppliers?: CatalogSuppliers;
   scanProducts?: ScanProduct[];
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -142,7 +144,7 @@ export function CombinedPurchasing({
     <div className="space-y-3">
       {/* Existing combined POs */}
       {batches.map((b) => (
-        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} />
+        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} />
       ))}
 
       {/* Combine builder */}
@@ -227,7 +229,7 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[] }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts, admin = false }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[]; admin?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -368,6 +370,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         returns={batch.returns}
         canRaiseReturn={batch.canRaiseReturn}
         canResolveReturn={batch.canResolveReturn}
+        admin={admin}
       />
 
       {/* Voucher reconciliation — actual spend vs the issued voucher for this PO.
@@ -380,6 +383,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           canSettle={batch.canSettleReconcile}
           canEscalate={batch.canEscalateReconcile}
           canApprove={batch.canApproveReconcile}
+          admin={admin}
         />
       )}
 

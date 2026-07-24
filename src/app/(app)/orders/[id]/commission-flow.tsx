@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, Download, Eye } from "lucide-react";
+import { Upload, FileText, Download, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { OrderCommissionFlow, WorkflowDoc } from "@/lib/order-workflow";
@@ -13,13 +13,14 @@ import {
   releaseCommissionBudget,
   receiveCommission,
   fileSignedCommissionVoucher,
+  removeCommissionVoucher,
 } from "../actions";
 
 const docLink = (d: WorkflowDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
 const docView = (d: WorkflowDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const docDownload = (d: WorkflowDoc) => `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
 
-function DocRow({ label, doc }: { label: string; doc: WorkflowDoc }) {
+function DocRow({ label, doc, onRemove }: { label: string; doc: WorkflowDoc; onRemove?: () => void }) {
   return (
     <span className="inline-flex items-center gap-2 text-xs">
       <span className="text-muted-foreground">{label}:</span>
@@ -32,6 +33,11 @@ function DocRow({ label, doc }: { label: string; doc: WorkflowDoc }) {
       <a href={docDownload(doc)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
         <Download className="h-3.5 w-3.5" />
       </a>
+      {onRemove && (
+        <button type="button" onClick={onRemove} className="text-muted-foreground hover:text-destructive" title="Remove" aria-label="Remove">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
     </span>
   );
 }
@@ -49,6 +55,7 @@ export function CommissionFlow({
   flow,
   canApprove,
   canAccounting,
+  admin = false,
 }: {
   orderId: string;
   amount: number;
@@ -58,6 +65,7 @@ export function CommissionFlow({
   flow: OrderCommissionFlow;
   canApprove: boolean;
   canAccounting: boolean;
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -120,8 +128,8 @@ export function CommissionFlow({
 
       {trail.length > 0 && <div className="text-xs text-muted-foreground">{trail.join(" · ")}</div>}
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {flow.voucherDoc && <DocRow label="Voucher" doc={flow.voucherDoc} />}
-        {flow.signedVoucherDoc && <DocRow label="Signed voucher" doc={flow.signedVoucherDoc} />}
+        {flow.voucherDoc && <DocRow label="Voucher" doc={flow.voucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this voucher document?")) run(() => removeCommissionVoucher(orderId, "voucher")); } : undefined} />}
+        {flow.signedVoucherDoc && <DocRow label="Signed voucher" doc={flow.signedVoucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this signed voucher document?")) run(() => removeCommissionVoucher(orderId, "signed")); } : undefined} />}
       </div>
 
       {/* Current actionable step */}

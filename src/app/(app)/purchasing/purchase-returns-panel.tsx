@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
-import { returnPurchaseItems, resolvePurchaseReturn } from "../orders/actions";
+import { returnPurchaseItems, resolvePurchaseReturn, removePurchaseReturnProof } from "../orders/actions";
 
 
 /**
@@ -24,12 +24,14 @@ export function PurchaseReturnsPanel({
   canRaiseReturn,
   canResolveReturn,
   readOnly = false,
+  admin = false,
 }: {
   prId: string;
   returns: PurchaseReturnView[];
   canRaiseReturn: boolean;
   canResolveReturn: boolean;
   readOnly?: boolean;
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -107,7 +109,17 @@ export function PurchaseReturnsPanel({
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="text-muted-foreground">Proof:</span>
                         {r.proof.map((f) => (
-                          <UploadLink key={f.path} doc={f} base="/api/purchase-uploads" size="xs" />
+                          <UploadLink
+                            key={f.path}
+                            doc={f}
+                            base="/api/purchase-uploads"
+                            size="xs"
+                            onRemove={admin ? async () => {
+                              if (!window.confirm(`Remove proof "${f.name}"?`)) return;
+                              try { await removePurchaseReturnProof(prId, r.id, f.path); router.refresh(); }
+                              catch (e) { setErr(e instanceof Error ? e.message : "Failed to remove"); }
+                            } : undefined}
+                          />
                         ))}
                       </div>
                     )}
