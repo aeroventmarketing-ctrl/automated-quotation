@@ -125,7 +125,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const saleForClose = saleFromClassification(quote.classification);
   const value = payableTotal(quote);
   // Shop-floor roles must not see client identity or purchase amounts.
-  const restricted = isClientRestricted(viewer, assignments);
+  const restricted = await isClientRestricted(viewer, assignments);
   const custName = restricted ? CLIENT_HIDDEN : quote.inquiry.customer.company;
 
   // Admin toggle: hide workflow progress from Sales & Engineer (who hold no

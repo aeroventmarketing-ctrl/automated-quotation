@@ -101,6 +101,19 @@ export default async function AdminOverviewPage() {
           </Link>
         ))}
       </div>
+      <Link href="/admin/role-permissions">
+        <Card className="transition-colors hover:bg-accent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Role permissions →</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Per-role restrictions and approved tasks. Toggle what each role can see and do — the
+              client-data restriction is enforced live; the task catalogue is your permissions policy.
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
       <Link href="/admin/suppliers">
         <Card className="transition-colors hover:bg-accent">
           <CardHeader className="pb-2">

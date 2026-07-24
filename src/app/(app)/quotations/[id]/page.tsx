@@ -58,7 +58,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const assignments = await getWorkflowRoles();
 
   // Shop-floor roles must not see quotations (client identity + line prices).
-  if (isClientRestricted(user, assignments)) {
+  if (await isClientRestricted(user, assignments)) {
     return (
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Quotation</h1>

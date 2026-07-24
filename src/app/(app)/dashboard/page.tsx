@@ -54,7 +54,7 @@ export default async function DashboardPage() {
   // Shop-floor roles must not see client identity or sales amounts — the sales
   // dashboard is entirely that, so show them a simple landing to their areas.
   const restrictedAssignments = await getWorkflowRoles();
-  if (isClientRestricted(user, restrictedAssignments)) {
+  if (await isClientRestricted(user, restrictedAssignments)) {
     const areas = [
       { href: "/orders", label: "Orders" },
       { href: "/inventory", label: "Inventory" },

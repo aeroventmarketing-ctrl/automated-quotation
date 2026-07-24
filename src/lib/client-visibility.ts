@@ -11,27 +11,23 @@
 import type { User } from "@prisma/client";
 import { isAdmin } from "@/lib/auth";
 import { userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleAssignments, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getRolePermissions, roleHasCapability } from "@/lib/role-permissions";
 
-export const CLIENT_RESTRICTED_ROLES = [
-  "quality_inspector",
-  "prod_head_fans",
-  "prod_head_duct",
-  "prod_head_accessories",
-  "warehouse",
-  "plant_manager",
-] as const;
-
-const RESTRICTED = new Set<string>(CLIENT_RESTRICTED_ROLES);
-
-/** Whether the viewer must have client identity and purchase amounts hidden. */
-export function isClientRestricted(user: User | null, assignments: WorkflowRoleAssignments): boolean {
+/**
+ * Whether the viewer must have client identity and purchase amounts hidden.
+ * Driven by the `restrict_client_data` capability per role (Admin → Role
+ * permissions). A viewer is restricted when they hold a role with it ON and no
+ * role with it OFF — any visibility-granting role wins.
+ */
+export async function isClientRestricted(user: User | null, assignments: WorkflowRoleAssignments): Promise<boolean> {
   if (!user) return false;
   if (isAdmin(user) || user.role === "SALES" || user.role === "ENGINEER") return false;
   const roles = WORKFLOW_ROLE_KEYS.filter((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey));
   if (roles.length === 0) return false;
-  const hasRestricted = roles.some((r) => RESTRICTED.has(r));
-  const hasTrusted = roles.some((r) => !RESTRICTED.has(r));
-  return hasRestricted && !hasTrusted;
+  const perms = await getRolePermissions();
+  const hasRestricted = roles.some((r) => roleHasCapability(perms, r, "restrict_client_data"));
+  const hasVisible = roles.some((r) => !roleHasCapability(perms, r, "restrict_client_data"));
+  return hasRestricted && !hasVisible;
 }
 
 export const CLIENT_HIDDEN = "Client hidden";

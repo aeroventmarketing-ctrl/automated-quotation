@@ -54,7 +54,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   ]);
   const adminViewer = isAdmin(viewer);
   const progressHidden = progressHiddenFor(hideOrderProgress, viewer, adminViewer, assignments);
-  const restricted = isClientRestricted(viewer, assignments);
+  const restricted = await isClientRestricted(viewer, assignments);
 
   const orders = quotes
     .map((q) => {
