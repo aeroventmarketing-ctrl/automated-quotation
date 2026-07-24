@@ -100,11 +100,15 @@ export function CommissionFlow({
     }
   }
 
-  const uploadLabel = (text: string) => (
+  // The two commission uploads are DISTINCT files (Commission Voucher + Signed
+  // Voucher), so the action is passed explicitly — never inferred from the label
+  // (a case-sensitive "signed" check used to send the signed voucher to the wrong
+  // slot, overwriting the first voucher and leaving only one file).
+  const uploadLabel = (text: string, action: (doc: { path: string; name: string; uploadedAt?: string }) => Promise<void>) => (
     <label className={`inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-white ${busy ? "bg-primary/60" : "bg-primary hover:bg-primary/90"}`}>
       <Upload className="h-4 w-4" /> {busy ? "Uploading…" : text}
       <input type="file" className="hidden" disabled={busy}
-        onChange={(e) => e.target.files?.[0] && uploadThen(e.target.files[0], text.includes("signed") ? fileSignedCommissionVoucher.bind(null, orderId) : uploadCommissionVoucher.bind(null, orderId))} />
+        onChange={(e) => e.target.files?.[0] && uploadThen(e.target.files[0], action)} />
     </label>
   );
 
@@ -136,8 +140,8 @@ export function CommissionFlow({
 
       {trail.length > 0 && <div className="text-xs text-muted-foreground">{trail.join(" · ")}</div>}
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {flow.voucherDoc && <DocRow label="Voucher" doc={flow.voucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this voucher document?")) run(() => removeCommissionVoucher(orderId, "voucher")); } : undefined} />}
-        {flow.signedVoucherDoc && <DocRow label="Signed voucher" doc={flow.signedVoucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this signed voucher document?")) run(() => removeCommissionVoucher(orderId, "signed")); } : undefined} />}
+        {flow.voucherDoc && <DocRow label="Commission Voucher" doc={flow.voucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this commission voucher?")) run(() => removeCommissionVoucher(orderId, "voucher")); } : undefined} />}
+        {flow.signedVoucherDoc && <DocRow label="Signed Voucher" doc={flow.signedVoucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this signed voucher?")) run(() => removeCommissionVoucher(orderId, "signed")); } : undefined} />}
       </div>
 
       {/* Current actionable step */}
@@ -148,7 +152,7 @@ export function CommissionFlow({
           </Button>
         ) : awaiting("to approve the commission amount", ["payment_approver"])
       ) : !flow.voucherAt ? (
-        canAccounting ? uploadLabel("Upload Commission Voucher") : awaiting("to upload the commission voucher", ["accounting"])
+        canAccounting ? uploadLabel("Prepare Commission Voucher", uploadCommissionVoucher.bind(null, orderId)) : awaiting("to prepare the commission voucher", ["accounting"])
       ) : !flow.voucherApprovedAt ? (
         canApprove ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => approveCommissionVoucher(orderId))}>
@@ -168,7 +172,7 @@ export function CommissionFlow({
           </Button>
         ) : awaiting("to mark the commission received", ["accounting"])
       ) : !flow.signedVoucherDoc ? (
-        canAccounting ? uploadLabel("Upload Signed Voucher") : awaiting("to file the signed voucher", ["accounting"])
+        canAccounting ? uploadLabel("Upload Signed Voucher", fileSignedCommissionVoucher.bind(null, orderId)) : awaiting("to file the signed voucher", ["accounting"])
       ) : (
         <p className="text-sm text-emerald-600">Commission complete — signed voucher filed by {flow.filedByName}.</p>
       )}
