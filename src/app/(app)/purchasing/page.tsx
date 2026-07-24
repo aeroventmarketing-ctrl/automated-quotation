@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
@@ -307,6 +308,7 @@ export default async function PurchasingPage() {
 
   return (
     <div className="space-y-6">
+      <AutoRefresh />
       <div>
         <h1 className="text-2xl font-bold">Purchasing</h1>
         <p className="text-sm text-muted-foreground">

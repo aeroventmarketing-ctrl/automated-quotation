@@ -1,4 +1,5 @@
 import { CalendarDays } from "lucide-react";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser, canApprove } from "@/lib/auth";
@@ -48,6 +49,7 @@ export default async function CalendarPage() {
 
   return (
     <div className="space-y-6">
+      <AutoRefresh />
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Team Calendar</h1>
         <p className="text-sm text-muted-foreground">
