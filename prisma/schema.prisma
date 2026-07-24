@@ -667,6 +667,14 @@ model Schedule {
   decidedByName String?
   decidedAt     DateTime?
   decisionNote  String?
+  // TimeTree-style extras (all optional):
+  recurrence      String? // null | "daily" | "weekly" | "monthly"
+  recurrenceUntil DateTime? // series end (inclusive), or null = open-ended (capped at read)
+  remindMinutes   Int? // in-app reminder, minutes before start (null = none)
+  calendar        String? // named calendar this event belongs to (null = default)
+  attendees       Json? // [{ userId, name, rsvp: "going"|"maybe"|"no"|"invited" }]
+  attachments     Json? // [{ path, name, uploadedAt }]
+  comments        Json? // [{ id, byId, byName, text, at }]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 

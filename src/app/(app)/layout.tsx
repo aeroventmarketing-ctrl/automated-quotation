@@ -4,6 +4,7 @@ import { AppNav } from "@/components/app-nav";
 import { MobileNav } from "@/components/mobile-nav";
 import { GeofenceGate } from "@/components/geofence-gate";
 import { ApproverAlarm } from "@/components/approver-alarm";
+import { CalendarReminders } from "@/components/calendar-reminders";
 import { getGeofence } from "@/lib/geofence";
 import { getDisabledRoles, isRoleEnabled } from "@/lib/role-access";
 
@@ -68,6 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto max-w-6xl p-4 md:p-8 print:max-w-none print:p-0">{children}</div>
       </main>
       <ApproverAlarm />
+      <CalendarReminders />
     </div>
   );
 

@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { ScheduleCalendar } from "../management/schedule-calendar";
-import type { ScheduleView } from "@/lib/schedule";
+import { buildScheduleView, expandOccurrences, type ScheduleView } from "@/lib/schedule";
+import { getCalendars } from "@/lib/calendars";
 
 export const dynamic = "force-dynamic";
 
@@ -21,28 +22,24 @@ export default async function CalendarPage() {
     viewer != null && (canApprove(viewer) || userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey));
 
   let scheduleRows: ScheduleView[] = [];
+  let users: { id: string; name: string }[] = [];
+  let calendars: string[] = ["General"];
   let scheduleMissing = false;
   try {
     const since = new Date(Date.now() - 180 * 86_400_000); // keep ~6 months of history
-    const rows = await prisma.schedule.findMany({ where: { startAt: { gte: since } }, orderBy: { startAt: "asc" } });
-    scheduleRows = rows.map((s) => ({
-      id: s.id,
-      title: s.title,
-      details: s.details,
-      category: s.category,
-      startAt: s.startAt.toISOString(),
-      endAt: s.endAt?.toISOString() ?? null,
-      allDay: s.allDay,
-      location: s.location,
-      status: s.status,
-      createdByName: s.createdByName,
-      decidedByName: s.decidedByName,
-      decidedAt: s.decidedAt?.toISOString() ?? null,
-      decisionNote: s.decisionNote,
-      isOwner: viewer?.id === s.createdById,
-      canEdit: canApproveSchedule || viewer?.id === s.createdById,
-      canDecide: canApproveSchedule,
-    }));
+    const winStart = since.getTime();
+    const winEnd = Date.now() + 365 * 86_400_000; // expand recurring events a year out
+    const [rows, allUsers, cals] = await Promise.all([
+      // Recurring rows may start before the window but still occur inside it, so
+      // fetch them regardless of startAt; one-off rows are bounded to the window.
+      prisma.schedule.findMany({ where: { OR: [{ startAt: { gte: since } }, { NOT: { recurrence: null } }] }, orderBy: { startAt: "asc" } }),
+      prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      getCalendars().catch(() => ["General"]),
+    ]);
+    users = allUsers;
+    calendars = cals;
+    const base = rows.map((s) => buildScheduleView(s, { viewerId: viewer?.id, canDecide: canApproveSchedule }));
+    scheduleRows = expandOccurrences(base, winStart, winEnd);
   } catch {
     scheduleMissing = true;
   }
@@ -64,9 +61,9 @@ export default async function CalendarPage() {
         </CardHeader>
         <CardContent>
           {scheduleMissing ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0025_schedules</code> migration to enable it.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the schedule migrations (<code className="rounded bg-muted px-1">0025_schedules</code> … <code className="rounded bg-muted px-1">0030_calendar_features</code>) in Supabase to enable it.</p>
           ) : (
-            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} />
+            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} viewerId={viewer?.id ?? ""} users={users} calendars={calendars} canManageCalendars={canApproveSchedule} />
           )}
         </CardContent>
       </Card>
