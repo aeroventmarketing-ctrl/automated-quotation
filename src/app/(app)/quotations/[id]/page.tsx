@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { isClientRestricted } from "@/lib/client-visibility";
 import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByName } from "@/lib/ensure-templates";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
@@ -55,6 +56,17 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
 
   // Clearing a confirmed sale is an accounting / admin action.
   const assignments = await getWorkflowRoles();
+
+  // Shop-floor roles must not see quotations (client identity + line prices).
+  if (isClientRestricted(user, assignments)) {
+    return (
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold">Quotation</h1>
+        <p className="text-sm text-muted-foreground">You don&apos;t have access to quotations. Work from the job orders on the order page instead.</p>
+      </div>
+    );
+  }
+
   const canClearSale = !!user && (isAdmin(user) || userHasWorkflowRole(assignments, user.id, "accounting"));
 
   // A "terms" client (admin-set) can confirm a sale on the PO alone.

@@ -54,6 +54,7 @@ export function MultiBatchPanel({
   currency,
   orderAmount,
   amountPaid,
+  restricted = false,
 }: {
   orderId: string;
   items: MBItem[];
@@ -64,6 +65,8 @@ export function MultiBatchPanel({
   currency: string;
   orderAmount: number;
   amountPaid: number;
+  /** Shop-floor viewer — hide all client purchase amounts. */
+  restricted?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -169,7 +172,9 @@ export function MultiBatchPanel({
   return (
     <div className="space-y-3">
       {/* Order-level payment (accounts receivable) — collect the remaining
-          balance any time, including after every batch is delivered. */}
+          balance any time, including after every batch is delivered. Hidden from
+          client-restricted (shop-floor) viewers. */}
+      {!restricted && (
       <div className="rounded-md border bg-muted/20 p-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span className="text-muted-foreground">Order amount: <span className="font-semibold tabular-nums text-foreground">{formatCurrency(orderAmount, currency)}</span></span>
@@ -222,6 +227,7 @@ export function MultiBatchPanel({
           </div>
         )}
       </div>
+      )}
 
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[520px] border-collapse text-sm">
@@ -283,7 +289,7 @@ export function MultiBatchPanel({
             <Badge variant={b.cancelled ? "destructive" : b.filed ? "success" : b.delivered ? "success" : "secondary"}>
               {b.cancelled ? "Cancelled" : b.filed ? "Completed" : b.drNumber ? `DR ${b.drNumber}` : "Batch"}
             </Badge>
-            {b.paymentAmount != null && b.paymentAmount > 0 && <Badge variant="success">Collected {formatCurrency(b.paymentAmount, currency)}</Badge>}
+            {!restricted && b.paymentAmount != null && b.paymentAmount > 0 && <Badge variant="success">Collected {formatCurrency(b.paymentAmount, currency)}</Badge>}
             {b.paymentProof && (
               <a href={docView(b.paymentProof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline" title="View payment details">
                 <Eye className="h-3.5 w-3.5" /> Payment details
@@ -300,14 +306,16 @@ export function MultiBatchPanel({
             {b.lines.map((l, i) => <li key={i}>{l.qty} · {l.description}</li>)}
           </ul>
 
-          {/* Order-level payment summary (same on every batch) — order amount,
-              amount paid across the order, remaining, and paid/unpaid status. */}
+          {/* Order-level payment summary (same on every batch) — hidden from
+              client-restricted (shop-floor) viewers. */}
+          {!restricted && (
           <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs">
             <span className="text-muted-foreground">Order amount: <span className="font-medium tabular-nums text-foreground">{formatCurrency(orderAmount, currency)}</span></span>
             <span className="text-muted-foreground">Amount paid: <span className="font-medium tabular-nums text-emerald-600">{formatCurrency(amountPaid, currency)}</span></span>
             <span className="text-muted-foreground">Remaining: <span className="font-medium tabular-nums text-foreground">{formatCurrency(remaining, currency)}</span></span>
             <Badge variant={payVariant}>{payStatus}</Badge>
           </div>
+          )}
 
           <ol className="space-y-0.5 text-xs">
             {b.steps.map((s) => (
