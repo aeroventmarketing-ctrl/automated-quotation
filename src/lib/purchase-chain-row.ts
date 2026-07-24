@@ -56,6 +56,7 @@ export interface PurchaseReconcileView {
   approved: string | null; // approver authorised the discrepancy
   settled: string | null; // settlement stamp, or null
   note: string | null;
+  aiVerified: boolean; // figures were AI-read from the uploaded receipt (vs typed by hand)
   aiReads: number; // AI receipt reads used (against the per-voucher limit)
   aiReadEscalated: string | null; // accounting informed the approver the AI limit was hit
 }
@@ -105,6 +106,8 @@ export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileVi
     approved: stampLabel(r.approval),
     settled: stampLabel(r.settled),
     note: r.note ?? null,
+    // Backfill legacy AI auto-records (which tagged the note "(AI)") as verified.
+    aiVerified: r.aiVerified ?? (r.note?.includes("(AI)") ?? false),
     aiReads: r.aiReadCount ?? 0,
     aiReadEscalated: stampLabel(r.aiReadEscalation),
   };

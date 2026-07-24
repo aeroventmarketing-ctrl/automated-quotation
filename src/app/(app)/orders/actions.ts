@@ -1371,6 +1371,7 @@ export async function recordReconciliation(
     lines: { description: string; qty?: string; poAmount: number; actualAmount: number }[];
     receipts?: { path: string; name: string; uploadedAt?: string }[];
     note?: string;
+    aiVerified?: boolean;
   },
 ): Promise<void> {
   const user = await getCurrentUser();
@@ -1409,6 +1410,9 @@ export async function recordReconciliation(
     recordedByName: user.name,
     recordedRole: recRole ? workflowRoleLabel(recRole) : "Admin",
     recordedAt: new Date().toISOString(),
+    // Only the AI receipt-read path may claim the figures came from the uploaded
+    // receipt; a manual record is figures-vs-PO only, never receipt-verified.
+    aiVerified: input.aiVerified === true,
     note: input.note?.trim() || undefined,
   };
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });

@@ -101,13 +101,14 @@ export function PurchaseReconcilePanel({
 
   // Persist a reconciliation (shared by the manual "Record" button and the
   // fully-automatic path). Returns true on success.
-  async function submitRecord(vatModeArg: "inclusive" | "exclusive", rowsArg: typeof rows, noteArg: string): Promise<boolean> {
+  async function submitRecord(vatModeArg: "inclusive" | "exclusive", rowsArg: typeof rows, noteArg: string, aiVerified: boolean): Promise<boolean> {
     try {
       await recordReconciliation(prId, {
         vatMode: vatModeArg,
         lines: rowsArg.map((r) => ({ description: r.description, qty: r.qty, poAmount: r.poAmount, actualAmount: num(r.actual) })),
         receipts,
         note: noteArg,
+        aiVerified,
       });
       setOpen(false); setReceipts([]); setNote("");
       router.refresh();
@@ -162,7 +163,7 @@ export function PurchaseReconcilePanel({
         // Fully automatic — no human needed. Record it straight away.
         setBusy("record");
         const okNote = `Auto-reconciled from receipt (AI)${note ? ` · ${note}` : ""}`;
-        await submitRecord(vatUsed, newRows, okNote);
+        await submitRecord(vatUsed, newRows, okNote, true);
         return;
       }
 
@@ -184,7 +185,8 @@ export function PurchaseReconcilePanel({
 
   async function record() {
     setBusy("record"); setErr(null);
-    await submitRecord(vatMode, rows, note);
+    // Manual record: figures typed by hand — NOT verified against the receipt image.
+    await submitRecord(vatMode, rows, note, false);
     setBusy(null);
   }
 
@@ -228,7 +230,14 @@ export function PurchaseReconcilePanel({
   }
 
   const verdict = (status: PurchaseReconcileView["status"], variance: number) => {
-    if (status === "balanced") return <span className="font-semibold text-emerald-700">Tallied ✓ — voucher matches receipts</span>;
+    if (status === "balanced") {
+      // Only claim the receipt matches when the figures were actually read from
+      // the uploaded receipt by the AI. A manual record only tallies the typed
+      // figures against the PO — it does NOT prove they match the uploaded document.
+      return reconcile.aiVerified
+        ? <span className="font-semibold text-emerald-700">Tallied ✓ — voucher matches the receipt (AI-read)</span>
+        : <span className="font-semibold text-amber-700">Figures tally ✓ — recorded manually; not verified against the uploaded receipt</span>;
+    }
     if (status === "change") return <span className="font-semibold text-amber-700">Change to return: {peso(variance)}</span>;
     if (status === "over") return <span className="font-semibold text-destructive">Over voucher by {peso(-variance)}</span>;
     return null;
@@ -308,6 +317,12 @@ export function PurchaseReconcilePanel({
       {recorded ? (
         <>
           <div className="text-sm">{verdict(reconcile.status, reconcile.variance)}</div>
+          {reconcile.status === "balanced" && !reconcile.aiVerified && (
+            <p className="rounded border border-amber-500/40 bg-amber-500/5 px-2 py-1 text-xs text-amber-700">
+              ⚠ Recorded by hand — the system only checked the typed figures against the PO, not the uploaded receipt.
+              Open the receipt above and confirm it actually matches before relying on this tally.
+            </p>
+          )}
           {reconcile.receipts.length > 0 && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="text-muted-foreground">Receipts:</span>
