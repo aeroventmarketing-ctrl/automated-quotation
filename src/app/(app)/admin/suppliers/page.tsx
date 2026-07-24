@@ -3,7 +3,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSuppliers } from "@/lib/suppliers";
 import { SuppliersManager } from "./suppliers-manager";
-import { saveSupplierAction, deleteSupplierAction, bulkImportSuppliersAction } from "./actions";
+import { saveSupplierAction, deleteSupplierAction, bulkImportSuppliersAction, importBundledSuppliersAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,7 @@ export default async function SuppliersPage() {
             onSave={saveSupplierAction}
             onDelete={deleteSupplierAction}
             onBulkImport={bulkImportSuppliersAction}
+            onLoadMaster={importBundledSuppliersAction}
           />
         </CardContent>
       </Card>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { saveSupplier, deleteSupplier, bulkUpsertSuppliers, type Supplier, type BulkResult } from "@/lib/suppliers";
+import { AEROVENT_SUPPLIERS } from "@/lib/supplier-seed";
 
 async function assertAdmin() {
   const user = await getCurrentUser();
@@ -62,6 +63,19 @@ export async function bulkImportSuppliersAction(input: z.infer<typeof bulkSchema
   await assertAdmin();
   const d = bulkSchema.parse(input);
   const result = await bulkUpsertSuppliers(d.rows);
+  revalidatePath("/admin/suppliers");
+  return result;
+}
+
+/**
+ * One-click loader for the AEROVENT master supplier list (bundled from the
+ * committed "suppliers-template with remarks.xlsx"). Upserts every supplier by
+ * company name, filling in the complete details and remarks. Existing suppliers
+ * are updated (non-blank fields only); new ones are added.
+ */
+export async function importBundledSuppliersAction(): Promise<BulkResult> {
+  await assertAdmin();
+  const result = await bulkUpsertSuppliers(AEROVENT_SUPPLIERS);
   revalidatePath("/admin/suppliers");
   return result;
 }

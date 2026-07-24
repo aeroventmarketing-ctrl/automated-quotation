@@ -22,6 +22,7 @@ type SaveFn = (input: {
 }) => Promise<Supplier[]>;
 type DeleteFn = (id: string) => Promise<Supplier[]>;
 type BulkFn = (input: { rows: Array<Omit<Supplier, "id" | "ewt"> & { ewt?: boolean }> }) => Promise<BulkResult>;
+type LoadMasterFn = () => Promise<BulkResult>;
 
 type Fields = Omit<Supplier, "id">;
 type StrField = Exclude<keyof Fields, "ewt">;
@@ -69,11 +70,13 @@ export function SuppliersManager({
   onSave,
   onDelete,
   onBulkImport,
+  onLoadMaster,
 }: {
   suppliers: Supplier[];
   onSave: SaveFn;
   onDelete: DeleteFn;
   onBulkImport: BulkFn;
+  onLoadMaster?: LoadMasterFn;
 }) {
   const [list, setList] = useState<Supplier[]>(suppliers);
   const [add, setAdd] = useState<Fields>(blank);
@@ -195,6 +198,23 @@ export function SuppliersManager({
     }
   }
 
+  async function onLoadMasterClick() {
+    if (!onLoadMaster) return;
+    if (!window.confirm("Load the AEROVENT master supplier list? Existing suppliers are matched by company name and updated with the master details and remarks; new ones are added.")) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const result = await onLoadMaster();
+      setList(result.list);
+      setMsg(`AEROVENT list loaded: ${result.added} added, ${result.updated} updated${result.skipped ? `, ${result.skipped} skipped` : ""}.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not load the AEROVENT supplier list");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const cell = (v: string) => (v ? v : "—");
 
   return (
@@ -212,6 +232,11 @@ export function SuppliersManager({
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); }}
         />
         <Button size="sm" className="h-8" disabled={busy} onClick={() => fileRef.current?.click()}>Upload file</Button>
+        {onLoadMaster && (
+          <Button size="sm" variant="secondary" className="h-8" disabled={busy} onClick={onLoadMasterClick} title="Load the built-in AEROVENT supplier list (with complete remarks)">
+            Load AEROVENT supplier list
+          </Button>
+        )}
         <span className="text-xs text-muted-foreground">Download the template, fill it in, then upload (.xlsx or .csv). Existing companies are updated; new ones are added.</span>
       </div>
 
