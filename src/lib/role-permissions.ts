@@ -136,15 +136,27 @@ export const CAPABILITY_GROUPS: CapabilityGroup[] = [
 
 export const ALL_CAPABILITY_KEYS = new Set(CAPABILITY_GROUPS.flatMap((g) => g.items.map((i) => i.key)));
 
-/** Roles whose client data is hidden by default (until the admin changes it). */
-export const DEFAULT_RESTRICT_CLIENT_DATA = new Set<string>([
-  "quality_inspector",
-  "prod_head_fans",
-  "prod_head_duct",
-  "prod_head_accessories",
-  "warehouse",
-  "plant_manager",
-]);
+/**
+ * Default capability matrix per role, from the ERP workflow and our discussions.
+ * These are the boxes ticked until an admin edits a role. Every signed-in user
+ * may add a schedule, so `add_schedule` is on for all. `restrict_client_data` is
+ * on for the six shop-floor roles.
+ */
+export const DEFAULT_ROLE_CAPS: Record<string, string[]> = {
+  accounting: ["view_orders", "view_quotations", "record_sale", "prepare_voucher", "manage_commissions", "add_schedule"],
+  payment_approver: ["view_orders", "view_quotations", "approve_payment", "sign_check", "release_cash", "approve_cash_request", "approve_po", "manage_payroll", "view_pnl", "approve_schedule", "add_schedule"],
+  technical_head: ["view_orders", "create_job_orders", "approve_job_orders", "add_schedule"],
+  quality_inspector: ["restrict_client_data", "view_orders", "quality_check_1", "add_schedule"],
+  quality_inspector_2: ["view_orders", "quality_check_2", "add_schedule"],
+  prod_head_fans: ["restrict_client_data", "view_orders", "create_job_orders", "approve_job_orders", "start_production", "finish_production", "raise_requisition", "confirm_transfer_prodhead", "add_schedule"],
+  prod_head_duct: ["restrict_client_data", "view_orders", "create_job_orders", "approve_job_orders", "start_production", "finish_production", "raise_requisition", "confirm_transfer_prodhead", "add_schedule"],
+  prod_head_accessories: ["restrict_client_data", "view_orders", "create_job_orders", "approve_job_orders", "start_production", "finish_production", "raise_requisition", "confirm_transfer_prodhead", "add_schedule"],
+  prod_head_motor: ["view_orders", "create_job_orders", "approve_job_orders", "start_production", "finish_production", "raise_requisition", "confirm_transfer_prodhead", "add_schedule"],
+  warehouse: ["restrict_client_data", "manage_inventory", "reserve_stock", "transfer_stock", "receive_into_stock", "add_schedule"],
+  purchaser: ["view_orders", "issue_po", "confirm_transfer_purchaser", "raise_requisition", "manage_products", "confirm_delivery", "add_schedule"],
+  logistics: ["view_orders", "assign_logistics", "confirm_delivery", "deliver_order", "add_schedule"],
+  plant_manager: ["restrict_client_data", "view_orders", "approve_requisition", "approve_job_orders", "plant_qc", "receive_into_stock", "manage_inventory", "add_schedule"],
+};
 
 export async function getRolePermissions(): Promise<RolePermissions> {
   const row = await prisma.appSetting.findUnique({ where: { key: ROLE_PERMISSIONS_KEY } }).catch(() => null);
@@ -177,6 +189,5 @@ export async function setRolePermissionsForRole(role: string, caps: Record<strin
 export function roleHasCapability(perms: RolePermissions, role: string, cap: string): boolean {
   const stored = perms[role]?.[cap];
   if (typeof stored === "boolean") return stored;
-  if (cap === "restrict_client_data") return DEFAULT_RESTRICT_CLIENT_DATA.has(role);
-  return false;
+  return (DEFAULT_ROLE_CAPS[role] ?? []).includes(cap);
 }
