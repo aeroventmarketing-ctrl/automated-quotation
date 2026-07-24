@@ -54,6 +54,7 @@ export interface CashLiquidationView {
   approved: string | null;
   settled: string | null;
   note: string | null;
+  aiVerified: boolean; // actuals were AI-read from the uploaded receipt (vs typed by hand)
   aiReads: number; // AI receipt reads used (against the per-liquidation limit)
   aiReadEscalated: string | null; // requestor/accounting informed the approver the AI limit was hit
 }
@@ -205,6 +206,8 @@ export function buildCashRequestRow(
     approved: stampLabel(l.approval),
     settled: stampLabel(l.settled),
     note: l.note ?? null,
+    // Backfill legacy AI auto-liquidations (which tagged the note "(AI)") as verified.
+    aiVerified: l.aiVerified ?? (l.note?.includes("(AI)") ?? false),
     aiReads: l.aiReadCount ?? 0,
     aiReadEscalated: stampLabel(l.aiReadEscalation),
   };

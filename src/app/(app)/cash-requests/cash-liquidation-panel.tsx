@@ -67,6 +67,10 @@ export function CashLiquidationPanel({
   const [reads, setReads] = useState(liquidation.aiReads);
   const readsLeft = Math.max(0, AI_RECEIPT_READ_LIMIT - reads);
   const limitReached = readsLeft <= 0;
+  // The receipt must be AI-read before a manual record is allowed — unless the AI
+  // read limit is reached, or an approver/admin (who can always record/correct).
+  const [hasAiRead, setHasAiRead] = useState(false);
+  const canManualRecord = hasAiRead || limitReached || canApprove;
 
   const preview = useMemo(() => {
     const budget = round2(rows.reduce((a, r) => a + r.budgetAmount, 0));
@@ -75,7 +79,7 @@ export function CashLiquidationPanel({
   }, [rows, released]);
 
   function startEdit() {
-    setRows(seed()); setNote(""); setReceipts([]); setErr(null); setAiInfo(null); setAiWarnings([]); setOpen(true);
+    setRows(seed()); setNote(""); setReceipts([]); setErr(null); setAiInfo(null); setAiWarnings([]); setHasAiRead(false); setOpen(true);
   }
   function setActual(i: number, v: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, actual: v } : r)));
@@ -95,12 +99,13 @@ export function CashLiquidationPanel({
     finally { setBusy(null); }
   }
 
-  async function submitRecord(rowsArg: Row[], noteArg: string): Promise<boolean> {
+  async function submitRecord(rowsArg: Row[], noteArg: string, aiVerified: boolean): Promise<boolean> {
     try {
       await recordCashLiquidation(id, {
         lines: rowsArg.map((r) => ({ description: r.description, budgetAmount: r.budgetAmount, actualAmount: r.actual })),
         receipts,
         note: noteArg,
+        aiVerified,
       });
       setOpen(false); setReceipts([]); setNote("");
       router.refresh();
@@ -124,6 +129,7 @@ export function CashLiquidationPanel({
         throw new Error(data.error || "Could not read the receipt.");
       }
       if (typeof data.reads === "number") setReads(data.reads);
+      setHasAiRead(true); // the receipt has now been read by AI — allow recording
 
       const newRows = rows.map((r, i) => {
         const l = data.lines?.[i];
@@ -143,7 +149,7 @@ export function CashLiquidationPanel({
 
       if (allMatched && Math.abs(variance) <= tolerance) {
         setBusy("record");
-        await submitRecord(newRows, `Auto-liquidated from receipt (AI)${note ? ` · ${note}` : ""}`);
+        await submitRecord(newRows, `Auto-liquidated from receipt (AI)${note ? ` · ${note}` : ""}`, true);
         return;
       }
       const bits = [
@@ -163,8 +169,10 @@ export function CashLiquidationPanel({
 
   async function record() {
     if (rows.every((r) => r.actual.trim() === "")) { setErr("Enter the amount spent on at least one line."); return; }
+    if (!canManualRecord) { setErr("Read the receipt with AI first — manual entry is only allowed once the AI read limit is reached or an approver allows it."); return; }
     setBusy("record"); setErr(null);
-    await submitRecord(rows, note);
+    // Manual record: figures typed/reviewed by hand — not auto-verified against the receipt.
+    await submitRecord(rows, note, false);
     setBusy(null);
   }
 
@@ -184,7 +192,13 @@ export function CashLiquidationPanel({
   }
 
   const verdict = (status: CashLiquidationView["status"], variance: number) => {
-    if (status === "balanced") return <span className="font-semibold text-emerald-700">Tallied ✓ — spend matches the cash released</span>;
+    if (status === "balanced") {
+      // Only claim the receipt matches when the figures were AI-read from it; a
+      // manual record only tallies the typed figures against the cash released.
+      return liquidation.aiVerified
+        ? <span className="font-semibold text-emerald-700">Tallied ✓ — spend matches the receipt (AI-read)</span>
+        : <span className="font-semibold text-amber-700">Figures tally ✓ — recorded manually; not verified against the uploaded receipt</span>;
+    }
     if (status === "change") return <span className="font-semibold text-amber-700">Change to return: {peso(variance)}</span>;
     if (status === "over") return <span className="font-semibold text-destructive">Over the cash released by {peso(-variance)}</span>;
     return null;
@@ -264,6 +278,12 @@ export function CashLiquidationPanel({
       {recorded ? (
         <>
           <div className="text-sm">{verdict(liquidation.status, liquidation.variance)}</div>
+          {liquidation.status === "balanced" && !liquidation.aiVerified && (
+            <p className="rounded border border-amber-500/40 bg-amber-500/5 px-2 py-1 text-xs text-amber-700">
+              ⚠ Recorded by hand — the system only checked the typed figures against the cash released, not the uploaded receipt.
+              Open the receipt above and confirm it actually matches before relying on this tally.
+            </p>
+          )}
           {liquidation.receipts.length > 0 && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="text-muted-foreground">Receipts:</span>
@@ -433,8 +453,13 @@ export function CashLiquidationPanel({
             <p className="text-xs text-muted-foreground">AI reads left: {readsLeft} of {AI_RECEIPT_READ_LIMIT}.</p>
           ) : null}
           <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
+          {!canManualRecord && (
+            <p className="text-xs text-muted-foreground">
+              Use <span className="font-medium">Auto-read receipt</span> to record. Manual entry unlocks after the AI read limit is reached or an approver allows it.
+            </p>
+          )}
           <div className="flex items-center gap-2">
-            <Button size="sm" className="h-7 text-xs" disabled={busy === "record"} onClick={record}>{busy === "record" ? "Saving…" : "Record & tally"}</Button>
+            <Button size="sm" className="h-7 text-xs" disabled={busy === "record" || !canManualRecord} onClick={record}>{busy === "record" ? "Saving…" : "Record & tally"}</Button>
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setOpen(false); setErr(null); }}>Cancel</Button>
           </div>
         </div>

@@ -203,6 +203,7 @@ export async function recordCashLiquidation(
     lines: { description: string; budgetAmount: number; actualAmount: string }[];
     receipts?: { path: string; name: string; uploadedAt?: string }[];
     note?: string;
+    aiVerified?: boolean;
   },
 ): Promise<void> {
   const user = await getCurrentUser();
@@ -234,6 +235,8 @@ export async function recordCashLiquidation(
     recordedByName: user.name,
     recordedRole: pr.requestedById === user.id ? "Requestor" : "Admin",
     recordedAt: new Date().toISOString(),
+    // Only the AI receipt-read path may claim the figures came from the receipt.
+    aiVerified: input.aiVerified === true,
     note: input.note?.trim() || undefined,
   };
   await prisma.cashRequest.update({

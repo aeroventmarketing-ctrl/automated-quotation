@@ -70,6 +70,10 @@ export function PurchaseReconcilePanel({
   const [reads, setReads] = useState(reconcile.aiReads);
   const readsLeft = Math.max(0, AI_RECEIPT_READ_LIMIT - reads);
   const limitReached = readsLeft <= 0;
+  // The receipt must be AI-read before a manual record is allowed — unless the AI
+  // read limit is reached, or the approver/admin (who can always record/correct).
+  const [hasAiRead, setHasAiRead] = useState(false);
+  const canManualRecord = hasAiRead || limitReached || canApprove;
 
   const factor = vatMode === "exclusive" ? 1 + VAT : 1;
   const preview = useMemo(() => {
@@ -79,7 +83,7 @@ export function PurchaseReconcilePanel({
   }, [rows, factor]);
 
   function startEdit() {
-    setRows(seed()); setVatMode(reconcile.vatMode); setNote(""); setReceipts([]); setErr(null); setOpen(true);
+    setRows(seed()); setVatMode(reconcile.vatMode); setNote(""); setReceipts([]); setErr(null); setHasAiRead(false); setOpen(true);
   }
   function setActual(i: number, v: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, actual: v } : r)));
@@ -137,6 +141,7 @@ export function PurchaseReconcilePanel({
         throw new Error(data.error || "Could not read the receipt.");
       }
       if (typeof data.reads === "number") setReads(data.reads);
+      setHasAiRead(true); // the receipt has now been read by AI — allow recording
 
       const vatUsed: "inclusive" | "exclusive" = data.vatMode === "exclusive" ? "exclusive" : data.vatMode === "inclusive" ? "inclusive" : vatMode;
       const newRows = rows.map((r, i) => {
@@ -184,6 +189,7 @@ export function PurchaseReconcilePanel({
   }
 
   async function record() {
+    if (!canManualRecord) { setErr("Read the receipt with AI first — manual entry is only allowed once the AI read limit is reached or an approver allows it."); return; }
     setBusy("record"); setErr(null);
     // Manual record: figures typed by hand — NOT verified against the receipt image.
     await submitRecord(vatMode, rows, note, false);
@@ -498,8 +504,13 @@ export function PurchaseReconcilePanel({
             <p className="text-xs text-muted-foreground">AI reads left: {readsLeft} of {AI_RECEIPT_READ_LIMIT}.</p>
           ) : null}
           <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
+          {!canManualRecord && (
+            <p className="text-xs text-muted-foreground">
+              Use <span className="font-medium">Auto-read receipt</span> to record. Manual entry unlocks after the AI read limit is reached or an approver allows it.
+            </p>
+          )}
           <div className="flex items-center gap-2">
-            <Button size="sm" className="h-7 text-xs" disabled={busy === "record"} onClick={record}>{busy === "record" ? "Saving…" : "Record & tally"}</Button>
+            <Button size="sm" className="h-7 text-xs" disabled={busy === "record" || !canManualRecord} onClick={record}>{busy === "record" ? "Saving…" : "Record & tally"}</Button>
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setOpen(false); setErr(null); }}>Cancel</Button>
           </div>
         </div>

@@ -155,6 +155,10 @@ export interface CashLiquidation {
   recordedByName?: string;
   recordedRole?: string;
   recordedAt?: string; // ISO
+  // Whether the actuals were read from the uploaded receipt by the AI (true) or
+  // typed by hand (false/undefined). A manual record only proves the typed
+  // figures tally against the cash released — NOT that they match the receipt.
+  aiVerified?: boolean;
   note?: string;
   aiReadCount?: number; // times the AI receipt reader has been run (limited)
   aiReadEscalation?: CashStamp; // requestor/accounting informed the approver the AI-read limit was hit
@@ -190,6 +194,7 @@ export function coerceLiquidation(v: unknown): CashLiquidation {
     recordedByName: typeof o.recordedByName === "string" ? o.recordedByName : undefined,
     recordedRole: typeof o.recordedRole === "string" ? o.recordedRole : undefined,
     recordedAt: typeof o.recordedAt === "string" ? o.recordedAt : undefined,
+    aiVerified: typeof o.aiVerified === "boolean" ? o.aiVerified : undefined,
     note: typeof o.note === "string" ? o.note : undefined,
     aiReadCount: typeof o.aiReadCount === "number" ? o.aiReadCount : undefined,
     aiReadEscalation: coerceStamp(o.aiReadEscalation),
