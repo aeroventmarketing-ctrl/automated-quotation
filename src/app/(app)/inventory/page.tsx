@@ -6,6 +6,9 @@ import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
+import { StockTransfers } from "./stock-transfers";
+import { isProductionHead, isPurchaserRole, coerceStockDoc, type StockTransferView } from "@/lib/stock-transfer";
+import { ArrowLeftRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +35,41 @@ export default async function InventoryPage() {
     items = await loadItems();
   } catch {
     tableMissing = true;
+  }
+
+  // Stock transfers — viewer capabilities per row.
+  const viewerIsProdHead = admin || (viewer != null && isProductionHead(assignments, viewer.id));
+  const viewerIsPurchaser = admin || has("purchaser");
+  let transfers: StockTransferView[] = [];
+  let transfersMissing = false;
+  try {
+    const rows = await prisma.stockTransfer.findMany({ orderBy: { initiatedAt: "desc" }, take: 100 });
+    transfers = rows.map((t) => ({
+      id: t.id,
+      itemName: t.itemName,
+      unit: t.unit,
+      qty: Number(t.qty),
+      fromLocation: t.fromLocation,
+      toLocation: t.toLocation,
+      status: t.status,
+      note: t.note,
+      proof: coerceStockDoc(t.proof),
+      initiatedByName: t.initiatedByName,
+      initiatedAt: t.initiatedAt.toISOString(),
+      prodHeadByName: t.prodHeadByName,
+      prodHeadAt: t.prodHeadAt?.toISOString() ?? null,
+      purchaserByName: t.purchaserByName,
+      purchaserAt: t.purchaserAt?.toISOString() ?? null,
+      receivedAt: t.receivedAt?.toISOString() ?? null,
+      cancelledByName: t.cancelledByName,
+      cancelledAt: t.cancelledAt?.toISOString() ?? null,
+      canConfirmProdHead: viewerIsProdHead,
+      canConfirmPurchaser: viewerIsPurchaser,
+      canUpload: canManage || viewerIsProdHead || viewerIsPurchaser,
+      canCancel: canManage,
+    }));
+  } catch {
+    transfersMissing = true;
   }
 
   const lowCount = items.filter((i) => i.status === "low").length;
@@ -81,6 +119,15 @@ export default async function InventoryPage() {
           <Card>
             <CardContent className="pt-6">
               <InventoryManager items={items} canManage={canManage} locations={locations} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm"><ArrowLeftRight className="h-4 w-4 text-muted-foreground" /> Stock transfers</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <StockTransfers transfers={transfers} missing={transfersMissing} />
             </CardContent>
           </Card>
         </>

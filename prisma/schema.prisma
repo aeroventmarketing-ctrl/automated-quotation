@@ -553,6 +553,51 @@ model StockMovement {
 }
 
 /**
+ * Stock transfer between locations with a double-handshake receipt. On send the
+ * quantity is issued from the source (in transit); it is received into the
+ * destination only once BOTH the production head and the purchaser confirm the
+ * receiving location got it. An optional proof (delivery note / photo) is
+ * attached and viewable.
+ */
+enum StockTransferStatus {
+  IN_TRANSIT // issued from source, awaiting both receipt confirmations
+  RECEIVED   // both confirmed, received into destination
+  CANCELLED  // recalled before receipt — quantity returned to source
+}
+
+model StockTransfer {
+  id              String              @id @default(cuid())
+  stockItemId     String? // source stock record (null if later deleted)
+  destStockItemId String? // destination stock record (set on receipt)
+  itemName        String
+  unit            String              @default("pcs")
+  qty             Decimal             @db.Decimal(14, 3)
+  fromLocation    String
+  toLocation      String
+  status          StockTransferStatus @default(IN_TRANSIT)
+  note            String?
+  proof           Json? // { path, name, uploadedAt }
+  initiatedById   String
+  initiatedByName String
+  initiatedAt     DateTime            @default(now())
+  // Handshake 1 — production head confirms receipt.
+  prodHeadById    String?
+  prodHeadByName  String?
+  prodHeadAt      DateTime?
+  // Handshake 2 — purchaser confirms receipt.
+  purchaserById   String?
+  purchaserByName String?
+  purchaserAt     DateTime?
+  receivedAt      DateTime?
+  cancelledByName String?
+  cancelledAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status])
+}
+
+/**
  * Purchasable product/item catalogue, connected to suppliers. Each product may
  * be sourced from several suppliers (each with its own code and price), stored
  * as JSON since suppliers live in the AppSetting directory (no supplier table).

@@ -11,7 +11,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
 import { BulkImport } from "./bulk-import";
-import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation, assignMissingSkus, transferStock } from "./actions";
+import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation, assignMissingSkus } from "./actions";
+import { initiateTransfer } from "./transfer-actions";
 
 interface Reservation {
   id: string;
@@ -136,7 +137,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
     const n = Number(xferQty);
     if (!(n > 0)) { setErr("Enter a quantity."); return; }
     if (xferTo.trim() === "") { setErr("Choose a destination location."); return; }
-    run(() => transferStock({ stockItemId: item.id, qty: n, toLocation: xferTo.trim(), note: xferNote || undefined }).then(() => { setXferQty(""); setXferTo(""); setXferNote(""); }));
+    run(() => initiateTransfer({ stockItemId: item.id, qty: n, toLocation: xferTo.trim(), note: xferNote || undefined }).then(() => { setXferQty(""); setXferTo(""); setXferNote(""); }));
   }
 
   return (
@@ -238,8 +239,8 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
               <label className="text-xs text-muted-foreground">Transfer qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={xferQty} onChange={(e) => setXferQty(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">To location<div><LocationField value={xferTo} onChange={setXferTo} locations={locations.filter((l) => l.toLowerCase() !== (item.location ?? "").toLowerCase())} /></div></label>
               <label className="text-xs text-muted-foreground">Note<Input className="h-8 w-44" placeholder="optional" value={xferNote} onChange={(e) => setXferNote(e.target.value)} /></label>
-              <Button size="sm" className="h-8" disabled={busy} onClick={transfer}>{busy ? "…" : "Transfer"}</Button>
-              <span className="text-xs text-muted-foreground">from {item.location || "—"} · {fmt(item.available)} {item.unit} available</span>
+              <Button size="sm" className="h-8" disabled={busy} onClick={transfer}>{busy ? "…" : "Send"}</Button>
+              <span className="text-xs text-muted-foreground">from {item.location || "—"} · {fmt(item.available)} {item.unit} available · held in transit until the production head &amp; purchaser confirm receipt</span>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
           </TableCell>
