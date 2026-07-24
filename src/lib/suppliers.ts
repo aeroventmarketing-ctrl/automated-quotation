@@ -22,6 +22,7 @@ export interface Supplier {
   bankName: string; // Bank Name
   accountNumber: string; // Account Number
   ewt: boolean; // EWT capable — issuing a PO to this supplier defaults to "with EWT"
+  remarks: string; // Default PO remark (e.g. payment terms) — auto-filled on the PO
 }
 
 /** The columns used for the import/export template (order matters). */
@@ -36,6 +37,7 @@ export const SUPPLIER_COLUMNS = [
   { key: "bankName", label: "Bank Name" },
   { key: "accountNumber", label: "Account Number" },
   { key: "ewt", label: "EWT Capable (yes/no)" },
+  { key: "remarks", label: "Remarks" },
 ] as const;
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -74,6 +76,7 @@ function coerceOne(r: unknown): Supplier | null {
     bankName: String(o.bankName ?? o.paymentDetails ?? "").trim(),
     accountNumber: String(o.accountNumber ?? "").trim(),
     ewt: parseEwt(o.ewt) ?? false,
+    remarks: String(o.remarks ?? "").trim(),
   };
 }
 
@@ -113,6 +116,7 @@ export interface SupplierInput {
   bankName?: string;
   accountNumber?: string;
   ewt?: boolean;
+  remarks?: string;
 }
 
 function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
@@ -127,6 +131,7 @@ function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
     bankName: (input.bankName ?? "").trim(),
     accountNumber: (input.accountNumber ?? "").trim(),
     ewt: input.ewt ?? false,
+    remarks: (input.remarks ?? "").trim(),
   };
 }
 
@@ -197,6 +202,7 @@ export async function bulkUpsertSuppliers(rows: SupplierInput[]): Promise<BulkRe
         accountNumber: d.accountNumber || list[idx].accountNumber,
         // Boolean: preserve the existing flag when the import didn't specify one.
         ewt: raw.ewt ?? list[idx].ewt,
+        remarks: d.remarks || list[idx].remarks,
       };
       updated++;
     } else {
@@ -231,6 +237,7 @@ export async function rememberSupplier(input: { company: string; attention?: str
     bankName: "",
     accountNumber: "",
     ewt: false,
+    remarks: "",
   });
   await writeSuppliers(list);
 }

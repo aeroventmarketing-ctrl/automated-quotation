@@ -22,6 +22,7 @@ const supplierSchema = z.object({
   bankName: z.string().trim().optional().default(""),
   accountNumber: z.string().trim().optional().default(""),
   ewt: z.boolean().optional().default(false),
+  remarks: z.string().trim().optional().default(""),
 });
 
 export async function saveSupplierAction(input: z.infer<typeof supplierSchema>): Promise<Supplier[]> {
@@ -52,6 +53,7 @@ const bulkSchema = z.object({
       bankName: z.string().trim().optional().default(""),
       accountNumber: z.string().trim().optional().default(""),
       ewt: z.boolean().optional(),
+      remarks: z.string().trim().optional().default(""),
     }),
   ),
 });
