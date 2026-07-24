@@ -771,8 +771,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
-      {/* Phase 6 — sales commission (once the order is closed with complete docs) */}
-      {phase6Active && commissionInfo && (
+      {/* Phase 6 — sales commission (once the order is closed with complete docs).
+          Purely financial — hidden from client-restricted (shop-floor) viewers. */}
+      {!restricted && phase6Active && commissionInfo && (
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 6 · Sales commission</CardTitle></CardHeader>
           <CardContent>
@@ -790,7 +791,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
       {/* Phase 6 — upcoming placeholder until the order is closed with complete docs. */}
-      {!phase6Active && (
+      {!restricted && !phase6Active && (
         <Card className="border-dashed opacity-70">
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Phase 6 · Sales commission</CardTitle></CardHeader>
           <CardContent><p className="text-sm text-muted-foreground">Opens once the order is closed with all closing documents complete — the sales commission voucher, approval and release.</p></CardContent>
