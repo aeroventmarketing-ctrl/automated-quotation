@@ -74,16 +74,27 @@ const num = (s: string | undefined) => {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 };
 
-/** Import stock items from an uploaded CSV or .xlsx file. */
+/**
+ * Import stock items from an uploaded CSV or .xlsx file. Returns a result rather
+ * than throwing (server-action errors are hidden in production), and imports
+ * each row in its own transaction so one bad row can't abort the whole batch.
+ */
 export async function importStockItems(
   formData: FormData,
 ): Promise<{ created: number; skipped: number; errors: string[] }> {
   const user = await requireInventoryManager();
   const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) throw new Error("Choose a CSV or Excel file.");
+  if (!file || file.size === 0) return { created: 0, skipped: 0, errors: ["Choose a CSV or Excel file."] };
+
+  const lower = file.name.toLowerCase();
   const buf = Buffer.from(await file.arrayBuffer());
-  const rows = file.name.toLowerCase().endsWith(".xlsx") ? await parseXlsx(buf) : parseCsv(buf.toString("utf8"));
-  if (rows.length < 2) throw new Error("The file has no data rows (needs a header row + items).");
+  let rows: string[][];
+  try {
+    rows = lower.endsWith(".xlsx") || lower.endsWith(".xlsm") ? await parseXlsx(buf) : parseCsv(buf.toString("utf8"));
+  } catch (e) {
+    return { created: 0, skipped: 0, errors: [`Couldn't read the file: ${e instanceof Error ? e.message : "unknown error"}. Save it as a valid .xlsx or .csv and try again.`] };
+  }
+  if (rows.length < 2) return { created: 0, skipped: 0, errors: ["The file has no data rows — it needs a header row plus at least one item."] };
 
   const header = rows[0].map((h) => h.trim().toLowerCase());
   const col = (names: string[]) => header.findIndex((h) => names.includes(h));
@@ -94,18 +105,22 @@ export async function importStockItems(
   const iQty = col(["quantity", "qty", "on hand", "onhand", "opening qty", "opening"]);
   const iReorder = col(["reorderlevel", "reorder level", "reorder at", "reorder"]);
   const iCost = col(["unitcost", "unit cost", "cost"]);
-  if (iName < 0) throw new Error('The file needs a "name" column.');
+  if (iName < 0) {
+    return { created: 0, skipped: 0, errors: ['The first row must be headers with a "name" column (e.g. name, unit, category, location, quantity, reorderLevel, unitCost).'] };
+  }
 
   const errors: string[] = [];
   let created = 0;
   let skipped = 0;
-  await prisma.$transaction(async (tx) => {
-    for (let r = 1; r < rows.length; r++) {
-      const row = rows[r];
-      const name = (row[iName] ?? "").trim();
-      if (!name) { skipped++; continue; }
-      const quantity = iQty >= 0 ? num(row[iQty]) : 0;
-      try {
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const name = (row[iName] ?? "").trim();
+    if (!name) { skipped++; continue; }
+    const quantity = iQty >= 0 ? num(row[iQty]) : 0;
+    try {
+      // Per-row transaction: a failure here (e.g. a bad value) is isolated so
+      // the rest of the batch still imports.
+      await prisma.$transaction(async (tx) => {
         const sku = await nextSku(tx);
         const item = await tx.stockItem.create({
           data: {
@@ -124,12 +139,12 @@ export async function importStockItems(
             data: { stockItemId: item.id, kind: "ADJUSTMENT", delta: quantity, balanceAfter: quantity, reason: "Opening balance (import)", byName: user.name },
           });
         }
-        created++;
-      } catch {
-        errors.push(`Row ${r + 1} (“${name}”) could not be imported.`);
-      }
+      });
+      created++;
+    } catch (e) {
+      errors.push(`Row ${r + 1} (“${name}”): ${e instanceof Error ? e.message.slice(0, 140) : "could not be imported."}`);
     }
-  });
+  }
   revalidatePath("/inventory");
   return { created, skipped, errors: errors.slice(0, 20) };
 }
