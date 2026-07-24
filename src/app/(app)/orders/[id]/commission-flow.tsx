@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, Download, Eye, Trash2 } from "lucide-react";
+import { Upload, FileText, Download, Eye, Trash2, CheckCircle2, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { OrderCommissionFlow, WorkflowDoc } from "@/lib/order-workflow";
@@ -18,6 +18,10 @@ import {
   removeCommissionVoucher,
 } from "../actions";
 
+const fmtWhen = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
+};
 const docLink = (d: WorkflowDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
 const docView = (d: WorkflowDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const docDownload = (d: WorkflowDoc) => `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
@@ -118,15 +122,17 @@ export function CommissionFlow({
     return <ApproverHighlight role={roleLabel || undefined} names={names} detail={detail} />;
   };
 
-  // Completed sign-offs trail.
-  const trail = [
-    flow.approvedByName && `Amount approved — ${flow.approvedByName}`,
-    flow.voucherByName && `Voucher uploaded — ${flow.voucherByName}`,
-    flow.voucherApprovedByName && `Voucher approved — ${flow.voucherApprovedByName}`,
-    flow.budgetReleasedByName && `Budget released — ${flow.budgetReleasedByName}`,
-    flow.receivedByName && `Received — ${flow.receivedByName}`,
-    flow.filedByName && `Signed voucher filed — ${flow.filedByName}`,
-  ].filter(Boolean);
+  // Per-step tracker so Sales can monitor the whole phase — each step's role,
+  // the assigned approver name(s), and who signed it off (or who it's waiting on).
+  const steps: { label: string; role: string; by?: string; at?: string }[] = [
+    { label: "Commission amount approved", role: "payment_approver", by: flow.approvedByName, at: flow.approvedAt },
+    { label: "Commission voucher prepared", role: "accounting", by: flow.voucherByName, at: flow.voucherAt },
+    { label: "Commission voucher approved", role: "payment_approver", by: flow.voucherApprovedByName, at: flow.voucherApprovedAt },
+    { label: "Commission budget released", role: "payment_approver", by: flow.budgetReleasedByName, at: flow.budgetReleasedAt },
+    { label: "Commission received by Sales", role: "accounting", by: flow.receivedByName, at: flow.receivedAt },
+    { label: "Signed voucher filed", role: "accounting", by: flow.filedByName, at: flow.filedAt },
+  ];
+  const currentIdx = steps.findIndex((s) => !s.at);
 
   return (
     <div className="space-y-2">
@@ -138,7 +144,41 @@ export function CommissionFlow({
         Sales month {salesMonth}. Issued to Sales {dueLabel ? `by ${dueLabel}` : ""} — 15 days after the sales month.
       </p>
 
-      {trail.length > 0 && <div className="text-xs text-muted-foreground">{trail.join(" · ")}</div>}
+      {/* Approval progress — role + assigned approver name per step. */}
+      <div className="space-y-1 rounded-md border bg-muted/20 p-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Approval progress</p>
+        <ol className="space-y-1">
+          {steps.map((s, i) => {
+            const done = !!s.at;
+            const current = i === currentIdx;
+            const roleLabel = workflowRoleLabel(s.role);
+            const assigned = approvers[s.role] ?? [];
+            return (
+              <li key={i} className="flex items-start gap-2 text-xs">
+                {done ? (
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                ) : current ? (
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500 animate-approver-blink" />
+                ) : (
+                  <Circle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+                )}
+                <span className={`flex-1 ${done ? "" : current ? "font-medium" : "text-muted-foreground"}`}>
+                  {s.label}
+                  {" — "}
+                  <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{roleLabel}</span>
+                  {done ? (
+                    <span className="text-muted-foreground"> · {s.by}{s.at ? ` · ${fmtWhen(s.at)}` : ""}</span>
+                  ) : (
+                    <span className={current ? "font-semibold text-amber-700" : "text-muted-foreground"}>
+                      {" "}{assigned.length ? assigned.join(", ") : "unassigned"}{current ? " — awaiting" : ""}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {flow.voucherDoc && <DocRow label="Commission Voucher" doc={flow.voucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this commission voucher?")) run(() => removeCommissionVoucher(orderId, "voucher")); } : undefined} />}
         {flow.signedVoucherDoc && <DocRow label="Signed Voucher" doc={flow.signedVoucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this signed voucher?")) run(() => removeCommissionVoucher(orderId, "signed")); } : undefined} />}
