@@ -6,14 +6,14 @@
  * A viewer is restricted only when they hold a restricted role and NOTHING that
  * grants visibility — Admins, Sales and Engineers always see, and any
  * non-restricted workflow role (Purchaser, Accounting, Payment Approver,
- * Technical Head, 1st QI, Head — Motor Controller, Logistics) grants visibility.
+ * Technical Head, 2nd QI, Head — Motor Controller, Logistics) grants visibility.
  */
 import type { User } from "@prisma/client";
 import { isAdmin } from "@/lib/auth";
 import { userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleAssignments, type WorkflowRoleKey } from "@/lib/workflow-roles";
 
 export const CLIENT_RESTRICTED_ROLES = [
-  "quality_inspector_2",
+  "quality_inspector",
   "prod_head_fans",
   "prod_head_duct",
   "prod_head_accessories",
