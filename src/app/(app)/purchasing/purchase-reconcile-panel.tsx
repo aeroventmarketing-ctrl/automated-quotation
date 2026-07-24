@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Scale, Upload, FileText, Download, Trash2, Sparkles } from "lucide-react";
+import { Scale, Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
-import { recordReconciliation, settleReconciliation, escalateReconciliation, approveReconciliation, escalateReconcileAiRead, resetReconcileAiRead } from "../orders/actions";
+import { UploadLink } from "@/components/upload-link";
+import { recordReconciliation, settleReconciliation, escalateReconciliation, approveReconciliation, escalateReconcileAiRead, resetReconcileAiRead, removeReconciliationReceipt } from "../orders/actions";
 
 const VAT = 0.12;
 // Auto-record threshold — mirrors balanceTolerance() on the server so an
@@ -18,8 +19,6 @@ const balanceTolerance = (voucher: number) => Math.max(1, Math.round(Math.abs(vo
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const num = (s: string) => Number(String(s ?? "").replace(/,/g, "").trim()) || 0;
-const link = (path: string) => `/api/purchase-uploads?path=${encodeURIComponent(path)}`;
-const dl = (path: string, name: string) => `${link(path)}&download=1&name=${encodeURIComponent(name)}`;
 
 /**
  * Voucher reconciliation panel: a per-line tally of the actual amount paid vs
@@ -333,14 +332,20 @@ export function PurchaseReconcilePanel({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="text-muted-foreground">Receipts:</span>
               {reconcile.receipts.map((f) => (
-                <span key={f.path} className="inline-flex items-center gap-1">
-                  <a href={link(f.path)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
-                    <FileText className="h-3.5 w-3.5" /> {f.name}
-                  </a>
-                  <a href={dl(f.path, f.name)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
-                    <Download className="h-3.5 w-3.5" />
-                  </a>
-                </span>
+                <UploadLink
+                  key={f.path}
+                  doc={f}
+                  base="/api/purchase-uploads"
+                  size="xs"
+                  busy={busy === `rm-${f.path}`}
+                  onRemove={!readOnly && canRecord ? async () => {
+                    if (!window.confirm(`Remove receipt "${f.name}"?`)) return;
+                    setBusy(`rm-${f.path}`); setErr(null);
+                    try { await removeReconciliationReceipt(prId, f.path); router.refresh(); }
+                    catch (e) { setErr(e instanceof Error ? e.message : "Failed to remove"); }
+                    finally { setBusy(null); }
+                  } : undefined}
+                />
               ))}
             </div>
           )}
@@ -472,14 +477,13 @@ export function PurchaseReconcilePanel({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="text-muted-foreground">Receipts:</span>
             {receipts.map((f) => (
-              <span key={f.path} className="inline-flex items-center gap-1">
-                <a href={link(f.path)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
-                  <FileText className="h-3.5 w-3.5" /> {f.name}
-                </a>
-                <button type="button" onClick={() => setReceipts((rs) => rs.filter((x) => x.path !== f.path))} className="text-muted-foreground hover:text-destructive" aria-label="Remove">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </span>
+              <UploadLink
+                key={f.path}
+                doc={f}
+                base="/api/purchase-uploads"
+                size="xs"
+                onRemove={() => setReceipts((rs) => rs.filter((x) => x.path !== f.path))}
+              />
             ))}
             <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 font-medium hover:bg-accent">
               <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : receipts.length ? "Add receipt" : "Upload receipt"}

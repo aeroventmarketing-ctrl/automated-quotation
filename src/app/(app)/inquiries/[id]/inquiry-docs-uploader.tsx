@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, Trash2, FileText, Download } from "lucide-react";
+import { Upload, Trash2, FileText, Download, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { INQUIRY_DOC_TYPES } from "@/lib/inquiry-docs";
 import type { SaleDoc } from "@/lib/sale";
 import { saveInquiryDocs } from "../actions";
 
 const link = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
+const view = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const download = (d: SaleDoc) => `${link(d)}&download=1&name=${encodeURIComponent(d.name)}`;
 
 /** Attach the required pre-quotation documents (Inquiry Form, RFQ/BOQ) to an inquiry. */
@@ -60,9 +61,10 @@ export function InquiryDocsUploader({
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 {files.map((f) => (
                   <div key={f.path} className="flex items-center gap-2">
-                    <a href={link(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
+                    <a href={view(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
                       <FileText className="h-4 w-4" /> {f.name}
                     </a>
+                    <a href={view(f)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View"><Eye className="h-4 w-4" /></a>
                     <a href={download(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download"><Download className="h-4 w-4" /></a>
                     {canEdit && (
                       <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(t.key, f.path)} disabled={busy} aria-label="Remove"><Trash2 className="h-4 w-4" /></button>

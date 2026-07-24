@@ -2,15 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw, Upload, FileText, Download, Trash2 } from "lucide-react";
+import { RotateCcw, Upload } from "lucide-react";
+import { UploadLink } from "@/components/upload-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
 import { returnPurchaseItems, resolvePurchaseReturn } from "../orders/actions";
 
-const proofLink = (path: string) => `/api/purchase-uploads?path=${encodeURIComponent(path)}`;
-const proofDownload = (path: string, name: string) => `${proofLink(path)}&download=1&name=${encodeURIComponent(name)}`;
 
 /**
  * "Returns to supplier" panel: lists items disapproved on inspection and sent
@@ -108,14 +107,7 @@ export function PurchaseReturnsPanel({
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="text-muted-foreground">Proof:</span>
                         {r.proof.map((f) => (
-                          <span key={f.path} className="inline-flex items-center gap-1">
-                            <a href={proofLink(f.path)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
-                              <FileText className="h-3.5 w-3.5" /> {f.name}
-                            </a>
-                            <a href={proofDownload(f.path, f.name)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
-                              <Download className="h-3.5 w-3.5" />
-                            </a>
-                          </span>
+                          <UploadLink key={f.path} doc={f} base="/api/purchase-uploads" size="xs" />
                         ))}
                       </div>
                     )}
@@ -126,14 +118,13 @@ export function PurchaseReturnsPanel({
                     {/* Proof the item was replaced. */}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       {proof.map((f) => (
-                        <span key={f.path} className="inline-flex items-center gap-1">
-                          <a href={proofLink(f.path)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
-                            <FileText className="h-3.5 w-3.5" /> {f.name}
-                          </a>
-                          <button type="button" onClick={() => setProof((ps) => ps.filter((x) => x.path !== f.path))} className="text-muted-foreground hover:text-destructive" aria-label="Remove">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </span>
+                        <UploadLink
+                          key={f.path}
+                          doc={f}
+                          base="/api/purchase-uploads"
+                          size="xs"
+                          onRemove={() => setProof((ps) => ps.filter((x) => x.path !== f.path))}
+                        />
                       ))}
                       <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 font-medium hover:bg-accent">
                         <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : proof.length ? "Add proof" : "Upload proof"}

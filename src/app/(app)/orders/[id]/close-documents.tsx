@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, Trash2, FileText, Download } from "lucide-react";
+import { Upload, Trash2, FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { afterPaymentDocTypes, closeDocsState, type SaleDoc } from "@/lib/sale";
 import { saveCloseDoc, removeCloseDoc, fileDocuments } from "../actions";
 
 const docLink = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
+const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const docDownload = (d: SaleDoc) => `${docLink(d)}&download=1&name=${encodeURIComponent(d.name)}`;
 
 /**
@@ -105,8 +106,11 @@ export function CloseDocuments({
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 {files.map((f) => (
                   <div key={f.path} className="flex items-center gap-2">
-                    <a href={docLink(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
+                    <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
                       <FileText className="h-4 w-4" /> {f.name}
+                    </a>
+                    <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                      <Eye className="h-4 w-4" />
                     </a>
                     <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
                       <Download className="h-4 w-4" />

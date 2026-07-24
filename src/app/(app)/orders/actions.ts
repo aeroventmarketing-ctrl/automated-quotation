@@ -1421,6 +1421,24 @@ export async function recordReconciliation(
   revalidatePath("/requisitions");
 }
 
+/** Remove one uploaded reconciliation receipt by its storage path. */
+export async function removeReconciliationReceipt(purchaseRequestId: string, path: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const admin = isAdmin(user);
+  const assignments = await getWorkflowRoles();
+  const recRole = (["purchaser", "accounting", "payment_approver"] as WorkflowRoleKey[]).some((r) => userHasWorkflowRole(assignments, user.id, r));
+  if (!(admin || recRole)) throw new Error("Only the Purchaser, Accounting, the Approver or an admin can remove a receipt.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const cur = coerceReconciliation(pr.reconciliation);
+  const next = { ...cur, receipts: (cur.receipts ?? []).filter((d) => d.path !== path) };
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
 /**
  * Accounting escalates a discrepancy (a reconciliation that doesn't balance) to
  * the admin / payment approver for authorisation.
