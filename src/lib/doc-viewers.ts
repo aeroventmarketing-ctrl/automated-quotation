@@ -15,6 +15,16 @@ export async function getDocViewers(): Promise<string[]> {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : [];
 }
 
+/**
+ * Whether an admin has ever saved the document-access list. Lets the UI show
+ * policy-based defaults (everyone who isn't a client-restricted shop-floor role)
+ * pre-checked until the admin makes their own explicit choice.
+ */
+export async function isDocViewersConfigured(): Promise<boolean> {
+  const row = await prisma.appSetting.findUnique({ where: { key: DOC_VIEWERS_KEY } });
+  return row != null;
+}
+
 /** Replace the granted-viewer list. */
 export async function setDocViewers(ids: string[]): Promise<string[]> {
   const clean = [...new Set(ids.filter((x) => typeof x === "string" && x !== ""))];
