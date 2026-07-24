@@ -5,6 +5,7 @@ import { MobileNav } from "@/components/mobile-nav";
 import { GeofenceGate } from "@/components/geofence-gate";
 import { ApproverAlarm } from "@/components/approver-alarm";
 import { getGeofence } from "@/lib/geofence";
+import { getDisabledRoles, isRoleEnabled } from "@/lib/role-access";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -15,6 +16,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // /login would loop with the middleware (which sends authed users to
     // /dashboard), so clear the session via the signout route instead.
     redirect("/auth/signout");
+  }
+
+  // Role access: an admin can disable whole roles from using AeroERP. A disabled
+  // role's users stay signed in but are blocked from every feature and setting.
+  // Admins are never disabled (enforced in isRoleEnabled) so no one is locked out.
+  const disabledRoles = await getDisabledRoles();
+  if (!isRoleEnabled(user.role, disabledRoles)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <div className="w-full max-w-md space-y-4 rounded-lg border bg-card p-6 text-center shadow-sm">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/aerovent-logo.jpg" alt="Aerovent Fans and Blowers Manufacturing" className="mx-auto h-10 w-auto" />
+          <div>
+            <h1 className="text-lg font-bold">Access temporarily disabled</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              An administrator has turned off AeroERP access for your role. Please contact your administrator
+              if you believe this is a mistake.
+            </p>
+          </div>
+          <form action="/auth/signout" method="post">
+            <button type="submit" className="inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent">
+              Sign out
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   // Location access: when enabled, non-admins are confined to the geofence(s).

@@ -7,6 +7,7 @@ import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { getNotificationsEnabled } from "@/lib/notification-settings";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
+import { getDisabledRoles } from "@/lib/role-access";
 import { getTestMode } from "@/lib/test-mode";
 import { getStockLocations } from "@/lib/stock-locations";
 import { getAiUsageLimit, currentMonthUsage, evaluateUsageAlert } from "@/lib/ai/usage";
@@ -20,7 +21,8 @@ import { FanMotorBrandSetting } from "./fan-motor-brand-setting";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo } from "./actions";
+import { RoleAccessSetting } from "./role-access-setting";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +45,7 @@ export default async function AdminOverviewPage() {
     getDocCheckGateEnabled(),
   ]);
   const testMode = await getTestMode();
+  const disabledRoles = await getDisabledRoles();
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
   const mrfNext = (Number((mrfRow?.value as { last?: unknown } | null)?.last ?? 0) || 0) + 1;
@@ -101,6 +104,7 @@ export default async function AdminOverviewPage() {
           </Link>
         ))}
       </div>
+      <RoleAccessSetting initialDisabled={disabledRoles} onSave={saveRoleAccessAction} />
       <Link href="/admin/role-permissions">
         <Card className="transition-colors hover:bg-accent">
           <CardHeader className="pb-2">

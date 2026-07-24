@@ -14,6 +14,7 @@ import { setDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { setTestMode } from "@/lib/test-mode";
 import { setStockLocations } from "@/lib/stock-locations";
 import { setDocViewers } from "@/lib/doc-viewers";
+import { setDisabledRoles } from "@/lib/role-access";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
@@ -25,6 +26,15 @@ async function assertAdmin() {
   const user = await getCurrentUser();
   if (!isAdmin(user)) throw new Error("Admin access required");
   return user!;
+}
+
+/** Enable/disable which base roles may access AeroERP (ADMIN is always enabled). */
+export async function saveRoleAccessAction(input: { disabled: string[] }): Promise<string[]> {
+  await assertAdmin();
+  const disabled = z.object({ disabled: z.array(z.string()).max(20) }).parse(input).disabled;
+  const saved = await setDisabledRoles(disabled);
+  revalidatePath("/admin");
+  return saved;
 }
 
 /** Grant/revoke which users may view sale/order documents. */
