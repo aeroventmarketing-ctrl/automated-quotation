@@ -72,6 +72,7 @@ export async function createSchedule(input: ScheduleInput): Promise<void> {
     },
   });
   revalidatePath("/management");
+  revalidatePath("/calendar");
 }
 
 /** Edit a schedule. The creator or an approver may edit; when a non-approver
@@ -99,6 +100,7 @@ export async function updateSchedule(id: string, input: ScheduleInput): Promise<
     },
   });
   revalidatePath("/management");
+  revalidatePath("/calendar");
 }
 
 /** Delete a schedule — the creator or an approver. */
@@ -110,6 +112,7 @@ export async function deleteSchedule(id: string): Promise<void> {
   if (!(approver || s.createdById === user.id)) throw new Error("You can only delete your own schedule.");
   await prisma.schedule.delete({ where: { id } });
   revalidatePath("/management");
+  revalidatePath("/calendar");
 }
 
 /** Approve or reject a schedule — Engineer, Admin or Approver only. */
@@ -127,4 +130,5 @@ export async function decideSchedule(id: string, decision: "approve" | "reject",
     },
   });
   revalidatePath("/management");
+  revalidatePath("/calendar");
 }
