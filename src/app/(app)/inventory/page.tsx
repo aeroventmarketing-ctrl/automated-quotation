@@ -3,6 +3,7 @@ import { ShoppingCart } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { canViewPrices } from "@/lib/price-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
@@ -19,6 +20,10 @@ export default async function InventoryPage() {
     viewer != null && userHasWorkflowRole(assignments, viewer.id, role);
   const canManage = admin || has("warehouse") || has("plant_manager");
   const canView = canManage || has("purchaser");
+  // Prices (unit cost, sell price, stock value) are commercial data — only the
+  // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
+  // manage stock but the money columns stay hidden.
+  const showPrices = canViewPrices(viewer, assignments);
 
   if (!canView) {
     return (
@@ -81,7 +86,8 @@ export default async function InventoryPage() {
     { label: "Items", value: String(items.length) },
     { label: "Low stock", value: String(lowCount) },
     { label: "Out of stock", value: String(outCount) },
-    { label: "Stock value", value: peso(stockValue) },
+    // Stock value is a money figure — only shown to price-authorized viewers.
+    ...(showPrices ? [{ label: "Stock value", value: peso(stockValue) }] : []),
   ];
 
   return (
@@ -108,7 +114,7 @@ export default async function InventoryPage() {
         </CardContent></Card>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className={`grid grid-cols-2 gap-3 ${showPrices ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
             {tiles.map((t) => (
               <Card key={t.label}>
                 <CardHeader className="pb-1"><CardTitle className="text-xs uppercase text-muted-foreground">{t.label}</CardTitle></CardHeader>
@@ -118,7 +124,7 @@ export default async function InventoryPage() {
           </div>
           <Card>
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManage} locations={locations} />
+              <InventoryManager items={items} canManage={canManage} locations={locations} showPrices={showPrices} />
             </CardContent>
           </Card>
 

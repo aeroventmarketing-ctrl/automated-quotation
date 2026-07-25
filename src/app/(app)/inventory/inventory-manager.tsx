@@ -78,8 +78,11 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item: Item; canManage: boolean; locations: string[]; scanTarget: string | null; scanNonce: number }) {
+function StockRow({ item, canManage, showPrices, locations, scanTarget, scanNonce }: { item: Item; canManage: boolean; showPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number }) {
   const router = useRouter();
+  // Table has 8 always-on columns + 3 price columns (unit cost, sell price,
+  // value) + 1 action column; the expandable panels span all of them.
+  const colSpan = 8 + (showPrices ? 3 : 0) + (canManage ? 1 : 0);
   const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "reserve" | "transfer" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
   const [flash, setFlash] = useState(false);
@@ -156,9 +159,9 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
         <TableCell className="text-right tabular-nums text-muted-foreground">{item.reserved ? fmt(item.reserved) : "—"}</TableCell>
         <TableCell className={`text-right tabular-nums font-medium ${item.available < 0 ? "text-destructive" : ""}`}>{fmt(item.available)}</TableCell>
         <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(item.reorderLevel)}</TableCell>
-        <TableCell className="text-right tabular-nums text-muted-foreground">{item.unitCost ? peso(item.unitCost) : "—"}</TableCell>
-        <TableCell className="text-right tabular-nums font-medium text-emerald-700">{item.sellPrice ? peso(item.sellPrice) : "—"}</TableCell>
-        <TableCell className="text-right tabular-nums">{item.value ? peso(item.value) : "—"}</TableCell>
+        {showPrices && <TableCell className="text-right tabular-nums text-muted-foreground">{item.unitCost ? peso(item.unitCost) : "—"}</TableCell>}
+        {showPrices && <TableCell className="text-right tabular-nums font-medium text-emerald-700">{item.sellPrice ? peso(item.sellPrice) : "—"}</TableCell>}
+        {showPrices && <TableCell className="text-right tabular-nums">{item.value ? peso(item.value) : "—"}</TableCell>}
         <TableCell>
           {item.status === "out" ? <Badge variant="destructive">Out</Badge>
             : item.status === "low" ? <Badge variant="warning">Low</Badge>
@@ -178,7 +181,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       </TableRow>
       {panel === "adjust" && canManage && (
         <TableRow>
-          <TableCell colSpan={12} className="bg-muted/30">
+          <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="h-8 rounded-md border bg-background px-2 text-sm">
                 <option value="RECEIPT">Receive (+)</option>
@@ -195,11 +198,11 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       )}
       {panel === "edit" && canManage && (
         <TableRow>
-          <TableCell colSpan={12} className="bg-muted/30">
+          <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <label className="text-xs text-muted-foreground">Location<div><LocationField value={location} onChange={setLocation} locations={locations} /></div></label>
-              <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>
-              <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>
+              {showPrices && <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>}
+              {showPrices && <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>}
               <label className="text-xs text-muted-foreground">Reorder at<Input className="h-8 w-28" type="number" step="any" min={0} value={reorder} onChange={(e) => setReorder(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
               <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Save"}</Button>
@@ -210,7 +213,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       )}
       {panel === "reserve" && canManage && (
         <TableRow>
-          <TableCell colSpan={12} className="bg-muted/30">
+          <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="space-y-2 py-1">
               <div className="flex flex-wrap items-end gap-2">
                 <label className="text-xs text-muted-foreground">Reserve qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={resvQty} onChange={(e) => setResvQty(e.target.value)} /></label>
@@ -239,7 +242,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       )}
       {panel === "transfer" && canManage && (
         <TableRow>
-          <TableCell colSpan={12} className="bg-muted/30">
+          <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <label className="text-xs text-muted-foreground">Transfer qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={xferQty} onChange={(e) => setXferQty(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">To location<div><LocationField value={xferTo} onChange={setXferTo} locations={locations.filter((l) => l.toLowerCase() !== (item.location ?? "").toLowerCase())} /></div></label>
@@ -253,7 +256,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       )}
       {panel === "label" && (
         <TableRow>
-          <TableCell colSpan={12} className="bg-muted/30">
+          <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-col items-start gap-1 py-1">
               <div className="text-sm font-medium">{item.name}{item.sku ? ` · SKU ${item.sku}` : ""}{item.location ? ` · Loc ${item.location}` : ""}</div>
               <div className="flex items-center gap-4">
@@ -274,7 +277,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
   );
 }
 
-export function InventoryManager({ items, canManage, locations }: { items: Item[]; canManage: boolean; locations: string[] }) {
+export function InventoryManager({ items, canManage, locations, showPrices }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean }) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
@@ -350,7 +353,9 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = canManage ? 12 : 11;
+  const cols = 8 + (showPrices ? 3 : 0) + (canManage ? 1 : 0);
+  // Hide the price-based sort options from viewers who can't see prices.
+  const sortOptions = showPrices ? SORT_OPTIONS : SORT_OPTIONS.filter((o) => o.key !== "unitCost" && o.key !== "sellPrice" && o.key !== "value");
 
   async function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
@@ -448,8 +453,8 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
                 <LocationField value={location} onChange={setLocation} locations={locations} className="h-8 w-40" />
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Opening qty" value={qty} onChange={(e) => setQty(e.target.value)} />
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Reorder at" value={reorder} onChange={(e) => setReorder(e.target.value)} />
-                <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Unit cost ₱" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
-                <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Sell price ₱" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
+                {showPrices && <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Unit cost ₱" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />}
+                {showPrices && <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Sell price ₱" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />}
                 <Button size="sm" className="h-8" disabled={busy} onClick={add}>{busy ? "Saving…" : "Add item"}</Button>
                 <Button size="sm" variant="outline" className="h-8" onClick={() => setShowAdd(false)}>Cancel</Button>
               </div>
@@ -484,7 +489,7 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           Sort by
           <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
-            {SORT_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {sortOptions.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </label>
         <button type="button" onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
@@ -510,9 +515,9 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
                 <TableHead className="text-right">Reserved</TableHead>
                 <TableHead className="text-right">Available</TableHead>
                 <TableHead className="text-right">Reorder at</TableHead>
-                <TableHead className="text-right">Unit cost</TableHead>
-                <TableHead className="text-right">Sell price</TableHead>
-                <TableHead className="text-right">Value</TableHead>
+                {showPrices && <TableHead className="text-right">Unit cost</TableHead>}
+                {showPrices && <TableHead className="text-right">Sell price</TableHead>}
+                {showPrices && <TableHead className="text-right">Value</TableHead>}
                 <TableHead>Status</TableHead>
                 {canManage && <TableHead className="text-right">Action</TableHead>}
               </TableRow>
@@ -524,11 +529,11 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
                     <TableRow className="bg-muted/40">
                       <TableCell colSpan={cols} className="py-1.5">
                         <span className="text-sm font-semibold">{g.key || "—"}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">{g.rows.length} item{g.rows.length === 1 ? "" : "s"} · {peso(g.rows.reduce((a, r) => a + r.value, 0))}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{g.rows.length} item{g.rows.length === 1 ? "" : "s"}{showPrices ? ` · ${peso(g.rows.reduce((a, r) => a + r.value, 0))}` : ""}</span>
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
                 </Fragment>
               ))}
             </TableBody>

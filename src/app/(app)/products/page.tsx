@@ -1,5 +1,6 @@
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { canViewPrices } from "@/lib/price-visibility";
 import { Card, CardContent } from "@/components/ui/card";
 import { getProducts, type ProductRow } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -17,6 +18,10 @@ export default async function ProductsPage() {
   // (Warehouse, Plant Manager, etc.) can view the list but not change it.
   const canManage = admin || has("purchaser");
   const canView = canManage || VIEW_ROLES.some(has);
+  // Supplier prices are commercial data — Purchaser, Engineers, Accounting and
+  // admins only. Other viewers (Warehouse, Plant Manager, Logistics, …) see the
+  // products and their suppliers but not the prices.
+  const showPrices = canViewPrices(viewer, assignments);
 
   if (!canView) {
     return (
@@ -51,7 +56,7 @@ export default async function ProductsPage() {
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <ProductManager products={products} suppliers={suppliers} canManage={canManage} />
+            <ProductManager products={products} suppliers={suppliers} canManage={canManage} showPrices={showPrices} />
           </CardContent>
         </Card>
       )}

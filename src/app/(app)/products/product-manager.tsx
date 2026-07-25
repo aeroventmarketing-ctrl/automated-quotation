@@ -93,7 +93,7 @@ function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplier
   );
 }
 
-function ProductRowView({ product, canManage, suppliers, scanTarget, scanNonce }: { product: ProductRow; canManage: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number }) {
+function ProductRowView({ product, canManage, showPrices, suppliers, scanTarget, scanNonce }: { product: ProductRow; canManage: boolean; showPrices: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number }) {
   const router = useRouter();
   const [panel, setPanel] = useState<"none" | "edit" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
@@ -137,7 +137,7 @@ function ProductRowView({ product, canManage, suppliers, scanTarget, scanNonce }
           {product.suppliers.length === 0 ? <span className="text-muted-foreground">No supplier</span> : (
             <div className="flex flex-wrap gap-1">
               {product.suppliers.map((s) => (
-                <Badge key={s.company} variant="secondary" className="font-normal">{s.company}{s.price ? ` · ${peso(s.price)}` : ""}</Badge>
+                <Badge key={s.company} variant="secondary" className="font-normal">{s.company}{showPrices && s.price ? ` · ${peso(s.price)}` : ""}</Badge>
               ))}
             </div>
           )}
@@ -197,7 +197,7 @@ function ProductRowView({ product, canManage, suppliers, scanTarget, scanNonce }
   );
 }
 
-export function ProductManager({ products, suppliers, canManage }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean }) {
+export function ProductManager({ products, suppliers, canManage, showPrices }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; showPrices: boolean }) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
@@ -279,6 +279,8 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
 
   const missing = products.filter((p) => !p.sku).length;
   const unsourced = products.filter(isUnsourced).length;
+  // Hide the price-based sort option from viewers who can't see prices.
+  const sortOptions = showPrices ? SORT_OPTIONS : SORT_OPTIONS.filter((o) => o.key !== "price");
 
   async function cleanupUnsourced() {
     if (!window.confirm(`Remove ${unsourced} product${unsourced === 1 ? "" : "s"} that have no supplier and no price? They'll be removed from the list (recoverable by an admin).`)) return;
@@ -365,7 +367,7 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           Sort by
           <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
-            {SORT_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {sortOptions.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </label>
         <button type="button" onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
@@ -401,7 +403,7 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} showPrices={showPrices} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
                 </Fragment>
               ))}
             </TableBody>
