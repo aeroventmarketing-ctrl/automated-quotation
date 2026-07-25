@@ -20,6 +20,18 @@ async function requireInventoryManager() {
   return user;
 }
 
+/** The Purchaser or an admin may set an item's unit cost and selling price. */
+async function requirePriceManager() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (isAdmin(user)) return user;
+  const roles = await getWorkflowRoles();
+  if (!userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)) {
+    throw new Error("Only the Purchaser or an admin can set prices.");
+  }
+  return user;
+}
+
 /** Claim the next SKU number (starts at 10001). Runs inside a transaction. */
 async function nextSku(tx: Prisma.TransactionClient): Promise<string> {
   const KEY = "sku_counter";
@@ -239,6 +251,28 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
   });
   revalidatePath("/inventory");
   revalidatePath("/inventory/reorder");
+}
+
+const priceSchema = z.object({
+  stockItemId: z.string().min(1),
+  unitCost: z.number().min(0),
+  sellPrice: z.number().min(0),
+});
+
+/**
+ * Set an item's unit cost and selling price. Available to the Purchaser and
+ * admins (who see prices) even when they aren't the item's stock manager — so a
+ * purchaser can fill in missing selling prices without warehouse rights.
+ */
+export async function updateStockItemPrices(input: z.infer<typeof priceSchema>): Promise<void> {
+  await requirePriceManager();
+  const d = priceSchema.parse(input);
+  await prisma.stockItem.update({
+    where: { id: d.stockItemId },
+    data: { unitCost: d.unitCost, sellPrice: d.sellPrice },
+  });
+  revalidatePath("/inventory");
+  revalidatePath("/dashboard");
 }
 
 const reserveSchema = z.object({

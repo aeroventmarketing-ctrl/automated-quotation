@@ -11,7 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
 import { BulkImport } from "./bulk-import";
-import { createStockItem, adjustStock, updateStockItemMeta, reserveStock, releaseReservation, assignMissingSkus } from "./actions";
+import { createStockItem, adjustStock, updateStockItemMeta, updateStockItemPrices, reserveStock, releaseReservation, assignMissingSkus } from "./actions";
 import { initiateTransfer } from "./transfer-actions";
 
 interface Reservation {
@@ -78,12 +78,15 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, showPrices, locations, scanTarget, scanNonce }: { item: Item; canManage: boolean; showPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number }) {
+function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanTarget, scanNonce }: { item: Item; canManage: boolean; showPrices: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number }) {
   const router = useRouter();
+  // Purchaser/admin who aren't the stock manager still get a "Set price" action.
+  const priceOnly = canEditPrices && !canManage;
+  const hasActions = canManage || canEditPrices;
   // Table has 8 always-on columns + 3 price columns (unit cost, sell price,
   // value) + 1 action column; the expandable panels span all of them.
-  const colSpan = 8 + (showPrices ? 3 : 0) + (canManage ? 1 : 0);
-  const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "reserve" | "transfer" | "label">("none");
+  const colSpan = 8 + (showPrices ? 3 : 0) + (hasActions ? 1 : 0);
+  const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "price" | "reserve" | "transfer" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
   const [flash, setFlash] = useState(false);
 
@@ -133,6 +136,9 @@ function StockRow({ item, canManage, showPrices, locations, scanTarget, scanNonc
   function saveMeta() {
     run(() => updateStockItemMeta({ stockItemId: item.id, category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
   }
+  function savePrices() {
+    run(() => updateStockItemPrices({ stockItemId: item.id, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
+  }
   function reserve() {
     const n = Number(resvQty);
     if (!(n > 0)) { setErr("Enter a quantity."); return; }
@@ -150,7 +156,12 @@ function StockRow({ item, canManage, showPrices, locations, scanTarget, scanNonc
     <>
       <TableRow ref={rowRef} className={flash ? "bg-primary/10 transition-colors" : undefined}>
         <TableCell>
-          <div className="font-medium">{item.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{item.name}</span>
+            {showPrices && item.sellPrice <= 0 && (
+              <Badge variant="warning" className="font-normal">No sell price</Badge>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground">{[item.sku ? `SKU ${item.sku}` : null, item.category].filter(Boolean).join(" · ")}</div>
         </TableCell>
         <TableCell className="text-sm text-muted-foreground">{item.unit}</TableCell>
@@ -167,14 +178,22 @@ function StockRow({ item, canManage, showPrices, locations, scanTarget, scanNonc
             : item.status === "low" ? <Badge variant="warning">Low</Badge>
             : <Badge variant="success">OK</Badge>}
         </TableCell>
-        {canManage && (
+        {hasActions && (
           <TableCell className="text-right">
             <div className="flex justify-end gap-1">
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}>Label</Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "reserve" ? "none" : "reserve"))}>Reserve{item.reservations.length ? ` (${item.reservations.length})` : ""}</Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "transfer" ? "none" : "transfer"))}>Transfer</Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>Edit</Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "adjust" ? "none" : "adjust"))}>Adjust</Button>
+              {priceOnly ? (
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "price" ? "none" : "price"))}>
+                  {item.sellPrice <= 0 ? "Set price" : "Edit price"}
+                </Button>
+              ) : (
+                <>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}>Label</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "reserve" ? "none" : "reserve"))}>Reserve{item.reservations.length ? ` (${item.reservations.length})` : ""}</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "transfer" ? "none" : "transfer"))}>Transfer</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>Edit</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "adjust" ? "none" : "adjust"))}>Adjust</Button>
+                </>
+              )}
             </div>
           </TableCell>
         )}
@@ -206,6 +225,19 @@ function StockRow({ item, canManage, showPrices, locations, scanTarget, scanNonc
               <label className="text-xs text-muted-foreground">Reorder at<Input className="h-8 w-28" type="number" step="any" min={0} value={reorder} onChange={(e) => setReorder(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
               <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Save"}</Button>
+              {err && <span className="text-xs text-destructive">{err}</span>}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+      {panel === "price" && priceOnly && (
+        <TableRow>
+          <TableCell colSpan={colSpan} className="bg-muted/30">
+            <div className="flex flex-wrap items-end gap-2 py-1">
+              <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>
+              <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>
+              <Button size="sm" className="h-8" disabled={busy} onClick={savePrices}>{busy ? "…" : "Save price"}</Button>
+              <span className="text-xs text-muted-foreground">Selling price is what Sales sees on Check availability.</span>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
           </TableCell>
@@ -277,7 +309,7 @@ function StockRow({ item, canManage, showPrices, locations, scanTarget, scanNonc
   );
 }
 
-export function InventoryManager({ items, canManage, locations, showPrices }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean }) {
+export function InventoryManager({ items, canManage, locations, showPrices, canEditPrices }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean }) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
@@ -303,8 +335,11 @@ export function InventoryManager({ items, canManage, locations, showPrices }: { 
   const scanRef = useRef<HTMLInputElement>(null);
   // Text search: filter by name, SKU, category or location.
   const [query, setQuery] = useState("");
+  // Quick filter: only items with no selling price set (price viewers only).
+  const [needsPrice, setNeedsPrice] = useState(false);
+  const needPriceCount = items.filter((it) => it.sellPrice <= 0).length;
   const q = query.trim().toLowerCase();
-  const filtered = q === ""
+  const searched = q === ""
     ? items
     : items.filter((it) =>
         it.name.toLowerCase().includes(q) ||
@@ -312,6 +347,7 @@ export function InventoryManager({ items, canManage, locations, showPrices }: { 
         (it.category ?? "").toLowerCase().includes(q) ||
         (it.location ?? "").toLowerCase().includes(q),
       );
+  const filtered = needsPrice && showPrices ? searched.filter((it) => it.sellPrice <= 0) : searched;
 
   // Sort & group controls.
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -353,7 +389,7 @@ export function InventoryManager({ items, canManage, locations, showPrices }: { 
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = 8 + (showPrices ? 3 : 0) + (canManage ? 1 : 0);
+  const cols = 8 + (showPrices ? 3 : 0) + (canManage || canEditPrices ? 1 : 0);
   // Hide the price-based sort options from viewers who can't see prices.
   const sortOptions = showPrices ? SORT_OPTIONS : SORT_OPTIONS.filter((o) => o.key !== "unitCost" && o.key !== "sellPrice" && o.key !== "value");
 
@@ -496,12 +532,21 @@ export function InventoryManager({ items, canManage, locations, showPrices }: { 
           className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-sm hover:bg-accent" title={dir === "asc" ? "Ascending" : "Descending"}>
           {dir === "asc" ? "↑ Asc" : "↓ Desc"}
         </button>
+        {showPrices && needPriceCount > 0 && (
+          <button type="button" onClick={() => setNeedsPrice((v) => !v)}
+            className={`inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-sm ${needsPrice ? "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/40" : "bg-background hover:bg-accent"}`}
+            title="Show only items with no selling price set">
+            {needsPrice ? "✓ " : ""}Needs selling price ({needPriceCount})
+          </button>
+        )}
       </div>
 
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No stock items yet.</p>
       ) : filtered.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">No items match &ldquo;{query}&rdquo;.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          {needsPrice && q === "" ? "Every item has a selling price set. 🎉" : `No items match “${query}”.`}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           {q !== "" && <p className="mb-1 text-xs text-muted-foreground">{filtered.length} of {items.length} items</p>}
@@ -519,7 +564,7 @@ export function InventoryManager({ items, canManage, locations, showPrices }: { 
                 {showPrices && <TableHead className="text-right">Sell price</TableHead>}
                 {showPrices && <TableHead className="text-right">Value</TableHead>}
                 <TableHead>Status</TableHead>
-                {canManage && <TableHead className="text-right">Action</TableHead>}
+                {(canManage || canEditPrices) && <TableHead className="text-right">Action</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -533,7 +578,7 @@ export function InventoryManager({ items, canManage, locations, showPrices }: { 
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
                 </Fragment>
               ))}
             </TableBody>

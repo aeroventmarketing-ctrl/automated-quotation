@@ -3,7 +3,7 @@ import { ShoppingCart } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
-import { canViewPrices } from "@/lib/price-visibility";
+import { canViewPrices, canEditPrices } from "@/lib/price-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
@@ -24,6 +24,8 @@ export default async function InventoryPage() {
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
   const showPrices = canViewPrices(viewer, assignments);
+  // The Purchaser/admin can fill in missing prices even without warehouse rights.
+  const editPrices = canEditPrices(viewer, assignments);
 
   if (!canView) {
     return (
@@ -124,7 +126,7 @@ export default async function InventoryPage() {
           </div>
           <Card>
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManage} locations={locations} showPrices={showPrices} />
+              <InventoryManager items={items} canManage={canManage} locations={locations} showPrices={showPrices} canEditPrices={editPrices} />
             </CardContent>
           </Card>
 

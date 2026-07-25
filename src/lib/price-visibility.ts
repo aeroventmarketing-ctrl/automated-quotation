@@ -11,9 +11,19 @@ import { userHasWorkflowRole, type WorkflowRoleAssignments, type WorkflowRoleKey
 /** Workflow roles (beyond admin / Engineer) allowed to see prices. */
 const PRICE_ROLES: WorkflowRoleKey[] = ["purchaser", "accounting"];
 
+/** Workflow roles (beyond admin) allowed to SET unit cost / selling price. */
+const PRICE_EDIT_ROLES: WorkflowRoleKey[] = ["purchaser"];
+
 /** Whether the viewer may see unit costs, selling prices and stock value. */
 export function canViewPrices(user: User | null | undefined, assignments: WorkflowRoleAssignments): boolean {
   if (!user) return false;
   if (isAdmin(user) || user.role === "ENGINEER") return true;
   return PRICE_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r));
+}
+
+/** Whether the viewer may edit an item's unit cost and selling price. */
+export function canEditPrices(user: User | null | undefined, assignments: WorkflowRoleAssignments): boolean {
+  if (!user) return false;
+  if (isAdmin(user)) return true;
+  return PRICE_EDIT_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r));
 }
