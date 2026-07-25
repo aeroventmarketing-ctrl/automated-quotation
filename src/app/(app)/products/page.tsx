@@ -13,7 +13,9 @@ export default async function ProductsPage() {
   const [viewer, assignments, suppliers] = await Promise.all([getCurrentUser(), getWorkflowRoles(), getSuppliers().catch(() => [])]);
   const admin = isAdmin(viewer);
   const has = (r: WorkflowRoleKey) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r);
-  const canManage = admin || has("purchaser") || has("warehouse");
+  // Only the Purchaser or an admin may add/edit/remove products. Other roles
+  // (Warehouse, Plant Manager, etc.) can view the list but not change it.
+  const canManage = admin || has("purchaser");
   const canView = canManage || VIEW_ROLES.some(has);
 
   if (!canView) {

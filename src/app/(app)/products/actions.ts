@@ -15,10 +15,8 @@ async function requireProductManager() {
   if (!user) throw new Error("Unauthorized");
   if (isAdmin(user)) return user;
   const roles = await getWorkflowRoles();
-  const ok =
-    userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey) ||
-    userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
-  if (!ok) throw new Error("Only the Purchaser, Warehouse, or an admin can manage the product list.");
+  const ok = userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only the Purchaser or an admin can manage the product list.");
   return user;
 }
 
