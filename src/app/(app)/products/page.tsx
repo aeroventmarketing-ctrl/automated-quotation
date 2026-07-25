@@ -16,8 +16,11 @@ export default async function ProductsPage() {
   const has = (r: WorkflowRoleKey) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r);
   // Only the Purchaser or an admin may add/edit/remove products. Other roles
   // (Warehouse, Plant Manager, etc.) can view the list but not change it.
-  const canManage = admin || has("purchaser");
-  const canView = canManage || VIEW_ROLES.some(has);
+  // Sales are blocked from the Products page entirely (they use the sales
+  // dashboard's Check-availability tool for name / quantity / selling price).
+  const isSales = viewer?.role === "SALES";
+  const canManage = !isSales && (admin || has("purchaser"));
+  const canView = !isSales && (canManage || VIEW_ROLES.some(has));
   // Supplier prices are commercial data — Purchaser, Engineers, Accounting and
   // admins only. Other viewers (Warehouse, Plant Manager, Logistics, …) see the
   // products and their suppliers but not the prices.

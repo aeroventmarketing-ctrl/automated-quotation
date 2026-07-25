@@ -18,8 +18,11 @@ export default async function InventoryPage() {
   const admin = isAdmin(viewer);
   const has = (role: "warehouse" | "plant_manager" | "purchaser") =>
     viewer != null && userHasWorkflowRole(assignments, viewer.id, role);
-  const canManage = admin || has("warehouse") || has("plant_manager");
-  const canView = canManage || has("purchaser");
+  // Sales are blocked from the Inventory page entirely (they use the sales
+  // dashboard's Check-availability tool for name / quantity / selling price).
+  const isSales = viewer?.role === "SALES";
+  const canManage = !isSales && (admin || has("warehouse") || has("plant_manager"));
+  const canView = !isSales && (canManage || has("purchaser"));
   // Prices (unit cost, sell price, stock value) are commercial data — only the
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
