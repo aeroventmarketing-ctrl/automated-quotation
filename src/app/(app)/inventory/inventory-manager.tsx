@@ -11,7 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
 import { BulkImport } from "./bulk-import";
-import { createStockItem, adjustStock, updateStockItemMeta, updateStockItemPrices, reserveStock, releaseReservation, assignMissingSkus } from "./actions";
+import { createStockItem, adjustStock, updateStockItemMeta, updateStockItemPrices, reserveStock, releaseReservation, assignMissingSkus, mergeDuplicateStockItems } from "./actions";
 import { initiateTransfer } from "./transfer-actions";
 
 interface Reservation {
@@ -429,6 +429,28 @@ export function InventoryManager({ items, canManage, locations, showPrices, canE
     }
   }
 
+  // Count duplicate items (same name) so we can offer a one-click merge — the
+  // number of extra copies beyond the first of each name.
+  const dupCount = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const it of items) { const k = it.name.trim().toLowerCase(); seen.set(k, (seen.get(k) ?? 0) + 1); }
+    let extra = 0;
+    for (const c of seen.values()) if (c > 1) extra += c - 1;
+    return extra;
+  }, [items]);
+
+  async function mergeDupes() {
+    if (!window.confirm(`Merge ${dupCount} duplicate item${dupCount === 1 ? "" : "s"}? Items with the same name are combined into one (keeping the selling price / unit cost), and the extra copies are removed (recoverable by an admin).`)) return;
+    setBusy(true); setErr(null);
+    try {
+      const { removed } = await mergeDuplicateStockItems();
+      router.refresh();
+      window.alert(`${removed} duplicate item${removed === 1 ? "" : "s"} merged.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally { setBusy(false); }
+  }
+
   async function add() {
     if (name.trim() === "") { setErr("Enter an item name."); return; }
     setBusy(true); setErr(null);
@@ -500,6 +522,11 @@ export function InventoryManager({ items, canManage, locations, showPrices, canE
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add stock item</Button>
               <BulkImport />
+              {dupCount > 0 && (
+                <Button size="sm" variant="outline" className="text-amber-700 hover:text-amber-700" disabled={busy} onClick={mergeDupes}>
+                  {busy ? "…" : `Merge duplicates (${dupCount})`}
+                </Button>
+              )}
             </div>
           )}
         </div>

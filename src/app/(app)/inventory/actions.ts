@@ -94,10 +94,10 @@ const num = (s: string | undefined) => {
  */
 export async function importStockItems(
   formData: FormData,
-): Promise<{ created: number; skipped: number; errors: string[] }> {
+): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
   const user = await requireInventoryManager();
   const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) return { created: 0, skipped: 0, errors: ["Choose a CSV or Excel file."] };
+  if (!file || file.size === 0) return { created: 0, updated: 0, skipped: 0, errors: ["Choose a CSV or Excel file."] };
 
   const lower = file.name.toLowerCase();
   const buf = Buffer.from(await file.arrayBuffer());
@@ -105,9 +105,9 @@ export async function importStockItems(
   try {
     rows = lower.endsWith(".xlsx") || lower.endsWith(".xlsm") ? await parseXlsx(buf) : parseCsv(buf.toString("utf8"));
   } catch (e) {
-    return { created: 0, skipped: 0, errors: [`Couldn't read the file: ${e instanceof Error ? e.message : "unknown error"}. Save it as a valid .xlsx or .csv and try again.`] };
+    return { created: 0, updated: 0, skipped: 0, errors: [`Couldn't read the file: ${e instanceof Error ? e.message : "unknown error"}. Save it as a valid .xlsx or .csv and try again.`] };
   }
-  if (rows.length < 2) return { created: 0, skipped: 0, errors: ["The file has no data rows — it needs a header row plus at least one item."] };
+  if (rows.length < 2) return { created: 0, updated: 0, skipped: 0, errors: ["The file has no data rows — it needs a header row plus at least one item."] };
 
   const header = rows[0].map((h) => h.trim().toLowerCase());
   const col = (names: string[]) => header.findIndex((h) => names.includes(h));
@@ -120,57 +120,151 @@ export async function importStockItems(
   const iCost = col(["unitcost", "unit cost", "cost"]);
   const iSell = col(["sellprice", "sell price", "selling price", "price"]);
   if (iName < 0) {
-    return { created: 0, skipped: 0, errors: ['The first row must be headers with a "name" column (e.g. name, unit, category, location, quantity, reorderLevel, unitCost).'] };
+    return { created: 0, updated: 0, skipped: 0, errors: ['The first row must be headers with a "name" column (e.g. name, unit, category, location, quantity, reorderLevel, unitCost).'] };
   }
 
   const errors: string[] = [];
   let created = 0;
+  let updated = 0;
   let skipped = 0;
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     const name = (row[iName] ?? "").trim();
     if (!name) { skipped++; continue; }
-    const quantity = iQty >= 0 ? num(row[iQty]) : 0;
+    // A cell's trimmed value, and whether the column exists AND the cell is
+    // non-empty (only non-empty cells overwrite existing data on re-import).
+    const cell = (i: number) => (i >= 0 ? (row[i] ?? "").trim() : "");
+    const has = (i: number) => i >= 0 && cell(i) !== "";
     try {
       // Per-row transaction: a failure here (e.g. a bad value) is isolated so
-      // the rest of the batch still imports.
+      // the rest of the batch still imports. Match an existing active item by
+      // name (case-insensitive) and UPDATE it, so re-uploading a master list
+      // refreshes items instead of creating duplicates.
       await prisma.$transaction(async (tx) => {
-        const sku = await nextSku(tx);
-        const item = await tx.stockItem.create({
-          data: {
-            sku,
-            name,
-            unit: (iUnit >= 0 ? row[iUnit]?.trim() : "") || "pcs",
-            category: (iCat >= 0 ? row[iCat]?.trim() : "") || null,
-            location: (iLoc >= 0 ? row[iLoc]?.trim() : "") || null,
-            quantity,
-            reorderLevel: iReorder >= 0 ? num(row[iReorder]) : 0,
-            unitCost: iCost >= 0 ? num(row[iCost]) : 0,
-            sellPrice: iSell >= 0 ? num(row[iSell]) : 0,
-          },
-        });
-        if (quantity > 0) {
-          await tx.stockMovement.create({
-            data: { stockItemId: item.id, kind: "ADJUSTMENT", delta: quantity, balanceAfter: quantity, reason: "Opening balance (import)", byName: user.name },
+        const existing = await tx.stockItem.findFirst({ where: { active: true, name: { equals: name, mode: "insensitive" } } });
+        if (existing) {
+          // Overwrite only the fields whose column is present and non-empty.
+          const data: Prisma.StockItemUpdateInput = {};
+          if (has(iUnit)) data.unit = cell(iUnit);
+          if (has(iCat)) data.category = cell(iCat);
+          if (has(iLoc)) data.location = cell(iLoc);
+          if (has(iReorder)) data.reorderLevel = num(cell(iReorder));
+          if (has(iCost)) data.unitCost = num(cell(iCost));
+          if (has(iSell)) data.sellPrice = num(cell(iSell));
+          if (Object.keys(data).length > 0) await tx.stockItem.update({ where: { id: existing.id }, data });
+          // Quantity: only when a non-empty quantity is given; record the change
+          // in the ledger. A blank quantity leaves on-hand untouched (so a
+          // price-only re-upload never zeroes stock).
+          if (has(iQty)) {
+            const newQty = num(cell(iQty));
+            const current = Number(existing.quantity);
+            if (newQty !== current) {
+              await tx.stockItem.update({ where: { id: existing.id }, data: { quantity: newQty } });
+              await tx.stockMovement.create({
+                data: { stockItemId: existing.id, kind: "ADJUSTMENT", delta: Math.round((newQty - current) * 1000) / 1000, balanceAfter: newQty, reason: "Bulk import update", byName: user.name },
+              });
+            }
+          }
+          updated++;
+        } else {
+          const sku = await nextSku(tx);
+          const quantity = has(iQty) ? num(cell(iQty)) : 0;
+          const item = await tx.stockItem.create({
+            data: {
+              sku,
+              name,
+              unit: cell(iUnit) || "pcs",
+              category: cell(iCat) || null,
+              location: cell(iLoc) || null,
+              quantity,
+              reorderLevel: has(iReorder) ? num(cell(iReorder)) : 0,
+              unitCost: has(iCost) ? num(cell(iCost)) : 0,
+              sellPrice: has(iSell) ? num(cell(iSell)) : 0,
+            },
           });
+          if (quantity > 0) {
+            await tx.stockMovement.create({
+              data: { stockItemId: item.id, kind: "ADJUSTMENT", delta: quantity, balanceAfter: quantity, reason: "Opening balance (import)", byName: user.name },
+            });
+          }
+          created++;
         }
       });
-      created++;
     } catch (e) {
       errors.push(`Row ${r + 1} (“${name}”): ${e instanceof Error ? e.message.slice(0, 140) : "could not be imported."}`);
     }
   }
-  if (created > 0) {
+  if (created > 0 || updated > 0) {
     await logActivity(user, {
       action: "inventory.import",
       category: "inventory",
-      summary: `Imported ${created} stock item${created === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped)` : ""}`,
+      summary: `Import: ${created} new, ${updated} updated${skipped ? `, ${skipped} skipped` : ""}`,
       entity: "inventory",
       href: "/inventory",
     });
   }
   revalidatePath("/inventory");
-  return { created, skipped, errors: errors.slice(0, 20) };
+  return { created, updated, skipped, errors: errors.slice(0, 20) };
+}
+
+/**
+ * Merge duplicate stock items created by earlier re-imports. Items are grouped
+ * by name (case-insensitive); within each group the richest record is kept
+ * (prefers one that has a selling price, then a unit cost, then the oldest), and
+ * the duplicates are deactivated. Missing selling price / unit cost on the kept
+ * record are backfilled from a duplicate. On-hand quantity is NOT summed (the
+ * duplicates were accidental copies, not extra stock) — the kept record's
+ * quantity stands. Admin / warehouse / plant manager only.
+ */
+export async function mergeDuplicateStockItems(): Promise<{ groups: number; removed: number }> {
+  const user = await requireInventoryManager();
+  const list = await prisma.stockItem.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } });
+  const byName = new Map<string, typeof list>();
+  for (const it of list) {
+    const key = it.name.trim().toLowerCase();
+    (byName.get(key) ?? byName.set(key, []).get(key)!).push(it);
+  }
+  let groups = 0;
+  let removed = 0;
+  for (const dupes of byName.values()) {
+    if (dupes.length < 2) continue;
+    // Rank: has sell price first, then has unit cost, then oldest.
+    const ranked = [...dupes].sort((a, b) => {
+      const sp = (Number(b.sellPrice) > 0 ? 1 : 0) - (Number(a.sellPrice) > 0 ? 1 : 0);
+      if (sp) return sp;
+      const uc = (Number(b.unitCost) > 0 ? 1 : 0) - (Number(a.unitCost) > 0 ? 1 : 0);
+      if (uc) return uc;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+    const keep = ranked[0];
+    const rest = ranked.slice(1);
+    const bestSell = Math.max(...dupes.map((d) => Number(d.sellPrice)));
+    const bestCost = Math.max(...dupes.map((d) => Number(d.unitCost)));
+    try {
+      await prisma.$transaction(async (tx) => {
+        const patch: Prisma.StockItemUpdateInput = {};
+        if (Number(keep.sellPrice) <= 0 && bestSell > 0) patch.sellPrice = bestSell;
+        if (Number(keep.unitCost) <= 0 && bestCost > 0) patch.unitCost = bestCost;
+        if (Object.keys(patch).length > 0) await tx.stockItem.update({ where: { id: keep.id }, data: patch });
+        await tx.stockItem.updateMany({ where: { id: { in: rest.map((d) => d.id) } }, data: { active: false } });
+      });
+      groups++;
+      removed += rest.length;
+    } catch {
+      /* skip a group that fails; the rest still merge */
+    }
+  }
+  if (removed > 0) {
+    await logActivity(user, {
+      action: "inventory.dedupe",
+      category: "inventory",
+      summary: `Merged duplicates: removed ${removed} across ${groups} item${groups === 1 ? "" : "s"}`,
+      entity: "inventory",
+      href: "/inventory",
+    });
+  }
+  revalidatePath("/inventory");
+  return { groups, removed };
 }
 
 /** Assign SKUs to every active item that doesn't have one yet. */

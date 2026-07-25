@@ -38,7 +38,7 @@ export function BulkImport() {
     setBusy(true); setMsg(null); setErrs([]);
     try {
       const r = await importStockItems(fd);
-      setMsg(`Imported ${r.created} item${r.created === 1 ? "" : "s"}${r.skipped ? `, skipped ${r.skipped} blank row${r.skipped === 1 ? "" : "s"}` : ""}.`);
+      setMsg(`Imported ${r.created} new item${r.created === 1 ? "" : "s"}, updated ${r.updated} existing${r.skipped ? `, skipped ${r.skipped} blank row${r.skipped === 1 ? "" : "s"}` : ""}.`);
       setErrs(r.errors);
       if (fileRef.current) fileRef.current.value = "";
       setFileName("");
@@ -62,7 +62,8 @@ export function BulkImport() {
       </div>
       <p className="text-xs text-muted-foreground">
         Upload a CSV or Excel (.xlsx) file. Columns: <span className="font-mono">name, unit, category, location, quantity, reorderLevel, unitCost, sellPrice</span> —
-        only <b>name</b> is required. SKUs are generated automatically.
+        only <b>name</b> is required. SKUs are generated automatically. Re-uploading an item with the
+        same <b>name</b> <b>updates</b> that item (matched fields only) instead of creating a duplicate.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={downloadTemplate} className="text-xs font-medium text-primary hover:underline">Download template (CSV)</button>
