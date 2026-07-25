@@ -31,8 +31,12 @@ const monthLabel = (salesMonth: string) => {
 export default async function CommissionsPage() {
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   const canManage = isAdmin(viewer) || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "accounting"));
-  // Sales may view commissions (read-only); Accounting/admin still manage (mark paid).
-  const canView = canManage || viewer?.role === "SALES" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver"));
+  // Accounting/admin manage (mark paid); the Payment Approver sees all. Sales may
+  // view — but only their OWN commissions.
+  const canSeeAll = canManage || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver"));
+  const isSales = viewer?.role === "SALES";
+  const canView = canSeeAll || isSales;
+  const ownOnly = !canSeeAll && isSales;
 
   if (!canView) {
     return (
@@ -46,7 +50,7 @@ export default async function CommissionsPage() {
   let rows: Awaited<ReturnType<typeof loadRows>> = [];
   let tableMissing = false;
   try {
-    rows = await loadRows();
+    rows = await loadRows(ownOnly ? viewer!.id : undefined);
   } catch {
     tableMissing = true;
   }
@@ -142,8 +146,9 @@ export default async function CommissionsPage() {
   );
 }
 
-async function loadRows() {
+async function loadRows(salespersonId?: string) {
   const list = await prisma.commission.findMany({
+    where: salespersonId ? { salespersonId } : undefined,
     orderBy: [{ salesMonth: "desc" }, { salespersonName: "asc" }],
     include: { quotation: { select: { quoteNumber: true } } },
   });

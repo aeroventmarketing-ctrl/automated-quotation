@@ -5,7 +5,7 @@ import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowR
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
-import { readOrderWorkflow, deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
+import { readOrderWorkflow, requisitionDeptLabel } from "@/lib/order-workflow";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
@@ -124,8 +124,7 @@ export default async function PurchasingPage() {
     };
     const mrfNoOf = (qid: string | null, mrfId: string | null) =>
       qid && mrfId ? mrfMapByQuote.get(qid)?.get(mrfId) ?? null : null;
-    const deptLabelOf = (dept: string | null) =>
-      dept && PRODUCTION_DEPTS.some((d) => d.key === dept) ? deptLabel(dept as (typeof PRODUCTION_DEPTS)[number]["key"]) : dept ?? "—";
+    const deptLabelOf = (dept: string | null) => requisitionDeptLabel(dept);
 
     const batched = allPrs.filter((pr) => poBatchId(pr.po));
     const unbatched = allPrs.filter((pr) => !poBatchId(pr.po));

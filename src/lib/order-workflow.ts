@@ -74,6 +74,23 @@ export const PRODUCTION_DEPTS = [
 export type ProductionDeptKey = (typeof PRODUCTION_DEPTS)[number]["key"];
 export type JobOrderStatus = "issued" | "in_production" | "finished";
 
+/**
+ * Departments that can raise a requisition (office supplies etc.). This is the
+ * four production departments plus a non-production "Office" department (where
+ * Sales sit) — Office has no job orders or production head; it just groups
+ * office/admin requisitions that still walk the normal purchasing chain.
+ */
+export const OFFICE_DEPT_KEY = "office";
+export const REQUISITION_DEPTS: { key: string; label: string }[] = [
+  ...PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label })),
+  { key: OFFICE_DEPT_KEY, label: "Office" },
+];
+export const REQUISITION_DEPT_KEYS = new Set(REQUISITION_DEPTS.map((d) => d.key));
+/** Label for any requisition department (production or Office); falls back to the key. */
+export function requisitionDeptLabel(key: string | null | undefined): string {
+  return REQUISITION_DEPTS.find((d) => d.key === key)?.label ?? key ?? "—";
+}
+
 export interface JobOrder {
   status: JobOrderStatus;
   issuedAt: string;

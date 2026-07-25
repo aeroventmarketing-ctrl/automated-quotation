@@ -9,7 +9,7 @@ import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
+import { requisitionDeptLabel } from "@/lib/order-workflow";
 import { formatDateTime } from "@/lib/utils";
 
 export interface PurchaseActionOpt {
@@ -304,7 +304,7 @@ export function buildPurchaseChainRow(
   });
   return {
     id: pr.id,
-    deptLabel: deptLabel(pr.dept as (typeof PRODUCTION_DEPTS)[number]["key"]),
+    deptLabel: requisitionDeptLabel(pr.dept),
     mrfNo: ctx.mrfNo ?? null,
     items: prItems,
     note: pr.note,

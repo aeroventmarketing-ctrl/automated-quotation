@@ -27,6 +27,9 @@ import {
   PRODUCTION_DEPTS,
   deptRole,
   deptLabel,
+  REQUISITION_DEPT_KEYS,
+  OFFICE_DEPT_KEY,
+  requisitionDeptLabel,
   allJobOrdersFinished,
   type OrderStage,
   type OrderStepKey,
@@ -994,16 +997,21 @@ export async function createDepartmentRequisition(
 ): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
-  const deptKey = dept as ProductionDeptKey;
+  if (!REQUISITION_DEPT_KEYS.has(dept)) throw new Error("Unknown department");
+  const isOffice = dept === OFFICE_DEPT_KEY;
 
   const roles = await getWorkflowRoles();
-  const allowed =
-    isAdmin(user) ||
-    user.role === "SALES" ||
-    userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey) ||
-    userHasWorkflowRole(roles, user.id, deptRole(deptKey) as WorkflowRoleKey);
-  if (!allowed) throw new Error(`Only Sales, the ${deptLabel(deptKey)} head, the Purchaser, or an admin can raise this requisition.`);
+  const purchaserOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
+  // Office requisitions: Sales, Purchaser or admin. Production requisitions: the
+  // department head, Purchaser or admin (Sales sit in Office, not production).
+  const allowed = isOffice
+    ? purchaserOrAdmin || user.role === "SALES"
+    : purchaserOrAdmin || userHasWorkflowRole(roles, user.id, deptRole(dept as ProductionDeptKey) as WorkflowRoleKey);
+  if (!allowed) {
+    throw new Error(isOffice
+      ? "Only Sales, the Purchaser, or an admin can raise an Office requisition."
+      : `Only the ${requisitionDeptLabel(dept)} head, the Purchaser, or an admin can raise this requisition.`);
+  }
 
   const cleanItems: MRFItem[] = (items ?? [])
     .map((it) => ({
@@ -1018,7 +1026,7 @@ export async function createDepartmentRequisition(
   await prisma.purchaseRequest.create({
     data: {
       kind: "department",
-      dept: deptKey,
+      dept,
       items: cleanItems.map(mrfItemLine) as Prisma.InputJsonValue,
       note: note.trim() || null,
       createdById: user.id,

@@ -4,7 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
-import { PRODUCTION_DEPTS, deptRole } from "@/lib/order-workflow";
+import { PRODUCTION_DEPTS, deptRole, REQUISITION_DEPTS, OFFICE_DEPT_KEY } from "@/lib/order-workflow";
 import { buildPurchaseChainRow } from "@/lib/purchase-chain-row";
 import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -23,7 +23,7 @@ export default async function RequisitionsPage() {
   const isSales = viewer?.role === "SALES";
   // Which departments the viewer heads.
   const ownDeptKeys = viewer == null ? [] : PRODUCTION_DEPTS.filter((d) => has(deptRole(d.key) as WorkflowRoleKey)).map((d) => d.key);
-  // Sales may raise requisitions (for any department, like the purchaser/admin).
+  // Sales (Office) may raise requisitions for the Office department only.
   const canRaise = admin || purchaser || isSales || ownDeptKeys.length > 0;
 
   if (!canRaise) {
@@ -35,7 +35,12 @@ export default async function RequisitionsPage() {
     );
   }
 
-  const raisableDepts = (admin || purchaser || isSales ? PRODUCTION_DEPTS.map((d) => d.key) : ownDeptKeys);
+  // Admin/purchaser: all departments (incl. Office). Sales: Office only. Dept heads: their dept.
+  const raisableDepts = admin || purchaser
+    ? REQUISITION_DEPTS.map((d) => d.key)
+    : isSales
+    ? [OFFICE_DEPT_KEY]
+    : ownDeptKeys;
   const [products, suppliers, paymentTerms, stockItems, allUsers] = await Promise.all([
     getProducts().catch(() => []),
     getSuppliers().catch(() => []),
@@ -80,7 +85,7 @@ export default async function RequisitionsPage() {
         <p className="text-sm text-muted-foreground">Department requests for production supplies, consumables and equipment. The purchaser processes them in Purchasing; received items go into stock.</p>
       </div>
 
-      <RequisitionForm depts={PRODUCTION_DEPTS.filter((d) => raisableDepts.includes(d.key)).map((d) => ({ key: d.key, label: d.label }))} products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))} />
+      <RequisitionForm depts={REQUISITION_DEPTS.filter((d) => raisableDepts.includes(d.key))} products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))} />
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">My requisitions</h2>
