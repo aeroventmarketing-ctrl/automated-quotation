@@ -1023,6 +1023,10 @@ export async function createDepartmentRequisition(
     .filter((it) => it.description !== "");
   if (cleanItems.length === 0) throw new Error("List at least one item.");
 
+  // Office requisitions need no Plant Manager approval — they start APPROVED so
+  // the Purchaser can prepare the PO directly. The rest of the chain (Approver
+  // PO approval, Accounting voucher, cash, receiving) is unchanged. Production
+  // requisitions still start PENDING_APPROVAL for the Plant Manager.
   await prisma.purchaseRequest.create({
     data: {
       kind: "department",
@@ -1031,7 +1035,7 @@ export async function createDepartmentRequisition(
       note: note.trim() || null,
       createdById: user.id,
       createdByName: user.name,
-      status: "PENDING_APPROVAL",
+      status: isOffice ? "APPROVED" : "PENDING_APPROVAL",
     },
   });
 
