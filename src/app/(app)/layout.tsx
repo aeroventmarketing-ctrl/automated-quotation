@@ -59,7 +59,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <aside className="hidden w-60 shrink-0 self-start border-r bg-background md:sticky md:top-11 md:block md:h-[calc(100vh-2.75rem)] md:overflow-y-auto print:!hidden">
           <AppNav role={user.role} name={user.name} />
         </aside>
-        <main className="flex-1 overflow-x-hidden">
+        {/* overflow-x-clip (not -hidden) prevents horizontal overflow WITHOUT
+            making <main> a scroll container — otherwise the mobile bar's sticky
+            top-11 reparents to <main> and double-counts the clock height, leaving
+            an empty band above the logo on mobile. */}
+        <main className="min-w-0 flex-1 overflow-x-clip">
           {/* Mobile top bar */}
           <div className="sticky top-11 z-30 flex items-center justify-between border-b bg-background px-4 py-3 md:hidden print:!hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
