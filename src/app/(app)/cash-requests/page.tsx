@@ -3,7 +3,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
-import { PRODUCTION_DEPTS } from "@/lib/order-workflow";
+import { REQUISITION_DEPTS, OFFICE_DEPT_KEY } from "@/lib/order-workflow";
 import { buildCashRequestRow, type CashRequestLike } from "@/lib/cash-request-row";
 import type { CashActor } from "@/lib/cash-request";
 import { CashRequestForm } from "./cash-request-form";
@@ -60,7 +60,7 @@ export default async function CashRequestsPage() {
         </p>
       </div>
 
-      <CashRequestForm depts={PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))} />
+      <CashRequestForm depts={viewer.role === "SALES" ? REQUISITION_DEPTS.filter((d) => d.key === OFFICE_DEPT_KEY) : REQUISITION_DEPTS} />
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">

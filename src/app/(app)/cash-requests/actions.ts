@@ -19,7 +19,7 @@ import {
   type CashRequestStatus,
   type CashCategoryKey,
 } from "@/lib/cash-request";
-import { PRODUCTION_DEPTS } from "@/lib/order-workflow";
+import { REQUISITION_DEPT_KEYS } from "@/lib/order-workflow";
 import { round2 } from "@/lib/quote";
 
 /** Claim the next cash-voucher number — a plain 7-digit sequence, e.g. "0000810"
@@ -61,7 +61,7 @@ export async function createCashRequest(input: {
   const purpose = (input.purpose ?? "").trim();
   if (!purpose) throw new Error("Describe what the cash is for.");
   const category: CashCategoryKey = (CASH_CATEGORIES.find((c) => c.key === input.category)?.key ?? "advance") as CashCategoryKey;
-  const dept = input.dept && PRODUCTION_DEPTS.some((d) => d.key === input.dept) ? input.dept : null;
+  const dept = input.dept && REQUISITION_DEPT_KEYS.has(input.dept) ? input.dept : null;
 
   const lines = (input.lines ?? [])
     .map((l) => ({ description: String(l.description ?? "").trim(), amount: num(l.amount) }))

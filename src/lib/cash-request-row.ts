@@ -20,7 +20,7 @@ import {
   type CashRequestLine,
 } from "@/lib/cash-request";
 import type { ReconcileStatus } from "@/lib/purchase-reconcile";
-import { deptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
+import { requisitionDeptLabel } from "@/lib/order-workflow";
 import { workflowRoleLabel } from "@/lib/workflow-roles";
 import { round2 } from "@/lib/quote";
 import { formatDateTime } from "@/lib/utils";
@@ -218,7 +218,7 @@ export function buildCashRequestRow(
     number: pr.number,
     purpose: pr.purpose,
     categoryLabel: cashCategoryLabel(pr.category),
-    deptLabel: pr.dept ? deptLabel(pr.dept as (typeof PRODUCTION_DEPTS)[number]["key"]) : null,
+    deptLabel: pr.dept ? requisitionDeptLabel(pr.dept) : null,
     amount,
     lines: reqLines,
     note: pr.note,
