@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { importStockItems } from "./actions";
 
 const TEMPLATE =
-  "name,unit,category,location,quantity,reorderLevel,unitCost\n" +
-  "GI Sheet 24ga,sheet,Raw material,A-1-2,50,20,850\n" +
-  "Bolt M8 x 25,pcs,Fasteners,B-3-1,1000,200,2.5\n" +
-  "Motor 5HP TECO,unit,Motors,C-1-1,4,2,18500\n";
+  "name,unit,category,location,quantity,reorderLevel,unitCost,sellPrice\n" +
+  "GI Sheet 24ga,sheet,Raw material,A-1-2,50,20,850,1100\n" +
+  "Bolt M8 x 25,pcs,Fasteners,B-3-1,1000,200,2.5,4\n" +
+  "Motor 5HP TECO,unit,Motors,C-1-1,4,2,18500,22200\n";
 
 export function BulkImport() {
   const router = useRouter();
@@ -61,7 +61,7 @@ export function BulkImport() {
         <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>Close</button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Upload a CSV or Excel (.xlsx) file. Columns: <span className="font-mono">name, unit, category, location, quantity, reorderLevel, unitCost</span> —
+        Upload a CSV or Excel (.xlsx) file. Columns: <span className="font-mono">name, unit, category, location, quantity, reorderLevel, unitCost, sellPrice</span> —
         only <b>name</b> is required. SKUs are generated automatically.
       </p>
       <div className="flex flex-wrap items-center gap-2">
