@@ -13,7 +13,7 @@ import { qrSvg } from "@/lib/qr";
 import type { Supplier } from "@/lib/suppliers";
 import type { ProductSupplierLink } from "@/lib/products";
 import type { ProductRow } from "@/lib/product-catalog";
-import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus } from "./actions";
+import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts } from "./actions";
 import { BulkImport } from "./bulk-import";
 import { ProductScanBox } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -43,6 +43,10 @@ const primaryPrice = (p: ProductRow) => {
   const prices = p.suppliers.map((s) => s.price).filter((n): n is number => typeof n === "number" && n > 0);
   return prices.length ? Math.min(...prices) : 0;
 };
+/** A product with neither a named supplier nor any price (old auto-save leftover). */
+const isUnsourced = (p: ProductRow) =>
+  !p.suppliers.some((s) => s.company && s.company.trim() !== "") &&
+  !p.suppliers.some((s) => typeof s.price === "number" && s.price > 0);
 
 /** Add/remove the suppliers a product can be bought from, each with code + price. */
 function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplierLink[]; onChange: (v: ProductSupplierLink[]) => void; suppliers: Supplier[] }) {
@@ -274,6 +278,19 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
   }
 
   const missing = products.filter((p) => !p.sku).length;
+  const unsourced = products.filter(isUnsourced).length;
+
+  async function cleanupUnsourced() {
+    if (!window.confirm(`Remove ${unsourced} product${unsourced === 1 ? "" : "s"} that have no supplier and no price? They'll be removed from the list (recoverable by an admin).`)) return;
+    setBusy(true); setErr(null);
+    try {
+      const { removed } = await removeUnsourcedProducts();
+      router.refresh();
+      window.alert(`${removed} item${removed === 1 ? "" : "s"} removed.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally { setBusy(false); }
+  }
 
   return (
     <div className="space-y-3">
@@ -318,6 +335,11 @@ export function ProductManager({ products, suppliers, canManage }: { products: P
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add product</Button>
               <BulkImport />
               <Link href="/products/labels" className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">Labels</Link>
+              {unsourced > 0 && (
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={busy} onClick={cleanupUnsourced}>
+                  {busy ? "…" : `Remove no-supplier items (${unsourced})`}
+                </Button>
+              )}
             </div>
           )}
         </div>

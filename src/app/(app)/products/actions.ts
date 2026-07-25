@@ -78,6 +78,29 @@ export async function deleteProduct(id: string): Promise<void> {
   revalidatePath("/products");
 }
 
+/**
+ * Purge products that have neither a supplier nor a price — the leftovers from
+ * the old auto-save behaviour. Purchaser/warehouse/admin only. Deactivates
+ * (never hard-deletes) so any historical reference is preserved.
+ */
+export async function removeUnsourcedProducts(): Promise<{ removed: number }> {
+  await requireProductManager();
+  const list = await prisma.product.findMany({ where: { active: true }, select: { id: true, suppliers: true } });
+  const ids = list
+    .filter((p) => {
+      const sups = coerceProductSuppliers(p.suppliers);
+      const hasSupplier = sups.some((s) => s.company && s.company.trim() !== "");
+      const hasPrice = sups.some((s) => typeof s.price === "number" && s.price > 0);
+      return !hasSupplier && !hasPrice;
+    })
+    .map((p) => p.id);
+  if (ids.length > 0) {
+    await prisma.product.updateMany({ where: { id: { in: ids } }, data: { active: false } });
+  }
+  revalidatePath("/products");
+  return { removed: ids.length };
+}
+
 // --- Bulk import (CSV / Excel) ----------------------------------------------
 
 /** Minimal RFC-4180-ish CSV parser (handles quoted fields and embedded commas). */

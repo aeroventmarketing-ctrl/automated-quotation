@@ -1,6 +1,7 @@
 /**
  * Server-side product catalogue helpers (no "use server" — internal use). Reads
- * the Product table and auto-saves products typed on the material request form.
+ * the Product table. Products are added only by the Purchaser or an admin on the
+ * Products page (with a supplier and price) — nothing is auto-saved from forms.
  */
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -42,23 +43,4 @@ export async function getProducts(): Promise<ProductRow[]> {
     note: p.note,
     suppliers: coerceProductSuppliers(p.suppliers),
   }));
-}
-
-/**
- * Auto-save a product typed on the material request form. Adds it (with a SKU)
- * only when no active product with that name exists yet; never overwrites. The
- * new product starts with no supplier — the purchaser attaches suppliers later.
- */
-export async function rememberProduct(name: string, unit?: string): Promise<void> {
-  const n = (name ?? "").trim();
-  if (!n) return;
-  const existing = await prisma.product.findFirst({ where: { active: true, name: { equals: n, mode: "insensitive" } } });
-  if (existing) return;
-  await prisma.$transaction(async (tx) => {
-    // Re-check inside the transaction to avoid a duplicate race.
-    const dup = await tx.product.findFirst({ where: { active: true, name: { equals: n, mode: "insensitive" } } });
-    if (dup) return;
-    const sku = await nextProductSku(tx);
-    await tx.product.create({ data: { name: n, unit: (unit ?? "").trim() || "pcs", sku } });
-  });
 }
