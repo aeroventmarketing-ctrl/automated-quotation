@@ -22,9 +22,9 @@ const normalizeUnit = (u: string | undefined): string => {
 };
 
 /** Raise a department requisition — production supplies not tied to an order. */
-export function RequisitionForm({ depts, products }: { depts: { key: string; label: string }[]; products: ScanProduct[] }) {
+export function RequisitionForm({ fixedDept, products }: { fixedDept: { key: string; label: string }; products: ScanProduct[] }) {
   const router = useRouter();
-  const [dept, setDept] = useState(depts[0]?.key ?? "");
+  const dept = fixedDept.key;
   const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow(), emptyRow()]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -122,9 +122,9 @@ export function RequisitionForm({ depts, products }: { depts: { key: string; lab
         </datalist>
         <label className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-xs text-muted-foreground">Department</span>
-          <select value={dept} onChange={(e) => setDept(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm">
-            {depts.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
-          </select>
+          {/* Fixed to the requestor's own department — greyed out, not selectable. */}
+          <input value={fixedDept.label} readOnly disabled aria-label="Department"
+            className="h-8 w-44 cursor-not-allowed rounded-md border bg-muted px-2 text-sm text-muted-foreground" />
         </label>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] border-collapse text-sm">

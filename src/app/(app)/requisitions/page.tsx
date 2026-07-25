@@ -4,7 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
-import { PRODUCTION_DEPTS, deptRole, REQUISITION_DEPTS, OFFICE_DEPT_KEY } from "@/lib/order-workflow";
+import { PRODUCTION_DEPTS, deptRole, requestorDeptKey, requisitionDeptLabel } from "@/lib/order-workflow";
 import { buildPurchaseChainRow } from "@/lib/purchase-chain-row";
 import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -35,12 +35,10 @@ export default async function RequisitionsPage() {
     );
   }
 
-  // Admin/purchaser: all departments (incl. Office). Sales: Office only. Dept heads: their dept.
-  const raisableDepts = admin || purchaser
-    ? REQUISITION_DEPTS.map((d) => d.key)
-    : isSales
-    ? [OFFICE_DEPT_KEY]
-    : ownDeptKeys;
+  // The requestor's own department — fixed on the form (production head → their
+  // line; everyone else → Office). Not selectable.
+  const reqDeptKey = requestorDeptKey((role) => has(role as WorkflowRoleKey));
+  const reqDept = { key: reqDeptKey, label: requisitionDeptLabel(reqDeptKey) };
   const [products, suppliers, paymentTerms, stockItems, allUsers] = await Promise.all([
     getProducts().catch(() => []),
     getSuppliers().catch(() => []),
@@ -85,7 +83,7 @@ export default async function RequisitionsPage() {
         <p className="text-sm text-muted-foreground">Department requests for production supplies, consumables and equipment. The purchaser processes them in Purchasing; received items go into stock.</p>
       </div>
 
-      <RequisitionForm depts={REQUISITION_DEPTS.filter((d) => raisableDepts.includes(d.key))} products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))} />
+      <RequisitionForm fixedDept={reqDept} products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))} />
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">My requisitions</h2>

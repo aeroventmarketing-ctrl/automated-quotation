@@ -27,9 +27,8 @@ import {
   PRODUCTION_DEPTS,
   deptRole,
   deptLabel,
-  REQUISITION_DEPT_KEYS,
   OFFICE_DEPT_KEY,
-  requisitionDeptLabel,
+  requestorDeptKey,
   allJobOrdersFinished,
   type OrderStage,
   type OrderStepKey,
@@ -991,27 +990,25 @@ async function nextMrfNo(): Promise<string> {
  * received into stock. Stored as a PurchaseRequest with kind "department".
  */
 export async function createDepartmentRequisition(
-  dept: string,
+  _dept: string,
   items: MRFItem[],
   note: string,
 ): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!REQUISITION_DEPT_KEYS.has(dept)) throw new Error("Unknown department");
-  const isOffice = dept === OFFICE_DEPT_KEY;
 
   const roles = await getWorkflowRoles();
+  // The department is fixed to the requestor's own department (production head →
+  // their line; everyone else → Office). Derived server-side so it can't be set
+  // from the client. The passed value is ignored.
+  const dept = requestorDeptKey((role) => userHasWorkflowRole(roles, user.id, role as WorkflowRoleKey));
+  const isOffice = dept === OFFICE_DEPT_KEY;
   const purchaserOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
-  // Office requisitions: Sales, Purchaser or admin. Production requisitions: the
-  // department head, Purchaser or admin (Sales sit in Office, not production).
-  const allowed = isOffice
-    ? purchaserOrAdmin || user.role === "SALES"
-    : purchaserOrAdmin || userHasWorkflowRole(roles, user.id, deptRole(dept as ProductionDeptKey) as WorkflowRoleKey);
-  if (!allowed) {
-    throw new Error(isOffice
-      ? "Only Sales, the Purchaser, or an admin can raise an Office requisition."
-      : `Only the ${requisitionDeptLabel(dept)} head, the Purchaser, or an admin can raise this requisition.`);
-  }
+  // A production department here means the user heads it (that's how it was
+  // derived). Office requisitions are for Sales, Purchaser or admin — not
+  // Engineers or other office roles with no requisition duty.
+  const allowed = isOffice ? purchaserOrAdmin || user.role === "SALES" : true;
+  if (!allowed) throw new Error("You don't have access to raise a requisition.");
 
   const cleanItems: MRFItem[] = (items ?? [])
     .map((it) => ({
