@@ -23,6 +23,28 @@ export function catalogPriceFor(description: string, companyLower: string, catal
   return key ? catalog[key]?.[companyLower] : undefined;
 }
 
+/**
+ * A reference price for a line before a supplier is chosen — used only when the
+ * product has a SINGLE known catalogue price (unambiguous). When several
+ * suppliers list different prices we leave it blank so the purchaser picks the
+ * supplier first (avoids seeding a wrong-supplier price).
+ */
+export function catalogReferencePriceFor(description: string, catalog: CatalogPrices): number | undefined {
+  const key = matchKey(description, Object.keys(catalog));
+  if (!key) return undefined;
+  const prices = [...new Set(Object.values(catalog[key] ?? {}).filter((n) => n > 0))];
+  return prices.length === 1 ? prices[0] : undefined;
+}
+
+/** Seed each blank line's unit price with its unambiguous catalogue reference price. */
+export function withReferencePrices(lines: POLine[], catalog: CatalogPrices): POLine[] {
+  return lines.map((l) => {
+    if (l.unitPrice) return l;
+    const price = catalogReferencePriceFor(l.description, catalog);
+    return price ? { ...l, unitPrice: String(price) } : l;
+  });
+}
+
 /** Fill each line's unit price from the catalogue for the chosen supplier (blanks only unless forced). */
 export function withCatalogPrices(lines: POLine[], company: string, catalog: CatalogPrices, force = false): POLine[] {
   const co = company.trim().toLowerCase();

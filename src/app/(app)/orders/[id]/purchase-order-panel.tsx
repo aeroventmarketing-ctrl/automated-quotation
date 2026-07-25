@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import { carriersForLines, catalogPriceFor, withCatalogPrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { carriersForLines, catalogPriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
@@ -66,7 +66,12 @@ export function PurchaseOrderPanel({
     setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
   }
   const [date, setDate] = useState(po?.date ? po.date.slice(0, 10) : todayInput());
-  const [lines, setLines] = useState<POLine[]>(po?.lines?.length ? po.lines : defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }]);
+  const [lines, setLines] = useState<POLine[]>(() => {
+    const base = po?.lines?.length ? po.lines : defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }];
+    // For a new PO, seed unambiguous catalogue prices so a price shows before a
+    // supplier is picked; picking a supplier then refines it to their price.
+    return po ? base : withReferencePrices(base, catalogPrices);
+  });
 
   // Only offer suppliers that carry the products on the PO lines (from the
   // catalogue); fall back to all suppliers when none of the products are catalogued.
@@ -242,6 +247,10 @@ export function PurchaseOrderPanel({
           </tbody>
         </table>
       </div>
+      <p className="text-[11px] text-muted-foreground">
+        Unit price fills from the product catalogue when you pick a supplier{" "}
+        {company ? `(using ${company}'s price)` : "in Company name"}. Set up a product&rsquo;s supplier price in Products so it auto-fills; otherwise type it here.
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addRow}>+ Add line</Button>
         {canFillPrices && (
