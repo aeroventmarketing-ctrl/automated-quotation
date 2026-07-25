@@ -5,6 +5,7 @@ import { MobileNav } from "@/components/mobile-nav";
 import { GeofenceGate } from "@/components/geofence-gate";
 import { ApproverAlarm } from "@/components/approver-alarm";
 import { CalendarReminders } from "@/components/calendar-reminders";
+import { LiveClock } from "@/components/live-clock";
 import { getGeofence } from "@/lib/geofence";
 import { getDisabledRoles, isRoleEnabled } from "@/lib/role-access";
 
@@ -51,23 +52,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const gated = geofence.enabled && !isAdmin(user) && geofence.locations.length > 0;
 
   const layout = (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 self-start border-r bg-background md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto print:!hidden">
-        <AppNav role={user.role} name={user.name} />
-      </aside>
-      <main className="flex-1 overflow-x-hidden">
-        {/* Mobile top bar */}
-        <div className="sticky top-0 z-30 flex items-center justify-between border-b bg-background px-4 py-3 md:hidden print:!hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/aerovent-logo.jpg"
-            alt="Aerovent Fans and Blowers Manufacturing"
-            className="h-7 w-auto"
-          />
-          <MobileNav role={user.role} name={user.name} />
-        </div>
-        <div className="mx-auto max-w-6xl p-4 md:p-8 print:max-w-none print:p-0">{children}</div>
-      </main>
+    <div className="flex min-h-screen flex-col">
+      {/* Live clock — pinned to the very top, persists on every page. */}
+      <LiveClock />
+      <div className="flex flex-1">
+        <aside className="hidden w-60 shrink-0 self-start border-r bg-background md:sticky md:top-11 md:block md:h-[calc(100vh-2.75rem)] md:overflow-y-auto print:!hidden">
+          <AppNav role={user.role} name={user.name} />
+        </aside>
+        <main className="flex-1 overflow-x-hidden">
+          {/* Mobile top bar */}
+          <div className="sticky top-11 z-30 flex items-center justify-between border-b bg-background px-4 py-3 md:hidden print:!hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/aerovent-logo.jpg"
+              alt="Aerovent Fans and Blowers Manufacturing"
+              className="h-7 w-auto"
+            />
+            <MobileNav role={user.role} name={user.name} />
+          </div>
+          <div className="mx-auto max-w-6xl p-4 md:p-8 print:max-w-none print:p-0">{children}</div>
+        </main>
+      </div>
       <ApproverAlarm />
       <CalendarReminders />
     </div>
