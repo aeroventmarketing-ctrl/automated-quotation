@@ -1000,9 +1000,10 @@ export async function createDepartmentRequisition(
   const roles = await getWorkflowRoles();
   const allowed =
     isAdmin(user) ||
+    user.role === "SALES" ||
     userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey) ||
     userHasWorkflowRole(roles, user.id, deptRole(deptKey) as WorkflowRoleKey);
-  if (!allowed) throw new Error(`Only the ${deptLabel(deptKey)} head, the Purchaser, or an admin can raise this requisition.`);
+  if (!allowed) throw new Error(`Only Sales, the ${deptLabel(deptKey)} head, the Purchaser, or an admin can raise this requisition.`);
 
   const cleanItems: MRFItem[] = (items ?? [])
     .map((it) => ({

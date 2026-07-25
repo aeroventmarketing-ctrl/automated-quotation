@@ -20,9 +20,11 @@ export default async function RequisitionsPage() {
   const admin = isAdmin(viewer);
   const has = (r: WorkflowRoleKey) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r);
   const purchaser = admin || has("purchaser");
+  const isSales = viewer?.role === "SALES";
   // Which departments the viewer heads.
   const ownDeptKeys = viewer == null ? [] : PRODUCTION_DEPTS.filter((d) => has(deptRole(d.key) as WorkflowRoleKey)).map((d) => d.key);
-  const canRaise = admin || purchaser || ownDeptKeys.length > 0;
+  // Sales may raise requisitions (for any department, like the purchaser/admin).
+  const canRaise = admin || purchaser || isSales || ownDeptKeys.length > 0;
 
   if (!canRaise) {
     return (
@@ -33,7 +35,7 @@ export default async function RequisitionsPage() {
     );
   }
 
-  const raisableDepts = (admin || purchaser ? PRODUCTION_DEPTS.map((d) => d.key) : ownDeptKeys);
+  const raisableDepts = (admin || purchaser || isSales ? PRODUCTION_DEPTS.map((d) => d.key) : ownDeptKeys);
   const [products, suppliers, paymentTerms, stockItems, allUsers] = await Promise.all([
     getProducts().catch(() => []),
     getSuppliers().catch(() => []),
@@ -56,7 +58,8 @@ export default async function RequisitionsPage() {
     const prs = await prisma.purchaseRequest.findMany({
       where: {
         kind: "department",
-        ...(admin || purchaser ? {} : { dept: { in: ownDeptKeys } }),
+        // Admin/purchaser see all; sales see what they raised; dept heads see their dept.
+        ...(admin || purchaser ? {} : isSales ? { createdById: viewer!.id } : { dept: { in: ownDeptKeys } }),
       },
       orderBy: { createdAt: "desc" },
     });

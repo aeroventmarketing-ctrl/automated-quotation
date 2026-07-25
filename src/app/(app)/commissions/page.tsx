@@ -31,7 +31,8 @@ const monthLabel = (salesMonth: string) => {
 export default async function CommissionsPage() {
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   const canManage = isAdmin(viewer) || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "accounting"));
-  const canView = canManage || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver"));
+  // Sales may view commissions (read-only); Accounting/admin still manage (mark paid).
+  const canView = canManage || viewer?.role === "SALES" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver"));
 
   if (!canView) {
     return (
