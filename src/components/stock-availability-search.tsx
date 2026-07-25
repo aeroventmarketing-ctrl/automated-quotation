@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PackageSearch, Search, X } from "lucide-react";
+import { PackageSearch, Search, Tag, X } from "lucide-react";
 
 interface Hit {
   id: string;
@@ -13,20 +13,22 @@ interface Hit {
   onHand: number;
   available: number;
   sellPrice: number;
-  unitCost: number;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 /**
- * A sales-facing "Check availability" box. Type an item name (or SKU) while on
- * the phone with a client and see how many are free to sell (on hand − reserved)
- * plus the selling price, so a rep can quote on the spot. Debounced; queries
- * /api/stock/availability. Selling price shows unit cost as a fallback when no
- * sell price has been set yet.
+ * Sales-facing item lookup. Two variants share one search:
+ *  - "availability": how many are free to sell (on hand − reservations) + price
+ *  - "price": a price verifier — the selling price of the product being sold
+ *
+ * Only the SELLING price is ever shown; the supplier's cost is never exposed to
+ * Sales. When an item has no selling price set, it says so (no cost fallback).
+ * Debounced; queries /api/stock/availability.
  */
-export function StockAvailabilitySearch({ showCost = false }: { showCost?: boolean }) {
+export function StockAvailabilitySearch({ variant = "availability" }: { variant?: "availability" | "price" }) {
+  const isPrice = variant === "price";
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,15 +68,17 @@ export function StockAvailabilitySearch({ showCost = false }: { showCost?: boole
   return (
     <div className="rounded-lg border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-center gap-2">
-        <PackageSearch className="h-4 w-4 text-primary" />
-        <h2 className="text-sm font-semibold">Check availability</h2>
-        <span className="text-xs text-muted-foreground">Search an item to see free-to-sell quantity &amp; price</span>
+        {isPrice ? <Tag className="h-4 w-4 text-primary" /> : <PackageSearch className="h-4 w-4 text-primary" />}
+        <h2 className="text-sm font-semibold">{isPrice ? "Price verifier" : "Check availability"}</h2>
+        <span className="text-xs text-muted-foreground">
+          {isPrice ? "Search a product to confirm its selling price" : "Search an item to see free-to-sell quantity"}
+        </span>
       </div>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           className="h-10 w-full rounded-md border bg-background pl-8 pr-8 text-sm outline-none focus:ring-2 focus:ring-primary/40"
-          placeholder="Type an item name or SKU… (e.g. GI sheet, 10001)"
+          placeholder={isPrice ? "Type a product name or SKU to verify its price…" : "Type an item name or SKU… (e.g. GI sheet, 10001)"}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           autoComplete="off"
@@ -102,10 +106,8 @@ export function StockAvailabilitySearch({ showCost = false }: { showCost?: boole
           ) : (
             <ul className="divide-y rounded-md border">
               {hits.map((h) => {
-                const price = h.sellPrice > 0 ? h.sellPrice : h.unitCost > 0 ? h.unitCost : 0;
-                const priceIsCost = h.sellPrice <= 0 && h.unitCost > 0;
-                const state =
-                  h.available <= 0 ? "out" : h.available < h.onHand ? "some" : "ok";
+                const hasPrice = h.sellPrice > 0;
+                const state = h.available <= 0 ? "out" : h.available < h.onHand ? "some" : "ok";
                 return (
                   <li key={h.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-sm">
                     <div className="min-w-0 flex-1">
@@ -114,34 +116,37 @@ export function StockAvailabilitySearch({ showCost = false }: { showCost?: boole
                         {[h.sku ? `SKU ${h.sku}` : null, h.category, h.location ? `Loc ${h.location}` : null].filter(Boolean).join(" · ") || "—"}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div
-                        className={`font-semibold tabular-nums ${
-                          state === "out" ? "text-destructive" : state === "some" ? "text-amber-600" : "text-emerald-700"
-                        }`}
-                      >
-                        {h.available <= 0 ? "Out of stock" : `${fmt(h.available)} ${h.unit}`}
+
+                    {/* Availability variant shows the free-to-sell quantity. */}
+                    {!isPrice && (
+                      <div className="text-right">
+                        <div
+                          className={`font-semibold tabular-nums ${
+                            state === "out" ? "text-destructive" : state === "some" ? "text-amber-600" : "text-emerald-700"
+                          }`}
+                        >
+                          {h.available <= 0 ? "Out of stock" : `${fmt(h.available)} ${h.unit}`}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {h.available > 0 && h.available < h.onHand ? `${fmt(h.onHand)} on hand · some reserved` : "available to sell"}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {h.available > 0 && h.available < h.onHand ? `${fmt(h.onHand)} on hand · some reserved` : "available to sell"}
+                    )}
+
+                    {/* Selling price — the only money figure Sales sees. */}
+                    <div className={isPrice ? "w-36 text-right" : "w-28 text-right"}>
+                      <div className={`font-semibold tabular-nums ${hasPrice ? "text-emerald-700" : "text-muted-foreground"} ${isPrice ? "text-base" : ""}`}>
+                        {hasPrice ? peso(h.sellPrice) : "—"}
                       </div>
-                    </div>
-                    <div className="w-28 text-right">
-                      <div className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                        {price > 0 ? peso(price) : <span className="text-muted-foreground">—</span>}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {price <= 0 ? "no price set" : priceIsCost ? "unit cost*" : "selling price"}
-                        {showCost && h.sellPrice > 0 && h.unitCost > 0 ? ` · cost ${peso(h.unitCost)}` : ""}
-                      </div>
+                      <div className="text-[11px] text-muted-foreground">{hasPrice ? "selling price" : "no selling price set"}</div>
                     </div>
                   </li>
                 );
               })}
             </ul>
           )}
-          {hits.some((h) => h.sellPrice <= 0 && h.unitCost > 0) && (
-            <p className="mt-1 text-[11px] text-muted-foreground">* No selling price set yet — showing unit cost as a reference. Set sell prices in Inventory.</p>
+          {hits.some((h) => h.sellPrice <= 0) && (
+            <p className="mt-1 text-[11px] text-muted-foreground">Items showing &ldquo;—&rdquo; have no selling price set yet. Set sell prices in Inventory.</p>
           )}
         </div>
       )}

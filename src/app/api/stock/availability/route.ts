@@ -4,11 +4,12 @@ import { prisma } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * Quick availability lookup for Sales: search an item by name/SKU and get back
- * how many are free to sell (on hand − active reservations) plus the selling
- * price and unit cost, so a rep can answer a client on the phone without opening
- * the full inventory screen. Returns [] for anyone not signed in or if the
- * inventory tables aren't set up yet.
+ * Quick availability + price lookup for Sales: search an item by name/SKU and
+ * get back how many are free to sell (on hand − active reservations) and the
+ * SELLING price, so a rep can answer a client on the phone without opening the
+ * full inventory screen. Unit cost (the supplier's price) is deliberately never
+ * returned here — Sales must not see cost. Returns [] for anyone not signed in
+ * or if the inventory tables aren't set up yet.
  */
 export async function GET(req: Request) {
   const user = await getCurrentUser();
@@ -53,7 +54,6 @@ export async function GET(req: Request) {
         onHand,
         available,
         sellPrice: Number(i.sellPrice),
-        unitCost: Number(i.unitCost),
       };
     });
     return Response.json({ items });

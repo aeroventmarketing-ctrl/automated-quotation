@@ -12,8 +12,12 @@ export default async function NewInquiryPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">New Inquiry</h1>
-      {/* Check stock availability & price while capturing the client's request. */}
-      <StockAvailabilitySearch />
+      {/* Check stock availability and verify the selling price while capturing
+          the client's request. */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <StockAvailabilitySearch variant="availability" />
+        <StockAvailabilitySearch variant="price" />
+      </div>
       <NewInquiryForm customers={customers} />
     </div>
   );
