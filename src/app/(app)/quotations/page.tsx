@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { Prisma, QuotationStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { TestModeBanner } from "@/components/test-mode-banner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -76,6 +77,9 @@ export default async function QuotationsPage({
     getCurrentUser(),
   ]);
   const admin = isAdmin(user);
+  // Eye view (open the quotation PDF) for Sales, admins and the Payment Approver.
+  const assignments = await getWorkflowRoles();
+  const canView = admin || user?.role === "SALES" || (user != null && userHasWorkflowRole(assignments, user.id, "payment_approver"));
 
   // Duplicate flags: for the quotes on this page, count other quotations with an
   // identical line-item set (same subtotal is a cheap candidate filter; the exact
@@ -139,6 +143,7 @@ export default async function QuotationsPage({
           <QuotationsTable
             rows={rows}
             admin={admin}
+            canView={canView}
             total={total}
             page={page}
             pageSize={PAGE_SIZE}

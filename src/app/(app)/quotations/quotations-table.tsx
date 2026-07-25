@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { QuotationStatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight, Copy } from "lucide-react";
+import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight, Copy, Eye } from "lucide-react";
 import { QuotationActions } from "./quotation-actions";
 
 export interface QuotationRow {
@@ -41,6 +41,7 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 export function QuotationsTable({
   rows,
   admin = false,
+  canView = false,
   total,
   page,
   pageSize,
@@ -50,6 +51,8 @@ export function QuotationsTable({
 }: {
   rows: QuotationRow[];
   admin?: boolean;
+  /** Sales / admin / Payment Approver — may open the quotation (eye view). */
+  canView?: boolean;
   total: number;
   page: number;
   pageSize: number;
@@ -57,6 +60,7 @@ export function QuotationsTable({
   sort: SortKey;
   dir: SortDir;
 }) {
+  const showActions = admin || canView;
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -162,7 +166,7 @@ export function QuotationsTable({
             <TableHead className="text-right">Total</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Status</TableHead>
-            {admin && <TableHead className="text-right">Actions</TableHead>}
+            {showActions && <TableHead className="text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -190,16 +194,30 @@ export function QuotationsTable({
               <TableCell className="text-right">{formatCurrency(q.total, q.currency)}</TableCell>
               <TableCell>{formatDate(new Date(q.createdISO))}</TableCell>
               <TableCell><QuotationStatusBadge status={q.status} /></TableCell>
-              {admin && (
+              {showActions && (
                 <TableCell>
-                  <QuotationActions id={q.id} label={q.quoteNumber} />
+                  <div className="flex items-center justify-end gap-1">
+                    {canView && (
+                      <a
+                        href={`/api/quotations/${q.id}/pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View quotation (PDF)"
+                        aria-label="View quotation"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </a>
+                    )}
+                    {admin && <QuotationActions id={q.id} label={q.quoteNumber} />}
+                  </div>
                 </TableCell>
               )}
             </TableRow>
           ))}
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={admin ? 7 : 6} className="text-center text-muted-foreground">
+              <TableCell colSpan={showActions ? 7 : 6} className="text-center text-muted-foreground">
                 {total === 0 && !query
                   ? "No quotations yet. Build one from an inquiry."
                   : "No quotations match your search."}

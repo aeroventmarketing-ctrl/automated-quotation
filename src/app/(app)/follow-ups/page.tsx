@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { Info } from "lucide-react";
+import { Info, Eye } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { config } from "@/lib/config";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -27,6 +29,9 @@ const num = (v: number) =>
 export default async function FollowUpsPage() {
   const now = new Date();
   const settings = await getFollowUpSettings();
+  // Eye view (open the quotation PDF) for Sales, admins and the Payment Approver.
+  const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
+  const canView = isAdmin(viewer) || viewer?.role === "SALES" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver"));
 
   // Sent quotes whose inquiry is still open (not won/lost).
   const quotes = await prisma.quotation.findMany({
@@ -137,14 +142,28 @@ export default async function FollowUpsPage() {
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{q.preparedBy.name}</TableCell>
                         <TableCell className="text-right">
-                          <a
-                            href={shareUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-primary hover:underline"
-                          >
-                            View quote
-                          </a>
+                          <div className="flex items-center justify-end gap-2">
+                            {canView && (
+                              <a
+                                href={`/api/quotations/${q.id}/pdf`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="View quotation (PDF)"
+                                aria-label="View quotation"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </a>
+                            )}
+                            <a
+                              href={shareUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-primary hover:underline"
+                            >
+                              View quote
+                            </a>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
