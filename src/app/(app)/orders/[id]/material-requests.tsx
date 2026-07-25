@@ -48,6 +48,11 @@ const emptyRow = (): MRFItem => ({ description: "", qty: "", unit: "", remark: "
 
 /** Standard units offered in the MRF unit dropdown. */
 const UNIT_OPTIONS = ["pc", "pcs", "length", "set"];
+/** Units are lower-case only: match a standard option, else lower-case the value. */
+const normalizeUnit = (u: string | undefined): string => {
+  const t = (u ?? "").trim();
+  return UNIT_OPTIONS.find((o) => o.toLowerCase() === t.toLowerCase()) ?? t.toLowerCase();
+};
 
 /**
  * Product autocomplete for the description field. Unlike a native <datalist>, it
@@ -132,7 +137,7 @@ export function MaterialRequests({
         // Picking/typing a catalogued product auto-fills its unit when blank.
         if (key === "description") {
           const match = productByName.get(value.trim().toLowerCase());
-          return { ...r, description: value, unit: r.unit || match?.unit || "" };
+          return { ...r, description: value, unit: normalizeUnit(r.unit || match?.unit || "") };
         }
         return { ...r, [key]: value };
       }),
@@ -161,7 +166,7 @@ export function MaterialRequests({
   }
   function handleScan({ mode, product, qty }: { mode: string; product: ScanProduct; qty: number }) {
     if (mode === "add") {
-      setRows((rs) => [...rs, { description: product.name, qty: String(qty), unit: product.unit, remark: "" }]);
+      setRows((rs) => [...rs, { description: product.name, qty: String(qty), unit: normalizeUnit(product.unit), remark: "" }]);
       return { ok: true, message: `Added ${qty} · ${product.name}` };
     }
     const idx = rows.findIndex((r) => r.description.trim().toLowerCase() === product.name.trim().toLowerCase());
@@ -204,10 +209,10 @@ export function MaterialRequests({
                     <td className="py-1 pr-2"><ProductCombobox value={r.description} onChange={(v) => setCell(i, "description", v)} products={products} /></td>
                     <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
                     <td className="py-1 px-1">
-                      <select value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">
+                      <select value={normalizeUnit(r.unit)} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">
                         <option value="">—</option>
-                        {/* Keep any auto-filled/legacy unit that isn't a standard option so it isn't lost. */}
-                        {[...UNIT_OPTIONS, ...(r.unit && !UNIT_OPTIONS.some((u) => u.toLowerCase() === r.unit.toLowerCase()) ? [r.unit] : [])].map((u) => (
+                        {/* Keep any non-standard unit (already lower-cased) so it isn't lost. */}
+                        {[...UNIT_OPTIONS, ...(normalizeUnit(r.unit) && !UNIT_OPTIONS.includes(normalizeUnit(r.unit)) ? [normalizeUnit(r.unit)] : [])].map((u) => (
                           <option key={u} value={u}>{u}</option>
                         ))}
                       </select>

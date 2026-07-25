@@ -15,6 +15,11 @@ const emptyRow = (): Row => ({ description: "", qty: "", unit: "", remark: "" })
 
 /** Standard units offered in the requisition unit dropdown. */
 const UNIT_OPTIONS = ["pc", "pcs", "length", "set"];
+/** Units are lower-case only: match a standard option, else lower-case the value. */
+const normalizeUnit = (u: string | undefined): string => {
+  const t = (u ?? "").trim();
+  return UNIT_OPTIONS.find((o) => o.toLowerCase() === t.toLowerCase()) ?? t.toLowerCase();
+};
 
 /** Raise a department requisition — production supplies not tied to an order. */
 export function RequisitionForm({ depts, products }: { depts: { key: string; label: string }[]; products: ScanProduct[] }) {
@@ -49,7 +54,7 @@ export function RequisitionForm({ depts, products }: { depts: { key: string; lab
     setRows((rs) => {
       const idx = rs.findIndex((r) => r.description.trim() === "");
       const target = idx >= 0 ? idx : rs.length;
-      const next = idx >= 0 ? rs.map((r, i) => (i === idx ? { ...r, description: p.name, unit: r.unit || p.unit } : r)) : [...rs, { description: p.name, qty: "", unit: p.unit, remark: "" }];
+      const next = idx >= 0 ? rs.map((r, i) => (i === idx ? { ...r, description: p.name, unit: normalizeUnit(r.unit || p.unit) } : r)) : [...rs, { description: p.name, qty: "", unit: normalizeUnit(p.unit), remark: "" }];
       flash(target);
       return next;
     });
@@ -137,9 +142,9 @@ export function RequisitionForm({ depts, products }: { depts: { key: string; lab
                   <td className="py-1 pr-2"><input list="requisition-products" value={r.description} onChange={(e) => setCell(i, "description", e.target.value)} className="w-full rounded border bg-background px-2 py-1" placeholder="Type or pick a product" /></td>
                   <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
                   <td className="py-1 px-1">
-                    <select value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">
+                    <select value={normalizeUnit(r.unit)} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">
                       <option value="">—</option>
-                      {[...UNIT_OPTIONS, ...(r.unit && !UNIT_OPTIONS.some((u) => u.toLowerCase() === r.unit.toLowerCase()) ? [r.unit] : [])].map((u) => (
+                      {[...UNIT_OPTIONS, ...(normalizeUnit(r.unit) && !UNIT_OPTIONS.includes(normalizeUnit(r.unit)) ? [normalizeUnit(r.unit)] : [])].map((u) => (
                         <option key={u} value={u}>{u}</option>
                       ))}
                     </select>
