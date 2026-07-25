@@ -91,6 +91,17 @@ export function requisitionDeptLabel(key: string | null | undefined): string {
   return REQUISITION_DEPTS.find((d) => d.key === key)?.label ?? key ?? "—";
 }
 
+/**
+ * The department a requestor belongs to: the production department they head, or
+ * else "Office" (Sales, admin, accounting, purchaser, warehouse, … all sit in
+ * Office). `hasRole` checks a workflow role for the user. Used to fix the
+ * department on cash requests / requisitions so it can't be chosen by hand.
+ */
+export function requestorDeptKey(hasRole: (role: string) => boolean): string {
+  for (const d of PRODUCTION_DEPTS) if (hasRole(d.role)) return d.key;
+  return OFFICE_DEPT_KEY;
+}
+
 export interface JobOrder {
   status: JobOrderStatus;
   issuedAt: string;

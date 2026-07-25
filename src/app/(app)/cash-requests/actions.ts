@@ -19,7 +19,7 @@ import {
   type CashRequestStatus,
   type CashCategoryKey,
 } from "@/lib/cash-request";
-import { REQUISITION_DEPT_KEYS } from "@/lib/order-workflow";
+import { requestorDeptKey } from "@/lib/order-workflow";
 import { round2 } from "@/lib/quote";
 
 /** Claim the next cash-voucher number — a plain 7-digit sequence, e.g. "0000810"
@@ -61,7 +61,11 @@ export async function createCashRequest(input: {
   const purpose = (input.purpose ?? "").trim();
   if (!purpose) throw new Error("Describe what the cash is for.");
   const category: CashCategoryKey = (CASH_CATEGORIES.find((c) => c.key === input.category)?.key ?? "advance") as CashCategoryKey;
-  const dept = input.dept && REQUISITION_DEPT_KEYS.has(input.dept) ? input.dept : null;
+  // The department is fixed to the requestor's own department (production head →
+  // their line, everyone else → Office). Derived server-side so it can't be
+  // changed from the client, and never blank.
+  const assignments = await getWorkflowRoles();
+  const dept = requestorDeptKey((role) => userHasWorkflowRole(assignments, user.id, role as WorkflowRoleKey));
 
   const lines = (input.lines ?? [])
     .map((l) => ({ description: String(l.description ?? "").trim(), amount: num(l.amount) }))

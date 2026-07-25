@@ -14,11 +14,10 @@ const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFrac
 const num = (s: string) => Number(String(s ?? "").replace(/,/g, "").trim()) || 0;
 
 /** Raise a cash request — general money request (advance / reimbursement / expense). */
-export function CashRequestForm({ depts }: { depts: { key: string; label: string }[] }) {
+export function CashRequestForm({ fixedDept }: { fixedDept: { key: string; label: string } }) {
   const router = useRouter();
   const [purpose, setPurpose] = useState("");
   const [category, setCategory] = useState<string>(CASH_CATEGORIES[0].key);
-  const [dept, setDept] = useState("");
   const [amount, setAmount] = useState("");
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [note, setNote] = useState("");
@@ -40,12 +39,13 @@ export function CashRequestForm({ depts }: { depts: { key: string; label: string
       await createCashRequest({
         purpose,
         category,
-        dept: dept || null,
+        // Department is fixed to the requestor's own department (enforced server-side too).
+        dept: fixedDept.key,
         amount: amount.trim() !== "" ? amount : undefined,
         lines: lines.filter((l) => l.description.trim() !== "" || l.amount.trim() !== ""),
         note,
       });
-      setPurpose(""); setCategory(CASH_CATEGORIES[0].key); setDept(""); setAmount(""); setLines([emptyLine()]); setNote("");
+      setPurpose(""); setCategory(CASH_CATEGORIES[0].key); setAmount(""); setLines([emptyLine()]); setNote("");
       setMsg("Cash request submitted.");
       router.refresh();
     } catch (e) {
@@ -73,11 +73,10 @@ export function CashRequestForm({ depts }: { depts: { key: string; label: string
             </select>
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-xs text-muted-foreground">Department (optional)</span>
-            <select value={dept} onChange={(e) => setDept(e.target.value)} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
-              <option value="">— none —</option>
-              {depts.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
-            </select>
+            <span className="text-xs text-muted-foreground">Department</span>
+            {/* Fixed to the requestor's own department — shown greyed out, not selectable. */}
+            <input value={fixedDept.label} readOnly disabled aria-label="Department"
+              className="h-9 w-full cursor-not-allowed rounded-md border bg-muted px-2 text-sm text-muted-foreground" />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-xs text-muted-foreground">Amount (₱){amount.trim() === "" && linesTotal > 0 ? " — leave blank to use the breakdown total" : ""}</span>

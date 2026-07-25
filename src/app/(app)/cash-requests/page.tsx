@@ -3,7 +3,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
-import { REQUISITION_DEPTS, OFFICE_DEPT_KEY } from "@/lib/order-workflow";
+import { requestorDeptKey, requisitionDeptLabel } from "@/lib/order-workflow";
 import { buildCashRequestRow, type CashRequestLike } from "@/lib/cash-request-row";
 import type { CashActor } from "@/lib/cash-request";
 import { CashRequestForm } from "./cash-request-form";
@@ -19,6 +19,9 @@ export default async function CashRequestsPage() {
   // Finance roles (and admins) monitor everyone's requests; everyone else sees
   // only the requests they raised themselves.
   const finance = admin || has("accounting") || has("payment_approver");
+  // The requestor's own department — fixed on the cash-request form (not selectable).
+  const cashDeptKey = requestorDeptKey((role) => has(role as WorkflowRoleKey));
+  const cashDept = { key: cashDeptKey, label: requisitionDeptLabel(cashDeptKey) };
 
   const userName = new Map<string, string>();
   const namesForActor = (actor: CashActor): string[] => {
@@ -60,7 +63,7 @@ export default async function CashRequestsPage() {
         </p>
       </div>
 
-      <CashRequestForm depts={viewer.role === "SALES" ? REQUISITION_DEPTS.filter((d) => d.key === OFFICE_DEPT_KEY) : REQUISITION_DEPTS} />
+      <CashRequestForm fixedDept={cashDept} />
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
