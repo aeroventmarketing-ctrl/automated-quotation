@@ -46,6 +46,9 @@ const STATUS: Record<ReqRow["status"], { label: string; variant: "secondary" | "
 
 const emptyRow = (): MRFItem => ({ description: "", qty: "", unit: "", remark: "" });
 
+/** Standard units offered in the MRF unit dropdown. */
+const UNIT_OPTIONS = ["pc", "pcs", "length", "set"];
+
 /**
  * Product autocomplete for the description field. Unlike a native <datalist>, it
  * keeps showing matches even when the value already equals a product (no need to
@@ -200,7 +203,15 @@ export function MaterialRequests({
                   <tr key={i} className={`border-b last:border-0 transition-colors ${highlight === i ? "bg-amber-200/60" : ""}`}>
                     <td className="py-1 pr-2"><ProductCombobox value={r.description} onChange={(v) => setCell(i, "description", v)} products={products} /></td>
                     <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
-                    <td className="py-1 px-1"><input value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>
+                    <td className="py-1 px-1">
+                      <select value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">
+                        <option value="">—</option>
+                        {/* Keep any auto-filled/legacy unit that isn't a standard option so it isn't lost. */}
+                        {[...UNIT_OPTIONS, ...(r.unit && !UNIT_OPTIONS.some((u) => u.toLowerCase() === r.unit.toLowerCase()) ? [r.unit] : [])].map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="py-1 pl-1"><input value={r.remark ?? ""} onChange={(e) => setCell(i, "remark", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>
                   </tr>
                 ))}

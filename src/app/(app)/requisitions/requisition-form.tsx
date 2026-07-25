@@ -13,6 +13,9 @@ import { createDepartmentRequisition } from "../orders/actions";
 interface Row { description: string; qty: string; unit: string; remark: string }
 const emptyRow = (): Row => ({ description: "", qty: "", unit: "", remark: "" });
 
+/** Standard units offered in the requisition unit dropdown. */
+const UNIT_OPTIONS = ["pc", "pcs", "length", "set"];
+
 /** Raise a department requisition — production supplies not tied to an order. */
 export function RequisitionForm({ depts, products }: { depts: { key: string; label: string }[]; products: ScanProduct[] }) {
   const router = useRouter();
@@ -133,7 +136,14 @@ export function RequisitionForm({ depts, products }: { depts: { key: string; lab
                 <tr key={i} className={`border-b last:border-0 transition-colors ${highlight === i ? "bg-amber-200/60" : ""}`}>
                   <td className="py-1 pr-2"><input list="requisition-products" value={r.description} onChange={(e) => setCell(i, "description", e.target.value)} className="w-full rounded border bg-background px-2 py-1" placeholder="Type or pick a product" /></td>
                   <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
-                  <td className="py-1 px-1"><input value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>
+                  <td className="py-1 px-1">
+                    <select value={r.unit} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">
+                      <option value="">—</option>
+                      {[...UNIT_OPTIONS, ...(r.unit && !UNIT_OPTIONS.some((u) => u.toLowerCase() === r.unit.toLowerCase()) ? [r.unit] : [])].map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="py-1 pl-1"><input value={r.remark} onChange={(e) => setCell(i, "remark", e.target.value)} className="w-full rounded border bg-background px-1 py-1" /></td>
                 </tr>
               ))}
