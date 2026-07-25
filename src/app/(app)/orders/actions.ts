@@ -2091,10 +2091,16 @@ export async function setBatchDeliveryEnabled(quotationId: string, enabled: bool
     throw new Error("Only an Engineer, the Payment Approver or an admin can enable batch delivery.");
   }
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (!enabled && wf.deliveryMode === "multi") {
-    throw new Error("The order is already being delivered in batches — this can't be turned off now.");
+  if (!enabled) {
+    // Turning off also returns the order to the single-delivery flow. Block it
+    // only when batches have actually been opened (cancel those first).
+    if (wf.deliveryBatches.some((b) => !b.cancelled)) {
+      throw new Error("Cancel the open delivery batches first before turning off batch delivery.");
+    }
+    await saveWorkflow(quotationId, cls, { ...wf, batchDeliveryEnabled: false, deliveryMode: undefined });
+    return;
   }
-  await saveWorkflow(quotationId, cls, { ...wf, batchDeliveryEnabled: enabled });
+  await saveWorkflow(quotationId, cls, { ...wf, batchDeliveryEnabled: true });
 }
 
 export async function setMultiDelivery(quotationId: string): Promise<void> {

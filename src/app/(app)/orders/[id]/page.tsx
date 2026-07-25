@@ -788,6 +788,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Multiple-batch delivery</CardTitle></CardHeader>
           <CardContent>
+            {/* Engineer / Payment Approver / admin can turn batch delivery back
+                off here (returns the order to single delivery) — allowed while no
+                batch has been opened. */}
+            {canEnableBatch && (
+              <div className="mb-3 rounded-md border bg-muted/20 p-2.5">
+                <BatchDeliveryToggle orderId={quote.id} enabled={batchEnabled} multiActive />
+              </div>
+            )}
             <p className="mb-3 text-xs text-muted-foreground">
               Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed.
             </p>
