@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Info, Eye } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { config } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
@@ -111,7 +110,6 @@ export default async function FollowUpsPage() {
                 <TableBody>
                   {rows.map(({ q, sentAt, result }) => {
                     const c = q.inquiry.customer;
-                    const shareUrl = `${config.appUrl}/q/${q.id}`;
                     return (
                       <TableRow key={q.id}>
                         <TableCell>
@@ -142,28 +140,18 @@ export default async function FollowUpsPage() {
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{q.preparedBy.name}</TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {canView && (
-                              <a
-                                href={`/api/quotations/${q.id}/pdf`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="View quotation (PDF)"
-                                aria-label="View quotation"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </a>
-                            )}
+                          {canView && (
                             <a
-                              href={shareUrl}
+                              href={`/api/quotations/${q.id}/pdf`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm text-primary hover:underline"
+                              title="View quotation (PDF)"
+                              aria-label="View quotation"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             >
-                              View quote
+                              <Eye className="h-4 w-4" />
                             </a>
-                          </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
