@@ -238,6 +238,10 @@ export interface OrderWorkflow {
   // deliveryMode is "multi" the order is delivered in batches instead of the
   // single-batch Phase 5 flow. Both are never active at once.
   deliveryMode?: "multi";
+  // When true, the "Deliver in multiple batches?" option is offered on the order
+  // (once production starts). Turned on by an Engineer / Payment Approver / admin
+  // via a toggle; the single→multi switch itself is still a deliberate click.
+  batchDeliveryEnabled?: boolean;
   deliveryBatches: MultiDeliveryBatch[];
 }
 
@@ -428,9 +432,10 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   }
 
   const deliveryMode = wf?.deliveryMode === "multi" ? "multi" as const : undefined;
+  const batchDeliveryEnabled = wf?.batchDeliveryEnabled === true;
   const deliveryBatches = coerceMultiBatches(wf?.deliveryBatches);
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, deliveryBatches };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, batchDeliveryEnabled, deliveryBatches };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */

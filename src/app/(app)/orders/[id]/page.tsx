@@ -42,6 +42,7 @@ import {
 } from "@/lib/delivery-multibatch";
 import { MultiBatchPanel } from "./multi-batch-panel";
 import { MultiDeliveryEntry } from "./multi-delivery-entry";
+import { BatchDeliveryToggle } from "./batch-delivery-toggle";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { DeptProductionControls } from "./dept-production-controls";
@@ -372,8 +373,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const isPreparerViewer = viewer != null && viewer.id === quote.preparedById;
   const multiMode = wf.deliveryMode === "multi";
   const canManageMulti = adminViewer || isPreparerViewer;
+  // Only an Engineer, the Payment Approver or an admin may enable batch delivery.
+  const canEnableBatch =
+    adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey));
+  const batchEnabled = wf.batchDeliveryEnabled === true;
+  // The enable toggle shows to authorized roles once production has started
+  // (and until the order switches to multi). The entry panel (1st picture)
+  // shows only after the toggle is on.
+  const inDeliveryWindow = wf.stage === "producing" || wf.stage === "production_finished";
+  const showBatchToggle = inDeliveryWindow && !multiMode && canEnableBatch;
   const showMultiEntry =
-    (wf.stage === "producing" || wf.stage === "production_finished") && !multiMode && canManageMulti;
+    inDeliveryWindow && !multiMode && batchEnabled && (canManageMulti || canEnableBatch);
   const mbOrdered = new Map<string, number>();
   for (const it of quote.items) {
     const k = it.descriptionSnapshot.trim();
@@ -728,16 +738,25 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
-      {/* Multiple-batch delivery — offered as soon as production starts, so finished
-          items can go out in batches while the rest is still being made. */}
-      {showMultiEntry && (
+      {/* Multiple-batch delivery — enabled by an Engineer / Payment Approver /
+          admin via the toggle; once on, the entry panel appears so finished items
+          can go out in batches while the rest is still being made. */}
+      {showBatchToggle && (
         <Card className="border-primary/30">
           <CardHeader className="pb-2"><CardTitle className="text-sm">Deliver in multiple batches?</CardTitle></CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              For large orders delivered in parts. Switch to multiple-batch delivery to send out finished items now — while the rest of the order is still in production — and run each batch through its own payment, quality check and delivery. The single-delivery flow won&apos;t be used for this order.
+              For large orders delivered in parts. Turn this on to send out finished items now — while the rest of the order is still in production — and run each batch through its own payment, quality check and delivery. Enabling is limited to Engineers, the Payment Approver and admins.
             </p>
-            <MultiDeliveryEntry orderId={quote.id} />
+            <BatchDeliveryToggle orderId={quote.id} enabled={batchEnabled} />
+            {showMultiEntry && (
+              <div className="border-t pt-3">
+                <p className="text-xs text-muted-foreground">
+                  Switch this order to multiple-batch delivery. The single-delivery flow won&apos;t be used for this order.
+                </p>
+                <MultiDeliveryEntry orderId={quote.id} />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

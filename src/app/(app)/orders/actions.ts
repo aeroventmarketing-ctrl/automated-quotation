@@ -2068,12 +2068,45 @@ function orderedMap(items: { qty: number; descriptionSnapshot: string }[]): Map<
 
 /** Switch the order to multiple-batch delivery (only at production_finished, before
  *  the single-batch flow has started). Sales or admin. */
+/** Engineer / Payment Approver / admin may enable the batch-delivery option. */
+async function canEnableBatchDelivery(user: { id: string; role: string } | null): Promise<boolean> {
+  if (!user) return false;
+  if (isAdmin(user as Parameters<typeof isAdmin>[0])) return true;
+  if (user.role === "ENGINEER") return true;
+  const roles = await getWorkflowRoles();
+  return userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey);
+}
+
+/**
+ * Turn the "Deliver in multiple batches?" option on/off for an order. Restricted
+ * to Engineers, the Payment Approver and admins. Enabling it makes the entry
+ * panel appear (once production has started); the actual single→multi switch is
+ * still a deliberate action. Can't be turned off after the order is already
+ * being delivered in batches.
+ */
+export async function setBatchDeliveryEnabled(quotationId: string, enabled: boolean): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(await canEnableBatchDelivery(user))) {
+    throw new Error("Only an Engineer, the Payment Approver or an admin can enable batch delivery.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!enabled && wf.deliveryMode === "multi") {
+    throw new Error("The order is already being delivered in batches — this can't be turned off now.");
+  }
+  await saveWorkflow(quotationId, cls, { ...wf, batchDeliveryEnabled: enabled });
+}
+
 export async function setMultiDelivery(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
-    throw new Error("Only Sales or an admin can choose multiple-batch delivery.");
+  if (!((await canManageMultiDelivery(user.id, quote.preparedById)) || (await canEnableBatchDelivery(user)))) {
+    throw new Error("Only Sales, an Engineer, the Payment Approver or an admin can choose multiple-batch delivery.");
+  }
+  // Batch delivery must be enabled first (Engineer / Payment Approver / admin).
+  if (!wf.batchDeliveryEnabled) {
+    throw new Error("Enable batch delivery first before switching this order to multiple batches.");
   }
   // Available once production has started (producing) through production finished —
   // but not after the single-batch delivery has begun.
