@@ -283,12 +283,8 @@ export default async function DashboardPage() {
 
       <TestModeBanner on={testMode.on} since={testMode.since} />
 
-      {/* Quick lookups for reps on the phone with a client: stock availability
-          and a selling-price verifier, side by side. */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <StockAvailabilitySearch variant="availability" />
-        <StockAvailabilitySearch variant="price" />
-      </div>
+      {/* Quick availability lookup for reps on the phone with a client. */}
+      <StockAvailabilitySearch />
 
       {/* Each box drills into its details: the status boxes open the inquiries
           list pre-filtered to that stage, and "Quotes drafted today" opens the
