@@ -27,6 +27,46 @@ export function scheduleCategory(key: string | null | undefined): ScheduleCatego
   return CAT_BY_KEY.get(key ?? "") ?? SCHEDULE_CATEGORIES[0];
 }
 
+/**
+ * TimeTree-style label colours a user can pick per event. Stored as the hex on
+ * the event; when none is set the event falls back to its category colour.
+ */
+export const SCHEDULE_LABELS: { label: string; color: string }[] = [
+  { label: "Red", color: "#e5484d" },
+  { label: "Orange", color: "#f76b15" },
+  { label: "Amber", color: "#f5a524" },
+  { label: "Yellow", color: "#eab308" },
+  { label: "Lime", color: "#84cc16" },
+  { label: "Green", color: "#22c55e" },
+  { label: "Emerald green", color: "#10b981" },
+  { label: "Teal", color: "#14b8a6" },
+  { label: "Sky", color: "#0ea5e9" },
+  { label: "Blue", color: "#3b82f6" },
+  { label: "Indigo", color: "#6366f1" },
+  { label: "Purple", color: "#8b5cf6" },
+  { label: "Pink", color: "#ec4899" },
+  { label: "Rose", color: "#f43f5e" },
+  { label: "Slate", color: "#64748b" },
+  { label: "Gray", color: "#6b7280" },
+];
+
+/** The colour an event renders in: its own label colour, else its category colour. */
+export function eventColor(s: { color?: string | null; category: string }): string {
+  return s.color && s.color.trim() ? s.color : scheduleCategory(s.category).color;
+}
+
+/** Readable text colour (near-black or white) for a solid hex background. */
+export function readableOn(hex: string): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16) || 0;
+  const g = parseInt(full.slice(2, 4), 16) || 0;
+  const b = parseInt(full.slice(4, 6), 16) || 0;
+  // Perceived luminance (sRGB) — light backgrounds get dark text and vice-versa.
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? "#1f2937" : "#ffffff";
+}
+
 export const SCHEDULE_STATUS_LABEL: Record<ScheduleStatus, string> = {
   PENDING: "Pending approval",
   APPROVED: "Approved",
@@ -107,6 +147,8 @@ export interface ScheduleView {
   canEdit: boolean;
   canDecide: boolean;
   // Extras:
+  color: string | null;
+  url: string | null;
   recurrence: string | null;
   recurrenceUntil: string | null; // ISO date
   remindMinutes: number | null;
@@ -125,6 +167,7 @@ export interface ScheduleRow {
   startAt: Date; endAt: Date | null; allDay: boolean; location: string | null;
   status: ScheduleStatus; createdById: string; createdByName: string;
   decidedByName: string | null; decidedAt: Date | null; decisionNote: string | null;
+  color: string | null; url: string | null;
   recurrence: string | null; recurrenceUntil: Date | null; remindMinutes: number | null;
   calendar: string | null; attendees: unknown; attachments: unknown; comments: unknown;
 }
@@ -138,6 +181,7 @@ export function buildScheduleView(s: ScheduleRow, ctx: { viewerId?: string; canD
     allDay: s.allDay, location: s.location, status: s.status,
     createdByName: s.createdByName, decidedByName: s.decidedByName, decidedAt: s.decidedAt ? s.decidedAt.toISOString() : null,
     decisionNote: s.decisionNote, isOwner, canEdit: ctx.canDecide || isOwner, canDecide: ctx.canDecide,
+    color: s.color, url: s.url,
     recurrence: s.recurrence, recurrenceUntil: s.recurrenceUntil ? s.recurrenceUntil.toISOString() : null,
     remindMinutes: s.remindMinutes, calendar: s.calendar,
     attendees: coerceAttendees(s.attendees), attachments: coerceAttachments(s.attachments), comments: coerceComments(s.comments),

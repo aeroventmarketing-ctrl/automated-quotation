@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, X, Check, Ban, Trash2, Pencil, MapPin, CalendarDays, User, Users, Repeat, Bell, Paperclip, MessageSquare, Send, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Check, Ban, Trash2, Pencil, MapPin, CalendarDays, User, Users, Repeat, Bell, Paperclip, MessageSquare, Send, Upload, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UploadLink } from "@/components/upload-link";
@@ -11,6 +11,9 @@ import {
   SCHEDULE_CATEGORIES,
   scheduleCategory,
   SCHEDULE_STATUS_LABEL,
+  SCHEDULE_LABELS,
+  eventColor,
+  readableOn,
   RECURRENCE_OPTIONS,
   REMINDER_OPTIONS,
   recurrenceLabel,
@@ -61,12 +64,14 @@ type FormState = {
   id?: string;
   title: string; category: string; date: string; allDay: boolean;
   startTime: string; endTime: string; location: string; details: string;
+  color: string; url: string;
   recurrence: string; recurrenceUntil: string; remindMinutes: number | null;
   calendar: string; attendees: { userId: string; name: string }[];
 };
 
 const emptyForm = (date: string, calendar: string): FormState => ({
   title: "", category: "general", date, allDay: true, startTime: "09:00", endTime: "10:00", location: "", details: "",
+  color: "", url: "",
   recurrence: "", recurrenceUntil: "", remindMinutes: null, calendar, attendees: [],
 });
 
@@ -188,6 +193,7 @@ export function ScheduleCalendar({
       id: s.id, title: s.title, category: s.category, date: dayKey(p.y, p.m, p.d), allDay: s.allDay,
       startTime: `${pad(p.hh)}:${pad(p.mm)}`, endTime: e ? `${pad(e.hh)}:${pad(e.mm)}` : "10:00",
       location: s.location ?? "", details: s.details ?? "",
+      color: s.color ?? "", url: s.url ?? "",
       recurrence: s.recurrence ?? "", recurrenceUntil: ru ? dayKey(ru.y, ru.m, ru.d) : "", remindMinutes: s.remindMinutes ?? null,
       calendar: calOf(s), attendees: s.attendees.map((a) => ({ userId: a.userId, name: a.name })),
     });
@@ -199,6 +205,7 @@ export function ScheduleCalendar({
     const payload = {
       title: form.title, details: form.details, category: form.category, date: form.date,
       allDay: form.allDay, startTime: form.allDay ? "" : form.startTime, endTime: form.allDay ? "" : form.endTime, location: form.location,
+      color: form.color, url: form.url,
       recurrence: form.recurrence as "" | "daily" | "weekly" | "monthly", recurrenceUntil: form.recurrence ? form.recurrenceUntil : "",
       remindMinutes: form.remindMinutes, calendar: form.calendar, attendees: form.attendees,
     };
@@ -403,6 +410,22 @@ export function ScheduleCalendar({
               {form.recurrence && <Field label="Repeat until (optional)"><Input type="date" value={form.recurrenceUntil} onChange={(e) => setForm({ ...form, recurrenceUntil: e.target.value })} /></Field>}
             </div>
             <Field label="Location (optional)"><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Plant / Client site" /></Field>
+            <Field label="URL (optional)"><Input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://…" /></Field>
+            {/* Label — the event colour (TimeTree-style). Blank uses the category colour. */}
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Label colour</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button type="button" title="Use category colour" onClick={() => setForm({ ...form, color: "" })}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full border text-[10px] ${form.color === "" ? "ring-2 ring-primary ring-offset-1" : ""}`}>
+                  <span className="h-3 w-3 rounded-full" style={{ background: scheduleCategory(form.category).color }} />
+                </button>
+                {SCHEDULE_LABELS.map((l) => (
+                  <button key={l.color} type="button" title={l.label} onClick={() => setForm({ ...form, color: l.color })}
+                    className={`h-6 w-6 rounded-full border ${form.color.toLowerCase() === l.color.toLowerCase() ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                    style={{ background: l.color }} aria-label={l.label} />
+                ))}
+              </div>
+            </div>
             {/* Attendees */}
             <div className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">Attendees</span>
@@ -441,7 +464,7 @@ export function ScheduleCalendar({
         const p = phParts(detail.startAt);
         const e = detail.endAt ? phParts(detail.endAt) : null;
         return (
-          <Modal onClose={() => { setDetailKey(null); setComment(""); }} title={detail.title} accent={cat.color}>
+          <Modal onClose={() => { setDetailKey(null); setComment(""); }} title={detail.title} accent={eventColor(detail)}>
             <div className="space-y-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: `${cat.color}20`, color: cat.color }}><span className="h-2 w-2 rounded-full" style={{ background: cat.color }} />{cat.label}</span>
@@ -457,6 +480,7 @@ export function ScheduleCalendar({
               {detail.recurrence && <div className="flex items-center gap-2 text-muted-foreground"><Repeat className="h-4 w-4" /> {recurrenceLabel(detail.recurrence)}{detail.recurrenceUntil ? ` · until ${new Date(detail.recurrenceUntil).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" })}` : ""}</div>}
               {detail.remindMinutes != null && <div className="flex items-center gap-2 text-muted-foreground"><Bell className="h-4 w-4" /> {reminderLabel(detail.remindMinutes)}</div>}
               {detail.location && <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {detail.location}</div>}
+              {detail.url && <div className="flex items-center gap-2 text-muted-foreground"><Link2 className="h-4 w-4 shrink-0" /> <a href={detail.url} target="_blank" rel="noopener noreferrer" className="truncate text-primary hover:underline">{detail.url}</a></div>}
               {detail.details && <p className="whitespace-pre-wrap rounded-md border bg-muted/30 p-2 text-foreground">{detail.details}</p>}
 
               {/* Attendees + RSVP */}
@@ -560,16 +584,24 @@ export function ScheduleCalendar({
 }
 
 function EventChip({ s, onClick }: { s: ScheduleView; onClick: (e: React.MouseEvent) => void }) {
-  const cat = scheduleCategory(s.category);
+  const color = eventColor(s);
   const p = phParts(s.startAt);
+  const pending = s.status === "PENDING";
+  const rejected = s.status === "REJECTED";
+  // TimeTree look: approved events are solid colour bars with readable text.
+  // Pending events stay tinted with a dashed outline so approvers can spot them.
+  const style: React.CSSProperties = rejected
+    ? {}
+    : pending
+    ? { background: `${color}26`, color, borderColor: color }
+    : { background: color, color: readableOn(color) };
   return (
     <span role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === "Enter") onClick(e as unknown as React.MouseEvent); }}
-      className={`block cursor-pointer truncate rounded-md px-1.5 py-0.5 text-[11px] leading-tight text-foreground ${STATUS_STYLE[s.status]}`}
-      style={{ background: `${cat.color}1f`, borderColor: s.status === "PENDING" ? "#f59e0b" : "transparent" }} title={s.title}>
-      <span className="mr-1 inline-block h-2 w-2 shrink-0 rounded-full align-middle" style={{ background: cat.color }} />
-      {!s.allDay && <span className="tabular-nums text-muted-foreground">{fmtTime(p.hh, p.mm)} </span>}
+      className={`block cursor-pointer truncate rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight ${pending ? "border border-dashed" : ""} ${rejected ? "text-foreground line-through opacity-60" : ""}`}
+      style={style} title={s.title}>
+      {!s.allDay && <span className="tabular-nums opacity-80">{fmtTime(p.hh, p.mm)} </span>}
       {s.title}
-      {s.recurring && <Repeat className="ml-0.5 inline h-2.5 w-2.5 text-muted-foreground" />}
+      {s.recurring && <Repeat className="ml-0.5 inline h-2.5 w-2.5 opacity-80" />}
     </span>
   );
 }
