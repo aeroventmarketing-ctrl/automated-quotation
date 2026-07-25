@@ -8,7 +8,8 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
-import { SCHEDULE_CATEGORIES, coerceAttendees, coerceAttachments, coerceComments, type RsvpStatus } from "@/lib/schedule";
+import { SCHEDULE_CATEGORIES, coerceAttendees, coerceAttachments, coerceComments, coerceTodos, type RsvpStatus } from "@/lib/schedule";
+import { parseIcs } from "@/lib/ics";
 import { getCalendars, normalizeCalendar, addCalendar, removeCalendar } from "@/lib/calendars";
 import type { User } from "@prisma/client";
 
@@ -45,6 +46,7 @@ const scheduleSchema = z.object({
   remindMinutes: z.number().int().min(0).max(20160).nullable().optional(),
   calendar: z.string().trim().optional().default(""),
   attendees: z.array(z.object({ userId: z.string().min(1), name: z.string().min(1) })).optional().default([]),
+  todos: z.array(z.object({ id: z.string().optional(), text: z.string().trim().min(1), done: z.boolean().optional() })).optional().default([]),
 });
 type ScheduleInput = z.infer<typeof scheduleSchema>;
 
@@ -60,6 +62,11 @@ function timesOf(d: ScheduleInput): { startAt: Date; endAt: Date | null } {
   return { startAt, endAt };
 }
 const catOf = (k: string) => (CAT_KEYS.has(k) ? k : "general");
+
+/** Normalize form todos into stored shape (assign ids, cap length). */
+function todosOf(items: { id?: string; text: string; done?: boolean }[]): { id: string; text: string; done: boolean }[] {
+  return items.slice(0, 50).map((t) => ({ id: t.id || randomUUID(), text: t.text.trim().slice(0, 300), done: t.done === true })).filter((t) => t.text);
+}
 
 /** Build the shared extra fields (recurrence / reminder / calendar / attendees). */
 async function extrasOf(d: ScheduleInput, user: User, existingAttendees: { userId: string; rsvp: RsvpStatus }[] = []) {
@@ -100,6 +107,7 @@ export async function createSchedule(input: ScheduleInput): Promise<void> {
       location: d.location || null,
       color: d.color || null,
       url: d.url || null,
+      todos: J(todosOf(d.todos)),
       status: approver ? "APPROVED" : "PENDING",
       createdById: user.id,
       createdByName: user.name,
@@ -142,6 +150,7 @@ export async function updateSchedule(id: string, input: ScheduleInput): Promise<
       location: d.location || null,
       color: d.color || null,
       url: d.url || null,
+      todos: J(todosOf(d.todos)),
       ...extras,
       ...(resetForApproval ? { status: "PENDING", decidedById: null, decidedByName: null, decidedAt: null, decisionNote: null } : {}),
     },
@@ -254,6 +263,84 @@ export async function removeScheduleFile(id: string, path: string): Promise<void
   const attachments = coerceAttachments(s.attachments).filter((a) => a.path !== path);
   await prisma.schedule.update({ where: { id }, data: { attachments: J(attachments) } });
   revalidateCal();
+}
+
+/** Tick / untick a to-do item on an event — owner or approver. */
+export async function toggleScheduleTodo(id: string, todoId: string): Promise<void> {
+  const user = await requireUser();
+  const s = await prisma.schedule.findUnique({ where: { id } });
+  if (!s) throw new Error("Schedule not found.");
+  const approver = await isScheduleApprover(user);
+  if (!(approver || s.createdById === user.id)) throw new Error("Only the owner or an approver can update the checklist.");
+  const todos = coerceTodos(s.todos);
+  const t = todos.find((x) => x.id === todoId);
+  if (!t) return;
+  t.done = !t.done;
+  await prisma.schedule.update({ where: { id }, data: { todos: J(todos) } });
+  revalidateCal();
+}
+
+/**
+ * Import events from an uploaded .ics file (e.g. a TimeTree export). Each event
+ * becomes a schedule — auto-approved when the importer can approve, else pending.
+ * Returns the count. Best-effort per event so one bad entry can't abort the batch.
+ */
+export async function importSchedules(formData: FormData): Promise<{ imported: number; skipped: number; error?: string }> {
+  const user = await requireUser();
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { imported: 0, skipped: 0, error: "Choose an .ics file exported from TimeTree." };
+  let events;
+  try {
+    events = parseIcs(await file.text());
+  } catch {
+    return { imported: 0, skipped: 0, error: "Couldn't read that file. Export your calendar as .ics and try again." };
+  }
+  if (events.length === 0) return { imported: 0, skipped: 0, error: "No events found in the file." };
+  const approver = await isScheduleApprover(user);
+  const calendars = await getCalendars();
+  const calendar = normalizeCalendar("", calendars);
+  const now = new Date();
+  let imported = 0;
+  let skipped = 0;
+  for (const ev of events) {
+    try {
+      const startAt = toInstant(ev.date, ev.allDay ? "00:00" : ev.startTime || "09:00");
+      const endAt = !ev.allDay && ev.endTime ? toInstant(ev.date, ev.endTime) : null;
+      await prisma.schedule.create({
+        data: {
+          title: ev.title,
+          details: ev.details,
+          category: "general",
+          startAt,
+          endAt,
+          allDay: ev.allDay,
+          location: ev.location,
+          url: ev.url,
+          recurrence: ev.recurrence || null,
+          recurrenceUntil: ev.recurrence && ev.recurrenceUntil ? new Date(`${ev.recurrenceUntil}T23:59:59+08:00`) : null,
+          calendar,
+          status: approver ? "APPROVED" : "PENDING",
+          createdById: user.id,
+          createdByName: user.name,
+          ...(approver ? { decidedById: user.id, decidedByName: user.name, decidedAt: now } : {}),
+        },
+      });
+      imported++;
+    } catch {
+      skipped++;
+    }
+  }
+  if (imported > 0) {
+    await logActivity(user, {
+      action: "schedule.import",
+      category: "schedule",
+      summary: `Imported ${imported} calendar event${imported === 1 ? "" : "s"}${approver ? "" : " (pending approval)"}`,
+      entity: "schedule",
+      href: "/calendar",
+    });
+  }
+  revalidateCal();
+  return { imported, skipped };
 }
 
 /** Create a named calendar (approver/admin). */

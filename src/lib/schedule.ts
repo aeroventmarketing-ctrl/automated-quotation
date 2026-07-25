@@ -77,6 +77,7 @@ export type RsvpStatus = "going" | "maybe" | "no" | "invited";
 export interface ScheduleAttendee { userId: string; name: string; rsvp: RsvpStatus }
 export interface ScheduleAttachment { path: string; name: string; uploadedAt: string }
 export interface ScheduleComment { id: string; byId: string; byName: string; text: string; at: string }
+export interface ScheduleTodo { id: string; text: string; done: boolean }
 
 export type Recurrence = "daily" | "weekly" | "monthly";
 export const RECURRENCE_OPTIONS: { key: string; label: string }[] = [
@@ -127,6 +128,13 @@ export function coerceComments(v: unknown): ScheduleComment[] {
     .filter((o): o is Record<string, unknown> => !!o && typeof o.text === "string")
     .map((o) => ({ id: String(o.id ?? ""), byId: String(o.byId ?? ""), byName: String(o.byName ?? ""), text: String(o.text), at: typeof o.at === "string" ? o.at : "" }));
 }
+export function coerceTodos(v: unknown): ScheduleTodo[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
+    .filter((o): o is Record<string, unknown> => !!o && typeof o.text === "string")
+    .map((o) => ({ id: String(o.id ?? ""), text: String(o.text), done: o.done === true }));
+}
 
 /** The row shape the calendar renders (dates as ISO strings, plus permissions). */
 export interface ScheduleView {
@@ -156,6 +164,7 @@ export interface ScheduleView {
   attendees: ScheduleAttendee[];
   attachments: ScheduleAttachment[];
   comments: ScheduleComment[];
+  todos: ScheduleTodo[];
   // Filled per occurrence when a recurring series is expanded:
   recurring?: boolean;
   instanceKey?: string;
@@ -169,7 +178,7 @@ export interface ScheduleRow {
   decidedByName: string | null; decidedAt: Date | null; decisionNote: string | null;
   color: string | null; url: string | null;
   recurrence: string | null; recurrenceUntil: Date | null; remindMinutes: number | null;
-  calendar: string | null; attendees: unknown; attachments: unknown; comments: unknown;
+  calendar: string | null; attendees: unknown; attachments: unknown; comments: unknown; todos: unknown;
 }
 
 /** Build the client ScheduleView from a stored row + viewer context. */
@@ -184,7 +193,7 @@ export function buildScheduleView(s: ScheduleRow, ctx: { viewerId?: string; canD
     color: s.color, url: s.url,
     recurrence: s.recurrence, recurrenceUntil: s.recurrenceUntil ? s.recurrenceUntil.toISOString() : null,
     remindMinutes: s.remindMinutes, calendar: s.calendar,
-    attendees: coerceAttendees(s.attendees), attachments: coerceAttachments(s.attachments), comments: coerceComments(s.comments),
+    attendees: coerceAttendees(s.attendees), attachments: coerceAttachments(s.attachments), comments: coerceComments(s.comments), todos: coerceTodos(s.todos),
   };
 }
 

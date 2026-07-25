@@ -671,6 +671,7 @@ model Schedule {
   // TimeTree-style extras (all optional):
   color           String? // per-event label colour (hex); falls back to the category colour
   url             String? // optional link attached to the event
+  todos           Json? // [{ id, text, done }] — TimeTree-style to-do checklist
   recurrence      String? // null | "daily" | "weekly" | "monthly"
   recurrenceUntil DateTime? // series end (inclusive), or null = open-ended (capped at read)
   remindMinutes   Int? // in-app reminder, minutes before start (null = none)

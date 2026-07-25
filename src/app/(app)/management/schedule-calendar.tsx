@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, X, Check, Ban, Trash2, Pencil, MapPin, CalendarDays, User, Users, Repeat, Bell, Paperclip, MessageSquare, Send, Upload, Link2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Check, Ban, Trash2, Pencil, MapPin, CalendarDays, User, Users, Repeat, Bell, Paperclip, MessageSquare, Send, Upload, Link2, ListChecks, Square, CheckSquare, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UploadLink } from "@/components/upload-link";
@@ -26,6 +26,7 @@ import {
   createSchedule, updateSchedule, deleteSchedule, decideSchedule,
   addScheduleComment, deleteScheduleComment, setScheduleRsvp,
   attachScheduleFile, removeScheduleFile, addCalendarAction, removeCalendarAction,
+  toggleScheduleTodo, importSchedules,
 } from "./schedule-actions";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -65,13 +66,14 @@ type FormState = {
   title: string; category: string; date: string; allDay: boolean;
   startTime: string; endTime: string; location: string; details: string;
   color: string; url: string;
+  todos: { id?: string; text: string; done: boolean }[];
   recurrence: string; recurrenceUntil: string; remindMinutes: number | null;
   calendar: string; attendees: { userId: string; name: string }[];
 };
 
 const emptyForm = (date: string, calendar: string): FormState => ({
   title: "", category: "general", date, allDay: true, startTime: "09:00", endTime: "10:00", location: "", details: "",
-  color: "", url: "",
+  color: "", url: "", todos: [],
   recurrence: "", recurrenceUntil: "", remindMinutes: null, calendar, attendees: [],
 });
 
@@ -104,6 +106,7 @@ export function ScheduleCalendar({
   const [comment, setComment] = useState("");
   const [attSearch, setAttSearch] = useState("");
   const [calName, setCalName] = useState("");
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   // Filters — which calendars & categories are visible (all on by default).
   const [hiddenCals, setHiddenCals] = useState<Set<string>>(new Set());
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
@@ -193,7 +196,7 @@ export function ScheduleCalendar({
       id: s.id, title: s.title, category: s.category, date: dayKey(p.y, p.m, p.d), allDay: s.allDay,
       startTime: `${pad(p.hh)}:${pad(p.mm)}`, endTime: e ? `${pad(e.hh)}:${pad(e.mm)}` : "10:00",
       location: s.location ?? "", details: s.details ?? "",
-      color: s.color ?? "", url: s.url ?? "",
+      color: s.color ?? "", url: s.url ?? "", todos: s.todos.map((t) => ({ id: t.id, text: t.text, done: t.done })),
       recurrence: s.recurrence ?? "", recurrenceUntil: ru ? dayKey(ru.y, ru.m, ru.d) : "", remindMinutes: s.remindMinutes ?? null,
       calendar: calOf(s), attendees: s.attendees.map((a) => ({ userId: a.userId, name: a.name })),
     });
@@ -206,10 +209,23 @@ export function ScheduleCalendar({
       title: form.title, details: form.details, category: form.category, date: form.date,
       allDay: form.allDay, startTime: form.allDay ? "" : form.startTime, endTime: form.allDay ? "" : form.endTime, location: form.location,
       color: form.color, url: form.url,
+      todos: form.todos.filter((t) => t.text.trim()),
       recurrence: form.recurrence as "" | "daily" | "weekly" | "monthly", recurrenceUntil: form.recurrence ? form.recurrenceUntil : "",
       remindMinutes: form.remindMinutes, calendar: form.calendar, attendees: form.attendees,
     };
     run(() => (form.id ? updateSchedule(form.id, payload) : createSchedule(payload)), () => setForm(null));
+  }
+
+  async function handleImport(file: File) {
+    setBusy(true); setErr(null); setImportMsg(null);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const r = await importSchedules(fd);
+      if (r.error) setErr(r.error);
+      else setImportMsg(`Imported ${r.imported} event${r.imported === 1 ? "" : "s"}${r.skipped ? `, skipped ${r.skipped}` : ""}.`);
+      router.refresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Import failed."); }
+    finally { setBusy(false); }
   }
 
   async function uploadAttachment(file: File, scheduleId: string) {
@@ -251,8 +267,15 @@ export function ScheduleCalendar({
             <button key={v} type="button" onClick={() => setMode(v)} className={`px-2.5 py-1.5 font-medium capitalize ${mode === v ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>{v}</button>
           ))}
         </div>
+        {canApprove && (
+          <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border px-2.5 text-xs font-medium hover:bg-accent" title="Import events from a .ics file (e.g. a TimeTree export)">
+            <Download className="h-3.5 w-3.5" /> Import
+            <input type="file" accept=".ics,text/calendar" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImport(f); e.target.value = ""; }} />
+          </label>
+        )}
         <Button size="sm" className="h-8" onClick={() => openAdd(dayKey(today.y, today.m, today.d))}><Plus className="mr-1 h-4 w-4" /> Add</Button>
       </div>
+      {importMsg && <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">{importMsg}</p>}
 
       {/* Filters — calendars + categories toggle visibility. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-md border bg-muted/20 p-2 text-[11px]">
@@ -369,7 +392,7 @@ export function ScheduleCalendar({
 
       {/* Add / edit modal */}
       {form && (
-        <Modal onClose={() => setForm(null)} title={form.id ? "Edit schedule" : "Add schedule"}>
+        <Drawer onClose={() => setForm(null)} title={form.id ? "Edit Event" : "Create Event"}>
           <div className="space-y-3">
             <Field label="Title"><Input value={form.title} autoFocus onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Site delivery — Project Golden" /></Field>
             <div className="grid grid-cols-2 gap-3">
@@ -447,15 +470,27 @@ export function ScheduleCalendar({
                 </div>
               )}
             </div>
+            {/* To-Do List (TimeTree-style checklist) */}
+            <div className="space-y-1">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground"><ListChecks className="h-3.5 w-3.5" /> To-Do List</span>
+              {form.todos.map((t, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <input type="checkbox" className="h-4 w-4 accent-primary" checked={t.done} onChange={(e) => setForm({ ...form, todos: form.todos.map((x, j) => (j === i ? { ...x, done: e.target.checked } : x)) })} />
+                  <Input value={t.text} onChange={(e) => setForm({ ...form, todos: form.todos.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)) })} placeholder="Task" className="h-8 flex-1" />
+                  <button type="button" onClick={() => setForm({ ...form, todos: form.todos.filter((_, j) => j !== i) })} className="text-muted-foreground hover:text-destructive" aria-label="Remove task"><X className="h-4 w-4" /></button>
+                </div>
+              ))}
+              <button type="button" onClick={() => setForm({ ...form, todos: [...form.todos, { text: "", done: false }] })} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><Plus className="h-3.5 w-3.5" /> Add task</button>
+            </div>
             <Field label="Details (optional)"><textarea className="min-h-[60px] w-full rounded-md border bg-background px-2 py-1.5 text-sm" value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} placeholder="Notes, instructions…" /></Field>
             {!canApprove && <p className="text-[11px] text-muted-foreground">This schedule will be submitted for approval by an Engineer, Admin or Approver.</p>}
             {err && <p className="text-xs text-destructive">{err}</p>}
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" className="h-8" disabled={busy} onClick={submitForm}>{busy ? "Saving…" : form.id ? "Save changes" : "Add schedule"}</Button>
+              <Button size="sm" className="h-8" disabled={busy} onClick={submitForm}>{busy ? "Saving…" : form.id ? "Save changes" : "Create event"}</Button>
               <Button size="sm" variant="ghost" className="h-8" disabled={busy} onClick={() => setForm(null)}>Cancel</Button>
             </div>
           </div>
-        </Modal>
+        </Drawer>
       )}
 
       {/* Detail modal */}
@@ -464,7 +499,7 @@ export function ScheduleCalendar({
         const p = phParts(detail.startAt);
         const e = detail.endAt ? phParts(detail.endAt) : null;
         return (
-          <Modal onClose={() => { setDetailKey(null); setComment(""); }} title={detail.title} accent={eventColor(detail)}>
+          <Drawer onClose={() => { setDetailKey(null); setComment(""); }} title={detail.title} accent={eventColor(detail)}>
             <div className="space-y-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: `${cat.color}20`, color: cat.color }}><span className="h-2 w-2 rounded-full" style={{ background: cat.color }} />{cat.label}</span>
@@ -482,6 +517,22 @@ export function ScheduleCalendar({
               {detail.location && <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {detail.location}</div>}
               {detail.url && <div className="flex items-center gap-2 text-muted-foreground"><Link2 className="h-4 w-4 shrink-0" /> <a href={detail.url} target="_blank" rel="noopener noreferrer" className="truncate text-primary hover:underline">{detail.url}</a></div>}
               {detail.details && <p className="whitespace-pre-wrap rounded-md border bg-muted/30 p-2 text-foreground">{detail.details}</p>}
+
+              {/* To-Do List */}
+              {detail.todos.length > 0 && (
+                <div className="space-y-1">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><ListChecks className="h-3.5 w-3.5" /> To-Do List ({detail.todos.filter((t) => t.done).length}/{detail.todos.length})</span>
+                  <div className="space-y-0.5">
+                    {detail.todos.map((t) => (
+                      <button key={t.id} type="button" disabled={busy || !detail.canEdit} onClick={() => run(() => toggleScheduleTodo(detail.id, t.id))}
+                        className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-sm hover:bg-accent disabled:cursor-default disabled:hover:bg-transparent">
+                        {t.done ? <CheckSquare className="h-4 w-4 shrink-0 text-emerald-600" /> : <Square className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                        <span className={t.done ? "text-muted-foreground line-through" : ""}>{t.text}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Attendees + RSVP */}
               {(detail.attendees.length > 0) && (
@@ -556,7 +607,7 @@ export function ScheduleCalendar({
                 {detail.canEdit && <button type="button" disabled={busy} onClick={() => { if (window.confirm(detail.recurrence ? "Delete this repeating event (whole series)?" : "Delete this schedule?")) run(() => deleteSchedule(detail.id), () => setDetailKey(null)); }} className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /> Delete</button>}
               </div>
             </div>
-          </Modal>
+          </Drawer>
         );
       })()}
 
@@ -617,6 +668,21 @@ function StatusBadge({ status }: { status: ScheduleStatus }) {
     REJECTED: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
   };
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[status]}`}>{SCHEDULE_STATUS_LABEL[status]}</span>;
+}
+
+/** Right-side slide-over panel (TimeTree's Create Event / detail layout). */
+function Drawer({ title, accent, onClose, children }: { title: string; accent?: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/45" onClick={onClose}>
+      <div className="flex h-full w-full max-w-md flex-col border-l bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3" style={accent ? { boxShadow: `inset 4px 0 0 ${accent}` } : undefined}>
+          <h3 className="text-sm font-bold text-balance">{title}</h3>
+          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="Close"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 function Modal({ title, accent, onClose, children }: { title: string; accent?: string; onClose: () => void; children: React.ReactNode }) {
