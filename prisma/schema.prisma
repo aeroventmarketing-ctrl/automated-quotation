@@ -531,6 +531,7 @@ model StockItem {
   quantity     Decimal  @db.Decimal(14, 3) @default(0)
   reorderLevel Decimal  @db.Decimal(14, 3) @default(0)
   unitCost     Decimal  @db.Decimal(14, 2) @default(0) // for stock valuation
+  sellPrice    Decimal  @db.Decimal(14, 2) @default(0) // selling price shown to sales for quick quoting
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

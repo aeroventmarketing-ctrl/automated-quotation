@@ -31,6 +31,7 @@ interface Item {
   quantity: number;
   reorderLevel: number;
   unitCost: number;
+  sellPrice: number;
   value: number;
   reserved: number;
   available: number;
@@ -41,7 +42,7 @@ interface Item {
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
-type SortKey = "name" | "quantity" | "available" | "reorderLevel" | "unitCost" | "value" | "status" | "location" | "category";
+type SortKey = "name" | "quantity" | "available" | "reorderLevel" | "unitCost" | "sellPrice" | "value" | "status" | "location" | "category";
 type GroupKey = "none" | "location" | "category" | "status";
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "name", label: "Name" },
@@ -49,6 +50,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "available", label: "Available" },
   { key: "reorderLevel", label: "Reorder at" },
   { key: "unitCost", label: "Unit cost" },
+  { key: "sellPrice", label: "Sell price" },
   { key: "value", label: "Value" },
   { key: "status", label: "Status" },
   { key: "location", label: "Location" },
@@ -102,6 +104,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
   const [location, setLocation] = useState(item.location ?? "");
   const [reorder, setReorder] = useState(String(item.reorderLevel));
   const [unitCost, setUnitCost] = useState(String(item.unitCost));
+  const [sellPrice, setSellPrice] = useState(String(item.sellPrice));
   // Reserve fields
   const [resvQty, setResvQty] = useState("");
   const [resvRef, setResvRef] = useState("");
@@ -125,7 +128,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
     run(() => adjustStock({ stockItemId: item.id, kind, qty: n, reason }).then(() => { setQty(""); setReason(""); }));
   }
   function saveMeta() {
-    run(() => updateStockItemMeta({ stockItemId: item.id, category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0 }));
+    run(() => updateStockItemMeta({ stockItemId: item.id, category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
   }
   function reserve() {
     const n = Number(resvQty);
@@ -154,6 +157,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
         <TableCell className={`text-right tabular-nums font-medium ${item.available < 0 ? "text-destructive" : ""}`}>{fmt(item.available)}</TableCell>
         <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(item.reorderLevel)}</TableCell>
         <TableCell className="text-right tabular-nums text-muted-foreground">{item.unitCost ? peso(item.unitCost) : "—"}</TableCell>
+        <TableCell className="text-right tabular-nums font-medium text-emerald-700">{item.sellPrice ? peso(item.sellPrice) : "—"}</TableCell>
         <TableCell className="text-right tabular-nums">{item.value ? peso(item.value) : "—"}</TableCell>
         <TableCell>
           {item.status === "out" ? <Badge variant="destructive">Out</Badge>
@@ -174,7 +178,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       </TableRow>
       {panel === "adjust" && canManage && (
         <TableRow>
-          <TableCell colSpan={11} className="bg-muted/30">
+          <TableCell colSpan={12} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="h-8 rounded-md border bg-background px-2 text-sm">
                 <option value="RECEIPT">Receive (+)</option>
@@ -191,10 +195,11 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       )}
       {panel === "edit" && canManage && (
         <TableRow>
-          <TableCell colSpan={11} className="bg-muted/30">
+          <TableCell colSpan={12} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <label className="text-xs text-muted-foreground">Location<div><LocationField value={location} onChange={setLocation} locations={locations} /></div></label>
               <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>
+              <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Reorder at<Input className="h-8 w-28" type="number" step="any" min={0} value={reorder} onChange={(e) => setReorder(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
               <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Save"}</Button>
@@ -205,7 +210,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       )}
       {panel === "reserve" && canManage && (
         <TableRow>
-          <TableCell colSpan={11} className="bg-muted/30">
+          <TableCell colSpan={12} className="bg-muted/30">
             <div className="space-y-2 py-1">
               <div className="flex flex-wrap items-end gap-2">
                 <label className="text-xs text-muted-foreground">Reserve qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={resvQty} onChange={(e) => setResvQty(e.target.value)} /></label>
@@ -234,7 +239,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       )}
       {panel === "transfer" && canManage && (
         <TableRow>
-          <TableCell colSpan={11} className="bg-muted/30">
+          <TableCell colSpan={12} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <label className="text-xs text-muted-foreground">Transfer qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={xferQty} onChange={(e) => setXferQty(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">To location<div><LocationField value={xferTo} onChange={setXferTo} locations={locations.filter((l) => l.toLowerCase() !== (item.location ?? "").toLowerCase())} /></div></label>
@@ -248,7 +253,7 @@ function StockRow({ item, canManage, locations, scanTarget, scanNonce }: { item:
       )}
       {panel === "label" && (
         <TableRow>
-          <TableCell colSpan={11} className="bg-muted/30">
+          <TableCell colSpan={12} className="bg-muted/30">
             <div className="flex flex-col items-start gap-1 py-1">
               <div className="text-sm font-medium">{item.name}{item.sku ? ` · SKU ${item.sku}` : ""}{item.location ? ` · Loc ${item.location}` : ""}</div>
               <div className="flex items-center gap-4">
@@ -279,6 +284,7 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
   const [qty, setQty] = useState("");
   const [reorder, setReorder] = useState("");
   const [unitCost, setUnitCost] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // Scan box: a barcode scanner "types" the SKU + Enter here. Mode decides what a
@@ -318,6 +324,7 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
         case "available": return (a.available - b.available) * mul;
         case "reorderLevel": return (a.reorderLevel - b.reorderLevel) * mul;
         case "unitCost": return (a.unitCost - b.unitCost) * mul;
+        case "sellPrice": return (a.sellPrice - b.sellPrice) * mul;
         case "value": return (a.value - b.value) * mul;
         case "status": return (statusRank(a.status) - statusRank(b.status)) * mul || a.name.localeCompare(b.name);
         case "location": return ((a.location ?? "").localeCompare(b.location ?? "") || a.name.localeCompare(b.name)) * mul;
@@ -343,7 +350,7 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = canManage ? 11 : 10;
+  const cols = canManage ? 12 : 11;
 
   async function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
@@ -387,9 +394,9 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
     try {
       await createStockItem({
         name, unit, category: category || undefined, location: location || undefined,
-        quantity: Number(qty) || 0, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0,
+        quantity: Number(qty) || 0, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0,
       });
-      setName(""); setCategory(""); setLocation(""); setQty(""); setReorder(""); setUnitCost(""); setUnit("pcs"); setShowAdd(false);
+      setName(""); setCategory(""); setLocation(""); setQty(""); setReorder(""); setUnitCost(""); setSellPrice(""); setUnit("pcs"); setShowAdd(false);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -442,6 +449,7 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Opening qty" value={qty} onChange={(e) => setQty(e.target.value)} />
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Reorder at" value={reorder} onChange={(e) => setReorder(e.target.value)} />
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Unit cost ₱" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
+                <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Sell price ₱" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
                 <Button size="sm" className="h-8" disabled={busy} onClick={add}>{busy ? "Saving…" : "Add item"}</Button>
                 <Button size="sm" variant="outline" className="h-8" onClick={() => setShowAdd(false)}>Cancel</Button>
               </div>
@@ -503,6 +511,7 @@ export function InventoryManager({ items, canManage, locations }: { items: Item[
                 <TableHead className="text-right">Available</TableHead>
                 <TableHead className="text-right">Reorder at</TableHead>
                 <TableHead className="text-right">Unit cost</TableHead>
+                <TableHead className="text-right">Sell price</TableHead>
                 <TableHead className="text-right">Value</TableHead>
                 <TableHead>Status</TableHead>
                 {canManage && <TableHead className="text-right">Action</TableHead>}

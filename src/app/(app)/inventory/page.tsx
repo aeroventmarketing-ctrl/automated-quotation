@@ -151,6 +151,7 @@ async function loadItems() {
     const quantity = Number(i.quantity);
     const reorderLevel = Number(i.reorderLevel);
     const unitCost = Number(i.unitCost);
+    const sellPrice = Number(i.sellPrice);
     const resv = byItem.get(i.id) ?? [];
     const reserved = Math.round(resv.reduce((a, r) => a + r.qty, 0) * 1000) / 1000;
     const available = Math.round((quantity - reserved) * 1000) / 1000;
@@ -166,6 +167,7 @@ async function loadItems() {
       quantity,
       reorderLevel,
       unitCost,
+      sellPrice,
       value: Math.round(quantity * unitCost * 100) / 100,
       reserved,
       available,

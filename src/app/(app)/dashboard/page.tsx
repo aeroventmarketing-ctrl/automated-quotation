@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { TestModeBanner } from "@/components/test-mode-banner";
 import { ActivityBell } from "@/components/activity-bell";
+import { StockAvailabilitySearch } from "@/components/stock-availability-search";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
 import { isClientRestricted } from "@/lib/client-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -281,6 +282,9 @@ export default async function DashboardPage() {
       </div>
 
       <TestModeBanner on={testMode.on} since={testMode.since} />
+
+      {/* Quick availability lookup for reps on the phone with a client. */}
+      <StockAvailabilitySearch />
 
       {/* Each box drills into its details: the status boxes open the inquiries
           list pre-filtered to that stage, and "Quotes drafted today" opens the

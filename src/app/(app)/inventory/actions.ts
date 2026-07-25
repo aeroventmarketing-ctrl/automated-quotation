@@ -106,6 +106,7 @@ export async function importStockItems(
   const iQty = col(["quantity", "qty", "on hand", "onhand", "opening qty", "opening"]);
   const iReorder = col(["reorderlevel", "reorder level", "reorder at", "reorder"]);
   const iCost = col(["unitcost", "unit cost", "cost"]);
+  const iSell = col(["sellprice", "sell price", "selling price", "price"]);
   if (iName < 0) {
     return { created: 0, skipped: 0, errors: ['The first row must be headers with a "name" column (e.g. name, unit, category, location, quantity, reorderLevel, unitCost).'] };
   }
@@ -133,6 +134,7 @@ export async function importStockItems(
             quantity,
             reorderLevel: iReorder >= 0 ? num(row[iReorder]) : 0,
             unitCost: iCost >= 0 ? num(row[iCost]) : 0,
+            sellPrice: iSell >= 0 ? num(row[iSell]) : 0,
           },
         });
         if (quantity > 0) {
@@ -181,6 +183,7 @@ const createSchema = z.object({
   quantity: z.number().min(0),
   reorderLevel: z.number().min(0),
   unitCost: z.number().min(0).optional(),
+  sellPrice: z.number().min(0).optional(),
 });
 
 /** Add a stock item. A non-zero opening quantity records an ADJUSTMENT movement. */
@@ -199,6 +202,7 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
         quantity: d.quantity,
         reorderLevel: d.reorderLevel,
         unitCost: d.unitCost ?? 0,
+        sellPrice: d.sellPrice ?? 0,
       },
     });
     if (d.quantity > 0) {
@@ -216,9 +220,10 @@ const metaSchema = z.object({
   location: z.string().trim().optional(),
   reorderLevel: z.number().min(0),
   unitCost: z.number().min(0),
+  sellPrice: z.number().min(0),
 });
 
-/** Edit an item's location, unit cost, category and reorder level (no movement). */
+/** Edit an item's location, unit cost, selling price, category and reorder level (no movement). */
 export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Promise<void> {
   await requireInventoryManager();
   const d = metaSchema.parse(input);
@@ -229,6 +234,7 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
       location: d.location?.trim() || null,
       reorderLevel: d.reorderLevel,
       unitCost: d.unitCost,
+      sellPrice: d.sellPrice,
     },
   });
   revalidatePath("/inventory");
