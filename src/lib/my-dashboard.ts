@@ -1,0 +1,209 @@
+/**
+ * Role-adaptive "My Dashboard" data. For a signed-in user it gathers the items
+ * currently AWAITING their action across every workflow (orders, purchasing,
+ * cash requests, schedules, commissions, quotations), plus their recent activity
+ * (progress / things they've done). Each pending item links to the detail page
+ * that shows the full record (and client details, where the viewer may see them).
+ *
+ * Client identity/amounts are masked for client-restricted (shop-floor) viewers,
+ * matching the app-wide client-visibility policy. Every source is wrapped so a
+ * missing table can't break the page.
+ */
+import type { User } from "@prisma/client";
+import { prisma } from "@/lib/db";
+import { isAdmin, canApprove } from "@/lib/auth";
+import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
+import { readOrderWorkflow, pendingStep, requisitionDeptLabel } from "@/lib/order-workflow";
+import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
+import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
+import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
+import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
+import { listActivityForActor, type ActivityView } from "@/lib/activity-log";
+
+export type TaskArea = "order" | "purchase" | "cash" | "schedule" | "commission" | "quotation";
+
+export interface MyTask {
+  key: string;
+  area: TaskArea;
+  areaLabel: string;
+  title: string; // order/quote/DR number or event title
+  action: string; // what the viewer must do
+  client: string | null; // masked when the viewer can't see clients / not applicable
+  amount: number | null; // masked when the viewer can't see client amounts / n/a
+  currency: string;
+  href: string;
+}
+
+export interface MyDashboard {
+  hasRole: boolean; // holds ≥1 workflow role (or admin) — i.e. this page applies
+  roleLabels: string[]; // the viewer's workflow-role labels (for the header)
+  pending: MyTask[];
+  activity: ActivityView[];
+  byArea: { area: TaskArea; label: string; count: number }[];
+}
+
+/** The workflow-role labels a user holds. */
+export function viewerRoleLabels(user: User, assignments: WorkflowRoleAssignments): string[] {
+  const labels = WORKFLOW_ROLE_KEYS
+    .filter((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey))
+    .map((k) => workflowRoleLabel(k));
+  if (isAdmin(user)) labels.unshift("Admin");
+  return labels;
+}
+
+const AREA_LABEL: Record<TaskArea, string> = {
+  order: "Orders",
+  purchase: "Purchasing",
+  cash: "Cash requests",
+  schedule: "Schedules",
+  commission: "Commissions",
+  quotation: "Quotations",
+};
+
+export async function buildMyDashboard(user: User): Promise<MyDashboard> {
+  const assignments = await getWorkflowRoles();
+  const has = (r: WorkflowRoleKey) => isAdmin(user) || userHasWorkflowRole(assignments, user.id, r);
+  const holdsAnyRole = WORKFLOW_ROLE_KEYS.some((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey));
+  const restricted = await isClientRestricted(user, assignments);
+  const maskClient = (name: string | null | undefined): string | null => (restricted ? CLIENT_HIDDEN : name ?? null);
+  const maskAmount = (n: number | null | undefined): number | null => (restricted ? null : n ?? null);
+
+  const tasks: MyTask[] = [];
+
+  // 1) Order-workflow approvals — confirmed orders whose current step needs a
+  //    role the viewer holds (or a Sales-owned step they own).
+  try {
+    const quotes = await prisma.quotation.findMany({
+      where: { inquiry: { status: "WON" } },
+      include: { inquiry: { include: { customer: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    for (const q of quotes) {
+      const sale = saleFromClassification(q.classification);
+      if (!sale || !isSaleConfirmed(sale)) continue;
+      const pend = pendingStep(readOrderWorkflow(q.classification));
+      if (!pend) continue;
+      const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
+      const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
+      if (!owesByRole && !owesBySales) continue;
+      tasks.push({
+        key: `order:${q.id}`, area: "order", areaLabel: AREA_LABEL.order,
+        title: q.quoteNumber, action: pend.action,
+        client: maskClient(q.inquiry.customer.company), amount: maskAmount(Number(q.total)), currency: q.currency,
+        href: `/orders/${q.id}`,
+      });
+    }
+  } catch { /* ignore */ }
+
+  // 2) Purchasing — purchase requests whose next step needs a role the viewer holds.
+  try {
+    const prs = await prisma.purchaseRequest.findMany({
+      where: { status: { notIn: ["COMPLETED", "REJECTED", "CANCELLED"] } },
+      include: { quotation: { include: { inquiry: { include: { customer: true } } } } },
+      orderBy: { createdAt: "desc" },
+    });
+    for (const pr of prs) {
+      const isDept = isDeptRequisition(pr);
+      const poApproved = isPoApproved(pr.chainLog);
+      const steps = purchaseStepsFrom(pr.status as PRStatus, isDept, poApproved);
+      const roles = steps.map((s) => effectiveStepRole(s, isDept));
+      if (!roles.some((r) => has(r))) continue;
+      const company = pr.quotation?.inquiry.customer.company ?? null;
+      const label = pr.quotationId ? (pr.quotation?.quoteNumber ?? "Order PR") : `Requisition · ${requisitionDeptLabel(pr.dept)}`;
+      tasks.push({
+        key: `pr:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
+        title: label, action: steps[0]?.label ?? "Process purchase",
+        client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
+        href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+      });
+    }
+  } catch { /* ignore */ }
+
+  // 3) Cash requests — whose next step needs a role the viewer holds (or they're
+  //    the requestor confirming receipt).
+  try {
+    const cash = await prisma.cashRequest.findMany({
+      where: { status: { notIn: ["RECEIVED", "LIQUIDATED", "SETTLED", "REJECTED", "CANCELLED"] } },
+      orderBy: { createdAt: "desc" },
+    });
+    for (const cr of cash) {
+      const steps = cashStepsFrom(cr.status as CashRequestStatus);
+      const awaiting = steps.some((s) => (s.by === "requestor" ? cr.requestedById === user.id : has(s.by as WorkflowRoleKey)));
+      if (!awaiting) continue;
+      tasks.push({
+        key: `cash:${cr.id}`, area: "cash", areaLabel: AREA_LABEL.cash,
+        title: cr.number ? `Cash ${cr.number}` : "Cash request", action: steps[0]?.label ?? CASH_STATUS_LABEL[cr.status as CashRequestStatus] ?? "Process",
+        client: cr.purpose ?? null, amount: Number(cr.amount), currency: "PHP",
+        href: "/cash-requests",
+      });
+    }
+  } catch { /* ignore */ }
+
+  // 4) Schedules pending approval — Engineer / Admin / Payment Approver.
+  if (canApprove(user) || isAdmin(user) || has("payment_approver")) {
+    try {
+      const pend = await prisma.schedule.findMany({ where: { status: "PENDING" }, orderBy: { startAt: "asc" }, take: 50 });
+      for (const s of pend) {
+        tasks.push({
+          key: `sched:${s.id}`, area: "schedule", areaLabel: AREA_LABEL.schedule,
+          title: s.title, action: "Approve schedule", client: null, amount: null, currency: "PHP",
+          href: "/calendar",
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 5) Commissions awaiting payout — Accounting / Admin mark them paid.
+  if (isAdmin(user) || has("accounting")) {
+    try {
+      const comm = await prisma.commission.findMany({
+        where: { paid: false },
+        include: { quotation: { include: { inquiry: { include: { customer: true } } } } },
+        orderBy: { salesMonth: "desc" },
+        take: 100,
+      });
+      for (const c of comm) {
+        tasks.push({
+          key: `comm:${c.id}`, area: "commission", areaLabel: AREA_LABEL.commission,
+          title: `Commission · ${c.quotation.quoteNumber}`, action: "Mark commission paid",
+          client: maskClient(c.quotation.inquiry.customer.company), amount: maskAmount(Number(c.amount)), currency: "PHP",
+          href: `/orders/${c.quotationId}`,
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 6) Quotations awaiting approval — Engineer / Admin.
+  if (canApprove(user)) {
+    try {
+      const q = await prisma.quotation.findMany({
+        where: { status: "PENDING_APPROVAL" },
+        include: { inquiry: { include: { customer: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      });
+      for (const quote of q) {
+        tasks.push({
+          key: `quote:${quote.id}`, area: "quotation", areaLabel: AREA_LABEL.quotation,
+          title: quote.quoteNumber, action: "Approve quotation",
+          client: maskClient(quote.inquiry.customer.company), amount: maskAmount(Number(quote.total)), currency: quote.currency,
+          href: `/quotations/${quote.id}`,
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
+  const byArea = (Object.keys(AREA_LABEL) as TaskArea[])
+    .map((area) => ({ area, label: AREA_LABEL[area], count: tasks.filter((t) => t.area === area).length }))
+    .filter((a) => a.count > 0);
+
+  const activity = await listActivityForActor(user.id, 30);
+
+  return {
+    hasRole: isAdmin(user) || holdsAnyRole,
+    roleLabels: viewerRoleLabels(user, assignments),
+    pending: tasks,
+    activity,
+    byArea,
+  };
+}

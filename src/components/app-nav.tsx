@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays } from "lucide-react";
+import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, ListChecks } from "lucide-react";
 import type { Role } from "@prisma/client";
+
+/** Shown to workflow-role holders and admins (their task list). */
+export const MY_DASHBOARD_ITEM = { href: "/my-dashboard", label: "My Dashboard", icon: ListChecks } as const;
 
 export const NAV = [
   { href: "/management", label: "Management Dashboard", icon: Gauge, roles: ["ADMIN"] },
@@ -24,9 +27,11 @@ export const NAV = [
   { href: "/admin", label: "Admin", icon: Settings, roles: ["ADMIN"] },
 ] as const;
 
-export function AppNav({ role, name }: { role: Role; name: string }) {
+export function AppNav({ role, name, hasWorkflowRole = false }: { role: Role; name: string; hasWorkflowRole?: boolean }) {
   const pathname = usePathname();
-  const items = NAV.filter((n) => (n.roles as readonly string[]).includes(role));
+  const base = NAV.filter((n) => (n.roles as readonly string[]).includes(role));
+  // Workflow-role holders (and admins) get their personal task dashboard on top.
+  const items = hasWorkflowRole || role === "ADMIN" ? [MY_DASHBOARD_ITEM, ...base] : base;
 
   return (
     <div className="flex h-full flex-col">

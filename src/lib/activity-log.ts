@@ -67,6 +67,20 @@ export interface ActivityView {
   createdAt: string;
 }
 
+/** A single actor's most recent activity (their own actions), newest first. */
+export async function listActivityForActor(actorId: string, limit = 30): Promise<ActivityView[]> {
+  try {
+    const rows = await prisma.activityLog.findMany({ where: { actorId }, orderBy: { createdAt: "desc" }, take: limit });
+    return rows.map((r) => ({
+      id: r.id, action: r.action, category: r.category, summary: r.summary,
+      entity: r.entity, entityId: r.entityId, href: r.href, actorName: r.actorName,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /** The most recent activity entries, newest first. Returns [] if unavailable. */
 export async function listActivity(limit = 50): Promise<ActivityView[]> {
   try {

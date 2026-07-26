@@ -5,14 +5,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAV } from "./app-nav";
+import { NAV, MY_DASHBOARD_ITEM } from "./app-nav";
 import type { Role } from "@prisma/client";
 
 /** Hamburger menu for the mobile top bar (the sidebar is hidden below md). */
-export function MobileNav({ role, name }: { role: Role; name: string }) {
+export function MobileNav({ role, name, hasWorkflowRole = false }: { role: Role; name: string; hasWorkflowRole?: boolean }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const items = NAV.filter((n) => (n.roles as readonly string[]).includes(role));
+  const base = NAV.filter((n) => (n.roles as readonly string[]).includes(role));
+  const items = hasWorkflowRole || role === "ADMIN" ? [MY_DASHBOARD_ITEM, ...base] : base;
 
   return (
     <div className="relative">
