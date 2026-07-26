@@ -436,16 +436,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // warehouse issue/escalate.
   const canWarehouse =
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey));
-  // A department can raise its MRF only once its job order is actually in
-  // production (the head pressed "Start production" — status left "issued").
-  const raisableDepts =
-    wf.stage === "jo_received" || wf.stage === "producing"
-      ? PRODUCTION_DEPTS.filter(
-          (d) =>
-            wf.jobOrders[d.key]?.status === "in_production" &&
-            (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey))),
-        ).map((d) => ({ key: d.key, label: d.label }))
-      : [];
+  // An authorized department head (or admin) may raise their department's MRF at
+  // any time during production — from when the job orders are released until
+  // production is finished. No longer gated on that department's own job order
+  // having been individually started.
+  const productionFinished = stageIndex(wf.stage) >= stageIndex("production_finished");
+  const productionUnderway = stageIndex(wf.stage) >= stageIndex("in_production") && !productionFinished;
+  const raisableDepts = productionUnderway
+    ? PRODUCTION_DEPTS.filter(
+        (d) => adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)),
+      ).map((d) => ({ key: d.key, label: d.label }))
+    : [];
   // Link each MRF to the purchase request it was escalated into, so the MRF card
   // reflects the live purchasing-chain stage (approved → voucher → purchased → …).
   const prByMrf = new Map<string, (typeof purchaseRequests)[number]>();
@@ -503,14 +504,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey))),
     };
   });
-  // Phase 3 (Materials + Purchasing) opens only once production has actually
-  // started — a production head pressed "Start production" on a received job
-  // order (per-JO status leaves "issued"). It stays visible afterwards.
-  const productionStarted = PRODUCTION_DEPTS.some((d) => {
-    const s = wf.jobOrders[d.key]?.status;
-    return s === "in_production" || s === "finished";
-  });
-  const showMaterials = productionStarted || wf.stage === "production_finished";
+  // Phase 3 (Materials + Purchasing) opens once the job orders are released
+  // (production phase entered) and stays visible afterwards — including after
+  // production is finished — so the MRFs and purchasing history remain readable.
+  const showMaterials = stageIndex(wf.stage) >= stageIndex("in_production");
+  // Hide the MRF View / Print document links from the production heads and the
+  // Plant Manager (they raise/monitor requests but don't need the printable MRF).
+  const hideMrfDoc =
+    !adminViewer && viewer != null &&
+    (["plant_manager", "prod_head_duct", "prod_head_accessories", "prod_head_motor"] as WorkflowRoleKey[]).some((r) =>
+      userHasWorkflowRole(assignments, viewer.id, r),
+    );
 
   // Purchasing chain (Phase 3, part 2) — real PurchaseRequest rows.
   const prVariant = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
@@ -738,7 +742,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
-            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} />
+            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} showMrfDoc={!hideMrfDoc} />
           </CardContent>
         </Card>
       )}

@@ -117,6 +117,7 @@ export function MaterialRequests({
   requests,
   stockItems,
   products = [],
+  showMrfDoc = true,
 }: {
   orderId: string;
   requesterName: string;
@@ -124,6 +125,8 @@ export function MaterialRequests({
   requests: ReqRow[];
   stockItems: StockOpt[];
   products?: ScanProduct[];
+  /** Whether to show the MRF View / Print document links. */
+  showMrfDoc?: boolean;
 }) {
   const router = useRouter();
   const [issuingId, setIssuingId] = useState<string | null>(null);
@@ -269,10 +272,14 @@ export function MaterialRequests({
                   ) : (
                     <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>
                   )}
-                  <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                    <Eye className="h-3.5 w-3.5" /> View
-                  </Link>
-                  <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="text-xs text-primary hover:underline">Print</Link>
+                  {showMrfDoc && (
+                    <>
+                      <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                        <Eye className="h-3.5 w-3.5" /> View
+                      </Link>
+                      <Link href={`/orders/${r.orderId}/mrf/${r.id}`} target="_blank" className="text-xs text-primary hover:underline">Print</Link>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="overflow-x-auto">

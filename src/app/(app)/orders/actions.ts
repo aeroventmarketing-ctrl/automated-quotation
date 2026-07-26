@@ -910,11 +910,14 @@ export async function raiseMaterialRequest(
   const { cls, wf } = await loadWorkflow(quotationId);
   const deptJo = wf.jobOrders[deptKey];
   if (!deptJo) throw new Error("This department has no job order on this order.");
-  // Phase 3 opens only once production has started on this job order — after the
-  // Plant Manager receives the released job orders, the production head presses
-  // "Start production" (status leaves "issued").
-  if (deptJo.status === "issued") {
-    throw new Error("Start production on this job order before requesting materials.");
+  // Phase 3 is open to any authorized department head throughout production —
+  // from when the job orders are released until production is finished. It no
+  // longer waits for this department's own job order to be individually started.
+  if (stageIndex(wf.stage) < stageIndex("in_production")) {
+    throw new Error("Job orders haven't been released for production yet.");
+  }
+  if (stageIndex(wf.stage) >= stageIndex("production_finished") || deptJo.status === "finished") {
+    throw new Error("Production is finished — material requests are closed.");
   }
 
   const req: MaterialRequest = {

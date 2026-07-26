@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { canViewPrices, canEditPrices } from "@/lib/price-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
@@ -22,7 +22,14 @@ export default async function InventoryPage() {
   // dashboard's Check-availability tool for name / quantity / selling price).
   const isSales = viewer?.role === "SALES";
   const canManage = !isSales && (admin || has("warehouse") || has("plant_manager"));
-  const canView = !isSales && (canManage || has("purchaser"));
+  // Production heads (Duct / Accessories / Motor) and the Plant Manager may view
+  // inventory (read-only) so they can check stock while running production.
+  const isProdHeadViewer =
+    viewer != null &&
+    (["prod_head_duct", "prod_head_accessories", "prod_head_motor"] as WorkflowRoleKey[]).some((r) =>
+      userHasWorkflowRole(assignments, viewer.id, r),
+    );
+  const canView = !isSales && (canManage || has("purchaser") || isProdHeadViewer);
   // The Plant Manager monitors stock but does not edit items — hide the
   // add / import / per-row action buttons for them (a Warehouseman or admin
   // still manages). They keep read-only view + their stock-transfer rights.
