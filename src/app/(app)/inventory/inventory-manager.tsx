@@ -549,7 +549,7 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
         )}
       </div>
 
-      {canManage && canCreate && (
+      {canCreate && (
         <div>
           {showAdd ? (
             <div className="space-y-2 rounded-md border p-3">

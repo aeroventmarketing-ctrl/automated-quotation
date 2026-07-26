@@ -20,6 +20,21 @@ async function requireInventoryManager() {
   return user;
 }
 
+/** Adding / importing / merging catalogue items — the Purchaser, Warehouse or an admin. */
+async function requireItemCreator() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (isAdmin(user)) return user;
+  const roles = await getWorkflowRoles();
+  if (
+    userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)
+  ) {
+    return user;
+  }
+  throw new Error("Only the Purchaser, Warehouse or an admin can add or import stock items.");
+}
+
 /** The Purchaser or an admin may set an item's unit cost and selling price. */
 async function requirePriceManager() {
   const user = await getCurrentUser();
@@ -95,7 +110,7 @@ const num = (s: string | undefined) => {
 export async function importStockItems(
   formData: FormData,
 ): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
-  const user = await requireInventoryManager();
+  const user = await requireItemCreator();
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { created: 0, updated: 0, skipped: 0, errors: ["Choose a CSV or Excel file."] };
 
@@ -217,7 +232,7 @@ export async function importStockItems(
  * quantity stands. Admin / warehouse / plant manager only.
  */
 export async function mergeDuplicateStockItems(): Promise<{ groups: number; removed: number }> {
-  const user = await requireInventoryManager();
+  const user = await requireItemCreator();
   const list = await prisma.stockItem.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } });
   const byName = new Map<string, typeof list>();
   for (const it of list) {
@@ -294,7 +309,7 @@ const createSchema = z.object({
 
 /** Add a stock item. A non-zero opening quantity records an ADJUSTMENT movement. */
 export async function createStockItem(input: z.infer<typeof createSchema>): Promise<void> {
-  const user = await requireInventoryManager();
+  const user = await requireItemCreator();
   const d = createSchema.parse(input);
   await prisma.$transaction(async (tx) => {
     const sku = await nextSku(tx);

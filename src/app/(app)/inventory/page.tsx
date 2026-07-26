@@ -37,9 +37,9 @@ export default async function InventoryPage() {
   // add / import / per-row action buttons for them (a Warehouseman or admin
   // still manages). They keep read-only view + their stock-transfer rights.
   const canManageItems = !isSales && (admin || has("warehouse"));
-  // Adding / importing stock items is admin-only — hidden from the Warehouseman
-  // (who still proposes per-row edits/adjustments via the double handshake).
-  const canCreateItems = admin;
+  // Adding / importing stock items — the Purchaser or an admin (hidden from the
+  // Warehouseman, who still proposes per-row edits/adjustments).
+  const canCreateItems = admin || has("purchaser");
   // …and hide the Labels / Reorder header tools from the Warehouseman, Plant
   // Manager and Accounting (non-admins). The Purchaser still sees them.
   const hidePlantMgrTools = !admin && (has("plant_manager") || has("accounting") || has("warehouse"));
