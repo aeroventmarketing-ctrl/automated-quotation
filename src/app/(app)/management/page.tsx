@@ -10,6 +10,7 @@ import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, type Ord
 import { getCurrentUser, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { ScheduleCalendar } from "./schedule-calendar";
+import { scheduleApproverNames } from "@/lib/approver-directory";
 import { buildScheduleView, expandOccurrences, type ScheduleView } from "@/lib/schedule";
 import { getCalendars } from "@/lib/calendars";
 import { DepartmentPnl } from "./department-pnl";
@@ -141,6 +142,7 @@ export default async function ManagementPage() {
   } catch {
     scheduleMissing = true;
   }
+  const scheduleApprovers = await scheduleApproverNames().catch(() => []);
 
   // Today in Manila (PH) for consistent deadline maths regardless of server TZ.
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -441,7 +443,7 @@ export default async function ManagementPage() {
           {scheduleMissing ? (
             <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the schedule migrations (<code className="rounded bg-muted px-1">0025_schedules</code> … <code className="rounded bg-muted px-1">0030_calendar_features</code>) in Supabase to enable it.</p>
           ) : (
-            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} viewerId={viewer?.id ?? ""} users={scheduleUsers} calendars={scheduleCalendars} canManageCalendars={canApproveSchedule} />
+            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} viewerId={viewer?.id ?? ""} users={scheduleUsers} calendars={scheduleCalendars} canManageCalendars={canApproveSchedule} scheduleApprovers={scheduleApprovers} />
           )}
         </CardContent>
       </Card>

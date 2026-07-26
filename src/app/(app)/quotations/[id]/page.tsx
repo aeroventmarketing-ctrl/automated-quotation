@@ -8,6 +8,7 @@ import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByN
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
+import { quoteApproverNames } from "@/lib/approver-directory";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { readPricing } from "@/lib/quote";
 import { getAccountData } from "@/lib/account";
@@ -97,6 +98,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       </div>
       <QuotationBuilder
       canApprove={canApprove(user)}
+      approverNames={await quoteApproverNames()}
       isAdmin={isAdmin(user)}
       isPreparer={!!user && user.id === quotation.preparedById}
       canClearSale={canClearSale}

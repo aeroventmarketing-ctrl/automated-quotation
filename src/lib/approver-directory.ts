@@ -18,6 +18,18 @@ export interface ApproverDirectory {
   labelFor: (role: string) => string;
 }
 
+/** Names of users who approve quotations — Engineers & admins (base roles). */
+export async function quoteApproverNames(): Promise<string[]> {
+  const users = await prisma.user.findMany({ where: { role: { in: ["ENGINEER", "ADMIN"] } }, select: { name: true }, orderBy: { name: "asc" } });
+  return users.map((u) => u.name).filter(Boolean);
+}
+
+/** Names of users who approve schedules — Engineers, admins & Payment Approvers. */
+export async function scheduleApproverNames(): Promise<string[]> {
+  const [base, dir] = await Promise.all([quoteApproverNames(), getApproverDirectory()]);
+  return Array.from(new Set([...base, ...dir.namesFor("payment_approver")]));
+}
+
 export async function getApproverDirectory(): Promise<ApproverDirectory> {
   const [assignments, users] = await Promise.all([
     getWorkflowRoles(),

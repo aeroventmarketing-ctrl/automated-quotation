@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Printer, Pencil, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, poHasEwt, poLineFromPRItem, type POLine, type EwtMode } from "@/lib/purchase-order";
@@ -361,7 +362,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           ))}
         </div>
       ) : awaiting ? (
-        <div className="mt-2 text-xs text-muted-foreground">Awaiting {awaiting.roleLabel}</div>
+        <div className="mt-2"><ApproverHighlight role={awaiting.roleLabel} /></div>
       ) : null}
 
       {/* Supplier returns — disapproved items in this PO sent back for replacement. */}

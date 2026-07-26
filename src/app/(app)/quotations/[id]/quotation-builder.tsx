@@ -34,6 +34,7 @@ import {
 } from "@/lib/teco-induction-selling";
 import { hyundaiSellingRow, hyundaiHpOptions } from "@/lib/hyundai-induction-selling";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw, Search, AlertTriangle } from "lucide-react";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import { PRODUCT_CATEGORIES, PRODUCT_TAXONOMY, typesFor, entryFor, bladeTypesFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
 import { ConfidenceBadge } from "@/components/status-badge";
 import type { SelectionResult } from "@/lib/selection";
@@ -2601,6 +2602,7 @@ export function QuotationBuilder({
   quotation,
   templates,
   canApprove,
+  approverNames = [],
   isAdmin = false,
   isPreparer = false,
   canClearSale = false,
@@ -2616,6 +2618,8 @@ export function QuotationBuilder({
   quotation: Quote;
   templates: { id: string; name: string; layoutKey: string; specNote: string; terms: string }[];
   canApprove: boolean;
+  /** Names of the Engineers/admins who approve quotations (for the awaiting badge). */
+  approverNames?: string[];
   isAdmin?: boolean;
   isPreparer?: boolean;
   canClearSale?: boolean;
@@ -6039,7 +6043,7 @@ export function QuotationBuilder({
               <Button variant="outline" onClick={() => transition("DRAFT")} disabled={busy}>
                 <CornerUpLeft className="h-4 w-4" /> Return to draft
               </Button>
-              {!canApprove && <span className="text-xs text-muted-foreground">Approval requires Engineer/Admin.</span>}
+              <ApproverHighlight role="Quotation approver" names={approverNames} detail="(Engineer / Admin)" />
             </>
           )}
           {quotation.status === "APPROVED" && (

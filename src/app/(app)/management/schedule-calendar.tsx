@@ -86,6 +86,7 @@ export function ScheduleCalendar({
   users = [],
   calendars = [DEFAULT_CAL],
   canManageCalendars = false,
+  scheduleApprovers = [],
 }: {
   schedules: ScheduleView[];
   canApprove: boolean;
@@ -93,6 +94,7 @@ export function ScheduleCalendar({
   users?: { id: string; name: string }[];
   calendars?: string[];
   canManageCalendars?: boolean;
+  scheduleApprovers?: string[];
 }) {
   const router = useRouter();
   const today = phTodayParts();
@@ -598,7 +600,7 @@ export function ScheduleCalendar({
 
               <div className="flex items-center gap-2 text-xs text-muted-foreground"><User className="h-3.5 w-3.5" /> Added by {detail.createdByName}</div>
               {detail.decidedByName && <div className="text-xs text-muted-foreground">{detail.status === "APPROVED" ? "Approved" : "Rejected"} by {detail.decidedByName}{detail.decisionNote ? ` — ${detail.decisionNote}` : ""}</div>}
-              {detail.status === "PENDING" && <ApproverHighlight role="Engineer / Admin / Approver" detail="to approve this schedule" />}
+              {detail.status === "PENDING" && <ApproverHighlight role="Schedule approver" names={scheduleApprovers} detail="to approve this schedule" />}
               {err && <p className="text-xs text-destructive">{err}</p>}
               <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                 {detail.canDecide && detail.status !== "APPROVED" && <Button size="sm" className="h-8" disabled={busy} onClick={() => run(() => decideSchedule(detail.id, "approve"), () => setDetailKey(null))}><Check className="mr-1 h-4 w-4" /> Approve</Button>}

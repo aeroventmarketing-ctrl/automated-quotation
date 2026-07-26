@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { ScheduleCalendar } from "../management/schedule-calendar";
+import { scheduleApproverNames } from "@/lib/approver-directory";
 import { buildScheduleView, expandOccurrences, type ScheduleView } from "@/lib/schedule";
 import { getCalendars } from "@/lib/calendars";
 
@@ -43,6 +44,7 @@ export default async function CalendarPage() {
   } catch {
     scheduleMissing = true;
   }
+  const scheduleApprovers = await scheduleApproverNames().catch(() => []);
 
   return (
     <div className="space-y-6">
@@ -63,7 +65,7 @@ export default async function CalendarPage() {
           {scheduleMissing ? (
             <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the schedule migrations (<code className="rounded bg-muted px-1">0025_schedules</code> … <code className="rounded bg-muted px-1">0030_calendar_features</code>) in Supabase to enable it.</p>
           ) : (
-            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} viewerId={viewer?.id ?? ""} users={users} calendars={calendars} canManageCalendars={canApproveSchedule} />
+            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} viewerId={viewer?.id ?? ""} users={users} calendars={calendars} canManageCalendars={canApproveSchedule} scheduleApprovers={scheduleApprovers} />
           )}
         </CardContent>
       </Card>
