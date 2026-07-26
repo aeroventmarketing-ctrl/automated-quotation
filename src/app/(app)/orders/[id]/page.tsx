@@ -309,10 +309,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Phase 5 & 6 — delivery & closeout permissions + trail.
   const hasRole = (role: WorkflowRoleKey) =>
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role));
-  // The "Process in Purchasing" link only helps roles who can actually open the
-  // Purchasing page (admins + the purchasing-chain roles); for everyone else it
-  // dead-ends on an access-denied page, so it's hidden below.
-  const canAccessPurchasing = (["payment_approver", "accounting", "logistics", "purchaser", "warehouse", "plant_manager"] as WorkflowRoleKey[]).some(hasRole);
   const isSalesViewer =
     adminViewer || (viewer != null && (viewer.id === quote.preparedById || viewer.role === "SALES" || viewer.role === "ENGINEER"));
   const perms = {
@@ -778,9 +774,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-sm">Phase 4 · Purchasing</CardTitle>
-            {canAccessPurchasing && (
-              <Link href="/purchasing" className="text-xs font-medium text-primary hover:underline">Process in Purchasing →</Link>
-            )}
+            <Link href="/purchasing" className="text-xs font-medium text-primary hover:underline">Process in Purchasing →</Link>
           </CardHeader>
           <CardContent>
             <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={adminViewer} showAmounts={showAmounts} showSupplier={showSupplier} readOnly />
