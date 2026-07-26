@@ -453,7 +453,19 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const materialReqs = wf.materialRequests.map((m) => {
     const linkedPr = prByMrf.get(m.id);
     const poStatus = linkedPr ? (linkedPr.status as PRStatus) : null;
+    // Who must act next on the linked purchase request — designation + name —
+    // for the flashing "awaiting" badge, mirroring the Phase 4 purchasing chain.
+    let awaitingLabel: string | null = null;
+    if (linkedPr && poStatus && poStatus !== "REJECTED" && poStatus !== "COMPLETED" && poStatus !== "CANCELLED") {
+      const step = purchaseStepsFrom(poStatus, true, isPoApproved(linkedPr.chainLog))[0];
+      if (step) {
+        const role = effectiveStepRole(step, true);
+        const names = namesForRole(role);
+        awaitingLabel = `${workflowRoleLabel(role)}${names.length ? ` (${names.join(", ")})` : ""}`;
+      }
+    }
     return {
+      awaitingLabel,
       id: m.id,
       formNo: m.formNo,
       orderId: quote.id,

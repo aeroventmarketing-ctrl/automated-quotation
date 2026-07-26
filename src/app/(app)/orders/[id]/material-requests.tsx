@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
@@ -28,6 +29,9 @@ interface ReqRow {
   poApproved?: boolean;
   linkedPrId?: string | null;
   canApproveMaterials?: boolean;
+  // Who must act next on the linked purchase request ("Role (Name)") — for the
+  // flashing "awaiting" badge that mirrors the Phase 4 purchasing chain.
+  awaitingLabel?: string | null;
   raisedByName: string;
   date: string;
   handledByName?: string;
@@ -305,6 +309,12 @@ export function MaterialRequests({
                 Requested by {r.raisedByName} · {r.date}
                 {r.handledByName ? ` · handled by ${r.handledByName}${r.handledWhen ? ` · ${r.handledWhen}` : ""}` : ""}
               </p>
+              {/* Flashing "awaiting approval" badge naming the designation + person
+                  who must act next on the linked purchase request — same behaviour
+                  as the Phase 4 purchasing chain, shown to every role. */}
+              {r.awaitingLabel && (
+                <div className="mt-2"><ApproverHighlight role={r.awaitingLabel} /></div>
+              )}
               {/* Plant Manager approval (step 16): once the warehouse escalates a
                   request for purchasing, the Plant Manager approves it here before
                   it becomes "For purchasing" and the Purchaser prepares the PO. */}
