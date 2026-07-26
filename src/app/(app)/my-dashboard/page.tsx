@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { buildMyDashboard, type MyTask } from "@/lib/my-dashboard";
+import { getProductionStatus } from "@/lib/production-status";
+import { ProductionStatusCard } from "@/components/production-status-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -62,6 +64,7 @@ export default async function MyDashboardPage() {
   const data = await buildMyDashboard(user);
   // Sales / Engineer / Other with no workflow role use their existing dashboard.
   if (!data.hasRole) redirect("/dashboard");
+  const production = await getProductionStatus();
 
   return (
     <div className="space-y-6">
@@ -73,6 +76,9 @@ export default async function MyDashboardPage() {
           {data.roleLabels.length > 0 ? ` · ${data.roleLabels.join(" · ")}` : ""}
         </p>
       </div>
+
+      {/* Production status — On time / Near due / Late, clickable to the client. */}
+      <ProductionStatusCard status={production} />
 
       {/* Counts by area — click a box to jump to that area's items below. */}
       {data.byArea.length > 0 && (

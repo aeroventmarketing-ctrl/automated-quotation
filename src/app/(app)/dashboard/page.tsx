@@ -13,6 +13,8 @@ import { InquiryStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Award } from "lucide-react";
 import { saleFromClassification, isSaleConfirmed, type SaleRecord } from "@/lib/sale";
+import { getProductionStatus } from "@/lib/production-status";
+import { ProductionStatusCard } from "@/components/production-status-card";
 import { payableTotal } from "@/lib/quote";
 import type { InquiryStatus } from "@prisma/client";
 
@@ -52,6 +54,8 @@ const saleDate = (sale: SaleRecord, fallback: Date): Date => {
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
+  // Production-deadline snapshot — shown to every role's dashboard.
+  const production = await getProductionStatus();
 
   // Shop-floor roles must not see client identity or sales amounts — the sales
   // dashboard is entirely that, so show them a simple landing to their areas.
@@ -74,6 +78,9 @@ export default async function DashboardPage() {
             <Link key={a.href} href={a.href} className="rounded-lg border p-4 text-center font-medium hover:bg-accent">{a.label}</Link>
           ))}
         </div>
+        {/* Production status with client details — explicitly enabled for the
+            production / monitoring roles. */}
+        <ProductionStatusCard status={production} />
       </div>
     );
   }
@@ -285,6 +292,9 @@ export default async function DashboardPage() {
 
       {/* Quick availability lookup for reps on the phone with a client. */}
       <StockAvailabilitySearch />
+
+      {/* Production status — On time / Near due / Late, clickable to the client. */}
+      <ProductionStatusCard status={production} />
 
       {/* Each box drills into its details: the status boxes open the inquiries
           list pre-filtered to that stage, and "Quotes drafted today" opens the
