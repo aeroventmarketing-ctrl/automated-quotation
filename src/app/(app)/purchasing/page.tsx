@@ -15,7 +15,7 @@ import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
-import { ReplenishmentList, type PRRow } from "./replenishment-list";
+import { type PRRow } from "./replenishment-list";
 import { PurchasingWorkspace } from "./purchasing-workspace";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
@@ -273,8 +273,10 @@ export default async function PurchasingPage() {
   let replenRows: PRRow[] = [];
   if (!tableMissing) {
     try {
+      // All statuses — the workspace tab (Pending/Approved/Rejected/Cancelled)
+      // decides which ones show, same as the order + department requests.
       const prs = await prisma.purchaseRequest.findMany({
-        where: { kind: "replenishment", status: { notIn: ["COMPLETED", "REJECTED"] } },
+        where: { kind: "replenishment" },
         orderBy: { createdAt: "asc" },
       });
       const stockIds = [...new Set(prs.map((p) => p.stockItemId).filter((s): s is string => !!s))];
@@ -335,16 +337,8 @@ export default async function PurchasingPage() {
               scanProducts={scanProducts}
               admin={admin}
               deptRows={deptRows}
+              replenRows={replenRows}
             />
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Replenishment (stock top-ups)</h2>
-            {replenRows.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No open replenishment requests. Raise them from Inventory → Reorder.</CardContent></Card>
-            ) : (
-              <ReplenishmentList rows={replenRows} />
-            )}
           </section>
         </>
       )}

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { statusBucket, type PRBucket } from "@/lib/purchasing";
+import { statusBucket, type PRBucket, type PRStatus } from "@/lib/purchasing";
 import { poTotals } from "@/lib/purchase-order";
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
@@ -17,6 +17,7 @@ import type { CatalogPrices, CatalogSuppliers } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
 import { CombinedPurchasing, type BatchCard, type CombinableItem, type SupplierSuggestion } from "./combined-purchasing";
+import { ReplenishmentList, type PRRow } from "./replenishment-list";
 import type { StockOpt } from "../orders/[id]/stock-match-panel";
 
 export interface OrderGroup {
@@ -78,6 +79,7 @@ export function PurchasingWorkspace({
   scanProducts,
   admin = false,
   deptRows = [],
+  replenRows = [],
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -94,6 +96,8 @@ export function PurchasingWorkspace({
   admin?: boolean;
   /** Standalone department requisitions — filtered by the same tab. */
   deptRows?: PurchaseChainRow[];
+  /** Replenishment (stock top-up) requests — filtered by the same tab. */
+  replenRows?: PRRow[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
@@ -358,6 +362,25 @@ export function PurchasingWorkspace({
                   catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
                 />
               </CardContent></Card>
+            )}
+          </section>
+        );
+      })()}
+
+      {/* Replenishment (stock top-ups) — same tab filter, so a top-up only shows
+          under the bucket matching its status (pending / approved / rejected /
+          cancelled), never across all tabs. */}
+      {replenRows.length > 0 && (() => {
+        const shown = replenRows
+          .filter((r) => inTab(statusBucket(r.status as PRStatus)))
+          .filter((r) => textMatch([...r.items, r.note ?? "", r.sku ?? ""].join("  "), query));
+        return (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Replenishment (stock top-ups)</h2>
+            {shown.length === 0 ? (
+              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}replenishment requests.</CardContent></Card>
+            ) : (
+              <ReplenishmentList rows={shown} />
             )}
           </section>
         );
