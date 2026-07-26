@@ -50,17 +50,29 @@ const SHOPFLOOR_ROLES = new Set<string>([
   "logistics",
 ]);
 
+// The four production line heads. They raise requisitions but don't process
+// POs, so the Purchasing tab denies them — hide it (a dead-end otherwise). They
+// track their requisition's progress on the Requisitions tab instead.
+const PROD_HEAD_ROLES = new Set<string>([
+  "prod_head_fans",
+  "prod_head_duct",
+  "prod_head_accessories",
+  "prod_head_motor",
+]);
+
 export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
   // Accounting sees Inventory (read-only, like the Plant Manager); Products and
   // the standalone Sales Dashboard stay hidden. Keeps Commissions (payouts).
   accounting: { hide: ["/products", "/dashboard"], show: ["/requisitions"] },
-  // Consolidated-dashboard roles: hide the standalone Sales Dashboard tab, and
-  // additionally hide Commissions from the production / shop-floor roles.
+  // Consolidated-dashboard roles: hide the standalone Sales Dashboard tab, plus
+  // Commissions for shop-floor roles and Purchasing for the production heads.
   ...Object.fromEntries(
-    DASHBOARD_CONSOLIDATED_ROLES.filter((r) => r !== "accounting").map((r) => [
-      r,
-      { hide: SHOPFLOOR_ROLES.has(r) ? ["/dashboard", "/commissions"] : ["/dashboard"] },
-    ]),
+    DASHBOARD_CONSOLIDATED_ROLES.filter((r) => r !== "accounting").map((r) => {
+      const hide = ["/dashboard"];
+      if (SHOPFLOOR_ROLES.has(r)) hide.push("/commissions");
+      if (PROD_HEAD_ROLES.has(r)) hide.push("/purchasing");
+      return [r, { hide }];
+    }),
   ),
   // The 1st Quality Inspector isn't dashboard-consolidated but is still a
   // shop-floor role — hide Commissions from them too.

@@ -40,9 +40,11 @@ export default async function InventoryPage() {
   // Adding / importing stock items — the Purchaser or an admin (hidden from the
   // Warehouseman, who still proposes per-row edits/adjustments).
   const canCreateItems = admin || has("purchaser");
-  // …and hide the Labels / Reorder header tools from the Warehouseman, Plant
-  // Manager and Accounting (non-admins). The Purchaser still sees them.
-  const hidePlantMgrTools = !admin && (has("plant_manager") || has("accounting") || has("warehouse") || has("logistics"));
+  // …and hide the Labels / Reorder header tools from the read-only monitors —
+  // the Warehouseman, Plant Manager, Accounting, Logistics and the production
+  // heads (their Labels / Reorder target pages deny them anyway). The Purchaser
+  // still sees them; admins always do.
+  const hidePlantMgrTools = !admin && (has("plant_manager") || has("accounting") || has("warehouse") || has("logistics") || isProdHeadViewer);
   // Prices (unit cost, sell price, stock value) are commercial data — only the
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
