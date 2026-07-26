@@ -93,7 +93,7 @@ function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplier
   );
 }
 
-function ProductRowView({ product, canManage, showPrices, suppliers, scanTarget, scanNonce }: { product: ProductRow; canManage: boolean; showPrices: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number }) {
+function ProductRowView({ product, canManage, showPrices, showSuppliers, suppliers, scanTarget, scanNonce }: { product: ProductRow; canManage: boolean; showPrices: boolean; showSuppliers: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number }) {
   const router = useRouter();
   const [panel, setPanel] = useState<"none" | "edit" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
@@ -133,15 +133,17 @@ function ProductRowView({ product, canManage, showPrices, suppliers, scanTarget,
           <div className="text-xs text-muted-foreground">{[product.sku ? `SKU ${product.sku}` : null, product.category].filter(Boolean).join(" · ")}</div>
         </TableCell>
         <TableCell className="text-sm text-muted-foreground">{product.unit}</TableCell>
-        <TableCell className="text-sm">
-          {product.suppliers.length === 0 ? <span className="text-muted-foreground">No supplier</span> : (
-            <div className="flex flex-wrap gap-1">
-              {product.suppliers.map((s) => (
-                <Badge key={s.company} variant="secondary" className="font-normal">{s.company}{showPrices && s.price ? ` · ${peso(s.price)}` : ""}</Badge>
-              ))}
-            </div>
-          )}
-        </TableCell>
+        {showSuppliers && (
+          <TableCell className="text-sm">
+            {product.suppliers.length === 0 ? <span className="text-muted-foreground">No supplier</span> : (
+              <div className="flex flex-wrap gap-1">
+                {product.suppliers.map((s) => (
+                  <Badge key={s.company} variant="secondary" className="font-normal">{s.company}{showPrices && s.price ? ` · ${peso(s.price)}` : ""}</Badge>
+                ))}
+              </div>
+            )}
+          </TableCell>
+        )}
         {canManage && (
           <TableCell className="text-right">
             <div className="flex justify-end gap-1">
@@ -197,7 +199,7 @@ function ProductRowView({ product, canManage, showPrices, suppliers, scanTarget,
   );
 }
 
-export function ProductManager({ products, suppliers, canManage, showPrices }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; showPrices: boolean }) {
+export function ProductManager({ products, suppliers, canManage, showPrices, showSuppliers = true }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; showPrices: boolean; showSuppliers?: boolean }) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
@@ -258,7 +260,7 @@ export function ProductManager({ products, suppliers, canManage, showPrices }: {
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = canManage ? 4 : 3;
+  const cols = (canManage ? 4 : 3) - (showSuppliers ? 0 : 1);
 
   function handleScan({ product }: { product: ScanProduct }) {
     setScanTarget(product.id); setScanNonce((n) => n + 1);
@@ -279,8 +281,9 @@ export function ProductManager({ products, suppliers, canManage, showPrices }: {
 
   const missing = products.filter((p) => !p.sku).length;
   const unsourced = products.filter(isUnsourced).length;
-  // Hide the price-based sort option from viewers who can't see prices.
-  const sortOptions = showPrices ? SORT_OPTIONS : SORT_OPTIONS.filter((o) => o.key !== "price");
+  // Hide the price- and supplier-based sort options from viewers who can't see them.
+  const sortOptions = SORT_OPTIONS.filter((o) => (showPrices || o.key !== "price") && (showSuppliers || o.key !== "supplier"));
+  const groupOptions = GROUP_OPTIONS.filter((o) => showSuppliers || o.key !== "supplier");
 
   async function cleanupUnsourced() {
     if (!window.confirm(`Remove ${unsourced} product${unsourced === 1 ? "" : "s"} that have no supplier and no price? They'll be removed from the list (recoverable by an admin).`)) return;
@@ -361,7 +364,7 @@ export function ProductManager({ products, suppliers, canManage, showPrices }: {
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           Group by
           <select value={group} onChange={(e) => setGroup(e.target.value as GroupKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
-            {GROUP_OPTIONS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+            {groupOptions.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
           </select>
         </label>
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -388,7 +391,7 @@ export function ProductManager({ products, suppliers, canManage, showPrices }: {
               <TableRow>
                 <TableHead>Product</TableHead>
                 <TableHead>Unit</TableHead>
-                <TableHead>Suppliers</TableHead>
+                {showSuppliers && <TableHead>Suppliers</TableHead>}
                 {canManage && <TableHead className="text-right">Action</TableHead>}
               </TableRow>
             </TableHeader>
@@ -403,7 +406,7 @@ export function ProductManager({ products, suppliers, canManage, showPrices }: {
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} showPrices={showPrices} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} showPrices={showPrices} showSuppliers={showSuppliers} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
                 </Fragment>
               ))}
             </TableBody>

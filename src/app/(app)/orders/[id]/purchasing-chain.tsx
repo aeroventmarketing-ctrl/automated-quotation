@@ -390,6 +390,9 @@ export function PurchasingChain({
                     {showAmounts && poHasEwt(r.po) && (
                       <span className="text-muted-foreground tabular-nums">· Net {formatCurrency(poTotals(r.po).net, "PHP")}</span>
                     )}
+                    {/* The PO document reveals supplier + amounts — only the roles
+                        allowed to see those may open / print it. */}
+                    {showSupplier && (
                     <a
                       href={viewHref(r.id)}
                       target="_blank"
@@ -398,12 +401,15 @@ export function PurchasingChain({
                     >
                       <Eye className="h-3.5 w-3.5" /> View PO
                     </a>
+                    )}
+                    {showSupplier && (
                     <a
                       href={printHref(r.id)}
                       className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED1C24]/40"
                     >
                       <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
                     </a>
+                    )}
                   </div>
                   {!readOnly && r.canManagePO && (
                     <button

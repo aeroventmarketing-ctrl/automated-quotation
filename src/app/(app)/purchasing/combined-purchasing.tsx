@@ -421,15 +421,20 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
               <Pencil className="h-3.5 w-3.5" /> Edit
             </button>
           )}
-          <a href={batch.orderIdForPrint ? `/orders/${batch.orderIdForPrint}/po/${batch.anchorId}/view` : `/purchasing/po/${batch.anchorId}/view`}
-            target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md border border-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10">
-            <Eye className="h-3.5 w-3.5" /> View PO
-          </a>
-          <a href={batch.orderIdForPrint ? `/orders/${batch.orderIdForPrint}/po/${batch.anchorId}/xlsx` : `/purchasing/po/${batch.anchorId}/xlsx`}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a]">
-            <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
-          </a>
+          {/* The PO document reveals supplier + amounts — gated to those roles. */}
+          {showSupplier && (
+            <a href={batch.orderIdForPrint ? `/orders/${batch.orderIdForPrint}/po/${batch.anchorId}/view` : `/purchasing/po/${batch.anchorId}/view`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10">
+              <Eye className="h-3.5 w-3.5" /> View PO
+            </a>
+          )}
+          {showSupplier && (
+            <a href={batch.orderIdForPrint ? `/orders/${batch.orderIdForPrint}/po/${batch.anchorId}/xlsx` : `/purchasing/po/${batch.anchorId}/xlsx`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#c2141a]">
+              <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
+            </a>
+          )}
         </div>
       </div>
       {err && <p className="mt-1 text-xs text-destructive">{err}</p>}
