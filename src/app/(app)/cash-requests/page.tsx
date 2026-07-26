@@ -22,9 +22,9 @@ export default async function CashRequestsPage() {
   // The requestor's own department — fixed on the cash-request form (not selectable).
   const cashDeptKey = requestorDeptKey((role) => has(role as WorkflowRoleKey));
   const cashDept = { key: cashDeptKey, label: requisitionDeptLabel(cashDeptKey) };
-  // The Plant Manager oversees all production lines — they pick which of the 4
-  // production departments (never Office) the cash request is for.
-  const plantMgrDepts = has("plant_manager")
+  // The Plant Manager and the Warehouseman may pick which of the 4 production
+  // departments (never Office) the cash request is for.
+  const plantMgrDepts = has("plant_manager") || has("warehouse")
     ? PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
     : undefined;
 

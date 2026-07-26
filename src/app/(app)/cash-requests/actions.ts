@@ -63,13 +63,15 @@ export async function createCashRequest(input: {
   const category: CashCategoryKey = (CASH_CATEGORIES.find((c) => c.key === input.category)?.key ?? "advance") as CashCategoryKey;
   // The department is fixed to the requestor's own department (production head →
   // their line, everyone else → Office). Derived server-side so it can't be
-  // changed from the client, and never blank. EXCEPTION: the Plant Manager
-  // oversees all production lines, so they may target any of the 4 production
-  // departments (never Office) — the client sends the chosen line, validated here.
+  // changed from the client, and never blank. EXCEPTION: the Plant Manager and
+  // the Warehouseman may target any of the 4 production departments (never
+  // Office) — the client sends the chosen line, validated here.
   const assignments = await getWorkflowRoles();
-  const isPlantManager = userHasWorkflowRole(assignments, user.id, "plant_manager" as WorkflowRoleKey);
+  const canPickProdDept =
+    userHasWorkflowRole(assignments, user.id, "plant_manager" as WorkflowRoleKey) ||
+    userHasWorkflowRole(assignments, user.id, "warehouse" as WorkflowRoleKey);
   const chosenProdDept = PRODUCTION_DEPTS.some((d) => d.key === input.dept) ? String(input.dept) : null;
-  const dept = isPlantManager && chosenProdDept
+  const dept = canPickProdDept && chosenProdDept
     ? chosenProdDept
     : requestorDeptKey((role) => userHasWorkflowRole(assignments, user.id, role as WorkflowRoleKey));
 
