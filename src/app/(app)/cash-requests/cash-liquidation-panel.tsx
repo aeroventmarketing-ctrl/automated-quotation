@@ -237,9 +237,15 @@ export function CashLiquidationPanel({
       </div>
 
       {/* AI read-limit notice — the requestor/Accounting informs the admin/
-          approver, who may bypass (allow more reads) or the figures go in manually. */}
+          approver, who may bypass (allow more reads) or the figures go in manually.
+          It flashes for high visibility until the discrepancy is resolved (the
+          Approver authorises it, it's settled, or the tally balances). */}
       {limitReached && (
-        <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5">
+        <div className={`space-y-1 rounded-md border px-2 py-1.5 ${
+          liquidation.approved || liquidation.settled || (recorded && liquidation.status === "balanced")
+            ? "border-destructive/40 bg-destructive/5"
+            : "animate-approver-blink border-destructive/60 bg-destructive/10"
+        }`}>
           <p className="text-xs font-medium text-destructive">
             AI read limit reached ({AI_RECEIPT_READ_LIMIT} of {AI_RECEIPT_READ_LIMIT} used). Check the receipt and enter the figures manually — or ask the admin/approver to allow more reads.
           </p>
