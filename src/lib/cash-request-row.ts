@@ -57,6 +57,11 @@ export interface CashLiquidationView {
   aiVerified: boolean; // actuals were AI-read from the uploaded receipt (vs typed by hand)
   aiReads: number; // AI receipt reads used (against the per-liquidation limit)
   aiReadEscalated: string | null; // requestor/accounting informed the approver the AI limit was hit
+  // Who must act at each liquidation stage — "Role (Name)" — for the flashing
+  // "awaiting" badges.
+  requestorLabel: string;
+  approverLabel: string;
+  accountingLabel: string;
 }
 
 export interface CashRequestRow {
@@ -211,6 +216,9 @@ export function buildCashRequestRow(
     aiVerified: l.aiVerified ?? (l.note?.includes("(AI)") ?? false),
     aiReads: l.aiReadCount ?? 0,
     aiReadEscalated: stampLabel(l.aiReadEscalation),
+    requestorLabel: actorLabel("requestor"),
+    approverLabel: actorLabel("payment_approver"),
+    accountingLabel: actorLabel("accounting"),
   };
 
   return {

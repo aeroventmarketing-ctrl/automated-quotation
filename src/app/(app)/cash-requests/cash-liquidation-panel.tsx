@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Scale, Upload, Sparkles, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import type { CashLiquidationView } from "@/lib/cash-request-row";
 import type { SaleDoc } from "@/lib/sale";
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
@@ -368,7 +369,7 @@ export function CashLiquidationPanel({
                       {busy === "approve" ? "…" : "Approve discrepancy"}
                     </button>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Awaiting the Approver&rsquo;s decision.</p>
+                    <ApproverHighlight role={liquidation.approverLabel} detail="to approve the discrepancy" />
                   )}
                 </>
               ) : (
@@ -399,7 +400,7 @@ export function CashLiquidationPanel({
               {busy === "settle" ? "…" : "Mark settled & close"}
             </button>
           ) : (
-            <p className="text-xs text-muted-foreground">Tallied — awaiting Accounting to close it.</p>
+            <ApproverHighlight role={liquidation.accountingLabel} detail="to close the liquidation" />
           )}
 
           {canRecord && !open && (
@@ -414,7 +415,7 @@ export function CashLiquidationPanel({
           <Scale className="h-3.5 w-3.5" /> Liquidate (per-line spend &amp; receipts)
         </button>
       ) : !recorded ? (
-        <p className="text-xs text-muted-foreground">Awaiting the requestor to liquidate the cash.</p>
+        <ApproverHighlight role={liquidation.requestorLabel} detail="to liquidate the cash" />
       ) : null}
 
       {canRecord && open && (
