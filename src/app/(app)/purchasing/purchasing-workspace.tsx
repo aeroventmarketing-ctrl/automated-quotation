@@ -81,6 +81,7 @@ export function PurchasingWorkspace({
   deptRows = [],
   replenRows = [],
   showAmounts = true,
+  showSupplier = true,
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -101,6 +102,8 @@ export function PurchasingWorkspace({
   replenRows?: PRRow[];
   /** Whether the viewer may see PO money amounts. */
   showAmounts?: boolean;
+  /** Whether the viewer may see the supplier's name. */
+  showSupplier?: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
@@ -287,6 +290,7 @@ export function PurchasingWorkspace({
           scanProducts={scanProducts}
           admin={admin}
           showAmounts={showAmounts}
+          showSupplier={showSupplier}
         />
       )}
 
@@ -335,6 +339,7 @@ export function PurchasingWorkspace({
                       selectedIds={selected}
                       onToggleSelect={toggleSelect}
                       showAmounts={showAmounts}
+                      showSupplier={showSupplier}
                     />
                   </CardContent>
                 </Card>
@@ -366,6 +371,7 @@ export function PurchasingWorkspace({
                   suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
                   catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
                   showAmounts={showAmounts}
+                  showSupplier={showSupplier}
                 />
               </CardContent></Card>
             )}

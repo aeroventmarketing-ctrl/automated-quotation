@@ -42,6 +42,16 @@ export function canViewOrderAmounts(user: User | null | undefined, assignments: 
   return AMOUNT_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r));
 }
 
+/**
+ * Whether the viewer may see the supplier's name on the Orders and Purchasing
+ * surfaces. Same allow-list as the money amounts — only the Purchaser,
+ * Accounting, the Payment Approver, Engineers and admins. Everyone else who
+ * monitors the chain sees the PO and progress but not who the supplier is.
+ */
+export function canViewSupplier(user: User | null | undefined, assignments: WorkflowRoleAssignments): boolean {
+  return canViewOrderAmounts(user, assignments);
+}
+
 /** Whether the viewer may edit an item's unit cost and selling price. */
 export function canEditPrices(user: User | null | undefined, assignments: WorkflowRoleAssignments): boolean {
   if (!user) return false;

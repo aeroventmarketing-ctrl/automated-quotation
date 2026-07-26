@@ -98,6 +98,7 @@ export function CombinedPurchasing({
   scanProducts = [],
   admin = false,
   showAmounts = true,
+  showSupplier = true,
 }: {
   combinable: CombinableItem[];
   batches: BatchCard[];
@@ -112,6 +113,7 @@ export function CombinedPurchasing({
   scanProducts?: ScanProduct[];
   admin?: boolean;
   showAmounts?: boolean;
+  showSupplier?: boolean;
 }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -147,7 +149,7 @@ export function CombinedPurchasing({
     <div className="space-y-3">
       {/* Existing combined POs */}
       {batches.map((b) => (
-        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} />
+        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
       ))}
 
       {/* Combine builder */}
@@ -232,7 +234,7 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts, admin = false, showAmounts = true }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts, admin = false, showAmounts = true, showSupplier = true }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -298,7 +300,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Badge variant="success">Combined PO {batch.poNumber}</Badge>
-          {batch.supplierCompany && <span className="text-muted-foreground">{batch.supplierCompany}</span>}
+          {showSupplier && batch.supplierCompany && <span className="text-muted-foreground">{batch.supplierCompany}</span>}
           <span className="text-muted-foreground">· {batch.members.length} requests</span>
         </div>
         <Badge variant={batch.variant}>{batch.statusLabel}</Badge>

@@ -77,6 +77,7 @@ export function PurchasingChain({
   deptApprovalHere = false,
   admin = false,
   showAmounts = true,
+  showSupplier = true,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -122,6 +123,8 @@ export function PurchasingChain({
   deptApprovalHere?: boolean;
   /** Whether the viewer may see PO money amounts (totals, net, line prices). */
   showAmounts?: boolean;
+  /** Whether the viewer may see the supplier's name. */
+  showSupplier?: boolean;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -382,7 +385,7 @@ export function PurchasingChain({
                 <div className="flex flex-wrap items-end justify-between gap-2 text-xs">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="success">PO {r.po.poNumber}</Badge>
-                    {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
+                    {showSupplier && r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
                     {showAmounts && <span className="font-semibold tabular-nums">{formatCurrency(poTotals(r.po).total, "PHP")}</span>}
                     {showAmounts && poHasEwt(r.po) && (
                       <span className="text-muted-foreground tabular-nums">· Net {formatCurrency(poTotals(r.po).net, "PHP")}</span>

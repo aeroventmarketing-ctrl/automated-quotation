@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { canViewOrderAmounts } from "@/lib/price-visibility";
+import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
@@ -44,6 +44,7 @@ export default async function PurchasingPage() {
   // PO money amounts show only to money-handling roles (Purchaser, Accounting,
   // Payment Approver) + admins; hidden from Warehouse / Logistics / Plant Manager.
   const showAmounts = canViewOrderAmounts(viewer, assignments);
+  const showSupplier = canViewSupplier(viewer, assignments);
   const canAct = (role: WorkflowRoleKey) => admin || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role));
   // Who may cancel: before approval the requestor / purchaser / admin; once
   // approved (or further) only an admin. Never once received into stock.
@@ -343,6 +344,7 @@ export default async function PurchasingPage() {
               deptRows={deptRows}
               replenRows={replenRows}
               showAmounts={showAmounts}
+              showSupplier={showSupplier}
             />
           </section>
         </>
