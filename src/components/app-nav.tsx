@@ -51,6 +51,12 @@ const NO_PURCHASING_ROLES = new Set<string>([
   "quality_inspector_2",
 ]);
 
+// The Quality Inspectors (1st & 2nd) are verification-only — hide the tabs whose
+// pages deny them anyway: Inventory, Products and Requisitions. Their surface is
+// Orders + My Dashboard + Calendar + Cash Requests.
+const QC_ROLES = new Set<string>(["quality_inspector", "quality_inspector_2"]);
+const QC_DEAD_END_TABS = ["/inventory", "/products", "/requisitions"];
+
 export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
   // Accounting sees Inventory (read-only, like the Plant Manager); Products and
   // the standalone Sales Dashboard stay hidden. Keeps Commissions (payouts).
@@ -63,12 +69,14 @@ export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }>
     DASHBOARD_CONSOLIDATED_ROLES.filter((r) => r !== "accounting").map((r) => {
       const hide = ["/dashboard", "/commissions"];
       if (NO_PURCHASING_ROLES.has(r)) hide.push("/purchasing");
+      if (QC_ROLES.has(r)) hide.push(...QC_DEAD_END_TABS);
       return [r, { hide }];
     }),
   ),
-  // The 1st Quality Inspector isn't dashboard-consolidated but still shouldn't
-  // see Commissions, and the Purchasing tab dead-ends for them too.
-  quality_inspector: { hide: ["/commissions", "/purchasing"] },
+  // The 1st Quality Inspector isn't dashboard-consolidated; give it the same
+  // hidden surface as the 2nd QI — Sales Dashboard, Commissions, Purchasing and
+  // the dead-end Inventory / Products / Requisitions tabs.
+  quality_inspector: { hide: ["/dashboard", "/commissions", "/purchasing", ...QC_DEAD_END_TABS] },
 };
 
 /** The nav items visible to a user given their base role + workflow roles. */
