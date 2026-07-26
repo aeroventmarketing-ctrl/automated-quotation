@@ -8,7 +8,7 @@ import { ProductManager } from "./product-manager";
 
 export const dynamic = "force-dynamic";
 
-const VIEW_ROLES: WorkflowRoleKey[] = ["purchaser", "warehouse", "plant_manager", "payment_approver", "accounting", "logistics", "prod_head_fans", "prod_head_duct", "prod_head_accessories", "prod_head_motor"];
+const VIEW_ROLES: WorkflowRoleKey[] = ["purchaser", "warehouse", "plant_manager", "payment_approver", "accounting", "logistics", "technical_head", "prod_head_fans", "prod_head_duct", "prod_head_accessories", "prod_head_motor"];
 
 export default async function ProductsPage() {
   const [viewer, assignments, suppliers] = await Promise.all([getCurrentUser(), getWorkflowRoles(), getSuppliers().catch(() => [])]);

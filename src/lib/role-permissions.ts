@@ -145,7 +145,7 @@ export const ALL_CAPABILITY_KEYS = new Set(CAPABILITY_GROUPS.flatMap((g) => g.it
 export const DEFAULT_ROLE_CAPS: Record<string, string[]> = {
   accounting: ["view_orders", "view_quotations", "record_sale", "prepare_voucher", "manage_commissions", "add_schedule"],
   payment_approver: ["view_orders", "view_quotations", "approve_payment", "sign_check", "release_cash", "approve_cash_request", "approve_po", "manage_payroll", "view_pnl", "approve_schedule", "add_schedule"],
-  technical_head: ["view_orders", "create_job_orders", "approve_job_orders", "add_schedule"],
+  technical_head: ["restrict_client_data", "view_orders", "create_job_orders", "approve_job_orders", "add_schedule"],
   quality_inspector: ["restrict_client_data", "view_orders", "quality_check_1", "add_schedule"],
   quality_inspector_2: ["restrict_client_data", "view_orders", "quality_check_2", "add_schedule"],
   prod_head_fans: ["restrict_client_data", "view_orders", "create_job_orders", "approve_job_orders", "start_production", "finish_production", "raise_requisition", "confirm_transfer_prodhead", "add_schedule"],
