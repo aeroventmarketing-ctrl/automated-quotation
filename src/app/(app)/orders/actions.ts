@@ -421,22 +421,17 @@ export async function advanceJobOrder(
 }
 
 /**
- * Set (or clear) a job order's target completion date. Set by the Technical
- * Head, the Plant Manager, the department head, or an admin. `dueAt` is a
- * YYYY-MM-DD date string; pass null/"" to clear it.
+ * Set (or clear) a job order's target completion date. Set by an Engineer or an
+ * admin only. `dueAt` is a YYYY-MM-DD date string; pass null/"" to clear it.
  */
 export async function setJobOrderDue(quotationId: string, dept: string, dueAt: string | null): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
   const deptKey = dept as ProductionDeptKey;
-  const roles = await getWorkflowRoles();
-  const allowed =
-    isAdmin(user) ||
-    userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey) ||
-    userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey) ||
-    userHasWorkflowRole(roles, user.id, deptRole(deptKey) as WorkflowRoleKey);
-  if (!allowed) throw new Error("Only the Technical Head, Plant Manager, the department head or an admin can set a deadline.");
+  if (!(isAdmin(user) || user.role === "ENGINEER")) {
+    throw new Error("Only an Engineer or an admin can set a deadline.");
+  }
 
   const { cls, wf } = await loadWorkflow(quotationId);
   const jo = wf.jobOrders[deptKey];
