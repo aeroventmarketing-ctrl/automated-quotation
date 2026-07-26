@@ -309,7 +309,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
   );
 }
 
-export function InventoryManager({ items, canManage, locations, showPrices, canEditPrices, allowOutFilter = true }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean; allowOutFilter?: boolean }) {
+export function InventoryManager({ items, canManage, locations, showPrices, canEditPrices }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
@@ -352,10 +352,7 @@ export function InventoryManager({ items, canManage, locations, showPrices, canE
   // Status drill-down from the Low / Out stock tiles (?status=low|out). Read from
   // the URL so clicking a tile updates the list live (the component stays mounted).
   const statusParam = searchParams.get("status");
-  // "out" is suppressed for roles without the Out-of-stock tile, so even a
-  // bookmarked ?status=out URL shows no out-of-stock filter or chip for them.
-  const statusFilter: "low" | "out" | null =
-    statusParam === "low" ? "low" : statusParam === "out" && allowOutFilter ? "out" : null;
+  const statusFilter: "low" | "out" | null = statusParam === "low" || statusParam === "out" ? statusParam : null;
   const filtered = statusFilter ? priceFiltered.filter((it) => it.status === statusFilter) : priceFiltered;
 
   // Sort & group controls.

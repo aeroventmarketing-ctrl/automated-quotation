@@ -39,13 +39,6 @@ export default async function InventoryPage() {
   // …and hide the Labels / Reorder tools from the Plant Manager and Accounting
   // (read-only monitors), unless they also manage stock as a Warehouseman/admin.
   const hidePlantMgrTools = (has("plant_manager") || has("accounting")) && !admin && !has("warehouse");
-  // Hide the "Out of stock" tile (and its filter) from the production /
-  // monitoring roles — only the Purchaser / Engineers / admins drive reordering.
-  const hideOutOfStock =
-    !admin && viewer != null && viewer.role !== "ENGINEER" && !has("purchaser") &&
-    (["plant_manager", "prod_head_duct", "prod_head_accessories", "prod_head_motor", "prod_head_fans", "accounting", "warehouse", "logistics", "quality_inspector_2", "technical_head"] as WorkflowRoleKey[]).some((r) =>
-      userHasWorkflowRole(assignments, viewer.id, r),
-    );
   // Prices (unit cost, sell price, stock value) are commercial data — only the
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
@@ -114,8 +107,7 @@ export default async function InventoryPage() {
     { label: "Items", value: String(items.length) },
     // Low / out tiles drill into the item list, filtered to that status.
     { label: "Low stock", value: String(lowCount), href: lowCount > 0 ? "/inventory?status=low#inv-items" : undefined },
-    // The "Out of stock" tile is hidden from the production / monitoring roles.
-    ...(hideOutOfStock ? [] : [{ label: "Out of stock", value: String(outCount), href: outCount > 0 ? "/inventory?status=out#inv-items" : undefined }]),
+    { label: "Out of stock", value: String(outCount), href: outCount > 0 ? "/inventory?status=out#inv-items" : undefined },
     // Stock value is a money figure — only shown to price-authorized viewers.
     ...(showPrices ? [{ label: "Stock value", value: peso(stockValue) }] : []),
   ];
@@ -146,7 +138,7 @@ export default async function InventoryPage() {
         </CardContent></Card>
       ) : (
         <>
-          <div className={`grid grid-cols-2 gap-3 ${tiles.length >= 4 ? "sm:grid-cols-4" : tiles.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+          <div className={`grid grid-cols-2 gap-3 ${showPrices ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
             {tiles.map((t) => {
               const card = (
                 <Card className={t.href ? "h-full transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md" : ""}>
@@ -159,7 +151,7 @@ export default async function InventoryPage() {
           </div>
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} allowOutFilter={!hideOutOfStock} />
+              <InventoryManager items={items} canManage={canManageItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} />
             </CardContent>
           </Card>
 
