@@ -9,6 +9,7 @@ import { buildPurchaseChainRow } from "@/lib/purchase-chain-row";
 import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
+import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
 import { COMPANY } from "@/lib/config";
 import { RequisitionForm } from "./requisition-form";
 import { RequisitionsList } from "./requisitions-list";
@@ -64,6 +65,14 @@ export default async function RequisitionsPage() {
   // usable here by the Purchaser / Accounting / Approver — the rest of the chain
   // stays read-only (processed in Purchasing).
   const canAct = (role: WorkflowRoleKey): boolean => admin || has(role);
+  // PO money amounts and supplier name (and the View / Print PO buttons, which
+  // reveal both) show only to the finance roles — Purchaser, Accounting, Payment
+  // Approver, Engineers and admins. Non-finance requestors (Plant Manager,
+  // production heads, Warehouse, Logistics, Sales) see the requisition status
+  // but not the PO's supplier / peso figures, matching the Orders & Purchasing
+  // pages.
+  const showAmounts = canViewOrderAmounts(viewer, assignments);
+  const showSupplier = canViewSupplier(viewer, assignments);
 
   // The viewer's requisitions (their departments; purchaser/admin see all active).
   let rows: (ReturnType<typeof buildPurchaseChainRow> & { createdAt: string; requestor: string })[] = [];
@@ -111,6 +120,8 @@ export default async function RequisitionsPage() {
             paymentTerms={paymentTerms}
             poDefaultRemarks={COMPANY.poDefaultRemarks}
             admin={admin}
+            showAmounts={showAmounts}
+            showSupplier={showSupplier}
           />
         )}
       </div>

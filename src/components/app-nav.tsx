@@ -33,14 +33,38 @@ export const NAV = [
  * removes a tab the base role would otherwise show; `show` forces a tab on. When
  * a user holds several roles, any role's `show` wins over another role's `hide`.
  */
+// Operational production / shop-floor roles. Sales commissions are sales-rep
+// payout data (client + money) that these roles don't need — the Commissions
+// tab is hidden from them (Accounting keeps it: they compute/pay commissions;
+// Sales / Engineer / Admin keep it via their base role).
+const SHOPFLOOR_ROLES = new Set<string>([
+  "plant_manager",
+  "prod_head_fans",
+  "prod_head_duct",
+  "prod_head_accessories",
+  "prod_head_motor",
+  "technical_head",
+  "quality_inspector",
+  "quality_inspector_2",
+  "warehouse",
+  "logistics",
+]);
+
 export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
   // Accounting sees Inventory (read-only, like the Plant Manager); Products and
-  // the standalone Sales Dashboard stay hidden.
+  // the standalone Sales Dashboard stay hidden. Keeps Commissions (payouts).
   accounting: { hide: ["/products", "/dashboard"], show: ["/requisitions"] },
-  // Consolidated-dashboard roles: hide the standalone Sales Dashboard tab.
+  // Consolidated-dashboard roles: hide the standalone Sales Dashboard tab, and
+  // additionally hide Commissions from the production / shop-floor roles.
   ...Object.fromEntries(
-    DASHBOARD_CONSOLIDATED_ROLES.filter((r) => r !== "accounting").map((r) => [r, { hide: ["/dashboard"] }]),
+    DASHBOARD_CONSOLIDATED_ROLES.filter((r) => r !== "accounting").map((r) => [
+      r,
+      { hide: SHOPFLOOR_ROLES.has(r) ? ["/dashboard", "/commissions"] : ["/dashboard"] },
+    ]),
   ),
+  // The 1st Quality Inspector isn't dashboard-consolidated but is still a
+  // shop-floor role — hide Commissions from them too.
+  quality_inspector: { hide: ["/commissions"] },
 };
 
 /** The nav items visible to a user given their base role + workflow roles. */
