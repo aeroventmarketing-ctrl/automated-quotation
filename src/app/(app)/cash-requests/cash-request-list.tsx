@@ -42,7 +42,7 @@ function CashRow({ r }: { r: CashRequestRow }) {
   const showLiquidation = r.status === "RECEIVED" || r.status === "LIQUIDATED" || r.status === "SETTLED";
 
   return (
-    <div className="rounded-lg border p-3">
+    <div id={`cr-${r.id}`} className="scroll-mt-20 rounded-lg border p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

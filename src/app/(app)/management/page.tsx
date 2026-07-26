@@ -3,7 +3,8 @@ import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTri
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { coerceLiquidation, isLiquidated, liquidationVariance } from "@/lib/cash-request";
 import { payableTotal, round2 } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
 import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, type OrderStage } from "@/lib/order-workflow";
@@ -272,6 +273,45 @@ export default async function ManagementPage() {
   const maxDept = Math.max(1, ...PRODUCTION_DEPTS.map((d) => prodActive.get(d.key) ?? 0));
 
   const collectedPct = billed > 0 ? Math.round((collected / billed) * 100) : 0;
+
+  // Cash liquidations — discrepancies (change / over) and settled ones, for a
+  // manager to review at a glance. Each row opens the cash request.
+  type LiqState = "pending" | "escalated" | "approved" | "settled";
+  const cashLiq: {
+    id: string; number: string; purpose: string; requestor: string;
+    released: number; spent: number; variance: number;
+    kind: "balanced" | "change" | "over"; state: LiqState; when: string;
+  }[] = [];
+  try {
+    const crs = await prisma.cashRequest.findMany({
+      where: { status: { in: ["RECEIVED", "LIQUIDATED", "SETTLED"] } },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      select: { id: true, number: true, purpose: true, amount: true, requestedByName: true, liquidation: true },
+    });
+    for (const cr of crs) {
+      const l = coerceLiquidation(cr.liquidation);
+      if (!isLiquidated(l)) continue;
+      const v = liquidationVariance(Number(cr.amount), l);
+      const settled = !!l.settled?.at;
+      const discrepancy = v.status !== "balanced";
+      // Show discrepancies (need authorising / settling) and anything settled.
+      if (!discrepancy && !settled) continue;
+      const state: LiqState = settled ? "settled" : l.approval?.at ? "approved" : l.escalation?.at ? "escalated" : "pending";
+      const stampAt = l.settled?.at ?? l.approval?.at ?? l.escalation?.at ?? l.recordedAt;
+      cashLiq.push({
+        id: cr.id, number: cr.number, purpose: cr.purpose, requestor: cr.requestedByName,
+        released: v.released, spent: v.spent, variance: v.variance, kind: v.status,
+        state, when: stampAt ? formatDateTime(new Date(stampAt)) : "",
+      });
+    }
+  } catch {
+    // Cash requests table not migrated yet — leave the list empty.
+  }
+  // Unsettled discrepancies first (most urgent), then by state, settled last.
+  const stateRank: Record<LiqState, number> = { pending: 0, escalated: 1, approved: 2, settled: 3 };
+  cashLiq.sort((a, b) => stateRank[a.state] - stateRank[b.state]);
+  const openDiscrepancies = cashLiq.filter((c) => c.state !== "settled").length;
 
   const tiles = [
     { label: "Open orders", value: String(openOrders), caption: `${orderCount} confirmed`, href: "/orders", icon: ClipboardList, color: "#2a78d6" },
@@ -552,6 +592,61 @@ export default async function ManagementPage() {
                   );
                 })}
                 {unbalanced.length > 10 && <li className="pt-1 text-xs text-muted-foreground">+ {unbalanced.length - 10} more</li>}
+              </ul>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Cash liquidations — discrepancies (change / overspend) needing the
+          Approver's authorisation, plus settled ones. Each row opens the cash
+          request for checking. */}
+      <Card className={`shadow-sm ${openDiscrepancies > 0 ? "border-amber-300 dark:border-amber-900" : ""}`}>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Scale className="h-4 w-4 text-muted-foreground" /> Cash liquidations
+            {openDiscrepancies > 0 && (
+              <span className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                {openDiscrepancies} open
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {cashLiq.length === 0 ? (
+            <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
+              No liquidation discrepancies or settlements to review.
+            </div>
+          ) : (
+            <>
+              <p className="mb-2 text-[11px] text-muted-foreground">Discrepancies need the Approver&rsquo;s authorisation, then Accounting settles them. Click a row to open the cash request and check the receipts &amp; breakdown.</p>
+              <ul className="divide-y">
+                {cashLiq.slice(0, 12).map((c) => {
+                  const stateTag =
+                    c.state === "settled" ? { text: "Settled", cls: "border-emerald-500/40 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" }
+                    : c.state === "approved" ? { text: "Approved · awaiting settle", cls: "border-amber-400 bg-amber-50 text-amber-700" }
+                    : c.state === "escalated" ? { text: "Escalated to approver", cls: "border-amber-400 bg-amber-50 text-amber-700" }
+                    : { text: "Needs authorisation", cls: "border-destructive/40 bg-destructive/10 text-destructive" };
+                  const varText =
+                    c.kind === "change" ? `Change ${formatCurrency(Math.abs(c.variance), CURRENCY)}`
+                    : c.kind === "over" ? `Over ${formatCurrency(Math.abs(c.variance), CURRENCY)}`
+                    : "Balanced";
+                  const varCls = c.kind === "over" ? "text-destructive" : c.kind === "change" ? "text-amber-700" : "text-emerald-700";
+                  return (
+                    <li key={c.id}>
+                      <Link href={`/cash-requests#cr-${c.id}`} className="-mx-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-1.5 text-sm hover:bg-accent">
+                        <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${stateTag.cls}`}>{stateTag.text}</span>
+                        <span className="min-w-0 truncate font-medium">{c.purpose}</span>
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">{c.number}</span>
+                        <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{c.requestor}</span>
+                        <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatCurrency(c.spent, CURRENCY)} / {formatCurrency(c.released, CURRENCY)}</span>
+                        <span className={`shrink-0 font-semibold tabular-nums ${varCls}`}>{varText}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+                {cashLiq.length > 12 && <li className="pt-1 text-xs text-muted-foreground">+ {cashLiq.length - 12} more · <Link href="/cash-requests" className="text-primary hover:underline">open Cash Requests →</Link></li>}
               </ul>
             </>
           )}
