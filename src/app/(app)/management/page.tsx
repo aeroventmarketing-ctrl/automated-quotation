@@ -440,48 +440,6 @@ export default async function ManagementPage() {
         </Card>
       </div>
 
-      {/* Job order deadlines at risk */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><CalendarClock className="h-4 w-4 text-muted-foreground" /> Job order deadlines</CardTitle></CardHeader>
-        <CardContent>
-          <div className="mb-3 flex flex-wrap gap-6">
-            <div>
-              <div className={`text-3xl font-bold tabular-nums ${overdueCount > 0 ? "text-destructive" : ""}`}>{overdueCount}</div>
-              <div className="text-xs text-muted-foreground">Overdue</div>
-            </div>
-            <div>
-              <div className={`text-3xl font-bold tabular-nums ${dueSoonCount > 0 ? "text-amber-600" : ""}`}>{dueSoonCount}</div>
-              <div className="text-xs text-muted-foreground">Due within 3 days</div>
-            </div>
-          </div>
-          {atRisk.length === 0 ? (
-            <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
-              All job orders on track.
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {atRisk.slice(0, 8).map((a, i) => {
-                const late = a.days < 0;
-                const text = late ? `Delayed · ${-a.days}d overdue` : a.days === 0 ? "Due today" : `Due in ${a.days}d`;
-                const cls = late || a.days === 0 ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-amber-400 bg-amber-50 text-amber-700";
-                return (
-                  <li key={i}>
-                    <Link href={`/orders/${a.orderId}`} className="-mx-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-1.5 text-sm hover:bg-accent">
-                      <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>{text}</span>
-                      <span className="font-medium">{a.dept}</span>
-                      <span className="min-w-0 truncate text-muted-foreground">{a.company} · {a.quoteNumber}</span>
-                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">due {fmtDue(a.dueAt)}</span>
-                    </Link>
-                  </li>
-                );
-              })}
-              {atRisk.length > 8 && <li className="pt-1 text-xs text-muted-foreground">+ {atRisk.length - 8} more</li>}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Team calendar — everyone can add a schedule; an Engineer / Admin /
           Approver approves. */}
       <Card className="shadow-sm">

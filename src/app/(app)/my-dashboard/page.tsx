@@ -78,13 +78,14 @@ export default async function MyDashboardPage() {
   // Admins keep the standalone Sales Dashboard, so nothing is embedded for them.
   // The Purchaser and Logistics don't get the sales analytics embedded either
   // (they don't need the client sales figures).
-  // The Sales Dashboard is embedded ABOVE the production sections for admins and
-  // the consolidated roles (except Purchaser / Logistics, who don't get it).
+  // The Sales Dashboard is embedded ABOVE the production sections for the
+  // consolidated roles (except Purchaser / Logistics). Admins keep it on their
+  // separate Sales Dashboard instead, so it isn't embedded here for them.
   const noSalesEmbedRoles: WorkflowRoleKey[] = ["purchaser", "logistics"];
   const showSalesAbove =
-    isAdmin(user) ||
-    (!noSalesEmbedRoles.some((r) => userHasWorkflowRole(assignments, user.id, r)) &&
-      DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey)));
+    !isAdmin(user) &&
+    !noSalesEmbedRoles.some((r) => userHasWorkflowRole(assignments, user.id, r)) &&
+    DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
   const maskProdClient = hidesProductionClient(user, assignments);
   const admin = isAdmin(user);
   // Inventory double-handshake actions awaiting the Warehouseman / Purchaser /
