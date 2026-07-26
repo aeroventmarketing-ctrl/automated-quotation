@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function InventoryPage() {
   const [viewer, assignments, locations] = await Promise.all([getCurrentUser(), getWorkflowRoles(), getStockLocations()]);
   const admin = isAdmin(viewer);
-  const has = (role: "warehouse" | "plant_manager" | "purchaser" | "accounting") =>
+  const has = (role: "warehouse" | "plant_manager" | "purchaser" | "accounting" | "logistics") =>
     viewer != null && userHasWorkflowRole(assignments, viewer.id, role);
   // Sales are blocked from the Inventory page entirely (they use the sales
   // dashboard's Check-availability tool for name / quantity / selling price).
@@ -32,7 +32,7 @@ export default async function InventoryPage() {
     );
   // Accounting monitors inventory read-only, with the same characteristics as
   // the Plant Manager (no add/edit, no Labels/Reorder, no Out-of-stock tile).
-  const canView = !isSales && (canManage || has("purchaser") || has("accounting") || isProdHeadViewer);
+  const canView = !isSales && (canManage || has("purchaser") || has("accounting") || has("logistics") || isProdHeadViewer);
   // The Plant Manager monitors stock but does not edit items — hide the
   // add / import / per-row action buttons for them (a Warehouseman or admin
   // still manages). They keep read-only view + their stock-transfer rights.
@@ -42,7 +42,7 @@ export default async function InventoryPage() {
   const canCreateItems = admin || has("purchaser");
   // …and hide the Labels / Reorder header tools from the Warehouseman, Plant
   // Manager and Accounting (non-admins). The Purchaser still sees them.
-  const hidePlantMgrTools = !admin && (has("plant_manager") || has("accounting") || has("warehouse"));
+  const hidePlantMgrTools = !admin && (has("plant_manager") || has("accounting") || has("warehouse") || has("logistics"));
   // Prices (unit cost, sell price, stock value) are commercial data — only the
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
