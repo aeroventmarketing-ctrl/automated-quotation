@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { coerceLiquidation, isLiquidated, liquidationVariance } from "@/lib/cash-request";
+import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { payableTotal, round2 } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
 import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, type OrderStage } from "@/lib/order-workflow";
@@ -274,13 +275,14 @@ export default async function ManagementPage() {
 
   const collectedPct = billed > 0 ? Math.round((collected / billed) * 100) : 0;
 
-  // Cash liquidations — discrepancies (change / over) and settled ones, for a
-  // manager to review at a glance. Each row opens the cash request.
-  type LiqState = "pending" | "escalated" | "approved" | "settled";
+  // Cash liquidations — discrepancies (change / over), AI-read-limit notices and
+  // settled ones, for a manager to review at a glance. Each row opens the cash
+  // request.
+  type LiqState = "pending" | "ai_limit" | "escalated" | "approved" | "settled";
   const cashLiq: {
     id: string; number: string; purpose: string; requestor: string;
-    released: number; spent: number; variance: number;
-    kind: "balanced" | "change" | "over"; state: LiqState; when: string;
+    released: number; spent: number | null; variance: number; liquidated: boolean;
+    kind: "balanced" | "change" | "over"; state: LiqState; aiLimit: boolean; when: string;
   }[] = [];
   try {
     const crs = await prisma.cashRequest.findMany({
@@ -291,25 +293,32 @@ export default async function ManagementPage() {
     });
     for (const cr of crs) {
       const l = coerceLiquidation(cr.liquidation);
-      if (!isLiquidated(l)) continue;
-      const v = liquidationVariance(Number(cr.amount), l);
+      const liquidated = isLiquidated(l);
+      const v = liquidated ? liquidationVariance(Number(cr.amount), l) : null;
       const settled = !!l.settled?.at;
-      const discrepancy = v.status !== "balanced";
-      // Show discrepancies (need authorising / settling) and anything settled.
-      if (!discrepancy && !settled) continue;
-      const state: LiqState = settled ? "settled" : l.approval?.at ? "approved" : l.escalation?.at ? "escalated" : "pending";
-      const stampAt = l.settled?.at ?? l.approval?.at ?? l.escalation?.at ?? l.recordedAt;
+      const approved = !!l.approval?.at;
+      const escalated = !!l.escalation?.at;
+      const discrepancy = !!v && v.status !== "balanced";
+      // The AI receipt-read limit was hit and it isn't resolved yet — Accounting
+      // needs a manual entry or the admin/approver to allow more reads.
+      const resolved = settled || approved || (liquidated && !discrepancy);
+      const aiLimit = (l.aiReadCount ?? 0) >= AI_RECEIPT_READ_LIMIT && !resolved;
+      // Show discrepancies (need authorising / settling), AI-limit notices, and
+      // anything settled.
+      if (!discrepancy && !settled && !aiLimit) continue;
+      const state: LiqState = settled ? "settled" : approved ? "approved" : escalated ? "escalated" : discrepancy ? "pending" : "ai_limit";
+      const stampAt = l.settled?.at ?? l.approval?.at ?? l.escalation?.at ?? l.aiReadEscalation?.at ?? l.recordedAt;
       cashLiq.push({
         id: cr.id, number: cr.number, purpose: cr.purpose, requestor: cr.requestedByName,
-        released: v.released, spent: v.spent, variance: v.variance, kind: v.status,
-        state, when: stampAt ? formatDateTime(new Date(stampAt)) : "",
+        released: v ? v.released : Number(cr.amount), spent: v ? v.spent : null, variance: v ? v.variance : 0,
+        liquidated, kind: v ? v.status : "balanced", state, aiLimit, when: stampAt ? formatDateTime(new Date(stampAt)) : "",
       });
     }
   } catch {
     // Cash requests table not migrated yet — leave the list empty.
   }
-  // Unsettled discrepancies first (most urgent), then by state, settled last.
-  const stateRank: Record<LiqState, number> = { pending: 0, escalated: 1, approved: 2, settled: 3 };
+  // Items needing action first (most urgent), then by state, settled last.
+  const stateRank: Record<LiqState, number> = { pending: 0, ai_limit: 0, escalated: 1, approved: 2, settled: 3 };
   cashLiq.sort((a, b) => stateRank[a.state] - stateRank[b.state]);
   const openDiscrepancies = cashLiq.filter((c) => c.state !== "settled").length;
 
@@ -616,17 +625,18 @@ export default async function ManagementPage() {
           {cashLiq.length === 0 ? (
             <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
-              No liquidation discrepancies or settlements to review.
+              No liquidation discrepancies, AI-limit notices or settlements to review.
             </div>
           ) : (
             <>
-              <p className="mb-2 text-[11px] text-muted-foreground">Discrepancies need the Approver&rsquo;s authorisation, then Accounting settles them. Click a row to open the cash request and check the receipts &amp; breakdown.</p>
+              <p className="mb-2 text-[11px] text-muted-foreground">Discrepancies need the Approver&rsquo;s authorisation, then Accounting settles them; an AI-limit notice means the receipt couldn&rsquo;t be auto-read and needs a manual entry or more reads. Click a row to open the cash request and check the receipts &amp; breakdown.</p>
               <ul className="divide-y">
                 {cashLiq.slice(0, 12).map((c) => {
                   const stateTag =
                     c.state === "settled" ? { text: "Settled", cls: "border-emerald-500/40 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" }
                     : c.state === "approved" ? { text: "Approved · awaiting settle", cls: "border-amber-400 bg-amber-50 text-amber-700" }
                     : c.state === "escalated" ? { text: "Escalated to approver", cls: "border-amber-400 bg-amber-50 text-amber-700" }
+                    : c.state === "ai_limit" ? { text: "AI limit — needs review", cls: "border-destructive/40 bg-destructive/10 text-destructive" }
                     : { text: "Needs authorisation", cls: "border-destructive/40 bg-destructive/10 text-destructive" };
                   const varText =
                     c.kind === "change" ? `Change ${formatCurrency(Math.abs(c.variance), CURRENCY)}`
@@ -637,11 +647,21 @@ export default async function ManagementPage() {
                     <li key={c.id}>
                       <Link href={`/cash-requests#cr-${c.id}`} className="-mx-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-1.5 text-sm hover:bg-accent">
                         <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${stateTag.cls}`}>{stateTag.text}</span>
+                        {/* An AI-limit flag that rides alongside a discrepancy. */}
+                        {c.aiLimit && c.state !== "ai_limit" && (
+                          <span className="inline-flex shrink-0 items-center rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">AI limit</span>
+                        )}
                         <span className="min-w-0 truncate font-medium">{c.purpose}</span>
                         <span className="shrink-0 font-mono text-xs text-muted-foreground">{c.number}</span>
                         <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{c.requestor}</span>
-                        <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatCurrency(c.spent, CURRENCY)} / {formatCurrency(c.released, CURRENCY)}</span>
-                        <span className={`shrink-0 font-semibold tabular-nums ${varCls}`}>{varText}</span>
+                        {c.liquidated ? (
+                          <>
+                            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatCurrency(c.spent ?? 0, CURRENCY)} / {formatCurrency(c.released, CURRENCY)}</span>
+                            <span className={`shrink-0 font-semibold tabular-nums ${varCls}`}>{varText}</span>
+                          </>
+                        ) : (
+                          <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatCurrency(c.released, CURRENCY)} · not yet recorded</span>
+                        )}
                       </Link>
                     </li>
                   );
