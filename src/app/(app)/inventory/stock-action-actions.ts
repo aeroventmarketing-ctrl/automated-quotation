@@ -38,6 +38,16 @@ async function viewerParties(): Promise<{ user: NonNullable<Awaited<ReturnType<t
   };
 }
 
+/**
+ * Which approvals a pending action needs before it applies. Reserve only needs
+ * the Warehouseman (it earmarks stock — no on-hand or value change); every other
+ * kind needs both the Warehouseman and the Purchaser (the two-person control).
+ */
+function isComplete(kind: StockActionKind, warehouseAt: Date | null, purchaserAt: Date | null): boolean {
+  if (kind === "RESERVE") return warehouseAt != null;
+  return warehouseAt != null && purchaserAt != null;
+}
+
 function summaryFor(kind: StockActionKind, item: { name: string; unit: string; quantity: unknown }, payload: unknown): string {
   const on = Number(item.quantity as number);
   if (kind === "EDIT") {
@@ -98,25 +108,35 @@ export async function proposeStockAction(kind: StockActionKind, stockItemId: str
 
   const proposedRole = !p.warehouse && !p.purchaser ? "admin" : p.warehouse ? "warehouse" : "purchaser";
   const now = new Date();
-  await prisma.stockAction.create({
-    data: {
-      stockItemId,
-      itemName: item.name,
-      kind,
-      payload: payload as Prisma.InputJsonValue,
-      summary: summaryFor(kind, item, payload),
-      proposedById: user.id,
-      proposedByName: user.name,
-      proposedRole,
-      // The proposer's own handshake slot is filled by proposing.
-      ...(proposedRole === "warehouse" ? { warehouseByName: user.name, warehouseAt: now } : {}),
-      ...(proposedRole === "purchaser" ? { purchaserByName: user.name, purchaserAt: now } : {}),
-    },
+  const warehouseAt = proposedRole === "warehouse" ? now : null;
+  const purchaserAt = proposedRole === "purchaser" ? now : null;
+  // Reserve needs only the Warehouseman, so a Warehouse/admin proposal applies
+  // immediately; every other kind stays pending for the second party's sign-off.
+  const applyNow = isComplete(kind, warehouseAt, purchaserAt);
+  const sum = summaryFor(kind, item, payload);
+  await prisma.$transaction(async (tx) => {
+    const created = await tx.stockAction.create({
+      data: {
+        stockItemId,
+        itemName: item.name,
+        kind,
+        payload: payload as Prisma.InputJsonValue,
+        summary: sum,
+        proposedById: user.id,
+        proposedByName: user.name,
+        proposedRole,
+        // The proposer's own handshake slot is filled by proposing.
+        ...(warehouseAt ? { warehouseByName: user.name, warehouseAt } : {}),
+        ...(purchaserAt ? { purchaserByName: user.name, purchaserAt } : {}),
+        ...(applyNow ? { status: "APPLIED" as const, appliedAt: now } : {}),
+      },
+    });
+    if (applyNow) await applyAction(tx, created, user.name);
   });
   await logActivity(user, {
-    action: "inventory.action.propose",
+    action: applyNow ? "inventory.action.applied" : "inventory.action.propose",
     category: "inventory",
-    summary: `Stock action proposed — ${summaryFor(kind, item, payload)}`,
+    summary: `${applyNow ? "Stock action applied" : "Stock action proposed"} — ${sum}`,
     entity: "inventory",
     entityId: stockItemId,
     href: "/inventory",
@@ -135,12 +155,16 @@ export async function approveStockAction(id: string): Promise<void> {
     if (a.status !== "PENDING") throw new Error("This action is no longer pending.");
     const now = new Date();
     const data: Prisma.StockActionUpdateInput = {};
+    let whAt: Date | null = a.warehouseAt;
+    let puAt: Date | null = a.purchaserAt;
     if (a.warehouseAt == null && p.warehouse) {
       data.warehouseByName = user.name;
       data.warehouseAt = now;
+      whAt = now;
     } else if (a.purchaserAt == null && p.purchaser) {
       data.purchaserByName = user.name;
       data.purchaserAt = now;
+      puAt = now;
     } else {
       throw new Error(
         a.warehouseAt != null && a.purchaserAt != null
@@ -148,8 +172,7 @@ export async function approveStockAction(id: string): Promise<void> {
           : "You can't approve this side (needs the other party).",
       );
     }
-    const bothIn = (a.warehouseAt != null || data.warehouseAt != null) && (a.purchaserAt != null || data.purchaserAt != null);
-    if (bothIn) {
+    if (isComplete(a.kind, whAt, puAt)) {
       await applyAction(tx, a, user.name);
       data.status = "APPLIED";
       data.appliedAt = now;
