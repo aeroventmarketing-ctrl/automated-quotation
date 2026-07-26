@@ -456,9 +456,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // having been individually started.
   const productionFinished = stageIndex(wf.stage) >= stageIndex("production_finished");
   const productionUnderway = stageIndex(wf.stage) >= stageIndex("in_production") && !productionFinished;
+  // The Plant Manager oversees every production line, so they may raise an MRF
+  // for any department; a department head raises only their own.
+  const isPlantMgrViewer = viewer != null && userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey);
   const raisableDepts = productionUnderway
     ? PRODUCTION_DEPTS.filter(
-        (d) => adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)),
+        (d) => adminViewer || isPlantMgrViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)),
       ).map((d) => ({ key: d.key, label: d.label }))
     : [];
   // Link each MRF to the purchase request it was escalated into, so the MRF card

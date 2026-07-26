@@ -893,8 +893,17 @@ export async function raiseMaterialRequest(
   if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
   const deptKey = dept as ProductionDeptKey;
 
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(deptKey) as WorkflowRoleKey))) {
-    throw new Error(`Only the ${deptLabel(deptKey)} head or an admin can raise its material request.`);
+  const mrfRoles = await getWorkflowRoles();
+  // The department head raises their own line's MRF; the Plant Manager (who
+  // oversees all lines) or an admin may raise it for any department.
+  if (
+    !(
+      isAdmin(user) ||
+      userHasWorkflowRole(mrfRoles, user.id, "plant_manager" as WorkflowRoleKey) ||
+      userHasWorkflowRole(mrfRoles, user.id, deptRole(deptKey) as WorkflowRoleKey)
+    )
+  ) {
+    throw new Error(`Only the ${deptLabel(deptKey)} head, the Plant Manager or an admin can raise its material request.`);
   }
 
   const cleanItems: MRFItem[] = (items ?? [])
