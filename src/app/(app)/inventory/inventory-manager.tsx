@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ScanLine, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -311,6 +311,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
 
 export function InventoryManager({ items, canManage, locations, showPrices, canEditPrices }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("pcs");
@@ -347,7 +348,12 @@ export function InventoryManager({ items, canManage, locations, showPrices, canE
         (it.category ?? "").toLowerCase().includes(q) ||
         (it.location ?? "").toLowerCase().includes(q),
       );
-  const filtered = needsPrice && showPrices ? searched.filter((it) => it.sellPrice <= 0) : searched;
+  const priceFiltered = needsPrice && showPrices ? searched.filter((it) => it.sellPrice <= 0) : searched;
+  // Status drill-down from the Low / Out stock tiles (?status=low|out). Read from
+  // the URL so clicking a tile updates the list live (the component stays mounted).
+  const statusParam = searchParams.get("status");
+  const statusFilter: "low" | "out" | null = statusParam === "low" || statusParam === "out" ? statusParam : null;
+  const filtered = statusFilter ? priceFiltered.filter((it) => it.status === statusFilter) : priceFiltered;
 
   // Sort & group controls.
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -566,13 +572,23 @@ export function InventoryManager({ items, canManage, locations, showPrices, canE
             {needsPrice ? "✓ " : ""}Needs selling price ({needPriceCount})
           </button>
         )}
+        {/* Active status drill-down (from a Low / Out stock tile) — click to clear. */}
+        {statusFilter && (
+          <button type="button" onClick={() => router.push("/inventory#inv-items")}
+            className={`inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-sm ${
+              statusFilter === "out" ? "border-destructive/50 bg-destructive/10 text-destructive" : "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/40"
+            }`}
+            title="Clear the status filter">
+            {statusFilter === "out" ? "Out of stock" : "Low stock"} ({filtered.length}) <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No stock items yet.</p>
       ) : filtered.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
-          {needsPrice && q === "" ? "Every item has a selling price set. 🎉" : `No items match “${query}”.`}
+          {statusFilter ? `No ${statusFilter === "out" ? "out-of-stock" : "low-stock"} items.` : needsPrice && q === "" ? "Every item has a selling price set. 🎉" : `No items match “${query}”.`}
         </p>
       ) : (
         <div className="overflow-x-auto">

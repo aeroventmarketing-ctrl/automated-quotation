@@ -27,6 +27,8 @@ export default async function InventoryPage() {
   // add / import / per-row action buttons for them (a Warehouseman or admin
   // still manages). They keep read-only view + their stock-transfer rights.
   const canManageItems = !isSales && (admin || has("warehouse"));
+  // …and hide the Labels / Reorder tools from a Plant-Manager-only viewer.
+  const hidePlantMgrTools = has("plant_manager") && !admin && !has("warehouse");
   // Prices (unit cost, sell price, stock value) are commercial data — only the
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
@@ -91,10 +93,11 @@ export default async function InventoryPage() {
   const stockValue = Math.round(items.reduce((a, i) => a + i.value, 0) * 100) / 100;
   const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
-  const tiles = [
+  const tiles: { label: string; value: string; href?: string }[] = [
     { label: "Items", value: String(items.length) },
-    { label: "Low stock", value: String(lowCount) },
-    { label: "Out of stock", value: String(outCount) },
+    // Low / out tiles drill into the item list, filtered to that status.
+    { label: "Low stock", value: String(lowCount), href: lowCount > 0 ? "/inventory?status=low#inv-items" : undefined },
+    { label: "Out of stock", value: String(outCount), href: outCount > 0 ? "/inventory?status=out#inv-items" : undefined },
     // Stock value is a money figure — only shown to price-authorized viewers.
     ...(showPrices ? [{ label: "Stock value", value: peso(stockValue) }] : []),
   ];
@@ -106,15 +109,17 @@ export default async function InventoryPage() {
           <h1 className="text-2xl font-bold">Inventory</h1>
           <p className="text-sm text-muted-foreground">Warehouse stock on hand, with receive / issue / adjust and a movement ledger.</p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/inventory/labels" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
-            Labels
-          </Link>
-          <Link href="/inventory/reorder" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
-            <ShoppingCart className="h-4 w-4" />
-            Reorder{lowCount + outCount > 0 ? ` (${lowCount + outCount})` : ""}
-          </Link>
-        </div>
+        {!hidePlantMgrTools && (
+          <div className="flex gap-2">
+            <Link href="/inventory/labels" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
+              Labels
+            </Link>
+            <Link href="/inventory/reorder" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
+              <ShoppingCart className="h-4 w-4" />
+              Reorder{lowCount + outCount > 0 ? ` (${lowCount + outCount})` : ""}
+            </Link>
+          </div>
+        )}
       </div>
 
       {tableMissing ? (
@@ -124,14 +129,17 @@ export default async function InventoryPage() {
       ) : (
         <>
           <div className={`grid grid-cols-2 gap-3 ${showPrices ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-            {tiles.map((t) => (
-              <Card key={t.label}>
-                <CardHeader className="pb-1"><CardTitle className="text-xs uppercase text-muted-foreground">{t.label}</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold tabular-nums">{t.value}</div></CardContent>
-              </Card>
-            ))}
+            {tiles.map((t) => {
+              const card = (
+                <Card className={t.href ? "h-full transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md" : ""}>
+                  <CardHeader className="pb-1"><CardTitle className="text-xs uppercase text-muted-foreground">{t.label}</CardTitle></CardHeader>
+                  <CardContent><div className="text-2xl font-bold tabular-nums">{t.value}</div></CardContent>
+                </Card>
+              );
+              return t.href ? <Link key={t.label} href={t.href} className="block">{card}</Link> : <div key={t.label}>{card}</div>;
+            })}
           </div>
-          <Card>
+          <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
               <InventoryManager items={items} canManage={canManageItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} />
             </CardContent>
