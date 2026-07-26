@@ -214,6 +214,7 @@ export default async function PurchasingPage() {
         status,
         statusLabel: PR_STATUS_LABEL[status],
         variant: variantFor(status),
+        poApproved: isPoApproved(anchor.chainLog),
         lines: po?.lines ?? [],
         members: members.map((m) => ({
           orderLabel: m.quotationId ? orderLabelOf(m.quotationId) : `Department · ${deptLabelOf(m.dept)}`,

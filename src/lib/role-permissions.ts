@@ -153,7 +153,7 @@ export const DEFAULT_ROLE_CAPS: Record<string, string[]> = {
   prod_head_accessories: ["restrict_client_data", "view_orders", "create_job_orders", "approve_job_orders", "start_production", "finish_production", "raise_requisition", "confirm_transfer_prodhead", "add_schedule"],
   prod_head_motor: ["view_orders", "create_job_orders", "approve_job_orders", "start_production", "finish_production", "raise_requisition", "confirm_transfer_prodhead", "add_schedule"],
   warehouse: ["restrict_client_data", "manage_inventory", "reserve_stock", "transfer_stock", "receive_into_stock", "add_schedule"],
-  purchaser: ["view_orders", "issue_po", "confirm_transfer_purchaser", "raise_requisition", "manage_products", "confirm_delivery", "add_schedule"],
+  purchaser: ["restrict_client_data", "view_orders", "issue_po", "confirm_transfer_purchaser", "raise_requisition", "manage_products", "confirm_delivery", "add_schedule"],
   logistics: ["view_orders", "assign_logistics", "confirm_delivery", "deliver_order", "add_schedule"],
   plant_manager: ["restrict_client_data", "view_orders", "approve_requisition", "approve_job_orders", "plant_qc", "receive_into_stock", "manage_inventory", "add_schedule"],
 };

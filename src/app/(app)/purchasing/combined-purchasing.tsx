@@ -62,6 +62,7 @@ export interface BatchCard {
   status: PRStatus;
   statusLabel: string;
   variant: "secondary" | "warning" | "success" | "destructive";
+  poApproved: boolean; // the Approver approved the PO — after this only admin may edit
   lines: POLine[];
   members: BatchMember[];
   trail: string[];
@@ -243,7 +244,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
   const totals = poTotals({ lines: batch.lines, ewtPct: batch.ewtPct, ewtMode: batch.ewtMode, ewtAmount: batch.ewtAmount });
   const actionable = batch.actions.filter((a) => a.canAct);
   const awaiting = batch.actions.find((a) => !a.canAct);
-  const editable = batch.canManagePO && (["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(batch.status);
+  // Once the PO is approved, only an admin may edit it.
+  const editable = batch.canManagePO && (!batch.poApproved || admin) && (["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(batch.status);
 
   async function run(stepKey: string) {
     setBusy(stepKey); setErr(null);

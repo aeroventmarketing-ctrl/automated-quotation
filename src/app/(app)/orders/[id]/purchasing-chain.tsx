@@ -411,7 +411,8 @@ export function PurchasingChain({
                     </a>
                     )}
                   </div>
-                  {!readOnly && r.canManagePO && (
+                  {/* Once approved, only an admin may edit the PO. */}
+                  {!readOnly && r.canManagePO && (!r.poApproved || admin) && (
                     <button
                       type="button"
                       onClick={() => setPoEditId(r.id)}

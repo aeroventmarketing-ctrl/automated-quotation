@@ -1812,6 +1812,10 @@ export async function savePurchaseOrder(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   if (pr.status === "REJECTED") throw new Error("This purchase request was rejected.");
+  // Once the purchase order is approved, only an admin may edit it.
+  if (isPoApproved(pr.chainLog) && !isAdmin(user)) {
+    throw new Error("This purchase order is approved — only an admin can edit it.");
+  }
   // A material/department requisition needs the Plant Manager's approval (step 16)
   // before the Purchaser prepares the purchase order (step 17).
   if (pr.status === "PENDING_APPROVAL" && isDeptRequisition(pr)) {
@@ -1917,6 +1921,10 @@ export async function updateCombinedPO(
   }
   const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
   if (!anchor) throw new Error("Purchase request not found");
+  // Once the purchase order is approved, only an admin may edit it.
+  if (isPoApproved(anchor.chainLog) && !isAdmin(user)) {
+    throw new Error("This purchase order is approved — only an admin can edit it.");
+  }
   const ids = poMemberIds(anchor.po);
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
   if (!(["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(anchor.status)) {

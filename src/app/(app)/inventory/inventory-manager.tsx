@@ -80,14 +80,16 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanTarget, scanNonce, pending = [] }: { item: Item; canManage: boolean; showPrices: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[] }) {
+function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [] }: { item: Item; canManage: boolean; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[] }) {
   const router = useRouter();
   // Purchaser/admin who aren't the stock manager still get a "Set price" action.
   const priceOnly = canEditPrices && !canManage;
   const hasActions = canManage || canEditPrices;
-  // Table has 8 always-on columns + 3 price columns (unit cost, sell price,
+  // The Sell-price column is hidden from some price viewers (e.g. Purchaser).
+  const showSell = showPrices && showSellPrice;
+  // Table has 8 always-on columns + price columns (unit cost, [sell price],
   // value) + 1 action column; the expandable panels span all of them.
-  const colSpan = 8 + (showPrices ? 3 : 0) + (hasActions ? 1 : 0);
+  const colSpan = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (hasActions ? 1 : 0);
   const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "price" | "reserve" | "transfer" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
   const [flash, setFlash] = useState(false);
@@ -178,7 +180,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
         <TableCell>
           <div className="flex items-center gap-2">
             <span className="font-medium">{item.name}</span>
-            {showPrices && item.sellPrice <= 0 && (
+            {showSell && item.sellPrice <= 0 && (
               <Badge variant="warning" className="font-normal">No sell price</Badge>
             )}
             <PendingChip pending={pending} />
@@ -192,7 +194,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
         <TableCell className={`text-right tabular-nums font-medium ${item.available < 0 ? "text-destructive" : ""}`}>{fmt(item.available)}</TableCell>
         <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(item.reorderLevel)}</TableCell>
         {showPrices && <TableCell className="text-right tabular-nums text-muted-foreground">{item.unitCost ? peso(item.unitCost) : "—"}</TableCell>}
-        {showPrices && <TableCell className="text-right tabular-nums font-medium text-emerald-700">{item.sellPrice ? peso(item.sellPrice) : "—"}</TableCell>}
+        {showSell && <TableCell className="text-right tabular-nums font-medium text-emerald-700">{item.sellPrice ? peso(item.sellPrice) : "—"}</TableCell>}
         {showPrices && <TableCell className="text-right tabular-nums">{item.value ? peso(item.value) : "—"}</TableCell>}
         <TableCell>
           {item.status === "out" ? <Badge variant="destructive">Out</Badge>
@@ -204,7 +206,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
             <div className="flex justify-end gap-1">
               {priceOnly ? (
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "price" ? "none" : "price"))}>
-                  {item.sellPrice <= 0 ? "Set price" : "Edit price"}
+                  {!showSell ? "Set cost" : item.sellPrice <= 0 ? "Set price" : "Edit price"}
                 </Button>
               ) : (
                 <>
@@ -242,7 +244,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
             <div className="flex flex-wrap items-end gap-2 py-1">
               <label className="text-xs text-muted-foreground">Location<div><LocationField value={location} onChange={setLocation} locations={locations} /></div></label>
               {showPrices && <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>}
-              {showPrices && <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>}
+              {showSell && <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>}
               <label className="text-xs text-muted-foreground">Reorder at<Input className="h-8 w-28" type="number" step="any" min={0} value={reorder} onChange={(e) => setReorder(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
               <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Propose edit"}</Button>
@@ -256,9 +258,9 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
           <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
               <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>
-              <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>
-              <Button size="sm" className="h-8" disabled={busy} onClick={savePrices}>{busy ? "…" : "Save price"}</Button>
-              <span className="text-xs text-muted-foreground">Selling price is what Sales sees on Check availability.</span>
+              {showSell && <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>}
+              <Button size="sm" className="h-8" disabled={busy} onClick={savePrices}>{busy ? "…" : showSell ? "Save price" : "Save cost"}</Button>
+              {showSell && <span className="text-xs text-muted-foreground">Selling price is what Sales sees on Check availability.</span>}
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
           </TableCell>
@@ -353,7 +355,8 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
   );
 }
 
-export function InventoryManager({ items, canManage, canCreate = true, locations, showPrices, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+  const showSell = showPrices && showSellPrice;
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
@@ -439,9 +442,11 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = 8 + (showPrices ? 3 : 0) + (canManage || canEditPrices ? 1 : 0);
+  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices ? 1 : 0);
   // Hide the price-based sort options from viewers who can't see prices.
-  const sortOptions = showPrices ? SORT_OPTIONS : SORT_OPTIONS.filter((o) => o.key !== "unitCost" && o.key !== "sellPrice" && o.key !== "value");
+  const sortOptions = SORT_OPTIONS.filter((o) =>
+    (showPrices || (o.key !== "unitCost" && o.key !== "sellPrice" && o.key !== "value")) && (showSell || o.key !== "sellPrice"),
+  );
 
   async function onScanKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
@@ -562,7 +567,7 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Opening qty" value={qty} onChange={(e) => setQty(e.target.value)} />
                 <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Reorder at" value={reorder} onChange={(e) => setReorder(e.target.value)} />
                 {showPrices && <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Unit cost ₱" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />}
-                {showPrices && <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Sell price ₱" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />}
+                {showSell && <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Sell price ₱" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />}
                 <Button size="sm" className="h-8" disabled={busy} onClick={add}>{busy ? "Saving…" : "Add item"}</Button>
                 <Button size="sm" variant="outline" className="h-8" onClick={() => setShowAdd(false)}>Cancel</Button>
               </div>
@@ -609,7 +614,7 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
           className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-sm hover:bg-accent" title={dir === "asc" ? "Ascending" : "Descending"}>
           {dir === "asc" ? "↑ Asc" : "↓ Desc"}
         </button>
-        {showPrices && needPriceCount > 0 && (
+        {showSell && needPriceCount > 0 && (
           <button type="button" onClick={() => setNeedsPrice((v) => !v)}
             className={`inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-sm ${needsPrice ? "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/40" : "bg-background hover:bg-accent"}`}
             title="Show only items with no selling price set">
@@ -648,7 +653,7 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
                 <TableHead className="text-right">Available</TableHead>
                 <TableHead className="text-right">Reorder at</TableHead>
                 {showPrices && <TableHead className="text-right">Unit cost</TableHead>}
-                {showPrices && <TableHead className="text-right">Sell price</TableHead>}
+                {showSell && <TableHead className="text-right">Sell price</TableHead>}
                 {showPrices && <TableHead className="text-right">Value</TableHead>}
                 <TableHead>Status</TableHead>
                 {(canManage || canEditPrices) && <TableHead className="text-right">Action</TableHead>}
@@ -665,7 +670,7 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} />)}
                 </Fragment>
               ))}
             </TableBody>

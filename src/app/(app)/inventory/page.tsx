@@ -47,6 +47,8 @@ export default async function InventoryPage() {
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
   const showPrices = canViewPrices(viewer, assignments);
+  // The Purchaser sees unit cost (for buying) but not the selling price.
+  const showSellPrice = !(has("purchaser") && !admin);
   // The Purchaser/admin can fill in missing prices even without warehouse rights.
   const editPrices = canEditPrices(viewer, assignments);
 
@@ -177,7 +179,7 @@ export default async function InventoryPage() {
           </div>
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} canCreate={canCreateItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} canCreate={canCreateItems} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 
