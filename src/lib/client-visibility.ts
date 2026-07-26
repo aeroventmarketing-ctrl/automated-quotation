@@ -45,8 +45,9 @@ const HIDE_PRODUCTION_CLIENT_ROLES: WorkflowRoleKey[] = [
   "quality_inspector_2",
   "technical_head",
   "purchaser",
+  "logistics",
 ];
-const PRODUCTION_CLIENT_VISIBLE_ROLES: WorkflowRoleKey[] = ["accounting", "logistics", "payment_approver"];
+const PRODUCTION_CLIENT_VISIBLE_ROLES: WorkflowRoleKey[] = ["accounting", "payment_approver"];
 
 /** Whether the viewer should have the client name masked on the Production card. */
 export function hidesProductionClient(user: User | null, assignments: WorkflowRoleAssignments): boolean {
