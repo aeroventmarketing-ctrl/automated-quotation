@@ -97,6 +97,7 @@ export function CombinedPurchasing({
   catalogSuppliers = {},
   scanProducts = [],
   admin = false,
+  showAmounts = true,
 }: {
   combinable: CombinableItem[];
   batches: BatchCard[];
@@ -110,6 +111,7 @@ export function CombinedPurchasing({
   catalogSuppliers?: CatalogSuppliers;
   scanProducts?: ScanProduct[];
   admin?: boolean;
+  showAmounts?: boolean;
 }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -145,7 +147,7 @@ export function CombinedPurchasing({
     <div className="space-y-3">
       {/* Existing combined POs */}
       {batches.map((b) => (
-        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} />
+        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} />
       ))}
 
       {/* Combine builder */}
@@ -230,7 +232,7 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts, admin = false }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[]; admin?: boolean }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts, admin = false, showAmounts = true }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -318,8 +320,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
             <tr className="border-b text-left text-muted-foreground">
               <th className="py-1 pr-2 font-medium">Description</th>
               <th className="w-16 py-1 px-1 text-right font-medium">Qty</th>
-              <th className="w-24 py-1 px-1 text-right font-medium">Unit price</th>
-              <th className="w-24 py-1 px-1 text-right font-medium">Amount</th>
+              {showAmounts && <th className="w-24 py-1 px-1 text-right font-medium">Unit price</th>}
+              {showAmounts && <th className="w-24 py-1 px-1 text-right font-medium">Amount</th>}
             </tr>
           </thead>
           <tbody>
@@ -327,8 +329,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
               <tr key={i} className="border-b last:border-0">
                 <td className="py-1 pr-2">{l.description}</td>
                 <td className="py-1 px-1 text-right tabular-nums">{[l.qty, l.unit].filter(Boolean).join(" ")}</td>
-                <td className="py-1 px-1 text-right tabular-nums">{l.unitPrice ? formatCurrency(Number(l.unitPrice), "PHP") : "—"}</td>
-                <td className="py-1 px-1 text-right tabular-nums">{poLineAmount(l) ? formatCurrency(poLineAmount(l), "PHP") : "—"}</td>
+                {showAmounts && <td className="py-1 px-1 text-right tabular-nums">{l.unitPrice ? formatCurrency(Number(l.unitPrice), "PHP") : "—"}</td>}
+                {showAmounts && <td className="py-1 px-1 text-right tabular-nums">{poLineAmount(l) ? formatCurrency(poLineAmount(l), "PHP") : "—"}</td>}
               </tr>
             ))}
           </tbody>
@@ -391,11 +393,13 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
       )}
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">
-        <span className="text-muted-foreground">
-          Total {formatCurrency(totals.total, "PHP")}
-          {poHasEwt(batch) && <> · less EWT {formatCurrency(totals.ewt, "PHP")}</>}
-          {" · "}<span className="font-semibold text-foreground">Net {formatCurrency(totals.net, "PHP")}</span>
-        </span>
+        {showAmounts ? (
+          <span className="text-muted-foreground">
+            Total {formatCurrency(totals.total, "PHP")}
+            {poHasEwt(batch) && <> · less EWT {formatCurrency(totals.ewt, "PHP")}</>}
+            {" · "}<span className="font-semibold text-foreground">Net {formatCurrency(totals.net, "PHP")}</span>
+          </span>
+        ) : <span />}
         <div className="flex items-center gap-2">
           {batch.canDelete && (
             <button type="button" onClick={del} disabled={busy === "delete"}

@@ -76,6 +76,7 @@ export function PurchasingChain({
   onToggleSelect,
   deptApprovalHere = false,
   admin = false,
+  showAmounts = true,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -119,6 +120,8 @@ export function PurchasingChain({
    * the otherwise read-only list.
    */
   deptApprovalHere?: boolean;
+  /** Whether the viewer may see PO money amounts (totals, net, line prices). */
+  showAmounts?: boolean;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -380,8 +383,8 @@ export function PurchasingChain({
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="success">PO {r.po.poNumber}</Badge>
                     {r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
-                    <span className="font-semibold tabular-nums">{formatCurrency(poTotals(r.po).total, "PHP")}</span>
-                    {poHasEwt(r.po) && (
+                    {showAmounts && <span className="font-semibold tabular-nums">{formatCurrency(poTotals(r.po).total, "PHP")}</span>}
+                    {showAmounts && poHasEwt(r.po) && (
                       <span className="text-muted-foreground tabular-nums">· Net {formatCurrency(poTotals(r.po).net, "PHP")}</span>
                     )}
                     <a
@@ -454,11 +457,13 @@ export function PurchasingChain({
               {selectedPoRows.length} of {poRows.length} PO{poRows.length > 1 ? "s" : ""} selected
             </span>
           </div>
-          <div className="tabular-nums">
-            <span className="font-semibold">Total {formatCurrency(selTotals.total, "PHP")}</span>
-            {selTotals.ewt > 0 && <span className="text-muted-foreground"> · less EWT {formatCurrency(selTotals.ewt, "PHP")}</span>}
-            <span className="ml-1 font-semibold text-foreground"> · Net {formatCurrency(selTotals.net, "PHP")}</span>
-          </div>
+          {showAmounts && (
+            <div className="tabular-nums">
+              <span className="font-semibold">Total {formatCurrency(selTotals.total, "PHP")}</span>
+              {selTotals.ewt > 0 && <span className="text-muted-foreground"> · less EWT {formatCurrency(selTotals.ewt, "PHP")}</span>}
+              <span className="ml-1 font-semibold text-foreground"> · Net {formatCurrency(selTotals.net, "PHP")}</span>
+            </div>
+          )}
         </div>
       )}
       {err && <p className="text-xs text-destructive">{err}</p>}

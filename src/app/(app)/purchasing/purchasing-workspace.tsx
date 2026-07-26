@@ -80,6 +80,7 @@ export function PurchasingWorkspace({
   admin = false,
   deptRows = [],
   replenRows = [],
+  showAmounts = true,
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -98,6 +99,8 @@ export function PurchasingWorkspace({
   deptRows?: PurchaseChainRow[];
   /** Replenishment (stock top-up) requests — filtered by the same tab. */
   replenRows?: PRRow[];
+  /** Whether the viewer may see PO money amounts. */
+  showAmounts?: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
@@ -283,6 +286,7 @@ export function PurchasingWorkspace({
           catalogSuppliers={catalogSuppliers}
           scanProducts={scanProducts}
           admin={admin}
+          showAmounts={showAmounts}
         />
       )}
 
@@ -330,6 +334,7 @@ export function PurchasingWorkspace({
                       hideRequisitionApproval
                       selectedIds={selected}
                       onToggleSelect={toggleSelect}
+                      showAmounts={showAmounts}
                     />
                   </CardContent>
                 </Card>
@@ -360,6 +365,7 @@ export function PurchasingWorkspace({
                   requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
                   suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
                   catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
+                  showAmounts={showAmounts}
                 />
               </CardContent></Card>
             )}
@@ -395,7 +401,7 @@ export function PurchasingWorkspace({
             <button type="button" onClick={() => setSelected(new Set())} className="text-xs font-medium text-primary hover:underline">
               Clear
             </button>
-            {selectedRows.some((r) => r.po) && (
+            {showAmounts && selectedRows.some((r) => r.po) && (
               <span className="tabular-nums text-muted-foreground">
                 Total <span className="font-semibold text-foreground">{formatCurrency(selTotals.total, "PHP")}</span>
                 {selTotals.ewt > 0 && <> · less EWT {formatCurrency(selTotals.ewt, "PHP")}</>}

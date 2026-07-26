@@ -26,6 +26,22 @@ export function canViewPrices(user: User | null | undefined, assignments: Workfl
   return PRICE_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r));
 }
 
+/**
+ * Whether the viewer may see purchase/PO money amounts (PO totals, net, line
+ * prices, release totals) on the Orders and Purchasing surfaces. Only the people
+ * who act on the money — the Purchaser, Accounting, the Payment Approver — plus
+ * Engineers/management and admins. Everyone else who monitors the chain (Plant
+ * Manager, production heads, Warehouseman, Logistics, QC, Technical Head, Sales)
+ * sees the items and progress but not the peso amounts.
+ */
+const AMOUNT_ROLES: WorkflowRoleKey[] = ["purchaser", "accounting", "payment_approver"];
+export function canViewOrderAmounts(user: User | null | undefined, assignments: WorkflowRoleAssignments): boolean {
+  if (!user) return false;
+  if (user.role === "SALES") return false;
+  if (isAdmin(user) || user.role === "ENGINEER") return true;
+  return AMOUNT_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r));
+}
+
 /** Whether the viewer may edit an item's unit cost and selling price. */
 export function canEditPrices(user: User | null | undefined, assignments: WorkflowRoleAssignments): boolean {
   if (!user) return false;

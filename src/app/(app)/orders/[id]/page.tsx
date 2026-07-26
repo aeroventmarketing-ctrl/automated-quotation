@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { canViewOrderAmounts } from "@/lib/price-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -120,6 +121,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const commissionRow = await prisma.commission.findUnique({ where: { quotationId: id } }).catch(() => null);
 
   const adminViewer = isAdmin(viewer);
+  // PO money amounts show only to the money-handling roles (Purchaser,
+  // Accounting, Payment Approver) + Engineers/admins; hidden from production,
+  // warehouse, logistics, QC and Sales monitors.
+  const showAmounts = canViewOrderAmounts(viewer, assignments);
   const wf = readOrderWorkflow(quote.classification);
   // Sale record (PO, payments, closing documents) — the closing docs reflect
   // between the quotation Sale panel and this order's close step.
@@ -745,7 +750,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <Link href="/purchasing" className="text-xs font-medium text-primary hover:underline">Process in Purchasing →</Link>
           </CardHeader>
           <CardContent>
-            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={adminViewer} readOnly />
+            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={adminViewer} showAmounts={showAmounts} readOnly />
           </CardContent>
         </Card>
       )}
