@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ScanLine, Search, X, Eye, Upload } from "lucide-react";
+import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, ArrowLeftRight, Pencil, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,18 +203,24 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
         </TableCell>
         {hasActions && (
           <TableCell className="text-right">
-            <div className="flex justify-end gap-1">
+            {/* Compact icon actions (tooltip + aria-label) so every data column
+                fits on screen without horizontal scrolling. The active panel's
+                button stays highlighted. */}
+            <div className="flex justify-end gap-0.5">
               {priceOnly ? (
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "price" ? "none" : "price"))}>
                   {!showSell ? "Set cost" : item.sellPrice <= 0 ? "Set price" : "Edit price"}
                 </Button>
               ) : (
                 <>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}>Label</Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "reserve" ? "none" : "reserve"))}>Reserve{item.reservations.length ? ` (${item.reservations.length})` : ""}</Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "transfer" ? "none" : "transfer"))}>Transfer</Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>Edit</Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "adjust" ? "none" : "adjust"))}>Adjust</Button>
+                  <Button size="sm" variant={panel === "label" ? "default" : "outline"} className="h-7 w-7 p-0" title="Label — barcode / QR" aria-label="Label" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}><Tag className="h-3.5 w-3.5" /></Button>
+                  <Button size="sm" variant={panel === "reserve" ? "default" : "outline"} className="relative h-7 w-7 p-0" title={`Reserve${item.reservations.length ? ` (${item.reservations.length} active)` : ""}`} aria-label="Reserve" onClick={() => setPanel((p) => (p === "reserve" ? "none" : "reserve"))}>
+                    <Bookmark className="h-3.5 w-3.5" />
+                    {item.reservations.length > 0 && <span className="absolute -right-1 -top-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold leading-none text-primary-foreground">{item.reservations.length}</span>}
+                  </Button>
+                  <Button size="sm" variant={panel === "transfer" ? "default" : "outline"} className="h-7 w-7 p-0" title="Transfer to another location" aria-label="Transfer" onClick={() => setPanel((p) => (p === "transfer" ? "none" : "transfer"))}><ArrowLeftRight className="h-3.5 w-3.5" /></Button>
+                  <Button size="sm" variant={panel === "edit" ? "default" : "outline"} className="h-7 w-7 p-0" title="Edit item details" aria-label="Edit" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button size="sm" variant={panel === "adjust" ? "default" : "outline"} className="h-7 w-7 p-0" title="Adjust — receive / issue / set quantity" aria-label="Adjust" onClick={() => setPanel((p) => (p === "adjust" ? "none" : "adjust"))}><SlidersHorizontal className="h-3.5 w-3.5" /></Button>
                 </>
               )}
             </div>
@@ -642,11 +648,10 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
       ) : (
         <div className="overflow-x-auto">
           {q !== "" && <p className="mb-1 text-xs text-muted-foreground">{filtered.length} of {items.length} items</p>}
-          {/* min-w-max lets the wide table (up to 12 cols + a 5-button Action
-              cell) grow to its content width so the overflow-auto wrapper
-              scrolls horizontally instead of squeezing the last column off the
-              right edge (where <main>'s overflow-x-clip would hide it). */}
-          <Table className="min-w-max">
+          {/* Compact density (tight cell padding + icon actions) so all columns
+              fit on screen without horizontal scrolling. The overflow-x-auto
+              wrapper stays only as a safety net for very narrow viewports. */}
+          <Table className="[&_td]:px-1.5 [&_th]:px-1.5">
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
