@@ -52,6 +52,9 @@ export function visibleNav(role: Role, workflowRoles: string[]) {
     o?.hide?.forEach((h) => hide.add(h));
     o?.show?.forEach((s) => show.add(s));
   }
+  // Admins keep the standalone Sales Dashboard even when they also hold a
+  // dashboard-consolidated workflow role (e.g. Accounting / Plant Manager).
+  if (role === "ADMIN") hide.delete("/dashboard");
   const items = NAV.filter((n) => {
     const allowed = (n.roles as readonly string[]).includes(role) || show.has(n.href);
     return allowed && !(hide.has(n.href) && !show.has(n.href));

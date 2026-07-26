@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { buildMyDashboard, type MyTask } from "@/lib/my-dashboard";
 import { getProductionStatus } from "@/lib/production-status";
 import { ProductionStatusCard } from "@/components/production-status-card";
@@ -72,7 +72,8 @@ export default async function MyDashboardPage() {
   // Consolidated-dashboard roles get the Sales Dashboard embedded below, so this
   // is their single dashboard to monitor.
   const assignments = await getWorkflowRoles();
-  const showSalesBelow = DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
+  // Admins keep the standalone Sales Dashboard, so nothing is embedded for them.
+  const showSalesBelow = !isAdmin(user) && DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
   const maskProdClient = hidesProductionClient(user, assignments);
 
   return (
