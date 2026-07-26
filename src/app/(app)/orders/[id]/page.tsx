@@ -526,7 +526,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Plant Manager (they raise/monitor requests but don't need the printable MRF).
   const hideMrfDoc =
     !adminViewer && viewer != null &&
-    (["plant_manager", "prod_head_duct", "prod_head_accessories", "prod_head_motor", "quality_inspector_2"] as WorkflowRoleKey[]).some((r) =>
+    (["plant_manager", "prod_head_fans", "prod_head_duct", "prod_head_accessories", "prod_head_motor", "technical_head", "quality_inspector", "quality_inspector_2"] as WorkflowRoleKey[]).some((r) =>
       userHasWorkflowRole(assignments, viewer.id, r),
     );
 
