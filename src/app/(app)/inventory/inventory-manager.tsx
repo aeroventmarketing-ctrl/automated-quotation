@@ -642,7 +642,11 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
       ) : (
         <div className="overflow-x-auto">
           {q !== "" && <p className="mb-1 text-xs text-muted-foreground">{filtered.length} of {items.length} items</p>}
-          <Table>
+          {/* min-w-max lets the wide table (up to 12 cols + a 5-button Action
+              cell) grow to its content width so the overflow-auto wrapper
+              scrolls horizontally instead of squeezing the last column off the
+              right edge (where <main>'s overflow-x-clip would hide it). */}
+          <Table className="min-w-max">
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
