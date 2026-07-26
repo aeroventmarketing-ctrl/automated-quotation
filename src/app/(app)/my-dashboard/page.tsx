@@ -83,6 +83,8 @@ export default async function MyDashboardPage() {
     !isAdmin(user) &&
     !noSalesEmbedRoles.some((r) => userHasWorkflowRole(assignments, user.id, r)) &&
     DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
+  // Admins get the Sales Dashboard embedded ABOVE the production sections.
+  const showSalesAbove = isAdmin(user);
   const maskProdClient = hidesProductionClient(user, assignments);
   const admin = isAdmin(user);
   // Inventory double-handshake actions awaiting the Warehouseman / Purchaser /
@@ -111,6 +113,9 @@ export default async function MyDashboardPage() {
           {data.roleLabels.length > 0 ? ` · ${data.roleLabels.join(" · ")}` : ""}
         </p>
       </div>
+
+      {/* Admins see the Sales Dashboard first, above the production sections. */}
+      {showSalesAbove && <SalesDashboardBody embedded />}
 
       {/* Production status — On time / Near due / Late, clickable to the client. */}
       <ProductionStatusCard status={production} maskClient={maskProdClient} />
