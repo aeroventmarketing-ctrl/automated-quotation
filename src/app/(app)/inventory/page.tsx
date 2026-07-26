@@ -47,8 +47,15 @@ export default async function InventoryPage() {
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
   const showPrices = canViewPrices(viewer, assignments);
-  // The Purchaser sees unit cost (for buying) but not the selling price.
-  const showSellPrice = !(has("purchaser") && !admin);
+  // Neither the Purchaser nor the Warehouse sees the selling price. The
+  // Purchaser sees unit cost (for buying); the Warehouseman only sees the
+  // sell-price column hidden here (a pure Warehouse sees no money columns at
+  // all). Admins always see everything.
+  const showSellPrice = admin || !(has("purchaser") || has("warehouse"));
+  // The scan → jump / receive / issue tool is available to stock movers (the
+  // Warehouse / Plant Manager / admin) and to the Purchaser (goods receipt on
+  // deliveries). This does NOT grant the per-row manage actions.
+  const canScan = canManageItems || has("purchaser");
   // The Purchaser/admin can fill in missing prices even without warehouse rights.
   const editPrices = canEditPrices(viewer, assignments);
 
@@ -179,7 +186,7 @@ export default async function InventoryPage() {
           </div>
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} canCreate={canCreateItems} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} canScan={canScan} canCreate={canCreateItems} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 

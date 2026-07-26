@@ -20,6 +20,25 @@ async function requireInventoryManager() {
   return user;
 }
 
+/**
+ * Scan fast-path (receive / issue via the barcode box) — the Warehouse, Plant
+ * Manager, Purchaser (goods receipt on deliveries) or an admin. This is the
+ * direct-adjust path only; the per-row Edit / Adjust / Reserve / Transfer still
+ * go through the double-handshake proposal flow.
+ */
+async function requireStockMover() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (isAdmin(user)) return user;
+  const roles = await getWorkflowRoles();
+  const ok =
+    userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only the Warehouse, Plant Manager, Purchaser or an admin can receive / issue stock.");
+  return user;
+}
+
 /** Adding / importing / merging catalogue items — the Purchaser, Warehouse or an admin. */
 async function requireItemCreator() {
   const user = await getCurrentUser();
@@ -430,7 +449,7 @@ const adjustSchema = z.object({
  * the on-hand to the given quantity. Records a ledger movement with the new balance.
  */
 export async function adjustStock(input: z.infer<typeof adjustSchema>): Promise<void> {
-  const user = await requireInventoryManager();
+  const user = await requireStockMover();
   const d = adjustSchema.parse(input);
   let logInfo: { name: string; unit: string; balanceAfter: number } | null = null;
   await prisma.$transaction(async (tx) => {

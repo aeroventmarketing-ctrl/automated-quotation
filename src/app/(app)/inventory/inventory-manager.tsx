@@ -361,7 +361,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   );
 }
 
-export function InventoryManager({ items, canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, canScan = canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canScan?: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -538,7 +538,7 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
           <Input ref={scanRef} className="h-9 w-56 pl-8" placeholder="Scan barcode…" value={scan} autoFocus disabled={scanBusy}
             onChange={(e) => setScan(e.target.value)} onKeyDown={onScanKey} />
         </div>
-        {canManage && (
+        {canScan && (
           <select value={scanMode} onChange={(e) => { setScanMode(e.target.value as typeof scanMode); scanRef.current?.focus(); }}
             className="h-9 rounded-md border bg-background px-2 text-sm">
             <option value="find">Scan → jump to item</option>
@@ -546,7 +546,7 @@ export function InventoryManager({ items, canManage, canCreate = true, locations
             <option value="issue">Scan → issue</option>
           </select>
         )}
-        {canManage && scanMode !== "find" && (
+        {canScan && scanMode !== "find" && (
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
             Qty<Input className="h-9 w-20" type="number" step="any" min={0} value={scanQty} onChange={(e) => setScanQty(e.target.value)} />
           </label>
