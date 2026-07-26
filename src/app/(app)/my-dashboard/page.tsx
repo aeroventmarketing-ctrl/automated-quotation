@@ -4,6 +4,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { buildMyDashboard, type MyTask } from "@/lib/my-dashboard";
 import { getProductionStatus } from "@/lib/production-status";
 import { ProductionStatusCard } from "@/components/production-status-card";
+import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { DASHBOARD_CONSOLIDATED_ROLES } from "@/components/app-nav";
+import { SalesDashboardBody } from "../dashboard/sales-dashboard-body";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -65,6 +68,10 @@ export default async function MyDashboardPage() {
   // Sales / Engineer / Other with no workflow role use their existing dashboard.
   if (!data.hasRole) redirect("/dashboard");
   const production = await getProductionStatus();
+  // Consolidated-dashboard roles get the Sales Dashboard embedded below, so this
+  // is their single dashboard to monitor.
+  const assignments = await getWorkflowRoles();
+  const showSalesBelow = DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
 
   return (
     <div className="space-y-6">
@@ -171,6 +178,10 @@ export default async function MyDashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Sales Dashboard, consolidated here for the production / monitoring roles
+          so they have one dashboard. (Restricted roles get nothing extra.) */}
+      {showSalesBelow && <SalesDashboardBody embedded />}
     </div>
   );
 }
