@@ -7,6 +7,7 @@ import { ProductionStatusCard } from "@/components/production-status-card";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 import { SalesDashboardBody } from "../dashboard/sales-dashboard-body";
+import { hidesProductionClient } from "@/lib/client-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -72,6 +73,7 @@ export default async function MyDashboardPage() {
   // is their single dashboard to monitor.
   const assignments = await getWorkflowRoles();
   const showSalesBelow = DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
+  const maskProdClient = hidesProductionClient(user, assignments);
 
   return (
     <div className="space-y-6">
@@ -85,7 +87,7 @@ export default async function MyDashboardPage() {
       </div>
 
       {/* Production status — On time / Near due / Late, clickable to the client. */}
-      <ProductionStatusCard status={production} />
+      <ProductionStatusCard status={production} maskClient={maskProdClient} />
 
       {/* Counts by area — click a box to jump to that area's items below. */}
       {data.byArea.length > 0 && (

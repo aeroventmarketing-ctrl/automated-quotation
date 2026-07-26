@@ -16,7 +16,7 @@ const fmtDue = (due: string) => {
   return new Date(y, m - 1, d).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
 };
 
-function StatusRow({ r, kind }: { r: ProductionRow; kind: Kind }) {
+function StatusRow({ r, kind, maskClient }: { r: ProductionRow; kind: Kind; maskClient: boolean }) {
   const tag =
     kind === "late" ? `${-r.days}d overdue` : r.days === 0 ? "Due today" : kind === "nearDue" ? `Due in ${r.days}d` : `${r.days}d left`;
   const cls =
@@ -30,14 +30,16 @@ function StatusRow({ r, kind }: { r: ProductionRow; kind: Kind }) {
       <Link href={`/orders/${r.orderId}`} className="-mx-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-1.5 text-sm hover:bg-accent">
         <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>{tag}</span>
         <span className="font-medium">{r.dept}</span>
-        <span className="min-w-0 truncate text-muted-foreground">{r.company}{r.projectName ? ` · ${r.projectName}` : ""} · {r.quoteNumber}</span>
+        {/* The order ref (quote no.) is an internal id, safe to show; the client
+            company / project are masked for restricted production roles. */}
+        <span className="min-w-0 truncate text-muted-foreground">{maskClient ? r.quoteNumber : `${r.company}${r.projectName ? ` · ${r.projectName}` : ""} · ${r.quoteNumber}`}</span>
         <span className="ml-auto shrink-0 text-xs text-muted-foreground">due {fmtDue(r.dueAt)}</span>
       </Link>
     </li>
   );
 }
 
-function Section({ kind, rows }: { kind: Kind; rows: ProductionRow[] }) {
+function Section({ kind, rows, maskClient }: { kind: Kind; rows: ProductionRow[]; maskClient: boolean }) {
   const k = KIND[kind];
   if (rows.length === 0) return null;
   return (
@@ -46,7 +48,7 @@ function Section({ kind, rows }: { kind: Kind; rows: ProductionRow[] }) {
         <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: k.dot }} /> {k.label} <span className="text-muted-foreground/70">({rows.length})</span>
       </div>
       <ul className="divide-y">
-        {rows.slice(0, 8).map((r, i) => <StatusRow key={`${r.orderId}-${r.dept}-${i}`} r={r} kind={kind} />)}
+        {rows.slice(0, 8).map((r, i) => <StatusRow key={`${r.orderId}-${r.dept}-${i}`} r={r} kind={kind} maskClient={maskClient} />)}
         {rows.length > 8 && <li className="pt-1 text-xs text-muted-foreground">+ {rows.length - 8} more</li>}
       </ul>
     </div>
@@ -55,7 +57,7 @@ function Section({ kind, rows }: { kind: Kind; rows: ProductionRow[] }) {
 
 /** Production-deadline snapshot: On time / Near due / Late, each clickable to
  *  the client's order. Shown across the dashboards. */
-export function ProductionStatusCard({ status }: { status: ProductionStatus }) {
+export function ProductionStatusCard({ status, maskClient = false }: { status: ProductionStatus; maskClient?: boolean }) {
   const total = status.onTime.length + status.nearDue.length + status.late.length;
   const tiles: { kind: Kind; count: number }[] = [
     { kind: "onTime", count: status.onTime.length },
@@ -94,9 +96,9 @@ export function ProductionStatusCard({ status }: { status: ProductionStatus }) {
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">Unfinished department job orders on live orders, by deadline. Click a row to open the client&rsquo;s order.</p>
             <div className="mt-2 space-y-4">
-              <Section kind="late" rows={status.late} />
-              <Section kind="nearDue" rows={status.nearDue} />
-              <Section kind="onTime" rows={status.onTime} />
+              <Section kind="late" rows={status.late} maskClient={maskClient} />
+              <Section kind="nearDue" rows={status.nearDue} maskClient={maskClient} />
+              <Section kind="onTime" rows={status.onTime} maskClient={maskClient} />
             </div>
           </>
         )}

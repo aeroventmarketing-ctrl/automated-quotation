@@ -30,6 +30,32 @@ export async function isClientRestricted(user: User | null, assignments: Workflo
   return hasRestricted && !hasVisible;
 }
 
+/**
+ * Roles that must not see the client name on the Production status card. A
+ * client-visible role (Purchaser, Accounting, Logistics, Payment Approver) — or
+ * being an Admin / Sales / Engineer — always wins and reveals the client.
+ */
+const HIDE_PRODUCTION_CLIENT_ROLES: WorkflowRoleKey[] = [
+  "plant_manager",
+  "prod_head_duct",
+  "prod_head_accessories",
+  "prod_head_motor",
+  "prod_head_fans",
+  "warehouse",
+  "quality_inspector_2",
+  "technical_head",
+];
+const PRODUCTION_CLIENT_VISIBLE_ROLES: WorkflowRoleKey[] = ["purchaser", "accounting", "logistics", "payment_approver"];
+
+/** Whether the viewer should have the client name masked on the Production card. */
+export function hidesProductionClient(user: User | null, assignments: WorkflowRoleAssignments): boolean {
+  if (!user) return false;
+  if (isAdmin(user) || user.role === "SALES" || user.role === "ENGINEER") return false;
+  const has = (r: WorkflowRoleKey) => userHasWorkflowRole(assignments, user.id, r);
+  if (PRODUCTION_CLIENT_VISIBLE_ROLES.some(has)) return false;
+  return HIDE_PRODUCTION_CLIENT_ROLES.some(has);
+}
+
 export const CLIENT_HIDDEN = "Client hidden";
 export const AMOUNT_HIDDEN = "₱ —";
 

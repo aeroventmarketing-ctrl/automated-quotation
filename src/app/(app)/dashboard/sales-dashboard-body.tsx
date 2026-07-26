@@ -6,7 +6,7 @@ import { TestModeBanner } from "@/components/test-mode-banner";
 import { ActivityBell } from "@/components/activity-bell";
 import { StockAvailabilitySearch } from "@/components/stock-availability-search";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
-import { isClientRestricted } from "@/lib/client-visibility";
+import { isClientRestricted, hidesProductionClient } from "@/lib/client-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
@@ -65,6 +65,7 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
   // Shop-floor roles must not see client identity or sales amounts — the sales
   // dashboard is entirely that, so show them a simple landing to their areas.
   const restrictedAssignments = await getWorkflowRoles();
+  const maskProdClient = hidesProductionClient(user, restrictedAssignments);
   if (await isClientRestricted(user, restrictedAssignments)) {
     // Embedded in My Dashboard there's nothing extra to add for a restricted
     // role — their work areas are in the sidebar and production is shown above.
@@ -88,7 +89,7 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
         </div>
         {/* Production status with client details — explicitly enabled for the
             production / monitoring roles. */}
-        <ProductionStatusCard status={production} />
+        <ProductionStatusCard status={production} maskClient={maskProdClient} />
       </div>
     );
   }
@@ -304,7 +305,7 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
       <StockAvailabilitySearch />
 
       {/* Production status — On time / Near due / Late, clickable to the client. */}
-      {!embedded && <ProductionStatusCard status={production} />}
+      {!embedded && <ProductionStatusCard status={production} maskClient={maskProdClient} />}
 
       {/* Each box drills into its details: the status boxes open the inquiries
           list pre-filtered to that stage, and "Quotes drafted today" opens the
