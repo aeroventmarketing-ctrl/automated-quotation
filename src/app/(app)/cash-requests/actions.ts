@@ -19,7 +19,7 @@ import {
   type CashRequestStatus,
   type CashCategoryKey,
 } from "@/lib/cash-request";
-import { requestorDeptKey } from "@/lib/order-workflow";
+import { requestorDeptKey, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { round2 } from "@/lib/quote";
 
 /** Claim the next cash-voucher number — a plain 7-digit sequence, e.g. "0000810"
@@ -63,9 +63,15 @@ export async function createCashRequest(input: {
   const category: CashCategoryKey = (CASH_CATEGORIES.find((c) => c.key === input.category)?.key ?? "advance") as CashCategoryKey;
   // The department is fixed to the requestor's own department (production head →
   // their line, everyone else → Office). Derived server-side so it can't be
-  // changed from the client, and never blank.
+  // changed from the client, and never blank. EXCEPTION: the Plant Manager
+  // oversees all production lines, so they may target any of the 4 production
+  // departments (never Office) — the client sends the chosen line, validated here.
   const assignments = await getWorkflowRoles();
-  const dept = requestorDeptKey((role) => userHasWorkflowRole(assignments, user.id, role as WorkflowRoleKey));
+  const isPlantManager = userHasWorkflowRole(assignments, user.id, "plant_manager" as WorkflowRoleKey);
+  const chosenProdDept = PRODUCTION_DEPTS.some((d) => d.key === input.dept) ? String(input.dept) : null;
+  const dept = isPlantManager && chosenProdDept
+    ? chosenProdDept
+    : requestorDeptKey((role) => userHasWorkflowRole(assignments, user.id, role as WorkflowRoleKey));
 
   const lines = (input.lines ?? [])
     .map((l) => ({ description: String(l.description ?? "").trim(), amount: num(l.amount) }))

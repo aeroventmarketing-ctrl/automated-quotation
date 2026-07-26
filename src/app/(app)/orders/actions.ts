@@ -1000,8 +1000,14 @@ export async function createDepartmentRequisition(
   const roles = await getWorkflowRoles();
   // The department is fixed to the requestor's own department (production head →
   // their line; everyone else → Office). Derived server-side so it can't be set
-  // from the client. The passed value is ignored.
-  const dept = requestorDeptKey((role) => userHasWorkflowRole(roles, user.id, role as WorkflowRoleKey));
+  // from the client. EXCEPTION: the Plant Manager oversees all production lines,
+  // so they may target any of the 4 production departments (never Office) — the
+  // client sends the chosen line and we validate it here.
+  const isPlantManager = userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey);
+  const chosenProdDept = PRODUCTION_DEPTS.some((d) => d.key === _dept) ? String(_dept) : null;
+  const dept = isPlantManager && chosenProdDept
+    ? chosenProdDept
+    : requestorDeptKey((role) => userHasWorkflowRole(roles, user.id, role as WorkflowRoleKey));
   const isOffice = dept === OFFICE_DEPT_KEY;
   const purchaserOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
   // A production department here means the user heads it (that's how it was

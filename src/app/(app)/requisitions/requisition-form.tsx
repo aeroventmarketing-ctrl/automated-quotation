@@ -22,9 +22,10 @@ const normalizeUnit = (u: string | undefined): string => {
 };
 
 /** Raise a department requisition — production supplies not tied to an order. */
-export function RequisitionForm({ fixedDept, products }: { fixedDept: { key: string; label: string }; products: ScanProduct[] }) {
+export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixedDept: { key: string; label: string }; selectableDepts?: { key: string; label: string }[]; products: ScanProduct[] }) {
   const router = useRouter();
-  const dept = fixedDept.key;
+  // Plant Manager: choose any production department. Everyone else: fixed.
+  const [dept, setDept] = useState(selectableDepts?.[0]?.key ?? fixedDept.key);
   const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow(), emptyRow()]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -122,9 +123,17 @@ export function RequisitionForm({ fixedDept, products }: { fixedDept: { key: str
         </datalist>
         <label className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-xs text-muted-foreground">Department</span>
-          {/* Fixed to the requestor's own department — greyed out, not selectable. */}
-          <input value={fixedDept.label} readOnly disabled aria-label="Department"
-            className="h-8 w-44 cursor-not-allowed rounded-md border bg-muted px-2 text-sm text-muted-foreground" />
+          {selectableDepts && selectableDepts.length > 0 ? (
+            // Plant Manager selects the production department (never Office).
+            <select value={dept} onChange={(e) => setDept(e.target.value)} aria-label="Department"
+              className="h-8 w-44 rounded-md border bg-background px-2 text-sm">
+              {selectableDepts.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
+            </select>
+          ) : (
+            /* Fixed to the requestor's own department — greyed out, not selectable. */
+            <input value={fixedDept.label} readOnly disabled aria-label="Department"
+              className="h-8 w-44 cursor-not-allowed rounded-md border bg-muted px-2 text-sm text-muted-foreground" />
+          )}
         </label>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] border-collapse text-sm">

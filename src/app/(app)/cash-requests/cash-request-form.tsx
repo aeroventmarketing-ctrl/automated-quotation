@@ -14,8 +14,10 @@ const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFrac
 const num = (s: string) => Number(String(s ?? "").replace(/,/g, "").trim()) || 0;
 
 /** Raise a cash request — general money request (advance / reimbursement / expense). */
-export function CashRequestForm({ fixedDept }: { fixedDept: { key: string; label: string } }) {
+export function CashRequestForm({ fixedDept, selectableDepts }: { fixedDept: { key: string; label: string }; selectableDepts?: { key: string; label: string }[] }) {
   const router = useRouter();
+  // Plant Manager: choose any production department. Everyone else: fixed.
+  const [dept, setDept] = useState(selectableDepts?.[0]?.key ?? fixedDept.key);
   const [purpose, setPurpose] = useState("");
   const [category, setCategory] = useState<string>(CASH_CATEGORIES[0].key);
   const [amount, setAmount] = useState("");
@@ -39,8 +41,8 @@ export function CashRequestForm({ fixedDept }: { fixedDept: { key: string; label
       await createCashRequest({
         purpose,
         category,
-        // Department is fixed to the requestor's own department (enforced server-side too).
-        dept: fixedDept.key,
+        // Requestor's own department (server-enforced); Plant Manager picks a line.
+        dept,
         amount: amount.trim() !== "" ? amount : undefined,
         lines: lines.filter((l) => l.description.trim() !== "" || l.amount.trim() !== ""),
         note,
@@ -74,9 +76,17 @@ export function CashRequestForm({ fixedDept }: { fixedDept: { key: string; label
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-xs text-muted-foreground">Department</span>
-            {/* Fixed to the requestor's own department — shown greyed out, not selectable. */}
-            <input value={fixedDept.label} readOnly disabled aria-label="Department"
-              className="h-9 w-full cursor-not-allowed rounded-md border bg-muted px-2 text-sm text-muted-foreground" />
+            {selectableDepts && selectableDepts.length > 0 ? (
+              // Plant Manager selects the production department (never Office).
+              <select value={dept} onChange={(e) => setDept(e.target.value)} aria-label="Department"
+                className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+                {selectableDepts.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
+              </select>
+            ) : (
+              /* Fixed to the requestor's own department — shown greyed out, not selectable. */
+              <input value={fixedDept.label} readOnly disabled aria-label="Department"
+                className="h-9 w-full cursor-not-allowed rounded-md border bg-muted px-2 text-sm text-muted-foreground" />
+            )}
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-xs text-muted-foreground">Amount (₱){amount.trim() === "" && linesTotal > 0 ? " — leave blank to use the breakdown total" : ""}</span>

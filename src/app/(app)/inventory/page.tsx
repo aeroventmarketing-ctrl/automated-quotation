@@ -23,6 +23,10 @@ export default async function InventoryPage() {
   const isSales = viewer?.role === "SALES";
   const canManage = !isSales && (admin || has("warehouse") || has("plant_manager"));
   const canView = !isSales && (canManage || has("purchaser"));
+  // The Plant Manager monitors stock but does not edit items — hide the
+  // add / import / per-row action buttons for them (a Warehouseman or admin
+  // still manages). They keep read-only view + their stock-transfer rights.
+  const canManageItems = !isSales && (admin || has("warehouse"));
   // Prices (unit cost, sell price, stock value) are commercial data — only the
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
@@ -129,7 +133,7 @@ export default async function InventoryPage() {
           </div>
           <Card>
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManage} locations={locations} showPrices={showPrices} canEditPrices={editPrices} />
+              <InventoryManager items={items} canManage={canManageItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} />
             </CardContent>
           </Card>
 

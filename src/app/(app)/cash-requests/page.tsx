@@ -3,7 +3,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
-import { requestorDeptKey, requisitionDeptLabel } from "@/lib/order-workflow";
+import { requestorDeptKey, requisitionDeptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { buildCashRequestRow, type CashRequestLike } from "@/lib/cash-request-row";
 import type { CashActor } from "@/lib/cash-request";
 import { CashRequestForm } from "./cash-request-form";
@@ -22,6 +22,11 @@ export default async function CashRequestsPage() {
   // The requestor's own department — fixed on the cash-request form (not selectable).
   const cashDeptKey = requestorDeptKey((role) => has(role as WorkflowRoleKey));
   const cashDept = { key: cashDeptKey, label: requisitionDeptLabel(cashDeptKey) };
+  // The Plant Manager oversees all production lines — they pick which of the 4
+  // production departments (never Office) the cash request is for.
+  const plantMgrDepts = has("plant_manager")
+    ? PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
+    : undefined;
 
   const userName = new Map<string, string>();
   const namesForActor = (actor: CashActor): string[] => {
@@ -63,7 +68,7 @@ export default async function CashRequestsPage() {
         </p>
       </div>
 
-      <CashRequestForm fixedDept={cashDept} />
+      <CashRequestForm fixedDept={cashDept} selectableDepts={plantMgrDepts} />
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
