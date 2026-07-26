@@ -5,7 +5,7 @@ import { buildMyDashboard, type MyTask } from "@/lib/my-dashboard";
 import { getProductionStatus } from "@/lib/production-status";
 import { ProductionStatusCard } from "@/components/production-status-card";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { DASHBOARD_CONSOLIDATED_ROLES } from "@/components/app-nav";
+import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 import { SalesDashboardBody } from "../dashboard/sales-dashboard-body";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

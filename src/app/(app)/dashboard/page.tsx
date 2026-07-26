@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { DASHBOARD_CONSOLIDATED_ROLES } from "@/components/app-nav";
+import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 import { SalesDashboardBody } from "./sales-dashboard-body";
 
 export const dynamic = "force-dynamic";

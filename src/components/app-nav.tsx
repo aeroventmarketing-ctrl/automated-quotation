@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, ListChecks } from "lucide-react";
 import type { Role } from "@prisma/client";
+import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 
 /** Shown to workflow-role holders and admins (their task list). */
 export const MY_DASHBOARD_ITEM = { href: "/my-dashboard", label: "My Dashboard", icon: ListChecks } as const;
@@ -32,25 +33,6 @@ export const NAV = [
  * removes a tab the base role would otherwise show; `show` forces a tab on. When
  * a user holds several roles, any role's `show` wins over another role's `hide`.
  */
-/**
- * Roles whose Sales Dashboard is consolidated into My Dashboard — they get a
- * single dashboard, so the separate Sales Dashboard tab is hidden and its
- * content is embedded inside My Dashboard.
- */
-export const DASHBOARD_CONSOLIDATED_ROLES = [
-  "plant_manager",
-  "prod_head_duct",
-  "prod_head_accessories",
-  "prod_head_motor",
-  "prod_head_fans",
-  "purchaser",
-  "accounting",
-  "warehouse",
-  "logistics",
-  "quality_inspector_2",
-  "technical_head",
-] as const;
-
 export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
   accounting: { hide: ["/inventory", "/products", "/dashboard"], show: ["/requisitions"] },
   // Consolidated-dashboard roles: hide the standalone Sales Dashboard tab.
