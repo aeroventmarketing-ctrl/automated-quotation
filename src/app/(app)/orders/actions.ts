@@ -1012,20 +1012,25 @@ export async function createDepartmentRequisition(
   // target any of the 4 production departments (never Office); Logistics may
   // target any of the 5 (including Office). The client sends the chosen line and
   // we validate it here.
+  // Logistics and the Technical Head may target any of the 5 departments
+  // (including Office); the Plant Manager and Warehouseman only the 4 production
+  // lines.
   const isLogistics = userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
+  const isTechHead = userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey);
+  const canPickAnyDept = isLogistics || isTechHead;
   const canPickProdDept =
     userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey) ||
     userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
   const chosen =
-    isLogistics && REQUISITION_DEPT_KEYS.has(String(_dept)) ? String(_dept)
+    canPickAnyDept && REQUISITION_DEPT_KEYS.has(String(_dept)) ? String(_dept)
     : canPickProdDept && PRODUCTION_DEPTS.some((d) => d.key === _dept) ? String(_dept)
     : null;
   const dept = chosen ?? requestorDeptKey((role) => userHasWorkflowRole(roles, user.id, role as WorkflowRoleKey));
   const isOffice = dept === OFFICE_DEPT_KEY;
   const purchaserOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
-  // Office requisitions are for Sales, Purchaser, Logistics or admin — not
-  // Engineers or other office roles with no requisition duty.
-  const allowed = isOffice ? purchaserOrAdmin || user.role === "SALES" || isLogistics : true;
+  // Office requisitions are for Sales, Purchaser, Logistics, the Technical Head
+  // or admin — not Engineers or other office roles with no requisition duty.
+  const allowed = isOffice ? purchaserOrAdmin || user.role === "SALES" || canPickAnyDept : true;
   if (!allowed) throw new Error("You don't have access to raise a requisition.");
 
   const cleanItems: MRFItem[] = (items ?? [])

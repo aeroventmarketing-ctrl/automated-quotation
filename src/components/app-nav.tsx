@@ -70,9 +70,6 @@ export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }>
       const hide = ["/dashboard", "/commissions"];
       if (NO_PURCHASING_ROLES.has(r)) hide.push("/purchasing");
       if (QC_ROLES.has(r)) hide.push(...QC_DEAD_END_TABS);
-      // The Technical Head gets read-only Inventory + Products, so only the
-      // Requisitions tab dead-ends for them.
-      if (r === "technical_head") hide.push("/requisitions");
       return [r, { hide }];
     }),
   ),

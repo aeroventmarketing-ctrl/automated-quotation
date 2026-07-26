@@ -28,7 +28,7 @@ export default async function RequisitionsPage() {
   // Office-type raisers (accounting, plant manager, warehouse, logistics,
   // engineers, sales) may raise requisitions for their own department.
   const officeRaiser =
-    isSales || isEngineer || has("accounting") || has("plant_manager") || has("warehouse") || has("logistics");
+    isSales || isEngineer || has("accounting") || has("plant_manager") || has("warehouse") || has("logistics") || has("technical_head");
   const canRaise = admin || purchaser || officeRaiser || ownDeptKeys.length > 0;
 
   if (!canRaise) {
@@ -46,7 +46,7 @@ export default async function RequisitionsPage() {
   const reqDept = { key: reqDeptKey, label: requisitionDeptLabel(reqDeptKey) };
   // Logistics may pick any of the 5 departments (incl. Office); the Plant Manager
   // and Warehouseman pick the 4 production departments (never Office).
-  const plantMgrDepts = has("logistics")
+  const plantMgrDepts = has("logistics") || has("technical_head")
     ? REQUISITION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
     : has("plant_manager") || has("warehouse")
     ? PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
