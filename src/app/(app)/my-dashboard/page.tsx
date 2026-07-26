@@ -76,11 +76,12 @@ export default async function MyDashboardPage() {
   // is their single dashboard to monitor.
   const assignments = await getWorkflowRoles();
   // Admins keep the standalone Sales Dashboard, so nothing is embedded for them.
-  // The Purchaser doesn't get the sales analytics embedded either (they don't
-  // need the client sales figures).
+  // The Purchaser and Logistics don't get the sales analytics embedded either
+  // (they don't need the client sales figures).
+  const noSalesEmbedRoles: WorkflowRoleKey[] = ["purchaser", "logistics"];
   const showSalesBelow =
     !isAdmin(user) &&
-    !userHasWorkflowRole(assignments, user.id, "purchaser" as WorkflowRoleKey) &&
+    !noSalesEmbedRoles.some((r) => userHasWorkflowRole(assignments, user.id, r)) &&
     DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
   const maskProdClient = hidesProductionClient(user, assignments);
   const admin = isAdmin(user);
