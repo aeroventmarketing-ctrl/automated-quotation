@@ -382,7 +382,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
 
       {/* Voucher reconciliation — actual spend vs the issued voucher for this PO.
           Only once the item is purchased (or already recorded); hidden earlier. */}
-      {(canReconcileAt(batch.status) || batch.reconcile.recorded != null) && (
+      {showAmounts && (canReconcileAt(batch.status) || batch.reconcile.recorded != null) && (
         <PurchaseReconcilePanel
           prId={batch.anchorId}
           reconcile={batch.reconcile}

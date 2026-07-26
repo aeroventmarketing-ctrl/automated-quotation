@@ -348,7 +348,7 @@ export function PurchasingChain({
                 Interactivity is driven by the row's own reconcile permissions,
                 not the chain's read-only flag, so it works on monitoring
                 surfaces (e.g. Requisitions) for whoever may reconcile. */}
-            {r.reconcile && (canReconcileAt(r.status as PRStatus) || r.reconcile.recorded != null) && (
+            {showAmounts && r.reconcile && (canReconcileAt(r.status as PRStatus) || r.reconcile.recorded != null) && (
               <PurchaseReconcilePanel
                 prId={r.id}
                 reconcile={r.reconcile}
