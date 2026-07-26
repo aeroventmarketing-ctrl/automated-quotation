@@ -47,11 +47,11 @@ export default async function InventoryPage() {
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
   const showPrices = canViewPrices(viewer, assignments);
-  // Neither the Purchaser nor the Warehouse sees the selling price. The
-  // Purchaser sees unit cost (for buying); the Warehouseman only sees the
-  // sell-price column hidden here (a pure Warehouse sees no money columns at
-  // all). Admins always see everything.
-  const showSellPrice = admin || !(has("purchaser") || has("warehouse"));
+  // The selling price is sales-only commercial data — hidden from the
+  // Purchaser, Accounting and Warehouse. The Purchaser and Accounting still see
+  // unit cost + stock value (needed for buying / valuation); the Warehouse sees
+  // no money columns at all. Admins and Engineers always see everything.
+  const showSellPrice = admin || !(has("purchaser") || has("warehouse") || has("accounting"));
   // The scan → jump / receive / issue tool is available to stock movers (the
   // Warehouse / Plant Manager / admin) and to the Purchaser (goods receipt on
   // deliveries). This does NOT grant the per-row manage actions.
