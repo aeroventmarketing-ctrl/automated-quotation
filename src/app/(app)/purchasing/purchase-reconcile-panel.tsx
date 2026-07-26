@@ -391,7 +391,11 @@ export function PurchaseReconcilePanel({
           {reconcile.recorded && <p className="text-xs text-muted-foreground">Reconciled by {reconcile.recorded}</p>}
           {/* Discrepancy authorisation flow — only when it doesn't balance. */}
           {reconcile.status !== "balanced" ? (
-            <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 p-2">
+            <div className={`space-y-1 rounded-md border p-2 ${
+              !reconcile.approved && !reconcile.escalated
+                ? "animate-approver-blink border-amber-400 bg-amber-100 dark:border-amber-600 dark:bg-amber-950/60"
+                : "border-amber-500/40 bg-amber-500/5"
+            }`}>
               {reconcile.approved ? (
                 <>
                   <p className="text-xs text-emerald-700">✓ Discrepancy approved — {reconcile.approved}</p>
