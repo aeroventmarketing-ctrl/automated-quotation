@@ -37,19 +37,6 @@ export const NAV = [
 // payout data (client + money) that these roles don't need — the Commissions
 // tab is hidden from them (Accounting keeps it: they compute/pay commissions;
 // Sales / Engineer / Admin keep it via their base role).
-const SHOPFLOOR_ROLES = new Set<string>([
-  "plant_manager",
-  "prod_head_fans",
-  "prod_head_duct",
-  "prod_head_accessories",
-  "prod_head_motor",
-  "technical_head",
-  "quality_inspector",
-  "quality_inspector_2",
-  "warehouse",
-  "logistics",
-]);
-
 // Roles for which the Purchasing tab is a dead-end — the production heads,
 // Technical Head and Quality Inspectors. They aren't a purchasing-chain role,
 // so the Purchasing page denies them; they raise requisitions and track
@@ -68,18 +55,19 @@ export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }>
   // Accounting sees Inventory (read-only, like the Plant Manager); Products and
   // the standalone Sales Dashboard stay hidden. Keeps Commissions (payouts).
   accounting: { hide: ["/products", "/dashboard"], show: ["/requisitions"] },
-  // Consolidated-dashboard roles: hide the standalone Sales Dashboard tab, plus
-  // Commissions for shop-floor roles and Purchasing for the roles it dead-ends.
+  // Consolidated-dashboard roles (except Accounting): hide the standalone Sales
+  // Dashboard and the Commissions tab — sales-rep payout data none of them need
+  // (only Accounting, who pays them, and Sales / Engineer / Admin keep it). Also
+  // hide the Purchasing tab for the roles where it dead-ends.
   ...Object.fromEntries(
     DASHBOARD_CONSOLIDATED_ROLES.filter((r) => r !== "accounting").map((r) => {
-      const hide = ["/dashboard"];
-      if (SHOPFLOOR_ROLES.has(r)) hide.push("/commissions");
+      const hide = ["/dashboard", "/commissions"];
       if (NO_PURCHASING_ROLES.has(r)) hide.push("/purchasing");
       return [r, { hide }];
     }),
   ),
-  // The 1st Quality Inspector isn't dashboard-consolidated but is still a
-  // shop-floor role — hide Commissions and the Purchasing dead-end from them.
+  // The 1st Quality Inspector isn't dashboard-consolidated but still shouldn't
+  // see Commissions, and the Purchasing tab dead-ends for them too.
   quality_inspector: { hide: ["/commissions", "/purchasing"] },
 };
 
