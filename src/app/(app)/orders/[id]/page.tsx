@@ -257,15 +257,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     return { status, canIssue, canAdvance, nextTo, nextLabel, awaitingReceive };
   };
 
-  // A job order is visible only to its own department head. Sales, Engineers,
-  // Admins, the Payment Approver, the Technical Head and the Plant Manager see
-  // every department's job orders.
+  // A job order is visible to its own department head. Sales, Engineers, Admins,
+  // the Purchaser, Payment Approver, Technical Head and Plant Manager see every
+  // department's job orders. Visibility never depends on the order's stage, so
+  // job orders stay viewable even after production is finished or the order is
+  // closed.
   const seesAllJobOrders =
     adminViewer ||
     viewer?.role === "SALES" ||
     viewer?.role === "ENGINEER" ||
     (viewer != null &&
-      (["payment_approver", "technical_head", "plant_manager"] as WorkflowRoleKey[]).some((r) =>
+      (["purchaser", "payment_approver", "technical_head", "plant_manager"] as WorkflowRoleKey[]).some((r) =>
         userHasWorkflowRole(assignments, viewer.id, r),
       ));
   const canSeeDeptJO = (deptKey: (typeof PRODUCTION_DEPTS)[number]["key"]): boolean =>
