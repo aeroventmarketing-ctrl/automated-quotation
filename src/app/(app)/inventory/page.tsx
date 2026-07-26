@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function InventoryPage() {
   const [viewer, assignments, locations] = await Promise.all([getCurrentUser(), getWorkflowRoles(), getStockLocations()]);
   const admin = isAdmin(viewer);
-  const has = (role: "warehouse" | "plant_manager" | "purchaser") =>
+  const has = (role: "warehouse" | "plant_manager" | "purchaser" | "accounting") =>
     viewer != null && userHasWorkflowRole(assignments, viewer.id, role);
   // Sales are blocked from the Inventory page entirely (they use the sales
   // dashboard's Check-availability tool for name / quantity / selling price).
@@ -29,13 +29,16 @@ export default async function InventoryPage() {
     (["prod_head_duct", "prod_head_accessories", "prod_head_motor"] as WorkflowRoleKey[]).some((r) =>
       userHasWorkflowRole(assignments, viewer.id, r),
     );
-  const canView = !isSales && (canManage || has("purchaser") || isProdHeadViewer);
+  // Accounting monitors inventory read-only, with the same characteristics as
+  // the Plant Manager (no add/edit, no Labels/Reorder, no Out-of-stock tile).
+  const canView = !isSales && (canManage || has("purchaser") || has("accounting") || isProdHeadViewer);
   // The Plant Manager monitors stock but does not edit items — hide the
   // add / import / per-row action buttons for them (a Warehouseman or admin
   // still manages). They keep read-only view + their stock-transfer rights.
   const canManageItems = !isSales && (admin || has("warehouse"));
-  // …and hide the Labels / Reorder tools from a Plant-Manager-only viewer.
-  const hidePlantMgrTools = has("plant_manager") && !admin && !has("warehouse");
+  // …and hide the Labels / Reorder tools from the Plant Manager and Accounting
+  // (read-only monitors), unless they also manage stock as a Warehouseman/admin.
+  const hidePlantMgrTools = (has("plant_manager") || has("accounting")) && !admin && !has("warehouse");
   // Hide the "Out of stock" tile (and its filter) from the production /
   // monitoring roles — only the Purchaser / Engineers / admins drive reordering.
   const hideOutOfStock =

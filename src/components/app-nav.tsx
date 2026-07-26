@@ -34,7 +34,9 @@ export const NAV = [
  * a user holds several roles, any role's `show` wins over another role's `hide`.
  */
 export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
-  accounting: { hide: ["/inventory", "/products", "/dashboard"], show: ["/requisitions"] },
+  // Accounting sees Inventory (read-only, like the Plant Manager); Products and
+  // the standalone Sales Dashboard stay hidden.
+  accounting: { hide: ["/products", "/dashboard"], show: ["/requisitions"] },
   // Consolidated-dashboard roles: hide the standalone Sales Dashboard tab.
   ...Object.fromEntries(
     DASHBOARD_CONSOLIDATED_ROLES.filter((r) => r !== "accounting").map((r) => [r, { hide: ["/dashboard"] }]),
