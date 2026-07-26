@@ -9,16 +9,16 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { applyStockChange } from "@/lib/inventory";
 import { REORDER_KEY, coerceReorderMap, type ReorderMap } from "@/lib/reorder";
 
-/** Purchaser, Warehouse, Plant Manager, or an admin may drive reordering. */
+/** Purchaser, Plant Manager, or an admin may drive reordering. */
 async function requirePurchaser() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   if (isAdmin(user)) return user;
   const roles = await getWorkflowRoles();
-  const ok = (["purchaser", "warehouse", "plant_manager"] as WorkflowRoleKey[]).some((r) =>
+  const ok = (["purchaser", "plant_manager"] as WorkflowRoleKey[]).some((r) =>
     userHasWorkflowRole(roles, user.id, r),
   );
-  if (!ok) throw new Error("Only the Purchaser, Warehouse, Plant Manager, or an admin can manage reorders.");
+  if (!ok) throw new Error("Only the Purchaser, Plant Manager, or an admin can manage reorders.");
   return user;
 }
 

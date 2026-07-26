@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic";
 export default async function ReorderPage() {
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   const admin = isAdmin(viewer);
-  const has = (role: "purchaser" | "warehouse" | "plant_manager") =>
+  const has = (role: "purchaser" | "plant_manager") =>
     viewer != null && userHasWorkflowRole(assignments, viewer.id, role);
-  const canView = admin || has("purchaser") || has("warehouse") || has("plant_manager");
+  const canView = admin || has("purchaser") || has("plant_manager");
   const canAct = canView;
 
   if (!canView) {

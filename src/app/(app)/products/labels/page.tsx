@@ -10,7 +10,7 @@ export default async function ProductLabelsPage({ searchParams }: { searchParams
   const admin = isAdmin(viewer);
   const canView =
     admin ||
-    (viewer != null && (["warehouse", "plant_manager", "purchaser"] as const).some((r) => userHasWorkflowRole(assignments, viewer.id, r)));
+    (viewer != null && (["plant_manager", "purchaser"] as const).some((r) => userHasWorkflowRole(assignments, viewer.id, r)));
   if (!canView) {
     return <div className="space-y-2"><h1 className="text-2xl font-bold">Product labels</h1><p className="text-sm text-muted-foreground">No access.</p></div>;
   }

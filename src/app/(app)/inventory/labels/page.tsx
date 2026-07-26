@@ -10,7 +10,7 @@ export default async function LabelsPage({ searchParams }: { searchParams: Promi
   const admin = isAdmin(viewer);
   const canView =
     admin ||
-    (viewer != null && (["warehouse", "plant_manager", "purchaser"] as const).some((r) => userHasWorkflowRole(assignments, viewer.id, r)));
+    (viewer != null && (["plant_manager", "purchaser"] as const).some((r) => userHasWorkflowRole(assignments, viewer.id, r)));
   if (!canView) {
     return <div className="space-y-2"><h1 className="text-2xl font-bold">Labels</h1><p className="text-sm text-muted-foreground">No access.</p></div>;
   }
