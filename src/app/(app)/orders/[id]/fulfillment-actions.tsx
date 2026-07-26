@@ -57,6 +57,7 @@ export function FulfillmentActions({
   recordedPayments = [],
   admin = false,
   approvers = {},
+  restricted = false,
 }: {
   orderId: string;
   stage: string;
@@ -68,6 +69,8 @@ export function FulfillmentActions({
   admin?: boolean;
   /** Workflow role key → assigned approver names, for the blinking highlight. */
   approvers?: Record<string, string[]>;
+  /** Client-restricted (shop-floor) viewers don't see payment amounts / proof. */
+  restricted?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -137,8 +140,10 @@ export function FulfillmentActions({
         </div>
       )}
 
-      {/* Final payment proof — uploaded for the approver to review, then archived. */}
-      {(stage === "final_pay_review" || stage === "final_pay_checked") && (
+      {/* Final payment proof — uploaded for the approver to review, then archived.
+          Hidden from client-restricted (shop-floor) viewers like the rest of the
+          payment/money data. */}
+      {!restricted && (stage === "final_pay_review" || stage === "final_pay_checked") && (
         <FinalPaymentProof orderId={orderId} initialFiles={closeDocs["final_payment"] ?? []} canEdit={canEditCloseDocs} admin={admin} />
       )}
 
