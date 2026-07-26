@@ -353,7 +353,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
   );
 }
 
-export function InventoryManager({ items, canManage, locations, showPrices, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, canCreate = true, locations, showPrices, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
@@ -549,7 +549,7 @@ export function InventoryManager({ items, canManage, locations, showPrices, canE
         )}
       </div>
 
-      {canManage && (
+      {canManage && canCreate && (
         <div>
           {showAdd ? (
             <div className="space-y-2 rounded-md border p-3">

@@ -37,9 +37,12 @@ export default async function InventoryPage() {
   // add / import / per-row action buttons for them (a Warehouseman or admin
   // still manages). They keep read-only view + their stock-transfer rights.
   const canManageItems = !isSales && (admin || has("warehouse"));
-  // …and hide the Labels / Reorder tools from the Plant Manager and Accounting
-  // (read-only monitors), unless they also manage stock as a Warehouseman/admin.
-  const hidePlantMgrTools = (has("plant_manager") || has("accounting")) && !admin && !has("warehouse");
+  // Adding / importing stock items is admin-only — hidden from the Warehouseman
+  // (who still proposes per-row edits/adjustments via the double handshake).
+  const canCreateItems = admin;
+  // …and hide the Labels / Reorder header tools from the Warehouseman, Plant
+  // Manager and Accounting (non-admins). The Purchaser still sees them.
+  const hidePlantMgrTools = !admin && (has("plant_manager") || has("accounting") || has("warehouse"));
   // Prices (unit cost, sell price, stock value) are commercial data — only the
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
@@ -174,7 +177,7 @@ export default async function InventoryPage() {
           </div>
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} canCreate={canCreateItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 
