@@ -50,14 +50,18 @@ const SHOPFLOOR_ROLES = new Set<string>([
   "logistics",
 ]);
 
-// The four production line heads. They raise requisitions but don't process
-// POs, so the Purchasing tab denies them — hide it (a dead-end otherwise). They
-// track their requisition's progress on the Requisitions tab instead.
-const PROD_HEAD_ROLES = new Set<string>([
+// Roles for which the Purchasing tab is a dead-end — the production heads,
+// Technical Head and Quality Inspectors. They aren't a purchasing-chain role,
+// so the Purchasing page denies them; they raise requisitions and track
+// progress on the Requisitions tab instead. Hide the tab.
+const NO_PURCHASING_ROLES = new Set<string>([
   "prod_head_fans",
   "prod_head_duct",
   "prod_head_accessories",
   "prod_head_motor",
+  "technical_head",
+  "quality_inspector",
+  "quality_inspector_2",
 ]);
 
 export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
@@ -65,18 +69,18 @@ export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }>
   // the standalone Sales Dashboard stay hidden. Keeps Commissions (payouts).
   accounting: { hide: ["/products", "/dashboard"], show: ["/requisitions"] },
   // Consolidated-dashboard roles: hide the standalone Sales Dashboard tab, plus
-  // Commissions for shop-floor roles and Purchasing for the production heads.
+  // Commissions for shop-floor roles and Purchasing for the roles it dead-ends.
   ...Object.fromEntries(
     DASHBOARD_CONSOLIDATED_ROLES.filter((r) => r !== "accounting").map((r) => {
       const hide = ["/dashboard"];
       if (SHOPFLOOR_ROLES.has(r)) hide.push("/commissions");
-      if (PROD_HEAD_ROLES.has(r)) hide.push("/purchasing");
+      if (NO_PURCHASING_ROLES.has(r)) hide.push("/purchasing");
       return [r, { hide }];
     }),
   ),
   // The 1st Quality Inspector isn't dashboard-consolidated but is still a
-  // shop-floor role — hide Commissions from them too.
-  quality_inspector: { hide: ["/commissions"] },
+  // shop-floor role — hide Commissions and the Purchasing dead-end from them.
+  quality_inspector: { hide: ["/commissions", "/purchasing"] },
 };
 
 /** The nav items visible to a user given their base role + workflow roles. */
