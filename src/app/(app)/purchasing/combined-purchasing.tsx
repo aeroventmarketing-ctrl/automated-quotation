@@ -353,6 +353,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         </div>
       ) : actionable.length > 0 ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
+          {/* Always name who must act (designation + name), alongside the button. */}
+          {batch.actions[0] && <ApproverHighlight role={batch.actions[0].roleLabel} />}
           {actionable.map((a) => (
             <Button key={a.key} size="sm" variant={a.key === "reject" ? "outline" : "default"} className="h-7 text-xs"
               disabled={busy === a.key}

@@ -77,6 +77,7 @@ export function PurchasingWorkspace({
   catalogSuppliers,
   scanProducts,
   admin = false,
+  deptRows = [],
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -91,6 +92,8 @@ export function PurchasingWorkspace({
   catalogSuppliers: CatalogSuppliers;
   scanProducts: ScanProduct[];
   admin?: boolean;
+  /** Standalone department requisitions — filtered by the same tab. */
+  deptRows?: PurchaseChainRow[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
@@ -335,6 +338,30 @@ export function PurchasingWorkspace({
       {nothing && (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}purchase orders.</CardContent></Card>
       )}
+
+      {/* Department requisitions — share the same tab filter as the order material
+          requests, so switching to Rejected/Cancelled hides the open ones too. */}
+      {deptRows.length > 0 && (() => {
+        const shown = deptRows
+          .filter((r) => inTab(rowBucket(r)))
+          .filter((r) => textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
+        return (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Department requisitions</h2>
+            {shown.length === 0 ? (
+              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}department requisitions.</CardContent></Card>
+            ) : (
+              <Card><CardContent className="pt-6">
+                <PurchasingChain
+                  requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
+                  suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
+                  catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
+                />
+              </CardContent></Card>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Cross-order selection bar — totals the ticked material requests across
           every order and lets an approver approve them together. */}

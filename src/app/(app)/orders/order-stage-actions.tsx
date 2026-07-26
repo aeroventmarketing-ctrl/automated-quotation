@@ -90,7 +90,9 @@ export function OrderStageActions({
           {blockedReason && <div className="mt-0.5 text-[11px] text-amber-600">{blockedReason}</div>}
         </div>
       )}
-      {!(nextStep && canAct) && awaiting && (
+      {/* Name who must act (designation + name) — shown even when the viewer can
+          act, so it's clear who owns the step. */}
+      {awaiting && (
         <ApproverHighlight role={awaiting} names={awaitingNames} />
       )}
       <div>

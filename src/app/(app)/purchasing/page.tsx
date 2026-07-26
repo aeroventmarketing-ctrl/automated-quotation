@@ -17,7 +17,6 @@ import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { ReplenishmentList, type PRRow } from "./replenishment-list";
 import { PurchasingWorkspace } from "./purchasing-workspace";
-import { PurchasingChain } from "../orders/[id]/purchasing-chain";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
 export const dynamic = "force-dynamic";
@@ -335,33 +334,8 @@ export default async function PurchasingPage() {
               catalogSuppliers={Object.fromEntries(suppliersByProduct)}
               scanProducts={scanProducts}
               admin={admin}
+              deptRows={deptRows}
             />
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Department requisitions</h2>
-            {deptRows.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No open department requisitions. Departments raise them from Requisitions.</CardContent></Card>
-            ) : (
-              <Card>
-                <CardContent className="pt-6">
-                  <PurchasingChain
-                    requests={deptRows}
-                    stockItems={stockItems}
-                    orderId=""
-                    poDefaultRemarks={COMPANY.poDefaultRemarks}
-                    suppliers={suppliers}
-                    paymentTerms={paymentTerms}
-                    canManagePO={canManagePO}
-                    admin={admin}
-                    catalogSuppliers={Object.fromEntries(suppliersByProduct)}
-                    catalogPrices={catalogPrices}
-                    scanProducts={scanProducts}
-                    poRoute="purchasing"
-                  />
-                </CardContent>
-              </Card>
-            )}
           </section>
 
           <section className="space-y-3">

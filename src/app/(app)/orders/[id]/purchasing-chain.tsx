@@ -253,6 +253,7 @@ export function PurchasingChain({
               deptApprovalHere && requisitionNeedsApproval ? (
                 deptApproveActions.length > 0 ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {deptApproveActions[0] && <ApproverHighlight role={deptApproveActions[0].roleLabel} />}
                     {deptApproveActions.map((a) => (
                       <Button
                         key={a.key}
@@ -290,6 +291,8 @@ export function PurchasingChain({
               />
             ) : actionable.length > 0 ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                {/* Always name who must act (designation + name), alongside the buttons. */}
+                {shownActions[0] && <ApproverHighlight role={shownActions[0].roleLabel} />}
                 {/* Approval/rejection/voucher can't proceed until the PO exists —
                     hide those buttons (rather than showing them disabled) and
                     show a hint instead, so nothing dead is clickable. EXCEPTION:
