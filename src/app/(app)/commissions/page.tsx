@@ -8,6 +8,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { round2 } from "@/lib/quote";
 import { MarkPaid } from "./mark-paid";
+import { ApproverHighlight } from "@/components/approver-highlight";
+import { getApproverDirectory } from "@/lib/approver-directory";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +48,9 @@ export default async function CommissionsPage() {
       </div>
     );
   }
+
+  // Who marks commissions paid — Accounting (named on the awaiting badge).
+  const acctNames = (await getApproverDirectory()).namesFor("accounting");
 
   let rows: Awaited<ReturnType<typeof loadRows>> = [];
   let tableMissing = false;
@@ -125,7 +130,7 @@ export default async function CommissionsPage() {
                               {r.paid ? (
                                 <Badge variant="success">Paid{r.paidByName ? ` · ${r.paidByName}` : ""}</Badge>
                               ) : (
-                                <Badge variant="secondary">Unpaid</Badge>
+                                <ApproverHighlight role="Accounting" names={acctNames} detail="to mark paid" />
                               )}
                             </TableCell>
                             {canManage && (
