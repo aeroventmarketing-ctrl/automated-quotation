@@ -9,10 +9,13 @@ export function MarkPaid({ id, paid }: { id: string; paid: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
-  async function toggle() {
+  // Once paid, the commission stays paid — there's no "mark unpaid" any more.
+  if (paid) return null;
+
+  async function markPaid() {
     setBusy(true);
     try {
-      await markCommissionPaid(id, !paid);
+      await markCommissionPaid(id, true);
       router.refresh();
     } catch {
       setBusy(false);
@@ -20,8 +23,8 @@ export function MarkPaid({ id, paid }: { id: string; paid: boolean }) {
   }
 
   return (
-    <Button size="sm" variant={paid ? "outline" : "default"} className="h-7 text-xs" disabled={busy} onClick={toggle}>
-      {busy ? "…" : paid ? "Mark unpaid" : "Mark paid"}
+    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={markPaid}>
+      {busy ? "…" : "Mark paid"}
     </Button>
   );
 }

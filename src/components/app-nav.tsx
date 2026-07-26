@@ -27,11 +27,35 @@ export const NAV = [
   { href: "/admin", label: "Admin", icon: Settings, roles: ["ADMIN"] },
 ] as const;
 
-export function AppNav({ role, name, hasWorkflowRole = false }: { role: Role; name: string; hasWorkflowRole?: boolean }) {
-  const pathname = usePathname();
-  const base = NAV.filter((n) => (n.roles as readonly string[]).includes(role));
+/**
+ * Per-workflow-role tab overrides on top of the base-role allow-list. `hide`
+ * removes a tab the base role would otherwise show; `show` forces a tab on. When
+ * a user holds several roles, any role's `show` wins over another role's `hide`.
+ */
+export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
+  accounting: { hide: ["/inventory", "/products"], show: ["/requisitions"] },
+};
+
+/** The nav items visible to a user given their base role + workflow roles. */
+export function visibleNav(role: Role, workflowRoles: string[]) {
+  const hide = new Set<string>();
+  const show = new Set<string>();
+  for (const r of workflowRoles) {
+    const o = NAV_OVERRIDES[r];
+    o?.hide?.forEach((h) => hide.add(h));
+    o?.show?.forEach((s) => show.add(s));
+  }
+  const items = NAV.filter((n) => {
+    const allowed = (n.roles as readonly string[]).includes(role) || show.has(n.href);
+    return allowed && !(hide.has(n.href) && !show.has(n.href));
+  });
   // Workflow-role holders (and admins) get their personal task dashboard on top.
-  const items = hasWorkflowRole || role === "ADMIN" ? [MY_DASHBOARD_ITEM, ...base] : base;
+  return workflowRoles.length > 0 || role === "ADMIN" ? [MY_DASHBOARD_ITEM, ...items] : items;
+}
+
+export function AppNav({ role, name, workflowRoles = [] }: { role: Role; name: string; workflowRoles?: string[] }) {
+  const pathname = usePathname();
+  const items = visibleNav(role, workflowRoles);
 
   return (
     <div className="flex h-full flex-col">

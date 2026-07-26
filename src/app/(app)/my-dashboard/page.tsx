@@ -74,21 +74,23 @@ export default async function MyDashboardPage() {
         </p>
       </div>
 
-      {/* Counts by area — what's on your plate right now. */}
+      {/* Counts by area — click a box to jump to that area's items below. */}
       {data.byArea.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {data.byArea.map((a) => {
             const Icon = AREA_ICON[a.area];
             return (
-              <Card key={a.area}>
-                <CardContent className="flex items-center gap-3 py-4">
-                  <Icon className={`h-6 w-6 ${AREA_COLOR[a.area]}`} />
-                  <div>
-                    <div className="text-2xl font-bold tabular-nums leading-none">{a.count}</div>
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{a.label}</div>
-                  </div>
-                </CardContent>
-              </Card>
+              <Link key={a.area} href={`#area-${a.area}`} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+                <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+                  <CardContent className="flex items-center gap-3 py-4">
+                    <Icon className={`h-6 w-6 ${AREA_COLOR[a.area]}`} />
+                    <div>
+                      <div className="text-2xl font-bold tabular-nums leading-none">{a.count}</div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{a.label}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })}
         </div>
@@ -113,8 +115,18 @@ export default async function MyDashboardPage() {
               <p className="text-sm text-muted-foreground">Nothing waiting on you. You&apos;re all caught up. 🎉</p>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {data.pending.map((t) => <TaskRow key={t.key} t={t} />)}
+            <div className="space-y-4">
+              {data.byArea.map((a) => {
+                const Icon = AREA_ICON[a.area];
+                return (
+                  <div key={a.area} id={`area-${a.area}`} className="scroll-mt-16 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <Icon className={`h-3.5 w-3.5 ${AREA_COLOR[a.area]}`} /> {a.label} <span className="text-muted-foreground/70">({a.count})</span>
+                    </div>
+                    {data.pending.filter((t) => t.area === a.area).map((t) => <TaskRow key={t.key} t={t} />)}
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

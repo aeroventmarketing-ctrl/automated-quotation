@@ -48,9 +48,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
   }
 
-  // Whether the user holds any workflow role — drives the "My Dashboard" tab.
+  // The user's workflow roles — drive the "My Dashboard" tab and per-role tab
+  // show/hide in the nav.
   const wfAssignments = await getWorkflowRoles();
-  const hasWorkflowRole = WORKFLOW_ROLE_KEYS.some((k) => userHasWorkflowRole(wfAssignments, user.id, k as WorkflowRoleKey));
+  const workflowRoles = WORKFLOW_ROLE_KEYS.filter((k) => userHasWorkflowRole(wfAssignments, user.id, k as WorkflowRoleKey));
 
   // Location access: when enabled, non-admins are confined to the geofence(s).
   const geofence = await getGeofence();
@@ -62,7 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <LiveClock />
       <div className="flex flex-1">
         <aside className="hidden w-60 shrink-0 self-start border-r bg-background md:sticky md:top-11 md:block md:h-[calc(100vh-2.75rem)] md:overflow-y-auto print:!hidden">
-          <AppNav role={user.role} name={user.name} hasWorkflowRole={hasWorkflowRole} />
+          <AppNav role={user.role} name={user.name} workflowRoles={workflowRoles} />
         </aside>
         {/* overflow-x-clip (not -hidden) prevents horizontal overflow WITHOUT
             making <main> a scroll container — otherwise the mobile bar's sticky
@@ -77,7 +78,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               alt="Aerovent Fans and Blowers Manufacturing"
               className="h-7 w-auto"
             />
-            <MobileNav role={user.role} name={user.name} hasWorkflowRole={hasWorkflowRole} />
+            <MobileNav role={user.role} name={user.name} workflowRoles={workflowRoles} />
           </div>
           <div className="mx-auto max-w-6xl p-4 md:p-8 print:max-w-none print:p-0">{children}</div>
         </main>
