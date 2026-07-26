@@ -8,6 +8,9 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 import { SalesDashboardBody } from "../dashboard/sales-dashboard-body";
 import { hidesProductionClient } from "@/lib/client-visibility";
+import { prisma } from "@/lib/db";
+import { STOCK_ACTION_LABEL, coerceStockDoc, type StockActionView } from "@/lib/stock-action";
+import { PendingStockActions } from "../inventory/pending-stock-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -75,12 +78,28 @@ export default async function MyDashboardPage() {
   // Admins keep the standalone Sales Dashboard, so nothing is embedded for them.
   const showSalesBelow = !isAdmin(user) && DASHBOARD_CONSOLIDATED_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
   const maskProdClient = hidesProductionClient(user, assignments);
+  const admin = isAdmin(user);
+  // Inventory double-handshake actions awaiting the Warehouseman / Purchaser /
+  // admin — surfaced here so both parties (and admins) are notified.
+  const invWarehouse = admin || userHasWorkflowRole(assignments, user.id, "warehouse" as WorkflowRoleKey);
+  const invPurchaser = admin || userHasWorkflowRole(assignments, user.id, "purchaser" as WorkflowRoleKey);
+  const stockPending: StockActionView[] = (invWarehouse || invPurchaser)
+    ? (await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" }, take: 50 }).catch(() => [])).map((a) => ({
+        id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
+        kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status,
+        proof: a.kind === "TRANSFER" ? coerceStockDoc((a.payload as { proof?: unknown } | null)?.proof) : null,
+        proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
+        warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
+        canApproveWarehouse: a.warehouseAt == null && invWarehouse,
+        canApprovePurchaser: a.purchaserAt == null && invPurchaser,
+      }))
+    : [];
 
   return (
     <div className="space-y-6">
       <AutoRefresh />
       <div>
-        <h1 className="text-2xl font-bold">My Dashboard</h1>
+        <h1 className="text-2xl font-bold">{admin ? "Production Dashboard" : "My Dashboard"}</h1>
         <p className="text-sm text-muted-foreground">
           {user.name}
           {data.roleLabels.length > 0 ? ` · ${data.roleLabels.join(" · ")}` : ""}
@@ -89,6 +108,33 @@ export default async function MyDashboardPage() {
 
       {/* Production status — On time / Near due / Late, clickable to the client. */}
       <ProductionStatusCard status={production} maskClient={maskProdClient} />
+
+      {/* Inventory approvals — double-handshake stock actions awaiting the
+          Warehouseman / Purchaser (and visible to admins). Click through to the
+          item on the Inventory page, or approve / reject right here. */}
+      {(invWarehouse || invPurchaser) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              Inventory approvals
+              {stockPending.length > 0 && (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">{stockPending.length}</span>
+              )}
+              <Link href="/inventory#inv-items" className="ml-auto text-xs font-medium text-primary hover:underline">Open Inventory →</Link>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {stockPending.length === 0 ? (
+              <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
+                No stock actions awaiting a double-handshake approval.
+              </div>
+            ) : (
+              <PendingStockActions pending={stockPending} />
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Counts by area — click a box to jump to that area's items below. */}
       {data.byArea.length > 0 && (

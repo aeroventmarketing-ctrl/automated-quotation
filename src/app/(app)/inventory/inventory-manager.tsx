@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ScanLine, Search, X } from "lucide-react";
+import { ScanLine, Search, X, Eye, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,10 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
 import { BulkImport } from "./bulk-import";
-import { createStockItem, adjustStock, updateStockItemMeta, updateStockItemPrices, reserveStock, releaseReservation, assignMissingSkus, mergeDuplicateStockItems } from "./actions";
-import { initiateTransfer } from "./transfer-actions";
+import { createStockItem, adjustStock, updateStockItemPrices, releaseReservation, assignMissingSkus, mergeDuplicateStockItems } from "./actions";
+import { proposeStockAction } from "./stock-action-actions";
+import { PendingChip, PendingStockActions } from "./pending-stock-actions";
+import type { StockActionView, StockDoc } from "@/lib/stock-action";
 
 interface Reservation {
   id: string;
@@ -78,7 +80,7 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanTarget, scanNonce }: { item: Item; canManage: boolean; showPrices: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number }) {
+function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanTarget, scanNonce, pending = [] }: { item: Item; canManage: boolean; showPrices: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[] }) {
   const router = useRouter();
   // Purchaser/admin who aren't the stock manager still get a "Set price" action.
   const priceOnly = canEditPrices && !canManage;
@@ -119,6 +121,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
   const [xferQty, setXferQty] = useState("");
   const [xferTo, setXferTo] = useState("");
   const [xferNote, setXferNote] = useState("");
+  const [xferProof, setXferProof] = useState<StockDoc | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -128,13 +131,15 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(false); }
   }
+  // Edit / Adjust / Reserve / Transfer are PROPOSED — they only take effect once
+  // both a Warehouseman and a Purchaser approve (double handshake).
   function apply() {
     const n = Number(qty);
     if (!Number.isFinite(n) || n < 0) { setErr("Enter a quantity."); return; }
-    run(() => adjustStock({ stockItemId: item.id, kind, qty: n, reason }).then(() => { setQty(""); setReason(""); }));
+    run(() => proposeStockAction("ADJUST", item.id, { kind, qty: n, reason }).then(() => { setQty(""); setReason(""); }));
   }
   function saveMeta() {
-    run(() => updateStockItemMeta({ stockItemId: item.id, category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
+    run(() => proposeStockAction("EDIT", item.id, { category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
   }
   function savePrices() {
     run(() => updateStockItemPrices({ stockItemId: item.id, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
@@ -143,13 +148,28 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
     const n = Number(resvQty);
     if (!(n > 0)) { setErr("Enter a quantity."); return; }
     if (resvRef.trim() === "") { setErr("Enter what it's reserved for."); return; }
-    run(() => reserveStock({ stockItemId: item.id, qty: n, forRef: resvRef, note: resvNote || undefined }).then(() => { setResvQty(""); setResvRef(""); setResvNote(""); }), true);
+    run(() => proposeStockAction("RESERVE", item.id, { qty: n, forRef: resvRef, note: resvNote || undefined }).then(() => { setResvQty(""); setResvRef(""); setResvNote(""); }));
+  }
+  async function uploadProof(file: File) {
+    setBusy(true); setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      // Group the upload under the item (no transfer record exists yet at propose time).
+      fd.append("transferId", `propose-${item.id}`);
+      const res = await fetch("/api/transfer-uploads", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setXferProof(data as StockDoc);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
+    finally { setBusy(false); }
   }
   function transfer() {
     const n = Number(xferQty);
     if (!(n > 0)) { setErr("Enter a quantity."); return; }
     if (xferTo.trim() === "") { setErr("Choose a destination location."); return; }
-    run(() => initiateTransfer({ stockItemId: item.id, qty: n, toLocation: xferTo.trim(), note: xferNote || undefined }).then(() => { setXferQty(""); setXferTo(""); setXferNote(""); }));
+    if (!xferProof) { setErr("Upload the stock transfer form first."); return; }
+    run(() => proposeStockAction("TRANSFER", item.id, { qty: n, toLocation: xferTo.trim(), note: xferNote || undefined, proof: xferProof }).then(() => { setXferQty(""); setXferTo(""); setXferNote(""); setXferProof(null); }));
   }
 
   return (
@@ -161,6 +181,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
             {showPrices && item.sellPrice <= 0 && (
               <Badge variant="warning" className="font-normal">No sell price</Badge>
             )}
+            <PendingChip pending={pending} />
           </div>
           <div className="text-xs text-muted-foreground">{[item.sku ? `SKU ${item.sku}` : null, item.category].filter(Boolean).join(" · ")}</div>
         </TableCell>
@@ -209,7 +230,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
               </select>
               <Input className="h-8 w-28" type="number" step="any" min={0} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} />
               <Input className="h-8 w-56" placeholder="Reason / reference (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
-              <Button size="sm" className="h-8" disabled={busy} onClick={apply}>{busy ? "…" : "Apply"}</Button>
+              <Button size="sm" className="h-8" disabled={busy} onClick={apply}>{busy ? "…" : "Propose"}</Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
           </TableCell>
@@ -224,7 +245,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
               {showPrices && <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>}
               <label className="text-xs text-muted-foreground">Reorder at<Input className="h-8 w-28" type="number" step="any" min={0} value={reorder} onChange={(e) => setReorder(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
-              <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Save"}</Button>
+              <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Propose edit"}</Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
           </TableCell>
@@ -251,7 +272,7 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
                 <label className="text-xs text-muted-foreground">Reserve qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={resvQty} onChange={(e) => setResvQty(e.target.value)} /></label>
                 <label className="text-xs text-muted-foreground">For (order / job)<Input className="h-8 w-44" placeholder="e.g. AFBM-JO2600054" value={resvRef} onChange={(e) => setResvRef(e.target.value)} /></label>
                 <label className="text-xs text-muted-foreground">Note<Input className="h-8 w-44" placeholder="optional" value={resvNote} onChange={(e) => setResvNote(e.target.value)} /></label>
-                <Button size="sm" className="h-8" disabled={busy} onClick={reserve}>{busy ? "…" : "Reserve"}</Button>
+                <Button size="sm" className="h-8" disabled={busy} onClick={reserve}>{busy ? "…" : "Propose reserve"}</Button>
                 <span className="text-xs text-muted-foreground">{fmt(item.available)} {item.unit} available</span>
                 {err && <span className="text-xs text-destructive">{err}</span>}
               </div>
@@ -279,8 +300,22 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
               <label className="text-xs text-muted-foreground">Transfer qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={xferQty} onChange={(e) => setXferQty(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">To location<div><LocationField value={xferTo} onChange={setXferTo} locations={locations.filter((l) => l.toLowerCase() !== (item.location ?? "").toLowerCase())} /></div></label>
               <label className="text-xs text-muted-foreground">Note<Input className="h-8 w-44" placeholder="optional" value={xferNote} onChange={(e) => setXferNote(e.target.value)} /></label>
-              <Button size="sm" className="h-8" disabled={busy} onClick={transfer}>{busy ? "…" : "Send"}</Button>
-              <span className="text-xs text-muted-foreground">from {item.location || "—"} · {fmt(item.available)} {item.unit} available · held in transit until the production head &amp; purchaser confirm receipt</span>
+              {/* A stock-transfer form must be uploaded before the transfer can be proposed. */}
+              {xferProof ? (
+                <span className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2 text-xs">
+                  <a href={`/api/transfer-uploads/view?path=${encodeURIComponent(xferProof.path)}&name=${encodeURIComponent(xferProof.name)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                    <Eye className="h-3.5 w-3.5" /> {xferProof.name}
+                  </a>
+                  <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => setXferProof(null)} aria-label="Remove"><X className="h-3.5 w-3.5" /></button>
+                </span>
+              ) : (
+                <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border px-2.5 text-xs font-medium hover:bg-accent">
+                  <Upload className="h-3.5 w-3.5" /> {busy ? "Uploading…" : "Upload transfer form"}
+                  <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                </label>
+              )}
+              <Button size="sm" className="h-8" disabled={busy || !xferProof} onClick={transfer}>{busy ? "…" : "Propose transfer"}</Button>
+              <span className="text-xs text-muted-foreground">from {item.location || "—"} · {fmt(item.available)} {item.unit} available · applies only after Warehouseman &amp; Purchaser both approve</span>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
           </TableCell>
@@ -305,11 +340,20 @@ function StockRow({ item, canManage, showPrices, canEditPrices, locations, scanT
           </TableCell>
         </TableRow>
       )}
+      {/* Pending double-handshake actions on this item — always shown so both
+          parties can review, approve or reject them. */}
+      {pending.length > 0 && (
+        <TableRow>
+          <TableCell colSpan={colSpan} className="bg-amber-50/40 dark:bg-amber-950/10">
+            <PendingStockActions pending={pending} />
+          </TableCell>
+        </TableRow>
+      )}
     </>
   );
 }
 
-export function InventoryManager({ items, canManage, locations, showPrices, canEditPrices }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean }) {
+export function InventoryManager({ items, canManage, locations, showPrices, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; locations: string[]; showPrices: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
@@ -621,7 +665,7 @@ export function InventoryManager({ items, canManage, locations, showPrices, canE
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} />)}
                 </Fragment>
               ))}
             </TableBody>

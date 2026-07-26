@@ -621,6 +621,54 @@ model StockTransfer {
 }
 
 /**
+ * A stock mutation (edit / adjust / reserve / transfer) proposed on the Inventory
+ * page that requires a double-handshake: it takes effect only once BOTH a
+ * Warehouseman and a Purchaser approve it. Held pending (no effect on stock)
+ * until then.
+ */
+enum StockActionKind {
+  EDIT
+  ADJUST
+  RESERVE
+  TRANSFER
+}
+
+enum StockActionStatus {
+  PENDING
+  APPLIED
+  REJECTED
+  CANCELLED
+}
+
+model StockAction {
+  id             String            @id @default(cuid())
+  stockItemId    String
+  itemName       String
+  kind           StockActionKind
+  payload        Json // the proposed change, shape depends on kind
+  summary        String // human snapshot of the proposed change (eye-view)
+  status         StockActionStatus @default(PENDING)
+  proposedById   String
+  proposedByName String
+  proposedRole   String // "warehouse" | "purchaser" | "admin"
+  proposedAt     DateTime          @default(now())
+  // Double handshake — both required before the change applies.
+  warehouseByName String?
+  warehouseAt     DateTime?
+  purchaserByName String?
+  purchaserAt     DateTime?
+  appliedAt      DateTime?
+  rejectedByName String?
+  rejectedAt     DateTime?
+  rejectReason   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status])
+  @@index([stockItemId])
+}
+
+/**
  * Purchasable product/item catalogue, connected to suppliers. Each product may
  * be sourced from several suppliers (each with its own code and price), stored
  * as JSON since suppliers live in the AppSetting directory (no supplier table).

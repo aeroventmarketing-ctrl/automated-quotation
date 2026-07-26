@@ -7,6 +7,7 @@ import { canViewPrices, canEditPrices } from "@/lib/price-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
+import { STOCK_ACTION_LABEL, type StockActionView } from "@/lib/stock-action";
 import { StockTransfers } from "./stock-transfers";
 import { isProductionHead, isPurchaserRole, coerceStockDoc, type StockTransferView } from "@/lib/stock-transfer";
 import { ArrowLeftRight } from "lucide-react";
@@ -61,6 +62,28 @@ export default async function InventoryPage() {
     items = await loadItems();
   } catch {
     tableMissing = true;
+  }
+
+  // Pending double-handshake stock actions (edit / adjust / reserve / transfer),
+  // grouped per item, with per-viewer approval flags.
+  const viewerWarehouse = admin || has("warehouse");
+  const viewerPurchaser = admin || has("purchaser");
+  const pendingByItem: Record<string, StockActionView[]> = {};
+  try {
+    const actions = await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" } });
+    for (const a of actions) {
+      const proof = a.kind === "TRANSFER" ? coerceStockDoc((a.payload as { proof?: unknown } | null)?.proof) : null;
+      (pendingByItem[a.stockItemId] ??= []).push({
+        id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
+        kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status, proof,
+        proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
+        warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
+        canApproveWarehouse: a.warehouseAt == null && viewerWarehouse,
+        canApprovePurchaser: a.purchaserAt == null && viewerPurchaser,
+      });
+    }
+  } catch {
+    // StockAction table not migrated yet — no pending actions.
   }
 
   // Stock transfers — viewer capabilities per row.
@@ -151,7 +174,7 @@ export default async function InventoryPage() {
           </div>
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} />
+              <InventoryManager items={items} canManage={canManageItems} locations={locations} showPrices={showPrices} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 

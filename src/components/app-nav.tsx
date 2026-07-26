@@ -60,7 +60,9 @@ export function visibleNav(role: Role, workflowRoles: string[]) {
     return allowed && !(hide.has(n.href) && !show.has(n.href));
   });
   // Workflow-role holders (and admins) get their personal task dashboard on top.
-  return workflowRoles.length > 0 || role === "ADMIN" ? [MY_DASHBOARD_ITEM, ...items] : items;
+  // For admins it's presented as the "Production Dashboard".
+  const dash = role === "ADMIN" ? { ...MY_DASHBOARD_ITEM, label: "Production Dashboard" } : MY_DASHBOARD_ITEM;
+  return workflowRoles.length > 0 || role === "ADMIN" ? [dash, ...items] : items;
 }
 
 export function AppNav({ role, name, workflowRoles = [] }: { role: Role; name: string; workflowRoles?: string[] }) {
