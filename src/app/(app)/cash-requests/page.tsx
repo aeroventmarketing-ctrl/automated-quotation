@@ -3,7 +3,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
-import { requestorDeptKey, requisitionDeptLabel, PRODUCTION_DEPTS } from "@/lib/order-workflow";
+import { requestorDeptKey, requisitionDeptLabel, PRODUCTION_DEPTS, REQUISITION_DEPTS } from "@/lib/order-workflow";
 import { buildCashRequestRow, type CashRequestLike } from "@/lib/cash-request-row";
 import type { CashActor } from "@/lib/cash-request";
 import { CashRequestForm } from "./cash-request-form";
@@ -22,9 +22,11 @@ export default async function CashRequestsPage() {
   // The requestor's own department — fixed on the cash-request form (not selectable).
   const cashDeptKey = requestorDeptKey((role) => has(role as WorkflowRoleKey));
   const cashDept = { key: cashDeptKey, label: requisitionDeptLabel(cashDeptKey) };
-  // The Plant Manager and the Warehouseman may pick which of the 4 production
-  // departments (never Office) the cash request is for.
-  const plantMgrDepts = has("plant_manager") || has("warehouse")
+  // Logistics may pick any of the 5 departments (incl. Office); the Plant Manager
+  // and Warehouseman pick the 4 production departments (never Office).
+  const plantMgrDepts = has("logistics")
+    ? REQUISITION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
+    : has("plant_manager") || has("warehouse")
     ? PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
     : undefined;
 

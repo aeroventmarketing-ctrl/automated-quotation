@@ -4,7 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
-import { PRODUCTION_DEPTS, deptRole, requestorDeptKey, requisitionDeptLabel } from "@/lib/order-workflow";
+import { PRODUCTION_DEPTS, REQUISITION_DEPTS, deptRole, requestorDeptKey, requisitionDeptLabel } from "@/lib/order-workflow";
 import { buildPurchaseChainRow } from "@/lib/purchase-chain-row";
 import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -43,9 +43,11 @@ export default async function RequisitionsPage() {
   // line; everyone else → Office). Not selectable.
   const reqDeptKey = requestorDeptKey((role) => has(role as WorkflowRoleKey));
   const reqDept = { key: reqDeptKey, label: requisitionDeptLabel(reqDeptKey) };
-  // The Plant Manager and the Warehouseman may pick which of the 4 production
-  // departments (never Office) the requisition is for.
-  const plantMgrDepts = has("plant_manager") || has("warehouse")
+  // Logistics may pick any of the 5 departments (incl. Office); the Plant Manager
+  // and Warehouseman pick the 4 production departments (never Office).
+  const plantMgrDepts = has("logistics")
+    ? REQUISITION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
+    : has("plant_manager") || has("warehouse")
     ? PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
     : undefined;
   const [products, suppliers, paymentTerms, stockItems, allUsers] = await Promise.all([

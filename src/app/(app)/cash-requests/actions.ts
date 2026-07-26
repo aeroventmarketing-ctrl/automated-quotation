@@ -19,7 +19,7 @@ import {
   type CashRequestStatus,
   type CashCategoryKey,
 } from "@/lib/cash-request";
-import { requestorDeptKey, PRODUCTION_DEPTS } from "@/lib/order-workflow";
+import { requestorDeptKey, PRODUCTION_DEPTS, REQUISITION_DEPT_KEYS } from "@/lib/order-workflow";
 import { round2 } from "@/lib/quote";
 
 /** Claim the next cash-voucher number — a plain 7-digit sequence, e.g. "0000810"
@@ -67,13 +67,17 @@ export async function createCashRequest(input: {
   // the Warehouseman may target any of the 4 production departments (never
   // Office) — the client sends the chosen line, validated here.
   const assignments = await getWorkflowRoles();
+  // Logistics may pick any of the 5 departments (incl. Office); the Plant Manager
+  // and Warehouseman pick the 4 production departments (never Office).
+  const isLogistics = userHasWorkflowRole(assignments, user.id, "logistics" as WorkflowRoleKey);
   const canPickProdDept =
     userHasWorkflowRole(assignments, user.id, "plant_manager" as WorkflowRoleKey) ||
     userHasWorkflowRole(assignments, user.id, "warehouse" as WorkflowRoleKey);
-  const chosenProdDept = PRODUCTION_DEPTS.some((d) => d.key === input.dept) ? String(input.dept) : null;
-  const dept = canPickProdDept && chosenProdDept
-    ? chosenProdDept
-    : requestorDeptKey((role) => userHasWorkflowRole(assignments, user.id, role as WorkflowRoleKey));
+  const chosen =
+    isLogistics && REQUISITION_DEPT_KEYS.has(String(input.dept)) ? String(input.dept)
+    : canPickProdDept && PRODUCTION_DEPTS.some((d) => d.key === input.dept) ? String(input.dept)
+    : null;
+  const dept = chosen ?? requestorDeptKey((role) => userHasWorkflowRole(assignments, user.id, role as WorkflowRoleKey));
 
   const lines = (input.lines ?? [])
     .map((l) => ({ description: String(l.description ?? "").trim(), amount: num(l.amount) }))
