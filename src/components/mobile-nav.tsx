@@ -9,7 +9,7 @@ import { visibleNav } from "./app-nav";
 import type { Role } from "@prisma/client";
 
 /** Hamburger menu for the mobile top bar (the sidebar is hidden below md). */
-export function MobileNav({ role, name, workflowRoles = [] }: { role: Role; name: string; workflowRoles?: string[] }) {
+export function MobileNav({ role, name, workflowRoles = [], dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; dashboardAlerts?: Record<string, boolean> }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const items = visibleNav(role, workflowRoles);
@@ -48,6 +48,7 @@ export function MobileNav({ role, name, workflowRoles = [] }: { role: Role; name
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}
+                  {dashboardAlerts[item.href] && <span className="ml-auto h-2.5 w-2.5 shrink-0 animate-approver-blink rounded-full bg-amber-500" aria-label="New activity" />}
                 </Link>
               );
             })}

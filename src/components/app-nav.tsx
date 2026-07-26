@@ -65,7 +65,7 @@ export function visibleNav(role: Role, workflowRoles: string[]) {
   return workflowRoles.length > 0 || role === "ADMIN" ? [dash, ...items] : items;
 }
 
-export function AppNav({ role, name, workflowRoles = [] }: { role: Role; name: string; workflowRoles?: string[] }) {
+export function AppNav({ role, name, workflowRoles = [], dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; dashboardAlerts?: Record<string, boolean> }) {
   const pathname = usePathname();
   const items = visibleNav(role, workflowRoles);
 
@@ -86,6 +86,7 @@ export function AppNav({ role, name, workflowRoles = [] }: { role: Role; name: s
         {items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
+          const alert = dashboardAlerts[item.href];
           return (
             <Link
               key={item.href}
@@ -99,6 +100,8 @@ export function AppNav({ role, name, workflowRoles = [] }: { role: Role; name: s
             >
               <Icon className="h-4 w-4" />
               {item.label}
+              {/* New-activity indicator — flashes on the dashboard with new items. */}
+              {alert && <span className="ml-auto h-2.5 w-2.5 shrink-0 animate-approver-blink rounded-full bg-amber-500" aria-label="New activity" />}
             </Link>
           );
         })}

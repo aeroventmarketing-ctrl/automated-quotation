@@ -9,6 +9,7 @@ import { LiveClock } from "@/components/live-clock";
 import { getGeofence } from "@/lib/geofence";
 import { getDisabledRoles, isRoleEnabled } from "@/lib/role-access";
 import { getWorkflowRoles, userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getDashboardAlerts } from "@/lib/dashboard-alerts";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -57,13 +58,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const geofence = await getGeofence();
   const gated = geofence.enabled && !isAdmin(user) && geofence.locations.length > 0;
 
+  // For admins, flash a dashboard's nav item when it has new activity.
+  const dashboardAlerts: Record<string, boolean> = {};
+  if (isAdmin(user)) {
+    const a = await getDashboardAlerts().catch(() => null);
+    if (a) {
+      dashboardAlerts["/my-dashboard"] = a.production;
+      dashboardAlerts["/management"] = a.management;
+      dashboardAlerts["/dashboard"] = a.sales;
+    }
+  }
+
   const layout = (
     <div className="flex min-h-screen flex-col">
       {/* Live clock — pinned to the very top, persists on every page. */}
       <LiveClock />
       <div className="flex flex-1">
         <aside className="hidden w-60 shrink-0 self-start border-r bg-background md:sticky md:top-11 md:block md:h-[calc(100vh-2.75rem)] md:overflow-y-auto print:!hidden">
-          <AppNav role={user.role} name={user.name} workflowRoles={workflowRoles} />
+          <AppNav role={user.role} name={user.name} workflowRoles={workflowRoles} dashboardAlerts={dashboardAlerts} />
         </aside>
         {/* overflow-x-clip (not -hidden) prevents horizontal overflow WITHOUT
             making <main> a scroll container — otherwise the mobile bar's sticky
@@ -78,7 +90,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               alt="Aerovent Fans and Blowers Manufacturing"
               className="h-7 w-auto"
             />
-            <MobileNav role={user.role} name={user.name} workflowRoles={workflowRoles} />
+            <MobileNav role={user.role} name={user.name} workflowRoles={workflowRoles} dashboardAlerts={dashboardAlerts} />
           </div>
           <div className="mx-auto max-w-6xl p-4 md:p-8 print:max-w-none print:p-0">{children}</div>
         </main>
