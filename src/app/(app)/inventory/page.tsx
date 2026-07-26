@@ -27,7 +27,7 @@ export default async function InventoryPage() {
   // inventory (read-only) so they can check stock while running production.
   const isProdHeadViewer =
     viewer != null &&
-    (["prod_head_duct", "prod_head_accessories", "prod_head_motor"] as WorkflowRoleKey[]).some((r) =>
+    (["prod_head_fans", "prod_head_duct", "prod_head_accessories", "prod_head_motor"] as WorkflowRoleKey[]).some((r) =>
       userHasWorkflowRole(assignments, viewer.id, r),
     );
   // Accounting monitors inventory read-only, with the same characteristics as
