@@ -384,7 +384,7 @@ export function PurchasingChain({
               ) : r.po ? (
                 <div className="flex flex-wrap items-end justify-between gap-2 text-xs">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="success">PO {r.po.poNumber}</Badge>
+                    <Badge variant="success">{r.po.poNumber}</Badge>
                     {showSupplier && r.po.supplier.company && <span className="text-muted-foreground">{r.po.supplier.company}</span>}
                     {showAmounts && <span className="font-semibold tabular-nums">{formatCurrency(poTotals(r.po).total, "PHP")}</span>}
                     {showAmounts && poHasEwt(r.po) && (

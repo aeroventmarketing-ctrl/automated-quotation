@@ -255,14 +255,14 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
   }
   const cancellable = batch.canCancel;
   async function cancel() {
-    if (!window.confirm(`Cancel combined PO ${batch.poNumber}? This withdraws all ${batch.members.length} requests.`)) return;
+    if (!window.confirm(`Cancel combined ${batch.poNumber}? This withdraws all ${batch.members.length} requests.`)) return;
     setBusy("cancel"); setErr(null);
     try { await cancelPurchaseRequest(batch.anchorId); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
   async function del() {
-    if (!window.confirm(`Delete combined PO ${batch.poNumber}? This permanently removes all ${batch.members.length} requests.`)) return;
+    if (!window.confirm(`Delete combined ${batch.poNumber}? This permanently removes all ${batch.members.length} requests.`)) return;
     setBusy("delete"); setErr(null);
     try { await deletePurchaseRequest(batch.anchorId); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
@@ -273,7 +273,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
     return (
       <div className="rounded-md border p-3">
         <CombineForm
-          title={`Edit combined PO ${batch.poNumber} · ${batch.members.length} requests`}
+          title={`Edit combined ${batch.poNumber} · ${batch.members.length} requests`}
           submitLabel="Save changes"
           initialLines={batch.lines}
           presetCompany={batch.supplierCompany}
@@ -301,7 +301,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
     <div className="rounded-md border p-3">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Badge variant="success">Combined PO {batch.poNumber}</Badge>
+          <Badge variant="success">Combined {batch.poNumber}</Badge>
           {showSupplier && batch.supplierCompany && <span className="text-muted-foreground">{batch.supplierCompany}</span>}
           <span className="text-muted-foreground">· {batch.members.length} requests</span>
         </div>
