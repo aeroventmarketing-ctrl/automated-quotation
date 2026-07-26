@@ -6,6 +6,7 @@ import { ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ApproverHighlight } from "@/components/approver-highlight";
 import { advancePurchaseRequest, receivePurchaseRequest } from "../orders/actions";
 
 interface ActionOpt {
@@ -60,6 +61,12 @@ function PRCard({ row }: { row: PRRow }) {
 
       {row.actions.length > 0 && (
         <div className="mt-3 space-y-2">
+          {/* Flashing "awaiting approval" badge naming the step owner (designation
+              + name), shown to everyone — same behaviour as the other purchasing
+              sections. */}
+          {row.actions.find((a) => !a.canAct) && (
+            <ApproverHighlight role={row.actions.find((a) => !a.canAct)!.roleLabel} />
+          )}
           {/* Receive step needs a quantity to post into stock. */}
           {row.actions.some((a) => a.key === "receive") && row.actions.find((a) => a.key === "receive")?.canAct && (
             <div className="flex flex-wrap items-end gap-2">
@@ -74,20 +81,16 @@ function PRCard({ row }: { row: PRRow }) {
           {row.actions.some((a) => (a.key === "approve" || a.key === "reject") && a.canAct) && (
             <Input className="h-8 w-full max-w-md" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
           )}
-          <div className="flex flex-wrap gap-2">
-            {row.actions.filter((a) => a.key !== "receive").map((a) => (
-              a.canAct ? (
+          {row.actions.some((a) => a.key !== "receive" && a.canAct) && (
+            <div className="flex flex-wrap gap-2">
+              {row.actions.filter((a) => a.key !== "receive" && a.canAct).map((a) => (
                 <Button key={a.key} size="sm" variant={a.key === "reject" ? "outline" : "default"} className="h-8" disabled={busy}
                   onClick={() => run(() => advancePurchaseRequest(row.id, a.key, note || undefined))}>
                   {a.label}
                 </Button>
-              ) : (
-                <span key={a.key} className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs text-muted-foreground">
-                  {a.label} · {a.roleLabel}
-                </span>
-              )
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
           {err && <p className="text-xs text-destructive">{err}</p>}
         </div>
       )}

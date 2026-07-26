@@ -21,10 +21,14 @@ export default async function RequisitionsPage() {
   const has = (r: WorkflowRoleKey) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r);
   const purchaser = admin || has("purchaser");
   const isSales = viewer?.role === "SALES";
+  const isEngineer = viewer?.role === "ENGINEER";
   // Which departments the viewer heads.
   const ownDeptKeys = viewer == null ? [] : PRODUCTION_DEPTS.filter((d) => has(deptRole(d.key) as WorkflowRoleKey)).map((d) => d.key);
-  // Sales (Office) may raise requisitions for the Office department only.
-  const canRaise = admin || purchaser || isSales || ownDeptKeys.length > 0;
+  // Office-type raisers (accounting, plant manager, warehouse, logistics,
+  // engineers, sales) may raise requisitions for their own department.
+  const officeRaiser =
+    isSales || isEngineer || has("accounting") || has("plant_manager") || has("warehouse") || has("logistics");
+  const canRaise = admin || purchaser || officeRaiser || ownDeptKeys.length > 0;
 
   if (!canRaise) {
     return (
@@ -61,8 +65,9 @@ export default async function RequisitionsPage() {
     const prs = await prisma.purchaseRequest.findMany({
       where: {
         kind: "department",
-        // Admin/purchaser see all; sales see what they raised; dept heads see their dept.
-        ...(admin || purchaser ? {} : isSales ? { createdById: viewer!.id } : { dept: { in: ownDeptKeys } }),
+        // Admin/purchaser see all; dept heads see their dept; everyone else
+        // (Office-type raisers) sees what they raised.
+        ...(admin || purchaser ? {} : ownDeptKeys.length > 0 ? { dept: { in: ownDeptKeys } } : { createdById: viewer!.id }),
       },
       orderBy: { createdAt: "desc" },
     });
