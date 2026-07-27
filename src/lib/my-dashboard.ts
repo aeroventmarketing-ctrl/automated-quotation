@@ -195,9 +195,10 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     } catch { /* ignore */ }
   }
 
-  // 7) Inventory double-handshake stock actions awaiting the viewer's approval
-  //    (Warehouseman / Purchaser). Each action needs both parties; surface the
-  //    ones whose still-open slot the viewer can fill.
+  // 7) Inventory double-handshake stock actions. Both the Warehouseman and the
+  //    Purchaser are parties to every action, so surface all pending ones to
+  //    both — the action text reflects whose sign-off is next (or "Awaiting …"
+  //    when the viewer has already signed and it's the other party's turn).
   if (has("warehouse") || has("purchaser")) {
     try {
       const actions = await prisma.stockAction.findMany({
@@ -206,12 +207,16 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         take: 100,
       });
       for (const a of actions) {
-        const needsWarehouse = a.warehouseAt == null && has("warehouse");
-        const needsPurchaser = a.purchaserAt == null && has("purchaser");
-        if (!needsWarehouse && !needsPurchaser) continue;
+        // Whose sign-off is still outstanding (Warehouse fills first, then Purchaser).
+        const nextRole: "warehouse" | "purchaser" | null =
+          a.warehouseAt == null ? "warehouse" : a.purchaserAt == null ? "purchaser" : null;
+        if (nextRole == null) continue; // both in — shouldn't still be PENDING
+        const myTurn = has(nextRole);
+        const label = STOCK_ACTION_LABEL[a.kind];
         tasks.push({
           key: `stock:${a.id}`, area: "inventory", areaLabel: AREA_LABEL.inventory,
-          title: a.itemName, action: `Approve ${STOCK_ACTION_LABEL[a.kind]}`,
+          title: a.itemName,
+          action: myTurn ? `Approve ${label}` : `Awaiting ${workflowRoleLabel(nextRole)} — ${label}`,
           client: null, amount: null, currency: "PHP",
           href: "/inventory#inv-items",
         });
