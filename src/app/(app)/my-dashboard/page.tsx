@@ -13,7 +13,7 @@ import { PendingStockActions } from "../inventory/pending-stock-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2 } from "lucide-react";
+import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
 
@@ -26,6 +26,7 @@ const AREA_ICON: Record<TaskArea, typeof ClipboardList> = {
   schedule: CalendarDays,
   commission: Percent,
   quotation: FileText,
+  inventory: Boxes,
 };
 const AREA_COLOR: Record<TaskArea, string> = {
   order: "text-blue-600",
@@ -34,6 +35,7 @@ const AREA_COLOR: Record<TaskArea, string> = {
   schedule: "text-violet-600",
   commission: "text-pink-600",
   quotation: "text-sky-600",
+  inventory: "text-teal-600",
 };
 
 const fmtWhen = (iso: string) =>

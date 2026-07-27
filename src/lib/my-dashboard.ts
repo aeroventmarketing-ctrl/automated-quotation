@@ -18,9 +18,10 @@ import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
+import { STOCK_ACTION_LABEL } from "@/lib/stock-action";
 import { listActivityForActor, type ActivityView } from "@/lib/activity-log";
 
-export type TaskArea = "order" | "purchase" | "cash" | "schedule" | "commission" | "quotation";
+export type TaskArea = "order" | "purchase" | "cash" | "schedule" | "commission" | "quotation" | "inventory";
 
 export interface MyTask {
   key: string;
@@ -58,6 +59,7 @@ const AREA_LABEL: Record<TaskArea, string> = {
   schedule: "Schedules",
   commission: "Commissions",
   quotation: "Quotations",
+  inventory: "Inventory",
 };
 
 export async function buildMyDashboard(user: User): Promise<MyDashboard> {
@@ -191,6 +193,30 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         });
       }
     } catch { /* ignore */ }
+  }
+
+  // 7) Inventory double-handshake stock actions awaiting the viewer's approval
+  //    (Warehouseman / Purchaser). Each action needs both parties; surface the
+  //    ones whose still-open slot the viewer can fill.
+  if (has("warehouse") || has("purchaser")) {
+    try {
+      const actions = await prisma.stockAction.findMany({
+        where: { status: "PENDING" },
+        orderBy: { proposedAt: "desc" },
+        take: 100,
+      });
+      for (const a of actions) {
+        const needsWarehouse = a.warehouseAt == null && has("warehouse");
+        const needsPurchaser = a.purchaserAt == null && has("purchaser");
+        if (!needsWarehouse && !needsPurchaser) continue;
+        tasks.push({
+          key: `stock:${a.id}`, area: "inventory", areaLabel: AREA_LABEL.inventory,
+          title: a.itemName, action: `Approve ${STOCK_ACTION_LABEL[a.kind]}`,
+          client: null, amount: null, currency: "PHP",
+          href: "/inventory#inv-items",
+        });
+      }
+    } catch { /* StockAction table not migrated — ignore */ }
   }
 
   const byArea = (Object.keys(AREA_LABEL) as TaskArea[])
