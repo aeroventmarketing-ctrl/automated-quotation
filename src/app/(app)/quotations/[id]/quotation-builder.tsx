@@ -6058,10 +6058,13 @@ export function QuotationBuilder({
               <Send className="h-4 w-4" /> Mark as sent
             </Button>
           )}
-          {/* Revise a finalized quote: bump rev. N and reopen for editing. The
-              preparer or an admin may revise it — but once the order is in
-              production the quote is locked to everyone except an admin. */}
-          {(isAdmin || (isPreparer && !orderInProduction)) && (quotation.status === "APPROVED" || quotation.status === "SENT") && (
+          {/* Revise a finalized quote: bump rev. N and reopen for editing.
+              Engineers / admins may revise (authorize a revision) anytime. The
+              preparer (Sales) may revise only until a sale is saved — once a
+              sale is recorded, only an Engineer or admin can authorize it. In
+              production the quote is admin-only. */}
+          {(quotation.status === "APPROVED" || quotation.status === "SENT") &&
+            (isAdmin || (canApprove && !orderInProduction) || (isPreparer && !quotation.sale && !orderInProduction)) && (
             <Button variant="outline" onClick={revise} disabled={busy}>
               <RotateCcw className="h-4 w-4" /> Revise
             </Button>

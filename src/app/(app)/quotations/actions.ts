@@ -349,13 +349,24 @@ export async function reviseQuotation(quotationId: string) {
     },
   });
   if (!quote) throw new Error("Quotation not found");
-  // The salesperson who prepared the quote — or an admin — may revise it.
-  if (quote.preparedById !== user.id && !isAdmin(user))
-    throw new Error("Only the preparer or an admin can revise this quotation.");
+  const admin = isAdmin(user);
+  const isEngineer = user.role === "ENGINEER";
+  const isPreparer = quote.preparedById === user.id;
+  const saleSaved = !!saleFromClassification(quote.classification);
   // Once the order is in production (or later) the quotation is locked — only an
   // admin can still revise it.
-  if (!isAdmin(user) && stageIndex(readOrderWorkflow(quote.classification).stage) >= stageIndex("producing")) {
+  if (!admin && stageIndex(readOrderWorkflow(quote.classification).stage) >= stageIndex("producing")) {
     throw new Error("This order is already in production — only an admin can revise the quotation.");
+  }
+  // Admins and Engineers may revise (authorize a revision) anytime. The preparer
+  // (Sales) may revise only until a sale is saved; after a sale is recorded, only
+  // an Engineer or an admin can authorize the revision.
+  if (!(admin || isEngineer || (isPreparer && !saleSaved))) {
+    throw new Error(
+      saleSaved
+        ? "A sale is already recorded — only an Engineer or an admin can authorize a revision now."
+        : "Only the preparer, an Engineer or an admin can revise this quotation.",
+    );
   }
 
   const cls = (quote.classification as Record<string, unknown>) ?? {};
