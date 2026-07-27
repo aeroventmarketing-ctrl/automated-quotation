@@ -18,6 +18,7 @@ import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
+import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
 import { STOCK_ACTION_LABEL } from "@/lib/stock-action";
 import { listActivityForActor, type ActivityView } from "@/lib/activity-log";
 
@@ -95,6 +96,28 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             title: q.quoteNumber, action: `Handle MRF #${m.formNo} · ${requisitionDeptLabel(m.dept)}`,
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`,
+          });
+        }
+      }
+      // Multi-batch delivery: each open batch runs its own approval sequence
+      // (separate from the main workflow), so surface each batch's current step
+      // to the role that must act — Accounting, Payment Approver, Technical Head,
+      // Plant Manager, Logistics, or the order's Sales. Single-delivery approval
+      // stages already come through pendingStep(wf) below.
+      if (wf.deliveryMode === "multi") {
+        for (const b of wf.deliveryBatches) {
+          if (b.cancelled || isMbFiled(b)) continue;
+          const next = mbProgress(b).next;
+          if (!next) continue;
+          const owes = next.role === "sales"
+            ? (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id || isAdmin(user))
+            : has(next.role as WorkflowRoleKey);
+          if (!owes) continue;
+          tasks.push({
+            key: `batch:${q.id}:${b.id}`, area: "order", areaLabel: AREA_LABEL.order,
+            title: q.quoteNumber, action: b.drNumber ? `${next.label} · ${b.drNumber}` : next.label,
+            client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
+            href: `/orders/${q.id}`, deliveryMode: "multi",
           });
         }
       }
