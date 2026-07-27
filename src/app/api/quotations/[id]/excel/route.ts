@@ -82,11 +82,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     };
   });
 
+  // The quote date follows the current revision: the "Revise"-click date when
+  // present, else the original creation date.
+  const revisedAtIso = (q.classification as Record<string, unknown> | null)?.revisedAt;
+  const issueDate = typeof revisedAtIso === "string" ? new Date(revisedAtIso) : q.createdAt;
   const data: XlsxData = {
     quoteNumber: ((r) => (typeof r === "number" && r > 0 ? `${q.quoteNumber} rev. ${r}` : q.quoteNumber))(
       (q.classification as Record<string, unknown> | null)?.revision,
     ),
-    dateStr: q.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" }),
+    dateStr: issueDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" }),
     projectName: q.projectName,
     customerName: q.inquiry.customer.contactName || q.inquiry.customer.company,
     vatMode:

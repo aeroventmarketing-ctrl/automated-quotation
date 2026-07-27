@@ -387,7 +387,9 @@ export async function reviseQuotation(quotationId: string) {
     data: {
       status: "DRAFT",
       approvedById: null,
-      classification: { ...cls, revision, revisions } as Prisma.InputJsonObject,
+      // Stamp the revision date (when "Revise" was clicked) so the quote date on
+      // the Excel / PDF follows the current revision, not the original creation.
+      classification: { ...cls, revision, revisions, revisedAt: new Date().toISOString() } as Prisma.InputJsonObject,
     },
   });
   revalidatePath(`/quotations/${quotationId}`);

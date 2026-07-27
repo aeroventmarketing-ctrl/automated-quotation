@@ -103,11 +103,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     };
   });
 
+  // The quote date follows the current revision: the "Revise"-click date when
+  // present, else the original creation date.
+  const revisedAtIso = (quotation.classification as Record<string, unknown> | null)?.revisedAt;
+  const issueDate = typeof revisedAtIso === "string" ? new Date(revisedAtIso) : quotation.createdAt;
   const data: QuotationPdfData = {
     quoteNumber: ((r) => (typeof r === "number" && r > 0 ? `${quotation.quoteNumber} rev. ${r}` : quotation.quoteNumber))(
       (quotation.classification as Record<string, unknown> | null)?.revision,
     ),
-    createdAt: quotation.createdAt.toLocaleDateString("en-US", {
+    createdAt: issueDate.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
