@@ -2637,7 +2637,9 @@ export function QuotationBuilder({
   axialSpLock?: boolean;
 }) {
   const router = useRouter();
-  const editable = quotation.status === "DRAFT";
+  // Engineers / admins can always edit & Save changes (any status); everyone
+  // else only while the quote is DRAFT.
+  const editable = quotation.status === "DRAFT" || canApprove;
 
   // Admin-only quotation-number editing.
   const [quoteNo, setQuoteNo] = useState(quotation.quoteNumber);
@@ -6052,8 +6054,8 @@ export function QuotationBuilder({
           {quotation.status === "APPROVED" && (
             <Button
               onClick={() => transition("SENT")}
-              disabled={busy || !excelDownloaded}
-              title={excelDownloaded ? undefined : "Download the Excel first, then mark as sent"}
+              disabled={busy || (!excelDownloaded && !canApprove)}
+              title={excelDownloaded || canApprove ? undefined : "Download the Excel first, then mark as sent"}
             >
               <Send className="h-4 w-4" /> Mark as sent
             </Button>
@@ -6064,7 +6066,7 @@ export function QuotationBuilder({
               sale is recorded, only an Engineer or admin can authorize it. In
               production the quote is admin-only. */}
           {(quotation.status === "APPROVED" || quotation.status === "SENT") &&
-            (isAdmin || (canApprove && !orderInProduction) || (isPreparer && !quotation.sale && !orderInProduction)) && (
+            (canApprove || (isPreparer && !quotation.sale && !orderInProduction)) && (
             <Button variant="outline" onClick={revise} disabled={busy}>
               <RotateCcw className="h-4 w-4" /> Revise
             </Button>
@@ -6072,7 +6074,7 @@ export function QuotationBuilder({
           {/* Download is disabled until an Engineer approves the quotation
               (APPROVED / SENT). The Sales copy comes out locked (read-only);
               Engineers / admins get an editable copy. */}
-          {quotation.status === "APPROVED" || quotation.status === "SENT" ? (
+          {quotation.status === "APPROVED" || quotation.status === "SENT" || canApprove ? (
             <Button asChild>
               <a href={`/api/quotations/${quotation.id}/excel`} onClick={() => setExcelDownloaded(true)}>
                 <Download className="h-4 w-4" /> Download Excel

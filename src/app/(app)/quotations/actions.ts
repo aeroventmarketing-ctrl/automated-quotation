@@ -180,7 +180,8 @@ export async function updateQuotationLines(
 
   const quote = await prisma.quotation.findUnique({ where: { id: quotationId } });
   if (!quote) throw new Error("Quotation not found");
-  if (quote.status !== "DRAFT") throw new Error("Only DRAFT quotations can be edited");
+  // DRAFT is editable by the preparer; Engineers / admins may edit any status.
+  if (quote.status !== "DRAFT" && !canApprove(user)) throw new Error("Only DRAFT quotations can be edited");
 
   // Merge the pricing adjustments into the existing classification blob so we
   // don't clobber sale/revision data that also lives there.
@@ -353,10 +354,10 @@ export async function reviseQuotation(quotationId: string) {
   const isEngineer = user.role === "ENGINEER";
   const isPreparer = quote.preparedById === user.id;
   const saleSaved = !!saleFromClassification(quote.classification);
-  // Once the order is in production (or later) the quotation is locked — only an
-  // admin can still revise it.
-  if (!admin && stageIndex(readOrderWorkflow(quote.classification).stage) >= stageIndex("producing")) {
-    throw new Error("This order is already in production — only an admin can revise the quotation.");
+  // Once the order is in production (or later) the quotation is locked to Sales —
+  // only an Engineer or an admin can still revise it.
+  if (!(admin || isEngineer) && stageIndex(readOrderWorkflow(quote.classification).stage) >= stageIndex("producing")) {
+    throw new Error("This order is already in production — only an Engineer or an admin can revise the quotation.");
   }
   // Admins and Engineers may revise (authorize a revision) anytime. The preparer
   // (Sales) may revise only until a sale is saved; after a sale is recorded, only

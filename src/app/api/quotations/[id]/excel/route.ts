@@ -32,7 +32,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // Download is only available once an Engineer has approved the quotation
   // (APPROVED or SENT). Before that it's blocked for everyone except admins.
   const approved = q.status === "APPROVED" || q.status === "SENT";
-  if (!approved && !isAdmin(user)) {
+  // Engineers and admins can download anytime; Sales only once it's approved.
+  const priv = isAdmin(user) || user.role === "ENGINEER";
+  if (!approved && !priv) {
     return NextResponse.json({ error: "This quotation isn't approved yet — an Engineer must approve it before the Excel can be downloaded." }, { status: 403 });
   }
   // The Sales copy is locked (read-only); Engineers and admins get an editable
