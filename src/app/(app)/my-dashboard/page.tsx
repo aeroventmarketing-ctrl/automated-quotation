@@ -50,9 +50,14 @@ function TaskRow({ t }: { t: MyTask }) {
     >
       <Icon className={`h-5 w-5 shrink-0 ${AREA_COLOR[t.area]}`} />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-medium">{t.title}</span>
           <Badge variant="warning" className="font-normal">{t.action}</Badge>
+          {t.deliveryMode && (
+            <Badge variant={t.deliveryMode === "multi" ? "success" : "secondary"} className="font-normal">
+              {t.deliveryMode === "multi" ? "Batch delivery" : "Single delivery"}
+            </Badge>
+          )}
         </div>
         <div className="truncate text-xs text-muted-foreground">
           {t.areaLabel}

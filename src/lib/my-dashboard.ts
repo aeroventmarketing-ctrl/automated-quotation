@@ -33,6 +33,7 @@ export interface MyTask {
   amount: number | null; // masked when the viewer can't see client amounts / n/a
   currency: string;
   href: string;
+  deliveryMode?: "single" | "multi"; // for order tasks: how the order ships
 }
 
 export interface MyDashboard {
@@ -107,6 +108,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         title: q.quoteNumber, action: pend.action,
         client: maskClient(q.inquiry.customer.company), amount: maskAmount(Number(q.total)), currency: q.currency,
         href: `/orders/${q.id}`,
+        deliveryMode: wf.deliveryMode === "multi" ? "multi" : "single",
       });
     }
   } catch { /* ignore */ }
