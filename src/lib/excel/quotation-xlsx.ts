@@ -306,7 +306,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
       c.alignment = { horizontal: "center", vertical: "middle", wrapText: wrap };
       c.border = allBorders;
     };
-    cellCfg(`B${r}`, it.itemLabel, 9);
+    cellCfg(`B${r}`, it.itemLabel, 9, true); // Item column wraps so long labels aren't clipped
     cellCfg(`C${r}`, it.qty, 11);
     cellCfg(`D${r}`, it.descriptionSnapshot, 10, true);
     // ensure merged-away cells D..G carry borders
