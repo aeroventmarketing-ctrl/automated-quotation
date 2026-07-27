@@ -135,7 +135,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   };
 
   const buf = await buildQuotationXlsx(data);
-  const fname = q.quoteNumber.replace(/[^a-zA-Z0-9-]/g, "_") + ".xlsx";
+  // Filename: "<quote number> - <Project Name>.xlsx" (project name omitted when
+  // blank). Keep it readable (spaces / hyphens) and strip only characters that
+  // are invalid in filenames.
+  const fname =
+    `${q.quoteNumber}${q.projectName?.trim() ? ` - ${q.projectName.trim()}` : ""}`
+      .replace(/[\\/:*?"<>|\r\n]/g, "")
+      .replace(/\s+/g, " ")
+      .trim() + ".xlsx";
   return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
