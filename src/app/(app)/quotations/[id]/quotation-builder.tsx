@@ -2697,6 +2697,9 @@ export function QuotationBuilder({
   );
   const [validUntil, setValidUntil] = useState(quotation.validUntil);
   const [busy, setBusy] = useState(false);
+  // "Mark as sent" is only enabled after the approved Excel has been downloaded
+  // (so the client copy is generated first). Set when the Download button is used.
+  const [excelDownloaded, setExcelDownloaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   // Per-line fan-selector state, keyed by line id.
   const [sel, setSel] = useState<Record<string, { loading: boolean; error: string | null; results: SelectionResult[] | null }>>({});
@@ -6047,7 +6050,11 @@ export function QuotationBuilder({
             </>
           )}
           {quotation.status === "APPROVED" && (
-            <Button onClick={() => transition("SENT")} disabled={busy}>
+            <Button
+              onClick={() => transition("SENT")}
+              disabled={busy || !excelDownloaded}
+              title={excelDownloaded ? undefined : "Download the Excel first, then mark as sent"}
+            >
               <Send className="h-4 w-4" /> Mark as sent
             </Button>
           )}
@@ -6064,7 +6071,7 @@ export function QuotationBuilder({
               Engineers / admins get an editable copy. */}
           {quotation.status === "APPROVED" || quotation.status === "SENT" ? (
             <Button asChild>
-              <a href={`/api/quotations/${quotation.id}/excel`}>
+              <a href={`/api/quotations/${quotation.id}/excel`} onClick={() => setExcelDownloaded(true)}>
                 <Download className="h-4 w-4" /> Download Excel
               </a>
             </Button>
