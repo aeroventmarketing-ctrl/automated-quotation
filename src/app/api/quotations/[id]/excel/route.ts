@@ -139,8 +139,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // Filename: "<quote number> - <Project Name>.xlsx" (project name omitted when
   // blank). Keep it readable (spaces / hyphens) and strip only characters that
   // are invalid in filenames.
+  // Filename: "QUOT NO. <number>[ rev. N] - <Company/Customer> - <Project>.xlsx".
+  // The company/customer and project segments are each included only when set;
+  // when both are present, both show (joined by " - ").
+  const client = (q.inquiry.customer.company || q.inquiry.customer.contactName || "").trim();
+  const project = (q.projectName ?? "").trim();
+  const tail = [client, project].filter(Boolean).join(" - ");
   const fname =
-    `QUOT NO. ${quoteNo}${q.projectName?.trim() ? ` - ${q.projectName.trim()}` : ""}`
+    `QUOT NO. ${quoteNo}${tail ? ` - ${tail}` : ""}`
       .replace(/[\\/:*?"<>|\r\n]/g, "")
       .replace(/\s+/g, " ")
       .trim() + ".xlsx";
