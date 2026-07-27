@@ -98,10 +98,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // present, else the original creation date.
   const revisedAtIso = (q.classification as Record<string, unknown> | null)?.revisedAt;
   const issueDate = typeof revisedAtIso === "string" ? new Date(revisedAtIso) : q.createdAt;
+  // Revision-aware quote number, e.g. "2026 - AFBM00002387S rev. 1".
+  const revNo = (q.classification as Record<string, unknown> | null)?.revision;
+  const quoteNo = typeof revNo === "number" && revNo > 0 ? `${q.quoteNumber} rev. ${revNo}` : q.quoteNumber;
   const data: XlsxData = {
-    quoteNumber: ((r) => (typeof r === "number" && r > 0 ? `${q.quoteNumber} rev. ${r}` : q.quoteNumber))(
-      (q.classification as Record<string, unknown> | null)?.revision,
-    ),
+    quoteNumber: quoteNo,
     dateStr: issueDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" }),
     locked,
     projectName: q.projectName,
@@ -139,7 +140,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // blank). Keep it readable (spaces / hyphens) and strip only characters that
   // are invalid in filenames.
   const fname =
-    `${q.quoteNumber}${q.projectName?.trim() ? ` - ${q.projectName.trim()}` : ""}`
+    `${quoteNo}${q.projectName?.trim() ? ` - ${q.projectName.trim()}` : ""}`
       .replace(/[\\/:*?"<>|\r\n]/g, "")
       .replace(/\s+/g, " ")
       .trim() + ".xlsx";
