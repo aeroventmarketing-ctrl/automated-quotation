@@ -140,7 +140,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // blank). Keep it readable (spaces / hyphens) and strip only characters that
   // are invalid in filenames.
   const fname =
-    `${quoteNo}${q.projectName?.trim() ? ` - ${q.projectName.trim()}` : ""}`
+    `QUOT NO. ${quoteNo}${q.projectName?.trim() ? ` - ${q.projectName.trim()}` : ""}`
       .replace(/[\\/:*?"<>|\r\n]/g, "")
       .replace(/\s+/g, " ")
       .trim() + ".xlsx";
