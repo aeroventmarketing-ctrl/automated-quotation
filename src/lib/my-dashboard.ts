@@ -83,7 +83,21 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     for (const q of quotes) {
       const sale = saleFromClassification(q.classification);
       if (!sale || !isSaleConfirmed(sale)) continue;
-      const pend = pendingStep(readOrderWorkflow(q.classification));
+      const wf = readOrderWorkflow(q.classification);
+      // Material Request Forms (MRF) awaiting the Warehouse to triage — status
+      // "requested" (issue from stock / send to purchasing). Warehouse only.
+      if (has("warehouse")) {
+        for (const m of wf.materialRequests) {
+          if (m.status !== "requested") continue;
+          tasks.push({
+            key: `mrf:${q.id}:${m.id}`, area: "order", areaLabel: AREA_LABEL.order,
+            title: q.quoteNumber, action: `Handle MRF #${m.formNo} · ${requisitionDeptLabel(m.dept)}`,
+            client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
+            href: `/orders/${q.id}`,
+          });
+        }
+      }
+      const pend = pendingStep(wf);
       if (!pend) continue;
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
       const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
