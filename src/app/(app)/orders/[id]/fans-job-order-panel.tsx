@@ -536,6 +536,10 @@ function JobOrderForm({
           <span className="text-[11px] text-muted-foreground">RPM (auto)</span>
           <Input className="h-8 bg-muted/50 font-medium" readOnly value={fanRpm != null ? String(fanRpm) : ""} placeholder="—" title={isDirect ? "Direct drive — fan runs at motor speed" : "Computed Fan RPM = roundup(Motor RPM × Motor Pulley ÷ Fan Pulley)"} />
         </label>
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">Motor RPM</span>
+          <Input className="h-8 bg-muted/50 font-medium" readOnly value={motorRpm != null ? String(motorRpm) : ""} placeholder="—" title="Motor speed for the selected Motor HP" />
+        </label>
       </div>
 
       <div className="text-xs font-semibold text-muted-foreground">Assignment</div>
