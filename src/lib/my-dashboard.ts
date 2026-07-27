@@ -121,11 +121,23 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     for (const pr of prs) {
       const isDept = isDeptRequisition(pr);
       const poApproved = isPoApproved(pr.chainLog);
+      const company = pr.quotation?.inquiry.customer.company ?? null;
+      const label = pr.quotationId ? (pr.quotation?.quoteNumber ?? "Order PR") : `Requisition · ${requisitionDeptLabel(pr.dept)}`;
+      // The Purchaser must raise the PO for an approved requisition that has none
+      // yet (e.g. an escalated MRF the Plant Manager just approved). The chain's
+      // "approve PO" step assumes a PO already exists, so surface this explicitly.
+      if (has("purchaser") && pr.status === "APPROVED" && !pr.po) {
+        tasks.push({
+          key: `pr-po:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
+          title: label, action: "Prepare Purchase Order",
+          client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
+          href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+        });
+        continue;
+      }
       const steps = purchaseStepsFrom(pr.status as PRStatus, isDept, poApproved);
       const roles = steps.map((s) => effectiveStepRole(s, isDept));
       if (!roles.some((r) => has(r))) continue;
-      const company = pr.quotation?.inquiry.customer.company ?? null;
-      const label = pr.quotationId ? (pr.quotation?.quoteNumber ?? "Order PR") : `Requisition · ${requisitionDeptLabel(pr.dept)}`;
       tasks.push({
         key: `pr:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
         title: label, action: steps[0]?.label ?? "Process purchase",
