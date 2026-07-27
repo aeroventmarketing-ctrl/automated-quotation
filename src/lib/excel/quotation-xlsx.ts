@@ -30,6 +30,9 @@ export interface XlsxLine {
 export interface XlsxData {
   quoteNumber: string;
   dateStr: string;
+  /** When true, the sheet is password-protected (read-only) — used for the Sales
+   *  copy so the approved figures can't be edited. Engineer/admin get it off. */
+  locked?: boolean;
   projectName?: string | null;
   customerName: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
@@ -516,6 +519,26 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   // Print/page-break area is the content block only — B..P — so the empty left
   // gutter (column A) and anything past column P are excluded from the page.
   ws.pageSetup.printArea = `B1:P${r}`;
+
+  // Sales copy is locked (read-only): password-protect the sheet so the approved
+  // figures can't be edited. Engineer/admin download it unlocked (data.locked
+  // false), so they can still edit / adjust.
+  if (data.locked) {
+    await ws.protect(process.env.QUOTATION_LOCK_PASSWORD || "AEROVENT-QUOTE-LOCK", {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertColumns: false,
+      insertRows: false,
+      deleteColumns: false,
+      deleteRows: false,
+      sort: false,
+      autoFilter: false,
+      pivotTables: false,
+    });
+  }
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);

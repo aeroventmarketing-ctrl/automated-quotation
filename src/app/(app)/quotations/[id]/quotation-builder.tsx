@@ -6059,11 +6059,20 @@ export function QuotationBuilder({
               <RotateCcw className="h-4 w-4" /> Revise
             </Button>
           )}
-          <Button asChild>
-            <a href={`/api/quotations/${quotation.id}/excel`}>
+          {/* Download is disabled until an Engineer approves the quotation
+              (APPROVED / SENT). The Sales copy comes out locked (read-only);
+              Engineers / admins get an editable copy. */}
+          {quotation.status === "APPROVED" || quotation.status === "SENT" ? (
+            <Button asChild>
+              <a href={`/api/quotations/${quotation.id}/excel`}>
+                <Download className="h-4 w-4" /> Download Excel
+              </a>
+            </Button>
+          ) : (
+            <Button disabled title="Available once an Engineer approves the quotation">
               <Download className="h-4 w-4" /> Download Excel
-            </a>
-          </Button>
+            </Button>
+          )}
         </div>
       </div>
     </div>

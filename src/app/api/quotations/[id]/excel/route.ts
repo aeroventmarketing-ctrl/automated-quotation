@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
 import { buildQuotationXlsx, type XlsxLine, type XlsxData } from "@/lib/excel/quotation-xlsx";
 import { getUserSignature } from "@/lib/signature";
@@ -28,6 +28,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
   if (!q) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Download is only available once an Engineer has approved the quotation
+  // (APPROVED or SENT). Before that it's blocked for everyone except admins.
+  const approved = q.status === "APPROVED" || q.status === "SENT";
+  if (!approved && !isAdmin(user)) {
+    return NextResponse.json({ error: "This quotation isn't approved yet — an Engineer must approve it before the Excel can be downloaded." }, { status: 403 });
+  }
+  // The Sales copy is locked (read-only); Engineers and admins get an editable
+  // (unlocked) copy — so only they can "unlock" it.
+  const locked = !(isAdmin(user) || user.role === "ENGINEER");
 
   const tpl = (q.template.config as Record<string, unknown>) ?? {};
   const units = (q.headerUnits as Record<string, unknown>) ?? {};
@@ -91,6 +101,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       (q.classification as Record<string, unknown> | null)?.revision,
     ),
     dateStr: issueDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" }),
+    locked,
     projectName: q.projectName,
     customerName: q.inquiry.customer.contactName || q.inquiry.customer.company,
     vatMode:
