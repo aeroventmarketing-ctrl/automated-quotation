@@ -375,6 +375,7 @@ export function MaterialRequests({
                 <StockMatchPanel
                   lines={r.items.filter((it) => it.disposition === "purchase").map((it) => ({ label: `${[it.qty, it.unit].filter(Boolean).join(" ")} · ${it.description}`, qtyDefault: it.qty }))}
                   stockItems={stockItems}
+                  selectable
                   submitLabel="Release & deduct from stock"
                   onCancel={() => setReleasingId(null)}
                   onSubmit={async (matches) => {

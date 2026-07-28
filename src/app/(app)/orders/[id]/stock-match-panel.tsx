@@ -21,12 +21,15 @@ export function StockMatchPanel({
   submitLabel,
   onCancel,
   onSubmit,
+  selectable = false,
 }: {
   lines: MatchLine[];
   stockItems: StockOpt[];
   submitLabel: string;
   onCancel: () => void;
   onSubmit: (matches: { stockItemId: string; qty: number }[]) => Promise<void>;
+  /** Show a per-line tick box; only ticked lines are submitted (for releasing). */
+  selectable?: boolean;
 }) {
   // Auto-match each line to an existing stock item (and quantity) so receiving
   // posts to inventory by default — the warehouse can still change or skip a row.
@@ -61,7 +64,7 @@ export function StockMatchPanel({
   const [rows, setRows] = useState(() =>
     lines.map((l) => {
       const { qty, desc } = parseLine(l.label);
-      return { stockItemId: autoMatchId(desc), qty: (l.qtyDefault ?? "").trim() || qty };
+      return { stockItemId: autoMatchId(desc), qty: (l.qtyDefault ?? "").trim() || qty, checked: true };
     }),
   );
   const [busy, setBusy] = useState(false);
@@ -70,14 +73,19 @@ export function StockMatchPanel({
   function set(i: number, key: "stockItemId" | "qty", value: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
   }
+  function toggle(i: number, checked: boolean) {
+    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, checked } : r)));
+  }
 
   async function submit() {
     setBusy(true);
     setErr(null);
     try {
       const matches = rows
+        .filter((r) => !selectable || r.checked)
         .map((r) => ({ stockItemId: r.stockItemId, qty: Number(r.qty) }))
         .filter((m) => m.stockItemId && Number.isFinite(m.qty) && m.qty > 0);
+      if (selectable && matches.length === 0) { setErr("Tick at least one item (with a quantity) to release."); setBusy(false); return; }
       await onSubmit(matches);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -88,7 +96,9 @@ export function StockMatchPanel({
   return (
     <div className="mt-2 space-y-2 rounded-md border bg-muted/30 p-3">
       <div className="text-xs text-muted-foreground">
-        Each line is matched to its stock item and quantity automatically — review and adjust if needed. Set a line to &ldquo;skip&rdquo; to leave it out (nothing deducted/added).
+        {selectable
+          ? "Tick the item(s) to release and set the quantity to release for each. Only ticked items are released and deducted from stock."
+          : "Each line is matched to its stock item and quantity automatically — review and adjust if needed. Set a line to “skip” to leave it out (nothing deducted/added)."}
       </div>
       {stockItems.length === 0 && (
         <div className="text-xs text-amber-600">No stock items yet — add them under Inventory. You can still proceed; nothing will be adjusted.</div>
@@ -96,18 +106,28 @@ export function StockMatchPanel({
       <div className="space-y-1.5">
         {lines.map((l, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">
-            <span className="min-w-[10rem] flex-1 text-sm">{l.label}</span>
+            {selectable && (
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={rows[i].checked}
+                onChange={(e) => toggle(i, e.target.checked)}
+                aria-label={`Release ${l.label}`}
+              />
+            )}
+            <span className={`min-w-[10rem] flex-1 text-sm ${selectable && !rows[i].checked ? "text-muted-foreground line-through" : ""}`}>{l.label}</span>
             <select
               value={rows[i].stockItemId}
               onChange={(e) => set(i, "stockItemId", e.target.value)}
-              className="h-8 min-w-[10rem] rounded-md border bg-background px-2 text-sm"
+              disabled={selectable && !rows[i].checked}
+              className="h-8 min-w-[10rem] rounded-md border bg-background px-2 text-sm disabled:opacity-50"
             >
               <option value="">— skip —</option>
               {stockItems.map((s) => (
                 <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>
               ))}
             </select>
-            <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={rows[i].qty} onChange={(e) => set(i, "qty", e.target.value)} />
+            <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={rows[i].qty} disabled={selectable && !rows[i].checked} onChange={(e) => set(i, "qty", e.target.value)} />
           </div>
         ))}
       </div>
