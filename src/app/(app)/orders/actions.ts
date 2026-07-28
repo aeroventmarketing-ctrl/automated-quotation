@@ -1109,9 +1109,14 @@ export async function confirmMaterialReceipt(quotationId: string, requestId: str
   // MRF can't be "completed" until every requested item is actually issued. (An
   // outstanding purchase line does not block completion; the department confirms
   // it received what was released, and purchasing is tracked separately.)
-  const hasShortfall = mrf.items.some(
-    (it) => (it.disposition === "issue" || it.disposition === "reserve") && Number(it.issuedQty ?? it.qty ?? 0) < Number(it.qty || 0),
-  );
+  const hasShortfall = mrf.items.some((it) => {
+    const req = Number(it.qty || 0);
+    if (it.disposition === "issue" || it.disposition === "reserve") return Number(it.issuedQty ?? it.qty ?? 0) < req;
+    // A purchase line is short when it hasn't been fully released yet
+    // (undefined = not released). This keeps a partial release from completing.
+    if (it.disposition === "purchase") return Number(it.issuedQty ?? 0) < req;
+    return false;
+  });
   const materialRequests = wf.materialRequests.slice();
   materialRequests[idx] = {
     ...mrf,
@@ -1178,6 +1183,7 @@ export async function releaseMaterialToRequestor(
   quotationId: string,
   requestId: string,
   matches: StockMatch[] = [],
+  released: { description: string; qty: number }[] = [],
 ): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -1190,12 +1196,28 @@ export async function releaseMaterialToRequestor(
   if (idx < 0) throw new Error("Material request not found.");
   const mrf = wf.materialRequests[idx];
   if (mrf.status === "cancelled") throw new Error("A cancelled request can't be released.");
-  // Purchase lines are now released to the department — record the released qty.
-  const items = mrf.items.map((it) => (it.disposition === "purchase" ? { ...it, issuedQty: it.issuedQty ?? it.qty } : it));
-  // A pure/partly purchasing MRF becomes "issued" so the department can confirm
-  // receipt; an already-completed MRF just records who released it.
+  // Record the released quantity PER purchase line (accumulating across releases).
+  // Only the lines actually released this round are updated — a partial release
+  // leaves the rest as "To purchase" so the card shows what/how much was released.
+  const relByDesc = new Map<string, number>();
+  for (const r of released ?? []) {
+    const k = r.description.trim().toLowerCase();
+    if (k && Number(r.qty) > 0) relByDesc.set(k, (relByDesc.get(k) ?? 0) + Number(r.qty));
+  }
+  // Fallback: if no per-line data was passed (older callers), release every line.
+  const items = mrf.items.map((it) => {
+    if (it.disposition !== "purchase") return it;
+    if (relByDesc.size === 0) return { ...it, issuedQty: it.issuedQty ?? it.qty };
+    const add = relByDesc.get(it.description.trim().toLowerCase());
+    if (add == null) return it; // not released this round
+    return { ...it, issuedQty: String(Number(it.issuedQty ?? 0) + add) };
+  });
+  // Fully released only when every purchase line's released qty covers what was
+  // requested; otherwise the MRF stays "partial".
+  const purchaseLines = items.filter((it) => it.disposition === "purchase");
+  const allReleased = purchaseLines.length > 0 && purchaseLines.every((it) => Number(it.issuedQty ?? 0) >= Number(it.qty || 0));
   const status: MaterialRequest["status"] =
-    mrf.status === "purchasing" || mrf.status === "partial" ? "issued" : mrf.status;
+    mrf.status === "purchasing" || mrf.status === "partial" ? (allReleased ? "issued" : "partial") : mrf.status;
   // Deduct the released quantities from inventory (the purchase already received
   // them into stock; releasing to the department issues them out). Lines left
   // unmatched are skipped — nothing is deducted for them.

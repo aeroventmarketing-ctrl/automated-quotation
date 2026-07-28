@@ -313,19 +313,27 @@ export function MaterialRequests({
                         <td className="py-1 pr-2">
                           {it.description}
                           {it.disposition && (() => {
-                            // Older MRFs stored no issued qty — treat absent as fully issued.
-                            const issued = it.issuedQty ?? it.qty;
-                            const short = (it.disposition === "issue" || it.disposition === "reserve") && Number(issued || 0) < Number(it.qty || 0);
-                            const cls = short
-                              ? "bg-amber-500/15 text-amber-700"
-                              : it.disposition === "issue"
-                              ? "bg-emerald-600/15 text-emerald-700"
-                              : it.disposition === "reserve"
-                              ? "bg-indigo-600/15 text-indigo-700"
-                              : "bg-amber-500/15 text-amber-700";
-                            const text = it.disposition === "purchase"
-                              ? "To purchase"
-                              : `${it.disposition === "issue" ? "Issued" : "Reserved"} ${issued || 0}${short ? ` of ${it.qty}` : ""}`;
+                            const req = Number(it.qty || 0);
+                            const emerald = "bg-emerald-600/15 text-emerald-700";
+                            const amber = "bg-amber-500/15 text-amber-700";
+                            let cls: string;
+                            let text: string;
+                            if (it.disposition === "purchase") {
+                              // Not released yet → "To purchase"; once released show how much.
+                              if (it.issuedQty == null) { cls = amber; text = "To purchase"; }
+                              else {
+                                const rel = Number(it.issuedQty);
+                                const short = rel < req;
+                                cls = short ? amber : emerald;
+                                text = short ? `Released ${it.issuedQty} of ${it.qty}` : `Released ${it.issuedQty}`;
+                              }
+                            } else {
+                              // Older MRFs stored no issued qty — treat absent as fully issued.
+                              const issued = it.issuedQty ?? it.qty;
+                              const short = Number(issued || 0) < req;
+                              cls = short ? amber : it.disposition === "reserve" ? "bg-indigo-600/15 text-indigo-700" : emerald;
+                              text = `${it.disposition === "issue" ? "Issued" : "Reserved"} ${issued || 0}${short ? ` of ${it.qty}` : ""}`;
+                            }
                             return <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${cls}`}>{text}</span>;
                           })()}
                         </td>
@@ -379,7 +387,12 @@ export function MaterialRequests({
                   submitLabel="Release & deduct from stock"
                   onCancel={() => setReleasingId(null)}
                   onSubmit={async (matches) => {
-                    await releaseMaterialToRequestor(orderId, r.id, matches);
+                    // Map each match back to its purchase line to record what/how much was released.
+                    const purchaseItems = r.items.filter((it) => it.disposition === "purchase");
+                    const released = matches
+                      .map((m) => ({ description: purchaseItems[m.lineIndex]?.description ?? "", qty: m.qty }))
+                      .filter((x) => x.description);
+                    await releaseMaterialToRequestor(orderId, r.id, matches, released);
                     setReleasingId(null);
                     router.refresh();
                   }}

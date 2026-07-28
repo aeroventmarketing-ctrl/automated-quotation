@@ -100,7 +100,7 @@ export function visibleNav(role: Role, workflowRoles: string[]) {
   const dash = role === "ADMIN" ? { ...MY_DASHBOARD_ITEM, label: "Production Dashboard" } : MY_DASHBOARD_ITEM;
   // Sales base-role users also get a personal My Dashboard (approvals + production
   // status), alongside their Sales Dashboard tab.
-  return workflowRoles.length > 0 || role === "ADMIN" || role === "SALES" ? [dash, ...items] : items;
+  return workflowRoles.length > 0 || role === "ADMIN" || role === "SALES" || role === "ENGINEER" ? [dash, ...items] : items;
 }
 
 export function AppNav({ role, name, workflowRoles = [], dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; dashboardAlerts?: Record<string, boolean> }) {

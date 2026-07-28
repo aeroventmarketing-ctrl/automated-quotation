@@ -95,7 +95,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // Seen in full by the materials-handling roles and by every role that can
   // request an MRF for any department: Admin, Warehouse, Purchaser and the Plant
   // Manager. Individual department heads additionally see their own dept's MRFs.
-  const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser") || has("plant_manager");
+  const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser") || has("plant_manager") || user.role === "SALES" || user.role === "ENGINEER";
   // Linked purchase-request status per MRF — so a "purchasing" MRF can say
   // whether its item has been received into stock yet.
   const mrfPrStatus = new Map<string, string>();
@@ -372,7 +372,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     // Sales base-role users get their own My Dashboard too — to monitor their
     // approvals (notify client, 2nd QC, POD) and the production-status card —
     // even when they hold no workflow role.
-    hasRole: isAdmin(user) || holdsAnyRole || user.role === "SALES",
+    hasRole: isAdmin(user) || holdsAnyRole || user.role === "SALES" || user.role === "ENGINEER",
     roleLabels: viewerRoleLabels(user, assignments),
     pending: tasks,
     activity,

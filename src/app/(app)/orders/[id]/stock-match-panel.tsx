@@ -27,7 +27,7 @@ export function StockMatchPanel({
   stockItems: StockOpt[];
   submitLabel: string;
   onCancel: () => void;
-  onSubmit: (matches: { stockItemId: string; qty: number }[]) => Promise<void>;
+  onSubmit: (matches: { stockItemId: string; qty: number; lineIndex: number }[]) => Promise<void>;
   /** Show a per-line tick box; only ticked lines are submitted (for releasing). */
   selectable?: boolean;
 }) {
@@ -87,9 +87,9 @@ export function StockMatchPanel({
     setErr(null);
     try {
       const matches = rows
-        .filter((r) => !selectable || r.checked)
-        .map((r) => ({ stockItemId: r.stockItemId, qty: Number(r.qty) }))
-        .filter((m) => m.stockItemId && Number.isFinite(m.qty) && m.qty > 0);
+        .map((r, i) => ({ stockItemId: r.stockItemId, qty: Number(r.qty), lineIndex: i, checked: r.checked }))
+        .filter((m) => (!selectable || m.checked) && m.stockItemId && Number.isFinite(m.qty) && m.qty > 0)
+        .map(({ stockItemId, qty, lineIndex }) => ({ stockItemId, qty, lineIndex }));
       if (selectable && matches.length === 0) { setErr("Tick at least one item (with a quantity) to release."); setBusy(false); return; }
       await onSubmit(matches);
     } catch (e) {
