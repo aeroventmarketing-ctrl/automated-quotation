@@ -157,6 +157,17 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const poApproved = isPoApproved(pr.chainLog);
       const company = pr.quotation?.inquiry.customer.company ?? null;
       const label = pr.quotationId ? (pr.quotation?.quoteNumber ?? "Order PR") : `Requisition · ${requisitionDeptLabel(pr.dept)}`;
+      // Purchase-path availability: an escalated MRF whose purchased item is
+      // delivered and Plant-Manager-approved — tell the requesting department the
+      // materials are available (the Warehouse will release them).
+      if (pr.mrfId && pr.dept && pr.status === "PLANT_APPROVED" && has(deptRole(pr.dept as Parameters<typeof deptRole>[0]) as WorkflowRoleKey)) {
+        tasks.push({
+          key: `mrf-avail:${pr.id}`, area: "order", areaLabel: AREA_LABEL.order,
+          title: pr.quotation?.quoteNumber ?? label, action: "Purchased materials available",
+          client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
+          href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+        });
+      }
       // The Purchaser must raise the PO for an approved requisition that has none
       // yet (e.g. an escalated MRF the Plant Manager just approved). The chain's
       // "approve PO" step assumes a PO already exists, so surface this explicitly.

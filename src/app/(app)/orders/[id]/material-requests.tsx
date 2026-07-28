@@ -7,7 +7,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
-import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, warehouseReceiveMrf } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
@@ -39,6 +39,7 @@ interface ReqRow {
   canHandle: boolean;
   canCancel: boolean;
   // Fulfillment handshake.
+  receivedByName?: string | null;
   isDeptHead?: boolean;
   canInform?: boolean;
   confirmedByName?: string | null;
@@ -369,9 +370,14 @@ export function MaterialRequests({
               )}
               {r.status === "requested" && (r.canHandle || r.canCancel) && issuingId !== r.id && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {r.canHandle && (
-                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Check availability &amp; process</Button>
+                  {/* Warehouse acknowledges the request first, then releases. */}
+                  {r.canHandle && !r.receivedByName && (
+                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => warehouseReceiveMrf(orderId, r.id))}>{r.deptLabel} Request Received</Button>
                   )}
+                  {r.canHandle && r.receivedByName && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Check availability &amp; release</Button>
+                  )}
+                  {r.receivedByName && <span className="text-xs text-muted-foreground">Request received by {r.receivedByName}</span>}
                   {r.canCancel && (
                     <button type="button" disabled={busy}
                       className="text-xs font-medium text-muted-foreground hover:text-destructive"

@@ -518,6 +518,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey))),
       // Fulfillment handshake: the requesting department head confirms receipt
       // and can follow up; the Warehouse can inform the requestor of availability.
+      receivedByName: m.receivedByName ?? null,
       isDeptHead: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey)),
       canInform: canWarehouse,
       confirmedByName: m.confirmedByName ?? null,
