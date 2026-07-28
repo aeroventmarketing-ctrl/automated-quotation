@@ -46,6 +46,9 @@ export default async function PurchasingPage() {
   const showAmounts = canViewOrderAmounts(viewer, assignments);
   const showSupplier = canViewSupplier(viewer, assignments);
   const canAct = (role: WorkflowRoleKey) => admin || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role));
+  // Generating a payment voucher from selected requests — Accounting, Payment
+  // Approver or an admin.
+  const canVoucher = canAct("accounting") || canAct("payment_approver");
   // Who may cancel: before approval the requestor / purchaser / admin; once
   // approved (or further) only an admin. Never once received into stock.
   const canCancelPr = (pr: { status: string; createdById: string }): boolean => {
@@ -346,6 +349,7 @@ export default async function PurchasingPage() {
               replenRows={replenRows}
               showAmounts={showAmounts}
               showSupplier={showSupplier}
+              canVoucher={canVoucher}
             />
           </section>
         </>

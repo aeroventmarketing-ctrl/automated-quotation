@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, Eye, Printer } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { statusBucket, type PRBucket, type PRStatus } from "@/lib/purchasing";
@@ -82,6 +82,7 @@ export function PurchasingWorkspace({
   replenRows = [],
   showAmounts = true,
   showSupplier = true,
+  canVoucher = false,
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -104,6 +105,8 @@ export function PurchasingWorkspace({
   showAmounts?: boolean;
   /** Whether the viewer may see the supplier's name. */
   showSupplier?: boolean;
+  /** Whether the viewer may generate a payment voucher from selected requests. */
+  canVoucher?: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
@@ -415,8 +418,30 @@ export function PurchasingWorkspace({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {bulkMsg && <span className="text-xs text-muted-foreground">{bulkMsg}</span>}
+            {/* Generate a payment voucher for the selected requests — view or
+                print. Accounting / Payment Approver / admin only. */}
+            {canVoucher && (
+              <>
+                <a
+                  href={`/purchasing/voucher?ids=${[...selected].join(",")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium hover:bg-accent"
+                >
+                  <Eye className="h-3.5 w-3.5" /> View voucher
+                </a>
+                <a
+                  href={`/purchasing/voucher?ids=${[...selected].join(",")}&print=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#ED1C24] px-3 text-xs font-medium text-white hover:bg-[#c9151c]"
+                >
+                  <Printer className="h-3.5 w-3.5" /> Print voucher
+                </a>
+              </>
+            )}
             <Button
               size="sm"
               className="h-8"
