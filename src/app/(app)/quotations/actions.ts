@@ -16,6 +16,7 @@ import { getInquiryDocs } from "@/lib/inquiry-docs-store";
 import { inquiryDocsMissing } from "@/lib/inquiry-docs";
 import { findDuplicateQuotes, type DuplicateMatch } from "@/lib/quote-duplicates";
 import { logActivity } from "@/lib/activity-log";
+import { isCurrentAccountOwner } from "@/lib/account";
 
 const lineSchema = z.object({
   catalogueItemId: z.string().nullable().optional(),
@@ -343,6 +344,7 @@ export async function reviseQuotation(quotationId: string) {
       subtotal: true,
       vat: true,
       total: true,
+      inquiry: { select: { customerId: true } },
       items: {
         orderBy: { sortOrder: "asc" },
         select: { descriptionSnapshot: true, specsSnapshot: true, qty: true, unitPrice: true, lineTotal: true },
@@ -352,7 +354,8 @@ export async function reviseQuotation(quotationId: string) {
   if (!quote) throw new Error("Quotation not found");
   const admin = isAdmin(user);
   const isEngineer = user.role === "ENGINEER";
-  const isPreparer = quote.preparedById === user.id;
+  // The preparer OR the current sales in-charge (after an account transfer).
+  const isPreparer = quote.preparedById === user.id || (await isCurrentAccountOwner(quote.inquiry.customerId, user.id));
   const saleSaved = !!saleFromClassification(quote.classification);
   // Once the order is in production (or later) the quotation is locked to Sales —
   // only an Engineer or an admin can still revise it.
@@ -591,12 +594,14 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
       preparedById: true,
       classification: true,
       quoteNumber: true,
-      inquiry: { select: { customer: { select: { company: true } } } },
+      inquiry: { select: { customerId: true, customer: { select: { company: true } } } },
     },
   });
   if (!quote) throw new Error("Quotation not found");
-  if (quote.preparedById !== user.id && !isAdmin(user))
-    throw new Error("Only the preparer or an admin can record this sale.");
+  // The preparer, the current sales in-charge (after a transfer), or an admin.
+  const ownsQuote = quote.preparedById === user.id || (await isCurrentAccountOwner(quote.inquiry.customerId, user.id));
+  if (!ownsQuote && !isAdmin(user))
+    throw new Error("Only the preparer, the current sales in-charge or an admin can record this sale.");
 
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const existing = saleFromClassification(cls);

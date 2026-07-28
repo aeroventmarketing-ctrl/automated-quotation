@@ -11,7 +11,7 @@ import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { quoteApproverNames } from "@/lib/approver-directory";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { readPricing } from "@/lib/quote";
-import { getAccountData } from "@/lib/account";
+import { getAccountData, currentOwner } from "@/lib/account";
 import { DuplicateToClient } from "./duplicate-to-client";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +71,11 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const canClearSale = !!user && (isAdmin(user) || userHasWorkflowRole(assignments, user.id, "accounting"));
 
   // A "terms" client (admin-set) can confirm a sale on the PO alone.
-  const clientTerms = (await getAccountData(quotation.inquiry.customerId))?.terms === true;
+  const account = await getAccountData(quotation.inquiry.customerId);
+  const clientTerms = account?.terms === true;
+  // A transferred quotation belongs to the current sales in-charge, so they get
+  // the same edit rights as the original preparer.
+  const isPreparerOrOwner = !!user && (user.id === quotation.preparedById || currentOwner(account)?.userId === user.id);
 
   const catalog = Object.fromEntries(
     catItems.map((i) => [
@@ -100,7 +104,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       canApprove={canApprove(user)}
       approverNames={await quoteApproverNames()}
       isAdmin={isAdmin(user)}
-      isPreparer={!!user && user.id === quotation.preparedById}
+      isPreparer={isPreparerOrOwner}
       canClearSale={canClearSale}
       clientTerms={clientTerms}
       orderInProduction={stageIndex(readOrderWorkflow(quotation.classification).stage) >= stageIndex("producing")}

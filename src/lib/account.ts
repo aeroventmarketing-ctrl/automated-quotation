@@ -51,6 +51,16 @@ export function currentOwner(data: AccountData | null | undefined): AccountAssig
   return null;
 }
 
+/**
+ * True when the user currently holds the client's account (the open assignment).
+ * A transferred quotation belongs to whoever the account is now assigned to, so
+ * the current sales in-charge gets the same edit rights as the preparer.
+ */
+export async function isCurrentAccountOwner(customerId: string, userId: string): Promise<boolean> {
+  const owner = currentOwner(await getAccountData(customerId));
+  return owner != null && owner.userId === userId;
+}
+
 function parseAccounts(config: unknown): Record<string, AccountData> {
   const accounts = (config as Record<string, unknown> | null)?.accounts;
   if (!accounts || typeof accounts !== "object") return {};
