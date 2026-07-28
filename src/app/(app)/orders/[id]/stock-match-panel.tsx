@@ -45,22 +45,27 @@ export function StockMatchPanel({
     const m = noRemark.match(/^([\d.]+)\s+\S+\s+(.*)$/);
     return m ? { qty: m[1], desc: m[2].trim() } : { qty: "", desc: noRemark };
   };
+  // Compare on alphanumerics only, so punctuation/spacing differences don't block
+  // a match — e.g. "G.I BOLT 5/16 X 1" matches "GI BOLT 5/16 X 1".
+  const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const autoMatchId = (desc: string): string => {
-    const d = desc.trim().toLowerCase();
-    if (!d) return "";
+    const dc = canon(desc);
+    if (!dc) return "";
     let best = "";
     let score = 0;
     for (const s of stockItems) {
-      const name = s.name.trim().toLowerCase();
-      if (!name) continue;
+      const nc = canon(s.name);
+      if (!nc) continue;
       let sc = 0;
-      if (name === d) sc = 1000;
-      else if (d.includes(name)) sc = 500 + name.length;
-      else if (name.includes(d)) sc = 300 + d.length;
+      if (nc === dc) sc = 1000;
+      else if (dc.includes(nc)) sc = 500 + nc.length;
+      else if (nc.includes(dc)) sc = 300 + dc.length;
       if (sc > score) { score = sc; best = s.id; }
     }
     return best;
   };
+  const nameOf = (id: string) => stockItems.find((s) => s.id === id)?.name ?? "";
+  const verb = selectable ? "released from" : "received into"; // selectable = the release flow
   const [rows, setRows] = useState(() =>
     lines.map((l) => {
       const { qty, desc } = parseLine(l.label);
@@ -128,6 +133,16 @@ export function StockMatchPanel({
               ))}
             </select>
             <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={rows[i].qty} disabled={selectable && !rows[i].checked} onChange={(e) => set(i, "qty", e.target.value)} />
+            {/* Confirmation of exactly which stock item gets the quantity. */}
+            {(!selectable || rows[i].checked) && (
+              <span className="w-full pl-6 text-[11px]">
+                {rows[i].stockItemId && Number(rows[i].qty) > 0 ? (
+                  <span className="text-muted-foreground">→ {rows[i].qty} {verb} <span className="font-medium text-foreground">{nameOf(rows[i].stockItemId)}</span></span>
+                ) : (
+                  <span className="text-amber-600">→ not matched to a stock item — nothing will be posted for this line</span>
+                )}
+              </span>
+            )}
           </div>
         ))}
       </div>
