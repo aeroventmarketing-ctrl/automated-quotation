@@ -26,6 +26,7 @@ import {
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
+import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
@@ -569,6 +570,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canManagePO =
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey));
   const mrfNoById = new Map(wf.materialRequests.map((m) => [m.id, m.formNo]));
+  // Printed cash-voucher number covering each purchase request (if any).
+  const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
   const purchaseRows = purchaseRequests.map((pr) => {
     const status = pr.status as PRStatus;
     const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
@@ -602,7 +605,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       returns: buildReturnViews(pr),
       canRaiseReturn: false,
       canResolveReturn: false,
-      reconcile: buildReconcileView(pr),
+      reconcile: { ...buildReconcileView(pr), voucherNo: voucherNoByPr.get(pr.id) ?? null },
       canRecordReconcile: false,
       canSettleReconcile: false,
       canEscalateReconcile: false,

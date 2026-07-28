@@ -8,7 +8,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { getSignatureMap } from "@/lib/signature";
-import { claimPurchaseVoucherNo } from "@/lib/purchase-voucher";
+import { getPurchaseVoucherNo, recordPrintedVoucher } from "@/lib/purchase-voucher";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { PrintButton } from "./print-button";
 
@@ -81,11 +81,14 @@ export default async function PurchasingVoucherPage({ searchParams }: { searchPa
 
   // "Paid to" is the Logistics head (who receives the cash to purchase).
   const paidTo = received.name;
-  // System-wide auto-incrementing voucher number (shared with the cash voucher
-  // counter, admin-set). Idempotent per selection so re-views reuse the number.
-  const voucherNo = await claimPurchaseVoucherNo(idList);
+  const particulars = lines.map((l) => ({ description: `${l.supplier}${l.poNumber ? ` — P.O. ${l.poNumber}` : ""}`, amount: l.net }));
+  // The voucher number (shared, auto-incrementing, admin-set counter) is only
+  // CLAIMED and the printed voucher RECORDED when printing; viewing is read-only.
+  const voucherNo = print === "1"
+    ? await recordPrintedVoucher({ ids: idList, paidTo, lines: particulars, total, printedByName: user.name, printedAt: new Date().toISOString() })
+    : await getPurchaseVoucherNo(idList);
 
-  const rows = lines.map((l) => ({ description: `${l.supplier}${l.poNumber ? ` — P.O. ${l.poNumber}` : ""}`, amount: l.net }));
+  const rows = [...particulars];
   while (rows.length < 8) rows.push({ description: "", amount: 0 });
 
   return (
@@ -115,9 +118,14 @@ export default async function PurchasingVoucherPage({ searchParams }: { searchPa
 
         <h1 className="mt-2 text-center text-2xl font-extrabold tracking-wide underline underline-offset-4">CASH VOUCHER</h1>
 
-        {/* Auto-numbered voucher number, right-aligned, in red. */}
+        {/* Auto-numbered voucher number, right-aligned, in red. Assigned on print. */}
         <div className="mt-1 text-right text-sm">
-          No.&nbsp;<span className="font-bold tracking-wide text-red-600">{voucherNo}</span>
+          No.&nbsp;
+          {voucherNo ? (
+            <span className="font-bold tracking-wide text-red-600">{voucherNo}</span>
+          ) : (
+            <span className="text-neutral-400 no-print">(assigned when printed)</span>
+          )}
         </div>
 
         <div className="mt-3 flex items-end justify-between gap-6 text-sm">

@@ -7,6 +7,8 @@ import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { coerceLiquidation, isLiquidated, liquidationVariance } from "@/lib/cash-request";
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { payableTotal, round2 } from "@/lib/quote";
+import { getPrintedVouchers } from "@/lib/purchase-voucher";
+import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
 import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, type OrderStage } from "@/lib/order-workflow";
 import { getCurrentUser, canApprove } from "@/lib/auth";
@@ -260,6 +262,19 @@ export default async function ManagementPage() {
     return q <= 0 || (r > 0 && q <= r);
   });
   const unpaidCommission = round2(commissions.reduce((a, c) => a + Number(c.amount), 0));
+
+  // Printed cash vouchers — number, details, and whether they tally with the
+  // approved requests they cover (voucher total vs Σ current net PO amounts).
+  const printedVouchers = await getPrintedVouchers().catch(() => []);
+  const voucherPrIds = [...new Set(printedVouchers.flatMap((v) => v.ids))];
+  const voucherPrs = voucherPrIds.length
+    ? await prisma.purchaseRequest.findMany({ where: { id: { in: voucherPrIds } }, select: { id: true, po: true } }).catch(() => [])
+    : [];
+  const voucherPrNet = new Map(voucherPrs.map((pr) => { const po = coercePurchaseOrder(pr.po); return [pr.id, po ? poTotals(po).net : 0]; }));
+  const voucherReport = printedVouchers.map((v) => {
+    const approvedTotal = round2(v.ids.reduce((s, id) => s + (voucherPrNet.get(id) ?? 0), 0));
+    return { ...v, approvedTotal, tallied: Math.abs(approvedTotal - round2(v.total)) < 0.01 };
+  });
 
   // Phase distribution for the donut.
   const phaseCount = new Map<string, number>();
@@ -707,6 +722,49 @@ export default async function ManagementPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Cash vouchers — number, details and whether they tally with the approved
+          requests they cover. */}
+      {voucherReport.length > 0 && (
+        <Card className="mt-4 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Banknote className="h-4 w-4 text-muted-foreground" /> Cash vouchers
+              <span className="ml-1 text-xs font-normal text-muted-foreground">({voucherReport.filter((v) => !v.tallied).length} not tallied)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground">
+                    <th className="py-1.5 pr-3 font-medium">Voucher No.</th>
+                    <th className="py-1.5 pr-3 font-medium">Details</th>
+                    <th className="py-1.5 pr-3 text-right font-medium">Amount</th>
+                    <th className="py-1.5 pr-3 font-medium">Status</th>
+                    <th className="py-1.5 font-medium">Printed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {voucherReport.map((v) => (
+                    <tr key={v.no} className="border-b align-top last:border-0">
+                      <td className="py-1.5 pr-3 font-semibold tabular-nums text-red-600">{v.no}</td>
+                      <td className="py-1.5 pr-3">
+                        <div className="font-medium">Paid to {v.paidTo || "—"}</div>
+                        <div className="text-xs text-muted-foreground">{v.lines.map((l) => l.description).filter(Boolean).join("; ")}</div>
+                        {!v.tallied && <div className="text-xs text-amber-700">Approved total {formatCurrency(v.approvedTotal, CURRENCY)} · voucher {formatCurrency(v.total, CURRENCY)}</div>}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{formatCurrency(v.total, CURRENCY)}</td>
+                      <td className="py-1.5 pr-3"><Badge variant={v.tallied ? "success" : "warning"}>{v.tallied ? "Tallied" : "Not tallied"}</Badge></td>
+                      <td className="py-1.5 text-xs text-muted-foreground">{v.printedByName}{v.printedAt ? ` · ${formatDateTime(v.printedAt)}` : ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

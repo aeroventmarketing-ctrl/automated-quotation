@@ -279,6 +279,7 @@ export function PurchaseReconcilePanel({
     <div className="mt-2 space-y-2 rounded-md border p-2">
       <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         <Scale className="h-3.5 w-3.5" /> Voucher reconciliation
+        {reconcile.voucherNo && <span className="ml-1 font-normal normal-case text-red-600">· Voucher No. {reconcile.voucherNo}</span>}
         <span className="ml-1 font-normal normal-case">· VAT {reconcile.vatMode === "exclusive" ? "exclusive (+12%)" : "inclusive"}</span>
       </div>
 

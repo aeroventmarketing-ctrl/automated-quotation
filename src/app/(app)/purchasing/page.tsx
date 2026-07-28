@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, requisitionDeptLabel } from "@/lib/order-workflow";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
+import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
 import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
@@ -49,6 +50,8 @@ export default async function PurchasingPage() {
   // Generating a payment voucher from selected requests — Accounting, Payment
   // Approver or an admin.
   const canVoucher = canAct("accounting") || canAct("payment_approver");
+  // Printed cash-voucher number covering each purchase request (if any).
+  const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
   // Who may cancel: before approval the requestor / purchaser / admin; once
   // approved (or further) only an admin. Never once received into stock.
   const canCancelPr = (pr: { status: string; createdById: string }): boolean => {
@@ -249,7 +252,7 @@ export default async function PurchasingPage() {
         const rows = unbatched
           .filter((pr) => pr.quotationId === qid)
           .map((pr) =>
-            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin }),
+            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null }),
           );
         if (rows.length === 0) return null;
         const project = q.projectName ?? q.inquiry.projectName ?? "";
@@ -272,6 +275,7 @@ export default async function PurchasingPage() {
         namesForRole,
         canAct,
         admin,
+        voucherNo: voucherNoByPr.get(pr.id) ?? null,
       }),
     );
   } catch {

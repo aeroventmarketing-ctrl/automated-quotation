@@ -59,6 +59,7 @@ export interface PurchaseReconcileView {
   aiVerified: boolean; // figures were AI-read from the uploaded receipt (vs typed by hand)
   aiReads: number; // AI receipt reads used (against the per-voucher limit)
   aiReadEscalated: string | null; // accounting informed the approver the AI limit was hit
+  voucherNo: string | null; // printed cash-voucher number covering this request (if any)
 }
 
 export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileView {
@@ -110,6 +111,7 @@ export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileVi
     aiVerified: r.aiVerified ?? (r.note?.includes("(AI)") ?? false),
     aiReads: r.aiReadCount ?? 0,
     aiReadEscalated: stampLabel(r.aiReadEscalation),
+    voucherNo: null, // set by the page from the printed-voucher records
   };
 }
 
@@ -270,6 +272,7 @@ export function buildPurchaseChainRow(
     namesForRole: (role: WorkflowRoleKey) => string[];
     canAct: (role: WorkflowRoleKey) => boolean;
     admin?: boolean;
+    voucherNo?: string | null;
   },
 ): PurchaseChainRow {
   const status = pr.status as PRStatus;
@@ -283,7 +286,7 @@ export function buildPurchaseChainRow(
   const canResolveReturn = ctx.canAct("purchaser") || ctx.canAct("warehouse");
   // Voucher reconciliation: the purchaser records the spend once bought;
   // accounting or the purchaser settle any change / overspend.
-  const reconcile = buildReconcileView(pr);
+  const reconcile = { ...buildReconcileView(pr), voucherNo: ctx.voucherNo ?? null };
   // Purchaser/accounting record it; the approver may also edit figures.
   const canRecordReconcile = canReconcileAt(status) && (ctx.canAct("purchaser") || ctx.canAct("accounting") || ctx.canAct("payment_approver"));
   const canSettleReconcile = ctx.canAct("accounting") || ctx.canAct("purchaser");
