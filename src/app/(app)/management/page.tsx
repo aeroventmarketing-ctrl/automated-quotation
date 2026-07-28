@@ -118,7 +118,7 @@ export default async function ManagementPage() {
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" } }).catch(() => []),
-    prisma.commission.findMany({ where: { paid: false } }).catch(() => []),
+    prisma.commission.findMany({ where: { paid: false }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } } } }).catch(() => []),
     prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] } }, select: { id: true, quotationId: true } }).catch(() => []),
   ]);
 
@@ -262,7 +262,14 @@ export default async function ManagementPage() {
     const r = Number(i.reorderLevel);
     return q <= 0 || (r > 0 && q <= r);
   });
-  const unpaidCommission = round2(commissions.reduce((a, c) => a + Number(c.amount), 0));
+  // Commissions only count once the client has fully paid the order — an
+  // unpaid-order commission stays hidden (matches the Commissions page).
+  const payableCommissions = commissions.filter((c) => {
+    const ov = Number(c.orderValue);
+    const collected = collectedTotal(saleFromClassification(c.quotation.classification));
+    return ov > 0 && collected >= ov - 0.005;
+  });
+  const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + Number(c.amount), 0));
 
   // Printed cash vouchers — number, details, and whether they tally with the
   // approved requests they cover (voucher total vs Σ current net PO amounts).
@@ -347,7 +354,7 @@ export default async function ManagementPage() {
     { label: "Open orders", value: String(openOrders), caption: `${orderCount} confirmed`, href: "/orders", icon: ClipboardList, color: "#2a78d6" },
     { label: "Receivables", value: formatCurrency(outstanding, CURRENCY), caption: `${collectedPct}% collected`, href: "/orders", icon: Wallet, color: "#1baf7a" },
     { label: "Low / out of stock", value: String(lowStock.length), caption: lowStock.length === 0 ? "all healthy" : "needs reorder", href: "/inventory/reorder", icon: PackageX, color: lowStock.length > 0 ? "#d03b3b" : "#0ca30c" },
-    { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), caption: `${commissions.length} pending`, href: "/commissions", icon: Percent, color: "#4a3aa7" },
+    { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), caption: `${payableCommissions.length} pending`, href: "/commissions", icon: Percent, color: "#4a3aa7" },
   ];
 
   return (
@@ -719,7 +726,7 @@ export default async function ManagementPage() {
             </div>
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
               <Link href="/commissions" className="text-muted-foreground hover:underline">Commissions unpaid</Link>
-              <span className="text-lg font-bold tabular-nums">{commissions.length}</span>
+              <span className="text-lg font-bold tabular-nums">{payableCommissions.length}</span>
             </div>
             <div className="flex items-center justify-between px-1">
               <span className="text-muted-foreground">Amount due</span>

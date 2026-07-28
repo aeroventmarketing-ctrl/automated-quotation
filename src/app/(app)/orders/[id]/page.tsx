@@ -398,9 +398,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         flow: wf.commission ?? {},
       }
     : null;
+  // The sales commission stays hidden until the client has fully paid the order
+  // (amount collected covers the payable total, within a rounding tolerance).
+  const fullyPaid = value > 0 && collectedTotal(saleForClose) >= value - 0.005;
   const phase6Active =
     wf.stage === "closed" &&
     !!commissionInfo &&
+    fullyPaid &&
     // Multi-batch handles closing documents per batch, so the order-level
     // closing-docs gate only applies to the single-batch flow.
     (wf.deliveryMode === "multi" || closeDocsState(saleForClose?.docs, quote.vatMode === "INCLUSIVE").complete);
@@ -918,7 +922,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       {!restricted && !phase6Active && (
         <Card className="border-dashed opacity-70">
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Phase 6 · Sales commission</CardTitle></CardHeader>
-          <CardContent><p className="text-sm text-muted-foreground">Opens once the order is closed with all closing documents complete — the sales commission voucher, approval and release.</p></CardContent>
+          <CardContent><p className="text-sm text-muted-foreground">Opens once the client has fully paid and the order is closed with all closing documents complete — the sales commission voucher, approval and release.</p></CardContent>
         </Card>
       )}
 

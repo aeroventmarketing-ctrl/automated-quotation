@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { collectedTotal, saleFromClassification } from "@/lib/sale";
 import { round2 } from "@/lib/quote";
 import { MarkPaid } from "./mark-paid";
 import { ApproverHighlight } from "@/components/approver-highlight";
@@ -155,17 +156,28 @@ async function loadRows(salespersonId?: string) {
   const list = await prisma.commission.findMany({
     where: salespersonId ? { salespersonId } : undefined,
     orderBy: [{ salesMonth: "desc" }, { salespersonName: "asc" }],
-    include: { quotation: { select: { quoteNumber: true } } },
+    include: { quotation: { select: { quoteNumber: true, classification: true } } },
   });
-  return list.map((c) => ({
-    id: c.id,
-    quotationId: c.quotationId,
-    quoteNumber: c.quotation.quoteNumber,
-    salespersonName: c.salespersonName,
-    orderValue: Number(c.orderValue),
-    amount: Number(c.amount),
-    salesMonth: c.salesMonth,
-    paid: c.paid,
-    paidByName: c.paidByName,
-  }));
+  return list
+    .map((c) => {
+      const orderValue = Number(c.orderValue);
+      // The commission is generated when the order closes, but it must stay hidden
+      // until the client has fully paid (orders on terms / multi-batch can close
+      // with a balance still owing).
+      const collected = collectedTotal(saleFromClassification(c.quotation.classification));
+      const fullyPaid = orderValue > 0 && collected >= orderValue - 0.005;
+      return {
+        id: c.id,
+        quotationId: c.quotationId,
+        quoteNumber: c.quotation.quoteNumber,
+        salespersonName: c.salespersonName,
+        orderValue,
+        amount: Number(c.amount),
+        salesMonth: c.salesMonth,
+        paid: c.paid,
+        paidByName: c.paidByName,
+        fullyPaid,
+      };
+    })
+    .filter((r) => r.fullyPaid);
 }
