@@ -90,16 +90,20 @@ export function PurchaseReconcilePanel({
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, actual: v } : r)));
   }
 
-  async function uploadReceipt(file: File) {
+  async function uploadReceipts(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (list.length === 0) return;
     setBusy("upload"); setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("purchaseRequestId", prId);
-      const res = await fetch("/api/purchase-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setReceipts((rs) => [...rs, data as SaleDoc]);
+      for (const file of list) {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("purchaseRequestId", prId);
+        const res = await fetch("/api/purchase-uploads", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Upload failed");
+        setReceipts((rs) => [...rs, data as SaleDoc]);
+      }
     } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
     finally { setBusy(null); }
   }
@@ -114,9 +118,14 @@ export function PurchaseReconcilePanel({
     if (!res.ok) throw new Error(data.error || "Upload failed");
     return data as SaleDoc;
   }
-  async function addRecordedReceipt(file: File) {
+  async function addRecordedReceipts(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (list.length === 0) return;
     setBusy("addrcpt"); setErr(null);
-    try { await addReconciliationReceipt(prId, await uploadRaw(file)); router.refresh(); }
+    try {
+      for (const file of list) await addReconciliationReceipt(prId, await uploadRaw(file));
+      router.refresh();
+    }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed to add receipt"); }
     finally { setBusy(null); }
   }
@@ -382,8 +391,8 @@ export function PurchaseReconcilePanel({
               ))}
               {admin && (
                 <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 font-medium hover:bg-accent">
-                  <Upload className="h-3.5 w-3.5" /> {busy === "addrcpt" ? "Uploading…" : "Add receipt"}
-                  <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy != null} onChange={(e) => e.target.files?.[0] && addRecordedReceipt(e.target.files[0])} />
+                  <Upload className="h-3.5 w-3.5" /> {busy === "addrcpt" ? "Uploading…" : "Add receipts"}
+                  <input type="file" accept="image/*,application/pdf" multiple className="hidden" disabled={busy != null} onChange={(e) => { if (e.target.files?.length) addRecordedReceipts(e.target.files); e.target.value = ""; }} />
                 </label>
               )}
             </div>
@@ -529,8 +538,8 @@ export function PurchaseReconcilePanel({
               />
             ))}
             <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 font-medium hover:bg-accent">
-              <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : receipts.length ? "Add receipt" : "Upload receipt"}
-              <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy === "upload"} onChange={(e) => e.target.files?.[0] && uploadReceipt(e.target.files[0])} />
+              <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : receipts.length ? "Add receipts" : "Upload receipts"}
+              <input type="file" accept="image/*,application/pdf" multiple className="hidden" disabled={busy === "upload"} onChange={(e) => { if (e.target.files?.length) uploadReceipts(e.target.files); e.target.value = ""; }} />
             </label>
             {receipts.length > 0 && (
               <button type="button" onClick={autoRead} disabled={busy === "read" || limitReached}
