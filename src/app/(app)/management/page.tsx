@@ -724,16 +724,22 @@ export default async function ManagementPage() {
       </div>
 
       {/* Cash vouchers — number, details and whether they tally with the approved
-          requests they cover. */}
-      {voucherReport.length > 0 && (
-        <Card className="mt-4 shadow-sm">
+          requests they cover. Always shown; empty until a voucher is printed. */}
+      <Card className="mt-4 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Banknote className="h-4 w-4 text-muted-foreground" /> Cash vouchers
-              <span className="ml-1 text-xs font-normal text-muted-foreground">({voucherReport.filter((v) => !v.tallied).length} not tallied)</span>
+              {voucherReport.length > 0 && (
+                <span className="ml-1 text-xs font-normal text-muted-foreground">({voucherReport.filter((v) => !v.tallied).length} not tallied)</span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {voucherReport.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No cash vouchers printed yet. Print one from <Link href="/purchasing" className="text-primary hover:underline">Purchasing</Link> (tick approved requests → Print voucher) and it will appear here.
+              </p>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] border-collapse text-sm">
                 <thead>
@@ -762,9 +768,9 @@ export default async function ManagementPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </CardContent>
         </Card>
-      )}
     </div>
   );
 }
