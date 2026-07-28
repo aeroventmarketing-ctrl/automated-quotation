@@ -54,6 +54,7 @@ import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { AccessoriesJobOrderPanel } from "./accessories-job-order-panel";
 import { formatAccessoriesJoNumber, accessoriesJobRemarks } from "@/lib/accessories-job-order";
 import { MotorControllerJobOrderPanel } from "./motor-controller-job-order-panel";
+import { quotationJobOrderDepts } from "@/lib/job-order-autogen";
 import { formatMotorControllerJoNumber } from "@/lib/motor-controller-job-order";
 import { ConversationLog } from "./conversation-log";
 import { AdminWorkflowOverride } from "./admin-workflow-override";
@@ -99,7 +100,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       include: {
         inquiry: { include: { customer: true } },
         preparedBy: true,
-        items: { select: { qty: true, descriptionSnapshot: true } },
+        items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
       },
     }),
     getCurrentUser(),
@@ -270,8 +271,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       (["purchaser", "payment_approver", "technical_head", "plant_manager"] as WorkflowRoleKey[]).some((r) =>
         userHasWorkflowRole(assignments, viewer.id, r),
       ));
-  const canSeeDeptJO = (deptKey: (typeof PRODUCTION_DEPTS)[number]["key"]): boolean =>
+  const canRoleSeeDeptJO = (deptKey: ProductionDeptKey): boolean =>
     seesAllJobOrders || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(deptKey) as WorkflowRoleKey));
+  // Departments the paid quotation actually has fabricable items for — a section
+  // for a department the order doesn't touch is hidden. Never hide a department
+  // that already has a job order created (manually added or issued), so existing
+  // work is never lost.
+  const joDepts = quotationJobOrderDepts(quote.items);
+  const deptJoArrays: Record<ProductionDeptKey, unknown[]> = {
+    fans: wf.fansJobOrders, duct: wf.ductJobOrders, accessories: wf.accessoriesJobOrders, motor: wf.motorJobOrders,
+  };
+  const deptHasContent = (deptKey: ProductionDeptKey): boolean =>
+    joDepts[deptKey] || (deptJoArrays[deptKey]?.length ?? 0) > 0 || !!wf.jobOrders[deptKey];
+  const canSeeDeptJO = (deptKey: ProductionDeptKey): boolean =>
+    canRoleSeeDeptJO(deptKey) && deptHasContent(deptKey);
 
   const jobs = PRODUCTION_DEPTS.filter((d) => wf.jobOrders[d.key] && canSeeDeptJO(d.key)).map((d) => {
     const jo = wf.jobOrders[d.key]!;

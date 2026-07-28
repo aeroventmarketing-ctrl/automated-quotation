@@ -118,6 +118,31 @@ function fanProjectCode(s: Record<string, unknown>, description: string): string
   return FAN_PROJECT_CODES.find((c) => model.includes(c)) ?? "";
 }
 
+/** The four mappable production departments. */
+export type JobOrderDept = "fans" | "duct" | "accessories" | "motor";
+
+/**
+ * Which departments the paid quotation actually has fabricable items for — used
+ * to hide job-order sections for departments the order doesn't touch. Mirrors the
+ * exact classification `buildAutoJobOrders` uses (duct → fan → motor / accessory),
+ * including the VFD exclusion (variable-frequency drives are bought-in, so they
+ * produce no Motor Controller job order).
+ */
+export function quotationJobOrderDepts(items: QuoteItemLike[]): Record<JobOrderDept, boolean> {
+  const depts: Record<JobOrderDept, boolean> = { fans: false, duct: false, accessories: false, motor: false };
+  for (const it of items) {
+    const s = specsOf(it);
+    if (isAirDuct(s)) { depts.duct = true; continue; }
+    if (isFan(s)) { depts.fans = true; continue; }
+    if (isMotorController(s)) {
+      if (!/variable frequency|vfd/i.test(str(s.bladeType))) depts.motor = true;
+    } else if (isAccessory(s)) {
+      depts.accessories = true;
+    }
+  }
+  return depts;
+}
+
 export interface AutoJobOrders {
   fans: FansJobOrder[];
   duct: DuctJobOrder[];
