@@ -8,6 +8,7 @@ import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByN
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
+import { BatchDocumentList } from "./batch-document-list";
 import { quoteApproverNames } from "@/lib/approver-directory";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { readPricing } from "@/lib/quote";
@@ -234,6 +235,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           };
         }),
       }}
+      />
+      {/* Per-batch closing documents attached on the order's multiple-batch
+          delivery — visible/downloadable here too. */}
+      <BatchDocumentList
+        batches={readOrderWorkflow(quotation.classification).deliveryBatches}
+        vatInclusive={quotation.vatMode === "INCLUSIVE"}
       />
     </div>
   );

@@ -31,6 +31,10 @@ export interface MultiDeliveryBatch {
   // Proof-of-delivery attachments (signed DRs / photos). Logistics must attach at
   // least one before the "Mark delivered" step; admins can manage them anytime.
   pod?: SaleDoc[];
+  // This batch's own closing documents (Sales Invoice / OR-CR-AF / Delivery
+  // Receipt / BIR 2307), keyed by document type. Accounting attaches them at the
+  // "delivery documents" step — each batch carries its own set.
+  docs?: Record<string, SaleDoc[]>;
   // Partial payment collected for this batch (a linked "progress" sale payment),
   // captured at the "Payment checked" step.
   paymentAmount?: number;
@@ -139,6 +143,13 @@ export function coerceMultiBatch(value: unknown): MultiDeliveryBatch | null {
   }
   const paymentAmount = num(o.paymentAmount);
   const pod = Array.isArray(o.pod) ? (o.pod as unknown[]).map(coercePodDoc).filter((d): d is SaleDoc => !!d) : [];
+  const docs: Record<string, SaleDoc[]> = {};
+  if (o.docs && typeof o.docs === "object") {
+    for (const [k, v] of Object.entries(o.docs as Record<string, unknown>)) {
+      const files = Array.isArray(v) ? (v as unknown[]).map(coercePodDoc).filter((d): d is SaleDoc => !!d) : [];
+      if (files.length) docs[k] = files;
+    }
+  }
   return {
     id: str(o.id),
     createdAt: str(o.createdAt),
@@ -147,6 +158,7 @@ export function coerceMultiBatch(value: unknown): MultiDeliveryBatch | null {
     lines,
     steps,
     ...(pod.length ? { pod } : {}),
+    ...(Object.keys(docs).length ? { docs } : {}),
     ...(paymentAmount > 0 ? { paymentAmount, paymentId: str(o.paymentId) || undefined } : {}),
     ...(o.cancelled ? { cancelled: true, cancelledAt: str(o.cancelledAt) } : {}),
   };

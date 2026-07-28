@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { afterPaymentDocTypes, type SaleDoc } from "@/lib/sale";
-import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof, saveMultiBatchPod, removeMultiBatchPod, saveCloseDoc, removeCloseDoc } from "../actions";
+import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof, saveMultiBatchPod, removeMultiBatchPod, saveMultiBatchDoc, removeMultiBatchDoc } from "../actions";
 
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const docDownload = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}&download=1&name=${encodeURIComponent(d.name)}`;
@@ -38,6 +38,8 @@ export interface MBBatchView {
   createdByName: string;
   lines: { description: string; qty: number }[];
   pod: SaleDoc[];
+  /** This batch's own closing documents, keyed by document type. */
+  docs: Record<string, SaleDoc[]>;
   paymentAmount?: number;
   paymentProof?: SaleDoc | null;
   paymentId?: string | null;
@@ -59,7 +61,6 @@ export function MultiBatchPanel({
   items,
   batches,
   payments = [],
-  closeDocs = {},
   vatInclusive,
   canManage,
   canCollect,
@@ -75,8 +76,6 @@ export function MultiBatchPanel({
   batches: MBBatchView[];
   /** Every payment recorded on the order — same records as the quotation tab. */
   payments?: MBPaymentView[];
-  /** The order's closing documents (same sale.docs shown on the quotation tab). */
-  closeDocs?: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   canManage: boolean;
   /** Sales / Accounting / admin — may record payments against the balance. */
@@ -144,12 +143,11 @@ export function MultiBatchPanel({
     }
   }
 
-  // Closing documents Accounting attaches at the "delivery documents" step.
-  // Stored on the order's sale record (same as the quotation tab), so they show
-  // in both places. Sales Invoice / BIR 2307 apply to VAT-inclusive deals only.
-  const deliveryDocSlots = afterPaymentDocTypes(vatInclusive).filter((t) => t.key !== "bir_2307");
-  async function uploadCloseDoc(key: string, file: File) {
-    setBusy("doc:" + key);
+  // Closing documents Accounting attaches at each batch's "delivery documents"
+  // step (per batch). Sales Invoice / BIR 2307 apply to VAT-inclusive deals only.
+  const deliveryDocSlots = afterPaymentDocTypes(vatInclusive);
+  async function uploadBatchDoc(batchId: string, key: string, file: File) {
+    setBusy("doc:" + batchId + key);
     setErr(null);
     try {
       const fd = new FormData();
@@ -158,7 +156,7 @@ export function MultiBatchPanel({
       const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      await saveCloseDoc(orderId, key, data as SaleDoc);
+      await saveMultiBatchDoc(orderId, batchId, key, data as SaleDoc);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
@@ -395,7 +393,8 @@ export function MultiBatchPanel({
         // a file.
         const atDeliveryDocs = b.next?.key === "delivery_docs";
         const canManageDocs = admin || (atDeliveryDocs && !!b.next?.canAct);
-        const docsBlocked = atDeliveryDocs && deliveryDocSlots.some((t) => (closeDocs[t.key]?.length ?? 0) === 0);
+        const docsBlocked = atDeliveryDocs && deliveryDocSlots.some((t) => (b.docs[t.key]?.length ?? 0) === 0);
+        const anyBatchDocs = deliveryDocSlots.some((t) => (b.docs[t.key]?.length ?? 0) > 0);
         return (
         <div key={b.id} className={`rounded-md border p-3 ${b.cancelled ? "opacity-60" : ""}`}>
           <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -485,15 +484,15 @@ export function MultiBatchPanel({
             </div>
           )}
 
-          {/* Delivery documents — Accounting attaches the Sales Invoice, OR/CR/AF
-              and Delivery Receipt here before approving delivery. Stored on the
-              order's sale record, so they also appear on the quotation tab. */}
-          {!restricted && (atDeliveryDocs || admin) && (
+          {/* Delivery documents — Accounting attaches THIS batch's Sales Invoice,
+              OR/CR/AF, Delivery Receipt and BIR 2307 before approving delivery.
+              Each batch carries its own set; they also appear on the quotation tab. */}
+          {!restricted && (atDeliveryDocs || anyBatchDocs || admin) && (
             <div className="mt-2 rounded-md border bg-muted/20 p-2">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Delivery documents</div>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Delivery documents (this batch)</div>
               <div className="space-y-1.5">
                 {deliveryDocSlots.map((t) => {
-                  const files = closeDocs[t.key] ?? [];
+                  const files = b.docs[t.key] ?? [];
                   return (
                     <div key={t.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <span className="min-w-[12rem] font-medium">
@@ -511,7 +510,7 @@ export function MultiBatchPanel({
                             <Download className="h-3.5 w-3.5" />
                           </a>
                           {canManageDocs && (
-                            <button type="button" className="text-muted-foreground hover:text-destructive" disabled={busy != null} onClick={() => { if (window.confirm(`Remove "${f.name}"?`)) run(b.id + "rmdoc" + f.path, () => removeCloseDoc(orderId, t.key, f.path)); }} title="Remove" aria-label="Remove">
+                            <button type="button" className="text-muted-foreground hover:text-destructive" disabled={busy != null} onClick={() => { if (window.confirm(`Remove "${f.name}"?`)) run(b.id + "rmdoc" + f.path, () => removeMultiBatchDoc(orderId, b.id, t.key, f.path)); }} title="Remove" aria-label="Remove">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           )}
@@ -519,8 +518,8 @@ export function MultiBatchPanel({
                       ))}
                       {canManageDocs && (
                         <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 hover:bg-accent">
-                          <Upload className="h-3.5 w-3.5" /> {busy === "doc:" + t.key ? "Uploading…" : files.length ? "Add file" : "Attach"}
-                          <input type="file" className="hidden" disabled={busy != null} onChange={(e) => e.target.files?.[0] && uploadCloseDoc(t.key, e.target.files[0])} />
+                          <Upload className="h-3.5 w-3.5" /> {busy === "doc:" + b.id + t.key ? "Uploading…" : files.length ? "Add file" : "Attach"}
+                          <input type="file" className="hidden" disabled={busy != null} onChange={(e) => e.target.files?.[0] && uploadBatchDoc(b.id, t.key, e.target.files[0])} />
                         </label>
                       )}
                     </div>

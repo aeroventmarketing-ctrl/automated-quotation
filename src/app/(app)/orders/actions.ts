@@ -46,7 +46,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { saleFromClassification, docCheckMissing, closeDocsState, type SaleDoc, type SalePayment } from "@/lib/sale";
+import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
 import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
@@ -2504,6 +2504,45 @@ export async function removeMultiBatchPod(quotationId: string, batchId: string, 
   await saveWorkflow(quotationId, cls, { ...wf, deliveryBatches });
 }
 
+/** Valid per-batch closing-document keys (Sales Invoice / OR-CR-AF / DR / 2307). */
+const MB_DOC_KEYS = new Set(["sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307"]);
+
+/** Accounting (or an admin / the Sales preparer) attaches a closing document to a batch. */
+export async function saveMultiBatchDoc(quotationId: string, batchId: string, key: string, doc: SaleDoc): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!MB_DOC_KEYS.has(key)) throw new Error("Unknown document.");
+  const roles = await getWorkflowRoles();
+  const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { preparedById: true } });
+  const ok = isAdmin(user) || quote?.preparedById === user.id || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only Accounting, Sales or an admin can attach delivery documents.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const batch = wf.deliveryBatches.find((b) => b.id === batchId);
+  if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
+  const entry: SaleDoc = { path: String(doc.path), name: String(doc.name || "file"), uploadedAt: doc.uploadedAt || new Date().toISOString() };
+  const docs = { ...(batch.docs ?? {}), [key]: [...(batch.docs?.[key] ?? []), entry] };
+  const deliveryBatches = wf.deliveryBatches.map((b) => (b.id === batchId ? { ...b, docs } : b));
+  await saveWorkflow(quotationId, cls, { ...wf, deliveryBatches });
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
+/** Remove a closing document from a batch (Accounting / admin). */
+export async function removeMultiBatchDoc(quotationId: string, batchId: string, key: string, path: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey))) {
+    throw new Error("Only Accounting or an admin can remove delivery documents.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const batch = wf.deliveryBatches.find((b) => b.id === batchId);
+  if (!batch) throw new Error("Delivery batch not found.");
+  const docs = { ...(batch.docs ?? {}), [key]: (batch.docs?.[key] ?? []).filter((d) => d.path !== path) };
+  const deliveryBatches = wf.deliveryBatches.map((b) => (b.id === batchId ? { ...b, docs } : b));
+  await saveWorkflow(quotationId, cls, { ...wf, deliveryBatches });
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
 export async function advanceMultiBatch(quotationId: string, batchId: string, stepKey: string, input: z.infer<typeof mbStepSchema>): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -2526,11 +2565,13 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   if (stepKey === MB_DELIVERED_STEP && !(batch.pod && batch.pod.length > 0)) {
     throw new Error("Attach the proof of delivery before marking the batch delivered.");
   }
-  // Accounting must attach the closing documents (Sales Invoice / OR-CR-AF /
-  // Delivery Receipt) before approving the batch's delivery documents.
+  // Accounting must attach this batch's own closing documents (Sales Invoice /
+  // OR-CR-AF / Delivery Receipt / BIR 2307) before approving its delivery
+  // documents. VAT-exclusive deals don't require the Sales Invoice or BIR 2307.
   if (stepKey === "delivery_docs") {
-    const { appear, missing } = closeDocsState(saleFromClassification(cls)?.docs, quote.vatMode === "INCLUSIVE");
-    if (!appear) throw new Error(`Attach the required delivery documents first (missing: ${missing.join(", ")}).`);
+    const required = afterPaymentDocTypes(quote.vatMode === "INCLUSIVE");
+    const missing = required.filter((t) => (batch.docs?.[t.key]?.length ?? 0) === 0);
+    if (missing.length) throw new Error(`Attach this batch's ${missing.map((t) => t.label).join(", ")} first.`);
   }
 
   const roles = await getWorkflowRoles();
