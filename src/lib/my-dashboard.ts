@@ -340,7 +340,10 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   materialsFeed.sort((a, b) => b.when.localeCompare(a.when));
 
   return {
-    hasRole: isAdmin(user) || holdsAnyRole,
+    // Sales base-role users get their own My Dashboard too — to monitor their
+    // approvals (notify client, 2nd QC, POD) and the production-status card —
+    // even when they hold no workflow role.
+    hasRole: isAdmin(user) || holdsAnyRole || user.role === "SALES",
     roleLabels: viewerRoleLabels(user, assignments),
     pending: tasks,
     activity,

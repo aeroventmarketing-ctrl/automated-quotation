@@ -88,7 +88,11 @@ export default async function MyDashboardPage() {
   // Sales / Engineer base-role users (those entitled to it). Changing a user to
   // "Other" removes it; switching back to Sales returns it. Admins keep it on
   // their separate Sales Dashboard, so it isn't embedded here for them.
-  const showSalesAbove = !isAdmin(user) && (user.role === "SALES" || user.role === "ENGINEER");
+  // Embed the Sales Dashboard only for consolidated workflow-role holders (they
+  // reach My Dashboard via a role). A pure Sales base-role user already has the
+  // standalone Sales Dashboard tab, so their My Dashboard stays focused on the
+  // production-status card and their approvals — no duplicate analytics.
+  const showSalesAbove = !isAdmin(user) && (user.role === "SALES" || user.role === "ENGINEER") && data.roleLabels.length > 0;
   const maskProdClient = hidesProductionClient(user, assignments);
   const admin = isAdmin(user);
   // Inventory double-handshake actions awaiting the Warehouseman / Purchaser /
