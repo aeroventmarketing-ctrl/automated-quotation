@@ -1085,31 +1085,6 @@ export async function cancelMaterialRequest(quotationId: string, requestId: stri
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
 }
 
-/**
- * The Warehouse acknowledges a material request ("<Dept> Request Received")
- * before releasing the items. Only on a still-"requested" MRF.
- */
-export async function warehouseReceiveMrf(quotationId: string, requestId: string): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
-    throw new Error("Only the Warehouse or an admin can receive this request.");
-  }
-  const { cls, wf } = await loadWorkflow(quotationId);
-  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
-  if (idx < 0) throw new Error("Material request not found.");
-  const mrf = wf.materialRequests[idx];
-  if (mrf.status !== "requested") throw new Error("This request has already been handled.");
-  const materialRequests = wf.materialRequests.slice();
-  materialRequests[idx] = { ...mrf, receivedAt: new Date().toISOString(), receivedByName: user.name };
-  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
-  await logActivity(user, {
-    action: "mrf.received", category: "order",
-    summary: `Warehouse received ${deptLabel(mrf.dept)} MRF #${mrf.formNo} (ready to release) — ${await orderRefLabel(quotationId)}`,
-    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
-  });
-}
-
 /** Helper: load an MRF and enforce the requesting-department-head (or admin) actor. */
 async function loadMrfForDeptHead(quotationId: string, requestId: string) {
   const user = await getCurrentUser();

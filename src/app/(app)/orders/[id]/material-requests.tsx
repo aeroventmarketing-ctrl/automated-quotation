@@ -7,7 +7,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
-import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, warehouseReceiveMrf } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
@@ -336,7 +336,7 @@ export function MaterialRequests({
                   {r.confirmedByName ? (
                     <Badge variant="success">Received &amp; confirmed by {r.confirmedByName}{r.confirmedWhen ? ` · ${r.confirmedWhen}` : ""}</Badge>
                   ) : (r.status === "issued" || r.status === "partial") && r.isDeptHead ? (
-                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => confirmMaterialReceipt(orderId, r.id))}>Confirm receipt</Button>
+                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => confirmMaterialReceipt(orderId, r.id))}>{r.deptLabel} Request Received</Button>
                   ) : null}
                   {r.canInform && !r.informedByName && (r.status === "issued" || r.status === "partial") && (
                     <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => run(() => informMaterialAvailable(orderId, r.id))}>Inform requestor — available</Button>
@@ -371,14 +371,11 @@ export function MaterialRequests({
               )}
               {r.status === "requested" && (r.canHandle || r.canCancel) && issuingId !== r.id && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {/* Warehouse acknowledges the request first, then releases. */}
-                  {r.canHandle && !r.receivedByName && (
-                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => warehouseReceiveMrf(orderId, r.id))}>{r.deptLabel} Request Received</Button>
+                  {/* Warehouse checks availability first, then either issues from
+                      stock (available) or sends the shortfall to purchasing. */}
+                  {r.canHandle && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Check availability &amp; process</Button>
                   )}
-                  {r.canHandle && r.receivedByName && (
-                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Check availability &amp; release</Button>
-                  )}
-                  {r.receivedByName && <span className="text-xs text-muted-foreground">Request received by {r.receivedByName}</span>}
                   {r.canCancel && (
                     <button type="button" disabled={busy}
                       className="text-xs font-medium text-muted-foreground hover:text-destructive"
