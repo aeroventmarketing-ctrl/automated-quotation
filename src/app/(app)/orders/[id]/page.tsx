@@ -461,6 +461,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // warehouse issue/escalate.
   const canWarehouse =
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "warehouse" as WorkflowRoleKey));
+  // Releasing purchased materials to the requesting department — Warehouse,
+  // Purchaser, Payment Approver or an admin.
+  const canReleaseMaterials =
+    canWarehouse ||
+    (viewer != null &&
+      (["purchaser", "payment_approver"] as WorkflowRoleKey[]).some((r) => userHasWorkflowRole(assignments, viewer.id, r)));
   // An authorized department head (or admin) may raise their department's MRF at
   // any time during production — from when the job orders are released until
   // production is finished. No longer gated on that department's own job order
@@ -535,6 +541,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       receivedByName: m.receivedByName ?? null,
       isDeptHead: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey)),
       canInform: canWarehouse,
+      canRelease: canReleaseMaterials,
+      releasedByName: m.releasedByName ?? null,
       confirmedByName: m.confirmedByName ?? null,
       confirmedWhen: m.confirmedAt ? formatDateTime(m.confirmedAt) : null,
       informedByName: m.informedByName ?? null,

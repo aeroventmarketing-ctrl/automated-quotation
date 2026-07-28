@@ -157,6 +157,9 @@ export interface MaterialRequest {
   /** Warehouse informed the requesting department the materials are available. */
   informedAt?: string;
   informedByName?: string;
+  /** Purchased materials released to the requesting department (after receiving). */
+  releasedAt?: string;
+  releasedByName?: string;
   /** The requesting department confirmed it received the released materials. */
   confirmedAt?: string;
   confirmedByName?: string;
@@ -395,6 +398,8 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
           receivedByName: m.receivedByName ? String(m.receivedByName) : undefined,
           informedAt: m.informedAt ? String(m.informedAt) : undefined,
           informedByName: m.informedByName ? String(m.informedByName) : undefined,
+          releasedAt: m.releasedAt ? String(m.releasedAt) : undefined,
+          releasedByName: m.releasedByName ? String(m.releasedByName) : undefined,
           confirmedAt: m.confirmedAt ? String(m.confirmedAt) : undefined,
           confirmedByName: m.confirmedByName ? String(m.confirmedByName) : undefined,
           followUps: Array.isArray(m.followUps)

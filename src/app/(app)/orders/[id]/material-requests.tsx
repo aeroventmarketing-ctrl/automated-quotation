@@ -7,7 +7,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
-import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, releaseMaterialToRequestor } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
@@ -42,6 +42,8 @@ interface ReqRow {
   receivedByName?: string | null;
   isDeptHead?: boolean;
   canInform?: boolean;
+  canRelease?: boolean;
+  releasedByName?: string | null;
   confirmedByName?: string | null;
   confirmedWhen?: string | null;
   informedByName?: string | null;
@@ -341,9 +343,15 @@ export function MaterialRequests({
               {/* Fulfillment handshake: the Warehouse informs availability; the
                   requesting department confirms receipt of released materials;
                   the department can follow up while the MRF is outstanding. */}
-              {r.status !== "cancelled" && (r.isDeptHead || r.canInform || r.informedByName || r.confirmedByName) && (
+              {r.status !== "cancelled" && (r.isDeptHead || r.canInform || r.canRelease || r.informedByName || r.releasedByName || r.confirmedByName) && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
                   {r.informedByName && <Badge variant="secondary">Available — informed by {r.informedByName}</Badge>}
+                  {r.releasedByName && <Badge variant="secondary">Released by {r.releasedByName}</Badge>}
+                  {/* Warehouse / Purchaser / Payment Approver / admin release the
+                      purchased (now in-stock) materials to the requesting department. */}
+                  {r.canRelease && !r.releasedByName && r.items.some((it) => it.disposition === "purchase") && (
+                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => releaseMaterialToRequestor(orderId, r.id))}>Release to requestor</Button>
+                  )}
                   {r.confirmedByName ? (
                     <Badge variant="success">Received &amp; confirmed by {r.confirmedByName}{r.confirmedWhen ? ` · ${r.confirmedWhen}` : ""}</Badge>
                   ) : (r.status === "issued" || r.status === "partial") && r.isDeptHead ? (

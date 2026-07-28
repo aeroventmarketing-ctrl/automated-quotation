@@ -1164,6 +1164,44 @@ export async function informMaterialAvailable(quotationId: string, requestId: st
   });
 }
 
+/** Roles that can release purchased materials to the requesting department. */
+const MRF_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse", "purchaser", "payment_approver"];
+
+/**
+ * Release the purchased materials of an MRF to the requesting department (after
+ * they have been bought and received into stock). Done by the Warehouse,
+ * Purchaser, Payment Approver or an admin. Marks the purchase lines as released
+ * and moves a "purchasing" MRF to "issued" so the department can then confirm
+ * receipt with its "<Dept> Request Received" button.
+ */
+export async function releaseMaterialToRequestor(quotationId: string, requestId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || MRF_RELEASE_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r)))) {
+    throw new Error("Only the Warehouse, Purchaser, Payment Approver or an admin can release the materials.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  if (mrf.status === "cancelled") throw new Error("A cancelled request can't be released.");
+  // Purchase lines are now released to the department — record the released qty.
+  const items = mrf.items.map((it) => (it.disposition === "purchase" ? { ...it, issuedQty: it.issuedQty ?? it.qty } : it));
+  // A pure/partly purchasing MRF becomes "issued" so the department can confirm
+  // receipt; an already-completed MRF just records who released it.
+  const status: MaterialRequest["status"] =
+    mrf.status === "purchasing" || mrf.status === "partial" ? "issued" : mrf.status;
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = { ...mrf, items, status, releasedAt: new Date().toISOString(), releasedByName: user.name };
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+  await logActivity(user, {
+    action: "mrf.released", category: "order",
+    summary: `Released MRF #${mrf.formNo} materials to ${deptLabel(mrf.dept)} — ${await orderRefLabel(quotationId)}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+  });
+}
+
 /** Render one MRF item as a single display line for the purchasing chain. */
 function mrfItemLine(it: MRFItem): string {
   const qtyUnit = [it.qty, it.unit].filter(Boolean).join(" ");
