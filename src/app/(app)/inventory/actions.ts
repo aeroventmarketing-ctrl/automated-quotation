@@ -301,6 +301,59 @@ export async function mergeDuplicateStockItems(): Promise<{ groups: number; remo
   return { groups, removed };
 }
 
+/**
+ * Merge chosen duplicate stock items into a primary (admin only). Sums the
+ * others' on-hand into the primary, moves their active reservations across,
+ * backfills missing SKU / sell price / unit cost, then deactivates them. Unlike
+ * the bulk auto-merge this DOES sum quantities — for genuine same-item duplicates.
+ */
+const mergeIntoSchema = z.object({ primaryId: z.string().min(1), otherIds: z.array(z.string().min(1)).min(1) });
+export async function mergeStockItemsInto(input: z.infer<typeof mergeIntoSchema>): Promise<void> {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Only an admin can merge stock items.");
+  const { primaryId, otherIds } = mergeIntoSchema.parse(input);
+  const ids = [...new Set([primaryId, ...otherIds])];
+  const items = await prisma.stockItem.findMany({ where: { id: { in: ids } } });
+  const primary = items.find((i) => i.id === primaryId);
+  if (!primary) throw new Error("Primary item not found.");
+  const others = items.filter((i) => i.id !== primaryId);
+  if (others.length === 0) throw new Error("Choose at least one duplicate to merge in.");
+  const addQty = others.reduce((s, o) => s + Number(o.quantity), 0);
+  const bestSell = Math.max(Number(primary.sellPrice), ...others.map((o) => Number(o.sellPrice)));
+  const bestCost = Math.max(Number(primary.unitCost), ...others.map((o) => Number(o.unitCost)));
+  const otherIdList = others.map((o) => o.id);
+  await prisma.$transaction(async (tx) => {
+    await tx.stockReservation.updateMany({ where: { stockItemId: { in: otherIdList }, active: true }, data: { stockItemId: primaryId } });
+    const patch: Prisma.StockItemUpdateInput = { quantity: Number(primary.quantity) + addQty };
+    if (Number(primary.sellPrice) <= 0 && bestSell > 0) patch.sellPrice = bestSell;
+    if (Number(primary.unitCost) <= 0 && bestCost > 0) patch.unitCost = bestCost;
+    if (!primary.sku) { const withSku = others.find((o) => o.sku); if (withSku?.sku) patch.sku = withSku.sku; }
+    await tx.stockItem.update({ where: { id: primaryId }, data: patch });
+    await tx.stockItem.updateMany({ where: { id: { in: otherIdList } }, data: { active: false, quantity: 0 } });
+  });
+  await logActivity(user, {
+    action: "inventory.merge", category: "inventory",
+    summary: `Merged ${others.length} duplicate${others.length === 1 ? "" : "s"} into ${primary.name} (+${addQty} ${primary.unit})`,
+    entity: "inventory", href: "/inventory",
+  });
+  revalidatePath("/inventory");
+}
+
+/** Remove (deactivate) a stock item — admin only. History is preserved. */
+export async function removeStockItem(id: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Only an admin can remove a stock item.");
+  const item = await prisma.stockItem.findUnique({ where: { id } });
+  if (!item) throw new Error("Item not found.");
+  await prisma.stockItem.update({ where: { id }, data: { active: false } });
+  await logActivity(user, {
+    action: "inventory.remove", category: "inventory",
+    summary: `Removed stock item ${item.name}${item.sku ? ` (${item.sku})` : ""}`,
+    entity: "inventory", href: "/inventory",
+  });
+  revalidatePath("/inventory");
+}
+
 /** Assign SKUs to every active item that doesn't have one yet. */
 export async function assignMissingSkus(): Promise<void> {
   await requireInventoryManager();

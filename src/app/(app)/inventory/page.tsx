@@ -7,6 +7,7 @@ import { canViewPrices, canEditPrices } from "@/lib/price-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
+import { DuplicateItemsPanel } from "./duplicate-items-panel";
 import { STOCK_ACTION_LABEL, type StockActionView } from "@/lib/stock-action";
 import { StockTransfers } from "./stock-transfers";
 import { isProductionHead, isPurchaserRole, coerceStockDoc, type StockTransferView } from "@/lib/stock-transfer";
@@ -137,6 +138,24 @@ export default async function InventoryPage() {
 
   const lowCount = items.filter((i) => i.status === "low").length;
   const outCount = items.filter((i) => i.status === "out").length;
+  // Admin duplicate-items tool: group active items whose names match once
+  // punctuation/spacing is ignored (e.g. "G.I BOLT 5/16 X 1" ≡ "GI BOLT 5/16 X 1").
+  const dupeGroups = admin
+    ? (() => {
+        const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const by = new Map<string, typeof items>();
+        for (const it of items) {
+          const k = canon(it.name);
+          if (!k) continue;
+          const arr = by.get(k) ?? [];
+          arr.push(it);
+          by.set(k, arr);
+        }
+        return [...by.values()]
+          .filter((g) => g.length > 1)
+          .map((g) => g.map((it) => ({ id: it.id, name: it.name, sku: it.sku, qty: it.quantity, unit: it.unit, sellPrice: it.sellPrice, unitCost: it.unitCost })));
+      })()
+    : [];
   const stockValue = Math.round(items.reduce((a, i) => a + i.value, 0) * 100) / 100;
   const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -186,6 +205,8 @@ export default async function InventoryPage() {
               return t.href ? <Link key={t.label} href={t.href} className="block">{card}</Link> : <div key={t.label}>{card}</div>;
             })}
           </div>
+          {admin && dupeGroups.length > 0 && <DuplicateItemsPanel groups={dupeGroups} />}
+
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
               <InventoryManager items={items} canManage={canManageItems} canScan={canScan} canCreate={canCreateItems} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
