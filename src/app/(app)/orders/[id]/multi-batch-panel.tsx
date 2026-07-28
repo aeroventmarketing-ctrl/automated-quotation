@@ -252,8 +252,9 @@ export function MultiBatchPanel({
                 </label>
               )}
             </div>
+            {!collectProof && <p className="text-[11px] text-muted-foreground">Upload the payment details to enable Record payment.</p>}
             <div className="flex items-center gap-2">
-              <Button size="sm" className="h-7 text-xs" disabled={busy != null || uploading} onClick={collectPayment}>{busy === "collect" ? "Saving…" : "Record payment"}</Button>
+              <Button size="sm" className="h-7 text-xs" disabled={busy != null || uploading || !collectProof} onClick={collectPayment}>{busy === "collect" ? "Saving…" : "Record payment"}</Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy != null} onClick={() => { setCollecting(false); setCollectProof(null); }}>Cancel</Button>
             </div>
           </div>
@@ -442,8 +443,9 @@ export function MultiBatchPanel({
                         </label>
                       )}
                     </div>
+                    {!payProof && <p className="text-[11px] text-muted-foreground">Upload the payment details to enable Record payment.</p>}
                     <div className="flex items-center gap-2">
-                      <Button size="sm" className="h-7 text-xs" disabled={busy != null || uploading} onClick={() => advance(b.id, b.next!.key, true)}>{busy === b.id + b.next.key ? "Saving…" : "Record payment"}</Button>
+                      <Button size="sm" className="h-7 text-xs" disabled={busy != null || uploading || !payProof} onClick={() => advance(b.id, b.next!.key, true)}>{busy === b.id + b.next.key ? "Saving…" : "Record payment"}</Button>
                       <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy != null} onClick={() => { setPayFor(null); setPayProof(null); }}>Cancel</Button>
                     </div>
                   </div>
