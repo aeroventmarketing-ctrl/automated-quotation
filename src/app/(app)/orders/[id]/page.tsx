@@ -887,7 +887,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <p className="mb-3 text-xs text-muted-foreground">
               Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed.
             </p>
-            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null })) : mbBatchViews} payments={restricted ? [] : mbPayments} canManage={canManageMulti} canCollect={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
+            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null })) : mbBatchViews} payments={restricted ? [] : mbPayments} closeDocs={restricted ? {} : (saleForClose?.docs ?? {})} vatInclusive={quote.vatMode === "INCLUSIVE"} canManage={canManageMulti} canCollect={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
           </CardContent>
         </Card>
       )}

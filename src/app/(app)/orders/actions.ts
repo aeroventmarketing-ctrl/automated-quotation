@@ -2509,7 +2509,7 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   if (!user) throw new Error("Unauthorized");
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { classification: true, preparedById: true, items: { select: { qty: true, descriptionSnapshot: true } } },
+    select: { classification: true, preparedById: true, vatMode: true, items: { select: { qty: true, descriptionSnapshot: true } } },
   });
   if (!quote) throw new Error("Order not found");
   const wf = readOrderWorkflow(quote.classification);
@@ -2525,6 +2525,12 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   // Logistics must attach the proof of delivery before the batch can be delivered.
   if (stepKey === MB_DELIVERED_STEP && !(batch.pod && batch.pod.length > 0)) {
     throw new Error("Attach the proof of delivery before marking the batch delivered.");
+  }
+  // Accounting must attach the closing documents (Sales Invoice / OR-CR-AF /
+  // Delivery Receipt) before approving the batch's delivery documents.
+  if (stepKey === "delivery_docs") {
+    const { appear, missing } = closeDocsState(saleFromClassification(cls)?.docs, quote.vatMode === "INCLUSIVE");
+    if (!appear) throw new Error(`Attach the required delivery documents first (missing: ${missing.join(", ")}).`);
   }
 
   const roles = await getWorkflowRoles();

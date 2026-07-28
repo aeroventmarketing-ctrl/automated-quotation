@@ -6,8 +6,8 @@ import { PackagePlus, Trash2, CheckCircle2, Circle, Upload, Eye, FileText, Downl
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import type { SaleDoc } from "@/lib/sale";
-import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof, saveMultiBatchPod, removeMultiBatchPod } from "../actions";
+import { afterPaymentDocTypes, type SaleDoc } from "@/lib/sale";
+import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof, saveMultiBatchPod, removeMultiBatchPod, saveCloseDoc, removeCloseDoc } from "../actions";
 
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const docDownload = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}&download=1&name=${encodeURIComponent(d.name)}`;
@@ -59,6 +59,8 @@ export function MultiBatchPanel({
   items,
   batches,
   payments = [],
+  closeDocs = {},
+  vatInclusive,
   canManage,
   canCollect,
   currency,
@@ -73,6 +75,9 @@ export function MultiBatchPanel({
   batches: MBBatchView[];
   /** Every payment recorded on the order — same records as the quotation tab. */
   payments?: MBPaymentView[];
+  /** The order's closing documents (same sale.docs shown on the quotation tab). */
+  closeDocs?: Record<string, SaleDoc[]>;
+  vatInclusive: boolean;
   canManage: boolean;
   /** Sales / Accounting / admin — may record payments against the balance. */
   canCollect: boolean;
@@ -131,6 +136,29 @@ export function MultiBatchPanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
       await saveMultiBatchPod(orderId, batchId, data as SaleDoc);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Closing documents Accounting attaches at the "delivery documents" step.
+  // Stored on the order's sale record (same as the quotation tab), so they show
+  // in both places. Sales Invoice / BIR 2307 apply to VAT-inclusive deals only.
+  const deliveryDocSlots = afterPaymentDocTypes(vatInclusive).filter((t) => t.key !== "bir_2307");
+  async function uploadCloseDoc(key: string, file: File) {
+    setBusy("doc:" + key);
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("quotationId", orderId);
+      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      await saveCloseDoc(orderId, key, data as SaleDoc);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
@@ -361,6 +389,13 @@ export function MultiBatchPanel({
         // for the "delivered" step means the viewer is the acting Logistics/admin.
         const canManagePod = admin || (b.next?.key === "delivered" && !!b.next?.canAct);
         const deliverBlocked = b.next?.key === "delivered" && podFiles.length === 0;
+        // Closing documents (Sales Invoice / OR-CR-AF / Delivery Receipt) attached
+        // by Accounting at the "delivery documents" step. Order-level (shared with
+        // the quotation tab); the advance is blocked until every required slot has
+        // a file.
+        const atDeliveryDocs = b.next?.key === "delivery_docs";
+        const canManageDocs = admin || (atDeliveryDocs && !!b.next?.canAct);
+        const docsBlocked = atDeliveryDocs && deliveryDocSlots.some((t) => (closeDocs[t.key]?.length ?? 0) === 0);
         return (
         <div key={b.id} className={`rounded-md border p-3 ${b.cancelled ? "opacity-60" : ""}`}>
           <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -450,6 +485,54 @@ export function MultiBatchPanel({
             </div>
           )}
 
+          {/* Delivery documents — Accounting attaches the Sales Invoice, OR/CR/AF
+              and Delivery Receipt here before approving delivery. Stored on the
+              order's sale record, so they also appear on the quotation tab. */}
+          {!restricted && (atDeliveryDocs || admin) && (
+            <div className="mt-2 rounded-md border bg-muted/20 p-2">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Delivery documents</div>
+              <div className="space-y-1.5">
+                {deliveryDocSlots.map((t) => {
+                  const files = closeDocs[t.key] ?? [];
+                  return (
+                    <div key={t.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      <span className="min-w-[12rem] font-medium">
+                        {t.label} {files.length === 0 && <span className="font-normal text-amber-600">(required — not attached)</span>}
+                      </span>
+                      {files.map((f) => (
+                        <span key={f.path} className="inline-flex items-center gap-1.5">
+                          <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                            <FileText className="h-3.5 w-3.5" /> {f.name}
+                          </a>
+                          <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                            <Eye className="h-3.5 w-3.5" />
+                          </a>
+                          <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                          {canManageDocs && (
+                            <button type="button" className="text-muted-foreground hover:text-destructive" disabled={busy != null} onClick={() => { if (window.confirm(`Remove "${f.name}"?`)) run(b.id + "rmdoc" + f.path, () => removeCloseDoc(orderId, t.key, f.path)); }} title="Remove" aria-label="Remove">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                      {canManageDocs && (
+                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 hover:bg-accent">
+                          <Upload className="h-3.5 w-3.5" /> {busy === "doc:" + t.key ? "Uploading…" : files.length ? "Add file" : "Attach"}
+                          <input type="file" className="hidden" disabled={busy != null} onChange={(e) => e.target.files?.[0] && uploadCloseDoc(t.key, e.target.files[0])} />
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {docsBlocked && canManageDocs && (
+                <p className="mt-1 text-[11px] text-muted-foreground">Attach every required document to enable &ldquo;Save documents &amp; approve delivery&rdquo;.</p>
+              )}
+            </div>
+          )}
+
           {!b.cancelled && b.next && (
             <div className="mt-2">
               {b.next.canAct ? (
@@ -489,7 +572,7 @@ export function MultiBatchPanel({
                     </div>
                   </div>
                 ) : (
-                  <Button size="sm" className="h-7 text-xs" disabled={busy != null || deliverBlocked} onClick={() => advance(b.id, b.next!.key, b.next!.collectsPayment)}>
+                  <Button size="sm" className="h-7 text-xs" disabled={busy != null || deliverBlocked || docsBlocked} onClick={() => advance(b.id, b.next!.key, b.next!.collectsPayment)}>
                     {busy === b.id + b.next.key ? "Saving…" : b.next.label}
                   </Button>
                 )
