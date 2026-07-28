@@ -886,7 +886,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 batch has been opened. */}
             {canEnableBatch && (
               <div className="mb-3 rounded-md border bg-muted/20 p-2.5">
-                <BatchDeliveryToggle orderId={quote.id} enabled={batchEnabled} multiActive />
+                <BatchDeliveryToggle orderId={quote.id} enabled={batchEnabled} multiActive hasOpenBatches={mbBatchViews.some((b) => !b.cancelled)} />
               </div>
             )}
             <p className="mb-3 text-xs text-muted-foreground">

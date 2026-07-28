@@ -11,7 +11,7 @@ import { setBatchDeliveryEnabled } from "../actions";
  * entry panel appears (once production has started). Locked on once the order is
  * already being delivered in batches.
  */
-export function BatchDeliveryToggle({ orderId, enabled, multiActive = false }: { orderId: string; enabled: boolean; multiActive?: boolean }) {
+export function BatchDeliveryToggle({ orderId, enabled, multiActive = false, hasOpenBatches = false }: { orderId: string; enabled: boolean; multiActive?: boolean; hasOpenBatches?: boolean }) {
   const router = useRouter();
   const [on, setOn] = useState(enabled);
   const [busy, setBusy] = useState(false);
@@ -20,6 +20,13 @@ export function BatchDeliveryToggle({ orderId, enabled, multiActive = false }: {
   async function toggle() {
     if (busy) return;
     const next = !on;
+    // Batch delivery can't be turned off once a batch has been opened. Explain it
+    // here — the server action guards it too, but Next redacts that message in
+    // production, so surface the real reason from the client.
+    if (!next && hasOpenBatches) {
+      setErr("Cancel the open delivery batches first before turning off batch delivery.");
+      return;
+    }
     // Turning off while the order is in multi-batch mode returns it to the
     // single-delivery flow — confirm first.
     if (!next && multiActive && !window.confirm("Turn off batch delivery and return this order to single delivery?")) return;
@@ -30,7 +37,10 @@ export function BatchDeliveryToggle({ orderId, enabled, multiActive = false }: {
       setOn(next);
       router.refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
+      const msg = e instanceof Error ? e.message : "Failed";
+      // Next redacts server-action error messages in production; show a friendly
+      // fallback instead of the raw "omitted in production builds" text.
+      setErr(/omitted in production/i.test(msg) ? "Couldn't change this setting — please try again." : msg);
     } finally {
       setBusy(false);
     }
