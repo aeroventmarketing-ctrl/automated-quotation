@@ -58,6 +58,40 @@ interface PRRow {
   poApproved?: boolean;
 }
 
+/** Normalise a description for loose matching (lower-case, single-spaced). */
+const normDesc = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Parse a request line "20 pc · CRS ROD…" → { qty, desc }. */
+function parseReqLine(it: string): { qty: number; desc: string } {
+  const dot = it.indexOf("·");
+  if (dot >= 0) {
+    const head = it.slice(0, dot).trim();
+    return { qty: Number((head.match(/^[\d.]+/) ?? ["0"])[0]) || 0, desc: normDesc(it.slice(dot + 1)) };
+  }
+  return { qty: 0, desc: normDesc(it) };
+}
+
+/**
+ * Total quantity of a line still out on an unresolved supplier return — so the
+ * "Receive & add to stock" default is the good quantity (ordered − returned).
+ * Return text looks like "5 pc CRS ROD…; 3 pc G.I BOLT…".
+ */
+function returnedQtyForLine(desc: string, returns: PurchaseReturnView[]): number {
+  const target = desc;
+  let sum = 0;
+  for (const rt of returns) {
+    if (rt.resolved) continue; // replacement received → back in the count
+    for (const entry of (rt.items ?? "").split(";")) {
+      const m = entry.trim().match(/^([\d.]+)\s+\S+\s+(.*)$/);
+      if (!m) continue;
+      const q = Number(m[1]) || 0;
+      const rdesc = normDesc(m[2]);
+      if (q > 0 && (rdesc.includes(target) || target.includes(rdesc))) sum += q;
+    }
+  }
+  return sum;
+}
+
 export function PurchasingChain({
   requests,
   stockItems,
@@ -293,7 +327,13 @@ export function PurchasingChain({
               ) : null
             ) : receivingId === r.id ? (
               <StockMatchPanel
-                lines={r.items.map((it) => ({ label: it, qtyDefault: "" }))}
+                lines={r.items.map((it) => {
+                  // Default the received qty to the good quantity: ordered minus any
+                  // quantity still out on an unresolved supplier return. Editable.
+                  const { qty, desc } = parseReqLine(it);
+                  const returned = returnedQtyForLine(desc, r.returns ?? []);
+                  return { label: it, qtyDefault: returned > 0 && qty > 0 ? String(Math.max(0, qty - returned)) : "" };
+                })}
                 stockItems={stockItems}
                 submitLabel="Receive & add to stock"
                 onCancel={() => setReceivingId(null)}
