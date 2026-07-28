@@ -149,9 +149,14 @@ export function FulfillmentActions({
 
       {stage === "final_pay_review" &&
         (perms.canCheckPay ? (
-          <Button size="sm" disabled={busy} onClick={() => run(() => checkFinalPayment(orderId))}>
-            {busy ? "Saving…" : "Final Payment Checked"}
-          </Button>
+          <div className="space-y-1">
+            {(closeDocs["final_payment"]?.length ?? 0) === 0 && (
+              <p className="text-[11px] text-muted-foreground">Upload the final payment proof to enable Final Payment Checked.</p>
+            )}
+            <Button size="sm" disabled={busy || (closeDocs["final_payment"]?.length ?? 0) === 0} onClick={() => run(() => checkFinalPayment(orderId))}>
+              {busy ? "Saving…" : "Final Payment Checked"}
+            </Button>
+          </div>
         ) : awaiting("to check the final payment", ["accounting"]))}
 
       {stage === "final_pay_checked" &&
