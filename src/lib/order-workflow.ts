@@ -136,6 +136,8 @@ export interface MRFItem {
   remark?: string;
   /** Set by the warehouse when handling: issued from stock or sent to purchasing. */
   disposition?: MRFLineDisposition;
+  /** Quantity actually issued/reserved from stock (may be less than requested). */
+  issuedQty?: string;
 }
 
 export interface MaterialRequest {
@@ -177,6 +179,7 @@ export function coerceMrfItems(raw: unknown): MRFItem[] {
         unit: String(o.unit ?? ""),
         remark: o.remark ? String(o.remark) : undefined,
         disposition: disp,
+        issuedQty: o.issuedQty != null && o.issuedQty !== "" ? String(o.issuedQty) : undefined,
       };
     })
     .filter((i) => i.description.trim() !== "");

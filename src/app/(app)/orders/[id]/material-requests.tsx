@@ -308,11 +308,22 @@ export function MaterialRequests({
                       <tr key={i} className="border-b last:border-0">
                         <td className="py-1 pr-2">
                           {it.description}
-                          {it.disposition && (
-                            <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${it.disposition === "issue" ? "bg-emerald-600/15 text-emerald-700" : it.disposition === "reserve" ? "bg-indigo-600/15 text-indigo-700" : "bg-amber-500/15 text-amber-700"}`}>
-                              {it.disposition === "issue" ? "Issued" : it.disposition === "reserve" ? "Reserved" : "To purchase"}
-                            </span>
-                          )}
+                          {it.disposition && (() => {
+                            // Older MRFs stored no issued qty — treat absent as fully issued.
+                            const issued = it.issuedQty ?? it.qty;
+                            const short = (it.disposition === "issue" || it.disposition === "reserve") && Number(issued || 0) < Number(it.qty || 0);
+                            const cls = short
+                              ? "bg-amber-500/15 text-amber-700"
+                              : it.disposition === "issue"
+                              ? "bg-emerald-600/15 text-emerald-700"
+                              : it.disposition === "reserve"
+                              ? "bg-indigo-600/15 text-indigo-700"
+                              : "bg-amber-500/15 text-amber-700";
+                            const text = it.disposition === "purchase"
+                              ? "To purchase"
+                              : `${it.disposition === "issue" ? "Issued" : "Reserved"} ${issued || 0}${short ? ` of ${it.qty}` : ""}`;
+                            return <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${cls}`}>{text}</span>;
+                          })()}
                         </td>
                         <td className="py-1 px-2 text-right tabular-nums">{it.qty}</td>
                         <td className="py-1 px-2">{it.unit}</td>

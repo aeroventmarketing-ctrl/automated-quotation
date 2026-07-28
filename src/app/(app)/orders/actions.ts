@@ -1105,14 +1105,26 @@ export async function confirmMaterialReceipt(quotationId: string, requestId: str
   if (mrf.status !== "issued" && mrf.status !== "partial") {
     throw new Error("There are no released materials to confirm yet.");
   }
+  // A stock line issued below its requested quantity still owes a balance — the
+  // MRF can't be "completed" until every requested item is actually issued. (An
+  // outstanding purchase line does not block completion; the department confirms
+  // it received what was released, and purchasing is tracked separately.)
+  const hasShortfall = mrf.items.some(
+    (it) => (it.disposition === "issue" || it.disposition === "reserve") && Number(it.issuedQty ?? it.qty ?? 0) < Number(it.qty || 0),
+  );
   const materialRequests = wf.materialRequests.slice();
-  // Confirming receipt marks the MRF completed — a partly-released MRF is
-  // auto-promoted to "completed" once the department receives the items.
-  materialRequests[idx] = { ...mrf, status: "completed", confirmedAt: new Date().toISOString(), confirmedByName: user.name };
+  materialRequests[idx] = {
+    ...mrf,
+    status: hasShortfall ? mrf.status : "completed",
+    confirmedAt: new Date().toISOString(),
+    confirmedByName: user.name,
+  };
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
   await logActivity(user, {
     action: "mrf.confirmed", category: "order",
-    summary: `MRF #${mrf.formNo} completed — ${deptLabel(mrf.dept)} confirmed receipt · ${await orderRefLabel(quotationId)}`,
+    summary: hasShortfall
+      ? `MRF #${mrf.formNo} received (partial — balance still owing) — ${deptLabel(mrf.dept)} confirmed · ${await orderRefLabel(quotationId)}`
+      : `MRF #${mrf.formNo} completed — ${deptLabel(mrf.dept)} confirmed receipt · ${await orderRefLabel(quotationId)}`,
     entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
   });
 }
@@ -1192,7 +1204,19 @@ export async function processMaterialRequest(
 
   const dispOf = (a: LineDisposition["action"]): MRFLineDisposition =>
     a === "purchase" ? "purchase" : a === "reserve" ? "reserve" : "issue";
-  const items: MRFItem[] = mrf.items.map((it, i) => ({ ...it, disposition: dispOf(dispositions[i]?.action ?? "issue") }));
+  const items: MRFItem[] = mrf.items.map((it, i) => {
+    const d = dispositions[i];
+    const disposition = dispOf(d?.action ?? "issue");
+    // Record how much was actually issued/reserved from stock — the warehouse can
+    // issue less than requested, so this may be below the requested qty.
+    const issuedQty =
+      (disposition === "issue" || disposition === "reserve") && d?.qty != null && Number(d.qty) > 0
+        ? String(d.qty)
+        : disposition === "purchase"
+        ? undefined
+        : "0";
+    return { ...it, disposition, issuedQty };
+  });
   const matchesFor = (action: "issue" | "reserve") =>
     dispositions
       .filter((d) => d.action === action && d.stockItemId && Number(d.qty) > 0)
@@ -1204,7 +1228,13 @@ export async function processMaterialRequest(
   const anyStock = items.some((it) => it.disposition === "issue" || it.disposition === "reserve");
   const anyPurchase = purchaseItems.length > 0;
   if (!anyStock && !anyPurchase) throw new Error("Nothing to process.");
-  const status: MaterialRequest["status"] = anyStock && anyPurchase ? "partial" : anyPurchase ? "purchasing" : "issued";
+  // A stock line issued below its requested quantity leaves a balance owing, so
+  // the MRF is only partially fulfilled — not fully "issued".
+  const anyShortfall = items.some(
+    (it) => (it.disposition === "issue" || it.disposition === "reserve") && Number(it.issuedQty ?? 0) < Number(it.qty || 0),
+  );
+  const status: MaterialRequest["status"] =
+    anyPurchase ? (anyStock ? "partial" : "purchasing") : anyShortfall ? "partial" : "issued";
   const orderRef = quote.quoteNumber || "order";
 
   await prisma.$transaction(async (tx) => {
