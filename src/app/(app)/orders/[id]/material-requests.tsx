@@ -365,8 +365,8 @@ export function MaterialRequests({
                   {/* Warehouse / Purchaser / Payment Approver / admin release the
                       purchased (now in-stock) materials to the requesting department,
                       deducting the released quantity from inventory. */}
-                  {r.canRelease && !r.releasedByName && r.items.some((it) => it.disposition === "purchase") && releasingId !== r.id && (
-                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => setReleasingId(r.id)}>Release to requestor</Button>
+                  {r.canRelease && r.items.some((it) => it.disposition === "purchase" && Number(it.issuedQty ?? 0) < Number(it.qty || 0)) && releasingId !== r.id && (
+                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => setReleasingId(r.id)}>{r.releasedByName ? "Release remaining" : "Release to requestor"}</Button>
                   )}
                   {r.confirmedByName ? (
                     <Badge variant="success">Received &amp; confirmed by {r.confirmedByName}{r.confirmedWhen ? ` · ${r.confirmedWhen}` : ""}</Badge>
@@ -384,25 +384,30 @@ export function MaterialRequests({
               )}
               {/* Release picker: match each purchased line to the stock item to
                   deduct as it's handed to the requesting department. */}
-              {r.canRelease && !r.releasedByName && releasingId === r.id && (
-                <StockMatchPanel
-                  lines={r.items.filter((it) => it.disposition === "purchase").map((it) => ({ label: `${[it.qty, it.unit].filter(Boolean).join(" ")} · ${it.description}`, qtyDefault: it.qty }))}
-                  stockItems={stockItems}
-                  selectable
-                  submitLabel="Release & deduct from stock"
-                  onCancel={() => setReleasingId(null)}
-                  onSubmit={async (matches) => {
-                    // Map each match back to its purchase line to record what/how much was released.
-                    const purchaseItems = r.items.filter((it) => it.disposition === "purchase");
-                    const released = matches
-                      .map((m) => ({ description: purchaseItems[m.lineIndex]?.description ?? "", qty: m.qty }))
-                      .filter((x) => x.description);
-                    await releaseMaterialToRequestor(orderId, r.id, matches, released);
-                    setReleasingId(null);
-                    router.refresh();
-                  }}
-                />
-              )}
+              {r.canRelease && releasingId === r.id && (() => {
+                // Only lines with an unreleased balance; default to the remaining qty.
+                const releasable = r.items.filter((it) => it.disposition === "purchase" && Number(it.issuedQty ?? 0) < Number(it.qty || 0));
+                return (
+                  <StockMatchPanel
+                    lines={releasable.map((it) => {
+                      const remaining = Number(it.qty || 0) - Number(it.issuedQty ?? 0);
+                      return { label: `${[String(remaining), it.unit].filter(Boolean).join(" ")} · ${it.description}`, qtyDefault: String(remaining) };
+                    })}
+                    stockItems={stockItems}
+                    selectable
+                    submitLabel="Release & deduct from stock"
+                    onCancel={() => setReleasingId(null)}
+                    onSubmit={async (matches) => {
+                      const released = matches
+                        .map((m) => ({ description: releasable[m.lineIndex]?.description ?? "", qty: m.qty }))
+                        .filter((x) => x.description);
+                      await releaseMaterialToRequestor(orderId, r.id, matches, released);
+                      setReleasingId(null);
+                      router.refresh();
+                    }}
+                  />
+                );
+              })()}
               {/* Admin correction of the recorded released quantities (fixes the
                   card/status without double-counting; does not change inventory). */}
               {admin && r.items.some((it) => it.disposition === "purchase") && (
