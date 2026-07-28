@@ -360,7 +360,7 @@ export function MaterialRequests({
                   ) : (r.status === "issued" || r.status === "partial") && r.isDeptHead ? (
                     <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => confirmMaterialReceipt(orderId, r.id))}>{r.deptLabel} Request Received</Button>
                   ) : null}
-                  {r.canInform && !r.informedByName && (r.status === "issued" || r.status === "partial") && (
+                  {r.canInform && !r.informedByName && !r.releasedByName && (r.status === "issued" || r.status === "partial") && (
                     <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => run(() => informMaterialAvailable(orderId, r.id))}>Inform requestor — available</Button>
                   )}
                   {r.isDeptHead && !r.confirmedByName && (
