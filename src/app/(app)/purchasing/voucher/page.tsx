@@ -8,6 +8,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { getSignatureMap } from "@/lib/signature";
+import { claimPurchaseVoucherNo } from "@/lib/purchase-voucher";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { PrintButton } from "./print-button";
 
@@ -54,8 +55,6 @@ export default async function PurchasingVoucherPage({ searchParams }: { searchPa
   if (lines.length === 0) notFound();
 
   const total = lines.reduce((s, l) => s + l.net, 0);
-  const suppliers = [...new Set(lines.map((l) => l.supplier))];
-  const paidTo = suppliers.length === 1 ? suppliers[0] : "Various suppliers (see particulars)";
   const dateStr = formatDate(new Date());
 
   // Signatories, resolved from the workflow-role assignments + uploaded
@@ -79,6 +78,12 @@ export default async function PurchasingVoucherPage({ searchParams }: { searchPa
   const prepared = signatory(acctId);
   const approved = signatory(payId);
   const received = signatory(logiId);
+
+  // "Paid to" is the Logistics head (who receives the cash to purchase).
+  const paidTo = received.name;
+  // System-wide auto-incrementing voucher number (shared with the cash voucher
+  // counter, admin-set). Idempotent per selection so re-views reuse the number.
+  const voucherNo = await claimPurchaseVoucherNo(idList);
 
   const rows = lines.map((l) => ({ description: `${l.supplier}${l.poNumber ? ` — P.O. ${l.poNumber}` : ""}`, amount: l.net }));
   while (rows.length < 8) rows.push({ description: "", amount: 0 });
@@ -106,12 +111,16 @@ export default async function PurchasingVoucherPage({ searchParams }: { searchPa
       <div id="voucher-sheet" className="mx-auto max-w-[760px] rounded-md border bg-white p-10 text-black">
         <div className="flex items-start justify-between">
           <div className="text-sm font-semibold leading-tight">{COMPANY.name}</div>
-          <div className="text-sm">Requests:&nbsp;<span className="font-bold tabular-nums">{lines.length}</span></div>
         </div>
 
-        <h1 className="mt-2 text-center text-2xl font-extrabold tracking-wide underline underline-offset-4">PAYMENT VOUCHER</h1>
+        <h1 className="mt-2 text-center text-2xl font-extrabold tracking-wide underline underline-offset-4">CASH VOUCHER</h1>
 
-        <div className="mt-5 flex items-end justify-between gap-6 text-sm">
+        {/* Auto-numbered voucher number, right-aligned, in red. */}
+        <div className="mt-1 text-right text-sm">
+          No.&nbsp;<span className="font-bold tracking-wide text-red-600">{voucherNo}</span>
+        </div>
+
+        <div className="mt-3 flex items-end justify-between gap-6 text-sm">
           <div className="flex-1 space-y-2">
             <div className="flex items-end gap-2">
               <span className="shrink-0">Paid to</span>
