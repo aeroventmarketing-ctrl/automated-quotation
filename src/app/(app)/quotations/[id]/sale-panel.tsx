@@ -112,35 +112,47 @@ export function SalePanel({
   const canSave = alreadyConfirmed || missingToSave.length === 0;
 
   async function upload(file: File): Promise<SaleDoc | null> {
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("quotationId", quotationId);
-    const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-    const data = await res.json();
-    if (!res.ok) {
-      setMsg(data.error || "Upload failed");
+    // Never throw: a network blip or a non-JSON error response (e.g. a 413/502
+    // from the proxy) must still return null so the caller's `finally` resets
+    // `busy` — otherwise every upload input stays disabled until a page refresh.
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("quotationId", quotationId);
+      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
+      let data: { error?: string } | SaleDoc | null = null;
+      try { data = await res.json(); } catch { /* non-JSON response */ }
+      if (!res.ok) {
+        setMsg((data as { error?: string } | null)?.error || `Upload failed (${res.status})`);
+        return null;
+      }
+      return data as SaleDoc;
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Upload failed — check your connection and try again.");
       return null;
     }
-    return data as SaleDoc;
   }
 
   async function onPoFile(file: File) {
     setBusy(true); setMsg(null);
-    const doc = await upload(file);
-    if (doc) setPo(doc);
-    setBusy(false);
+    try {
+      const doc = await upload(file);
+      if (doc) setPo(doc);
+    } finally { setBusy(false); }
   }
   async function onProofFile(id: string, file: File) {
     setBusy(true); setMsg(null);
-    const doc = await upload(file);
-    if (doc) setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
-    setBusy(false);
+    try {
+      const doc = await upload(file);
+      if (doc) setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
+    } finally { setBusy(false); }
   }
   async function onDocFile(key: string, file: File) {
     setBusy(true); setMsg(null);
-    const doc = await upload(file);
-    if (doc) setDocs((d) => ({ ...d, [key]: [...(d[key] ?? []), doc] }));
-    setBusy(false);
+    try {
+      const doc = await upload(file);
+      if (doc) setDocs((d) => ({ ...d, [key]: [...(d[key] ?? []), doc] }));
+    } finally { setBusy(false); }
   }
   function removeDoc(key: string, path: string) {
     setDocs((d) => ({ ...d, [key]: (d[key] ?? []).filter((x) => x.path !== path) }));
@@ -221,7 +233,7 @@ export function SalePanel({
               type.important && files.length === 0 && "border-teal-400 bg-teal-50 text-teal-700 hover:bg-teal-100",
             )}>
               <Upload className="h-4 w-4" /> {files.length ? "Add file" : "Upload"}
-              <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && onDocFile(type.key, e.target.files[0])} />
+              <input type="file" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onDocFile(type.key, f); }} />
             </label>
           ) : files.length === 0 ? (
             <span className="text-sm text-muted-foreground">Not attached.</span>
@@ -295,7 +307,7 @@ export function SalePanel({
           ) : canEdit ? (
             <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-teal-400 bg-teal-50 px-3 py-1.5 text-sm text-teal-700 hover:bg-teal-100">
               <Upload className="h-4 w-4" /> Upload PO
-              <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && onPoFile(e.target.files[0])} />
+              <input type="file" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onPoFile(f); }} />
             </label>
           ) : (
             <span className="text-sm text-muted-foreground">No PO attached.</span>
@@ -336,7 +348,7 @@ export function SalePanel({
                 ) : canEdit ? (
                   <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-primary underline">
                     <Upload className="h-3.5 w-3.5" /> proof
-                    <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && onProofFile(p.id, e.target.files[0])} />
+                    <input type="file" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onProofFile(p.id, f); }} />
                   </label>
                 ) : (
                   <span className="text-xs text-muted-foreground">—</span>
