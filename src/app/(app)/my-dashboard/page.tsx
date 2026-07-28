@@ -209,6 +209,37 @@ export default async function MyDashboardPage() {
         </CardContent>
       </Card>
 
+      {/* Materials notifications — MRF completed / partially released, shown to
+          Admin, Warehouse, Purchaser and the requesting department. */}
+      {data.materialsFeed.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Materials — MRF status</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {data.materialsFeed.map((m) => (
+                <li key={m.key}>
+                  <Link href={m.href} className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-accent">
+                    <Boxes className="h-4 w-4 shrink-0 text-teal-600" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">MRF #{m.formNo} · {m.dept}</span>
+                        <Badge variant={m.kind === "completed" ? "success" : "warning"} className="font-normal">
+                          {m.kind === "completed" ? "MRF completed" : "MRF partially released"}
+                        </Badge>
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {m.orderRef}{m.client ? ` · ${m.client}` : ""}{m.when ? ` · ${fmtWhen(m.when)}` : ""}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Your recent activity — progress / things you've done. */}
       <Card>
         <CardHeader className="pb-2">

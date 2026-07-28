@@ -37,12 +37,27 @@ export interface MyTask {
   deliveryMode?: "single" | "multi"; // for order tasks: how the order ships
 }
 
+/** A cross-role MRF notification (completed / partially released). */
+export interface MaterialNote {
+  key: string;
+  orderRef: string;
+  dept: string; // department label
+  formNo: string;
+  kind: "completed" | "partial";
+  client: string | null; // masked for client-restricted viewers
+  when: string; // ISO
+  href: string;
+}
+
 export interface MyDashboard {
   hasRole: boolean; // holds ≥1 workflow role (or admin) — i.e. this page applies
   roleLabels: string[]; // the viewer's workflow-role labels (for the header)
   pending: MyTask[];
   activity: ActivityView[];
   byArea: { area: TaskArea; label: string; count: number }[];
+  // MRF completed / partially-released notes — shown to Admin, Warehouse,
+  // Purchaser and the requesting department.
+  materialsFeed: MaterialNote[];
 }
 
 /** The workflow-role labels a user holds. */
@@ -73,6 +88,10 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   const maskAmount = (n: number | null | undefined): number | null => (restricted ? null : n ?? null);
 
   const tasks: MyTask[] = [];
+  // MRF completed / partially-released notifications for Admin / Warehouse /
+  // Purchaser / requesting department (collected while scanning orders below).
+  const materialsFeed: MaterialNote[] = [];
+  const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser");
 
   // 1) Order-workflow approvals — confirmed orders whose current step needs a
   //    role the viewer holds (or a Sales-owned step they own).
@@ -106,6 +125,22 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`,
           });
+        }
+        // Cross-role notification: MRF fully released (completed) or partly
+        // released, shown to Admin / Warehouse / Purchaser and the requesting dept.
+        if (m.status === "issued" || m.status === "partial") {
+          if (seesMaterialsFeed || has(deptRole(m.dept) as WorkflowRoleKey)) {
+            materialsFeed.push({
+              key: `mfeed:${q.id}:${m.id}`,
+              orderRef: q.quoteNumber,
+              dept: requisitionDeptLabel(m.dept),
+              formNo: m.formNo,
+              kind: m.status === "issued" ? "completed" : "partial",
+              client: maskClient(q.inquiry.customer.company),
+              when: m.handledAt || m.raisedAt || "",
+              href: `/orders/${q.id}`,
+            });
+          }
         }
       }
       // Multi-batch delivery: each open batch runs its own approval sequence
@@ -301,11 +336,14 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
 
   const activity = await listActivityForActor(user.id, 30);
 
+  materialsFeed.sort((a, b) => b.when.localeCompare(a.when));
+
   return {
     hasRole: isAdmin(user) || holdsAnyRole,
     roleLabels: viewerRoleLabels(user, assignments),
     pending: tasks,
     activity,
     byArea,
+    materialsFeed: materialsFeed.slice(0, 15),
   };
 }
