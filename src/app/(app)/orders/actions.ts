@@ -1292,6 +1292,41 @@ export async function setMrfReleasedQuantities(
   });
 }
 
+/**
+ * Admin correction: clear a receipt confirmation that was recorded without the
+ * requesting department actually pressing "<Dept> Request Received" (e.g. legacy
+ * records from an earlier build, or a confirmation stamped from an admin session).
+ * Removes confirmedAt / confirmedByName and reverts the status from "completed"
+ * back to "issued" (fully released) or "partial", so the requesting department can
+ * confirm receipt itself. Does NOT touch inventory.
+ */
+export async function resetMaterialReceipt(quotationId: string, requestId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can reset a receipt confirmation.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  if (!mrf.confirmedAt && !mrf.confirmedByName) throw new Error("This request has no receipt confirmation to reset.");
+  // Recompute the pre-confirmation status from what has actually been provided:
+  // "issued" when every line's issued/released qty covers what was requested,
+  // otherwise "partial".
+  const fullyProvided = mrf.items.every((it) => {
+    const req = Number(it.qty || 0);
+    const provided = Number(it.issuedQty ?? (it.disposition === "purchase" ? 0 : it.qty ?? 0));
+    return provided >= req;
+  });
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = { ...mrf, status: fullyProvided ? "issued" : "partial", confirmedAt: undefined, confirmedByName: undefined };
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+  await logActivity(user, {
+    action: "mrf.reset_receipt", category: "order",
+    summary: `Reset receipt confirmation on MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+  });
+}
+
 /** Render one MRF item as a single display line for the purchasing chain. */
 function mrfItemLine(it: MRFItem): string {
   const qtyUnit = [it.qty, it.unit].filter(Boolean).join(" ");

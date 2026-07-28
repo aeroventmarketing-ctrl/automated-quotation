@@ -7,7 +7,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
-import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, releaseMaterialToRequestor, setMrfReleasedQuantities } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, releaseMaterialToRequestor, setMrfReleasedQuantities, resetMaterialReceipt } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
@@ -369,7 +369,16 @@ export function MaterialRequests({
                     <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => setReleasingId(r.id)}>{r.releasedByName ? "Release remaining" : "Release to requestor"}</Button>
                   )}
                   {r.confirmedByName ? (
-                    <Badge variant="success">Received &amp; confirmed by {r.confirmedByName}{r.confirmedWhen ? ` · ${r.confirmedWhen}` : ""}</Badge>
+                    <>
+                      <Badge variant="success">Received &amp; confirmed by {r.confirmedByName}{r.confirmedWhen ? ` · ${r.confirmedWhen}` : ""}</Badge>
+                      {admin && (
+                        <button type="button" disabled={busy}
+                          className="text-xs font-medium text-muted-foreground hover:text-destructive"
+                          onClick={() => { if (window.confirm(`Reset the receipt confirmation on MRF #${r.formNo}? The requesting department will need to confirm receipt itself.`)) run(() => resetMaterialReceipt(orderId, r.id)); }}>
+                          Reset receipt (admin)
+                        </button>
+                      )}
+                    </>
                   ) : (r.status === "issued" || r.status === "partial") && r.isDeptHead ? (
                     <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => confirmMaterialReceipt(orderId, r.id))}>{r.deptLabel} Request Received</Button>
                   ) : null}
