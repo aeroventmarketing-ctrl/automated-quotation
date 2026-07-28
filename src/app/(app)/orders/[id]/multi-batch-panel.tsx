@@ -55,6 +55,7 @@ export function MultiBatchPanel({
   currency,
   orderAmount,
   amountPaid,
+  clientName,
   restricted = false,
   admin = false,
 }: {
@@ -67,6 +68,8 @@ export function MultiBatchPanel({
   currency: string;
   orderAmount: number;
   amountPaid: number;
+  /** Client company — already masked ("Client hidden") for shop-floor viewers. */
+  clientName?: string;
   /** Shop-floor viewer — hide all client purchase amounts. */
   restricted?: boolean;
   admin?: boolean;
@@ -174,6 +177,11 @@ export function MultiBatchPanel({
 
   return (
     <div className="space-y-3">
+      {/* Client company — shown to authorized viewers, "Client hidden" for
+          shop-floor, matching the client visibility used across the order. */}
+      {clientName && (
+        <div className="text-sm text-muted-foreground">Client: <span className="font-medium text-foreground">{clientName}</span></div>
+      )}
       {/* Order-level payment (accounts receivable) — collect the remaining
           balance any time, including after every batch is delivered. Hidden from
           client-restricted (shop-floor) viewers. */}
