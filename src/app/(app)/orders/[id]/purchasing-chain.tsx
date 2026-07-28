@@ -233,14 +233,22 @@ export function PurchasingChain({
           <div key={r.id} className="rounded-md border bg-card p-3">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2 text-sm font-medium">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-[#ED1C24]"
-                  checked={sel.has(r.id)}
-                  onChange={() => toggleSel(r.id)}
-                  title="Select this material request"
-                  aria-label={`Select ${r.deptLabel}${r.mrfNo ? ` MRF #${r.mrfNo}` : ""}`}
-                />
+                {(() => {
+                  // A completed / rejected / cancelled request is done — its tick
+                  // box is disabled so it can't be selected (for any role).
+                  const locked = r.status === "COMPLETED" || r.status === "REJECTED" || r.status === "CANCELLED";
+                  return (
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-[#ED1C24] disabled:cursor-not-allowed disabled:opacity-40"
+                      checked={sel.has(r.id)}
+                      disabled={locked}
+                      onChange={() => !locked && toggleSel(r.id)}
+                      title={locked ? "This request is already completed" : "Select this material request"}
+                      aria-label={`Select ${r.deptLabel}${r.mrfNo ? ` MRF #${r.mrfNo}` : ""}`}
+                    />
+                  );
+                })()}
                 {r.deptLabel}
                 {r.mrfNo && <span className="font-normal text-muted-foreground">MRF #{r.mrfNo}</span>}
               </span>
