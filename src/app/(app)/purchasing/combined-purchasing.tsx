@@ -380,6 +380,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         canRaiseReturn={batch.canRaiseReturn}
         canResolveReturn={batch.canResolveReturn}
         admin={admin}
+        lineItems={batch.members.flatMap((m) => m.items)}
       />
 
       {/* Voucher reconciliation — actual spend vs the issued voucher for this PO.

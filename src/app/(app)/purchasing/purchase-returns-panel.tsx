@@ -18,6 +18,18 @@ import { returnPurchaseItems, resolvePurchaseReturn, removePurchaseReturnProof }
  * item was replaced. Shared by the individual chain rows and the combined-PO
  * card. `prId` is the request (or anchor) to act on. Read-only on the order page.
  */
+/** Parse a purchase line "9 pc · ANGLE BAR 2.0 X 25 X 25 (remark)". */
+function parseReturnLine(label: string): { qty: string; unit: string; desc: string } {
+  const noRemark = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const dot = noRemark.indexOf("·");
+  if (dot >= 0) {
+    const head = noRemark.slice(0, dot).trim(); // "9 pc"
+    const m = head.match(/^([\d.]+)\s*(.*)$/);
+    return { qty: m?.[1] ?? "", unit: (m?.[2] ?? "").trim(), desc: noRemark.slice(dot + 1).trim() };
+  }
+  return { qty: "", unit: "", desc: noRemark };
+}
+
 export function PurchaseReturnsPanel({
   prId,
   returns,
@@ -25,6 +37,7 @@ export function PurchaseReturnsPanel({
   canResolveReturn,
   readOnly = false,
   admin = false,
+  lineItems = [],
 }: {
   prId: string;
   returns: PurchaseReturnView[];
@@ -32,6 +45,8 @@ export function PurchaseReturnsPanel({
   canResolveReturn: boolean;
   readOnly?: boolean;
   admin?: boolean;
+  /** The purchase-request lines, so the return can be picked by tick box. */
+  lineItems?: string[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -39,6 +54,14 @@ export function PurchaseReturnsPanel({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // Tick-box selection of which lines (and how much) are being returned.
+  const parsedLines = lineItems.map(parseReturnLine);
+  const [picks, setPicks] = useState<{ checked: boolean; qty: string }[]>(() =>
+    lineItems.map((l) => ({ checked: false, qty: parseReturnLine(l).qty })),
+  );
+  const setPick = (i: number, patch: Partial<{ checked: boolean; qty: string }>) =>
+    setPicks((ps) => ps.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
 
   // Resolve form state (per return being closed out).
   const [resolvingId, setResolvingId] = useState<string | null>(null);
@@ -48,11 +71,21 @@ export function PurchaseReturnsPanel({
   const unresolved = returns.filter((r) => !r.resolved).length;
 
   async function raise() {
-    if (!items.trim() || !reason.trim()) { setErr("Fill in the item(s) and the reason."); return; }
+    // With line items, compile the ticked rows; otherwise use the free-text box.
+    let itemsText = items.trim();
+    if (lineItems.length > 0) {
+      const chosen = picks
+        .map((p, i) => (p.checked ? `${(p.qty || parsedLines[i].qty).trim()} ${parsedLines[i].unit} ${parsedLines[i].desc}`.replace(/\s+/g, " ").trim() : null))
+        .filter((s): s is string => !!s);
+      if (chosen.length === 0) { setErr("Tick at least one item to return."); return; }
+      itemsText = chosen.join("; ");
+    }
+    if (!itemsText || !reason.trim()) { setErr("Select the item(s) and enter the reason."); return; }
     setBusy("raise"); setErr(null);
     try {
-      await returnPurchaseItems(prId, { items, reason });
+      await returnPurchaseItems(prId, { items: itemsText, reason });
       setItems(""); setReason(""); setOpen(false);
+      setPicks(lineItems.map((l) => ({ checked: false, qty: parseReturnLine(l).qty })));
       router.refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
@@ -175,10 +208,39 @@ export function PurchaseReturnsPanel({
         open ? (
           <div className="space-y-2 rounded-md border p-2">
             <div className="text-xs font-medium">Return item(s) to supplier</div>
-            <label className="block space-y-1">
-              <span className="text-xs text-muted-foreground">Item(s) &amp; quantity being returned</span>
-              <Input className="h-8" value={items} onChange={(e) => setItems(e.target.value)} placeholder="e.g. 3 pcs GI sheet 24ga — dented" />
-            </label>
+            {lineItems.length > 0 ? (
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">Tick the item(s) &amp; quantity being returned</span>
+                <div className="space-y-1 rounded-md border p-2">
+                  {parsedLines.map((p, i) => (
+                    <label key={i} className="flex flex-wrap items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={picks[i].checked}
+                        onChange={(e) => setPick(i, { checked: e.target.checked })}
+                      />
+                      <Input
+                        className="h-7 w-16 text-right"
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={picks[i].qty}
+                        disabled={!picks[i].checked}
+                        onChange={(e) => setPick(i, { qty: e.target.value })}
+                      />
+                      {p.unit && <span className="text-xs text-muted-foreground">{p.unit}</span>}
+                      <span>{p.desc}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <label className="block space-y-1">
+                <span className="text-xs text-muted-foreground">Item(s) &amp; quantity being returned</span>
+                <Input className="h-8" value={items} onChange={(e) => setItems(e.target.value)} placeholder="e.g. 3 pcs GI sheet 24ga — dented" />
+              </label>
+            )}
             <label className="block space-y-1">
               <span className="text-xs text-muted-foreground">Reason for disapproval</span>
               <Input className="h-8" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. failed quality check / wrong specification" />

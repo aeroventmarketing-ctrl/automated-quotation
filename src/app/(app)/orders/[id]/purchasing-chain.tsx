@@ -340,6 +340,7 @@ export function PurchasingChain({
               canResolveReturn={r.canResolveReturn ?? false}
               readOnly={!(r.canRaiseReturn || r.canResolveReturn)}
               admin={admin}
+              lineItems={r.items}
             />
 
             {/* Voucher reconciliation — actual spend vs the issued voucher.
