@@ -1,9 +1,10 @@
 # Project guidance for Claude
 
-## 🔒 Frozen area — Order Phases 1, 2, 3 & 4: do NOT change without explicit owner approval
+## 🔒 Frozen area — Order Phases 1, 2, 3, 4 & 5: do NOT change without explicit owner approval
 
 The order workflow's **Phase 1 (Order intake & payment clearing)**, **Phase 2 (Job
-orders & production)**, **Phase 3 (Materials / MRF)**, and **Phase 4 (Purchasing)**
+orders & production)**, **Phase 3 (Materials / MRF)**, **Phase 4 (Purchasing)**, and
+**Phase 5 (Final payment, quality, delivery & documents)**
 are **locked**. Do not
 modify, refactor, "improve", or extend any of them unless the repository owner
 explicitly approves that specific change in the current conversation. If a
@@ -122,3 +123,49 @@ Files:
   `src/app/(app)/admin/purchaser-signatory/actions.ts`
 - The purchase-request / PO / reconciliation types & status logic in
   `src/lib/order-workflow.ts`
+
+### Phase 5 · Final payment, quality, delivery & documents
+
+The delivery phase — single-delivery and multiple-batch — from clearing the final
+payment through quality checks, delivery, proof of delivery and the closing
+documents that close the order.
+
+- The delivery sequence & stamps: **final payment checked → confirmed** → quality
+  (**QA tested → plant QC → transferred → Sales 2nd QC**) → **delivery documents →
+  delivered → POD approved → documents surrendered → received → filed (order
+  closed)**, and the single-vs-multiple delivery-mode switch.
+- The **final payment gate**: the "Final Payment Checked" button stays disabled
+  until the final-payment proof is attached; the closing-documents gate (Sales
+  Invoice / OR-CR-AF / Delivery Receipt, plus BIR 2307 for VAT-inclusive).
+- The **proof of delivery** handshake (Logistics attaches before "Mark delivered";
+  Sales approves the POD) and the document-view access that lets client-restricted
+  roles open the POD files they handle.
+- **Multiple-batch delivery**: opening a batch, running each batch through the full
+  sequence, per-batch payment (payment-first) and the order-level "Record payment"
+  receivables box (Accounting / Payment Approver / admin), the payment
+  details & records list, per-batch proof of delivery, and each batch's own closing
+  documents (Sales Invoice / OR-CR-AF / Delivery Receipt / BIR 2307).
+
+Files:
+
+- The Phase 5 cards (single delivery, multiple-batch delivery, the batch-delivery
+  toggle) in `src/app/(app)/orders/[id]/page.tsx`
+- `src/app/(app)/orders/[id]/fulfillment-actions.tsx`,
+  `final-payment-proof.tsx`, `sale-document-list.tsx`
+- `src/app/(app)/orders/[id]/multi-batch-panel.tsx`, `multi-delivery-entry.tsx`,
+  `batch-delivery-toggle.tsx`
+- The per-batch document list on the quotation tab:
+  `src/app/(app)/quotations/[id]/batch-document-list.tsx`
+- The delivery libs: `src/lib/delivery-multibatch.ts` and the Phase 5 stages /
+  step definitions in `src/lib/order-workflow.ts`
+- Sale-document access control: `src/lib/sale-doc-access.ts` and the
+  `src/app/api/sale-uploads/` view / download routes
+- The Phase 5 server actions in `src/app/(app)/orders/actions.ts`
+  (`checkFinalPayment`, `confirmFinalPayment`, `qaTest`, `qaPlantCheck`,
+  `qaTransfer`, `qaSalesCheck`, `prepareDeliveryDocs`, `markDelivered`,
+  `approveDelivery`, `surrenderDeliveryDocs`, `confirmDocsReceived`,
+  `fileDocuments`, `saveCloseDoc`, `removeCloseDoc`, `setBatchDeliveryEnabled`,
+  `setMultiDelivery`, `createMultiBatch`, `advanceMultiBatch`, `cancelMultiBatch`,
+  `recordOrderPayment`, `saveMultiBatchPod`, `removeMultiBatchPod`,
+  `saveMultiBatchDoc`, `removeMultiBatchDoc`, `removeMultiBatchProof`) and the
+  delivery / batch types & status logic in `src/lib/order-workflow.ts`
