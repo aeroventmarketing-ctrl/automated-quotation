@@ -11,6 +11,7 @@ import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, ad
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
+import { StockMatchPanel } from "./stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 
@@ -143,6 +144,7 @@ export function MaterialRequests({
 }) {
   const router = useRouter();
   const [issuingId, setIssuingId] = useState<string | null>(null);
+  const [releasingId, setReleasingId] = useState<string | null>(null);
   const [dept, setDept] = useState(raisableDepts[0]?.key ?? "");
   const [rows, setRows] = useState<MRFItem[]>([emptyRow(), emptyRow(), emptyRow()]);
   const [note, setNote] = useState("");
@@ -348,9 +350,10 @@ export function MaterialRequests({
                   {r.informedByName && <Badge variant="secondary">Available — informed by {r.informedByName}</Badge>}
                   {r.releasedByName && <Badge variant="secondary">Released by {r.releasedByName}</Badge>}
                   {/* Warehouse / Purchaser / Payment Approver / admin release the
-                      purchased (now in-stock) materials to the requesting department. */}
-                  {r.canRelease && !r.releasedByName && r.items.some((it) => it.disposition === "purchase") && (
-                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => releaseMaterialToRequestor(orderId, r.id))}>Release to requestor</Button>
+                      purchased (now in-stock) materials to the requesting department,
+                      deducting the released quantity from inventory. */}
+                  {r.canRelease && !r.releasedByName && r.items.some((it) => it.disposition === "purchase") && releasingId !== r.id && (
+                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => setReleasingId(r.id)}>Release to requestor</Button>
                   )}
                   {r.confirmedByName ? (
                     <Badge variant="success">Received &amp; confirmed by {r.confirmedByName}{r.confirmedWhen ? ` · ${r.confirmedWhen}` : ""}</Badge>
@@ -365,6 +368,21 @@ export function MaterialRequests({
                   )}
                   {r.followUpCount ? <span className="text-xs text-muted-foreground">Followed up {r.followUpCount}×{r.lastFollowUpWhen ? ` · ${r.lastFollowUpWhen}` : ""}</span> : null}
                 </div>
+              )}
+              {/* Release picker: match each purchased line to the stock item to
+                  deduct as it's handed to the requesting department. */}
+              {r.canRelease && !r.releasedByName && releasingId === r.id && (
+                <StockMatchPanel
+                  lines={r.items.filter((it) => it.disposition === "purchase").map((it) => ({ label: `${[it.qty, it.unit].filter(Boolean).join(" ")} · ${it.description}`, qtyDefault: it.qty }))}
+                  stockItems={stockItems}
+                  submitLabel="Release & deduct from stock"
+                  onCancel={() => setReleasingId(null)}
+                  onSubmit={async (matches) => {
+                    await releaseMaterialToRequestor(orderId, r.id, matches);
+                    setReleasingId(null);
+                    router.refresh();
+                  }}
+                />
               )}
               {/* Flashing "awaiting approval" badge naming the designation + person
                   who must act next on the linked purchase request — same behaviour

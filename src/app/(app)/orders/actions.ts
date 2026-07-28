@@ -1174,7 +1174,11 @@ const MRF_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse", "purchaser", "payment
  * and moves a "purchasing" MRF to "issued" so the department can then confirm
  * receipt with its "<Dept> Request Received" button.
  */
-export async function releaseMaterialToRequestor(quotationId: string, requestId: string): Promise<void> {
+export async function releaseMaterialToRequestor(
+  quotationId: string,
+  requestId: string,
+  matches: StockMatch[] = [],
+): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
@@ -1192,9 +1196,28 @@ export async function releaseMaterialToRequestor(quotationId: string, requestId:
   // receipt; an already-completed MRF just records who released it.
   const status: MaterialRequest["status"] =
     mrf.status === "purchasing" || mrf.status === "partial" ? "issued" : mrf.status;
+  // Deduct the released quantities from inventory (the purchase already received
+  // them into stock; releasing to the department issues them out). Lines left
+  // unmatched are skipped — nothing is deducted for them.
+  const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
   const materialRequests = wf.materialRequests.slice();
   materialRequests[idx] = { ...mrf, items, status, releasedAt: new Date().toISOString(), releasedByName: user.name };
-  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+  await prisma.$transaction(async (tx) => {
+    for (const m of clean) {
+      await applyStockChange(
+        tx,
+        { stockItemId: m.stockItemId, kind: "ISSUE", qty: Number(m.qty), reason: `MRF #${mrf.formNo} released to ${deptLabel(mrf.dept)}` },
+        user.name,
+      );
+    }
+    await tx.quotation.update({
+      where: { id: quotationId },
+      data: { classification: { ...cls, workflow: { ...wf, materialRequests } } as unknown as Prisma.InputJsonObject },
+    });
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/inventory");
   await logActivity(user, {
     action: "mrf.released", category: "order",
     summary: `Released MRF #${mrf.formNo} materials to ${deptLabel(mrf.dept)} — ${await orderRefLabel(quotationId)}`,
