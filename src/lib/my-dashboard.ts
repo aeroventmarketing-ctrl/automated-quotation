@@ -37,13 +37,14 @@ export interface MyTask {
   deliveryMode?: "single" | "multi"; // for order tasks: how the order ships
 }
 
-/** A cross-role MRF notification (completed / partially released). */
+/** A cross-role MRF status note shown to the requestor and materials roles. */
 export interface MaterialNote {
   key: string;
   orderRef: string;
   dept: string; // department label
   formNo: string;
-  kind: "completed" | "partial";
+  label: string; // current MRF status, in plain words
+  variant: "success" | "warning" | "secondary" | "destructive";
   client: string | null; // masked for client-restricted viewers
   when: string; // ISO
   href: string;
@@ -92,6 +93,30 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // Purchaser / requesting department (collected while scanning orders below).
   const materialsFeed: MaterialNote[] = [];
   const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser");
+  // Linked purchase-request status per MRF — so a "purchasing" MRF can say
+  // whether its item has been received into stock yet.
+  const mrfPrStatus = new Map<string, string>();
+  try {
+    const linkedPrs = await prisma.purchaseRequest.findMany({
+      where: { mrfId: { not: null } },
+      select: { mrfId: true, status: true },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const p of linkedPrs) if (p.mrfId) mrfPrStatus.set(p.mrfId, p.status);
+  } catch { /* ignore */ }
+
+  // Plain-words status for the requestor's Materials feed (null = don't show).
+  const mrfNote = (m: { id: string; status: string; releasedByName?: string }): { label: string; variant: MaterialNote["variant"] } | null => {
+    const prDone = mrfPrStatus.get(m.id) === "COMPLETED";
+    switch (m.status) {
+      case "completed": return { label: "MRF completed", variant: "success" };
+      case "issued": return { label: m.releasedByName ? "Released — awaiting your confirmation" : "Issued — awaiting your confirmation", variant: "warning" };
+      case "partial": return { label: "Partly released", variant: "warning" };
+      case "purchasing": return prDone ? { label: "Purchased — received into stock, awaiting release", variant: "warning" } : { label: "For purchasing", variant: "secondary" };
+      case "requested": return { label: "Requested — awaiting warehouse", variant: "secondary" };
+      default: return null; // cancelled
+    }
+  };
 
   // 1) Order-workflow approvals — confirmed orders whose current step needs a
   //    role the viewer holds (or a Sales-owned step they own).
@@ -126,22 +151,23 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             href: `/orders/${q.id}`,
           });
         }
-        // Cross-role notification: MRF completed (fully released, or a partial
-        // MRF the department has confirmed) or partly released — shown to Admin /
-        // Warehouse / Purchaser and the requesting department.
-        if (m.status === "issued" || m.status === "partial" || m.status === "completed") {
-          if (seesMaterialsFeed || has(deptRole(m.dept) as WorkflowRoleKey)) {
-            materialsFeed.push({
-              key: `mfeed:${q.id}:${m.id}`,
-              orderRef: q.quoteNumber,
-              dept: requisitionDeptLabel(m.dept),
-              formNo: m.formNo,
-              kind: m.status === "partial" ? "partial" : "completed",
-              client: maskClient(q.inquiry.customer.company),
-              when: m.confirmedAt || m.handledAt || m.raisedAt || "",
-              href: `/orders/${q.id}`,
-            });
-          }
+        // Materials feed: the current status of every active MRF, so the
+        // requesting department (plus Admin / Warehouse / Purchaser) can track
+        // their requested items — from "Requested" through purchasing to release
+        // and completion.
+        const note = mrfNote(m);
+        if (note && (seesMaterialsFeed || has(deptRole(m.dept) as WorkflowRoleKey))) {
+          materialsFeed.push({
+            key: `mfeed:${q.id}:${m.id}`,
+            orderRef: q.quoteNumber,
+            dept: requisitionDeptLabel(m.dept),
+            formNo: m.formNo,
+            label: note.label,
+            variant: note.variant,
+            client: maskClient(q.inquiry.customer.company),
+            when: m.confirmedAt || m.releasedAt || m.handledAt || m.raisedAt || "",
+            href: `/orders/${q.id}`,
+          });
         }
       }
       // Multi-batch delivery: each open batch runs its own approval sequence

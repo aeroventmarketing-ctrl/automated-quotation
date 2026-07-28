@@ -227,9 +227,7 @@ export default async function MyDashboardPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">MRF #{m.formNo} · {m.dept}</span>
-                        <Badge variant={m.kind === "completed" ? "success" : "warning"} className="font-normal">
-                          {m.kind === "completed" ? "MRF completed" : "MRF partially released"}
-                        </Badge>
+                        <Badge variant={m.variant} className="font-normal">{m.label}</Badge>
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
                         {m.orderRef}{m.client ? ` · ${m.client}` : ""}{m.when ? ` · ${fmtWhen(m.when)}` : ""}
