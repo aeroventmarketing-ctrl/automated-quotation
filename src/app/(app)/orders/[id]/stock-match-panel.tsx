@@ -28,7 +28,42 @@ export function StockMatchPanel({
   onCancel: () => void;
   onSubmit: (matches: { stockItemId: string; qty: number }[]) => Promise<void>;
 }) {
-  const [rows, setRows] = useState(lines.map((l) => ({ stockItemId: "", qty: l.qtyDefault ?? "" })));
+  // Auto-match each line to an existing stock item (and quantity) so receiving
+  // posts to inventory by default — the warehouse can still change or skip a row.
+  // Lines look like "9 pc · ANGLE BAR 2.0 X 25 X 25 (remark)".
+  const parseLine = (label: string): { qty: string; desc: string } => {
+    const noRemark = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    const dot = noRemark.indexOf("·");
+    if (dot >= 0) {
+      const head = noRemark.slice(0, dot).trim(); // "9 pc"
+      const qty = (head.match(/^[\d.]+/) ?? [""])[0];
+      return { qty, desc: noRemark.slice(dot + 1).trim() };
+    }
+    const m = noRemark.match(/^([\d.]+)\s+\S+\s+(.*)$/);
+    return m ? { qty: m[1], desc: m[2].trim() } : { qty: "", desc: noRemark };
+  };
+  const autoMatchId = (desc: string): string => {
+    const d = desc.trim().toLowerCase();
+    if (!d) return "";
+    let best = "";
+    let score = 0;
+    for (const s of stockItems) {
+      const name = s.name.trim().toLowerCase();
+      if (!name) continue;
+      let sc = 0;
+      if (name === d) sc = 1000;
+      else if (d.includes(name)) sc = 500 + name.length;
+      else if (name.includes(d)) sc = 300 + d.length;
+      if (sc > score) { score = sc; best = s.id; }
+    }
+    return best;
+  };
+  const [rows, setRows] = useState(() =>
+    lines.map((l) => {
+      const { qty, desc } = parseLine(l.label);
+      return { stockItemId: autoMatchId(desc), qty: (l.qtyDefault ?? "").trim() || qty };
+    }),
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -53,7 +88,7 @@ export function StockMatchPanel({
   return (
     <div className="mt-2 space-y-2 rounded-md border bg-muted/30 p-3">
       <div className="text-xs text-muted-foreground">
-        Match each line to a stock item and quantity. Leave a line blank to skip it (nothing deducted/added).
+        Each line is matched to its stock item and quantity automatically — review and adjust if needed. Set a line to &ldquo;skip&rdquo; to leave it out (nothing deducted/added).
       </div>
       {stockItems.length === 0 && (
         <div className="text-xs text-amber-600">No stock items yet — add them under Inventory. You can still proceed; nothing will be adjusted.</div>
