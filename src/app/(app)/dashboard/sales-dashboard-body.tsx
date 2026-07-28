@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { TestModeBanner } from "@/components/test-mode-banner";
 import { ActivityBell } from "@/components/activity-bell";
@@ -59,10 +59,9 @@ const saleDate = (sale: SaleRecord, fallback: Date): Date => {
  */
 export async function SalesDashboardBody({ embedded = false }: { embedded?: boolean }) {
   const user = await getCurrentUser();
-  // Production-deadline snapshot — shown to every role's dashboard. Admins have
-  // it on their Production Dashboard, so it's omitted from their Sales Dashboard.
+  // Production-deadline snapshot — still shown to client-restricted (shop-floor)
+  // roles' landing below; the standalone Sales Dashboard no longer shows it.
   const production = await getProductionStatus();
-  const adminViewer = isAdmin(user);
 
   // Shop-floor roles must not see client identity or sales amounts — the sales
   // dashboard is entirely that, so show them a simple landing to their areas.
@@ -306,9 +305,8 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
       {/* Quick availability lookup for reps on the phone with a client. */}
       <StockAvailabilitySearch />
 
-      {/* Production status — On time / Near due / Late, clickable to the client.
-          Hidden for admins (they have it on the Production Dashboard). */}
-      {!embedded && !adminViewer && <ProductionStatusCard status={production} maskClient={maskProdClient} />}
+      {/* Production status now lives on My Dashboard (Sales included), so it is no
+          longer shown on the standalone Sales Dashboard. */}
 
       {/* Each box drills into its details: the status boxes open the inquiries
           list pre-filtered to that stage, and "Quotes drafted today" opens the
