@@ -1226,11 +1226,19 @@ export async function releaseMaterialToRequestor(
   materialRequests[idx] = { ...mrf, items, status, releasedAt: new Date().toISOString(), releasedByName: user.name };
   await prisma.$transaction(async (tx) => {
     for (const m of clean) {
-      await applyStockChange(
-        tx,
-        { stockItemId: m.stockItemId, kind: "ISSUE", qty: Number(m.qty), reason: `MRF #${mrf.formNo} released to ${deptLabel(mrf.dept)}` },
-        user.name,
-      );
+      const item = await tx.stockItem.findUnique({ where: { id: m.stockItemId } });
+      if (!item) continue; // stock item gone (e.g. merged) — skip its deduction
+      // Deduct only what's on hand: a stock shortfall (often from a duplicate/merged
+      // item) must not block the release. The MRF record still reflects the released
+      // quantity — reconcile the stock separately in Inventory if it went short.
+      const deduct = Math.min(Number(m.qty), Math.max(0, Number(item.quantity)));
+      if (deduct > 0) {
+        await applyStockChange(
+          tx,
+          { stockItemId: m.stockItemId, kind: "ISSUE", qty: deduct, reason: `MRF #${mrf.formNo} released to ${deptLabel(mrf.dept)}` },
+          user.name,
+        );
+      }
     }
     await tx.quotation.update({
       where: { id: quotationId },
