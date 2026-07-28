@@ -372,6 +372,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     label: `${PAYMENT_KIND_LABEL[p.kind]} · ${formatCurrency(Number(p.amount) || 0, quote.currency)}${p.date ? ` · ${fmtWhen(p.date)}` : ""}`,
     proof: p.proof ?? null,
   }));
+  // Same collected-payment records surfaced in the multi-batch panel (with the
+  // payment id, for a stable key) — kept in sync with the quotation tab because
+  // both read the one sale record.
+  const mbPayments = (saleForClose?.payments ?? []).map((p) => ({
+    id: p.id,
+    label: `${PAYMENT_KIND_LABEL[p.kind]} · ${formatCurrency(Number(p.amount) || 0, quote.currency)}${p.date ? ` · ${fmtWhen(p.date)}` : ""}`,
+    proof: p.proof ?? null,
+  }));
 
   // Sales-commission info for the post-close sign-offs. Due date = the 15th day
   // after the sales month ends ("issued 15 days after the sales month").
@@ -879,7 +887,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <p className="mb-3 text-xs text-muted-foreground">
               Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed.
             </p>
-            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null })) : mbBatchViews} canManage={canManageMulti} canCollect={!restricted && (canManageMulti || perms.canCheckPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
+            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null })) : mbBatchViews} payments={restricted ? [] : mbPayments} canManage={canManageMulti} canCollect={!restricted && (canManageMulti || perms.canCheckPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
           </CardContent>
         </Card>
       )}

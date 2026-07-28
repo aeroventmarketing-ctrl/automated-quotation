@@ -26,6 +26,12 @@ export interface MBStepView {
   byName?: string;
   at?: string;
 }
+/** A recorded order payment (shared with the quotation tab's sale panel). */
+export interface MBPaymentView {
+  id: string;
+  label: string;
+  proof: SaleDoc | null;
+}
 export interface MBBatchView {
   id: string;
   drNumber: string;
@@ -52,6 +58,7 @@ export function MultiBatchPanel({
   orderId,
   items,
   batches,
+  payments = [],
   canManage,
   canCollect,
   currency,
@@ -64,6 +71,8 @@ export function MultiBatchPanel({
   orderId: string;
   items: MBItem[];
   batches: MBBatchView[];
+  /** Every payment recorded on the order — same records as the quotation tab. */
+  payments?: MBPaymentView[];
   canManage: boolean;
   /** Sales / Accounting / admin — may record payments against the balance. */
   canCollect: boolean;
@@ -223,6 +232,36 @@ export function MultiBatchPanel({
           <p className="mt-1 text-[11px] text-muted-foreground">
             The order has an outstanding balance. Record collections here until it is fully paid — this works even after every batch has been delivered.
           </p>
+        )}
+        {/* Payment details & records — the same collected payments (with proof
+            eye-view) shown on the quotation tab; both read/write the same sale
+            record, so recording here updates there and vice versa. */}
+        {payments.length > 0 && (
+          <div className="mt-2 border-t pt-2">
+            <div className="text-xs font-medium text-muted-foreground">Payment details &amp; records</div>
+            <ul className="mt-1 space-y-1">
+              {payments.map((p) => (
+                <li key={p.id} className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="tabular-nums">{p.label}</span>
+                  {p.proof ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <a href={docView(p.proof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                        <FileText className="h-3.5 w-3.5" /> {p.proof.name}
+                      </a>
+                      <a href={docView(p.proof)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View proof" aria-label="View proof">
+                        <Eye className="h-3.5 w-3.5" />
+                      </a>
+                      <a href={docDownload(p.proof)} className="text-muted-foreground hover:text-primary" title="Download proof" aria-label="Download proof">
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">no proof attached</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {collecting && (
           <div className="mt-2 space-y-2 rounded-md border bg-background p-2">
