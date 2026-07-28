@@ -9,6 +9,7 @@ import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { payableTotal, round2 } from "@/lib/quote";
 import { getPrintedVouchers } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
 import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, type OrderStage } from "@/lib/order-workflow";
 import { getCurrentUser, canApprove } from "@/lib/auth";
@@ -268,12 +269,17 @@ export default async function ManagementPage() {
   const printedVouchers = await getPrintedVouchers().catch(() => []);
   const voucherPrIds = [...new Set(printedVouchers.flatMap((v) => v.ids))];
   const voucherPrs = voucherPrIds.length
-    ? await prisma.purchaseRequest.findMany({ where: { id: { in: voucherPrIds } }, select: { id: true, po: true } }).catch(() => [])
+    ? await prisma.purchaseRequest.findMany({ where: { id: { in: voucherPrIds } }, select: { id: true, po: true, reconciliation: true } }).catch(() => [])
     : [];
   const voucherPrNet = new Map(voucherPrs.map((pr) => { const po = coercePurchaseOrder(pr.po); return [pr.id, po ? poTotals(po).net : 0]; }));
+  const voucherReconciled = new Map(voucherPrs.map((pr) => [pr.id, isReconciled(coerceReconciliation(pr.reconciliation))]));
   const voucherReport = printedVouchers.map((v) => {
     const approvedTotal = round2(v.ids.reduce((s, id) => s + (voucherPrNet.get(id) ?? 0), 0));
-    return { ...v, approvedTotal, tallied: Math.abs(approvedTotal - round2(v.total)) < 0.01 };
+    const amountMatches = Math.abs(approvedTotal - round2(v.total)) < 0.01;
+    // Every covered request's voucher reconciliation has been recorded.
+    const reconciled = v.ids.length > 0 && v.ids.every((id) => voucherReconciled.get(id));
+    const state: "mismatch" | "awaiting" | "tallied" = !amountMatches ? "mismatch" : reconciled ? "tallied" : "awaiting";
+    return { ...v, approvedTotal, state };
   });
 
   // Phase distribution for the donut.
@@ -730,7 +736,9 @@ export default async function ManagementPage() {
             <CardTitle className="flex items-center gap-2 text-sm">
               <Banknote className="h-4 w-4 text-muted-foreground" /> Cash vouchers
               {voucherReport.length > 0 && (
-                <span className="ml-1 text-xs font-normal text-muted-foreground">({voucherReport.filter((v) => !v.tallied).length} not tallied)</span>
+                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                  ({voucherReport.filter((v) => v.state === "mismatch").length} not tallied · {voucherReport.filter((v) => v.state === "awaiting").length} awaiting reconciliation)
+                </span>
               )}
             </CardTitle>
           </CardHeader>
@@ -758,10 +766,18 @@ export default async function ManagementPage() {
                       <td className="py-1.5 pr-3">
                         <div className="font-medium">Paid to {v.paidTo || "—"}</div>
                         <div className="text-xs text-muted-foreground">{v.lines.map((l) => l.description).filter(Boolean).join("; ")}</div>
-                        {!v.tallied && <div className="text-xs text-amber-700">Approved total {formatCurrency(v.approvedTotal, CURRENCY)} · voucher {formatCurrency(v.total, CURRENCY)}</div>}
+                        {v.state === "mismatch" && <div className="text-xs text-amber-700">Approved total {formatCurrency(v.approvedTotal, CURRENCY)} · voucher {formatCurrency(v.total, CURRENCY)}</div>}
                       </td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{formatCurrency(v.total, CURRENCY)}</td>
-                      <td className="py-1.5 pr-3"><Badge variant={v.tallied ? "success" : "warning"}>{v.tallied ? "Tallied" : "Not tallied"}</Badge></td>
+                      <td className="py-1.5 pr-3">
+                        {v.state === "mismatch" ? (
+                          <Badge variant="warning">Not tallied</Badge>
+                        ) : v.state === "awaiting" ? (
+                          <Badge variant="secondary">Awaiting reconciliation</Badge>
+                        ) : (
+                          <Badge variant="success">Tallied</Badge>
+                        )}
+                      </td>
                       <td className="py-1.5 text-xs text-muted-foreground">{v.printedByName}{v.printedAt ? ` · ${formatDateTime(v.printedAt)}` : ""}</td>
                     </tr>
                   ))}
