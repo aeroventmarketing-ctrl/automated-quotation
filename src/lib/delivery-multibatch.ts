@@ -10,6 +10,7 @@
  * Stored as JSON on the order's workflow (no migration).
  */
 import type { WorkflowRoleKey } from "@/lib/workflow-roles";
+import type { SaleDoc } from "@/lib/sale";
 
 export interface MBLine {
   description: string;
@@ -27,6 +28,9 @@ export interface MultiDeliveryBatch {
   drNumber: string;
   lines: MBLine[];
   steps: Record<string, MBStamp>; // keyed by MULTIBATCH_STEPS[].key
+  // Proof-of-delivery attachments (signed DRs / photos). Logistics must attach at
+  // least one before the "Mark delivered" step; admins can manage them anytime.
+  pod?: SaleDoc[];
   // Partial payment collected for this batch (a linked "progress" sale payment),
   // captured at the "Payment checked" step.
   paymentAmount?: number;
@@ -106,6 +110,12 @@ function coerceLine(value: unknown): MBLine | null {
   const qty = num(o.qty);
   return description && qty > 0 ? { description, qty } : null;
 }
+function coercePodDoc(value: unknown): SaleDoc | null {
+  if (!value || typeof value !== "object") return null;
+  const o = value as Record<string, unknown>;
+  if (typeof o.path !== "string" || !o.path) return null;
+  return { path: o.path, name: typeof o.name === "string" ? o.name : o.path.split("/").pop() ?? "file", uploadedAt: typeof o.uploadedAt === "string" ? o.uploadedAt : "" };
+}
 function coerceStamp(value: unknown): MBStamp | null {
   if (!value || typeof value !== "object") return null;
   const o = value as Record<string, unknown>;
@@ -128,6 +138,7 @@ export function coerceMultiBatch(value: unknown): MultiDeliveryBatch | null {
     }
   }
   const paymentAmount = num(o.paymentAmount);
+  const pod = Array.isArray(o.pod) ? (o.pod as unknown[]).map(coercePodDoc).filter((d): d is SaleDoc => !!d) : [];
   return {
     id: str(o.id),
     createdAt: str(o.createdAt),
@@ -135,6 +146,7 @@ export function coerceMultiBatch(value: unknown): MultiDeliveryBatch | null {
     drNumber: str(o.drNumber),
     lines,
     steps,
+    ...(pod.length ? { pod } : {}),
     ...(paymentAmount > 0 ? { paymentAmount, paymentId: str(o.paymentId) || undefined } : {}),
     ...(o.cancelled ? { cancelled: true, cancelledAt: str(o.cancelledAt) } : {}),
   };

@@ -2298,6 +2298,44 @@ export async function createMultiBatch(quotationId: string, input: z.infer<typeo
 }
 
 /** Advance a delivery batch by completing its next step (role-gated). */
+/** Logistics (or an admin) attaches a proof-of-delivery file to a delivery batch. */
+export async function saveMultiBatchPod(quotationId: string, batchId: string, doc: SaleDoc): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
+    throw new Error("Only Logistics or an admin can attach the proof of delivery.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const batch = wf.deliveryBatches.find((b) => b.id === batchId);
+  if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
+  const entry: SaleDoc = { path: String(doc.path), name: String(doc.name || "file"), uploadedAt: doc.uploadedAt || new Date().toISOString() };
+  const pod = [...(batch.pod ?? []), entry];
+  const deliveryBatches = wf.deliveryBatches.map((b) => (b.id === batchId ? { ...b, pod } : b));
+  await saveWorkflow(quotationId, cls, { ...wf, deliveryBatches });
+}
+
+/**
+ * Remove a proof-of-delivery file from a delivery batch. Logistics may edit its
+ * attachments up to the point of delivery; afterwards only an admin can.
+ */
+export async function removeMultiBatchPod(quotationId: string, batchId: string, path: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  const isLogistics = userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
+  if (!(isAdmin(user) || isLogistics)) throw new Error("Only an admin or Logistics can remove the proof of delivery.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const batch = wf.deliveryBatches.find((b) => b.id === batchId);
+  if (!batch) throw new Error("Delivery batch not found.");
+  if (batch.steps[MB_DELIVERED_STEP] && !isAdmin(user)) {
+    throw new Error("Only an admin can edit the proof of delivery after the batch is delivered.");
+  }
+  const pod = (batch.pod ?? []).filter((d) => d.path !== path);
+  const deliveryBatches = wf.deliveryBatches.map((b) => (b.id === batchId ? { ...b, pod } : b));
+  await saveWorkflow(quotationId, cls, { ...wf, deliveryBatches });
+}
+
 export async function advanceMultiBatch(quotationId: string, batchId: string, stepKey: string, input: z.infer<typeof mbStepSchema>): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -2315,6 +2353,11 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   if (!stepDef) throw new Error("Unknown step.");
   const { next } = mbProgress(batch);
   if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");
+
+  // Logistics must attach the proof of delivery before the batch can be delivered.
+  if (stepKey === MB_DELIVERED_STEP && !(batch.pod && batch.pod.length > 0)) {
+    throw new Error("Attach the proof of delivery before marking the batch delivered.");
+  }
 
   const roles = await getWorkflowRoles();
   const allowed =
@@ -2634,6 +2677,9 @@ export async function markDelivered(quotationId: string, pod: string): Promise<v
     throw new Error("Only Logistics or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "delivery_docs_ready") throw new Error("Delivery documents aren't ready yet.");
+  // Logistics must attach the proof of delivery before marking delivered.
+  const podDocs = saleFromClassification(cls)?.docs?.pod ?? [];
+  if (podDocs.length === 0) throw new Error("Attach the proof of delivery before marking delivered.");
   const documents = { ...wf.documents, pod: pod.trim() || undefined };
   await saveWorkflow(quotationId, cls, { ...wf, stage: "delivered", documents, approvals: stamp(wf, "delivered", user) });
 }

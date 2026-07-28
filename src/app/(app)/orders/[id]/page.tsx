@@ -444,6 +444,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       drNumber: b.drNumber,
       createdByName: b.createdByName,
       lines: b.lines,
+      pod: b.pod ?? [],
       paymentAmount: b.paymentAmount,
       paymentProof: b.paymentId ? mbPaymentById.get(b.paymentId)?.proof ?? null : null,
       paymentId: b.paymentId ?? null,

@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PackagePlus, Trash2, CheckCircle2, Circle, Upload, Eye, FileText } from "lucide-react";
+import { PackagePlus, Trash2, CheckCircle2, Circle, Upload, Eye, FileText, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { SaleDoc } from "@/lib/sale";
-import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof } from "../actions";
+import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof, saveMultiBatchPod, removeMultiBatchPod } from "../actions";
 
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
+const docDownload = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}&download=1&name=${encodeURIComponent(d.name)}`;
 
 export interface MBItem {
   description: string;
@@ -30,6 +31,7 @@ export interface MBBatchView {
   drNumber: string;
   createdByName: string;
   lines: { description: string; qty: number }[];
+  pod: SaleDoc[];
   paymentAmount?: number;
   paymentProof?: SaleDoc | null;
   paymentId?: string | null;
@@ -106,6 +108,25 @@ export function MultiBatchPanel({
       setErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function uploadPod(batchId: string, file: File) {
+    setBusy(batchId + "pod");
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("quotationId", orderId);
+      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      await saveMultiBatchPod(orderId, batchId, data as SaleDoc);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -294,7 +315,13 @@ export function MultiBatchPanel({
       )}
       {err && <p className="text-xs text-destructive">{err}</p>}
 
-      {batches.map((b) => (
+      {batches.map((b) => {
+        const podFiles = b.pod ?? [];
+        // Logistics may manage POD up to delivery; admins any time. `next.canAct`
+        // for the "delivered" step means the viewer is the acting Logistics/admin.
+        const canManagePod = admin || (b.next?.key === "delivered" && !!b.next?.canAct);
+        const deliverBlocked = b.next?.key === "delivered" && podFiles.length === 0;
+        return (
         <div key={b.id} className={`rounded-md border p-3 ${b.cancelled ? "opacity-60" : ""}`}>
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <Badge variant={b.cancelled ? "destructive" : b.filed ? "success" : b.delivered ? "success" : "secondary"}>
@@ -346,6 +373,43 @@ export function MultiBatchPanel({
             ))}
           </ol>
 
+          {/* Proof of delivery — Logistics attaches signed DRs / photos before the
+              "Mark delivered" step; view without downloading; admins manage anytime. */}
+          {(podFiles.length > 0 || canManagePod) && (
+            <div className="mt-2 rounded-md border bg-muted/20 p-2">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Proof of delivery</div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                {podFiles.map((f) => (
+                  <span key={f.path} className="inline-flex items-center gap-1.5 text-xs">
+                    <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                      <FileText className="h-3.5 w-3.5" /> {f.name}
+                    </a>
+                    <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View">
+                      <Eye className="h-3.5 w-3.5" />
+                    </a>
+                    <a href={docDownload(f)} className="text-muted-foreground hover:text-primary" title="Download" aria-label="Download">
+                      <Download className="h-3.5 w-3.5" />
+                    </a>
+                    {canManagePod && (
+                      <button type="button" className="text-muted-foreground hover:text-destructive" disabled={busy != null} onClick={() => { if (window.confirm("Remove this proof of delivery?")) run(b.id + "rmpod", () => removeMultiBatchPod(orderId, b.id, f.path)); }} title="Remove" aria-label="Remove">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {canManagePod && (
+                  <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs hover:bg-accent">
+                    <Upload className="h-3.5 w-3.5" /> {busy === b.id + "pod" ? "Uploading…" : podFiles.length ? "Add file" : "Attach proof of delivery"}
+                    <input type="file" className="hidden" disabled={busy != null} onChange={(e) => e.target.files?.[0] && uploadPod(b.id, e.target.files[0])} />
+                  </label>
+                )}
+              </div>
+              {deliverBlocked && canManagePod && (
+                <p className="mt-1 text-[11px] text-muted-foreground">Attach at least one proof of delivery to enable &ldquo;Mark delivered&rdquo;.</p>
+              )}
+            </div>
+          )}
+
           {!b.cancelled && b.next && (
             <div className="mt-2">
               {b.next.canAct ? (
@@ -384,7 +448,7 @@ export function MultiBatchPanel({
                     </div>
                   </div>
                 ) : (
-                  <Button size="sm" className="h-7 text-xs" disabled={busy != null} onClick={() => advance(b.id, b.next!.key, b.next!.collectsPayment)}>
+                  <Button size="sm" className="h-7 text-xs" disabled={busy != null || deliverBlocked} onClick={() => advance(b.id, b.next!.key, b.next!.collectsPayment)}>
                     {busy === b.id + b.next.key ? "Saving…" : b.next.label}
                   </Button>
                 )
@@ -394,7 +458,8 @@ export function MultiBatchPanel({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
