@@ -5,8 +5,9 @@ import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { formatDate } from "@/lib/utils";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { getSignatureMap } from "@/lib/signature";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { PrintButton } from "./print-button";
 
@@ -56,6 +57,28 @@ export default async function PurchasingVoucherPage({ searchParams }: { searchPa
   const suppliers = [...new Set(lines.map((l) => l.supplier))];
   const paidTo = suppliers.length === 1 ? suppliers[0] : "Various suppliers (see particulars)";
   const dateStr = formatDate(new Date());
+
+  // Signatories, resolved from the workflow-role assignments + uploaded
+  // signatures: Prepared by = Accounting, Approved by = Payment Approver / admin,
+  // Received by = Logistics head. Prefer the current viewer when they hold the role.
+  const pickRoleUser = (role: WorkflowRoleKey): string | null => {
+    const roleIds = usersWithWorkflowRole(assignments, role);
+    if (roleIds.includes(user.id)) return user.id;
+    return roleIds[0] ?? null;
+  };
+  const acctId = pickRoleUser("accounting");
+  const payId = pickRoleUser("payment_approver") ?? (isAdmin(user) ? user.id : null);
+  const logiId = pickRoleUser("logistics");
+  const sigIds = [acctId, payId, logiId].filter((x): x is string => !!x);
+  const sigUsers = sigIds.length
+    ? await prisma.user.findMany({ where: { id: { in: sigIds } }, select: { id: true, name: true } })
+    : [];
+  const nameById = new Map(sigUsers.map((u) => [u.id, u.name]));
+  const sigMap = await getSignatureMap();
+  const signatory = (id: string | null) => ({ name: id ? nameById.get(id) ?? "" : "", sig: id ? sigMap[id] ?? null : null });
+  const prepared = signatory(acctId);
+  const approved = signatory(payId);
+  const received = signatory(logiId);
 
   const rows = lines.map((l) => ({ description: `${l.supplier}${l.poNumber ? ` — P.O. ${l.poNumber}` : ""}`, amount: l.net }));
   while (rows.length < 8) rows.push({ description: "", amount: 0 });
@@ -136,23 +159,41 @@ export default async function PurchasingVoucherPage({ searchParams }: { searchPa
           <table className="border-collapse text-sm">
             <tbody>
               <tr>
-                <td className="border border-black px-3 pb-6 pt-1 align-top">
+                <td className="border border-black px-3 pt-1 align-top">
                   <div>Prepared by:</div>
-                  <div className="mt-4 min-w-[10rem] text-center font-medium">&nbsp;</div>
+                  <div className="flex h-12 items-end justify-center">
+                    {prepared.sig && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={prepared.sig} alt="" className="max-h-12 object-contain" />
+                    )}
+                  </div>
+                  <div className="min-w-[11rem] border-t border-black pt-0.5 text-center font-medium">{prepared.name || " "}</div>
+                  <div className="text-center text-[11px] text-neutral-500">Accounting</div>
                 </td>
-                <td className="border border-black px-3 pb-6 pt-1 align-top">
+                <td className="border border-black px-3 pt-1 align-top">
                   <div>Approved by:</div>
-                  <div className="mt-4 min-w-[10rem] text-center font-medium">&nbsp;</div>
+                  <div className="flex h-12 items-end justify-center">
+                    {approved.sig && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={approved.sig} alt="" className="max-h-12 object-contain" />
+                    )}
+                  </div>
+                  <div className="min-w-[11rem] border-t border-black pt-0.5 text-center">&nbsp;</div>
+                  <div className="text-center text-[11px] text-neutral-500">Payment Approver</div>
                 </td>
               </tr>
             </tbody>
           </table>
-          <div className="flex-1 text-right text-sm">
-            <div className="inline-block text-left">
-              <div>By:</div>
-              <div className="mt-2 min-w-[12rem] border-b border-black px-1 text-center font-medium">&nbsp;</div>
-              <div className="text-[11px] text-neutral-500">(received by)</div>
+          <div className="text-sm">
+            <div>Received by:</div>
+            <div className="flex h-12 items-end justify-center">
+              {received.sig && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={received.sig} alt="" className="max-h-12 object-contain" />
+              )}
             </div>
+            <div className="min-w-[12rem] border-t border-black pt-0.5 text-center font-medium">{received.name || " "}</div>
+            <div className="text-center text-[11px] text-neutral-500">Logistics Head</div>
           </div>
         </div>
       </div>
