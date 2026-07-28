@@ -7,7 +7,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
-import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, releaseMaterialToRequestor } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, releaseMaterialToRequestor, setMrfReleasedQuantities } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
@@ -132,6 +132,7 @@ export function MaterialRequests({
   stockItems,
   products = [],
   showMrfDoc = true,
+  admin = false,
 }: {
   orderId: string;
   requesterName: string;
@@ -141,10 +142,14 @@ export function MaterialRequests({
   products?: ScanProduct[];
   /** Whether to show the MRF View / Print document links. */
   showMrfDoc?: boolean;
+  /** Admin — may correct the recorded released quantities. */
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [issuingId, setIssuingId] = useState<string | null>(null);
   const [releasingId, setReleasingId] = useState<string | null>(null);
+  const [correctingId, setCorrectingId] = useState<string | null>(null);
+  const [correctQty, setCorrectQty] = useState<Record<string, string>>({});
   const [dept, setDept] = useState(raisableDepts[0]?.key ?? "");
   const [rows, setRows] = useState<MRFItem[]>([emptyRow(), emptyRow(), emptyRow()]);
   const [note, setNote] = useState("");
@@ -397,6 +402,40 @@ export function MaterialRequests({
                     router.refresh();
                   }}
                 />
+              )}
+              {/* Admin correction of the recorded released quantities (fixes the
+                  card/status without double-counting; does not change inventory). */}
+              {admin && r.items.some((it) => it.disposition === "purchase") && (
+                correctingId === r.id ? (
+                  <div className="mt-2 space-y-2 rounded-md border bg-muted/30 p-3">
+                    <div className="text-xs font-medium">Correct released quantities (admin)</div>
+                    <p className="text-[11px] text-muted-foreground">Set the exact quantity released for each purchased item. This fixes the record &amp; status only — it does not change inventory (adjust stock in Inventory if needed).</p>
+                    {r.items.filter((it) => it.disposition === "purchase").map((it, k) => {
+                      const key = `${r.id}:${it.description}`;
+                      return (
+                        <div key={k} className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="min-w-[10rem] flex-1">{it.description} <span className="text-muted-foreground">(of {it.qty} {it.unit})</span></span>
+                          <input type="number" min={0} step="any" placeholder="Released"
+                            className="h-8 w-24 rounded-md border bg-background px-2 text-right text-sm"
+                            value={correctQty[key] ?? it.issuedQty ?? ""}
+                            onChange={(e) => setCorrectQty((q) => ({ ...q, [key]: e.target.value }))} />
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" className="h-7 text-xs" disabled={busy}
+                        onClick={() => run(
+                          () => setMrfReleasedQuantities(orderId, r.id, r.items.filter((it) => it.disposition === "purchase").map((it) => ({ description: it.description, qty: Number(correctQty[`${r.id}:${it.description}`] ?? it.issuedQty ?? 0) || 0 }))),
+                          () => setCorrectingId(null),
+                        )}>
+                        Save corrections
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setCorrectingId(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="mt-2 text-xs font-medium text-muted-foreground hover:text-primary" onClick={() => setCorrectingId(r.id)}>Correct released qty (admin)</button>
+                )
               )}
               {/* Flashing "awaiting approval" badge naming the designation + person
                   who must act next on the linked purchase request — same behaviour

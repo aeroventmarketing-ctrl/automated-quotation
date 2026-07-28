@@ -1247,6 +1247,43 @@ export async function releaseMaterialToRequestor(
   });
 }
 
+/**
+ * Admin correction: SET the exact released quantity of each purchase line (does
+ * not add), then recompute the MRF status. Used to fix records where the release
+ * was mis-recorded. Does NOT touch inventory — the original release already
+ * deducted the actual amounts; adjust stock separately if needed.
+ */
+export async function setMrfReleasedQuantities(
+  quotationId: string,
+  requestId: string,
+  released: { description: string; qty: number }[],
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can correct released quantities.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  const relByDesc = new Map((released ?? []).map((r) => [r.description.trim().toLowerCase(), Math.max(0, Number(r.qty) || 0)]));
+  const items = mrf.items.map((it) => {
+    if (it.disposition !== "purchase") return it;
+    const q = relByDesc.get(it.description.trim().toLowerCase());
+    return q == null ? it : { ...it, issuedQty: String(q) };
+  });
+  const purchaseLines = items.filter((it) => it.disposition === "purchase");
+  const allReleased = purchaseLines.length > 0 && purchaseLines.every((it) => Number(it.issuedQty ?? 0) >= Number(it.qty || 0));
+  const status: MaterialRequest["status"] = allReleased ? (mrf.confirmedAt ? "completed" : "issued") : "partial";
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = { ...mrf, items, status };
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+  await logActivity(user, {
+    action: "mrf.correct", category: "order",
+    summary: `Corrected released quantities on MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+  });
+}
+
 /** Render one MRF item as a single display line for the purchasing chain. */
 function mrfItemLine(it: MRFItem): string {
   const qtyUnit = [it.qty, it.unit].filter(Boolean).join(" ");
