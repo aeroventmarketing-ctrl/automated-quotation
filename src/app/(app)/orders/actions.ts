@@ -1131,14 +1131,13 @@ export async function confirmMaterialReceipt(quotationId: string, requestId: str
     throw new Error("There are no released materials to confirm yet.");
   }
   const materialRequests = wf.materialRequests.slice();
-  materialRequests[idx] = { ...mrf, confirmedAt: new Date().toISOString(), confirmedByName: user.name };
+  // Confirming receipt marks the MRF completed — a partly-released MRF is
+  // auto-promoted to "completed" once the department receives the items.
+  materialRequests[idx] = { ...mrf, status: "completed", confirmedAt: new Date().toISOString(), confirmedByName: user.name };
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
-  // "issued" = every line came from stock (fully released → completed);
-  // "partial" = some lines still in purchasing (partially released).
-  const outcome = mrf.status === "issued" ? "completed" : "partially released";
   await logActivity(user, {
     action: "mrf.confirmed", category: "order",
-    summary: `MRF #${mrf.formNo} ${outcome} — ${deptLabel(mrf.dept)} confirmed receipt · ${await orderRefLabel(quotationId)}`,
+    summary: `MRF #${mrf.formNo} completed — ${deptLabel(mrf.dept)} confirmed receipt · ${await orderRefLabel(quotationId)}`,
     entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
   });
 }

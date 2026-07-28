@@ -21,7 +21,7 @@ interface ReqRow {
   deptLabel: string;
   items: MRFItem[];
   note?: string | null;
-  status: "requested" | "issued" | "purchasing" | "partial" | "cancelled";
+  status: "requested" | "issued" | "purchasing" | "partial" | "completed" | "cancelled";
   poStatus?: string | null;
   poStatusLabel?: string | null;
   poStatusVariant?: "secondary" | "warning" | "success" | "destructive" | null;
@@ -55,6 +55,7 @@ const STATUS: Record<ReqRow["status"], { label: string; variant: "secondary" | "
   issued: { label: "Issued from stock", variant: "success" },
   purchasing: { label: "For purchasing", variant: "warning" },
   partial: { label: "Partly issued · purchasing", variant: "warning" },
+  completed: { label: "Completed", variant: "success" },
   cancelled: { label: "Cancelled", variant: "destructive" },
 };
 

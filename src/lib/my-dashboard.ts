@@ -126,18 +126,19 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             href: `/orders/${q.id}`,
           });
         }
-        // Cross-role notification: MRF fully released (completed) or partly
-        // released, shown to Admin / Warehouse / Purchaser and the requesting dept.
-        if (m.status === "issued" || m.status === "partial") {
+        // Cross-role notification: MRF completed (fully released, or a partial
+        // MRF the department has confirmed) or partly released — shown to Admin /
+        // Warehouse / Purchaser and the requesting department.
+        if (m.status === "issued" || m.status === "partial" || m.status === "completed") {
           if (seesMaterialsFeed || has(deptRole(m.dept) as WorkflowRoleKey)) {
             materialsFeed.push({
               key: `mfeed:${q.id}:${m.id}`,
               orderRef: q.quoteNumber,
               dept: requisitionDeptLabel(m.dept),
               formNo: m.formNo,
-              kind: m.status === "issued" ? "completed" : "partial",
+              kind: m.status === "partial" ? "partial" : "completed",
               client: maskClient(q.inquiry.customer.company),
-              when: m.handledAt || m.raisedAt || "",
+              when: m.confirmedAt || m.handledAt || m.raisedAt || "",
               href: `/orders/${q.id}`,
             });
           }
