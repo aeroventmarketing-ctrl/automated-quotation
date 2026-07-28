@@ -232,10 +232,10 @@ async function loadItems() {
     prisma.stockItem.findMany({ where: { active: true }, orderBy: [{ name: "asc" }] }),
     prisma.stockReservation.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
   ]);
-  const byItem = new Map<string, { id: string; qty: number; forRef: string; note: string | null; byName: string }[]>();
+  const byItem = new Map<string, { id: string; qty: number; forRef: string; note: string | null; byName: string; createdAt: string; validUntil: string | null }[]>();
   for (const r of reservations) {
     const arr = byItem.get(r.stockItemId) ?? [];
-    arr.push({ id: r.id, qty: Number(r.qty), forRef: r.forRef, note: r.note, byName: r.byName });
+    arr.push({ id: r.id, qty: Number(r.qty), forRef: r.forRef, note: r.note, byName: r.byName, createdAt: r.createdAt.toISOString(), validUntil: r.validUntil ? r.validUntil.toISOString() : null });
     byItem.set(r.stockItemId, arr);
   }
   return list.map((i) => {

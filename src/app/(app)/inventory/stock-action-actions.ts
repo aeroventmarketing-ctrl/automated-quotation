@@ -61,7 +61,7 @@ function summaryFor(kind: StockActionKind, item: { name: string; unit: string; q
   }
   if (kind === "RESERVE") {
     const d = payload as ReservePayload;
-    return `Reserve ${d.qty} ${item.unit} · ${item.name} for ${d.forRef}${d.note ? ` · ${d.note}` : ""}`;
+    return `Reserve ${d.qty} ${item.unit} · ${item.name} for ${d.forRef}${d.note ? ` · ${d.note}` : ""}${d.validUntil ? ` · valid until ${d.validUntil.slice(0, 10)}` : ""}`;
   }
   const d = payload as TransferPayload;
   return `Transfer ${d.qty} ${item.unit} · ${item.name} → ${d.toLocation}${d.note ? ` · ${d.note}` : ""}`;
@@ -96,7 +96,7 @@ export async function proposeStockAction(kind: StockActionKind, stockItemId: str
     const d = payloadRaw as ReservePayload;
     if (!(Number(d.qty) > 0)) throw new Error("Enter a quantity.");
     if (!(d.forRef ?? "").trim()) throw new Error("Enter what it's reserved for.");
-    payload = { qty: Number(d.qty), forRef: d.forRef.trim(), note: (d.note ?? "").trim() || null } satisfies ReservePayload;
+    payload = { qty: Number(d.qty), forRef: d.forRef.trim(), note: (d.note ?? "").trim() || null, validUntil: (d.validUntil ?? "").trim() || null } satisfies ReservePayload;
   } else {
     const d = payloadRaw as TransferPayload;
     if (!(Number(d.qty) > 0)) throw new Error("Enter a quantity.");
@@ -239,7 +239,7 @@ async function applyAction(tx: Prisma.TransactionClient, a: { kind: StockActionK
     const agg = await tx.stockReservation.aggregate({ where: { stockItemId: item.id, active: true }, _sum: { qty: true } });
     const available = Number(item.quantity) - Number(agg._sum.qty ?? 0);
     if (d.qty > available) throw new Error(`Only ${available} ${item.unit} available to reserve.`);
-    await tx.stockReservation.create({ data: { stockItemId: item.id, qty: d.qty, forRef: d.forRef, note: d.note, byName } });
+    await tx.stockReservation.create({ data: { stockItemId: item.id, qty: d.qty, forRef: d.forRef, note: d.note, byName, validUntil: d.validUntil ? new Date(d.validUntil) : null } });
     return;
   }
 

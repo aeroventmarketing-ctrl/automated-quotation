@@ -22,6 +22,8 @@ interface Reservation {
   forRef: string;
   note: string | null;
   byName: string;
+  createdAt: string;
+  validUntil: string | null;
 }
 interface Item {
   id: string;
@@ -119,6 +121,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   const [resvQty, setResvQty] = useState("");
   const [resvRef, setResvRef] = useState("");
   const [resvNote, setResvNote] = useState("");
+  const [resvValid, setResvValid] = useState("");
   // Transfer fields
   const [xferQty, setXferQty] = useState("");
   const [xferTo, setXferTo] = useState("");
@@ -150,7 +153,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
     const n = Number(resvQty);
     if (!(n > 0)) { setErr("Enter a quantity."); return; }
     if (resvRef.trim() === "") { setErr("Enter what it's reserved for."); return; }
-    run(() => proposeStockAction("RESERVE", item.id, { qty: n, forRef: resvRef, note: resvNote || undefined }).then(() => { setResvQty(""); setResvRef(""); setResvNote(""); }));
+    run(() => proposeStockAction("RESERVE", item.id, { qty: n, forRef: resvRef, note: resvNote || undefined, validUntil: resvValid || undefined }).then(() => { setResvQty(""); setResvRef(""); setResvNote(""); setResvValid(""); }));
   }
   async function uploadProof(file: File) {
     setBusy(true); setErr(null);
@@ -279,22 +282,32 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
               <div className="flex flex-wrap items-end gap-2">
                 <label className="text-xs text-muted-foreground">Reserve qty<Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={resvQty} onChange={(e) => setResvQty(e.target.value)} /></label>
                 <label className="text-xs text-muted-foreground">For (order / job)<Input className="h-8 w-44" placeholder="e.g. AFBM-JO2600054" value={resvRef} onChange={(e) => setResvRef(e.target.value)} /></label>
-                <label className="text-xs text-muted-foreground">Note<Input className="h-8 w-44" placeholder="optional" value={resvNote} onChange={(e) => setResvNote(e.target.value)} /></label>
+                <label className="text-xs text-muted-foreground">Purpose / note<Input className="h-8 w-44" placeholder="reason for reserving" value={resvNote} onChange={(e) => setResvNote(e.target.value)} /></label>
+                <label className="text-xs text-muted-foreground">Valid until<Input className="h-8 w-40" type="date" value={resvValid} onChange={(e) => setResvValid(e.target.value)} /></label>
                 <Button size="sm" className="h-8" disabled={busy} onClick={reserve}>{busy ? "…" : "Propose reserve"}</Button>
                 <span className="text-xs text-muted-foreground">{fmt(item.available)} {item.unit} available</span>
                 {err && <span className="text-xs text-destructive">{err}</span>}
               </div>
               {item.reservations.length > 0 && (
                 <ul className="space-y-1">
-                  {item.reservations.map((r) => (
-                    <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1 text-xs">
+                  {item.reservations.map((r) => {
+                    const expired = r.validUntil != null && new Date(r.validUntil).getTime() < Date.now();
+                    return (
+                    <li key={r.id} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border bg-background px-2 py-1 text-xs ${expired ? "border-destructive/40" : ""}`}>
                       <span className="font-medium tabular-nums">{fmt(r.qty)} {item.unit}</span>
                       <span>→ {r.forRef}</span>
                       {r.note && <span className="text-muted-foreground">· {r.note}</span>}
-                      <span className="text-muted-foreground">· {r.byName}</span>
+                      <span className="text-muted-foreground">· Owner: {r.byName}</span>
+                      <span className="text-muted-foreground">· {new Date(r.createdAt).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                      {r.validUntil && (
+                        <span className={expired ? "font-medium text-destructive" : "text-muted-foreground"}>
+                          · Valid until {new Date(r.validUntil).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" })}{expired ? " (expired)" : ""}
+                        </span>
+                      )}
                       <button type="button" className="ml-auto rounded border px-2 py-0.5 text-muted-foreground hover:text-destructive" disabled={busy} onClick={() => run(() => releaseReservation(r.id), true)}>Release</button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </div>

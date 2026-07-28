@@ -25,6 +25,7 @@ export interface ReservePayload {
   qty: number;
   forRef: string;
   note: string | null;
+  validUntil: string | null; // ISO date the reservation is valid until (optional)
 }
 export interface TransferPayload {
   qty: number;

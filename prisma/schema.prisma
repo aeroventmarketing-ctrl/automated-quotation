@@ -551,6 +551,7 @@ model StockReservation {
   byName         String
   active         Boolean   @default(true)
   createdAt      DateTime  @default(now())
+  validUntil     DateTime? // reservation validity / expiry, optional
   releasedByName String?
   releasedAt     DateTime?
 
