@@ -92,7 +92,10 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // MRF completed / partially-released notifications for Admin / Warehouse /
   // Purchaser / requesting department (collected while scanning orders below).
   const materialsFeed: MaterialNote[] = [];
-  const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser");
+  // Seen in full by the materials-handling roles and by every role that can
+  // request an MRF for any department: Admin, Warehouse, Purchaser and the Plant
+  // Manager. Individual department heads additionally see their own dept's MRFs.
+  const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser") || has("plant_manager");
   // Linked purchase-request status per MRF — so a "purchasing" MRF can say
   // whether its item has been received into stock yet.
   const mrfPrStatus = new Map<string, string>();
