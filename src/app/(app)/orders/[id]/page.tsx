@@ -516,6 +516,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       canCancel:
         m.status === "requested" &&
         (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey))),
+      // Fulfillment handshake: the requesting department head confirms receipt
+      // and can follow up; the Warehouse can inform the requestor of availability.
+      isDeptHead: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey)),
+      canInform: canWarehouse,
+      confirmedByName: m.confirmedByName ?? null,
+      confirmedWhen: m.confirmedAt ? formatDateTime(m.confirmedAt) : null,
+      informedByName: m.informedByName ?? null,
+      informedWhen: m.informedAt ? formatDateTime(m.informedAt) : null,
+      followUpCount: m.followUps?.length ?? 0,
+      lastFollowUpWhen: m.followUps && m.followUps.length ? formatDateTime(m.followUps[m.followUps.length - 1].at) : null,
     };
   });
   // Phase 3 (Materials + Purchasing) opens once the job orders are released

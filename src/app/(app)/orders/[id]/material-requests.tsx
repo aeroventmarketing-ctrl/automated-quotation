@@ -7,7 +7,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
-import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest } from "../actions";
+import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
@@ -38,6 +38,15 @@ interface ReqRow {
   handledWhen?: string;
   canHandle: boolean;
   canCancel: boolean;
+  // Fulfillment handshake.
+  isDeptHead?: boolean;
+  canInform?: boolean;
+  confirmedByName?: string | null;
+  confirmedWhen?: string | null;
+  informedByName?: string | null;
+  informedWhen?: string | null;
+  followUpCount?: number;
+  lastFollowUpWhen?: string | null;
 }
 
 const STATUS: Record<ReqRow["status"], { label: string; variant: "secondary" | "success" | "warning" | "destructive" }> = {
@@ -316,6 +325,26 @@ export function MaterialRequests({
                 Requested by {r.raisedByName} · {r.date}
                 {r.handledByName ? ` · handled by ${r.handledByName}${r.handledWhen ? ` · ${r.handledWhen}` : ""}` : ""}
               </p>
+              {/* Fulfillment handshake: the Warehouse informs availability; the
+                  requesting department confirms receipt of released materials;
+                  the department can follow up while the MRF is outstanding. */}
+              {r.status !== "cancelled" && (r.isDeptHead || r.canInform || r.informedByName || r.confirmedByName) && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
+                  {r.informedByName && <Badge variant="secondary">Available — informed by {r.informedByName}</Badge>}
+                  {r.confirmedByName ? (
+                    <Badge variant="success">Received &amp; confirmed by {r.confirmedByName}{r.confirmedWhen ? ` · ${r.confirmedWhen}` : ""}</Badge>
+                  ) : (r.status === "issued" || r.status === "partial") && r.isDeptHead ? (
+                    <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => confirmMaterialReceipt(orderId, r.id))}>Confirm receipt</Button>
+                  ) : null}
+                  {r.canInform && !r.informedByName && (r.status === "issued" || r.status === "partial") && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => run(() => informMaterialAvailable(orderId, r.id))}>Inform requestor — available</Button>
+                  )}
+                  {r.isDeptHead && !r.confirmedByName && (
+                    <button type="button" disabled={busy} className="text-xs font-medium text-primary hover:underline" onClick={() => run(() => followUpMaterialRequest(orderId, r.id))}>Follow up</button>
+                  )}
+                  {r.followUpCount ? <span className="text-xs text-muted-foreground">Followed up {r.followUpCount}×{r.lastFollowUpWhen ? ` · ${r.lastFollowUpWhen}` : ""}</span> : null}
+                </div>
+              )}
               {/* Flashing "awaiting approval" badge naming the designation + person
                   who must act next on the linked purchase request — same behaviour
                   as the Phase 4 purchasing chain, shown to every role. */}

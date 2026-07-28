@@ -1085,6 +1085,71 @@ export async function cancelMaterialRequest(quotationId: string, requestId: stri
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
 }
 
+/** Helper: load an MRF and enforce the requesting-department-head (or admin) actor. */
+async function loadMrfForDeptHead(quotationId: string, requestId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(mrf.dept) as WorkflowRoleKey))) {
+    throw new Error(`Only the ${deptLabel(mrf.dept)} head or an admin can do this.`);
+  }
+  return { user, cls, wf, idx, mrf };
+}
+
+/** The requesting department confirms it received the released materials. */
+export async function confirmMaterialReceipt(quotationId: string, requestId: string): Promise<void> {
+  const { user, cls, wf, idx, mrf } = await loadMrfForDeptHead(quotationId, requestId);
+  if (mrf.status !== "issued" && mrf.status !== "partial") {
+    throw new Error("There are no released materials to confirm yet.");
+  }
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = { ...mrf, confirmedAt: new Date().toISOString(), confirmedByName: user.name };
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+  await logActivity(user, {
+    action: "mrf.confirmed", category: "order",
+    summary: `${deptLabel(mrf.dept)} confirmed receipt of MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+  });
+}
+
+/** The requesting department follows up on an outstanding material request. */
+export async function followUpMaterialRequest(quotationId: string, requestId: string): Promise<void> {
+  const { user, cls, wf, idx, mrf } = await loadMrfForDeptHead(quotationId, requestId);
+  const followUps = [...(mrf.followUps ?? []), { at: new Date().toISOString(), byName: user.name }];
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = { ...mrf, followUps };
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+  await logActivity(user, {
+    action: "mrf.followup", category: "order",
+    summary: `${deptLabel(mrf.dept)} followed up MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+  });
+}
+
+/** The warehouse informs the requesting department that the materials are available. */
+export async function informMaterialAvailable(quotationId: string, requestId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can inform the requestor.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = { ...mrf, informedAt: new Date().toISOString(), informedByName: user.name };
+  await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+  await logActivity(user, {
+    action: "mrf.informed", category: "order",
+    summary: `Warehouse told ${deptLabel(mrf.dept)}: MRF #${mrf.formNo} materials are available — ${await orderRefLabel(quotationId)}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+  });
+}
+
 /** Render one MRF item as a single display line for the purchasing chain. */
 function mrfItemLine(it: MRFItem): string {
   const qtyUnit = [it.qty, it.unit].filter(Boolean).join(" ");

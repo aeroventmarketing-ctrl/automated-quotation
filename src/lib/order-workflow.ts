@@ -149,6 +149,17 @@ export interface MaterialRequest {
   raisedByName: string;
   handledAt?: string;
   handledByName?: string;
+  /** Warehouse pressed "…Request Received" (acknowledged before releasing). */
+  receivedAt?: string;
+  receivedByName?: string;
+  /** Warehouse informed the requesting department the materials are available. */
+  informedAt?: string;
+  informedByName?: string;
+  /** The requesting department confirmed it received the released materials. */
+  confirmedAt?: string;
+  confirmedByName?: string;
+  /** Follow-ups raised by the requesting department (most recent last). */
+  followUps?: { at: string; byName: string }[];
 }
 
 /** Coerce raw JSON items to MRFItem[] (accepts legacy string[] entries). */
@@ -377,6 +388,17 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
           raisedByName: String(m.raisedByName ?? ""),
           handledAt: m.handledAt ? String(m.handledAt) : undefined,
           handledByName: m.handledByName ? String(m.handledByName) : undefined,
+          receivedAt: m.receivedAt ? String(m.receivedAt) : undefined,
+          receivedByName: m.receivedByName ? String(m.receivedByName) : undefined,
+          informedAt: m.informedAt ? String(m.informedAt) : undefined,
+          informedByName: m.informedByName ? String(m.informedByName) : undefined,
+          confirmedAt: m.confirmedAt ? String(m.confirmedAt) : undefined,
+          confirmedByName: m.confirmedByName ? String(m.confirmedByName) : undefined,
+          followUps: Array.isArray(m.followUps)
+            ? (m.followUps as unknown[])
+                .map((f) => (f && typeof f === "object" ? { at: String((f as Record<string, unknown>).at ?? ""), byName: String((f as Record<string, unknown>).byName ?? "") } : null))
+                .filter((f): f is { at: string; byName: string } => !!f && !!f.at)
+            : undefined,
         }))
     : [];
 

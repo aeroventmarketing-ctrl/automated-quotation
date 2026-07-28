@@ -13,7 +13,7 @@ import type { User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
-import { readOrderWorkflow, pendingStep, requisitionDeptLabel } from "@/lib/order-workflow";
+import { readOrderWorkflow, pendingStep, requisitionDeptLabel, deptRole } from "@/lib/order-workflow";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
@@ -88,12 +88,21 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const wf = readOrderWorkflow(q.classification);
       // Material Request Forms (MRF) awaiting the Warehouse to triage — status
       // "requested" (issue from stock / send to purchasing). Warehouse only.
-      if (has("warehouse")) {
-        for (const m of wf.materialRequests) {
-          if (m.status !== "requested") continue;
+      for (const m of wf.materialRequests) {
+        // Warehouse triages a newly requested MRF (issue from stock / purchase).
+        if (m.status === "requested" && has("warehouse")) {
           tasks.push({
             key: `mrf:${q.id}:${m.id}`, area: "order", areaLabel: AREA_LABEL.order,
             title: q.quoteNumber, action: `Handle MRF #${m.formNo} · ${requisitionDeptLabel(m.dept)}`,
+            client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
+            href: `/orders/${q.id}`,
+          });
+        }
+        // The requesting department confirms receipt of the released materials.
+        if ((m.status === "issued" || m.status === "partial") && !m.confirmedAt && has(deptRole(m.dept) as WorkflowRoleKey)) {
+          tasks.push({
+            key: `mrf-confirm:${q.id}:${m.id}`, area: "order", areaLabel: AREA_LABEL.order,
+            title: q.quoteNumber, action: `Confirm materials received · MRF #${m.formNo}`,
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`,
           });
