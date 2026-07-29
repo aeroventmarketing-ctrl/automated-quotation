@@ -2919,9 +2919,13 @@ async function loadForCloseDoc(quotationId: string, key: string) {
     select: { id: true, classification: true, preparedById: true },
   });
   if (!quote) throw new Error("Order not found");
+  const roles = await getWorkflowRoles();
   const ok = isAdmin(user)
     || quote.preparedById === user.id
-    || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey);
+    || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey)
+    // Logistics attaches/removes the proof of delivery (the "pod" slot only) —
+    // they own the delivery step but aren't Accounting/Sales.
+    || (key === "pod" && userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey));
   if (!ok) throw new Error("Only Accounting, Sales or an admin can attach closing documents.");
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const sale = saleFromClassification(cls) ?? { arrangement: "downpayment_full" as const, payments: [] };
