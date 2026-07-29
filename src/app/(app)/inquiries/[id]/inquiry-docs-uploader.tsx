@@ -5,6 +5,7 @@ import { Upload, Trash2, FileText, Download, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { INQUIRY_DOC_TYPES } from "@/lib/inquiry-docs";
 import type { SaleDoc } from "@/lib/sale";
+import { uploadDocument } from "@/lib/client-upload";
 import { saveInquiryDocs } from "../actions";
 
 const link = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
@@ -35,13 +36,10 @@ export function InquiryDocsUploader({
   async function onFile(key: string, file: File) {
     setBusy(true); setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("inquiryId", inquiryId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) { setErr(data.error || "Upload failed"); return; }
-      await persist({ ...docs, [key]: [...(docs[key] ?? []), data as SaleDoc] });
+      const data = await uploadDocument("/api/sale-uploads", file, { inquiryId }) as SaleDoc;
+      await persist({ ...docs, [key]: [...(docs[key] ?? []), data] });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
     }

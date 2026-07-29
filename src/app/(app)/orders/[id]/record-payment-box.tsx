@@ -6,6 +6,7 @@ import { Upload, Eye, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { SaleDoc } from "@/lib/sale";
+import { uploadDocument } from "@/lib/client-upload";
 import { recordOrderPayment } from "../actions";
 
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
@@ -32,13 +33,7 @@ export function RecordPaymentBox({ orderId, currency, orderAmount, amountPaid }:
   async function uploadProof(file: File) {
     setUploading(true); setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("quotationId", orderId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setProof(data as SaleDoc);
+      setProof(await uploadDocument("/api/sale-uploads", file, { quotationId: orderId }) as SaleDoc);
     } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
     finally { setUploading(false); }
   }

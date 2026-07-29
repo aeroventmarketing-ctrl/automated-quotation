@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
+import { uploadDocument } from "@/lib/client-upload";
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { UploadLink } from "@/components/upload-link";
 import { recordReconciliation, settleReconciliation, escalateReconciliation, approveReconciliation, escalateReconcileAiRead, resetReconcileAiRead, removeReconciliationReceipt, addReconciliationReceipt, replaceReconciliationReceipt } from "../orders/actions";
@@ -96,13 +97,8 @@ export function PurchaseReconcilePanel({
     setBusy("upload"); setErr(null);
     try {
       for (const file of list) {
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("purchaseRequestId", prId);
-        const res = await fetch("/api/purchase-uploads", { method: "POST", body: fd });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Upload failed");
-        setReceipts((rs) => [...rs, data as SaleDoc]);
+        const data = await uploadDocument("/api/purchase-uploads", file, { purchaseRequestId: prId }) as SaleDoc;
+        setReceipts((rs) => [...rs, data]);
       }
     } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
     finally { setBusy(null); }
@@ -110,13 +106,7 @@ export function PurchaseReconcilePanel({
 
   // Admin management of the RECORDED receipts (add / replace / delete in place).
   async function uploadRaw(file: File): Promise<SaleDoc> {
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("purchaseRequestId", prId);
-    const res = await fetch("/api/purchase-uploads", { method: "POST", body: fd });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Upload failed");
-    return data as SaleDoc;
+    return await uploadDocument("/api/purchase-uploads", file, { purchaseRequestId: prId }) as SaleDoc;
   }
   async function addRecordedReceipts(files: FileList | File[]) {
     const list = Array.from(files);

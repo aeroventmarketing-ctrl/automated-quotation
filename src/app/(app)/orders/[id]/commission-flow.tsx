@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { OrderCommissionFlow, WorkflowDoc } from "@/lib/order-workflow";
 import { workflowRoleLabel } from "@/lib/workflow-roles";
 import { ApproverHighlight } from "@/components/approver-highlight";
+import { uploadDocument } from "@/lib/client-upload";
 import {
   approveCommission,
   uploadCommissionVoucher,
@@ -89,12 +90,7 @@ export function CommissionFlow({
   async function uploadThen(file: File, action: (doc: { path: string; name: string; uploadedAt?: string }) => Promise<void>) {
     setBusy(true); setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("quotationId", orderId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+      const data = await uploadDocument("/api/sale-uploads", file, { quotationId: orderId });
       await action(data);
       router.refresh();
     } catch (e) {

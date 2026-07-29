@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { afterPaymentDocTypes, type SaleDoc } from "@/lib/sale";
+import { uploadDocument } from "@/lib/client-upload";
 import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof, saveMultiBatchPod, removeMultiBatchPod, saveMultiBatchDoc, removeMultiBatchDoc } from "../actions";
 
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
@@ -110,13 +111,7 @@ export function MultiBatchPanel({
     setUploading(true);
     setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("quotationId", orderId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setter(data as SaleDoc);
+      setter(await uploadDocument("/api/sale-uploads", file, { quotationId: orderId }) as SaleDoc);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -128,13 +123,8 @@ export function MultiBatchPanel({
     setBusy(batchId + "pod");
     setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("quotationId", orderId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      await saveMultiBatchPod(orderId, batchId, data as SaleDoc);
+      const data = await uploadDocument("/api/sale-uploads", file, { quotationId: orderId }) as SaleDoc;
+      await saveMultiBatchPod(orderId, batchId, data);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
@@ -150,13 +140,8 @@ export function MultiBatchPanel({
     setBusy("doc:" + batchId + key);
     setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("quotationId", orderId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      await saveMultiBatchDoc(orderId, batchId, key, data as SaleDoc);
+      const data = await uploadDocument("/api/sale-uploads", file, { quotationId: orderId }) as SaleDoc;
+      await saveMultiBatchDoc(orderId, batchId, key, data);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");

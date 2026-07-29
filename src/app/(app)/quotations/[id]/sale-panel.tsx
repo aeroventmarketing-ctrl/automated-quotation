@@ -25,6 +25,7 @@ import {
   ewtWithheld,
   isSaleConfirmed,
 } from "@/lib/sale";
+import { uploadDocument } from "@/lib/client-upload";
 
 const ARRANGEMENTS: SaleArrangement[] = ["downpayment_full", "downpayment_progress", "terms"];
 const PAYMENT_KINDS: PaymentKind[] = ["down", "full", "progress", "ewt"];
@@ -112,21 +113,11 @@ export function SalePanel({
   const canSave = alreadyConfirmed || missingToSave.length === 0;
 
   async function upload(file: File): Promise<SaleDoc | null> {
-    // Never throw: a network blip or a non-JSON error response (e.g. a 413/502
-    // from the proxy) must still return null so the caller's `finally` resets
-    // `busy` — otherwise every upload input stays disabled until a page refresh.
+    // Never throw: a too-large / non-JSON error must still return null so the
+    // caller's `finally` resets `busy` — otherwise every upload input stays
+    // disabled until a page refresh. Large images are compressed first.
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("quotationId", quotationId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      let data: { error?: string } | SaleDoc | null = null;
-      try { data = await res.json(); } catch { /* non-JSON response */ }
-      if (!res.ok) {
-        setMsg((data as { error?: string } | null)?.error || `Upload failed (${res.status})`);
-        return null;
-      }
-      return data as SaleDoc;
+      return await uploadDocument("/api/sale-uploads", file, { quotationId }) as SaleDoc;
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Upload failed — check your connection and try again.");
       return null;

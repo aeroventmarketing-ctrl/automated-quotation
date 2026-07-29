@@ -5,6 +5,7 @@ import { Plus, Upload, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isNextControlFlowError } from "@/lib/utils";
 import type { SaleDoc } from "@/lib/sale";
+import { uploadDocument } from "@/lib/client-upload";
 import { addQuotation, ensureInquiryForQuotation } from "../actions";
 
 /**
@@ -26,16 +27,10 @@ export function AddQuotation({ customerId }: { customerId: string }) {
       // File under the real inquiry the quote will attach to, so document
       // view-access (owner check by path) resolves correctly.
       const inquiryId = await ensureInquiryForQuotation(customerId);
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("inquiryId", inquiryId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) { setErr(data.error || "Upload failed"); return; }
-      setDoc(data as SaleDoc);
+      setDoc(await uploadDocument("/api/sale-uploads", file, { inquiryId }) as SaleDoc);
     } catch (e) {
       if (isNextControlFlowError(e)) throw e;
-      setErr("Upload failed. Try again.");
+      setErr(e instanceof Error ? e.message : "Upload failed. Try again.");
     } finally {
       setUploading(false);
     }

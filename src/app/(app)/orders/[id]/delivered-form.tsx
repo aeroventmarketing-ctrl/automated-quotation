@@ -6,6 +6,7 @@ import { Upload, Trash2, FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { SaleDoc } from "@/lib/sale";
+import { uploadDocument } from "@/lib/client-upload";
 import { saveCloseDoc, removeCloseDoc, markDelivered } from "../actions";
 
 const docLink = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
@@ -22,14 +23,9 @@ export function DeliveredForm({ orderId, initialFiles, admin = false }: { orderI
   async function upload(file: File) {
     setBusy(true); setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("quotationId", orderId);
-      const res = await fetch("/api/sale-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      await saveCloseDoc(orderId, "pod", data as SaleDoc);
-      setFiles((fs) => [...fs, data as SaleDoc]);
+      const data = await uploadDocument("/api/sale-uploads", file, { quotationId: orderId }) as SaleDoc;
+      await saveCloseDoc(orderId, "pod", data);
+      setFiles((fs) => [...fs, data]);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");

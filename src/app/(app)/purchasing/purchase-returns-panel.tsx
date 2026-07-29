@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
+import { uploadDocument } from "@/lib/client-upload";
 import { returnPurchaseItems, resolvePurchaseReturn, removePurchaseReturnProof } from "../orders/actions";
 
 
@@ -98,13 +99,8 @@ export function PurchaseReturnsPanel({
   async function uploadProof(file: File) {
     setBusy("upload"); setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("purchaseRequestId", prId);
-      const res = await fetch("/api/purchase-uploads", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setProof((ps) => [...ps, data as SaleDoc]);
+      const data = await uploadDocument("/api/purchase-uploads", file, { purchaseRequestId: prId }) as SaleDoc;
+      setProof((ps) => [...ps, data]);
     } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
     finally { setBusy(null); }
   }
