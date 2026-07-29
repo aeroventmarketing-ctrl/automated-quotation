@@ -69,12 +69,19 @@ export async function createCashRequest(input: {
   const assignments = await getWorkflowRoles();
   // Logistics may pick any of the 5 departments (incl. Office); the Plant Manager
   // and Warehouseman pick the 4 production departments (never Office).
-  const isLogistics = userHasWorkflowRole(assignments, user.id, "logistics" as WorkflowRoleKey);
+  // Purchaser, Technical Head and Logistics (and admins) may pick any of the 5
+  // departments (incl. Office); the Plant Manager and Warehouseman pick the 4
+  // production departments (never Office).
+  const canPickAnyDept =
+    isAdmin(user) ||
+    userHasWorkflowRole(assignments, user.id, "logistics" as WorkflowRoleKey) ||
+    userHasWorkflowRole(assignments, user.id, "purchaser" as WorkflowRoleKey) ||
+    userHasWorkflowRole(assignments, user.id, "technical_head" as WorkflowRoleKey);
   const canPickProdDept =
     userHasWorkflowRole(assignments, user.id, "plant_manager" as WorkflowRoleKey) ||
     userHasWorkflowRole(assignments, user.id, "warehouse" as WorkflowRoleKey);
   const chosen =
-    isLogistics && REQUISITION_DEPT_KEYS.has(String(input.dept)) ? String(input.dept)
+    canPickAnyDept && REQUISITION_DEPT_KEYS.has(String(input.dept)) ? String(input.dept)
     : canPickProdDept && PRODUCTION_DEPTS.some((d) => d.key === input.dept) ? String(input.dept)
     : null;
   const dept = chosen ?? requestorDeptKey((role) => userHasWorkflowRole(assignments, user.id, role as WorkflowRoleKey));

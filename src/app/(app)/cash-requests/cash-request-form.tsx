@@ -17,7 +17,11 @@ const num = (s: string) => Number(String(s ?? "").replace(/,/g, "").trim()) || 0
 export function CashRequestForm({ fixedDept, selectableDepts }: { fixedDept: { key: string; label: string }; selectableDepts?: { key: string; label: string }[] }) {
   const router = useRouter();
   // Plant Manager: choose any production department. Everyone else: fixed.
-  const [dept, setDept] = useState(selectableDepts?.[0]?.key ?? fixedDept.key);
+  // Default to the requestor's OWN department when it's a selectable option
+  // (a production head who can also pick others still starts on their own line).
+  const [dept, setDept] = useState(
+    selectableDepts?.some((d) => d.key === fixedDept.key) ? fixedDept.key : (selectableDepts?.[0]?.key ?? fixedDept.key),
+  );
   const [purpose, setPurpose] = useState("");
   const [category, setCategory] = useState<string>(CASH_CATEGORIES[0].key);
   const [amount, setAmount] = useState("");

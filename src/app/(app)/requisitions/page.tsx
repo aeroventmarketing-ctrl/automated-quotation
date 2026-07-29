@@ -44,9 +44,10 @@ export default async function RequisitionsPage() {
   // line; everyone else → Office). Not selectable.
   const reqDeptKey = requestorDeptKey((role) => has(role as WorkflowRoleKey));
   const reqDept = { key: reqDeptKey, label: requisitionDeptLabel(reqDeptKey) };
-  // Logistics may pick any of the 5 departments (incl. Office); the Plant Manager
-  // and Warehouseman pick the 4 production departments (never Office).
-  const plantMgrDepts = has("logistics") || has("technical_head")
+  // Purchaser, Technical Head, Logistics (and admins) may pick any of the 5
+  // departments (incl. Office); the Plant Manager and Warehouseman pick the 4
+  // production departments (never Office).
+  const plantMgrDepts = admin || purchaser || has("technical_head") || has("logistics")
     ? REQUISITION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
     : has("plant_manager") || has("warehouse")
     ? PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))

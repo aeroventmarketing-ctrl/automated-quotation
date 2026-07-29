@@ -24,8 +24,12 @@ const normalizeUnit = (u: string | undefined): string => {
 /** Raise a department requisition — production supplies not tied to an order. */
 export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixedDept: { key: string; label: string }; selectableDepts?: { key: string; label: string }[]; products: ScanProduct[] }) {
   const router = useRouter();
-  // Plant Manager: choose any production department. Everyone else: fixed.
-  const [dept, setDept] = useState(selectableDepts?.[0]?.key ?? fixedDept.key);
+  // Default to the requestor's OWN department when it's one of the selectable
+  // options (so a production head who can also pick other departments still
+  // starts on their own line), otherwise the first option. Everyone else: fixed.
+  const [dept, setDept] = useState(
+    selectableDepts?.some((d) => d.key === fixedDept.key) ? fixedDept.key : (selectableDepts?.[0]?.key ?? fixedDept.key),
+  );
   const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow(), emptyRow()]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);

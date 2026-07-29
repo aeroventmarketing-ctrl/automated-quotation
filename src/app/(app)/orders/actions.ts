@@ -1017,7 +1017,9 @@ export async function createDepartmentRequisition(
   // lines.
   const isLogistics = userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
   const isTechHead = userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey);
-  const canPickAnyDept = isLogistics || isTechHead;
+  // Purchaser and Technical Head (and Logistics / admin) may target any of the 5
+  // departments, including Office.
+  const canPickAnyDept = isLogistics || isTechHead || isAdmin(user) || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
   const canPickProdDept =
     userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey) ||
     userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
