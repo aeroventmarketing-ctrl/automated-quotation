@@ -2687,8 +2687,12 @@ export async function recordOrderPayment(quotationId: string, input: z.infer<typ
   const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { classification: true, preparedById: true } });
   if (!quote) throw new Error("Order not found");
   const roles = await getWorkflowRoles();
-  const allowed = isAdmin(user) || quote.preparedById === user.id || userHasWorkflowRole(roles, user.id, "accounting");
-  if (!allowed) throw new Error("Only Sales, Accounting or an admin can record a payment.");
+  const allowed = isAdmin(user)
+    || quote.preparedById === user.id
+    || user.role === "ENGINEER"
+    || userHasWorkflowRole(roles, user.id, "accounting")
+    || userHasWorkflowRole(roles, user.id, "payment_approver");
+  if (!allowed) throw new Error("Only Sales, Accounting, the Payment Approver, an Engineer or an admin can record a payment.");
   const d = recordPaymentSchema.parse(input);
   const amount = Number.isFinite(d.amount) ? Math.max(0, d.amount) : 0;
   if (amount <= 0) throw new Error("Enter a payment amount greater than zero.");

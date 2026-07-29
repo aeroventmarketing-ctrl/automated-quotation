@@ -11,6 +11,7 @@ import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
 import { DeliveredForm } from "./delivered-form";
 import { FinalPaymentProof } from "./final-payment-proof";
+import { RecordPaymentBox } from "./record-payment-box";
 import {
   notifyClientReady,
   checkFinalPayment,
@@ -58,6 +59,10 @@ export function FulfillmentActions({
   admin = false,
   approvers = {},
   restricted = false,
+  canRecordPayment = false,
+  currency = "PHP",
+  orderAmount = 0,
+  amountPaid = 0,
 }: {
   orderId: string;
   stage: string;
@@ -71,6 +76,11 @@ export function FulfillmentActions({
   approvers?: Record<string, string[]>;
   /** Client-restricted (shop-floor) viewers don't see payment amounts / proof. */
   restricted?: boolean;
+  /** Accounting / Payment Approver / Engineer / admin may record a payment. */
+  canRecordPayment?: boolean;
+  currency?: string;
+  orderAmount?: number;
+  amountPaid?: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -101,6 +111,12 @@ export function FulfillmentActions({
 
   return (
     <div className="space-y-2">
+      {/* Record a payment (amount + optional proof) — reflects here and on the
+          quotation tab. Available any time, including after delivery, so the
+          balance can be collected. Accounting / Payment Approver / Engineer / admin. */}
+      {!restricted && canRecordPayment && (
+        <RecordPaymentBox orderId={orderId} currency={currency} orderAmount={orderAmount} amountPaid={amountPaid} />
+      )}
       {/* Phase 5 */}
       {stage === "production_finished" &&
         (perms.canNotify ? (
