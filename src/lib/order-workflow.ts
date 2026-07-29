@@ -8,6 +8,7 @@
  *   docs_checked   → [Payment Approver: clear payment] → released (job orders out)
  */
 import type { WorkflowRoleKey } from "@/lib/workflow-roles";
+import type { SaleDoc } from "@/lib/sale";
 import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, type DuctJobOrder } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
@@ -102,6 +103,14 @@ export function requestorDeptKey(hasRole: (role: string) => boolean): string {
   return OFFICE_DEPT_KEY;
 }
 
+/**
+ * A proofing picture attached to a department's job order before it can be
+ * marked finished — extends a stored SaleDoc with who uploaded it.
+ */
+export interface JobOrderProof extends SaleDoc {
+  byName?: string;
+}
+
 export interface JobOrder {
   status: JobOrderStatus;
   issuedAt: string;
@@ -111,6 +120,7 @@ export interface JobOrder {
   finishedAt?: string;
   finishedByName?: string;
   dueAt?: string; // target completion date (YYYY-MM-DD)
+  proofs?: JobOrderProof[]; // proofing pictures required before "Mark finished"
 }
 
 export interface OrderApproval {
@@ -375,7 +385,18 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   if (wf?.jobOrders && typeof wf.jobOrders === "object") {
     for (const [k, v] of Object.entries(wf.jobOrders as Record<string, unknown>)) {
       if (DEPT_KEYS.has(k as ProductionDeptKey) && v && typeof v === "object") {
-        jobOrders[k as ProductionDeptKey] = v as JobOrder;
+        const raw = v as JobOrder;
+        const proofs: JobOrderProof[] = Array.isArray(raw.proofs)
+          ? (raw.proofs as unknown[])
+              .filter((p): p is Record<string, unknown> => !!p && typeof p === "object" && typeof (p as Record<string, unknown>).path === "string")
+              .map((p) => ({
+                path: String(p.path),
+                name: String(p.name ?? "file"),
+                uploadedAt: String(p.uploadedAt ?? ""),
+                byName: p.byName ? String(p.byName) : undefined,
+              }))
+          : [];
+        jobOrders[k as ProductionDeptKey] = proofs.length ? { ...raw, proofs } : { ...raw, proofs: undefined };
       }
     }
   }

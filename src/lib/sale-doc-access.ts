@@ -31,6 +31,19 @@ function orderPodPaths(classification: unknown): Set<string> {
   return paths;
 }
 
+/**
+ * The production-proof file paths attached to an order's job orders. The shop-floor
+ * production heads who upload these are otherwise client-restricted, but must be
+ * able to open the proofing pictures they attach before marking a job order
+ * finished. This exposes only those proof images — no financial documents.
+ */
+function orderJobProofPaths(classification: unknown): Set<string> {
+  const paths = new Set<string>();
+  const wf = readOrderWorkflow(classification);
+  for (const jo of Object.values(wf.jobOrders)) for (const p of jo?.proofs ?? []) paths.add(p.path);
+  return paths;
+}
+
 export async function canViewSaleDocPath(user: User | null | undefined, path: string): Promise<boolean> {
   if (!user) return false;
   if (isAdmin(user)) return true;
@@ -52,7 +65,9 @@ export async function canViewSaleDocPath(user: User | null | undefined, path: st
   const assignments = await getWorkflowRoles();
   if (!(await isClientRestricted(user, assignments))) return true;
   // Client-restricted (shop-floor) viewers stay blocked from financial documents,
-  // but may still open the proof-of-delivery files they attach/handle.
+  // but may still open the proof-of-delivery files they attach/handle and the
+  // production proofs they upload against their department's job order.
   if (quoteClassification && orderPodPaths(quoteClassification).has(path)) return true;
+  if (quoteClassification && orderJobProofPaths(quoteClassification).has(path)) return true;
   return false;
 }

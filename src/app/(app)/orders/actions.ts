@@ -36,6 +36,7 @@ import {
   type OrderWorkflow,
   type ProductionDeptKey,
   type JobOrder,
+  type JobOrderProof,
   type MaterialRequest,
   type MRFItem,
   type MRFLineDisposition,
@@ -397,6 +398,11 @@ export async function advanceJobOrder(
 
   const valid = (to === "in_production" && jo.status === "issued") || (to === "finished" && jo.status === "in_production");
   if (!valid) throw new Error("That job-order step isn't available right now.");
+  // Proofing gate: at least one proof picture must be attached before a
+  // department can mark its job order finished.
+  if (to === "finished" && !(jo.proofs && jo.proofs.length > 0)) {
+    throw new Error("Attach at least one proof picture before marking this job order finished.");
+  }
 
   const now = new Date().toISOString();
   const updated: JobOrder =
@@ -418,6 +424,63 @@ export async function advanceJobOrder(
     entityId: quotationId,
     href: `/orders/${quotationId}`,
   });
+}
+
+/**
+ * Attach a proofing picture to a department's job order. Uploaded by the
+ * department's production head (or an admin) during production so the work can
+ * be reviewed before it's marked finished. At least one proof is required by
+ * `advanceJobOrder` before the "Mark finished" step is allowed.
+ */
+export async function addJobOrderProof(quotationId: string, dept: string, doc: SaleDoc): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
+  const deptKey = dept as ProductionDeptKey;
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(deptKey) as WorkflowRoleKey))) {
+    throw new Error(`Only the ${deptLabel(deptKey)} head or an admin can attach a proof.`);
+  }
+  if (!doc || typeof doc.path !== "string" || !doc.path) throw new Error("No file uploaded.");
+
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const jo = wf.jobOrders[deptKey];
+  if (!jo) throw new Error("No job order for this department.");
+  if (jo.status === "finished") throw new Error("This job order is already finished.");
+
+  const proof: JobOrderProof = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt, byName: user.name };
+  const updated: JobOrder = { ...jo, proofs: [...(jo.proofs ?? []), proof] };
+  await saveWorkflow(quotationId, cls, { ...wf, jobOrders: { ...wf.jobOrders, [deptKey]: updated } });
+  await logActivity(user, {
+    action: "order.jo.proof.add",
+    category: "order",
+    summary: `${deptLabel(deptKey)}: attached a production proof — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
+}
+
+/**
+ * Remove a proofing picture from a department's job order (before it's marked
+ * finished). Done by the department's production head or an admin.
+ */
+export async function removeJobOrderProof(quotationId: string, dept: string, path: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
+  const deptKey = dept as ProductionDeptKey;
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(deptKey) as WorkflowRoleKey))) {
+    throw new Error(`Only the ${deptLabel(deptKey)} head or an admin can remove a proof.`);
+  }
+
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const jo = wf.jobOrders[deptKey];
+  if (!jo) throw new Error("No job order for this department.");
+  if (jo.status === "finished") throw new Error("This job order is already finished.");
+
+  const proofs = (jo.proofs ?? []).filter((p) => p.path !== path);
+  const updated: JobOrder = { ...jo, proofs: proofs.length ? proofs : undefined };
+  await saveWorkflow(quotationId, cls, { ...wf, jobOrders: { ...wf.jobOrders, [deptKey]: updated } });
 }
 
 /**

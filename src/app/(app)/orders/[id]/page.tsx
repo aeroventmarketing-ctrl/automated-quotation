@@ -251,12 +251,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const nextTo: "in_production" | "finished" | null =
       status === "issued" ? "in_production" : status === "in_production" ? "finished" : null;
     const nextLabel = nextTo === "in_production" ? "Start production" : nextTo === "finished" ? "Mark Finished" : null;
+    const isDeptHead = adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(deptKey) as WorkflowRoleKey));
     const canAdvance =
       nextTo != null &&
       (wf.stage === "jo_received" || wf.stage === "producing") &&
-      (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(deptKey) as WorkflowRoleKey)));
+      isDeptHead;
     const awaitingReceive = status === "issued" && wf.stage === "in_production";
-    return { status, canIssue, canAdvance, nextTo, nextLabel, awaitingReceive };
+    // Proofing pictures: the department head (or an admin) may attach/remove
+    // while the job order is open (not yet finished); everyone else views only.
+    const proofs = jo?.proofs ?? [];
+    const canEditProofs = isDeptHead && status != null && status !== "finished";
+    return { status, canIssue, canAdvance, nextTo, nextLabel, awaitingReceive, proofs, canEditProofs };
   };
 
   // A job order is visible to its own department head. Sales, Engineers, Admins,
