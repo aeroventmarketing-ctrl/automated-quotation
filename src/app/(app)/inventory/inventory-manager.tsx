@@ -45,6 +45,13 @@ interface Item {
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const csvEscape = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+function triggerDownload(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
 
 type SortKey = "name" | "quantity" | "available" | "reorderLevel" | "unitCost" | "sellPrice" | "value" | "status" | "location" | "category";
 type GroupKey = "none" | "location" | "category" | "status";
@@ -573,6 +580,42 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
     finally { setBusy(false); }
   }
 
+  // Export the current (search-filtered, sorted) list to CSV / Excel.
+  function exportRows() {
+    const statusLabel = (s: Item["status"]) => (s === "out" ? "Out" : s === "low" ? "Low" : "OK");
+    const headers = [
+      "Name", "SKU", "Unit", "Category", "Location", "On hand", "Reserved", "Available", "Reorder at",
+      ...(showPrices ? ["Unit cost"] : []), ...(showSell ? ["Sell price"] : []), ...(showPrices ? ["Value"] : []), "Status",
+    ];
+    const rows = sorted.map((it) => [
+      it.name, it.sku ?? "", it.unit, it.category ?? "", it.location ?? "",
+      it.quantity, it.reserved, it.available, it.reorderLevel,
+      ...(showPrices ? [it.unitCost] : []), ...(showSell ? [it.sellPrice] : []), ...(showPrices ? [it.value] : []),
+      statusLabel(it.status),
+    ]);
+    return { headers, rows };
+  }
+  function exportCsv() {
+    const { headers, rows } = exportRows();
+    const csv = [headers, ...rows].map((r) => r.map((c) => csvEscape(String(c ?? ""))).join(",")).join("\r\n");
+    triggerDownload("inventory.csv", new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+  }
+  async function exportXlsx() {
+    setBusy(true); setErr(null);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Inventory");
+      const { headers, rows } = exportRows();
+      ws.addRow(headers); ws.getRow(1).font = { bold: true };
+      rows.forEach((r) => ws.addRow(r));
+      ws.columns.forEach((c) => (c.width = 18));
+      const buf = await wb.xlsx.writeBuffer();
+      triggerDownload("inventory.xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    } catch (e) { setErr(e instanceof Error ? e.message : "Export failed"); }
+    finally { setBusy(false); }
+  }
+
   async function add() {
     if (name.trim() === "") { setErr("Enter an item name."); return; }
     setBusy(true); setErr(null);
@@ -713,6 +756,12 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
             title="Clear the status filter">
             {statusFilter === "out" ? "Out of stock" : "Low stock"} ({filtered.length}) <X className="h-3.5 w-3.5" />
           </button>
+        )}
+        {items.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>
+          </div>
         )}
       </div>
 

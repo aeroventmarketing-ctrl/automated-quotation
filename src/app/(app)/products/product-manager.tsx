@@ -19,6 +19,13 @@ import { ProductScanBox } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const csvEscape = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+function triggerDownload(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
 
 type SortKey = "name" | "sku" | "unit" | "category" | "supplier" | "price";
 type GroupKey = "none" | "category" | "supplier" | "unit";
@@ -332,6 +339,37 @@ export function ProductManager({ products, suppliers, canManage, admin = false, 
     finally { setBusy(false); }
   }
 
+  // Export the current (search-filtered, sorted) list to CSV / Excel.
+  function exportRows() {
+    const headers = ["Name", "SKU", "Unit", "Category", "Note", "Suppliers", ...(showPrices ? ["Lowest price"] : [])];
+    const rows = sorted.map((p) => [
+      p.name, p.sku ?? "", p.unit, p.category ?? "", p.note ?? "",
+      p.suppliers.map((s) => `${s.company}${s.code ? ` (${s.code})` : ""}${showPrices && s.price ? ` ₱${s.price}` : ""}`).join("; "),
+      ...(showPrices ? [primaryPrice(p) ? String(primaryPrice(p)) : ""] : []),
+    ]);
+    return { headers, rows };
+  }
+  function exportCsv() {
+    const { headers, rows } = exportRows();
+    const csv = [headers, ...rows].map((r) => r.map((c) => csvEscape(String(c ?? ""))).join(",")).join("\r\n");
+    triggerDownload("products.csv", new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+  }
+  async function exportXlsx() {
+    setBusy(true); setErr(null);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Products");
+      const { headers, rows } = exportRows();
+      ws.addRow(headers); ws.getRow(1).font = { bold: true };
+      rows.forEach((r) => ws.addRow(r));
+      ws.columns.forEach((c) => (c.width = 24));
+      const buf = await wb.xlsx.writeBuffer();
+      triggerDownload("products.xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    } catch (e) { setErr(e instanceof Error ? e.message : "Export failed"); }
+    finally { setBusy(false); }
+  }
+
   async function cleanupUnsourced() {
     if (!window.confirm(`Remove ${unsourced} product${unsourced === 1 ? "" : "s"} that have no supplier and no price? They'll be removed from the list (recoverable by an admin).`)) return;
     setBusy(true); setErr(null);
@@ -429,6 +467,12 @@ export function ProductManager({ products, suppliers, canManage, admin = false, 
           className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-sm hover:bg-accent" title={dir === "asc" ? "Ascending" : "Descending"}>
           {dir === "asc" ? "↑ Asc" : "↓ Desc"}
         </button>
+        {products.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>
+          </div>
+        )}
       </div>
 
       {/* Bulk selection bar — appears once one or more products are ticked. */}

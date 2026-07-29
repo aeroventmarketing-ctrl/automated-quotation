@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { saveSupplier, deleteSupplier, bulkUpsertSuppliers, type Supplier, type BulkResult } from "@/lib/suppliers";
+import { saveSupplier, deleteSupplier, deleteSuppliers, clearSuppliers, bulkUpsertSuppliers, type Supplier, type BulkResult } from "@/lib/suppliers";
 import { AEROVENT_SUPPLIERS } from "@/lib/supplier-seed";
 
 async function assertAdmin() {
@@ -37,6 +37,22 @@ export async function saveSupplierAction(input: z.infer<typeof supplierSchema>):
 export async function deleteSupplierAction(id: string): Promise<Supplier[]> {
   await assertAdmin();
   const list = await deleteSupplier(id);
+  revalidatePath("/admin/suppliers");
+  return list;
+}
+
+/** Remove several suppliers at once. Admin only. */
+export async function deleteSuppliersAction(ids: string[]): Promise<Supplier[]> {
+  await assertAdmin();
+  const list = await deleteSuppliers(ids);
+  revalidatePath("/admin/suppliers");
+  return list;
+}
+
+/** Clear the whole supplier directory so a fresh Excel/CSV can be imported. */
+export async function clearSuppliersAction(): Promise<Supplier[]> {
+  await assertAdmin();
+  const list = await clearSuppliers();
   revalidatePath("/admin/suppliers");
   return list;
 }

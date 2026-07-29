@@ -21,6 +21,8 @@ type SaveFn = (input: {
   remarks: string;
 }) => Promise<Supplier[]>;
 type DeleteFn = (id: string) => Promise<Supplier[]>;
+type DeleteManyFn = (ids: string[]) => Promise<Supplier[]>;
+type ClearAllFn = () => Promise<Supplier[]>;
 type BulkFn = (input: { rows: Array<Omit<Supplier, "id" | "ewt"> & { ewt?: boolean }> }) => Promise<BulkResult>;
 type LoadMasterFn = () => Promise<BulkResult>;
 
@@ -69,12 +71,16 @@ export function SuppliersManager({
   suppliers,
   onSave,
   onDelete,
+  onDeleteMany,
+  onClearAll,
   onBulkImport,
   onLoadMaster,
 }: {
   suppliers: Supplier[];
   onSave: SaveFn;
   onDelete: DeleteFn;
+  onDeleteMany?: DeleteManyFn;
+  onClearAll?: ClearAllFn;
   onBulkImport: BulkFn;
   onLoadMaster?: LoadMasterFn;
 }) {
@@ -86,7 +92,12 @@ export function SuppliersManager({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
+  const selectable = !!onDeleteMany;
+  const toggleOne = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const allSelected = list.length > 0 && selected.size === list.length;
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(list.map((s) => s.id)));
 
   async function run(fn: () => Promise<Supplier[]>, after?: () => void) {
     setBusy(true);
@@ -114,13 +125,13 @@ export function SuppliersManager({
 
   const ewtText = (b: boolean) => (b ? "yes" : "no");
 
-  function downloadCsv() {
+  function downloadCsv(base = "suppliers-template") {
     const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt), s.remarks])];
     const csv = rows.map((r) => r.map((c) => csvEscape(c ?? "")).join(",")).join("\r\n");
-    download("suppliers-template.csv", new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+    download(`${base}.csv`, new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
   }
 
-  async function downloadXlsx() {
+  async function downloadXlsx(base = "suppliers-template") {
     setBusy(true);
     setErr(null);
     try {
@@ -132,12 +143,33 @@ export function SuppliersManager({
       list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt), s.remarks]));
       ws.columns.forEach((c) => (c.width = 28));
       const buf = await wb.xlsx.writeBuffer();
-      download("suppliers-template.xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      download(`${base}.xlsx`, new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not build the Excel template");
+      setErr(e instanceof Error ? e.message : "Could not build the Excel file");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function deleteSelected() {
+    if (!onDeleteMany) return;
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected supplier${ids.length === 1 ? "" : "s"}?`)) return;
+    setBusy(true); setErr(null); setMsg(null);
+    try { setList(await onDeleteMany(ids)); setSelected(new Set()); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(false); }
+  }
+
+  async function clearAll() {
+    if (!onClearAll) return;
+    if (!window.confirm(`Clear ALL ${list.length} suppliers so you can import a fresh file?`)) return;
+    if (!window.confirm("This removes every supplier on the list. Continue?")) return;
+    setBusy(true); setErr(null); setMsg(null);
+    try { setList(await onClearAll()); setSelected(new Set()); setMsg("Supplier list cleared. You can now import a fresh file."); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(false); }
   }
 
   // --- Import (CSV / XLSX) ----------------------------------------------------
@@ -221,9 +253,9 @@ export function SuppliersManager({
     <div className="space-y-4">
       {/* Import / export toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border p-3">
-        <span className="text-sm font-medium">Bulk import</span>
-        <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={downloadXlsx}>Download Excel template</Button>
-        <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={downloadCsv}>Download CSV template</Button>
+        <span className="text-sm font-medium">Bulk import / export</span>
+        <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={() => downloadXlsx("suppliers")}>Download Excel</Button>
+        <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={() => downloadCsv("suppliers")}>Download CSV</Button>
         <input
           ref={fileRef}
           type="file"
@@ -237,8 +269,20 @@ export function SuppliersManager({
             Load AEROVENT supplier list
           </Button>
         )}
-        <span className="text-xs text-muted-foreground">Download the template, fill it in, then upload (.xlsx or .csv). Existing companies are updated; new ones are added.</span>
+        {onClearAll && list.length > 0 && (
+          <Button size="sm" variant="outline" className="h-8 text-destructive hover:text-destructive" disabled={busy} onClick={clearAll}>Clear all ({list.length})</Button>
+        )}
+        <span className="text-xs text-muted-foreground">Download the list (or a blank template), fill it in, then upload (.xlsx or .csv). Existing companies are updated; new ones are added.</span>
       </div>
+
+      {/* Bulk selection bar — appears once one or more suppliers are ticked. */}
+      {selectable && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+          <span className="font-medium">{selected.size} selected</span>
+          <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={deleteSelected}>{busy ? "…" : "Delete selected"}</Button>
+          <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelected(new Set())}>Clear selection</button>
+        </div>
+      )}
 
       {/* Add new */}
       <div className="space-y-2 rounded-md border p-3">
@@ -272,6 +316,11 @@ export function SuppliersManager({
           <table className="w-full min-w-[1520px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                {selectable && (
+                  <th className="py-2 px-3 w-8">
+                    <input type="checkbox" className="h-4 w-4 cursor-pointer" checked={allSelected} onChange={toggleAll} aria-label="Select all" title="Select all" />
+                  </th>
+                )}
                 <th className="py-2 px-3 font-medium">Company Name</th>
                 <th className="py-2 px-3 font-medium">Contact Person</th>
                 <th className="py-2 px-3 font-medium">Contact Number</th>
@@ -290,6 +339,7 @@ export function SuppliersManager({
               {list.map((s) =>
                 editId === s.id ? (
                   <tr key={s.id} className="border-b last:border-0 align-top">
+                    {selectable && <td className="py-1.5 px-3" />}
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.company} onChange={(e) => setEdit({ ...edit, company: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.contactPerson} onChange={(e) => setEdit({ ...edit, contactPerson: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.contactNumber} onChange={(e) => setEdit({ ...edit, contactNumber: e.target.value })} /></td>
@@ -310,7 +360,12 @@ export function SuppliersManager({
                   </tr>
                 ) : (
                   <Fragment key={s.id}>
-                  <tr className="border-b last:border-0">
+                  <tr className={`border-b last:border-0 ${selected.has(s.id) ? "bg-primary/5" : ""}`}>
+                    {selectable && (
+                      <td className="py-2 px-3">
+                        <input type="checkbox" className="h-4 w-4 cursor-pointer" checked={selected.has(s.id)} onChange={() => toggleOne(s.id)} aria-label={`Select ${s.company}`} />
+                      </td>
+                    )}
                     <td className="py-2 px-3 font-medium">
                       <button
                         type="button"
@@ -345,7 +400,7 @@ export function SuppliersManager({
                   </tr>
                   {openId === s.id && (
                     <tr className="border-b last:border-0 bg-muted/20">
-                      <td colSpan={12} className="px-4 py-3">
+                      <td colSpan={selectable ? 13 : 12} className="px-4 py-3">
                         <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
                           {([
                             ["Company Name", s.company],

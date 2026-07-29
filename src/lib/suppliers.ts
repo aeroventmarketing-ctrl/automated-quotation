@@ -161,6 +161,20 @@ export async function deleteSupplier(id: string): Promise<Supplier[]> {
   return list;
 }
 
+/** Remove several suppliers at once (by id). */
+export async function deleteSuppliers(ids: string[]): Promise<Supplier[]> {
+  const drop = new Set((ids ?? []).filter((x) => typeof x === "string" && x));
+  const list = (await getSuppliers()).filter((s) => !drop.has(s.id));
+  await writeSuppliers(list);
+  return list;
+}
+
+/** Clear the whole supplier directory (so a fresh Excel/CSV can be imported). */
+export async function clearSuppliers(): Promise<Supplier[]> {
+  await writeSuppliers([]);
+  return [];
+}
+
 export interface BulkResult {
   added: number;
   updated: number;
