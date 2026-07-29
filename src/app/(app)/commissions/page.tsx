@@ -77,7 +77,7 @@ export default async function CommissionsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Commissions</h1>
-        <p className="text-sm text-muted-foreground">1.5% of order value on closed orders, per salesperson · paid 15 days after the sales month.</p>
+        <p className="text-sm text-muted-foreground">1.5% of value on closed orders and completed counter sales, per salesperson · paid 15 days after the sales month.</p>
       </div>
 
       {tableMissing ? (
@@ -122,7 +122,7 @@ export default async function CommissionsPage() {
                             <TableCell className="whitespace-nowrap text-sm">{monthLabel(r.salesMonth)}</TableCell>
                             <TableCell className="text-sm">{r.salespersonName}</TableCell>
                             <TableCell>
-                              <Link href={`/orders/${r.quotationId}`} className="text-primary hover:underline">{r.quoteNumber}</Link>
+                              <Link href={r.href} className="text-primary hover:underline">{r.refLabel}</Link>
                             </TableCell>
                             <TableCell className="text-right tabular-nums">{formatCurrency(r.orderValue, currency)}</TableCell>
                             <TableCell className="text-right tabular-nums font-medium">{formatCurrency(r.amount, currency)}</TableCell>
@@ -156,20 +156,35 @@ async function loadRows(salespersonId?: string) {
   const list = await prisma.commission.findMany({
     where: salespersonId ? { salespersonId } : undefined,
     orderBy: [{ salesMonth: "desc" }, { salespersonName: "asc" }],
-    include: { quotation: { select: { quoteNumber: true, classification: true } } },
+    include: {
+      quotation: { select: { id: true, quoteNumber: true, classification: true } },
+      counterSale: { select: { id: true, saleNumber: true, paymentCleared: true } },
+    },
   });
   return list
     .map((c) => {
       const orderValue = Number(c.orderValue);
-      // The commission is generated when the order closes, but it must stay hidden
-      // until the client has fully paid (orders on terms / multi-batch can close
-      // with a balance still owing).
-      const collected = collectedTotal(saleFromClassification(c.quotation.classification));
-      const fullyPaid = orderValue > 0 && collected >= orderValue - 0.005;
+      // A commission is generated when the order closes / the counter sale
+      // completes, but stays hidden until the money is fully in: an order until
+      // the client has fully paid (terms / multi-batch can close still owing); a
+      // counter sale until its payment has cleared.
+      let fullyPaid = false;
+      let refLabel = "—";
+      let href = "#";
+      if (c.quotation) {
+        const collected = collectedTotal(saleFromClassification(c.quotation.classification));
+        fullyPaid = orderValue > 0 && collected >= orderValue - 0.005;
+        refLabel = c.quotation.quoteNumber;
+        href = `/orders/${c.quotation.id}`;
+      } else if (c.counterSale) {
+        fullyPaid = c.counterSale.paymentCleared;
+        refLabel = c.counterSale.saleNumber ?? "Counter sale";
+        href = `/counter-sales/${c.counterSale.id}`;
+      }
       return {
         id: c.id,
-        quotationId: c.quotationId,
-        quoteNumber: c.quotation.quoteNumber,
+        href,
+        refLabel,
         salespersonName: c.salespersonName,
         orderValue,
         amount: Number(c.amount),

@@ -100,6 +100,20 @@ async function buildCostResolvers() {
   return { cogsOf, officeCostOf, supplierVatInclusive };
 }
 
+/** Stock unit-cost lookup for the items sold across a set of counter sales. */
+async function counterSaleCostMap(sales: { items: { stockItemId: string | null }[] }[]): Promise<Map<string, number>> {
+  const ids = [...new Set(sales.flatMap((s) => s.items.map((i) => i.stockItemId).filter((x): x is string => !!x)))];
+  const map = new Map<string, number>();
+  if (!ids.length) return map;
+  try {
+    const items = await prisma.stockItem.findMany({ where: { id: { in: ids } }, select: { id: true, unitCost: true } });
+    for (const it of items) map.set(it.id, Number(it.unitCost) || 0);
+  } catch {
+    /* stock table issue — treat as no COGS */
+  }
+  return map;
+}
+
 /**
  * Build the departmental P&L for [from, to] (Manila YYYY-MM-DD, inclusive).
  * Sales come from confirmed quotations recognised in the window; expenses from
@@ -176,6 +190,24 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         addSplit(sales, lineSalesSplit(specs, net, 0));
       }
     }
+  }
+
+  // --- Sales: completed counter sales (walk-in) → Office -------------------
+  // Booked to Office as margin (net selling less stock COGS), mirroring bought-in
+  // resale. Recognised on the completion date. VAT-inclusive sales charge output
+  // VAT; VAT-exclusive (non-VAT) sales don't.
+  const counterSales = await prisma.counterSale.findMany({
+    where: { status: "COMPLETED", ...(cutoff ? { createdAt: cutoff } : {}) },
+    select: { completedAt: true, vatMode: true, subtotal: true, items: { select: { qty: true, stockItemId: true } } },
+  });
+  const csCostById = await counterSaleCostMap(counterSales);
+  for (const cs of counterSales) {
+    if (!cs.completedAt || !ymdInRange(manilaYMD(cs.completedAt.toISOString()), lo, hi)) continue;
+    salesCount += 1;
+    const net = Number(cs.subtotal) || 0; // INCLUSIVE backs VAT out; EXCLUSIVE = total
+    if (cs.vatMode !== "EXCLUSIVE") outputVat = round2(outputVat + round2(net * VAT_RATE));
+    const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCostById.get(i.stockItemId) ?? 0) * Number(i.qty) : 0), 0));
+    sales.office = round2(sales.office + round2(net - cogs));
   }
 
   // --- Expenses: purchase requests (material POs) --------------------------
@@ -257,6 +289,7 @@ export interface PnlSaleLine {
 }
 export interface PnlSaleDetail {
   quotationId: string;
+  href?: string; // link target (defaults to the quotation; set for counter sales)
   quoteNumber: string;
   customerId: string | null;
   customer: string;
@@ -361,6 +394,32 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       basis: sale!.arrangement === "terms" ? "PO date" : "Payment date",
       net: round2(lines.reduce((a, l) => a + l.net, 0)),
       lines,
+    });
+  }
+  // Counter sales (walk-in) → Office, as margin (net less stock COGS).
+  const counterSalesD = await prisma.counterSale.findMany({
+    where: { status: "COMPLETED", ...(cutoff ? { createdAt: cutoff } : {}) },
+    select: { id: true, saleNumber: true, vatMode: true, subtotal: true, completedAt: true, customerId: true, customer: { select: { company: true } }, items: { select: { qty: true, stockItemId: true } } },
+  });
+  const csCost = await counterSaleCostMap(counterSalesD);
+  for (const cs of counterSalesD) {
+    if (!cs.completedAt) continue;
+    const ymd = manilaYMD(cs.completedAt.toISOString());
+    if (!ymdInRange(ymd, lo, hi)) continue;
+    const net = Number(cs.subtotal) || 0;
+    const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCost.get(i.stockItemId) ?? 0) * Number(i.qty) : 0), 0));
+    if (cs.vatMode !== "EXCLUSIVE") outputVatByDept.office = round2(outputVatByDept.office + round2(net * VAT_RATE));
+    const n = cs.items.length;
+    sales.push({
+      quotationId: cs.id,
+      href: `/counter-sales/${cs.id}`,
+      quoteNumber: cs.saleNumber ?? "Counter sale",
+      customerId: cs.customerId,
+      customer: cs.customer.company,
+      recognizedAt: ymd,
+      basis: "Payment date",
+      net,
+      lines: [{ label: `Counter sale · ${n} item${n === 1 ? "" : "s"}`, qty: 1, net, routing: "office_full", dept: "office", deptShare: 0, officeShare: round2(net - cogs), cogs: null, officeCost: cogs || null }],
     });
   }
   sales.sort((a, b) => a.recognizedAt.localeCompare(b.recognizedAt) || a.quoteNumber.localeCompare(b.quoteNumber));

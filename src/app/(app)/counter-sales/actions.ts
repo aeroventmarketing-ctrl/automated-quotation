@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/auth";
 import { logActivity } from "@/lib/activity-log";
 import { applyStockChange } from "@/lib/inventory";
+import { round2 } from "@/lib/quote";
 import { getCounterSaleViewer } from "@/lib/counter-sale-access";
 import {
   counterTotals,
@@ -162,6 +163,35 @@ export async function updateCounterSale(id: string, input: Omit<CounterSaleInput
   revalidatePath("/counter-sales");
 }
 
+const COMMISSION_RATE_PCT = 1.5;
+
+/**
+ * Create the sales-commission row for a completed counter sale (idempotent —
+ * never overwrites an existing one). Only when a salesperson is credited; the
+ * rate matches order commissions (1.5%). Guarded so a missing table can't block
+ * completing the sale.
+ */
+async function ensureCounterSaleCommission(saleId: string): Promise<void> {
+  try {
+    const s = await prisma.counterSale.findUnique({
+      where: { id: saleId },
+      select: { status: true, salespersonId: true, salespersonName: true, total: true, completedAt: true },
+    });
+    if (!s || s.status !== "COMPLETED" || !s.salespersonId) return;
+    const orderValue = Number(s.total);
+    const amount = round2((orderValue * COMMISSION_RATE_PCT) / 100);
+    const at = s.completedAt ?? new Date();
+    const salesMonth = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}`;
+    await prisma.commission.upsert({
+      where: { counterSaleId: saleId },
+      create: { counterSaleId: saleId, salespersonId: s.salespersonId, salespersonName: s.salespersonName ?? "", orderValue, ratePct: COMMISSION_RATE_PCT, amount, salesMonth },
+      update: {},
+    });
+  } catch {
+    // Commission table not set up yet — the sale still completes.
+  }
+}
+
 /** Claim the next counter-sale sequence within a transaction. */
 async function nextCounterSeq(tx: Prisma.TransactionClient): Promise<number> {
   const KEY = "counter_sale_counter";
@@ -246,6 +276,7 @@ export async function completeCounterSale(id: string, opts?: { overrideStock?: b
     return number;
   });
 
+  await ensureCounterSaleCommission(id);
   await logActivity(user, {
     action: "counter_sale.complete",
     category: "order",
@@ -257,6 +288,8 @@ export async function completeCounterSale(id: string, opts?: { overrideStock?: b
   revalidatePath(`/counter-sales/${id}`);
   revalidatePath("/counter-sales");
   revalidatePath("/inventory");
+  revalidatePath("/commissions");
+  revalidatePath("/management");
 }
 
 /** Mark a non-cash payment cleared (the money has landed). */
@@ -298,6 +331,8 @@ export async function voidCounterSale(id: string): Promise<void> {
       }
     }
     await tx.counterSale.update({ where: { id }, data: { status: "VOID", voidedByName: user.name, voidedAt: new Date() } });
+    // Drop any commission generated for this sale (unless already paid out).
+    await tx.commission.deleteMany({ where: { counterSaleId: id, paid: false } });
   });
   await logActivity(user, {
     action: "counter_sale.void",

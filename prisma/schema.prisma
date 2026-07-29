@@ -456,7 +456,8 @@ model CashRequest {
  */
 model Commission {
   id              String   @id @default(cuid())
-  quotationId     String   @unique
+  quotationId     String?  @unique // set for an order commission (null for a counter sale)
+  counterSaleId   String?  @unique // set for a walk-in counter-sale commission
   salespersonId   String
   salespersonName String
   orderValue      Decimal  @db.Decimal(14, 2)
@@ -468,7 +469,8 @@ model Commission {
   paidAt          DateTime?
   paidByName      String?
 
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  quotation   Quotation?   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  counterSale CounterSale? @relation(fields: [counterSaleId], references: [id], onDelete: Cascade)
 
   @@index([salesMonth])
   @@index([salespersonId])
@@ -776,8 +778,9 @@ model CounterSale {
   voidedByName    String?
   voidedAt        DateTime?
 
-  customer Customer          @relation(fields: [customerId], references: [id])
-  items    CounterSaleItem[]
+  customer   Customer          @relation(fields: [customerId], references: [id])
+  items      CounterSaleItem[]
+  commission Commission?
 
   @@index([status])
   @@index([customerId])

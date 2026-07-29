@@ -384,16 +384,25 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     try {
       const comm = await prisma.commission.findMany({
         where: { paid: false },
-        include: { quotation: { include: { inquiry: { include: { customer: true } } } } },
+        include: {
+          quotation: { include: { inquiry: { include: { customer: true } } } },
+          counterSale: { include: { customer: true } },
+        },
         orderBy: { salesMonth: "desc" },
         take: 100,
       });
       for (const c of comm) {
+        const ref = c.quotation
+          ? { label: c.quotation.quoteNumber, client: c.quotation.inquiry.customer.company, href: `/orders/${c.quotationId}` }
+          : c.counterSale
+          ? { label: c.counterSale.saleNumber ?? "Counter sale", client: c.counterSale.customer.company, href: `/counter-sales/${c.counterSaleId}` }
+          : null;
+        if (!ref) continue;
         tasks.push({
           key: `comm:${c.id}`, area: "commission", areaLabel: AREA_LABEL.commission,
-          title: `Commission · ${c.quotation.quoteNumber}`, action: "Mark commission paid",
-          client: maskClient(c.quotation.inquiry.customer.company), amount: maskAmount(Number(c.amount)), currency: "PHP",
-          href: `/orders/${c.quotationId}`,
+          title: `Commission · ${ref.label}`, action: "Mark commission paid",
+          client: maskClient(ref.client), amount: maskAmount(Number(c.amount)), currency: "PHP",
+          href: ref.href,
           since: c.computedAt.toISOString(),
         });
       }

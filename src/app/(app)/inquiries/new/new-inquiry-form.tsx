@@ -13,8 +13,8 @@ import { createInquiry } from "../actions";
 
 const SOURCES = ["EMAIL", "PHONE", "WALK_IN", "PHOTO", "OTHER"] as const;
 
-export function NewInquiryForm({ customers }: { customers: { id: string; company: string }[] }) {
-  const [customerId, setCustomerId] = useState<string>("__new");
+export function NewInquiryForm({ customers, initialCustomerId }: { customers: { id: string; company: string }[]; initialCustomerId?: string }) {
+  const [customerId, setCustomerId] = useState<string>(initialCustomerId ?? "__new");
   const [customerSearch, setCustomerSearch] = useState("");
   const [company, setCompany] = useState("");
   const [contactName, setContactName] = useState("");

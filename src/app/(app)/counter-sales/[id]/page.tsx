@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FileText } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/auth";
@@ -69,6 +70,11 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
             {sale.customer.contactName ? ` · ${sale.customer.contactName}` : ""}
             {sale.customer.phone ? ` · ${sale.customer.phone}` : ""}
           </p>
+          {(admin || user?.role === "SALES" || user?.role === "ENGINEER") && (
+            <Link href={`/inquiries/new?customerId=${sale.customerId}`} className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+              <FileText className="h-3.5 w-3.5" /> Quote this client (new inquiry)
+            </Link>
+          )}
         </div>
         <CounterSaleActions
           saleId={sale.id}

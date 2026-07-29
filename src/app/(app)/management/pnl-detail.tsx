@@ -18,7 +18,7 @@ function SaleRef({ s }: { s: PnlSaleDetail }) {
   return (
     <div className="leading-tight">
       <div className="font-medium">{s.recognizedAt}</div>
-      <Link href={`/quotations/${s.quotationId}`} className="block font-mono text-[11px] text-primary hover:underline">{s.quoteNumber}</Link>
+      <Link href={s.href ?? `/quotations/${s.quotationId}`} className="block font-mono text-[11px] text-primary hover:underline">{s.quoteNumber}</Link>
       {s.customerId ? (
         <Link href={`/customers/${s.customerId}`} className="block text-primary hover:underline">{s.customer}</Link>
       ) : (

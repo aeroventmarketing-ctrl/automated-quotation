@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale, Banknote, RotateCcw } from "lucide-react";
+import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale, Banknote, RotateCcw, Store } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +119,7 @@ export default async function ManagementPage() {
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" } }).catch(() => []),
-    prisma.commission.findMany({ where: { paid: false }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } } } }).catch(() => []),
+    prisma.commission.findMany({ where: { paid: false }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } }, counterSale: { select: { paymentCleared: true } } } }).catch(() => []),
     prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] } }, select: { id: true, quotationId: true } }).catch(() => []),
   ]);
 
@@ -267,8 +267,12 @@ export default async function ManagementPage() {
   // unpaid-order commission stays hidden (matches the Commissions page).
   const payableCommissions = commissions.filter((c) => {
     const ov = Number(c.orderValue);
-    const collected = collectedTotal(saleFromClassification(c.quotation.classification));
-    return ov > 0 && collected >= ov - 0.005;
+    if (c.counterSale) return c.counterSale.paymentCleared; // counter sale: once payment cleared
+    if (c.quotation) {
+      const collected = collectedTotal(saleFromClassification(c.quotation.classification));
+      return ov > 0 && collected >= ov - 0.005;
+    }
+    return false;
   });
   const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + Number(c.amount), 0));
 
@@ -387,8 +391,17 @@ export default async function ManagementPage() {
   }
   const openReturns = returnRows.filter((r) => !r.done).length;
 
+  // Counter sales (walk-in) completed this calendar month.
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const counterMonth = await prisma.counterSale
+    .aggregate({ _sum: { total: true }, _count: true, where: { status: "COMPLETED", completedAt: { gte: monthStart } } })
+    .catch(() => null);
+  const csMonthTotal = Number(counterMonth?._sum.total ?? 0);
+  const csMonthCount = counterMonth?._count ?? 0;
+
   const tiles = [
     { label: "Open orders", value: String(openOrders), caption: `${orderCount} confirmed`, href: "/orders", icon: ClipboardList, color: "#2a78d6" },
+    { label: "Counter sales (mo.)", value: formatCurrency(csMonthTotal, CURRENCY), caption: `${csMonthCount} this month`, href: "/counter-sales", icon: Store, color: "#7c3aed" },
     { label: "Receivables", value: formatCurrency(outstanding, CURRENCY), caption: `${collectedPct}% collected`, href: "/orders", icon: Wallet, color: "#1baf7a" },
     { label: "Low / out of stock", value: String(lowStock.length), caption: lowStock.length === 0 ? "all healthy" : "needs reorder", href: "/inventory/reorder", icon: PackageX, color: lowStock.length > 0 ? "#d03b3b" : "#0ca30c" },
     { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), caption: `${payableCommissions.length} pending`, href: "/commissions", icon: Percent, color: "#4a3aa7" },
