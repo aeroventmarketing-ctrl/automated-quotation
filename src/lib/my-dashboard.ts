@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep, requisitionDeptLabel, deptRole } from "@/lib/order-workflow";
+import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
@@ -35,6 +36,7 @@ export interface MyTask {
   currency: string;
   href: string;
   deliveryMode?: "single" | "multi"; // for order tasks: how the order ships
+  since?: string; // ISO — when it became pending (for the notification backlog reset)
 }
 
 /** A cross-role MRF status note shown to the requestor and materials roles. */
@@ -143,6 +145,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             title: q.quoteNumber, action: `Handle MRF #${m.formNo} · ${requisitionDeptLabel(m.dept)}`,
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`,
+            since: m.raisedAt || undefined,
           });
         }
         // The requesting department confirms receipt of the released materials.
@@ -152,6 +155,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             title: q.quoteNumber, action: `Confirm materials received · MRF #${m.formNo}`,
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`,
+            since: m.releasedAt || m.handledAt || m.raisedAt || undefined,
           });
         }
         // Materials feed: the current status of every active MRF, so the
@@ -187,11 +191,16 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             ? (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id || isAdmin(user))
             : has(next.role as WorkflowRoleKey);
           if (!owes) continue;
+          // "Pending since" = the batch's most recent step stamp (when it entered
+          // this step), or the batch's creation time.
+          const bStamps = Object.values(b.steps ?? {}).map((s) => (s as { at?: string } | null)?.at).filter((t): t is string => !!t);
+          const batchSince = bStamps.length ? [...bStamps].sort().at(-1)! : b.createdAt || undefined;
           tasks.push({
             key: `batch:${q.id}:${b.id}`, area: "order", areaLabel: AREA_LABEL.order,
             title: q.quoteNumber, action: b.drNumber ? `${next.label} · ${b.drNumber}` : next.label,
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`, deliveryMode: "multi",
+            since: batchSince,
           });
         }
       }
@@ -200,12 +209,17 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
       const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
       if (!owesByRole && !owesBySales) continue;
+      // "Pending since" = the most recent approval stamp (when it entered this
+      // step), or the order's creation time.
+      const oStamps = Object.values(wf.approvals ?? {}).map((s) => (s as { at?: string } | null)?.at).filter((t): t is string => !!t);
+      const orderSince = oStamps.length ? [...oStamps].sort().at(-1)! : q.createdAt.toISOString();
       tasks.push({
         key: `order:${q.id}`, area: "order", areaLabel: AREA_LABEL.order,
         title: q.quoteNumber, action: pend.action,
         client: maskClient(q.inquiry.customer.company), amount: maskAmount(Number(q.total)), currency: q.currency,
         href: `/orders/${q.id}`,
         deliveryMode: wf.deliveryMode === "multi" ? "multi" : "single",
+        since: orderSince,
       });
     }
   } catch { /* ignore */ }
@@ -231,6 +245,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           title: pr.quotation?.quoteNumber ?? label, action: "Purchased materials available",
           client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
           href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+          since: pr.createdAt.toISOString(),
         });
       }
       // The Purchaser must raise the PO for an approved requisition that has none
@@ -242,6 +257,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           title: label, action: "Prepare Purchase Order",
           client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
           href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+          since: pr.createdAt.toISOString(),
         });
         continue;
       }
@@ -253,6 +269,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         title: label, action: steps[0]?.label ?? "Process purchase",
         client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
         href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+        since: pr.createdAt.toISOString(),
       });
     }
   } catch { /* ignore */ }
@@ -273,6 +290,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         title: cr.number ? `Cash ${cr.number}` : "Cash request", action: steps[0]?.label ?? CASH_STATUS_LABEL[cr.status as CashRequestStatus] ?? "Process",
         client: cr.purpose ?? null, amount: Number(cr.amount), currency: "PHP",
         href: "/cash-requests",
+        since: cr.createdAt.toISOString(),
       });
     }
   } catch { /* ignore */ }
@@ -286,6 +304,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           key: `sched:${s.id}`, area: "schedule", areaLabel: AREA_LABEL.schedule,
           title: s.title, action: "Approve schedule", client: null, amount: null, currency: "PHP",
           href: "/calendar",
+          since: s.createdAt.toISOString(),
         });
       }
     } catch { /* ignore */ }
@@ -306,6 +325,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           title: `Commission · ${c.quotation.quoteNumber}`, action: "Mark commission paid",
           client: maskClient(c.quotation.inquiry.customer.company), amount: maskAmount(Number(c.amount)), currency: "PHP",
           href: `/orders/${c.quotationId}`,
+          since: c.computedAt.toISOString(),
         });
       }
     } catch { /* ignore */ }
@@ -326,6 +346,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           title: quote.quoteNumber, action: "Approve quotation",
           client: maskClient(quote.inquiry.customer.company), amount: maskAmount(Number(quote.total)), currency: quote.currency,
           href: `/quotations/${quote.id}`,
+          since: quote.createdAt.toISOString(),
         });
       }
     } catch { /* ignore */ }
@@ -355,18 +376,25 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           action: myTurn ? `Approve ${label}` : `Awaiting ${workflowRoleLabel(nextRole)} — ${label}`,
           client: null, amount: null, currency: "PHP",
           href: "/inventory#inv-items",
+          since: a.proposedAt.toISOString(),
         });
       }
     } catch { /* StockAction table not migrated — ignore */ }
   }
 
+  // Notification backlog reset (practice slate): drop tasks / feed notes that
+  // were already pending before the reset. New items (during practice) stay.
+  const baseline = await getNotificationBaseline();
+  const visibleTasks = tasks.filter((t) => passesNotificationBaseline(t.since, baseline));
+  const visibleFeed = materialsFeed.filter((m) => passesNotificationBaseline(m.when || undefined, baseline));
+
   const byArea = (Object.keys(AREA_LABEL) as TaskArea[])
-    .map((area) => ({ area, label: AREA_LABEL[area], count: tasks.filter((t) => t.area === area).length }))
+    .map((area) => ({ area, label: AREA_LABEL[area], count: visibleTasks.filter((t) => t.area === area).length }))
     .filter((a) => a.count > 0);
 
   const activity = await listActivityForActor(user.id, 30);
 
-  materialsFeed.sort((a, b) => b.when.localeCompare(a.when));
+  visibleFeed.sort((a, b) => b.when.localeCompare(a.when));
 
   return {
     // Sales base-role users get their own My Dashboard too — to monitor their
@@ -374,9 +402,9 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     // even when they hold no workflow role.
     hasRole: isAdmin(user) || holdsAnyRole || user.role === "SALES" || user.role === "ENGINEER",
     roleLabels: viewerRoleLabels(user, assignments),
-    pending: tasks,
+    pending: visibleTasks,
     activity,
     byArea,
-    materialsFeed: materialsFeed.slice(0, 15),
+    materialsFeed: visibleFeed.slice(0, 15),
   };
 }
