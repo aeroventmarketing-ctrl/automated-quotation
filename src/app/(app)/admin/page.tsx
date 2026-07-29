@@ -18,6 +18,7 @@ import { MrfNumberSetting } from "./mrf-number-setting";
 import { PoNumberSetting } from "./po-number-setting";
 import { JoNumberSetting } from "./jo-number-setting";
 import { CashNumberSetting } from "./cash-number-setting";
+import { CounterSaleNumberSetting } from "./counter-sale-number-setting";
 import { FanMotorBrandSetting } from "./fan-motor-brand-setting";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { SpLockSetting } from "./sp-lock-setting";
@@ -65,6 +66,8 @@ export default async function AdminOverviewPage() {
   ]);
   const cashRow = await prisma.appSetting.findUnique({ where: { key: "cash_request_counter" } });
   const cashNext = (Number((cashRow?.value as { n?: unknown } | null)?.n ?? 0) || 0) + 1;
+  const counterSaleRow = await prisma.appSetting.findUnique({ where: { key: "counter_sale_counter" } });
+  const counterSaleNext = (Number((counterSaleRow?.value as { n?: unknown } | null)?.n ?? 0) || 0) + 1;
   const fanMotorBrand = await getFanMotorBrand();
   const [aiLimit, aiThisMonth] = await Promise.all([getAiUsageLimit(), currentMonthUsage()]);
   const aiAlert = evaluateUsageAlert(aiThisMonth, aiLimit);
@@ -205,6 +208,7 @@ export default async function AdminOverviewPage() {
       <JoNumberSetting current={mcJoNext} title="Job Order numbering (Motor Controller)" prefix="MC-JO" onSave={setMcJoNextNo} />
       <FanMotorBrandSetting current={fanMotorBrand} />
       <CashNumberSetting current={cashNext} />
+      <CounterSaleNumberSetting current={counterSaleNext} year={new Date().getFullYear()} />
       <SpLockSetting
         title="Propeller Type static-pressure lock"
         description={'When enabled, Power Roof Ventilator and Wall Fan (Propeller Type) lines are capped at 0.5" w.g.: the builder warns above that and disables Run selection. Turn off to allow selecting these fans at any static pressure.'}

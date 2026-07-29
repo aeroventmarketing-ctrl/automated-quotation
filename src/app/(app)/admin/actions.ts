@@ -545,6 +545,22 @@ export async function setCashNextNo(input: z.infer<typeof cashNextSchema>): Prom
   return d.next;
 }
 
+const COUNTER_SALE_COUNTER_KEY = "counter_sale_counter";
+const counterSaleNextSchema = z.object({ next: z.number().int().min(1) });
+/** Set the next counter-sale sequence number (stored as n = next - 1). */
+export async function setCounterSaleNextNo(input: z.infer<typeof counterSaleNextSchema>): Promise<number> {
+  await assertAdmin();
+  const d = counterSaleNextSchema.parse(input);
+  await prisma.appSetting.upsert({
+    where: { key: COUNTER_SALE_COUNTER_KEY },
+    create: { key: COUNTER_SALE_COUNTER_KEY, value: { n: d.next - 1 } },
+    update: { value: { n: d.next - 1 } },
+  });
+  revalidatePath("/admin");
+  revalidatePath("/counter-sales");
+  return d.next;
+}
+
 // --- Job Order numbering (per department) -----------------------------------
 // Each department keeps its own running base sequence in an AppSetting keyed
 // { last: <lastValue> }; the next number is last + 1. Setting "next" stores
