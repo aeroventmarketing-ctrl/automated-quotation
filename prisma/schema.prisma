@@ -101,7 +101,8 @@ model Customer {
   address     String?
   notes       String?
 
-  inquiries Inquiry[]
+  inquiries    Inquiry[]
+  counterSales CounterSale[]
 }
 
 model CatalogueItem {
@@ -733,4 +734,67 @@ model Schedule {
 
   @@index([startAt])
   @@index([status])
+}
+
+/**
+ * Walk-in / over-the-counter cash sale. A client buys finished goods off the
+ * shelf and takes them right away — no manufacturing workflow. Items are drawn
+ * from inventory (StockItem) on completion. VAT mode drives which documents are
+ * handed over (INCLUSIVE: Sales Invoice + Collection Receipt + Delivery Receipt;
+ * EXCLUSIVE: Delivery Form + Acknowledgement Form; BIR 2307 optional in both).
+ */
+enum CounterSaleStatus {
+  DRAFT      // being built at the counter
+  COMPLETED  // paid, stock deducted, documents issued
+  VOID       // reversed (admin) — stock returned
+}
+
+model CounterSale {
+  id              String            @id @default(cuid())
+  saleNumber      String?           @unique // e.g. "CS-2026-00001" — claimed on completion (null while draft)
+  customerId      String
+  vatMode         String            @default("INCLUSIVE") // INCLUSIVE | EXCLUSIVE
+  status          CounterSaleStatus @default(DRAFT)
+  soldById        String // user who recorded the sale
+  soldByName      String
+  salespersonId   String? // credited salesperson (for Phase B commission)
+  salespersonName String?
+  subtotal        Decimal           @db.Decimal(14, 2) @default(0) // net of VAT
+  vat             Decimal           @db.Decimal(14, 2) @default(0)
+  total           Decimal           @db.Decimal(14, 2) @default(0) // amount due
+  currency        String            @default("PHP")
+  amountPaid      Decimal           @db.Decimal(14, 2) @default(0)
+  paymentMethod   String            @default("cash") // cash | gcash | dated_check | post_dated_check | credit_card | online
+  paymentCleared  Boolean           @default(false) // non-cash: whether the money has landed
+  paymentDueAt    DateTime? // post-dated check / expected clearing date
+  clearedByName   String?
+  clearedAt       DateTime?
+  docs            Json              @default("{}") // Record<string, SaleDoc[]> — SI / CR / DR / DF / AF / 2307
+  notes           String?
+  createdAt       DateTime          @default(now())
+  completedAt     DateTime?
+  voidedByName    String?
+  voidedAt        DateTime?
+
+  customer Customer          @relation(fields: [customerId], references: [id])
+  items    CounterSaleItem[]
+
+  @@index([status])
+  @@index([customerId])
+}
+
+model CounterSaleItem {
+  id          String  @id @default(cuid())
+  saleId      String
+  stockItemId String? // inventory reference (no FK — snapshot below keeps history stable)
+  description String // item name snapshot
+  unit        String  @default("pcs")
+  qty         Decimal @db.Decimal(14, 3) @default(1)
+  unitPrice   Decimal @db.Decimal(14, 2) @default(0) // VAT-inclusive unit price
+  lineTotal   Decimal @db.Decimal(14, 2) @default(0)
+  sortOrder   Int     @default(0)
+
+  sale CounterSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
 }

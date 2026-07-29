@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, ListChecks } from "lucide-react";
+import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, ListChecks, Store } from "lucide-react";
 import type { Role } from "@prisma/client";
 import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 
@@ -18,6 +18,7 @@ export const NAV = [
   { href: "/follow-ups", label: "Follow-ups", icon: BellRing, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/calendar", label: "Team Calendar", icon: CalendarDays, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/orders", label: "Orders", icon: ClipboardList, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
+  { href: "/counter-sales", label: "Counter Sales", icon: Store, roles: ["SALES", "ADMIN"] },
   { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["ENGINEER", "ADMIN", "OTHER"] },
   { href: "/products", label: "Products", icon: Package, roles: ["ENGINEER", "ADMIN", "OTHER"] },
   { href: "/requisitions", label: "Requisitions", icon: ClipboardCheck, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
@@ -88,6 +89,10 @@ export function visibleNav(role: Role, workflowRoles: string[]) {
     o?.hide?.forEach((h) => hide.add(h));
     o?.show?.forEach((s) => show.add(s));
   }
+  // Counter Sales is open to Accounting (cashier), Warehouse and the Payment
+  // Approver too (they record / hand over / clear walk-in sales), on top of the
+  // Sales + Admin base roles.
+  if (workflowRoles.some((r) => r === "accounting" || r === "warehouse" || r === "payment_approver")) show.add("/counter-sales");
   // Admins keep the standalone Sales Dashboard even when they also hold a
   // dashboard-consolidated workflow role (e.g. Accounting / Plant Manager).
   if (role === "ADMIN") hide.delete("/dashboard");
