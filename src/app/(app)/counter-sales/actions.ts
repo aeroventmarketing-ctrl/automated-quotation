@@ -192,16 +192,25 @@ async function ensureCounterSaleCommission(saleId: string): Promise<void> {
   }
 }
 
-/** Claim the next counter-sale sequence within a transaction. */
-async function nextCounterSeq(tx: Prisma.TransactionClient): Promise<number> {
+/**
+ * Claim the next counter-sale sequence within a transaction. When yearly reset is
+ * enabled (admin setting) the sequence restarts at 1 the first time a sale is
+ * completed in a new year; otherwise it runs continuously.
+ */
+async function nextCounterSeq(tx: Prisma.TransactionClient, year: number): Promise<number> {
   const KEY = "counter_sale_counter";
   const row = await tx.appSetting.findUnique({ where: { key: KEY } });
-  const cur = typeof (row?.value as { n?: unknown } | null)?.n === "number" ? (row!.value as { n: number }).n : 0;
-  const n = cur + 1;
+  const v = (row?.value ?? {}) as { n?: unknown; year?: unknown; resetYearly?: unknown };
+  const resetYearly = v.resetYearly === true;
+  const cur = typeof v.n === "number" ? v.n : 0;
+  const storedYear = typeof v.year === "number" ? v.year : year;
+  // Roll over to 1 when the year changes and yearly reset is on.
+  const base = resetYearly && storedYear !== year ? 0 : cur;
+  const n = base + 1;
   await tx.appSetting.upsert({
     where: { key: KEY },
-    create: { key: KEY, value: { n } as Prisma.InputJsonValue },
-    update: { value: { n } as Prisma.InputJsonValue },
+    create: { key: KEY, value: { n, year, resetYearly } as Prisma.InputJsonValue },
+    update: { value: { n, year, resetYearly } as Prisma.InputJsonValue },
   });
   return n;
 }
@@ -242,7 +251,7 @@ export async function completeCounterSale(id: string, opts?: { overrideStock?: b
   const now = new Date();
 
   const saleNumber = await prisma.$transaction(async (tx) => {
-    const seq = await nextCounterSeq(tx);
+    const seq = await nextCounterSeq(tx, now.getFullYear());
     const number = formatCounterSaleNumber(now.getFullYear(), seq);
     for (const it of stockLines) {
       const qty = Number(it.qty);

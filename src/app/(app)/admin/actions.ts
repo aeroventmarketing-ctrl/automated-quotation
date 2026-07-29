@@ -547,18 +547,43 @@ export async function setCashNextNo(input: z.infer<typeof cashNextSchema>): Prom
 
 const COUNTER_SALE_COUNTER_KEY = "counter_sale_counter";
 const counterSaleNextSchema = z.object({ next: z.number().int().min(1) });
-/** Set the next counter-sale sequence number (stored as n = next - 1). */
+
+type CounterCounterValue = { n?: number; year?: number; resetYearly?: boolean };
+async function readCounterCounter(): Promise<CounterCounterValue> {
+  const row = await prisma.appSetting.findUnique({ where: { key: COUNTER_SALE_COUNTER_KEY } });
+  return (row?.value ?? {}) as CounterCounterValue;
+}
+
+/** Set the next counter-sale sequence number (stored as n = next - 1), keeping
+ *  the yearly-reset preference and stamping the current year. */
 export async function setCounterSaleNextNo(input: z.infer<typeof counterSaleNextSchema>): Promise<number> {
   await assertAdmin();
   const d = counterSaleNextSchema.parse(input);
+  const cur = await readCounterCounter();
+  const value = { n: d.next - 1, year: new Date().getFullYear(), resetYearly: cur.resetYearly === true };
   await prisma.appSetting.upsert({
     where: { key: COUNTER_SALE_COUNTER_KEY },
-    create: { key: COUNTER_SALE_COUNTER_KEY, value: { n: d.next - 1 } },
-    update: { value: { n: d.next - 1 } },
+    create: { key: COUNTER_SALE_COUNTER_KEY, value },
+    update: { value },
   });
   revalidatePath("/admin");
   revalidatePath("/counter-sales");
   return d.next;
+}
+
+/** Turn the yearly reset (sequence restarts at 1 each new year) on or off. */
+export async function setCounterSaleResetYearly(enabled: boolean): Promise<boolean> {
+  await assertAdmin();
+  const cur = await readCounterCounter();
+  const value = { n: typeof cur.n === "number" ? cur.n : 0, year: typeof cur.year === "number" ? cur.year : new Date().getFullYear(), resetYearly: !!enabled };
+  await prisma.appSetting.upsert({
+    where: { key: COUNTER_SALE_COUNTER_KEY },
+    create: { key: COUNTER_SALE_COUNTER_KEY, value },
+    update: { value },
+  });
+  revalidatePath("/admin");
+  revalidatePath("/counter-sales");
+  return !!enabled;
 }
 
 // --- Job Order numbering (per department) -----------------------------------
