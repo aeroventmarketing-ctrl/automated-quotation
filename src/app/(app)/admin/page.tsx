@@ -9,6 +9,7 @@ import { getNotificationsEnabled } from "@/lib/notification-settings";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { getDisabledRoles } from "@/lib/role-access";
 import { getTestMode } from "@/lib/test-mode";
+import { getNotificationBaseline } from "@/lib/notification-baseline";
 import { getStockLocations } from "@/lib/stock-locations";
 import { getAiUsageLimit, currentMonthUsage, evaluateUsageAlert } from "@/lib/ai/usage";
 import { StockLocationsSetting } from "./stock-locations-setting";
@@ -22,7 +23,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { SpLockSetting } from "./sp-lock-setting";
 import { FollowUpSetting } from "./follow-up-setting";
 import { RoleAccessSetting } from "./role-access-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export default async function AdminOverviewPage() {
     getDocCheckGateEnabled(),
   ]);
   const testMode = await getTestMode();
+  const notificationBaseline = await getNotificationBaseline();
   const disabledRoles = await getDisabledRoles();
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
@@ -226,6 +228,12 @@ export default async function AdminOverviewPage() {
         description="When enabled, an approver hears a loud 20-second alarm and sees a flashing pop-up whenever an order is waiting on their approval. Turn off to silence the alarm for everyone (the order workflow is unaffected)."
         enabled={notificationsEnabled}
         onSave={saveNotificationsSetting}
+      />
+      <SpLockSetting
+        title="Clear notification backlog (practice slate)"
+        description="When enabled, every order approval that is ALREADY waiting is hidden from the alarm from now on — so the alarm stops ringing for the existing backlog while it keeps ringing for any NEW approval that comes up during your practice run. Nothing is approved or deleted; turn it off to bring the backlog back. (Data stays fully visible and the alarm stays on.)"
+        enabled={notificationBaseline.on}
+        onSave={saveNotificationBaselineSetting}
       />
       <SpLockSetting
         title="Require documents before ‘Mark documents checked’"

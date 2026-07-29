@@ -12,6 +12,7 @@ import { setHideOrderProgress } from "@/lib/order-progress-visibility";
 import { setNotificationsEnabled } from "@/lib/notification-settings";
 import { setDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { setTestMode } from "@/lib/test-mode";
+import { setNotificationBaseline } from "@/lib/notification-baseline";
 import { setStockLocations } from "@/lib/stock-locations";
 import { setDocViewers } from "@/lib/doc-viewers";
 import { setDisabledRoles } from "@/lib/role-access";
@@ -448,6 +449,15 @@ export async function saveTestModeSetting(input: z.infer<typeof spLockSchema>): 
   // Everything that reads the hidden records needs to re-render.
   for (const p of ["/admin", "/management", "/customers", "/inquiries", "/quotations", "/dashboard"]) revalidatePath(p);
   return tm.on;
+}
+
+// --- Notification backlog reset (practice slate) ----------------------------
+export async function saveNotificationBaselineSetting(input: z.infer<typeof spLockSchema>): Promise<boolean> {
+  await assertAdmin();
+  const d = spLockSchema.parse(input);
+  const nb = await setNotificationBaseline(d.enabled);
+  revalidatePath("/admin");
+  return nb.on;
 }
 
 // --- Stock locations (dropdown list for Inventory) --------------------------
