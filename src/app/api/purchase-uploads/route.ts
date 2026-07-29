@@ -9,7 +9,7 @@ export const maxDuration = 30;
  * Upload a purchasing document (e.g. proof that a returned item was replaced) to
  * Supabase Storage and return its storage path + original name. Stored under
  * purchases/<purchaseRequestId>/…; the caller records the path on the purchase
- * request (via resolvePurchaseReturn). Internal-only — any authenticated staff
+ * request (via advancePurchaseReturn). Internal-only — any authenticated staff
  * member who works the purchasing chain can upload and view.
  */
 export async function POST(req: NextRequest) {

@@ -2,22 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw, Upload } from "lucide-react";
+import { RotateCcw, Upload, Check } from "lucide-react";
 import { UploadLink } from "@/components/upload-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PurchaseReturnView } from "@/lib/purchase-chain-row";
 import type { SaleDoc } from "@/lib/sale";
 import { uploadDocument } from "@/lib/client-upload";
-import { returnPurchaseItems, resolvePurchaseReturn, removePurchaseReturnProof } from "../orders/actions";
+import { returnPurchaseItems, advancePurchaseReturn, removePurchaseReturnProof } from "../orders/actions";
 
 
 /**
  * "Returns to supplier" panel: lists items disapproved on inspection and sent
- * back for replacement, lets an inspector raise a new return, and lets the
- * purchaser/warehouse mark the replacement received — attaching proof that the
- * item was replaced. Shared by the individual chain rows and the combined-PO
- * card. `prId` is the request (or anchor) to act on. Read-only on the order page.
+ * back for replacement, lets an inspector raise a new return, and tracks each
+ * return through its lifecycle — sent to supplier → replaced → checked by
+ * purchaser → in transit → warehouse received → plant-manager approved. Every
+ * stage is gated to the role that owns it (advancing is re-checked server-side).
+ * Shared by the individual chain rows and the combined-PO card. Read-only on the
+ * order page.
  */
 /** Parse a purchase line "9 pc · ANGLE BAR 2.0 X 25 X 25 (remark)". */
 function parseReturnLine(label: string): { qty: string; unit: string; desc: string } {
@@ -35,7 +37,7 @@ export function PurchaseReturnsPanel({
   prId,
   returns,
   canRaiseReturn,
-  canResolveReturn,
+  advanceRoles = [],
   readOnly = false,
   admin = false,
   lineItems = [],
@@ -43,7 +45,8 @@ export function PurchaseReturnsPanel({
   prId: string;
   returns: PurchaseReturnView[];
   canRaiseReturn: boolean;
-  canResolveReturn: boolean;
+  /** Return-lifecycle roles the viewer holds (purchaser/logistics/warehouse/plant_manager). */
+  advanceRoles?: string[];
   readOnly?: boolean;
   admin?: boolean;
   /** The purchase-request lines, so the return can be picked by tick box. */
@@ -64,12 +67,14 @@ export function PurchaseReturnsPanel({
   const setPick = (i: number, patch: Partial<{ checked: boolean; qty: string }>) =>
     setPicks((ps) => ps.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
 
-  // Resolve form state (per return being closed out).
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  // Proof/confirm form state (per return being advanced to "warehouse received").
+  const [receivingId, setReceivingId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [proof, setProof] = useState<SaleDoc[]>([]);
 
-  const unresolved = returns.filter((r) => !r.resolved).length;
+  const unresolved = returns.filter((r) => !r.done).length;
+  const canAdvance = (r: PurchaseReturnView) =>
+    !readOnly && r.awaiting != null && (admin || advanceRoles.includes(r.awaiting.role));
 
   async function raise() {
     // With line items, compile the ticked rows; otherwise use the free-text box.
@@ -92,8 +97,20 @@ export function PurchaseReturnsPanel({
     finally { setBusy(null); }
   }
 
-  function startResolve(id: string) {
-    setResolvingId(id); setNote(""); setProof([]); setErr(null);
+  // Advance a stage that needs no proof (replaced / checked / in transit / approved).
+  async function advance(r: PurchaseReturnView) {
+    if (!r.awaiting) return;
+    setBusy(r.id); setErr(null);
+    try {
+      await advancePurchaseReturn(prId, r.id, r.awaiting.toStage, { note: note.trim() || undefined });
+      setNote("");
+      router.refresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
+
+  function startReceive(id: string) {
+    setReceivingId(id); setNote(""); setProof([]); setErr(null);
   }
 
   async function uploadProof(file: File) {
@@ -105,12 +122,13 @@ export function PurchaseReturnsPanel({
     finally { setBusy(null); }
   }
 
-  async function confirmResolve() {
+  async function confirmReceive(r: PurchaseReturnView) {
+    if (!r.awaiting) return;
     if (proof.length === 0) { setErr("Upload proof that the item was replaced."); return; }
-    setBusy("resolve"); setErr(null);
+    setBusy("receive"); setErr(null);
     try {
-      await resolvePurchaseReturn(prId, resolvingId!, note, proof);
-      setResolvingId(null); setNote(""); setProof([]);
+      await advancePurchaseReturn(prId, r.id, r.awaiting.toStage, { note: note.trim() || undefined, proof });
+      setReceivingId(null); setNote(""); setProof([]);
       router.refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
@@ -123,77 +141,96 @@ export function PurchaseReturnsPanel({
       {returns.length > 0 && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-            Returns to supplier{unresolved > 0 ? ` · ${unresolved} awaiting replacement` : " · all resolved"}
+            Returns to supplier{unresolved > 0 ? ` · ${unresolved} in progress` : " · all replaced"}
           </p>
-          <ul className="mt-1 space-y-1.5">
+          <ul className="mt-1 space-y-2">
             {returns.map((r) => (
               <li key={r.id} className="text-xs">
                 <div className="font-medium text-foreground">{r.items}</div>
                 <div className="text-muted-foreground">Reason: {r.reason}</div>
-                <div className="text-muted-foreground">Returned by {r.raised}</div>
-                {r.resolved ? (
-                  <>
-                    <div className="text-emerald-700">✓ {r.resolved}</div>
-                    {r.proof.length > 0 && (
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span className="text-muted-foreground">Proof:</span>
-                        {r.proof.map((f) => (
+
+                {/* Lifecycle timeline — each completed stage with who + when. */}
+                <ol className="mt-1 space-y-0.5">
+                  {r.timeline.map((t) => (
+                    <li key={t.label} className="flex items-start gap-1 text-emerald-700">
+                      <Check className="mt-0.5 h-3 w-3 shrink-0" />
+                      <span>
+                        <span className="font-medium">{t.label}</span>
+                        {t.stamp ? <span className="text-muted-foreground"> — {t.stamp}</span> : null}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+
+                {/* Proof the item was replaced (once attached). */}
+                {r.proof.length > 0 && (
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-muted-foreground">Proof:</span>
+                    {r.proof.map((f) => (
+                      <UploadLink
+                        key={f.path}
+                        doc={f}
+                        base="/api/purchase-uploads"
+                        size="xs"
+                        onRemove={admin ? async () => {
+                          if (!window.confirm(`Remove proof "${f.name}"?`)) return;
+                          try { await removePurchaseReturnProof(prId, r.id, f.path); router.refresh(); }
+                          catch (e) { setErr(e instanceof Error ? e.message : "Failed to remove"); }
+                        } : undefined}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Next step — status + (for the owning role) the advance control. */}
+                {r.done ? (
+                  <div className="mt-0.5 font-medium text-emerald-700">✓ Return complete — replacement approved into stock.</div>
+                ) : r.awaiting ? (
+                  receivingId === r.id ? (
+                    // Warehouse-received: proof upload is mandatory.
+                    <div className="mt-1 space-y-1.5 rounded-md border bg-background p-2">
+                      <div className="font-medium text-foreground">{r.awaiting.advanceLabel}</div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {proof.map((f) => (
                           <UploadLink
                             key={f.path}
                             doc={f}
                             base="/api/purchase-uploads"
                             size="xs"
-                            onRemove={admin ? async () => {
-                              if (!window.confirm(`Remove proof "${f.name}"?`)) return;
-                              try { await removePurchaseReturnProof(prId, r.id, f.path); router.refresh(); }
-                              catch (e) { setErr(e instanceof Error ? e.message : "Failed to remove"); }
-                            } : undefined}
+                            onRemove={() => setProof((ps) => ps.filter((x) => x.path !== f.path))}
                           />
                         ))}
+                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 font-medium hover:bg-accent">
+                          <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : proof.length ? "Add proof" : "Upload proof"}
+                          <input type="file" className="hidden" disabled={busy === "upload"} onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                        </label>
                       </div>
-                    )}
-                  </>
-                ) : !readOnly && canResolveReturn && resolvingId === r.id ? (
-                  <div className="mt-1 space-y-1.5 rounded-md border bg-background p-2">
-                    <div className="font-medium text-foreground">Replacement received</div>
-                    {/* Proof the item was replaced. */}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      {proof.map((f) => (
-                        <UploadLink
-                          key={f.path}
-                          doc={f}
-                          base="/api/purchase-uploads"
-                          size="xs"
-                          onRemove={() => setProof((ps) => ps.filter((x) => x.path !== f.path))}
-                        />
-                      ))}
-                      <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 font-medium hover:bg-accent">
-                        <Upload className="h-3.5 w-3.5" /> {busy === "upload" ? "Uploading…" : proof.length ? "Add proof" : "Upload proof"}
-                        <input type="file" className="hidden" disabled={busy === "upload"} onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
-                      </label>
+                      <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" className="h-7 text-xs" disabled={busy === "receive"} onClick={() => confirmReceive(r)}>
+                          {busy === "receive" ? "Saving…" : "Confirm received"}
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setReceivingId(null); setErr(null); }}>Cancel</Button>
+                      </div>
                     </div>
-                    <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional) — e.g. replaced, credited" />
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" className="h-7 text-xs" disabled={busy === "resolve"} onClick={confirmResolve}>
-                        {busy === "resolve" ? "Saving…" : "Confirm replacement"}
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setResolvingId(null); setErr(null); }}>Cancel</Button>
+                  ) : (
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-amber-700">
+                        Awaiting: {r.awaiting.advanceLabel} <span className="font-normal text-muted-foreground">({r.awaiting.roleLabel})</span>
+                      </span>
+                      {canAdvance(r) && (
+                        <button
+                          type="button"
+                          disabled={busy === r.id}
+                          onClick={() => (r.awaiting!.requiresProof ? startReceive(r.id) : advance(r))}
+                          className="rounded border border-emerald-600/50 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-600/10 disabled:opacity-50"
+                        >
+                          {busy === r.id ? "Saving…" : r.awaiting.advanceLabel}
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <span className="font-medium text-amber-700">Awaiting replacement from supplier</span>
-                    {!readOnly && canResolveReturn && (
-                      <button
-                        type="button"
-                        onClick={() => startResolve(r.id)}
-                        className="rounded border border-emerald-600/50 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-600/10"
-                      >
-                        Replacement received
-                      </button>
-                    )}
-                  </div>
-                )}
+                  )
+                ) : null}
               </li>
             ))}
           </ul>

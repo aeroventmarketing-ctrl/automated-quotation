@@ -46,7 +46,8 @@ interface PRRow {
   canDelete?: boolean;
   returns?: PurchaseReturnView[];
   canRaiseReturn?: boolean;
-  canResolveReturn?: boolean;
+  returnAdvanceRoles?: string[];
+  returnAdmin?: boolean;
   reconcile?: PurchaseReconcileView;
   canRecordReconcile?: boolean;
   canSettleReconcile?: boolean;
@@ -385,8 +386,8 @@ export function PurchasingChain({
               prId={r.id}
               returns={r.returns ?? []}
               canRaiseReturn={r.canRaiseReturn ?? false}
-              canResolveReturn={r.canResolveReturn ?? false}
-              readOnly={!(r.canRaiseReturn || r.canResolveReturn)}
+              advanceRoles={r.returnAdvanceRoles ?? []}
+              readOnly={!(r.canRaiseReturn || (r.returnAdvanceRoles?.length ?? 0) > 0)}
               admin={admin}
               lineItems={r.items}
             />

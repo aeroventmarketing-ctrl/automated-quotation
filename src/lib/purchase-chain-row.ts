@@ -5,7 +5,16 @@
  */
 import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
-import { coercePurchaseReturns, hasUnresolvedReturn, canRaiseReturnAt } from "@/lib/purchase-returns";
+import {
+  coercePurchaseReturns,
+  hasUnresolvedReturn,
+  canRaiseReturnAt,
+  nextReturnStage,
+  returnStageDef,
+  RETURN_STAGES,
+  returnStageIndex,
+  type ReturnStage,
+} from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -25,7 +34,19 @@ export interface PurchaseReturnView {
   items: string;
   reason: string;
   raised: string; // "Name (Role) · date/time"
-  resolved: string | null; // resolution stamp, or null while awaiting replacement
+  stage: ReturnStage; // current lifecycle stage
+  stageLabel: string; // label for the current stage
+  done: boolean; // plant-manager approved — return complete
+  // The next step to advance, or null once approved.
+  awaiting: {
+    toStage: ReturnStage;
+    role: string; // WorkflowRoleKey that owns the step
+    roleLabel: string;
+    advanceLabel: string;
+    requiresProof: boolean;
+  } | null;
+  timeline: { label: string; stamp: string }[]; // completed stages, in order
+  resolved: string | null; // final approval stamp, or null while in progress
   proof: { path: string; name: string }[]; // proof the item was replaced
 }
 
@@ -138,7 +159,9 @@ export interface PurchaseChainRow {
   canDelete?: boolean;
   returns: PurchaseReturnView[];
   canRaiseReturn: boolean;
-  canResolveReturn: boolean;
+  /** Which return-lifecycle roles the viewer holds (purchaser/logistics/warehouse/plant_manager). */
+  returnAdvanceRoles: string[];
+  returnAdmin: boolean;
   reconcile: PurchaseReconcileView;
   canRecordReconcile: boolean;
   canSettleReconcile: boolean;
@@ -183,18 +206,44 @@ export interface PurchaseRequestLike {
   reconciliation?: unknown;
 }
 
-/** Format a request's supplier returns for display. */
+/** Format a request's supplier returns (with their lifecycle) for display. */
 export function buildReturnViews(pr: PurchaseRequestLike): PurchaseReturnView[] {
-  return coercePurchaseReturns(pr.returns).map((r) => ({
-    id: r.id,
-    items: r.items,
-    reason: r.reason,
-    raised: `${r.raisedByName}${r.raisedRole ? ` (${r.raisedRole})` : ""} · ${formatDateTime(r.raisedAt ? new Date(r.raisedAt) : undefined)}`,
-    resolved: r.resolvedAt
-      ? `Replacement received — ${r.resolvedByName}${r.resolvedRole ? ` (${r.resolvedRole})` : ""} · ${formatDateTime(new Date(r.resolvedAt))}${r.resolutionNote ? ` · ${r.resolutionNote}` : ""}`
-      : null,
-    proof: (r.proof ?? []).map((d) => ({ path: d.path, name: d.name })),
-  }));
+  return coercePurchaseReturns(pr.returns).map((r) => {
+    const curIdx = returnStageIndex(r.stage);
+    const done = r.stage === "approved";
+    const next = nextReturnStage(r.stage);
+    // Completed stages, in order, with who did each + when.
+    const timeline = RETURN_STAGES.filter((s) => returnStageIndex(s.key) <= curIdx).map((s) => {
+      const st = r.stamps[s.key];
+      return {
+        label: s.label,
+        stamp: st ? `${st.byName}${st.role ? ` (${st.role})` : ""} · ${formatDateTime(new Date(st.at))}` : "",
+      };
+    });
+    return {
+      id: r.id,
+      items: r.items,
+      reason: r.reason,
+      raised: `${r.raisedByName}${r.raisedRole ? ` (${r.raisedRole})` : ""} · ${formatDateTime(r.raisedAt ? new Date(r.raisedAt) : undefined)}`,
+      stage: r.stage,
+      stageLabel: returnStageDef(r.stage).label,
+      done,
+      awaiting: next && next.role
+        ? {
+            toStage: next.key,
+            role: next.role,
+            roleLabel: workflowRoleLabel(next.role),
+            advanceLabel: next.advanceLabel,
+            requiresProof: !!next.requiresProof,
+          }
+        : null,
+      timeline,
+      resolved: r.resolvedAt
+        ? `Approved by plant manager — ${r.resolvedByName}${r.resolvedRole ? ` (${r.resolvedRole})` : ""} · ${formatDateTime(new Date(r.resolvedAt))}${r.resolutionNote ? ` · ${r.resolutionNote}` : ""}`
+        : null,
+      proof: (r.proof ?? []).map((d) => ({ path: d.path, name: d.name })),
+    };
+  });
 }
 
 interface ChainLogEntry { byName?: string; at?: string }
@@ -283,7 +332,11 @@ export function buildPurchaseChainRow(
   // purchaser or warehouse can mark the replacement received.
   const canRaiseReturn =
     canRaiseReturnAt(status) && (ctx.canAct("purchaser") || ctx.canAct("warehouse") || ctx.canAct("plant_manager"));
-  const canResolveReturn = ctx.canAct("purchaser") || ctx.canAct("warehouse");
+  // Which lifecycle roles the viewer holds — each owns its own stage of the
+  // supplier-return handshake (advance gating is re-checked server-side).
+  const returnAdvanceRoles = (["purchaser", "logistics", "warehouse", "plant_manager"] as WorkflowRoleKey[]).filter((r) =>
+    ctx.canAct(r),
+  );
   // Voucher reconciliation: the purchaser records the spend once bought;
   // accounting or the purchaser settle any change / overspend.
   const reconcile = { ...buildReconcileView(pr), voucherNo: ctx.voucherNo ?? null };
@@ -323,7 +376,8 @@ export function buildPurchaseChainRow(
     canDelete: ctx.canDelete ?? false,
     returns,
     canRaiseReturn,
-    canResolveReturn,
+    returnAdvanceRoles,
+    returnAdmin: ctx.admin ?? false,
     reconcile,
     canRecordReconcile,
     canSettleReconcile,

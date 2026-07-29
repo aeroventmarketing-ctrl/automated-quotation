@@ -45,7 +45,7 @@ import {
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
-import { coercePurchaseReturns, canRaiseReturnAt } from "@/lib/purchase-returns";
+import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
 import {
@@ -1612,8 +1612,6 @@ export async function advancePurchaseRequest(
 
 /** Roles that can flag items for return to the supplier (any inspection point). */
 const RETURN_RAISE_ROLES: WorkflowRoleKey[] = ["purchaser", "warehouse", "plant_manager"];
-/** Roles that can mark a supplier return resolved (replacement received). */
-const RETURN_RESOLVE_ROLES: WorkflowRoleKey[] = ["purchaser", "warehouse"];
 
 async function userHasAnyRole(userId: string, roles: WorkflowRoleKey[]): Promise<boolean> {
   const assignments = await getWorkflowRoles();
@@ -1654,13 +1652,16 @@ export async function returnPurchaseItems(
   const raisedRole = role ? workflowRoleLabel(role) : admin ? "Admin" : "";
 
   const list = coercePurchaseReturns(pr.returns);
+  const now = new Date().toISOString();
   list.push({
     id: randomUUID(),
     items,
     reason,
     raisedByName: user.name,
     raisedRole,
-    raisedAt: new Date().toISOString(),
+    raisedAt: now,
+    stage: "sent",
+    stamps: { sent: { byName: user.name, role: raisedRole, at: now } },
   });
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { returns: list as unknown as Prisma.InputJsonValue } });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
@@ -1669,44 +1670,80 @@ export async function returnPurchaseItems(
 }
 
 /**
- * Mark a supplier return resolved — the replacement has been received/settled.
- * Proof that the item was replaced (uploaded to /api/purchase-uploads) is
- * attached so it stays on the return's record.
+ * Advance a supplier return to its next lifecycle stage:
+ *   sent → replaced → checked → in_transit → received → approved.
+ * Each stage is gated to the role that owns it (Purchaser, Logistics, Warehouse,
+ * Plant Manager — admins may do any); the client passes the exact next stage so a
+ * step can't be skipped. Proof the item was replaced (uploaded to
+ * /api/purchase-uploads) is mandatory to reach "Warehouse received". The final
+ * "approved" stage marks the return fully resolved so the PO can be received.
  */
-export async function resolvePurchaseReturn(
+export async function advancePurchaseReturn(
   purchaseRequestId: string,
   returnId: string,
-  note?: string,
-  proof?: { path: string; name: string; uploadedAt?: string }[],
+  toStage: ReturnStage,
+  opts?: { note?: string; proof?: { path: string; name: string; uploadedAt?: string }[] },
 ): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const admin = isAdmin(user);
-  if (!(admin || (await userHasAnyRole(user.id, RETURN_RESOLVE_ROLES)))) {
-    throw new Error("Only the Purchaser, Warehouse or an admin can resolve a supplier return.");
-  }
+
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
-  const assignments = await getWorkflowRoles();
-  const role = RETURN_RESOLVE_ROLES.find((r) => userHasWorkflowRole(assignments, user.id, r));
-  const resolvedRole = role ? workflowRoleLabel(role) : admin ? "Admin" : "";
 
   const list = coercePurchaseReturns(pr.returns);
   const entry = list.find((r) => r.id === returnId);
   if (!entry) throw new Error("Return not found.");
-  if (entry.resolvedAt) throw new Error("This return is already resolved.");
-  entry.resolvedByName = user.name;
-  entry.resolvedRole = resolvedRole;
-  entry.resolvedAt = new Date().toISOString();
-  if (note && note.trim()) entry.resolutionNote = note.trim();
-  const proofDocs = (proof ?? [])
+  if (isReturnComplete(entry.stage)) throw new Error("This return is already approved and complete.");
+
+  // Only the immediate next stage may be set — no skipping.
+  const next = nextReturnStage(entry.stage);
+  if (!next) throw new Error("This return has no further stage.");
+  if (toStage !== next.key) throw new Error("That isn't the next step for this return.");
+
+  // Gate to the role that owns the target stage.
+  const needRole = next.role;
+  if (!needRole) throw new Error("That step can't be advanced.");
+  const assignments = await getWorkflowRoles();
+  if (!(admin || userHasWorkflowRole(assignments, user.id, needRole))) {
+    throw new Error(`Only the ${workflowRoleLabel(needRole)} or an admin can mark "${next.label}".`);
+  }
+  const stampRole = userHasWorkflowRole(assignments, user.id, needRole) ? workflowRoleLabel(needRole) : "Admin";
+
+  // Proof is mandatory to reach "Warehouse received".
+  const proofDocs = (opts?.proof ?? [])
     .filter((d) => d && typeof d.path === "string" && typeof d.name === "string")
     .map((d) => ({ path: d.path, name: d.name, uploadedAt: d.uploadedAt ?? new Date().toISOString() }));
-  if (proofDocs.length) entry.proof = proofDocs;
+  if (next.requiresProof && proofDocs.length === 0 && !(entry.proof && entry.proof.length > 0)) {
+    throw new Error("Attach proof that the item was replaced before marking it received.");
+  }
+
+  const now = new Date().toISOString();
+  entry.stage = next.key;
+  entry.stamps = { ...entry.stamps, [next.key]: { byName: user.name, role: stampRole, at: now } };
+  if (proofDocs.length) entry.proof = [...(entry.proof ?? []), ...proofDocs];
+  const note = opts?.note?.trim();
+  if (next.key === "approved") {
+    entry.resolvedByName = user.name;
+    entry.resolvedRole = stampRole;
+    entry.resolvedAt = now;
+    if (note) entry.resolutionNote = note;
+  }
+
   await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { returns: list as unknown as Prisma.InputJsonValue } });
+  await logActivity(user, {
+    action: "order.purchase.return.advance",
+    category: "order",
+    summary: `Supplier return — ${next.label}${pr.quotationId ? ` — ${await orderRefLabel(pr.quotationId)}` : ""}`,
+    entity: "order",
+    entityId: pr.quotationId ?? purchaseRequestId,
+    href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+  });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
+  revalidatePath("/my-dashboard");
+  revalidatePath("/management");
 }
 
 // --- Voucher reconciliation -------------------------------------------------

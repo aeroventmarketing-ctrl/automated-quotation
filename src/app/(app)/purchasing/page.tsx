@@ -199,7 +199,7 @@ export default async function PurchasingPage() {
       // Supplier returns ride on the anchor request (the whole PO).
       const returns = buildReturnViews(anchor);
       const canRaiseReturn = canRaiseReturnAt(status) && (canAct("purchaser") || canAct("warehouse") || canAct("plant_manager"));
-      const canResolveReturn = canAct("purchaser") || canAct("warehouse");
+      const returnAdvanceRoles = (["purchaser", "logistics", "warehouse", "plant_manager"] as WorkflowRoleKey[]).filter((r) => canAct(r));
       // Voucher reconciliation rides on the anchor (the whole PO / voucher).
       const reconcile = buildReconcileView(anchor);
       const canRecordReconcile = canReconcileAt(status) && (canAct("purchaser") || canAct("accounting") || canAct("payment_approver"));
@@ -235,7 +235,8 @@ export default async function PurchasingPage() {
         canDelete,
         returns,
         canRaiseReturn,
-        canResolveReturn,
+        returnAdvanceRoles,
+        returnAdmin: admin,
         reconcile,
         canRecordReconcile,
         canSettleReconcile,

@@ -17,6 +17,7 @@ import { readOrderWorkflow, pendingStep, requisitionDeptLabel, deptRole } from "
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
+import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
@@ -52,6 +53,19 @@ export interface MaterialNote {
   href: string;
 }
 
+/** A supplier-return lifecycle note — shown to the four handling roles + admin. */
+export interface ReturnNote {
+  key: string;
+  orderRef: string; // order / requisition label
+  items: string; // what was returned
+  stageLabel: string; // current lifecycle stage
+  awaiting: string | null; // next step + owning role, or null once complete
+  yourStep: boolean; // the next step is one the viewer owns
+  variant: "success" | "warning" | "secondary";
+  when: string; // ISO — latest stamp
+  href: string;
+}
+
 export interface MyDashboard {
   hasRole: boolean; // holds ≥1 workflow role (or admin) — i.e. this page applies
   roleLabels: string[]; // the viewer's workflow-role labels (for the header)
@@ -61,6 +75,9 @@ export interface MyDashboard {
   // MRF completed / partially-released notes — shown to Admin, Warehouse,
   // Purchaser and the requesting department.
   materialsFeed: MaterialNote[];
+  // Supplier-return lifecycle — shown to Admin, Purchaser, Warehouse, Plant
+  // Manager and Logistics.
+  returnsFeed: ReturnNote[];
 }
 
 /** The workflow-role labels a user holds. */
@@ -94,6 +111,10 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // MRF completed / partially-released notifications for Admin / Warehouse /
   // Purchaser / requesting department (collected while scanning orders below).
   const materialsFeed: MaterialNote[] = [];
+  // Supplier-return lifecycle notes for the Purchaser, Warehouse, Plant Manager
+  // and Logistics (and admins) — each owns one stage of the handshake.
+  const returnsFeed: ReturnNote[] = [];
+  const seesReturnsFeed = isAdmin(user) || has("purchaser") || has("warehouse") || has("plant_manager") || has("logistics");
   // Seen in full by the materials-handling roles and by every role that can
   // request an MRF for any department: Admin, Warehouse, Purchaser and the Plant
   // Manager. Individual department heads additionally see their own dept's MRFs.
@@ -274,6 +295,54 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     }
   } catch { /* ignore */ }
 
+  // 2b) Supplier returns — the return-to-supplier lifecycle. Every handling role
+  //     sees the live status of each return; when the next step is theirs it also
+  //     becomes an actionable task.
+  if (seesReturnsFeed) {
+    try {
+      const retPrs = await prisma.purchaseRequest.findMany({
+        select: {
+          id: true, quotationId: true, dept: true, returns: true, createdAt: true,
+          quotation: { select: { quoteNumber: true, inquiry: { select: { customer: { select: { company: true } } } } } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      for (const pr of retPrs) {
+        const rets = coercePurchaseReturns(pr.returns);
+        if (rets.length === 0) continue;
+        const company = pr.quotation?.inquiry.customer.company ?? null;
+        const orderRef = pr.quotationId ? (pr.quotation?.quoteNumber ?? "Order") : `Requisition · ${requisitionDeptLabel(pr.dept)}`;
+        const href = pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing";
+        for (const r of rets) {
+          const done = isReturnComplete(r.stage);
+          const next = nextReturnStage(r.stage);
+          const yourStep = !done && !!next && next.role != null && has(next.role);
+          const stamps = Object.values(r.stamps).filter(Boolean) as { at: string }[];
+          const when = stamps.map((s) => s.at).sort().at(-1) ?? r.raisedAt ?? new Date(0).toISOString();
+          returnsFeed.push({
+            key: `ret:${pr.id}:${r.id}`,
+            orderRef,
+            items: r.items,
+            stageLabel: returnStageDef(r.stage).label,
+            awaiting: done || !next ? null : `${next.advanceLabel} (${workflowRoleLabel(next.role!)})`,
+            yourStep,
+            variant: done ? "success" : yourStep ? "warning" : "secondary",
+            when,
+            href,
+          });
+          if (yourStep && next) {
+            tasks.push({
+              key: `ret-task:${pr.id}:${r.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
+              title: orderRef, action: `Supplier return — ${next.advanceLabel}`,
+              client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
+              href, since: when,
+            });
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
   // 3) Cash requests — whose next step needs a role the viewer holds (or they're
   //    the requestor confirming receipt).
   try {
@@ -395,6 +464,12 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   const activity = await listActivityForActor(user.id, 30);
 
   visibleFeed.sort((a, b) => b.when.localeCompare(a.when));
+  const visibleReturns = returnsFeed.filter((r) => passesNotificationBaseline(r.when || undefined, baseline));
+  // Open returns first (your step, then other awaiting), completed last; newest within each.
+  visibleReturns.sort((a, b) => {
+    const rank = (n: ReturnNote) => (n.variant === "warning" ? 0 : n.variant === "secondary" ? 1 : 2);
+    return rank(a) - rank(b) || b.when.localeCompare(a.when);
+  });
 
   return {
     // Sales base-role users get their own My Dashboard too — to monitor their
@@ -406,5 +481,6 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     activity,
     byArea,
     materialsFeed: visibleFeed.slice(0, 15),
+    returnsFeed: visibleReturns.slice(0, 15),
   };
 }

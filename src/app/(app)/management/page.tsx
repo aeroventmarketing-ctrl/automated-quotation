@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale, Banknote } from "lucide-react";
+import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale, Banknote, RotateCcw } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +11,10 @@ import { getPrintedVouchers } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
-import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, type OrderStage } from "@/lib/order-workflow";
-import { getCurrentUser, canApprove } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, requisitionDeptLabel, type OrderStage } from "@/lib/order-workflow";
+import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
+import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { scheduleApproverNames } from "@/lib/approver-directory";
 import { buildScheduleView, expandOccurrences, type ScheduleView } from "@/lib/schedule";
@@ -350,6 +351,42 @@ export default async function ManagementPage() {
   cashLiq.sort((a, b) => stateRank[a.state] - stateRank[b.state]);
   const openDiscrepancies = cashLiq.filter((c) => c.state !== "settled").length;
 
+  // Supplier returns — the return-to-supplier lifecycle, surfaced for admin /
+  // payment-approver monitoring (notification + live status).
+  const seesReturns = viewer != null && (isAdmin(viewer) || userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey));
+  type ReturnRow = { key: string; items: string; orderRef: string; stageLabel: string; awaiting: string | null; done: boolean; when: string; href: string };
+  const returnRows: ReturnRow[] = [];
+  if (seesReturns) {
+    const retPrs = await prisma.purchaseRequest
+      .findMany({ select: { id: true, quotationId: true, dept: true, returns: true, quotation: { select: { quoteNumber: true } } } })
+      .catch(() => [] as { id: string; quotationId: string | null; dept: string | null; returns: unknown; quotation: { quoteNumber: string | null } | null }[]);
+    for (const pr of retPrs) {
+      const rets = coercePurchaseReturns(pr.returns);
+      if (rets.length === 0) continue;
+      const orderRef = pr.quotationId ? (pr.quotation?.quoteNumber ?? "Order") : `Requisition · ${requisitionDeptLabel(pr.dept)}`;
+      const href = pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing";
+      for (const r of rets) {
+        const done = isReturnComplete(r.stage);
+        const next = nextReturnStage(r.stage);
+        const stamps = Object.values(r.stamps).filter(Boolean) as { at: string }[];
+        const when = stamps.map((s) => s.at).sort().at(-1) ?? r.raisedAt ?? "";
+        returnRows.push({
+          key: `${pr.id}:${r.id}`,
+          items: r.items,
+          orderRef,
+          stageLabel: returnStageDef(r.stage).label,
+          awaiting: done || !next || !next.role ? null : `${next.advanceLabel} (${workflowRoleLabel(next.role)})`,
+          done,
+          when,
+          href,
+        });
+      }
+    }
+    // Open returns first, newest within each group.
+    returnRows.sort((a, b) => Number(a.done) - Number(b.done) || b.when.localeCompare(a.when));
+  }
+  const openReturns = returnRows.filter((r) => !r.done).length;
+
   const tiles = [
     { label: "Open orders", value: String(openOrders), caption: `${orderCount} confirmed`, href: "/orders", icon: ClipboardList, color: "#2a78d6" },
     { label: "Receivables", value: formatCurrency(outstanding, CURRENCY), caption: `${collectedPct}% collected`, href: "/orders", icon: Wallet, color: "#1baf7a" },
@@ -658,6 +695,47 @@ export default async function ManagementPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Supplier returns — return-to-supplier lifecycle (admin / payment approver). */}
+      {seesReturns && (
+        <Card className={`shadow-sm ${openReturns > 0 ? "border-amber-300 dark:border-amber-900" : ""}`}>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <RotateCcw className="h-4 w-4 text-muted-foreground" /> Returns to supplier
+              {openReturns > 0 && (
+                <span className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  {openReturns} in progress
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {returnRows.length === 0 ? (
+              <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
+                No items returned to suppliers.
+              </div>
+            ) : (
+              <>
+                <p className="mb-2 text-[11px] text-muted-foreground">Each returned item walks: sent to supplier → replaced → checked by purchaser → in transit → warehouse received → plant-manager approved. Click a row to open the order and monitor the handshake.</p>
+                <ul className="divide-y">
+                  {returnRows.slice(0, 12).map((r) => (
+                    <li key={r.key}>
+                      <Link href={r.href} className="-mx-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-1.5 text-sm hover:bg-accent">
+                        <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${r.done ? "border-emerald-500/40 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "border-amber-400 bg-amber-50 text-amber-700"}`}>{r.stageLabel}</span>
+                        <span className="min-w-0 truncate font-medium">{r.items}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{r.orderRef}</span>
+                        <span className="ml-auto shrink-0 text-xs text-muted-foreground">{r.awaiting ? `Awaiting: ${r.awaiting}` : "Complete"}</span>
+                      </Link>
+                    </li>
+                  ))}
+                  {returnRows.length > 12 && <li className="pt-1 text-xs text-muted-foreground">+ {returnRows.length - 12} more</li>}
+                </ul>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Receivables */}

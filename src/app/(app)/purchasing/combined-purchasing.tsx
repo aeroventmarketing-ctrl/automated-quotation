@@ -72,7 +72,8 @@ export interface BatchCard {
   canDelete: boolean;
   returns: PurchaseReturnView[];
   canRaiseReturn: boolean;
-  canResolveReturn: boolean;
+  returnAdvanceRoles: string[];
+  returnAdmin: boolean;
   reconcile: PurchaseReconcileView;
   canRecordReconcile: boolean;
   canSettleReconcile: boolean;
@@ -378,7 +379,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         prId={batch.anchorId}
         returns={batch.returns}
         canRaiseReturn={batch.canRaiseReturn}
-        canResolveReturn={batch.canResolveReturn}
+        advanceRoles={batch.returnAdvanceRoles}
+        readOnly={!(batch.canRaiseReturn || batch.returnAdvanceRoles.length > 0)}
         admin={admin}
         lineItems={batch.members.flatMap((m) => m.items)}
       />

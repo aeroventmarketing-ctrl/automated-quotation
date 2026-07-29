@@ -13,7 +13,7 @@ import { PendingStockActions } from "../inventory/pending-stock-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes } from "lucide-react";
+import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
 
@@ -231,6 +231,36 @@ export default async function MyDashboardPage() {
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
                         {m.orderRef}{m.client ? ` · ${m.client}` : ""}{m.when ? ` · ${fmtWhen(m.when)}` : ""}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Supplier returns — the return-to-supplier lifecycle, shown to the
+          Purchaser, Warehouse, Plant Manager, Logistics and admins. */}
+      {data.returnsFeed.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Returns to supplier — status</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {data.returnsFeed.map((r) => (
+                <li key={r.key}>
+                  <Link href={r.href} className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-accent">
+                    <RotateCcw className={`h-4 w-4 shrink-0 ${r.variant === "warning" ? "text-amber-600" : r.variant === "success" ? "text-emerald-600" : "text-muted-foreground"}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate font-medium">{r.items}</span>
+                        <Badge variant={r.variant} className="font-normal">{r.stageLabel}</Badge>
+                        {r.yourStep && <Badge variant="destructive" className="font-normal">Your step</Badge>}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {r.orderRef}{r.awaiting ? ` · Awaiting: ${r.awaiting}` : " · Complete"}{r.when ? ` · ${fmtWhen(r.when)}` : ""}
                       </div>
                     </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
