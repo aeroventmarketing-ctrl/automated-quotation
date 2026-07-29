@@ -63,7 +63,7 @@ export default async function ProductsPage() {
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <ProductManager products={products} suppliers={suppliers} canManage={canManage} showPrices={showPrices} showSuppliers={showSuppliers} />
+            <ProductManager products={products} suppliers={suppliers} canManage={canManage} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} />
           </CardContent>
         </Card>
       )}

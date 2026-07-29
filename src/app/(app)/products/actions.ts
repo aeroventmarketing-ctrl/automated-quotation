@@ -99,6 +99,29 @@ export async function removeUnsourcedProducts(): Promise<{ removed: number }> {
   return { removed: ids.length };
 }
 
+/** Remove several products at once (soft-delete). Purchaser / admin. */
+export async function deleteProducts(ids: string[]): Promise<{ removed: number }> {
+  await requireProductManager();
+  const clean = [...new Set((ids ?? []).filter((x): x is string => typeof x === "string" && x.length > 0))];
+  if (clean.length === 0) return { removed: 0 };
+  const res = await prisma.product.updateMany({ where: { id: { in: clean }, active: true }, data: { active: false } });
+  revalidatePath("/products");
+  return { removed: res.count };
+}
+
+/**
+ * Clear the whole product list (soft-delete every active product) so a fresh
+ * Excel/CSV can be imported. Admin only — deactivates (never hard-deletes), so
+ * historical references are preserved and an admin can recover them.
+ */
+export async function clearAllProducts(): Promise<{ removed: number }> {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Only an admin can clear all products.");
+  const res = await prisma.product.updateMany({ where: { active: true }, data: { active: false } });
+  revalidatePath("/products");
+  return { removed: res.count };
+}
+
 // --- Bulk import (CSV / Excel) ----------------------------------------------
 
 /** Minimal RFC-4180-ish CSV parser (handles quoted fields and embedded commas). */

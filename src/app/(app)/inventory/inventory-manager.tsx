@@ -11,7 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
 import { BulkImport } from "./bulk-import";
-import { createStockItem, adjustStock, updateStockItemPrices, releaseReservation, assignMissingSkus, mergeDuplicateStockItems } from "./actions";
+import { createStockItem, adjustStock, updateStockItemPrices, releaseReservation, assignMissingSkus, mergeDuplicateStockItems, removeStockItems, clearAllStockItems } from "./actions";
 import { proposeStockAction } from "./stock-action-actions";
 import { PendingChip, PendingStockActions } from "./pending-stock-actions";
 import type { StockActionView, StockDoc } from "@/lib/stock-action";
@@ -82,7 +82,7 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [] }: { item: Item; canManage: boolean; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[] }) {
+function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   const router = useRouter();
   // Purchaser/admin who aren't the stock manager still get a "Set price" action.
   const priceOnly = canEditPrices && !canManage;
@@ -90,8 +90,9 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   // The Sell-price column is hidden from some price viewers (e.g. Purchaser).
   const showSell = showPrices && showSellPrice;
   // Table has 8 always-on columns + price columns (unit cost, [sell price],
-  // value) + 1 action column; the expandable panels span all of them.
-  const colSpan = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (hasActions ? 1 : 0);
+  // value) + 1 action column (+ a leading select column); the expandable panels
+  // span all of them.
+  const colSpan = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (hasActions ? 1 : 0) + (selectable ? 1 : 0);
   const [panel, setPanel] = useState<"none" | "adjust" | "edit" | "price" | "reserve" | "transfer" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
   const [flash, setFlash] = useState(false);
@@ -179,7 +180,12 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
 
   return (
     <>
-      <TableRow ref={rowRef} className={flash ? "bg-primary/10 transition-colors" : undefined}>
+      <TableRow ref={rowRef} className={flash ? "bg-primary/10 transition-colors" : selected ? "bg-primary/5" : undefined}>
+        {selectable && (
+          <TableCell className="w-8 align-top">
+            <input type="checkbox" className="mt-1 h-4 w-4 cursor-pointer" checked={selected} onChange={onToggle} aria-label={`Select ${item.name}`} />
+          </TableCell>
+        )}
         <TableCell>
           <div className="flex items-center gap-2">
             <span className="font-medium">{item.name}</span>
@@ -374,9 +380,13 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   );
 }
 
-export function InventoryManager({ items, canManage, canScan = canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canScan?: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, admin = false, canScan = canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canScan?: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
+  // Multi-select for bulk delete / clear-all (admin only — the server actions
+  // are admin-gated). Lets an admin wipe items to re-import a fresh Excel/CSV.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleOne = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const searchParams = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
@@ -461,7 +471,7 @@ export function InventoryManager({ items, canManage, canScan = canManage, canCre
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices ? 1 : 0);
+  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices ? 1 : 0) + (admin ? 1 : 0);
   // Hide the price-based sort options from viewers who can't see prices.
   const sortOptions = SORT_OPTIONS.filter((o) =>
     (showPrices || (o.key !== "unitCost" && o.key !== "sellPrice" && o.key !== "value")) && (showSell || o.key !== "sellPrice"),
@@ -523,6 +533,44 @@ export function InventoryManager({ items, canManage, canScan = canManage, canCre
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally { setBusy(false); }
+  }
+
+  const selectable = admin;
+  const filteredIds = useMemo(() => filtered.map((it) => it.id), [filtered]);
+  const selectedVisible = filteredIds.filter((id) => selected.has(id));
+  const allVisibleSelected = filteredIds.length > 0 && selectedVisible.length === filteredIds.length;
+  function toggleAllVisible() {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (allVisibleSelected) filteredIds.forEach((id) => n.delete(id));
+      else filteredIds.forEach((id) => n.add(id));
+      return n;
+    });
+  }
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected item${ids.length === 1 ? "" : "s"}? They'll be removed from the inventory (recoverable by an admin).`)) return;
+    setBusy(true); setErr(null);
+    try {
+      const { removed } = await removeStockItems(ids);
+      setSelected(new Set());
+      router.refresh();
+      window.alert(`${removed} item${removed === 1 ? "" : "s"} removed.`);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(false); }
+  }
+  async function clearAll() {
+    if (!window.confirm(`Clear ALL ${items.length} stock items so you can import a fresh file? They'll be removed from the inventory (recoverable by an admin).`)) return;
+    if (!window.confirm("This removes every item in the inventory. Continue?")) return;
+    setBusy(true); setErr(null);
+    try {
+      const { removed } = await clearAllStockItems();
+      setSelected(new Set());
+      router.refresh();
+      window.alert(`${removed} item${removed === 1 ? "" : "s"} removed. You can now import a fresh file.`);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(false); }
   }
 
   async function add() {
@@ -601,8 +649,24 @@ export function InventoryManager({ items, canManage, canScan = canManage, canCre
                   {busy ? "…" : `Merge duplicates (${dupCount})`}
                 </Button>
               )}
+              {admin && items.length > 0 && (
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={busy} onClick={clearAll}>
+                  {busy ? "…" : `Clear all (${items.length})`}
+                </Button>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Bulk selection bar — appears once one or more items are ticked. */}
+      {selectable && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+          <span className="font-medium">{selected.size} selected</span>
+          <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={deleteSelected}>
+            {busy ? "…" : "Delete selected"}
+          </Button>
+          <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelected(new Set())}>Clear selection</button>
         </div>
       )}
 
@@ -667,6 +731,11 @@ export function InventoryManager({ items, canManage, canScan = canManage, canCre
           <Table className="[&_td]:px-1.5 [&_th]:px-1.5">
             <TableHeader>
               <TableRow>
+                {selectable && (
+                  <TableHead className="w-8">
+                    <input type="checkbox" className="h-4 w-4 cursor-pointer" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all" title="Select all shown" />
+                  </TableHead>
+                )}
                 <TableHead>Item</TableHead>
                 <TableHead>Unit</TableHead>
                 <TableHead>Location</TableHead>
@@ -692,7 +761,7 @@ export function InventoryManager({ items, canManage, canScan = canManage, canCre
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
                 </Fragment>
               ))}
             </TableBody>

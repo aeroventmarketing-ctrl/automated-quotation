@@ -354,6 +354,40 @@ export async function removeStockItem(id: string): Promise<void> {
   revalidatePath("/inventory");
 }
 
+/** Remove several stock items at once (soft-delete). Admin only. */
+export async function removeStockItems(ids: string[]): Promise<{ removed: number }> {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Only an admin can remove stock items.");
+  const clean = [...new Set((ids ?? []).filter((x): x is string => typeof x === "string" && x.length > 0))];
+  if (clean.length === 0) return { removed: 0 };
+  const res = await prisma.stockItem.updateMany({ where: { id: { in: clean }, active: true }, data: { active: false } });
+  await logActivity(user, {
+    action: "inventory.remove_bulk", category: "inventory",
+    summary: `Removed ${res.count} stock item${res.count === 1 ? "" : "s"}`,
+    entity: "inventory", href: "/inventory",
+  });
+  revalidatePath("/inventory");
+  return { removed: res.count };
+}
+
+/**
+ * Clear the whole inventory (soft-delete every active stock item) so a fresh
+ * Excel/CSV can be imported. Admin only — deactivates (never hard-deletes), so
+ * historical movements/references are preserved and an admin can recover them.
+ */
+export async function clearAllStockItems(): Promise<{ removed: number }> {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) throw new Error("Only an admin can clear the inventory.");
+  const res = await prisma.stockItem.updateMany({ where: { active: true }, data: { active: false } });
+  await logActivity(user, {
+    action: "inventory.clear_all", category: "inventory",
+    summary: `Cleared the inventory (${res.count} item${res.count === 1 ? "" : "s"})`,
+    entity: "inventory", href: "/inventory",
+  });
+  revalidatePath("/inventory");
+  return { removed: res.count };
+}
+
 /** Assign SKUs to every active item that doesn't have one yet. */
 export async function assignMissingSkus(): Promise<void> {
   await requireInventoryManager();

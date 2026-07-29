@@ -13,7 +13,7 @@ import { qrSvg } from "@/lib/qr";
 import type { Supplier } from "@/lib/suppliers";
 import type { ProductSupplierLink } from "@/lib/products";
 import type { ProductRow } from "@/lib/product-catalog";
-import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts } from "./actions";
+import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts, deleteProducts, clearAllProducts } from "./actions";
 import { BulkImport } from "./bulk-import";
 import { ProductScanBox } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -93,7 +93,7 @@ function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplier
   );
 }
 
-function ProductRowView({ product, canManage, showPrices, showSuppliers, suppliers, scanTarget, scanNonce }: { product: ProductRow; canManage: boolean; showPrices: boolean; showSuppliers: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number }) {
+function ProductRowView({ product, canManage, showPrices, showSuppliers, suppliers, scanTarget, scanNonce, selectable, selected, onToggle, colSpan }: { product: ProductRow; canManage: boolean; showPrices: boolean; showSuppliers: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number; selectable: boolean; selected: boolean; onToggle: () => void; colSpan: number }) {
   const router = useRouter();
   const [panel, setPanel] = useState<"none" | "edit" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
@@ -127,7 +127,12 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
 
   return (
     <>
-      <TableRow ref={rowRef} className={flash ? "bg-primary/10 transition-colors" : undefined}>
+      <TableRow ref={rowRef} className={flash ? "bg-primary/10 transition-colors" : selected ? "bg-primary/5" : undefined}>
+        {selectable && (
+          <TableCell className="w-8 align-top">
+            <input type="checkbox" className="mt-1 h-4 w-4 cursor-pointer" checked={selected} onChange={onToggle} aria-label={`Select ${product.name}`} />
+          </TableCell>
+        )}
         <TableCell>
           <div className="font-medium">{product.name}</div>
           <div className="text-xs text-muted-foreground">{[product.sku ? `SKU ${product.sku}` : null, product.category].filter(Boolean).join(" · ")}</div>
@@ -155,7 +160,7 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
       </TableRow>
       {panel === "edit" && canManage && (
         <TableRow>
-          <TableCell colSpan={canManage ? 4 : 3} className="bg-muted/30">
+          <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="space-y-2 py-1">
               <div className="flex flex-wrap items-end gap-2">
                 <label className="text-xs text-muted-foreground">Name<Input className="h-8 w-56" value={name} onChange={(e) => setName(e.target.value)} /></label>
@@ -178,7 +183,7 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
       )}
       {panel === "label" && (
         <TableRow>
-          <TableCell colSpan={canManage ? 4 : 3} className="bg-muted/30">
+          <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-col items-start gap-1 py-1">
               <div className="text-sm font-medium">{product.name}{product.sku ? ` · SKU ${product.sku}` : ""}</div>
               <div className="flex items-center gap-4">
@@ -199,9 +204,12 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
   );
 }
 
-export function ProductManager({ products, suppliers, canManage, showPrices, showSuppliers = true }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; showPrices: boolean; showSuppliers?: boolean }) {
+export function ProductManager({ products, suppliers, canManage, admin = false, showPrices, showSuppliers = true }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean }) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
+  // Multi-select for bulk delete (managers only).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleOne = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("pcs");
   const [category, setCategory] = useState("");
@@ -260,7 +268,8 @@ export function ProductManager({ products, suppliers, canManage, showPrices, sho
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = (canManage ? 4 : 3) - (showSuppliers ? 0 : 1);
+  const selectable = canManage;
+  const cols = (canManage ? 4 : 3) - (showSuppliers ? 0 : 1) + (selectable ? 1 : 0);
 
   function handleScan({ product }: { product: ScanProduct }) {
     setScanTarget(product.id); setScanNonce((n) => n + 1);
@@ -284,6 +293,44 @@ export function ProductManager({ products, suppliers, canManage, showPrices, sho
   // Hide the price- and supplier-based sort options from viewers who can't see them.
   const sortOptions = SORT_OPTIONS.filter((o) => (showPrices || o.key !== "price") && (showSuppliers || o.key !== "supplier"));
   const groupOptions = GROUP_OPTIONS.filter((o) => showSuppliers || o.key !== "supplier");
+
+  // Only offer to select the products currently visible (after search/filter).
+  const filteredIds = useMemo(() => filtered.map((p) => p.id), [filtered]);
+  const selectedVisible = filteredIds.filter((id) => selected.has(id));
+  const allVisibleSelected = filteredIds.length > 0 && selectedVisible.length === filteredIds.length;
+  function toggleAllVisible() {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (allVisibleSelected) filteredIds.forEach((id) => n.delete(id));
+      else filteredIds.forEach((id) => n.add(id));
+      return n;
+    });
+  }
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected product${ids.length === 1 ? "" : "s"}? They'll be removed from the list (recoverable by an admin).`)) return;
+    setBusy(true); setErr(null);
+    try {
+      const { removed } = await deleteProducts(ids);
+      setSelected(new Set());
+      router.refresh();
+      window.alert(`${removed} product${removed === 1 ? "" : "s"} removed.`);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(false); }
+  }
+  async function clearAll() {
+    if (!window.confirm(`Clear ALL ${products.length} products so you can import a fresh file? They'll be removed from the list (recoverable by an admin).`)) return;
+    if (!window.confirm("This removes every product on the list. Continue?")) return;
+    setBusy(true); setErr(null);
+    try {
+      const { removed } = await clearAllProducts();
+      setSelected(new Set());
+      router.refresh();
+      window.alert(`${removed} product${removed === 1 ? "" : "s"} removed. You can now import a fresh file.`);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(false); }
+  }
 
   async function cleanupUnsourced() {
     if (!window.confirm(`Remove ${unsourced} product${unsourced === 1 ? "" : "s"} that have no supplier and no price? They'll be removed from the list (recoverable by an admin).`)) return;
@@ -345,6 +392,11 @@ export function ProductManager({ products, suppliers, canManage, showPrices, sho
                   {busy ? "…" : `Remove no-supplier items (${unsourced})`}
                 </Button>
               )}
+              {admin && products.length > 0 && (
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={busy} onClick={clearAll}>
+                  {busy ? "…" : `Clear all (${products.length})`}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -379,6 +431,17 @@ export function ProductManager({ products, suppliers, canManage, showPrices, sho
         </button>
       </div>
 
+      {/* Bulk selection bar — appears once one or more products are ticked. */}
+      {selectable && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+          <span className="font-medium">{selected.size} selected</span>
+          <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={deleteSelected}>
+            {busy ? "…" : "Delete selected"}
+          </Button>
+          <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelected(new Set())}>Clear selection</button>
+        </div>
+      )}
+
       {products.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No products yet.</p>
       ) : filtered.length === 0 ? (
@@ -389,6 +452,11 @@ export function ProductManager({ products, suppliers, canManage, showPrices, sho
           <Table>
             <TableHeader>
               <TableRow>
+                {selectable && (
+                  <TableHead className="w-8">
+                    <input type="checkbox" className="h-4 w-4 cursor-pointer" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all" title="Select all shown" />
+                  </TableHead>
+                )}
                 <TableHead>Product</TableHead>
                 <TableHead>Unit</TableHead>
                 {showSuppliers && <TableHead>Suppliers</TableHead>}
@@ -406,7 +474,7 @@ export function ProductManager({ products, suppliers, canManage, showPrices, sho
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} showPrices={showPrices} showSuppliers={showSuppliers} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} />)}
+                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} showPrices={showPrices} showSuppliers={showSuppliers} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} selectable={selectable} selected={selected.has(p.id)} onToggle={() => toggleOne(p.id)} colSpan={cols} />)}
                 </Fragment>
               ))}
             </TableBody>
