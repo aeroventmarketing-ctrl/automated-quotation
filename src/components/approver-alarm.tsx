@@ -142,12 +142,14 @@ export function ApproverAlarm() {
         for (const id of alarmedRef.current) if (!currentIds.has(id)) alarmedRef.current.delete(id);
         const fresh = orders.filter((o) => !alarmedRef.current.has(o.id));
         if (fresh.length > 0 && !stopSoundRef.current) {
-          // Only "remember" these once audio can actually play; if it's still
-          // locked (no interaction yet), leave them so the next poll re-rings
-          // with sound after the user has tapped once.
-          const soundReady = unlockAudio();
+          unlockAudio();
           ring(orders);
-          if (soundReady) orders.forEach((o) => alarmedRef.current.add(o.id));
+          // Ring each order ONCE: remember every currently-pending order so it
+          // doesn't re-fire every poll while it just sits waiting. (Audio may be
+          // locked on this first ring — the flashing popup still shows, and any
+          // later tap unlocks sound for the NEXT new order.) An order that leaves
+          // the pending set is forgotten above, so it can ring again if it returns.
+          orders.forEach((o) => alarmedRef.current.add(o.id));
         }
       } catch {
         /* ignore network hiccups */
