@@ -1142,17 +1142,34 @@ export async function createDepartmentRequisition(
 export async function cancelMaterialRequest(quotationId: string, requestId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  const { cls, wf } = await loadWorkflow(quotationId);
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
   const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
   if (idx < 0) throw new Error("Material request not found.");
   const mrf = wf.materialRequests[idx];
-  if (mrf.status !== "requested") throw new Error("Only a request the warehouse hasn't handled yet can be cancelled.");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(mrf.dept) as WorkflowRoleKey))) {
+  if (mrf.status === "cancelled" || mrf.status === "completed") throw new Error("This material request is already closed.");
+  const admin = isAdmin(user);
+  const isDeptHead = userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(mrf.dept) as WorkflowRoleKey);
+  // The requesting dept head may cancel only while it's still 'requested' (before
+  // the warehouse handles it); an admin may cancel a material request at ANY stage.
+  if (mrf.status !== "requested" && !admin) {
+    throw new Error("Only an admin can cancel a material request the warehouse has already handled.");
+  }
+  if (!(admin || isDeptHead)) {
     throw new Error(`Only the ${deptLabel(mrf.dept)} head or an admin can cancel this material request.`);
   }
+  // Release any active soft-reservations held for this MRF (safe cleanup). Issued
+  // stock isn't reversed (it's already been taken) and a linked purchase request,
+  // if any, is left for the Purchaser/admin to cancel in Purchasing.
+  await prisma.stockReservation
+    .updateMany({
+      where: { active: true, forRef: quote.quoteNumber || "order", note: `MRF #${mrf.formNo}` },
+      data: { active: false, releasedByName: user.name, releasedAt: new Date() },
+    })
+    .catch(() => {});
   const materialRequests = wf.materialRequests.slice();
   materialRequests[idx] = { ...mrf, status: "cancelled", handledAt: new Date().toISOString(), handledByName: user.name };
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
+  revalidatePath("/inventory");
 }
 
 /** Helper: load an MRF and enforce the requesting-department-head (or admin) actor. */
@@ -1437,16 +1454,35 @@ export async function processMaterialRequest(
 
   const dispOf = (a: LineDisposition["action"]): MRFLineDisposition =>
     a === "purchase" ? "purchase" : a === "reserve" ? "reserve" : "issue";
-  // Plan each requested line: how much is issued/reserved from stock now, and how
-  // much is short. The shortfall on a partial issue/reserve is escalated to
-  // purchasing (previously it was silently dropped).
+
+  // Available-to-use quantity (on-hand − active reservations) for each stock item
+  // the warehouse chose to issue/reserve. What can't be covered from stock —
+  // including an item that's completely out of stock — auto-routes to purchasing.
+  const stockIds = [...new Set(dispositions.filter((d) => (d.action === "issue" || d.action === "reserve") && d.stockItemId).map((d) => d.stockItemId as string))];
+  const availById = new Map<string, number>();
+  if (stockIds.length) {
+    const [stk, resv] = await Promise.all([
+      prisma.stockItem.findMany({ where: { id: { in: stockIds } }, select: { id: true, quantity: true } }),
+      prisma.stockReservation.groupBy({ by: ["stockItemId"], where: { active: true, stockItemId: { in: stockIds } }, _sum: { qty: true } }),
+    ]);
+    const resvBy = new Map(resv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
+    for (const s of stk) availById.set(s.id, Math.max(0, Number(s.quantity) - (resvBy.get(s.id) ?? 0)));
+  }
+
+  // Plan each requested line: how much is issued/reserved from stock now (capped
+  // at what's actually available), and how much is short. The shortfall on a
+  // partial issue/reserve is escalated to purchasing (previously it was silently
+  // dropped); an out-of-stock item moves entirely to purchasing.
   const plans = mrf.items.map((it, i) => {
     const d = dispositions[i];
     const disposition = dispOf(d?.action ?? "issue");
     const req = Number(it.qty || 0);
     if (disposition === "purchase") return { it, disposition, issuedHere: 0, stockItemId: undefined as string | undefined, shortfall: req };
     const got = d?.qty != null && Number(d.qty) > 0 ? Number(d.qty) : 0;
-    const issuedHere = req > 0 ? Math.min(got, req) : got;
+    // Cap at available stock when an item was picked (out of stock → 0 → all purchased).
+    const avail = d?.stockItemId ? (availById.get(d.stockItemId) ?? 0) : Number.POSITIVE_INFINITY;
+    const wanted = req > 0 ? Math.min(got, req) : got;
+    const issuedHere = Math.max(0, Math.min(wanted, avail));
     return { it, disposition, issuedHere, stockItemId: d?.stockItemId || undefined, shortfall: req > 0 ? Math.max(0, req - issuedHere) : 0 };
   });
 

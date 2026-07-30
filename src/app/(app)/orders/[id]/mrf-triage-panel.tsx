@@ -62,13 +62,12 @@ export function MrfTriagePanel({
   }
 
   const issueCount = rows.filter((r) => r.action === "issue").length;
-  const reserveCount = rows.filter((r) => r.action === "reserve").length;
   const buyCount = rows.filter((r) => r.action === "purchase").length;
 
   return (
     <div className="mt-2 space-y-3 rounded-md border bg-muted/30 p-3">
       <div className="text-xs text-muted-foreground">
-        For each line, choose <b>Issue from stock</b> (pick the item &amp; quantity to deduct) or <b>Purchase</b> (send that line to purchasing). Lines can be split — some issued, some purchased.
+        For each line, choose <b>Issue from stock</b> (pick the item &amp; quantity to deduct) or <b>Purchase</b> (send that line to purchasing). Whatever isn&apos;t available in stock — including an out-of-stock item — is sent to purchasing automatically.
       </div>
       {stockItems.length === 0 && (
         <div className="text-xs text-amber-600">No stock items yet — add them under Inventory. You can still mark lines for purchase.</div>
@@ -94,20 +93,13 @@ export function MrfTriagePanel({
                   </button>
                   <button
                     type="button"
-                    onClick={() => set(i, { action: "reserve" })}
-                    className={`border-l px-2.5 py-1 text-xs ${r.action === "reserve" ? "bg-indigo-600 text-white" : "hover:bg-accent"}`}
-                  >
-                    Reserve
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => set(i, { action: "purchase" })}
                     className={`border-l px-2.5 py-1 text-xs ${r.action === "purchase" ? "bg-amber-500 text-white" : "hover:bg-accent"}`}
                   >
                     Purchase
                   </button>
                 </div>
-                {(r.action === "issue" || r.action === "reserve") && (
+                {r.action === "issue" && (
                   <>
                     <select
                       value={r.stockItemId}
@@ -121,7 +113,6 @@ export function MrfTriagePanel({
                     </select>
                     <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty"
                       value={r.qty} onChange={(e) => set(i, { qty: e.target.value })} />
-                    {r.action === "reserve" && <span className="text-xs text-indigo-600">Held, not deducted</span>}
                   </>
                 )}
                 {r.action === "purchase" && (
@@ -135,7 +126,7 @@ export function MrfTriagePanel({
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" className="h-8" disabled={busy} onClick={submit}>
-          {busy ? "Processing…" : `Process — issue ${issueCount}, reserve ${reserveCount}, purchase ${buyCount}`}
+          {busy ? "Processing…" : `Process — issue ${issueCount}, purchase ${buyCount}`}
         </Button>
         <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={onCancel}>Cancel</Button>
         {err && <span className="text-xs text-destructive">{err}</span>}

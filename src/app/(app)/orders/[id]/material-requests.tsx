@@ -496,6 +496,17 @@ export function MaterialRequests({
                   )}
                 </div>
               )}
+              {/* Admin-only cancel for a request the warehouse has already handled
+                  (partial / purchasing / issued) — closes a stuck MRF. */}
+              {admin && r.status !== "requested" && r.status !== "cancelled" && r.status !== "completed" && (
+                <div className="mt-2">
+                  <button type="button" disabled={busy}
+                    className="text-xs font-medium text-muted-foreground hover:text-destructive"
+                    onClick={() => { if (window.confirm(`Cancel MRF #${r.formNo}? This closes the request. Issued stock is NOT returned; any held reservations are released. Cancel a linked purchase order separately in Purchasing.`)) run(() => cancelMaterialRequest(orderId, r.id)); }}>
+                    Cancel MRF (admin)
+                  </button>
+                </div>
+              )}
               {r.status === "requested" && r.canHandle && issuingId === r.id && (
                 <MrfTriagePanel
                   lines={r.items.map((it) => ({ description: it.description, qty: it.qty, unit: it.unit, remark: it.remark }))}
