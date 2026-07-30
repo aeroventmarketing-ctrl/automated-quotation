@@ -59,15 +59,16 @@ export async function canViewSaleDocPath(user: User | null | undefined, path: st
     isOwner = inq?.createdById === user.id;
   }
   if (isOwner) return true;
-  if ((await getDocViewers()).includes(user.id)) return true;
-  // Anyone who isn't client-restricted already sees the documents list, so let
-  // them open the documents too.
-  const assignments = await getWorkflowRoles();
-  if (!(await isClientRestricted(user, assignments))) return true;
-  // Client-restricted (shop-floor) viewers stay blocked from financial documents,
-  // but may still open the proof-of-delivery files they attach/handle and the
-  // production proofs they upload against their department's job order.
+  // Production-proof and proof-of-delivery images are non-financial and must be
+  // openable by ANYONE who can reach the order — Sales, the shop-floor roles who
+  // upload them, everyone. Checked up front so a proof/POD picture never depends
+  // on the client-restriction / document-list gate (or a role-lookup failure).
   if (quoteClassification && orderPodPaths(quoteClassification).has(path)) return true;
   if (quoteClassification && orderJobProofPaths(quoteClassification).has(path)) return true;
+  if ((await getDocViewers()).includes(user.id)) return true;
+  // Anyone who isn't client-restricted already sees the documents list, so let
+  // them open the (financial) documents too.
+  const assignments = await getWorkflowRoles();
+  if (!(await isClientRestricted(user, assignments))) return true;
   return false;
 }
