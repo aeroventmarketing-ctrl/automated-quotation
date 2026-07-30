@@ -18,6 +18,7 @@ import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
 import { CombinedPurchasing, type BatchCard, type CombinableItem, type SupplierSuggestion } from "./combined-purchasing";
 import { ReplenishmentList, type PRRow } from "./replenishment-list";
+import { AdminAddDeptRequest, AdminAddReplenishment } from "./admin-pr-manage";
 import type { StockOpt } from "../orders/[id]/stock-match-panel";
 
 export interface OrderGroup {
@@ -85,6 +86,7 @@ export function PurchasingWorkspace({
   canVoucher = false,
   canCheckStock = false,
   canIssueStock = false,
+  depts = [],
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -113,6 +115,8 @@ export function PurchasingWorkspace({
   canCheckStock?: boolean;
   /** Warehouse / admin — may issue a requisition line from stock (removes it from the PO). */
   canIssueStock?: boolean;
+  /** Department options for the admin "Add material request" form. */
+  depts?: { key: string; label: string }[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
@@ -349,6 +353,7 @@ export function PurchasingWorkspace({
                       onToggleSelect={toggleSelect}
                       showAmounts={showAmounts}
                       showSupplier={showSupplier}
+                      adminManage={admin}
                     />
                   </CardContent>
                 </Card>
@@ -364,13 +369,16 @@ export function PurchasingWorkspace({
 
       {/* Department requisitions — share the same tab filter as the order material
           requests, so switching to Rejected/Cancelled hides the open ones too. */}
-      {deptRows.length > 0 && (() => {
+      {(deptRows.length > 0 || admin) && (() => {
         const shown = deptRows
           .filter((r) => inTab(rowBucket(r)))
           .filter((r) => textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
         return (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Department requisitions</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Department requisitions</h2>
+              {admin && <AdminAddDeptRequest depts={depts} />}
+            </div>
             {shown.length === 0 ? (
               <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}department requisitions.</CardContent></Card>
             ) : (
@@ -383,6 +391,7 @@ export function PurchasingWorkspace({
                   showSupplier={showSupplier}
                   showStockCheck={canCheckStock}
                   canIssueStock={canIssueStock}
+                  adminManage={admin}
                 />
               </CardContent></Card>
             )}
@@ -393,17 +402,20 @@ export function PurchasingWorkspace({
       {/* Replenishment (stock top-ups) — same tab filter, so a top-up only shows
           under the bucket matching its status (pending / approved / rejected /
           cancelled), never across all tabs. */}
-      {replenRows.length > 0 && (() => {
+      {(replenRows.length > 0 || admin) && (() => {
         const shown = replenRows
           .filter((r) => inTab(statusBucket(r.status as PRStatus)))
           .filter((r) => textMatch([...r.items, r.note ?? "", r.sku ?? ""].join("  "), query));
         return (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Replenishment (stock top-ups)</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Replenishment (stock top-ups)</h2>
+              {admin && <AdminAddReplenishment stockItems={stockItems} />}
+            </div>
             {shown.length === 0 ? (
               <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}replenishment requests.</CardContent></Card>
             ) : (
-              <ReplenishmentList rows={shown} />
+              <ReplenishmentList rows={shown} admin={admin} />
             )}
           </section>
         );

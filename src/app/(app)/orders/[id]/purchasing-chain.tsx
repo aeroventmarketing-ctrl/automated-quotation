@@ -12,6 +12,7 @@ import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-pane
 import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override";
 import { StockAvailabilityLookup } from "@/components/stock-availability-lookup";
 import { RequisitionStockCheck } from "../../requisitions/requisition-stock-check";
+import { AdminPrEditDelete } from "../../purchasing/admin-pr-manage";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { PRStatus } from "@/lib/purchasing";
@@ -117,6 +118,7 @@ export function PurchasingChain({
   showSupplier = true,
   showStockCheck = false,
   canIssueStock = false,
+  adminManage = false,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -168,6 +170,8 @@ export function PurchasingChain({
   showStockCheck?: boolean;
   /** Warehouse/admin may also issue requisition lines from stock (requisitions tab). */
   canIssueStock?: boolean;
+  /** Admin manage: show per-row "Edit item lines" (Purchasing workspace only). */
+  adminManage?: boolean;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -300,6 +304,8 @@ export function PurchasingChain({
             <ul className="ml-4 list-disc text-sm text-muted-foreground">
               {r.items.map((it, i) => <li key={i}>{it}</li>)}
             </ul>
+            {/* Admin: edit the item lines in place (delete lives in the actions row). */}
+            {adminManage && admin && !readOnly && <AdminPrEditDelete prId={r.id} items={r.items} showDelete={false} />}
             {/* Stock availability lookup — plus per-line issue-from-stock for the
                 warehouse/admin on a requisition that hasn't been PO'd yet (issuing
                 removes the line so the Purchaser only buys what's left). */}

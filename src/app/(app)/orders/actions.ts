@@ -2369,6 +2369,52 @@ export async function deletePurchaseRequest(purchaseRequestId: string): Promise<
   revalidatePath("/purchasing");
 }
 
+/**
+ * Admin: replace a purchase request's item lines (and note). Works on any
+ * status/tab. Note: this edits the request lines only — a Purchase Order that
+ * was already issued keeps its own priced lines (edit those in the PO editor).
+ */
+export async function adminEditPurchaseRequestItems(purchaseRequestId: string, items: string[], note?: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can edit a request.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  const clean = (items ?? []).map((s) => s.trim()).filter(Boolean);
+  if (clean.length === 0) throw new Error("List at least one item.");
+  await prisma.purchaseRequest.update({
+    where: { id: purchaseRequestId },
+    data: { items: clean as Prisma.InputJsonValue, ...(note !== undefined ? { note: note.trim() || null } : {}) },
+  });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+}
+
+/** Admin: add a replenishment (stock top-up) request from the Purchasing workspace. */
+export async function adminCreateReplenishment(stockItemId: string, qty: number, note?: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can add a replenishment.");
+  const item = await prisma.stockItem.findUnique({ where: { id: stockItemId } });
+  if (!item) throw new Error("Pick a stock item.");
+  if (!(qty > 0)) throw new Error("Enter a quantity greater than zero.");
+  await prisma.purchaseRequest.create({
+    data: {
+      quotationId: null,
+      kind: "replenishment",
+      stockItemId: item.id,
+      dept: null,
+      items: [`${item.name} — ${qty} ${item.unit}`.trim()],
+      note: note?.trim() || null,
+      createdById: user.id,
+      createdByName: user.name,
+      status: "PENDING_APPROVAL",
+    },
+  });
+  revalidatePath("/purchasing");
+}
+
 // --- Supplier Purchase Order ------------------------------------------------
 
 const poInputSchema = z.object({
