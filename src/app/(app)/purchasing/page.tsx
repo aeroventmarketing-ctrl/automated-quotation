@@ -355,6 +355,8 @@ export default async function PurchasingPage() {
               showAmounts={showAmounts}
               showSupplier={showSupplier}
               canVoucher={canVoucher}
+              canCheckStock={admin || canAct("warehouse") || canAct("purchaser") || canAct("payment_approver")}
+              canIssueStock={admin || canAct("warehouse")}
             />
           </section>
         </>

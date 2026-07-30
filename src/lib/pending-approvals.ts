@@ -8,6 +8,7 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { readOrderWorkflow, pendingStep } from "@/lib/order-workflow";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
+import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 
 export interface PendingApproval {
   id: string;
@@ -23,7 +24,7 @@ interface Viewer {
 
 /** Confirmed orders awaiting `user`'s approval (empty for users who owe nothing). */
 export async function pendingApprovalsForUser(user: Viewer): Promise<PendingApproval[]> {
-  const [quotes, assignments, baseline] = await Promise.all([
+  const [quotes, assignments, baseline, golive] = await Promise.all([
     prisma.quotation.findMany({
       where: { inquiry: { status: "WON" } },
       include: { inquiry: { include: { customer: true } } },
@@ -31,6 +32,7 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
     }),
     getWorkflowRoles(),
     getNotificationBaseline(),
+    getAlertGoLive(),
   ]);
 
   const out: PendingApproval[] = [];
@@ -54,6 +56,9 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
       .filter((t): t is string => !!t);
     const pendingSince = stampTimes.length ? [...stampTimes].sort().at(-1)! : q.createdAt.toISOString();
     if (!passesNotificationBaseline(pendingSince, baseline)) continue;
+    // Alerts go-live gate: silent before launch; afterwards only approvals that
+    // entered their step after the go-live moment ring (pre-launch backlog stays quiet).
+    if (!alertPasses(pendingSince, golive)) continue;
 
     out.push({
       id: q.id,

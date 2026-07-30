@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { buildScheduleView, expandOccurrences, coerceAttendees } from "@/lib/schedule";
+import { getAlertGoLive, alertsSuppressedNow } from "@/lib/alert-golive";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return Response.json({ reminders: [] });
   try {
+    // Alerts go-live gate: no reminders fire until the launch moment.
+    if (alertsSuppressedNow(await getAlertGoLive())) return Response.json({ reminders: [] });
     const now = Date.now();
     const from = new Date(now - 36 * 3600 * 1000);
     const to = new Date(now + 3 * 24 * 3600 * 1000);

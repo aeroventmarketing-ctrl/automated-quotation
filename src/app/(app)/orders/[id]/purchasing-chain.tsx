@@ -301,9 +301,10 @@ export function PurchasingChain({
               {r.items.map((it, i) => <li key={i}>{it}</li>)}
             </ul>
             {/* Stock availability lookup — plus per-line issue-from-stock for the
-                warehouse/admin on requisitions (never on the read-only order page). */}
+                warehouse/admin on a requisition that hasn't been PO'd yet (issuing
+                removes the line so the Purchaser only buys what's left). */}
             {showStockCheck && (
-              canIssueStock
+              canIssueStock && !r.po && (r.status === "PENDING_APPROVAL" || r.status === "APPROVED")
                 ? <RequisitionStockCheck prId={r.id} items={r.items} stockItems={stockItems} canIssue />
                 : <StockAvailabilityLookup terms={r.items} />
             )}

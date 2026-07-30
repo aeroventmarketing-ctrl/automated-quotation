@@ -13,6 +13,7 @@ import { setNotificationsEnabled } from "@/lib/notification-settings";
 import { setDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { setTestMode } from "@/lib/test-mode";
 import { setNotificationBaseline } from "@/lib/notification-baseline";
+import { setAlertGoLive, type AlertGoLive } from "@/lib/alert-golive";
 import { setStockLocations } from "@/lib/stock-locations";
 import { setDocViewers } from "@/lib/doc-viewers";
 import { setDisabledRoles } from "@/lib/role-access";
@@ -458,6 +459,17 @@ export async function saveNotificationBaselineSetting(input: z.infer<typeof spLo
   const nb = await setNotificationBaseline(d.enabled);
   revalidatePath("/admin");
   return nb.on;
+}
+
+// --- Alerts go-live gate (silence all alerts until a launch moment) ----------
+const alertGoLiveSchema = z.object({ enabled: z.boolean(), at: z.string().datetime().optional() });
+export async function saveAlertGoLiveSetting(input: z.infer<typeof alertGoLiveSchema>): Promise<AlertGoLive> {
+  await assertAdmin();
+  const d = alertGoLiveSchema.parse(input);
+  const g = await setAlertGoLive(d.enabled, d.at);
+  // Every alert surface reads this, so re-render the pages that host them.
+  for (const p of ["/admin", "/my-dashboard", "/management", "/dashboard", "/orders", "/purchasing", "/requisitions"]) revalidatePath(p);
+  return g;
 }
 
 // --- Stock locations (dropdown list for Inventory) --------------------------

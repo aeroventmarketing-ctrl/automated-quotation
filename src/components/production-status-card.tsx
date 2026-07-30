@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import { CalendarClock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ProductionStatus, ProductionRow } from "@/lib/production-status";
+import { useAlertsSuppressed } from "@/components/alert-golive-context";
 
 type Kind = "onTime" | "nearDue" | "late";
 
@@ -58,6 +61,9 @@ function Section({ kind, rows, maskClient }: { kind: Kind; rows: ProductionRow[]
 /** Production-deadline snapshot: On time / Near due / Late, each clickable to
  *  the client's order. Shown across the dashboards. */
 export function ProductionStatusCard({ status, maskClient = false }: { status: ProductionStatus; maskClient?: boolean }) {
+  // Alerts go-live gate: keep the whole card hidden until the launch moment.
+  const suppressed = useAlertsSuppressed();
+  if (suppressed) return null;
   const total = status.onTime.length + status.nearDue.length + status.late.length;
   const tiles: { kind: Kind; count: number }[] = [
     { kind: "onTime", count: status.onTime.length },

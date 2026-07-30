@@ -10,6 +10,8 @@ import { getGeofence } from "@/lib/geofence";
 import { getDisabledRoles, isRoleEnabled } from "@/lib/role-access";
 import { getWorkflowRoles, userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { getDashboardAlerts } from "@/lib/dashboard-alerts";
+import { getAlertGoLive, alertsSuppressedNow } from "@/lib/alert-golive";
+import { AlertSuppressionProvider } from "@/components/alert-golive-context";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -58,6 +60,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const geofence = await getGeofence();
   const gated = geofence.enabled && !isAdmin(user) && geofence.locations.length > 0;
 
+  // Alerts go-live gate: before the launch moment, every alert surface stays
+  // silent. This flag blanks the presentational surfaces (inline "awaiting
+  // approval" badges) via context; the timestamped surfaces gate themselves.
+  const alertsSuppressed = alertsSuppressedNow(await getAlertGoLive());
+
   // For admins, flash a dashboard's nav item when it has new activity.
   const dashboardAlerts: Record<string, boolean> = {};
   if (isAdmin(user)) {
@@ -100,8 +107,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     </div>
   );
 
-  if (gated) {
-    return <GeofenceGate locations={geofence.locations}>{layout}</GeofenceGate>;
-  }
-  return layout;
+  const content = gated ? <GeofenceGate locations={geofence.locations}>{layout}</GeofenceGate> : layout;
+  return <AlertSuppressionProvider suppressed={alertsSuppressed}>{content}</AlertSuppressionProvider>;
 }

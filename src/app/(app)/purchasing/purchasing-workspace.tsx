@@ -83,6 +83,8 @@ export function PurchasingWorkspace({
   showAmounts = true,
   showSupplier = true,
   canVoucher = false,
+  canCheckStock = false,
+  canIssueStock = false,
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -107,6 +109,10 @@ export function PurchasingWorkspace({
   showSupplier?: boolean;
   /** Whether the viewer may generate a payment voucher from selected requests. */
   canVoucher?: boolean;
+  /** Warehouse / Purchaser / Payment Approver / admin — show the stock lookup on requisitions. */
+  canCheckStock?: boolean;
+  /** Warehouse / admin — may issue a requisition line from stock (removes it from the PO). */
+  canIssueStock?: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
@@ -375,6 +381,8 @@ export function PurchasingWorkspace({
                   catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
                   showAmounts={showAmounts}
                   showSupplier={showSupplier}
+                  showStockCheck={canCheckStock}
+                  canIssueStock={canIssueStock}
                 />
               </CardContent></Card>
             )}

@@ -10,6 +10,7 @@ import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { getDisabledRoles } from "@/lib/role-access";
 import { getTestMode } from "@/lib/test-mode";
 import { getNotificationBaseline } from "@/lib/notification-baseline";
+import { getAlertGoLive } from "@/lib/alert-golive";
 import { getStockLocations } from "@/lib/stock-locations";
 import { getAiUsageLimit, currentMonthUsage, evaluateUsageAlert } from "@/lib/ai/usage";
 import { StockLocationsSetting } from "./stock-locations-setting";
@@ -22,9 +23,10 @@ import { CounterSaleNumberSetting } from "./counter-sale-number-setting";
 import { FanMotorBrandSetting } from "./fan-motor-brand-setting";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { SpLockSetting } from "./sp-lock-setting";
+import { AlertGoLiveSetting } from "./alert-golive-setting";
 import { FollowUpSetting } from "./follow-up-setting";
 import { RoleAccessSetting } from "./role-access-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +50,7 @@ export default async function AdminOverviewPage() {
   ]);
   const testMode = await getTestMode();
   const notificationBaseline = await getNotificationBaseline();
+  const alertGoLive = await getAlertGoLive();
   const disabledRoles = await getDisabledRoles();
   const nextQuoteSeq = (counter?.lastValue ?? 0) + 1;
   const mrfRow = await prisma.appSetting.findUnique({ where: { key: "mrf_counter" } });
@@ -241,6 +244,7 @@ export default async function AdminOverviewPage() {
         enabled={notificationBaseline.on}
         onSave={saveNotificationBaselineSetting}
       />
+      <AlertGoLiveSetting on={alertGoLive.on} at={alertGoLive.at} onSave={saveAlertGoLiveSetting} />
       <SpLockSetting
         title="Require documents before ‘Mark documents checked’"
         description="When enabled, an order's documents can only be marked checked once the Purchase Order, Computation, Quotation, and RFQ/BOQ are attached. Turn off (e.g. while testing) to allow marking documents checked without the attachments."
