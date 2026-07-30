@@ -100,6 +100,7 @@ function ProductCombobox({ value, onChange, products }: { value: string; onChang
         onFocus={() => { place(); setOpen(true); }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder="Type or pick a product"
+        autoComplete="off"
         className="w-full rounded border bg-background px-2 py-1"
       />
       {open && pos && products.length > 0 && matches.length > 0 && (
