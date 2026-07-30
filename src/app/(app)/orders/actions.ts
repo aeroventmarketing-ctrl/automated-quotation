@@ -29,6 +29,7 @@ import {
   deptLabel,
   OFFICE_DEPT_KEY,
   REQUISITION_DEPT_KEYS,
+  requisitionDeptLabel,
   requestorDeptKey,
   allJobOrdersFinished,
   type OrderStage,
@@ -1689,6 +1690,74 @@ export async function sendMrfLineToPurchasing(quotationId: string, requestId: st
   revalidatePath("/orders");
   revalidatePath(`/orders/${quotationId}`);
   revalidatePath("/inventory");
+}
+
+/** Parse a requisition item line "5 pc · ANGLE BAR 2.0 X 25 X 25 (remark)". */
+function parseReqItemLine(label: string): { qty: number; unit: string; desc: string } {
+  const noRemark = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const dot = noRemark.indexOf("·");
+  if (dot >= 0) {
+    const head = noRemark.slice(0, dot).trim();
+    const m = head.match(/^([\d.]+)\s*(.*)$/);
+    return { qty: m ? Number(m[1]) || 0 : 0, unit: (m ? m[2] : head).trim(), desc: noRemark.slice(dot + 1).trim() };
+  }
+  return { qty: 0, unit: "", desc: noRemark };
+}
+
+/**
+ * Fulfil ONE department-requisition line from stock instead of purchasing it.
+ * Deducts the line quantity (capped at what's available) from the chosen stock
+ * item and drops that line from the requisition; anything short stays on the
+ * requisition to be purchased. When every line has been issued, the requisition
+ * is completed (no purchase needed). Only before a purchase order exists.
+ */
+export async function issueRequisitionLineFromStock(
+  purchaseRequestId: string,
+  lineIndex: number,
+  stockItemId: string,
+  qty?: number,
+): Promise<{ issued: number; remaining: number }> {
+  const user = await requireWarehouse();
+  if (!stockItemId) throw new Error("Pick a stock item.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Requisition not found.");
+  if (pr.po) throw new Error("A purchase order already exists — this can't be fulfilled from stock.");
+  if (!(pr.status === "PENDING_APPROVAL" || pr.status === "APPROVED")) {
+    throw new Error("This requisition can no longer be fulfilled from stock.");
+  }
+  const items = Array.isArray(pr.items) ? (pr.items as string[]).slice() : [];
+  const target = items[lineIndex];
+  if (target == null) throw new Error("Line not found — refresh and try again.");
+  const parsed = parseReqItemLine(target);
+  const req = qty != null && qty > 0 ? qty : parsed.qty;
+  if (!(req > 0)) throw new Error("Couldn't read the quantity for this line.");
+
+  const result = await prisma.$transaction(async (tx) => {
+    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { quantity: true } });
+    if (!item) throw new Error("Stock item not found.");
+    const agg = await tx.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
+    const avail = Math.max(0, Number(item.quantity) - Number(agg._sum.qty ?? 0));
+    const issued = Math.max(0, Math.min(req, avail));
+    if (issued <= 0) throw new Error("Out of stock — leave it on the requisition to be purchased.");
+    await applyStockChange(tx, { stockItemId, kind: "ISSUE", qty: issued, reason: `Requisition · ${requisitionDeptLabel(pr.dept)}` }, user.name);
+    const shortfall = parsed.qty > 0 ? Math.max(0, parsed.qty - issued) : 0;
+    const newItems = items.slice();
+    if (shortfall > 0) {
+      newItems[lineIndex] = `${parsed.unit ? `${shortfall} ${parsed.unit}` : shortfall} · ${parsed.desc}`;
+    } else {
+      newItems.splice(lineIndex, 1);
+    }
+    const data: Prisma.PurchaseRequestUpdateInput = { items: newItems as Prisma.InputJsonValue };
+    if (newItems.length === 0) data.status = "COMPLETED";
+    await tx.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
+    return { issued, remaining: newItems.length };
+  });
+
+  revalidatePath("/requisitions");
+  revalidatePath("/purchasing");
+  revalidatePath("/inventory");
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  return result;
 }
 
 /**

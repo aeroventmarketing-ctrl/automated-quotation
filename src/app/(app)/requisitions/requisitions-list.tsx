@@ -55,6 +55,7 @@ export function RequisitionsList({
   showAmounts = true,
   showSupplier = true,
   canCheckStock = false,
+  canIssueStock = false,
 }: {
   rows: RequisitionRow[];
   stockItems: StockOpt[];
@@ -66,6 +67,8 @@ export function RequisitionsList({
   showSupplier?: boolean;
   /** Warehouse / Purchaser / Payment Approver / admin — show the stock lookup. */
   canCheckStock?: boolean;
+  /** Warehouse / admin — may also issue a requisition line from stock. */
+  canIssueStock?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("pending");
   const [query, setQuery] = useState("");
@@ -118,7 +121,7 @@ export function RequisitionsList({
     return [...map.entries()].map(([key, rs]) => ({ key, rows: rs }));
   }, [visible, group]);
 
-  const chainProps = { stockItems, suppliers, paymentTerms, poDefaultRemarks, admin, showAmounts, showSupplier, showStockCheck: canCheckStock };
+  const chainProps = { stockItems, suppliers, paymentTerms, poDefaultRemarks, admin, showAmounts, showSupplier, showStockCheck: canCheckStock, canIssueStock };
 
   return (
     <div className="space-y-3">
