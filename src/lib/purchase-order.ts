@@ -134,3 +134,36 @@ export function poLineFromPRItem(item: string): POLine {
   }
   return { description: raw, qty: "", unit: "", unitPrice: "" };
 }
+
+/**
+ * Sentinel prefix marking a requisition line that was already issued from stock.
+ * The line is kept on the requisition as an "Issued X from stock" record, but it
+ * must never be turned into a Purchase Order line — it's informational only.
+ */
+export const ISSUED_FROM_STOCK_PREFIX = "✓ issued from stock · ";
+
+export function isIssuedFromStockLine(item: string): boolean {
+  return String(item ?? "").startsWith(ISSUED_FROM_STOCK_PREFIX);
+}
+
+/** Format the record line stored on a requisition when a line is issued from stock. */
+export function issuedFromStockLine(issued: number | string, unit: string, desc: string): string {
+  const head = unit ? `${issued} ${unit}` : String(issued);
+  return `${ISSUED_FROM_STOCK_PREFIX}${head} · ${desc}`;
+}
+
+/** Read back an issued-from-stock record line into its parts (null if not one). */
+export function parseIssuedFromStockLine(item: string): { qty: string; unit: string; desc: string } | null {
+  if (!isIssuedFromStockLine(item)) return null;
+  const body = item.slice(ISSUED_FROM_STOCK_PREFIX.length).trim();
+  const dot = body.indexOf(" · ");
+  const head = dot >= 0 ? body.slice(0, dot).trim() : "";
+  const desc = dot >= 0 ? body.slice(dot + 3).trim() : body;
+  const m = head.match(/^([\d.]+)\s+(.*)$/);
+  return { qty: m ? m[1] : head, unit: m ? m[2].trim() : "", desc };
+}
+
+/** Build PO lines from PR item strings, skipping any already-issued-from-stock records. */
+export function poLinesFromPRItems(items: string[]): POLine[] {
+  return (Array.isArray(items) ? items : []).filter((s) => !isIssuedFromStockLine(s)).map(poLineFromPRItem);
+}

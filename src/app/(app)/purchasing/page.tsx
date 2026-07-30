@@ -12,7 +12,7 @@ import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildRecon
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
-import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLineFromPRItem, isIssuedFromStockLine } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -89,6 +89,7 @@ export default async function PurchasingPage() {
   for (const p of products) suppliersByProduct.set(p.name.trim().toLowerCase(), p.suppliers.map((s) => s.company).filter(Boolean));
   const productNamesByLen = [...suppliersByProduct.keys()].sort((a, b) => b.length - a.length);
   const suppliersForItem = (itemStr: string): string[] => {
+    if (isIssuedFromStockLine(itemStr)) return []; // issued-from-stock record, not purchased
     const desc = poLineFromPRItem(itemStr).description.trim().toLowerCase();
     if (!desc) return [];
     const exact = suppliersByProduct.get(desc);

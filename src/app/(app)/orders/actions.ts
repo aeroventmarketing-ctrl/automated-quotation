@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { coercePurchaseOrder, formatPoNumber, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
@@ -1716,9 +1716,10 @@ function parseReqItemLine(label: string): { qty: number; unit: string; desc: str
 /**
  * Fulfil ONE department-requisition line from stock instead of purchasing it.
  * Deducts the line quantity (capped at what's available) from the chosen stock
- * item and drops that line from the requisition; anything short stays on the
- * requisition to be purchased. When every line has been issued, the requisition
- * is completed (no purchase needed). Only before a purchase order exists.
+ * item and records the issued amount as an "Issued X from stock" line (kept for
+ * the record, never purchased); anything short stays on the requisition to be
+ * purchased. When every line has been issued, the requisition is completed (no
+ * purchase needed). Only before a purchase order exists.
  */
 export async function issueRequisitionLineFromStock(
   purchaseRequestId: string,
@@ -1737,6 +1738,7 @@ export async function issueRequisitionLineFromStock(
   const items = Array.isArray(pr.items) ? (pr.items as string[]).slice() : [];
   const target = items[lineIndex];
   if (target == null) throw new Error("Line not found — refresh and try again.");
+  if (isIssuedFromStockLine(target)) throw new Error("This line has already been issued from stock.");
   const parsed = parseReqItemLine(target);
   const req = qty != null && qty > 0 ? qty : parsed.qty;
   if (!(req > 0)) throw new Error("Couldn't read the quantity for this line.");
@@ -1750,16 +1752,16 @@ export async function issueRequisitionLineFromStock(
     if (issued <= 0) throw new Error("Out of stock — leave it on the requisition to be purchased.");
     await applyStockChange(tx, { stockItemId, kind: "ISSUE", qty: issued, reason: `Requisition · ${requisitionDeptLabel(pr.dept)}` }, user.name);
     const shortfall = parsed.qty > 0 ? Math.max(0, parsed.qty - issued) : 0;
-    const newItems = items.slice();
-    if (shortfall > 0) {
-      newItems[lineIndex] = `${parsed.unit ? `${shortfall} ${parsed.unit}` : shortfall} · ${parsed.desc}`;
-    } else {
-      newItems.splice(lineIndex, 1);
-    }
+    // Keep an "Issued X from stock" record line (never purchased); anything short
+    // stays as its own purchase line so the Purchaser only buys the remainder.
+    const replacement = [issuedFromStockLine(issued, parsed.unit, parsed.desc)];
+    if (shortfall > 0) replacement.push(`${parsed.unit ? `${shortfall} ${parsed.unit}` : shortfall} · ${parsed.desc}`);
+    const newItems = [...items.slice(0, lineIndex), ...replacement, ...items.slice(lineIndex + 1)];
+    const remainingToBuy = newItems.filter((s) => !isIssuedFromStockLine(s));
     const data: Prisma.PurchaseRequestUpdateInput = { items: newItems as Prisma.InputJsonValue };
-    if (newItems.length === 0) data.status = "COMPLETED";
+    if (remainingToBuy.length === 0) data.status = "COMPLETED";
     await tx.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
-    return { issued, remaining: newItems.length };
+    return { issued, remaining: remainingToBuy.length };
   });
 
   revalidatePath("/requisitions");

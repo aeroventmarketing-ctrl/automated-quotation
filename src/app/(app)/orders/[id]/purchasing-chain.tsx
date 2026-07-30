@@ -18,7 +18,7 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
-import { poTotals, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { poTotals, poHasEwt, parseIssuedFromStockLine, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
@@ -302,7 +302,20 @@ export function PurchasingChain({
               <Badge variant={r.variant}>{statusLabel}</Badge>
             </div>
             <ul className="ml-4 list-disc text-sm text-muted-foreground">
-              {r.items.map((it, i) => <li key={i}>{it}</li>)}
+              {r.items.map((it, i) => {
+                const issued = parseIssuedFromStockLine(it);
+                if (issued) {
+                  return (
+                    <li key={i} className="marker:text-emerald-600">
+                      {issued.desc}
+                      <span className="ml-2 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] text-emerald-700">
+                        Issued {issued.qty}{issued.unit ? ` ${issued.unit}` : ""} from stock
+                      </span>
+                    </li>
+                  );
+                }
+                return <li key={i}>{it}</li>;
+              })}
             </ul>
             {/* Admin: edit the item lines in place (delete lives in the actions row). */}
             {adminManage && admin && !readOnly && <AdminPrEditDelete prId={r.id} items={r.items} showDelete={false} />}

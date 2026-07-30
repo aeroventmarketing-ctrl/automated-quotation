@@ -3,7 +3,7 @@
  * PurchaseRequest. Shared by the per-order Phase 3 box (read-only monitoring)
  * and the central Purchasing workspace (where the purchaser processes them).
  */
-import { coercePurchaseOrder, poLineFromPRItem, poLineAmount, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLinesFromPRItems, poLineAmount, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import {
   coercePurchaseReturns,
@@ -370,7 +370,7 @@ export function buildPurchaseChainRow(
     trail,
     actions,
     po: coercePurchaseOrder(pr.po),
-    poDefaultLines: prItems.map(poLineFromPRItem),
+    poDefaultLines: poLinesFromPRItems(prItems),
     canManagePO: ctx.canManagePO,
     canCancel: ctx.canCancel ?? false,
     canDelete: ctx.canDelete ?? false,

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
-import { poLineAmount, poTotals, poHasEwt, poLineFromPRItem, type POLine, type EwtMode } from "@/lib/purchase-order";
+import { poLineAmount, poTotals, poHasEwt, poLinesFromPRItems, type POLine, type EwtMode } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
@@ -217,7 +217,7 @@ export function CombinedPurchasing({
             <CombineForm
               title={`New combined PO · ${selectedItems.length} requests`}
               submitLabel="Create combined PO"
-              initialLines={selectedItems.flatMap((it) => it.items.map((s) => poLineFromPRItem(s)))}
+              initialLines={selectedItems.flatMap((it) => poLinesFromPRItems(it.items))}
               presetCompany={presetCompany}
               suppliers={suppliers}
               paymentTerms={paymentTerms}
