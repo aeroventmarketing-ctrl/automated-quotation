@@ -1587,24 +1587,31 @@ async function finalizeMrfIfDone(
     where: { id: quotationId },
     data: { classification: { ...cls, workflow: { ...wf, materialRequests } } as unknown as Prisma.InputJsonObject },
   });
-  if (!pendingRemain) {
-    const purchaseItems = newItems.filter((it) => it.disposition === "purchase");
-    if (purchaseItems.length > 0) {
-      const existing = await tx.purchaseRequest.findFirst({ where: { mrfId: mrf.id }, select: { id: true } });
-      if (!existing) {
-        await tx.purchaseRequest.create({
-          data: {
-            quotationId,
-            mrfId: mrf.id,
-            dept: mrf.dept,
-            items: purchaseItems.map(mrfItemLine) as Prisma.InputJsonValue,
-            note: mrf.note ?? null,
-            createdById: user.id,
-            createdByName: user.name,
-            status: "PENDING_APPROVAL",
-          },
-        });
-      }
+  // Surface purchase lines to Purchasing as soon as ANY line is marked "purchase"
+  // — don't wait for every line to be handled, or a single stranded pending line
+  // would keep the whole request out of the Purchasing tab. Create the linked
+  // request on first purchase line, then keep it in sync with the accumulating
+  // purchase lines while it's still awaiting approval (never touch it once it has
+  // advanced / been turned into a PO).
+  const purchaseItems = newItems.filter((it) => it.disposition === "purchase");
+  if (purchaseItems.length > 0) {
+    const itemLines = purchaseItems.map(mrfItemLine) as Prisma.InputJsonValue;
+    const existing = await tx.purchaseRequest.findFirst({ where: { mrfId: mrf.id }, select: { id: true, status: true } });
+    if (!existing) {
+      await tx.purchaseRequest.create({
+        data: {
+          quotationId,
+          mrfId: mrf.id,
+          dept: mrf.dept,
+          items: itemLines,
+          note: mrf.note ?? null,
+          createdById: user.id,
+          createdByName: user.name,
+          status: "PENDING_APPROVAL",
+        },
+      });
+    } else if (existing.status === "PENDING_APPROVAL") {
+      await tx.purchaseRequest.update({ where: { id: existing.id }, data: { items: itemLines } });
     }
   }
 }
@@ -1667,6 +1674,7 @@ export async function issueMrfLineFromStock(
   revalidatePath("/orders");
   revalidatePath(`/orders/${quotationId}`);
   revalidatePath("/inventory");
+  revalidatePath("/purchasing");
   return result;
 }
 
@@ -1690,6 +1698,7 @@ export async function sendMrfLineToPurchasing(quotationId: string, requestId: st
   revalidatePath("/orders");
   revalidatePath(`/orders/${quotationId}`);
   revalidatePath("/inventory");
+  revalidatePath("/purchasing");
 }
 
 /** Parse a requisition item line "5 pc · ANGLE BAR 2.0 X 25 X 25 (remark)". */
