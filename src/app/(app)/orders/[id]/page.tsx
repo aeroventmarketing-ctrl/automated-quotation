@@ -27,7 +27,7 @@ import {
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
-import { coercePurchaseOrder, poLineFromPRItem } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLinesFromPRItems } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
@@ -642,7 +642,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       trail,
       actions,
       po: coercePurchaseOrder(pr.po),
-      poDefaultLines: prItems.map(poLineFromPRItem),
+      poDefaultLines: poLinesFromPRItems(prItems),
       canManagePO,
       isDept: isDeptRequisition(pr),
       returns: buildReturnViews(pr),
