@@ -67,7 +67,7 @@ export function AlertGoLiveSetting({ on, at, onSave }: { on: boolean; at: string
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
           When on, no notification or alert fires anywhere — approver alarm, dashboard feeds, activity bell,
-          calendar reminders, nav dots and the inline &ldquo;awaiting approval&rdquo; badges all stay quiet — until the
+          calendar reminders, nav dots, the production-status panel and the inline &ldquo;awaiting approval&rdquo; badges all stay quiet — until the
           moment below. From that moment on, an alert fires only for things that become pending <em>after</em> it, so the
           pre-launch backlog never rings. Nothing is muted, hidden or deleted — client details and the workflow are untouched.
         </p>
