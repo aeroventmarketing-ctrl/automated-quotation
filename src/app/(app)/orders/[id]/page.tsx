@@ -571,7 +571,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       date: m.raisedAt ? formatDateTime(m.raisedAt) : "",
       handledByName: m.handledByName,
       handledWhen: m.handledAt ? formatDateTime(m.handledAt) : "",
-      canHandle: canWarehouse && m.status === "requested",
+      // "requested" (nothing handled yet) or "partial" (some lines handled, some
+      // still pending) — the warehouse can keep issuing / sending the remaining
+      // lines. A single handled line no longer locks the rest out.
+      canHandle: canWarehouse && (m.status === "requested" || m.status === "partial"),
       // The requesting department head (or an admin) can withdraw it before the
       // warehouse handles it.
       canCancel:
