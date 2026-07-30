@@ -25,6 +25,8 @@ export interface MrfLine {
 interface StockOpt {
   id: string;
   name: string;
+  /** Free to issue right now (on hand − active reservations). */
+  available?: number;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
@@ -155,13 +157,18 @@ export function MrfStockCheck({
         <div className="space-y-1 rounded-md border bg-background p-1.5">
           {pending.map((l) => {
             const matched = matchStock(l.description);
+            const inStock = !!matched && (matched.available ?? 0) > 0;
             return (
               <div key={l.index} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="min-w-0 flex-1 truncate">
                   {l.description} <span className="text-muted-foreground">· {l.qty} {l.unit}</span>
-                  {!matched && <span className="ml-1 text-amber-600">· no stock match</span>}
+                  {!matched ? (
+                    <span className="ml-1 text-amber-600">· no stock match</span>
+                  ) : !inStock ? (
+                    <span className="ml-1 text-amber-600">· out of stock</span>
+                  ) : null}
                 </span>
-                {matched ? (
+                {inStock ? (
                   <button
                     type="button"
                     disabled={busy === l.index}
