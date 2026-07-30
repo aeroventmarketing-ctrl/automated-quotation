@@ -55,6 +55,8 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
     ? rows.filter((r) => r.description.trim() !== "" && !productNames.has(r.description.trim().toLowerCase())).map((r) => r.description.trim())
     : [];
   const allItemsKnown = unknownItems.length === 0;
+  // Every filled row must also have a quantity (> 0) and a unit.
+  const allRowsComplete = rows.every((r) => r.description.trim() === "" || (Number(r.qty) > 0 && normalizeUnit(r.unit).trim() !== ""));
   function setCell(i: number, key: keyof Row, value: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
   }
@@ -183,8 +185,11 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
         {unknownItems.length > 0 && (
           <p className="text-xs text-destructive">Pick each item from the product list — these aren&apos;t in the system: {unknownItems.join(", ")}.</p>
         )}
+        {hasItems && !allRowsComplete && (
+          <p className="text-xs text-destructive">Every item needs a quantity and a unit.</p>
+        )}
         <div className="flex items-center gap-2">
-          <Button size="sm" disabled={busy || !dept || !hasItems || !allItemsKnown} onClick={submit}>{busy ? "Submitting…" : "Submit requisition"}</Button>
+          <Button size="sm" disabled={busy || !dept || !hasItems || !allItemsKnown || !allRowsComplete} onClick={submit}>{busy ? "Submitting…" : "Submit requisition"}</Button>
           {msg && <span className="text-xs text-emerald-600">{msg}</span>}
           {err && <span className="text-xs text-destructive">{err}</span>}
         </div>

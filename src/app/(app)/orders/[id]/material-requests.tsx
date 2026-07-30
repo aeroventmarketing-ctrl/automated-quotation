@@ -219,6 +219,8 @@ export function MaterialRequests({
     ? rows.filter((r) => r.description.trim() !== "" && !productByName.has(r.description.trim().toLowerCase())).map((r) => r.description.trim())
     : [];
   const allItemsKnown = unknownItems.length === 0;
+  // Every filled row must also have a quantity (> 0) and a unit.
+  const allRowsComplete = rows.every((r) => r.description.trim() === "" || (Number(r.qty) > 0 && normalizeUnit(r.unit).trim() !== ""));
   const [highlight, setHighlight] = useState<number | null>(null);
   function flash(idx: number) {
     setHighlight(idx);
@@ -290,7 +292,10 @@ export function MaterialRequests({
           {unknownItems.length > 0 && (
             <p className="text-xs text-destructive">Pick each item from the product list — these aren&apos;t in the system: {unknownItems.join(", ")}.</p>
           )}
-          <Button size="sm" disabled={busy || !dept || !hasItems || !allItemsKnown}
+          {hasItems && !allRowsComplete && (
+            <p className="text-xs text-destructive">Every item needs a quantity and a unit.</p>
+          )}
+          <Button size="sm" disabled={busy || !dept || !hasItems || !allItemsKnown || !allRowsComplete}
             onClick={() => run(() => raiseMaterialRequest(orderId, dept, rows, note), () => { setRows([emptyRow(), emptyRow(), emptyRow()]); setNote(""); })}>
             {busy ? "Saving…" : "Submit request"}
           </Button>
