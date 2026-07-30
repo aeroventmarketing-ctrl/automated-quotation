@@ -212,6 +212,13 @@ export function MaterialRequests({
   }
 
   const hasItems = rows.some((r) => r.description.trim() !== "");
+  // Every filled row must be a product that exists in the system — free-typed
+  // items that don't match a catalogue product block submission (only enforced
+  // when a product catalogue exists).
+  const unknownItems = products.length > 0
+    ? rows.filter((r) => r.description.trim() !== "" && !productByName.has(r.description.trim().toLowerCase())).map((r) => r.description.trim())
+    : [];
+  const allItemsKnown = unknownItems.length === 0;
   const [highlight, setHighlight] = useState<number | null>(null);
   function flash(idx: number) {
     setHighlight(idx);
@@ -280,7 +287,10 @@ export function MaterialRequests({
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setRows((rs) => [...rs, emptyRow()])}>+ Add row</Button>
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-8 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm" />
           </div>
-          <Button size="sm" disabled={busy || !dept || !hasItems}
+          {unknownItems.length > 0 && (
+            <p className="text-xs text-destructive">Pick each item from the product list — these aren&apos;t in the system: {unknownItems.join(", ")}.</p>
+          )}
+          <Button size="sm" disabled={busy || !dept || !hasItems || !allItemsKnown}
             onClick={() => run(() => raiseMaterialRequest(orderId, dept, rows, note), () => { setRows([emptyRow(), emptyRow(), emptyRow()]); setNote(""); })}>
             {busy ? "Saving…" : "Submit request"}
           </Button>

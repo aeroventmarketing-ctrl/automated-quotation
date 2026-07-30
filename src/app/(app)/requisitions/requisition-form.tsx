@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +47,14 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
         .slice(0, 8);
 
   const hasItems = rows.some((r) => r.description.trim() !== "");
+  // Every filled row must be a product that exists in the system — free-typed
+  // items that don't match a catalogue product block submission (only enforced
+  // when a product catalogue exists).
+  const productNames = useMemo(() => new Set(products.map((p) => p.name.trim().toLowerCase())), [products]);
+  const unknownItems = products.length > 0
+    ? rows.filter((r) => r.description.trim() !== "" && !productNames.has(r.description.trim().toLowerCase())).map((r) => r.description.trim())
+    : [];
+  const allItemsKnown = unknownItems.length === 0;
   function setCell(i: number, key: keyof Row, value: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
   }
@@ -172,8 +180,11 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setRows((rs) => [...rs, emptyRow()])}>+ Add row</Button>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-8 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm" />
         </div>
+        {unknownItems.length > 0 && (
+          <p className="text-xs text-destructive">Pick each item from the product list — these aren&apos;t in the system: {unknownItems.join(", ")}.</p>
+        )}
         <div className="flex items-center gap-2">
-          <Button size="sm" disabled={busy || !dept || !hasItems} onClick={submit}>{busy ? "Submitting…" : "Submit requisition"}</Button>
+          <Button size="sm" disabled={busy || !dept || !hasItems || !allItemsKnown} onClick={submit}>{busy ? "Submitting…" : "Submit requisition"}</Button>
           {msg && <span className="text-xs text-emerald-600">{msg}</span>}
           {err && <span className="text-xs text-destructive">{err}</span>}
         </div>
