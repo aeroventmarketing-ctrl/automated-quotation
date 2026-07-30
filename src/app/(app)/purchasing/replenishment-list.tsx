@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import { advancePurchaseRequest, receivePurchaseRequest } from "../orders/actions";
+import { AdminPrEditDelete } from "./admin-pr-manage";
 
 interface ActionOpt {
   key: string;
@@ -29,7 +30,7 @@ export interface PRRow {
   actions: ActionOpt[];
 }
 
-function PRCard({ row }: { row: PRRow }) {
+function PRCard({ row, admin = false }: { row: PRRow; admin?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -94,11 +95,13 @@ function PRCard({ row }: { row: PRRow }) {
           {err && <p className="text-xs text-destructive">{err}</p>}
         </div>
       )}
+      {/* Admin: edit the item lines or delete this request, on any status/tab. */}
+      {admin && <AdminPrEditDelete prId={row.id} items={row.items} showDelete />}
     </div>
   );
 }
 
-export function ReplenishmentList({ rows }: { rows: PRRow[] }) {
+export function ReplenishmentList({ rows, admin = false }: { rows: PRRow[]; admin?: boolean }) {
   const router = useRouter();
   const [scan, setScan] = useState("");
   const [scanQty, setScanQty] = useState("1");
@@ -142,7 +145,7 @@ export function ReplenishmentList({ rows }: { rows: PRRow[] }) {
           {scanMsg && <span className={`text-xs ${scanErr ? "text-destructive" : "text-emerald-600"}`}>{scanMsg}</span>}
         </div>
       )}
-      {rows.map((r) => <PRCard key={r.id} row={r} />)}
+      {rows.map((r) => <PRCard key={r.id} row={r} admin={admin} />)}
     </div>
   );
 }

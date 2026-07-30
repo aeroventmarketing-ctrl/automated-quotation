@@ -7,7 +7,7 @@ import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowR
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
-import { readOrderWorkflow, requisitionDeptLabel } from "@/lib/order-workflow";
+import { readOrderWorkflow, requisitionDeptLabel, REQUISITION_DEPTS } from "@/lib/order-workflow";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
@@ -358,6 +358,7 @@ export default async function PurchasingPage() {
               canVoucher={canVoucher}
               canCheckStock={admin || canAct("warehouse") || canAct("purchaser") || canAct("payment_approver")}
               canIssueStock={admin || canAct("warehouse")}
+              depts={REQUISITION_DEPTS.map((d) => ({ key: d.key, label: d.label }))}
             />
           </section>
         </>
