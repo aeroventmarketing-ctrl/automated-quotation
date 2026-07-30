@@ -385,6 +385,93 @@ export async function removeCounterSaleDoc(id: string, slotKey: string, path: st
   revalidatePath(`/counter-sales/${id}`);
 }
 
+/**
+ * Admin: edit a sale's lines / payment / salesperson / notes on ANY status.
+ * A COMPLETED sale is re-booked: its old stock is returned and its (unpaid)
+ * commission dropped, the lines are replaced, then stock is re-deducted and the
+ * commission re-computed against the new total — keeping the same sale number.
+ * A VOID sale keeps its returned stock (edits are display/records only); a DRAFT
+ * edits like the normal editor.
+ */
+export async function adminEditCounterSale(id: string, input: Omit<CounterSaleInput, "customerId" | "newCustomer">): Promise<void> {
+  const user = await requireViewer();
+  if (!isAdmin(user)) throw new Error("Only an admin can edit a finalized sale.");
+  const sale = await prisma.counterSale.findUnique({ where: { id }, include: { items: true } });
+  if (!sale) throw new Error("Sale not found.");
+  const vatMode: CounterSaleVatMode = input.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE";
+  if (!PAYMENT_METHODS.some((m) => m.key === input.paymentMethod)) throw new Error("Choose a payment method.");
+  const items = cleanItems(input.items);
+  if (items.length === 0) throw new Error("Add at least one item to sell.");
+  const totals = counterTotals(items, vatMode);
+  const wasCompleted = sale.status === "COMPLETED";
+
+  await prisma.$transaction(async (tx) => {
+    if (wasCompleted) {
+      // Return the previously-sold stock and drop the (unpaid) commission so we
+      // can re-book against the edited lines.
+      for (const it of sale.items) {
+        if (!it.stockItemId) continue;
+        const qty = Number(it.qty);
+        if (qty > 0) await applyStockChange(tx, { stockItemId: it.stockItemId, kind: "RECEIPT", qty, reason: `Edit counter sale ${sale.saleNumber ?? ""}`.trim() }, user.name);
+      }
+      await tx.commission.deleteMany({ where: { counterSaleId: id, paid: false } });
+    }
+    await tx.counterSaleItem.deleteMany({ where: { saleId: id } });
+    await tx.counterSale.update({
+      where: { id },
+      data: {
+        vatMode,
+        paymentMethod: input.paymentMethod,
+        salespersonId: input.salespersonId ?? null,
+        notes: input.notes?.trim() || null,
+        subtotal: totals.subtotal,
+        vat: totals.vat,
+        total: totals.total,
+        ...(wasCompleted ? { amountPaid: totals.total } : {}),
+        items: { create: items },
+      },
+    });
+    if (wasCompleted) {
+      for (const it of items) {
+        if (!it.stockItemId) continue;
+        const qty = Number(it.qty);
+        if (qty > 0) await applyStockChange(tx, { stockItemId: it.stockItemId, kind: "ISSUE", qty, reason: `Counter sale ${sale.saleNumber ?? ""} (edited)`.trim() }, user.name);
+      }
+    }
+  });
+  if (wasCompleted) await ensureCounterSaleCommission(id);
+  revalidatePath(`/counter-sales/${id}`);
+  revalidatePath("/counter-sales");
+  revalidatePath("/inventory");
+  revalidatePath("/commissions");
+  revalidatePath("/management");
+}
+
+/**
+ * Admin: permanently delete a sale on ANY status. A COMPLETED sale returns its
+ * stock to inventory first; its items and commission cascade-delete with the row.
+ */
+export async function adminDeleteCounterSale(id: string): Promise<void> {
+  const user = await requireViewer();
+  if (!isAdmin(user)) throw new Error("Only an admin can delete a counter sale.");
+  const sale = await prisma.counterSale.findUnique({ where: { id }, include: { items: true } });
+  if (!sale) throw new Error("Sale not found.");
+  await prisma.$transaction(async (tx) => {
+    if (sale.status === "COMPLETED") {
+      for (const it of sale.items) {
+        if (!it.stockItemId) continue;
+        const qty = Number(it.qty);
+        if (qty > 0) await applyStockChange(tx, { stockItemId: it.stockItemId, kind: "RECEIPT", qty, reason: `Delete counter sale ${sale.saleNumber ?? ""}`.trim() }, user.name);
+      }
+    }
+    await tx.counterSale.delete({ where: { id } });
+  });
+  revalidatePath("/counter-sales");
+  revalidatePath("/inventory");
+  revalidatePath("/commissions");
+  revalidatePath("/management");
+}
+
 /** Discard a draft sale entirely (draft only; anyone with access, or admin). */
 export async function deleteCounterSaleDraft(id: string): Promise<void> {
   const user = await requireViewer();
