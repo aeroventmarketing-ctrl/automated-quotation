@@ -12,6 +12,7 @@ import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
 import { MrfTriagePanel } from "./mrf-triage-panel";
 import { StockMatchPanel } from "./stock-match-panel";
+import { MrfStockCheck } from "./mrf-stock-check";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 
@@ -133,6 +134,7 @@ export function MaterialRequests({
   products = [],
   showMrfDoc = true,
   admin = false,
+  canCheckStock = false,
 }: {
   orderId: string;
   requesterName: string;
@@ -144,6 +146,8 @@ export function MaterialRequests({
   showMrfDoc?: boolean;
   /** Admin — may correct the recorded released quantities. */
   admin?: boolean;
+  /** Warehouse / Purchaser / Payment Approver / admin — may check stock availability. */
+  canCheckStock?: boolean;
 }) {
   const router = useRouter();
   const [issuingId, setIssuingId] = useState<string | null>(null);
@@ -355,6 +359,9 @@ export function MaterialRequests({
                 Requested by {r.raisedByName} · {r.date}
                 {r.handledByName ? ` · handled by ${r.handledByName}${r.handledWhen ? ` · ${r.handledWhen}` : ""}` : ""}
               </p>
+              {/* Availability checker — Warehouse / Purchaser / Payment Approver /
+                  admin look up on-hand stock for the requested items. */}
+              {canCheckStock && <MrfStockCheck terms={r.items.map((it) => it.description)} />}
               {/* Fulfillment handshake: the Warehouse informs availability; the
                   requesting department confirms receipt of released materials;
                   the department can follow up while the MRF is outstanding. */}
