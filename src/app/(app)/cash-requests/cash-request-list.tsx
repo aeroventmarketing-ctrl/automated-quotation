@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import type { CashRequestRow } from "@/lib/cash-request-row";
-import { advanceCashRequest, cancelCashRequest } from "./actions";
+import { Input } from "@/components/ui/input";
+import { advanceCashRequest, cancelCashRequest, adminEditCashRequest, adminDeleteCashRequest } from "./actions";
 import { CashLiquidationPanel } from "./cash-liquidation-panel";
 import { AdminCashOverride } from "./admin-cash-override";
 
@@ -37,6 +38,27 @@ function CashRow({ r }: { r: CashRequestRow }) {
     try { await cancelCashRequest(r.id); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
+  }
+
+  const [editing, setEditing] = useState(false);
+  const [ePurpose, setEPurpose] = useState(r.purpose);
+  const [eAmount, setEAmount] = useState(String(r.amount));
+  const [eNote, setENote] = useState(r.note ?? "");
+
+  async function saveEdit() {
+    setBusy("edit"); setErr(null);
+    try {
+      await adminEditCashRequest(r.id, { purpose: ePurpose, amount: eAmount, note: eNote });
+      setEditing(false); router.refresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function del() {
+    if (!window.confirm("Permanently delete this cash request? This cannot be undone.")) return;
+    setBusy("delete"); setErr(null);
+    try { await adminDeleteCashRequest(r.id); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); setBusy(null); }
   }
 
   const showLiquidation = r.status === "RECEIVED" || r.status === "LIQUIDATED" || r.status === "SETTLED";
@@ -124,6 +146,30 @@ function CashRow({ r }: { r: CashRequestRow }) {
       </div>
 
       {r.canOverride && <AdminCashOverride id={r.id} priorStatuses={r.priorStatuses} />}
+
+      {/* Admin: edit key fields or delete this request, on any status. */}
+      {r.admin && (
+        editing ? (
+          <div className="mt-2 space-y-2 rounded-md border border-amber-300 bg-amber-50/60 p-2 dark:border-amber-800 dark:bg-amber-950/30">
+            <div className="text-xs font-semibold text-amber-800 dark:text-amber-300">Edit (admin)</div>
+            <Input className="h-8" placeholder="Purpose" value={ePurpose} onChange={(e) => setEPurpose(e.target.value)} />
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">Amount<Input className="h-8 w-32" type="number" step="any" min={0} value={eAmount} onChange={(e) => setEAmount(e.target.value)} /></label>
+              <Input className="h-8 flex-1 min-w-[10rem]" placeholder="Note" value={eNote} onChange={(e) => setENote(e.target.value)} />
+            </div>
+            <p className="text-[10px] text-amber-700 dark:text-amber-400">The amount here is the figure the P&amp;L uses. Any per-line breakdown is left unchanged.</p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="h-7 text-xs" disabled={busy === "edit"} onClick={saveEdit}>{busy === "edit" ? "Saving…" : "Save"}</Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditing(false); setEPurpose(r.purpose); setEAmount(String(r.amount)); setENote(r.note ?? ""); }}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
+            <button type="button" onClick={() => setEditing(true)} className="rounded border px-2 py-0.5 text-xs font-medium hover:bg-accent">Edit (admin)</button>
+            <button type="button" onClick={del} disabled={busy === "delete"} className="rounded border border-destructive/40 px-2 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50">{busy === "delete" ? "…" : "Delete (admin)"}</button>
+          </div>
+        )
+      )}
     </div>
   );
 }

@@ -206,6 +206,58 @@ export async function cancelCashRequest(id: string): Promise<void> {
   revalidatePath("/cash-requests");
 }
 
+/**
+ * Admin: edit a cash request's details on ANY status. The P&L reads these rows
+ * on the fly, so an edited amount / department is reflected immediately.
+ */
+export async function adminEditCashRequest(id: string, input: {
+  purpose: string;
+  category?: string;
+  dept?: string | null;
+  amount?: string;
+  lines?: { description: string; amount: string }[];
+  note?: string;
+}): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can edit a cash request.");
+  const pr = await loadOr404(id);
+  const purpose = (input.purpose ?? "").trim();
+  if (!purpose) throw new Error("Describe what the cash is for.");
+  const category = input.category ? (CASH_CATEGORIES.find((c) => c.key === input.category)?.key ?? pr.category) : pr.category;
+  const dept = input.dept != null && REQUISITION_DEPT_KEYS.has(String(input.dept)) ? String(input.dept) : pr.dept;
+  const lines = (input.lines ?? [])
+    .map((l) => ({ description: String(l.description ?? "").trim(), amount: num(l.amount) }))
+    .filter((l) => l.description !== "" || l.amount !== 0);
+  const linesTotal = lines.reduce((a, l) => a + l.amount, 0);
+  const amount = input.amount && input.amount.trim() !== "" ? num(input.amount) : (lines.length ? linesTotal : Number(pr.amount));
+  if (amount <= 0) throw new Error("Enter the amount (greater than zero).");
+  await prisma.cashRequest.update({
+    where: { id },
+    data: {
+      purpose,
+      category,
+      dept,
+      amount: new Prisma.Decimal(amount.toFixed(2)),
+      ...(input.lines != null ? { lines: lines as unknown as Prisma.InputJsonValue } : {}),
+      note: input.note != null ? (input.note.trim() || null) : pr.note,
+    },
+  });
+  revalidatePath("/cash-requests");
+  revalidatePath("/management");
+}
+
+/** Admin: permanently delete a cash request on any status. */
+export async function adminDeleteCashRequest(id: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can delete a cash request.");
+  await loadOr404(id);
+  await prisma.cashRequest.delete({ where: { id } });
+  revalidatePath("/cash-requests");
+  revalidatePath("/management");
+}
+
 // --- Liquidation ------------------------------------------------------------
 
 /** Which finance role the actor is acting in (for the stamp), if any. */

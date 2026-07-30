@@ -18,6 +18,7 @@ import {
 } from "@/lib/counter-sale";
 import { CounterSaleDocs } from "../counter-sale-docs";
 import { CounterSaleActions } from "../counter-sale-actions";
+import { CounterSaleAdminEdit } from "../counter-sale-admin-edit";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,19 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
           paymentDue={fmtDate(sale.paymentDueAt)}
         />
       </div>
+
+      {admin && (
+        <CounterSaleAdminEdit
+          saleId={sale.id}
+          initial={{
+            vatMode,
+            paymentMethod: sale.paymentMethod,
+            salespersonId: sale.salespersonId,
+            notes: sale.notes ?? "",
+            lines: sale.items.map((it) => ({ stockItemId: it.stockItemId, description: it.description, unit: it.unit, qty: String(Number(it.qty)), unitPrice: String(Number(it.unitPrice)) })),
+          }}
+        />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Items + totals */}
