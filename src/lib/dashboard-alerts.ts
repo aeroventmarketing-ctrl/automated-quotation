@@ -8,6 +8,7 @@
  *  - Sales Dashboard       → a new (unworked) inquiry
  */
 import { prisma } from "@/lib/db";
+import { getAlertGoLive, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
 
 export interface DashboardAlerts {
   production: boolean;
@@ -16,10 +17,14 @@ export interface DashboardAlerts {
 }
 
 export async function getDashboardAlerts(): Promise<DashboardAlerts> {
+  // Alerts go-live gate: only count items created after the launch moment, so the
+  // nav dots stay dark before launch and afterwards flash only for new activity.
+  const createdAt = alertGoLiveCreatedAtFilter(await getAlertGoLive());
+  const when = createdAt ? { createdAt } : {};
   const [stockPending, newCash, newInquiries] = await Promise.all([
-    prisma.stockAction.count({ where: { status: "PENDING" } }).catch(() => 0),
-    prisma.cashRequest.count({ where: { status: "SUBMITTED" } }).catch(() => 0),
-    prisma.inquiry.count({ where: { status: "NEW" } }).catch(() => 0),
+    prisma.stockAction.count({ where: { status: "PENDING", ...when } }).catch(() => 0),
+    prisma.cashRequest.count({ where: { status: "SUBMITTED", ...when } }).catch(() => 0),
+    prisma.inquiry.count({ where: { status: "NEW", ...when } }).catch(() => 0),
   ]);
   return { production: stockPending > 0, management: newCash > 0, sales: newInquiries > 0 };
 }

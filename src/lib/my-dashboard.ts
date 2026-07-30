@@ -15,6 +15,7 @@ import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep, requisitionDeptLabel, deptRole } from "@/lib/order-workflow";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
+import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
@@ -462,9 +463,12 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
 
   // Notification backlog reset (practice slate): drop tasks / feed notes that
   // were already pending before the reset. New items (during practice) stay.
-  const baseline = await getNotificationBaseline();
-  const visibleTasks = tasks.filter((t) => passesNotificationBaseline(t.since, baseline));
-  const visibleFeed = materialsFeed.filter((m) => passesNotificationBaseline(m.when || undefined, baseline));
+  // Alerts go-live gate: additionally, before launch nothing shows, and after
+  // launch only items newer than the go-live moment do.
+  const [baseline, golive] = await Promise.all([getNotificationBaseline(), getAlertGoLive()]);
+  const shows = (when: string | null | undefined) => passesNotificationBaseline(when, baseline) && alertPasses(when, golive);
+  const visibleTasks = tasks.filter((t) => shows(t.since));
+  const visibleFeed = materialsFeed.filter((m) => shows(m.when || undefined));
 
   const byArea = (Object.keys(AREA_LABEL) as TaskArea[])
     .map((area) => ({ area, label: AREA_LABEL[area], count: visibleTasks.filter((t) => t.area === area).length }))
@@ -473,7 +477,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   const activity = await listActivityForActor(user.id, 30);
 
   visibleFeed.sort((a, b) => b.when.localeCompare(a.when));
-  const visibleReturns = returnsFeed.filter((r) => passesNotificationBaseline(r.when || undefined, baseline));
+  const visibleReturns = returnsFeed.filter((r) => shows(r.when || undefined));
   // Open returns first (your step, then other awaiting), completed last; newest within each.
   visibleReturns.sort((a, b) => {
     const rank = (n: ReturnNote) => (n.variant === "warning" ? 0 : n.variant === "secondary" ? 1 : 2);

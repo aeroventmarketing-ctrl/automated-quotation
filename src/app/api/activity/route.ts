@@ -2,6 +2,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
 import { isClientRestricted } from "@/lib/client-visibility";
 import { listActivity } from "@/lib/activity-log";
+import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,9 @@ export async function GET() {
   try {
     const assignments = await getWorkflowRoles();
     if (await isClientRestricted(user, assignments)) return Response.json({ activity: [] });
-    const activity = await listActivity(50);
+    // Alerts go-live gate: nothing before launch; afterwards only post-launch activity.
+    const golive = await getAlertGoLive();
+    const activity = (await listActivity(50)).filter((a) => alertPasses(a.createdAt, golive));
     return Response.json({ activity });
   } catch {
     return Response.json({ activity: [] });

@@ -1,4 +1,7 @@
+"use client";
+
 import { BellRing } from "lucide-react";
+import { useAlertsSuppressed } from "./alert-golive-context";
 
 /**
  * A blinking, highlighted "awaiting approval" badge that names the role and the
@@ -9,6 +12,9 @@ import { BellRing } from "lucide-react";
  * names it shows just the role. `detail` adds a trailing action hint
  * ("to confirm the final payment"). Purely presentational — resolve the names
  * server-side via getApproverDirectory().
+ *
+ * While the "alerts go-live" gate is holding (before launch), the badge blanks
+ * itself so no approval flashes ahead of the go-live moment.
  */
 export function ApproverHighlight({
   role,
@@ -21,6 +27,8 @@ export function ApproverHighlight({
   detail?: string;
   className?: string;
 }) {
+  const suppressed = useAlertsSuppressed();
+  if (suppressed) return null;
   const who = names.length > 0 ? names.join(", ") : null;
   return (
     <span
