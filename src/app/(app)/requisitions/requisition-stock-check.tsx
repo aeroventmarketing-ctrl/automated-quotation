@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackageSearch, Search, X } from "lucide-react";
-import { issueRequisitionLineFromStock } from "../orders/actions";
-import { parseIssuedFromStockLine } from "@/lib/purchase-order";
+import { issueRequisitionLineFromStock, sendRequisitionLineToPurchasing } from "../orders/actions";
+import { parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix } from "@/lib/purchase-order";
 
 interface Hit {
   id: string;
@@ -68,7 +68,11 @@ export function RequisitionStockCheck({
     return m;
   }, [stockItems]);
 
-  const lines = items.map((raw, index) => ({ index, raw, issued: parseIssuedFromStockLine(raw), ...parseLine(raw) }));
+  const lines = items.map((raw, index) => {
+    const issued = parseIssuedFromStockLine(raw);
+    const toPurchase = isToPurchaseLine(raw);
+    return { index, raw, issued, toPurchase, ...parseLine(stripToPurchasePrefix(raw)) };
+  });
   const chips = Array.from(new Set(lines.filter((l) => !l.issued).map((l) => l.desc).filter((t) => t.length >= 2)));
 
   useEffect(() => {
@@ -104,6 +108,17 @@ export function RequisitionStockCheck({
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to issue");
+    } finally { setBusy(null); }
+  }
+
+  async function toPurchasing(line: { index: number; desc: string }) {
+    setBusy(line.index); setErr(null); setMsg(null);
+    try {
+      await sendRequisitionLineToPurchasing(prId, line.index);
+      setMsg(`${line.desc} sent to purchasing.`);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
     } finally { setBusy(null); }
   }
 
@@ -143,6 +158,16 @@ export function RequisitionStockCheck({
                 </div>
               );
             }
+            if (l.toPurchase) {
+              return (
+                <div key={l.index} className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="min-w-0 flex-1 truncate">
+                    {l.desc} <span className="text-muted-foreground">· {l.qty || "?"} {l.unit}</span>
+                    <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">To purchase</span>
+                  </span>
+                </div>
+              );
+            }
             const matched = stockByName.get(normLabel(l.desc));
             const inStock = !!matched && (matched.available ?? 0) > 0;
             return (
@@ -161,10 +186,14 @@ export function RequisitionStockCheck({
                     {busy === l.index ? "Issuing…" : `Issue ${l.qty}`}
                   </button>
                 )}
+                <button type="button" disabled={busy === l.index} onClick={() => toPurchasing(l)}
+                  className="rounded border px-2 py-0.5 font-medium text-amber-700 hover:bg-amber-500/10 disabled:opacity-50">
+                  To purchasing
+                </button>
               </div>
             );
           })}
-          <p className="px-0.5 pt-0.5 text-[10px] text-muted-foreground">Issuing deducts from stock; the issued amount stays as an &ldquo;Issued from stock&rdquo; record and anything short is left to be purchased.</p>
+          <p className="px-0.5 pt-0.5 text-[10px] text-muted-foreground">Issuing deducts from stock and keeps an &ldquo;Issued from stock&rdquo; record; anything short, out of stock, or sent &ldquo;To purchasing&rdquo; is left for the purchaser to buy.</p>
         </div>
       )}
 

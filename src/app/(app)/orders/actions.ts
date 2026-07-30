@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
@@ -1739,6 +1739,7 @@ export async function issueRequisitionLineFromStock(
   const target = items[lineIndex];
   if (target == null) throw new Error("Line not found — refresh and try again.");
   if (isIssuedFromStockLine(target)) throw new Error("This line has already been issued from stock.");
+  if (isToPurchaseLine(target)) throw new Error("This line is already marked for purchasing.");
   const parsed = parseReqItemLine(target);
   const req = qty != null && qty > 0 ? qty : parsed.qty;
   if (!(req > 0)) throw new Error("Couldn't read the quantity for this line.");
@@ -1769,6 +1770,34 @@ export async function issueRequisitionLineFromStock(
   revalidatePath("/inventory");
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   return result;
+}
+
+/**
+ * Mark ONE requisition line as explicitly sent to purchasing (the MRF's "To
+ * purchasing" action). The line is still bought — it just gets a "To purchase"
+ * badge so it reads as handled. Warehouse / admin only, before a PO exists.
+ */
+export async function sendRequisitionLineToPurchasing(
+  purchaseRequestId: string,
+  lineIndex: number,
+): Promise<void> {
+  await requireWarehouse();
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Requisition not found.");
+  if (pr.po) throw new Error("A purchase order already exists.");
+  if (!(pr.status === "PENDING_APPROVAL" || pr.status === "APPROVED")) {
+    throw new Error("This requisition can no longer be handled.");
+  }
+  const items = Array.isArray(pr.items) ? (pr.items as string[]).slice() : [];
+  const target = items[lineIndex];
+  if (target == null) throw new Error("Line not found — refresh and try again.");
+  if (isIssuedFromStockLine(target)) throw new Error("This line has already been issued from stock.");
+  if (isToPurchaseLine(target)) return; // already marked
+  items[lineIndex] = toPurchaseLine(target);
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { items: items as Prisma.InputJsonValue } });
+  revalidatePath("/requisitions");
+  revalidatePath("/purchasing");
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
 }
 
 /**

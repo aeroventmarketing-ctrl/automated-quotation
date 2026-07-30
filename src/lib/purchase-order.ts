@@ -163,7 +163,40 @@ export function parseIssuedFromStockLine(item: string): { qty: string; unit: str
   return { qty: m ? m[1] : head, unit: m ? m[2].trim() : "", desc };
 }
 
-/** Build PO lines from PR item strings, skipping any already-issued-from-stock records. */
+/**
+ * Sentinel prefix marking a requisition line the warehouse explicitly sent to
+ * purchasing (the MRF's "To purchasing" action). Unlike an issued record this is
+ * still bought — the prefix is stripped before the PO line is built — it just
+ * carries a "To purchase" badge so the line reads as handled.
+ */
+export const TO_PURCHASE_PREFIX = "» to purchase · ";
+
+export function isToPurchaseLine(item: string): boolean {
+  return String(item ?? "").startsWith(TO_PURCHASE_PREFIX);
+}
+
+/** Drop the "to purchase" marker, leaving the plain "qty unit · desc" line. */
+export function stripToPurchasePrefix(item: string): string {
+  return isToPurchaseLine(item) ? item.slice(TO_PURCHASE_PREFIX.length) : item;
+}
+
+/** Mark a line as explicitly sent to purchasing (idempotent). */
+export function toPurchaseLine(item: string): string {
+  return `${TO_PURCHASE_PREFIX}${stripToPurchasePrefix(item)}`;
+}
+
+/**
+ * Build PO lines from PR item strings: skip already-issued-from-stock records
+ * (informational only) and strip the "to purchase" marker off the rest so the
+ * purchaser sees a clean "qty unit · desc" line.
+ */
 export function poLinesFromPRItems(items: string[]): POLine[] {
-  return (Array.isArray(items) ? items : []).filter((s) => !isIssuedFromStockLine(s)).map(poLineFromPRItem);
+  return (Array.isArray(items) ? items : [])
+    .filter((s) => !isIssuedFromStockLine(s))
+    .map((s) => poLineFromPRItem(stripToPurchasePrefix(s)));
+}
+
+/** Clean PR item lines for a text preview: drop issued records, strip the "to purchase" marker. */
+export function displayPRItems(items: string[]): string[] {
+  return (Array.isArray(items) ? items : []).filter((s) => !isIssuedFromStockLine(s)).map(stripToPurchasePrefix);
 }

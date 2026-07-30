@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
-import { poLineAmount, poTotals, poHasEwt, poLinesFromPRItems, type POLine, type EwtMode } from "@/lib/purchase-order";
+import { poLineAmount, poTotals, poHasEwt, poLinesFromPRItems, displayPRItems, type POLine, type EwtMode } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PRStatus } from "@/lib/purchasing";
@@ -191,7 +191,7 @@ export function CombinedPurchasing({
                         <span className="font-medium">{c.deptLabel}</span>
                         {c.mrfNo && <span className="ml-1 text-muted-foreground">MRF #{c.mrfNo}</span>}
                         <span className="ml-1 text-xs text-muted-foreground">· {c.orderLabel}</span>
-                        <span className="block text-xs text-muted-foreground">{c.items.join(", ")}</span>
+                        <span className="block text-xs text-muted-foreground">{displayPRItems(c.items).join(", ")}</span>
                         {c.supplierCompanies.length > 0 && (
                           <span className="mt-0.5 flex flex-wrap gap-1">
                             {c.supplierCompanies.map((co) => <Badge key={co} variant="secondary" className="font-normal">{co}</Badge>)}
@@ -313,7 +313,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         {batch.members.map((m, i) => (
           <li key={i}>
             <span className="font-medium text-foreground/80">{m.deptLabel}</span>
-            {m.mrfNo && ` · MRF #${m.mrfNo}`} · {m.orderLabel} — {m.items.join(", ")}
+            {m.mrfNo && ` · MRF #${m.mrfNo}`} · {m.orderLabel} — {displayPRItems(m.items).join(", ")}
           </li>
         ))}
       </ul>

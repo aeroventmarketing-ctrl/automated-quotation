@@ -18,7 +18,7 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
-import { poTotals, poHasEwt, parseIssuedFromStockLine, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { poTotals, poHasEwt, parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
@@ -311,6 +311,14 @@ export function PurchasingChain({
                       <span className="ml-2 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] text-emerald-700">
                         Issued {issued.qty}{issued.unit ? ` ${issued.unit}` : ""} from stock
                       </span>
+                    </li>
+                  );
+                }
+                if (isToPurchaseLine(it)) {
+                  return (
+                    <li key={i} className="marker:text-amber-600">
+                      {stripToPurchasePrefix(it)}
+                      <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">To purchase</span>
                     </li>
                   );
                 }
