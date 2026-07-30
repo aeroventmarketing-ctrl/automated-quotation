@@ -1555,6 +1555,142 @@ export async function processMaterialRequest(
   revalidatePath("/inventory");
 }
 
+/** MRF status from the current line dispositions once every line is handled. */
+function mrfFinalStatus(items: MRFItem[]): MaterialRequest["status"] {
+  const anyStock = items.some((it) => it.disposition === "issue" || it.disposition === "reserve");
+  const anyPurchase = items.some((it) => it.disposition === "purchase");
+  return anyPurchase ? (anyStock ? "partial" : "purchasing") : "issued";
+}
+
+/**
+ * Finalise a partly-handled MRF once no line is left pending: set the final
+ * status and create the linked purchase request for the accumulated purchase
+ * lines (only if one doesn't already exist). Called from the incremental
+ * per-line actions inside their transaction.
+ */
+async function finalizeMrfIfDone(
+  tx: Prisma.TransactionClient,
+  quotationId: string,
+  mrf: MaterialRequest,
+  idx: number,
+  cls: Record<string, unknown>,
+  wf: OrderWorkflow,
+  newItems: MRFItem[],
+  user: { id: string; name: string },
+): Promise<void> {
+  const pendingRemain = newItems.some((it) => !it.disposition);
+  const status: MaterialRequest["status"] = pendingRemain ? "partial" : mrfFinalStatus(newItems);
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = { ...mrf, items: newItems, status, handledAt: new Date().toISOString(), handledByName: user.name };
+  await tx.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, workflow: { ...wf, materialRequests } } as unknown as Prisma.InputJsonObject },
+  });
+  if (!pendingRemain) {
+    const purchaseItems = newItems.filter((it) => it.disposition === "purchase");
+    if (purchaseItems.length > 0) {
+      const existing = await tx.purchaseRequest.findFirst({ where: { mrfId: mrf.id }, select: { id: true } });
+      if (!existing) {
+        await tx.purchaseRequest.create({
+          data: {
+            quotationId,
+            mrfId: mrf.id,
+            dept: mrf.dept,
+            items: purchaseItems.map(mrfItemLine) as Prisma.InputJsonValue,
+            note: mrf.note ?? null,
+            createdById: user.id,
+            createdByName: user.name,
+            status: "PENDING_APPROVAL",
+          },
+        });
+      }
+    }
+  }
+}
+
+async function requireWarehouse(): Promise<{ id: string; name: string }> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can issue materials.");
+  }
+  return { id: user.id, name: user.name };
+}
+
+/**
+ * Issue ONE material-request line from stock, incrementally. Deducts the
+ * requested quantity (capped at what's actually available) from the chosen stock
+ * item and marks that line issued; any shortfall / out-of-stock balance splits
+ * off as a "purchase" line. Other lines stay pending until they're handled too;
+ * the linked purchase request is created once the last line is handled.
+ */
+export async function issueMrfLineFromStock(
+  quotationId: string,
+  requestId: string,
+  lineIndex: number,
+  stockItemId: string,
+  qty?: number,
+): Promise<{ issued: number; toPurchase: number }> {
+  const user = await requireWarehouse();
+  if (!stockItemId) throw new Error("Pick a stock item.");
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  if (mrf.status === "cancelled" || mrf.status === "completed") throw new Error("This material request is already closed.");
+  const target = mrf.items[lineIndex];
+  if (!target) throw new Error("Line not found — refresh and try again.");
+  if (target.disposition) throw new Error("This line has already been handled — refresh and try again.");
+  const req = Number(target.qty || 0);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { id: true, quantity: true } });
+    if (!item) throw new Error("Stock item not found.");
+    const agg = await tx.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
+    const avail = Math.max(0, Number(item.quantity) - Number(agg._sum.qty ?? 0));
+    const want = qty != null && qty > 0 ? Math.min(qty, req || qty) : req;
+    const issued = Math.max(0, Math.min(want, avail));
+    if (issued > 0) {
+      await applyStockChange(tx, { stockItemId, kind: "ISSUE", qty: issued, reason: `MRF #${mrf.formNo}` }, user.name);
+    }
+    const shortfall = req > 0 ? Math.max(0, req - issued) : 0;
+    const replacement: MRFItem[] = [];
+    if (issued > 0) replacement.push({ ...target, qty: String(issued), disposition: "issue", issuedQty: String(issued) });
+    if (shortfall > 0) replacement.push({ ...target, qty: String(shortfall), disposition: "purchase", issuedQty: undefined });
+    if (replacement.length === 0) replacement.push({ ...target, disposition: "purchase", issuedQty: undefined });
+    const newItems = [...mrf.items.slice(0, lineIndex), ...replacement, ...mrf.items.slice(lineIndex + 1)];
+    await finalizeMrfIfDone(tx, quotationId, mrf, idx, cls, wf, newItems, user);
+    return { issued, toPurchase: shortfall };
+  });
+
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/inventory");
+  return result;
+}
+
+/** Send ONE pending material-request line straight to purchasing (no stock). */
+export async function sendMrfLineToPurchasing(quotationId: string, requestId: string, lineIndex: number): Promise<void> {
+  const user = await requireWarehouse();
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
+  if (idx < 0) throw new Error("Material request not found.");
+  const mrf = wf.materialRequests[idx];
+  if (mrf.status === "cancelled" || mrf.status === "completed") throw new Error("This material request is already closed.");
+  const target = mrf.items[lineIndex];
+  if (!target) throw new Error("Line not found — refresh and try again.");
+  if (target.disposition) throw new Error("This line has already been handled — refresh and try again.");
+
+  await prisma.$transaction(async (tx) => {
+    const newItems = [...mrf.items.slice(0, lineIndex), { ...target, disposition: "purchase" as MRFLineDisposition, issuedQty: undefined }, ...mrf.items.slice(lineIndex + 1)];
+    await finalizeMrfIfDone(tx, quotationId, mrf, idx, cls, wf, newItems, user);
+  });
+
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/inventory");
+}
+
 /**
  * Advance a PurchaseRequest one step along the chain (approve/reject → voucher →
  * buy → check → receive → final approval). Guarded by the step's workflow role.

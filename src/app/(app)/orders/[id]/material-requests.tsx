@@ -382,8 +382,17 @@ export function MaterialRequests({
                 {r.handledByName ? ` · handled by ${r.handledByName}${r.handledWhen ? ` · ${r.handledWhen}` : ""}` : ""}
               </p>
               {/* Availability checker — Warehouse / Purchaser / Payment Approver /
-                  admin look up on-hand stock for the requested items. */}
-              {canCheckStock && <MrfStockCheck terms={r.items.map((it) => it.description)} />}
+                  admin look up on-hand stock; the Warehouse/admin can also issue
+                  each pending line from stock right here. */}
+              {canCheckStock && (
+                <MrfStockCheck
+                  orderId={orderId}
+                  requestId={r.id}
+                  lines={r.items.map((it, i) => ({ index: i, description: it.description, qty: it.qty, unit: it.unit, disposition: it.disposition }))}
+                  stockItems={stockItems}
+                  canIssue={r.canHandle && r.status !== "cancelled" && r.status !== "completed"}
+                />
+              )}
               {/* Fulfillment handshake: the Warehouse informs availability; the
                   requesting department confirms receipt of released materials;
                   the department can follow up while the MRF is outstanding. */}

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PackageSearch, Search, X } from "lucide-react";
+import { issueMrfLineFromStock, sendMrfLineToPurchasing } from "../actions";
 
 interface Hit {
   id: string;
@@ -13,29 +15,64 @@ interface Hit {
   onHand: number;
   available: number;
 }
+export interface MrfLine {
+  index: number; // position in the MRF items array
+  description: string;
+  qty: string;
+  unit: string;
+  disposition?: string | null; // undefined ⇒ still pending
+}
+interface StockOpt {
+  id: string;
+  name: string;
+}
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
-/** Clean an MRF line into a searchable term: drop parenthetical notes + extra spaces. */
+/** Normalise an item label for matching / searching (drop parenthetical notes). */
 const cleanTerm = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+const normLabel = (s: string) => cleanTerm(s).toLowerCase();
 
 /**
- * Warehouse/Purchaser availability checker embedded on an MRF card. Lets the
- * warehouseman, purchaser or admin/payment approver look up how much of an item
- * is on hand / free before deciding to issue from stock or send to purchasing.
- * Seeded with quick-search chips for each requested line. Read-only; queries
- * /api/stock/availability (no cost is exposed).
+ * Warehouse availability checker + per-line issue on an MRF card. For each line
+ * still awaiting handling it shows an Issue button (issue the requested qty from
+ * the matched stock item — the server caps at what's available and sends the rest
+ * to purchasing) plus a "To purchasing" option; and a free search for any item.
+ * Viewing is open to purchaser/payment-approver too; issuing is warehouse/admin.
  */
-export function MrfStockCheck({ terms }: { terms: string[] }) {
+export function MrfStockCheck({
+  orderId,
+  requestId,
+  lines,
+  stockItems,
+  canIssue,
+}: {
+  orderId: string;
+  requestId: string;
+  lines: MrfLine[];
+  stockItems: StockOpt[];
+  canIssue: boolean;
+}) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [loading, setLoading] = useState(false);
   const [notSetUp, setNotSetUp] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const acRef = useRef<AbortController | null>(null);
 
-  // Distinct, cleaned quick-search suggestions from the requested lines.
-  const chips = Array.from(new Set(terms.map(cleanTerm).filter((t) => t.length >= 2)));
+  const stockByName = useMemo(() => {
+    const m = new Map<string, StockOpt>();
+    for (const s of stockItems) m.set(normLabel(s.name), s);
+    return m;
+  }, [stockItems]);
+  const matchStock = (desc: string) => stockByName.get(normLabel(desc));
+
+  const pending = lines.filter((l) => !l.disposition);
+  const chips = Array.from(new Set(lines.map((l) => cleanTerm(l.description)).filter((t) => t.length >= 2)));
 
   useEffect(() => {
     const term = q.trim();
@@ -60,6 +97,34 @@ export function MrfStockCheck({ terms }: { terms: string[] }) {
     return () => clearTimeout(t);
   }, [q]);
 
+  async function issue(line: MrfLine) {
+    const m = matchStock(line.description);
+    if (!m) { setErr(`No stock item matches "${line.description}". Send it to purchasing or use "Check availability & process".`); return; }
+    setBusy(line.index); setErr(null); setMsg(null);
+    try {
+      const r = await issueMrfLineFromStock(orderId, requestId, line.index, m.id, Number(line.qty) || undefined);
+      setMsg(
+        r.toPurchase > 0
+          ? `Issued ${fmt(r.issued)} of ${line.description}; ${fmt(r.toPurchase)} sent to purchasing (short/out of stock).`
+          : `Issued ${fmt(r.issued)} of ${line.description}.`,
+      );
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to issue");
+    } finally { setBusy(null); }
+  }
+
+  async function toPurchasing(line: MrfLine) {
+    setBusy(line.index); setErr(null); setMsg(null);
+    try {
+      await sendMrfLineToPurchasing(orderId, requestId, line.index);
+      setMsg(`${line.description} sent to purchasing.`);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally { setBusy(null); }
+  }
+
   const term = q.trim();
 
   if (!open) {
@@ -69,7 +134,7 @@ export function MrfStockCheck({ terms }: { terms: string[] }) {
         onClick={() => setOpen(true)}
         className="mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent"
       >
-        <PackageSearch className="h-3.5 w-3.5" /> Check stock availability
+        <PackageSearch className="h-3.5 w-3.5" /> Check stock availability{canIssue && pending.length > 0 ? " & issue" : ""}
       </button>
     );
   }
@@ -78,23 +143,54 @@ export function MrfStockCheck({ terms }: { terms: string[] }) {
     <div className="mt-2 space-y-2 rounded-md border bg-muted/20 p-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-xs font-semibold">
-          <PackageSearch className="h-3.5 w-3.5 text-primary" /> Check stock availability
+          <PackageSearch className="h-3.5 w-3.5 text-primary" /> Stock availability{canIssue && pending.length > 0 ? " & issue" : ""}
         </div>
-        <button type="button" onClick={() => { setOpen(false); setQ(""); }} className="text-muted-foreground hover:text-foreground" aria-label="Close">
+        <button type="button" onClick={() => { setOpen(false); setQ(""); setMsg(null); setErr(null); }} className="text-muted-foreground hover:text-foreground" aria-label="Close">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {/* Quick lookups for this MRF's requested items. */}
+      {/* Per-line issue — one row per line still awaiting handling (warehouse/admin). */}
+      {canIssue && pending.length > 0 && (
+        <div className="space-y-1 rounded-md border bg-background p-1.5">
+          {pending.map((l) => {
+            const matched = matchStock(l.description);
+            return (
+              <div key={l.index} className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate">
+                  {l.description} <span className="text-muted-foreground">· {l.qty} {l.unit}</span>
+                  {!matched && <span className="ml-1 text-amber-600">· no stock match</span>}
+                </span>
+                {matched ? (
+                  <button
+                    type="button"
+                    disabled={busy === l.index}
+                    onClick={() => issue(l)}
+                    className="rounded border border-emerald-600/50 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-600/10 disabled:opacity-50"
+                  >
+                    {busy === l.index ? "Issuing…" : `Issue ${l.qty}`}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={busy === l.index}
+                  onClick={() => toPurchasing(l)}
+                  className="rounded border px-2 py-0.5 font-medium text-amber-700 hover:bg-amber-500/10 disabled:opacity-50"
+                >
+                  To purchasing
+                </button>
+              </div>
+            );
+          })}
+          <p className="px-0.5 pt-0.5 text-[10px] text-muted-foreground">Issuing deducts from stock; anything short or out of stock is sent to purchasing automatically.</p>
+        </div>
+      )}
+
+      {/* Quick lookup for any item. */}
       {chips.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {chips.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setQ(c)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] hover:bg-accent ${q === c ? "border-primary bg-primary/10 text-primary" : ""}`}
-            >
+            <button key={c} type="button" onClick={() => setQ(c)} className={`rounded-full border px-2 py-0.5 text-[11px] hover:bg-accent ${q === c ? "border-primary bg-primary/10 text-primary" : ""}`}>
               {c}
             </button>
           ))}
@@ -150,6 +246,8 @@ export function MrfStockCheck({ terms }: { terms: string[] }) {
           </ul>
         )
       )}
+      {msg && <p className="text-[11px] text-emerald-700">{msg}</p>}
+      {err && <p className="text-[11px] text-destructive">{err}</p>}
     </div>
   );
 }
