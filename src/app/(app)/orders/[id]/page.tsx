@@ -107,14 +107,28 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     getCurrentUser(),
     getWorkflowRoles(),
     prisma.purchaseRequest.findMany({ where: { quotationId: id }, orderBy: { createdAt: "asc" } }),
-    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
+    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true, quantity: true } }).catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true } }),
     getSuppliers().catch(() => []),
     getPaymentTerms().catch(() => []),
     getHideOrderProgress().catch(() => false),
   ]);
   if (!quote) notFound();
-  const stockItems = stockItemsRaw;
+  // Enrich stock items with what's actually free to issue (on hand − active
+  // reservations), the same figure the availability lookup shows — so the MRF
+  // panels can hide "Issue" for anything not in stock.
+  const stockResv = stockItemsRaw.length
+    ? await prisma.stockReservation
+        .groupBy({ by: ["stockItemId"], where: { active: true, stockItemId: { in: stockItemsRaw.map((s) => s.id) } }, _sum: { qty: true } })
+        .catch(() => [] as { stockItemId: string; _sum: { qty: number | null } }[])
+    : [];
+  const reservedById = new Map(stockResv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
+  const stockItems = stockItemsRaw.map((s) => ({
+    id: s.id,
+    name: s.name,
+    unit: s.unit,
+    available: Math.round((Number(s.quantity) - (reservedById.get(s.id) ?? 0)) * 1000) / 1000,
+  }));
   // Catalogue of purchasable products (for the MRF autocomplete); may be empty
   // before the product table is migrated.
   const productOptions = await getProducts().then((ps) => ps.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))).catch(() => []);

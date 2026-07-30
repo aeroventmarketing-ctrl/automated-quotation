@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { StockOpt } from "./stock-match-panel";
+
+/** Normalise an item label for matching (drop parenthetical notes, fold case). */
+const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 
 export interface TriageLine {
   description: string;
@@ -35,8 +38,23 @@ export function MrfTriagePanel({
   onCancel: () => void;
   onSubmit: (dispositions: { action: TriageAction; stockItemId?: string; qty?: number }[]) => Promise<void>;
 }) {
+  // Match each line to a stock item by name and find what's free to issue, so a
+  // line with nothing in stock offers only "Purchase" (no "Issue from stock").
+  const stockByName = useMemo(() => {
+    const m = new Map<string, StockOpt>();
+    for (const s of stockItems) m.set(normLabel(s.name), s);
+    return m;
+  }, [stockItems]);
+  const inStockFor = (desc: string) => {
+    const m = stockByName.get(normLabel(desc));
+    return m && (m.available ?? 0) > 0 ? m : undefined;
+  };
+
   const [rows, setRows] = useState<RowState[]>(
-    lines.map((l) => ({ action: "issue", stockItemId: "", qty: l.qty ?? "" })),
+    lines.map((l) => {
+      const m = inStockFor(l.description);
+      return { action: m ? "issue" : "purchase", stockItemId: m?.id ?? "", qty: l.qty ?? "" };
+    }),
   );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -76,6 +94,7 @@ export function MrfTriagePanel({
       <div className="space-y-2">
         {lines.map((l, i) => {
           const r = rows[i];
+          const matched = inStockFor(l.description);
           return (
             <div key={i} className="rounded-md border bg-background p-2">
               <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
@@ -84,22 +103,25 @@ export function MrfTriagePanel({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="inline-flex overflow-hidden rounded-md border">
-                  <button
-                    type="button"
-                    onClick={() => set(i, { action: "issue" })}
-                    className={`px-2.5 py-1 text-xs ${r.action === "issue" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                  >
-                    Issue from stock
-                  </button>
+                  {/* "Issue from stock" only when the item is actually available. */}
+                  {matched && (
+                    <button
+                      type="button"
+                      onClick={() => set(i, { action: "issue" })}
+                      className={`px-2.5 py-1 text-xs ${r.action === "issue" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                    >
+                      Issue from stock
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => set(i, { action: "purchase" })}
-                    className={`border-l px-2.5 py-1 text-xs ${r.action === "purchase" ? "bg-amber-500 text-white" : "hover:bg-accent"}`}
+                    className={`px-2.5 py-1 text-xs ${matched ? "border-l" : ""} ${r.action === "purchase" ? "bg-amber-500 text-white" : "hover:bg-accent"}`}
                   >
                     Purchase
                   </button>
                 </div>
-                {r.action === "issue" && (
+                {r.action === "issue" && matched && (
                   <>
                     <select
                       value={r.stockItemId}
@@ -116,7 +138,7 @@ export function MrfTriagePanel({
                   </>
                 )}
                 {r.action === "purchase" && (
-                  <span className="text-xs text-amber-600">Will be sent to purchasing</span>
+                  <span className="text-xs text-amber-600">{matched ? "Will be sent to purchasing" : "Not in stock — will be sent to purchasing"}</span>
                 )}
               </div>
             </div>

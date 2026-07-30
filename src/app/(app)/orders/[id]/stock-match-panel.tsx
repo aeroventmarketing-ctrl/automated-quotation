@@ -12,6 +12,8 @@ export interface StockOpt {
   id: string;
   name: string;
   unit: string;
+  /** Free to issue right now (on hand − active reservations); absent ⇒ unknown. */
+  available?: number;
 }
 
 /** Match request/purchase lines to stock items + quantities before issuing/receiving. */
