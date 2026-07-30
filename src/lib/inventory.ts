@@ -6,8 +6,40 @@
  * sets the on-hand to the given quantity.
  */
 import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db";
 
 export type StockKind = "RECEIPT" | "ISSUE" | "ADJUSTMENT";
+
+export interface StockOptWithAvail {
+  id: string;
+  name: string;
+  unit: string;
+  /** Free to issue right now (on hand − active reservations). */
+  available: number;
+}
+
+/**
+ * Active stock items with what's actually free to issue (on hand − active
+ * reservations), the same figure the availability lookup shows. Shared by the
+ * MRF / requisition / purchasing stock pickers so a line with nothing available
+ * can hide its "Issue" control. Returns [] if the inventory tables aren't set up.
+ */
+export async function listStockItemsWithAvailability(): Promise<StockOptWithAvail[]> {
+  const items = await prisma.stockItem
+    .findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true, quantity: true } })
+    .catch(() => [] as { id: string; name: string; unit: string; quantity: unknown }[]);
+  if (items.length === 0) return [];
+  const resv = await prisma.stockReservation
+    .groupBy({ by: ["stockItemId"], where: { active: true, stockItemId: { in: items.map((i) => i.id) } }, _sum: { qty: true } })
+    .catch(() => [] as { stockItemId: string; _sum: { qty: number | null } }[]);
+  const reservedById = new Map(resv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
+  return items.map((i) => ({
+    id: i.id,
+    name: i.name,
+    unit: i.unit,
+    available: Math.round((Number(i.quantity) - (reservedById.get(i.id) ?? 0)) * 1000) / 1000,
+  }));
+}
 
 export interface StockChange {
   stockItemId: string;

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { listStockItemsWithAvailability } from "@/lib/inventory";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -56,7 +57,7 @@ export default async function RequisitionsPage() {
     getProducts().catch(() => []),
     getSuppliers().catch(() => []),
     getPaymentTerms().catch(() => []),
-    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
+    listStockItemsWithAvailability(),
     prisma.user.findMany({ select: { id: true, name: true } }),
   ]);
   const userName = new Map(allUsers.map((u) => [u.id, u.name] as const));
