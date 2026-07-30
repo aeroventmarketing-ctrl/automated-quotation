@@ -111,6 +111,7 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
           <Input
             className="h-9 pl-8"
             placeholder="Search a product to add…"
+            autoComplete="off"
             value={pquery}
             onChange={(e) => { setPquery(e.target.value); setPOpen(true); }}
             onFocus={() => setPOpen(true)}
@@ -162,7 +163,7 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i} className={`border-b last:border-0 transition-colors ${highlight === i ? "bg-amber-200/60" : ""}`}>
-                  <td className="py-1 pr-2"><input list="requisition-products" value={r.description} onChange={(e) => setCell(i, "description", e.target.value)} className="w-full rounded border bg-background px-2 py-1" placeholder="Type or pick a product" /></td>
+                  <td className="py-1 pr-2"><input list="requisition-products" autoComplete="off" value={r.description} onChange={(e) => setCell(i, "description", e.target.value)} className="w-full rounded border bg-background px-2 py-1" placeholder="Type or pick a product" /></td>
                   <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
                   <td className="py-1 px-1">
                     <select value={normalizeUnit(r.unit)} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">

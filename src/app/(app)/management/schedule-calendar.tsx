@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UploadLink } from "@/components/upload-link";
 import { ApproverHighlight } from "@/components/approver-highlight";
+import { useAlertsSuppressed } from "@/components/alert-golive-context";
 import {
   SCHEDULE_CATEGORIES,
   scheduleCategory,
@@ -97,6 +98,8 @@ export function ScheduleCalendar({
   scheduleApprovers?: string[];
 }) {
   const router = useRouter();
+  // Alerts go-live gate: hold the blinking "pending approval" badge until launch.
+  const alertsSuppressed = useAlertsSuppressed();
   const today = phTodayParts();
   const [mode, setMode] = useState<ViewMode>("month");
   const [view, setView] = useState<{ y: number; m: number; d: number }>({ y: today.y, m: today.m, d: today.d });
@@ -260,7 +263,7 @@ export function ScheduleCalendar({
             : mode === "agenda" ? "Agenda"
             : <>{monthName(view.y, view.m)} <span className="font-normal text-muted-foreground">{view.y}</span></>}
         </div>
-        {canApprove && pendingCount > 0 && (
+        {canApprove && pendingCount > 0 && !alertsSuppressed && (
           <span className="animate-approver-blink inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">{pendingCount} pending approval</span>
         )}
         {/* View switcher */}
