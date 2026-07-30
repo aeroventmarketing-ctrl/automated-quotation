@@ -428,9 +428,9 @@ export async function advanceJobOrder(
 
 /**
  * Attach a proofing picture to a department's job order. Uploaded by the
- * department's production head (or an admin) during production so the work can
- * be reviewed before it's marked finished. At least one proof is required by
- * `advanceJobOrder` before the "Mark finished" step is allowed.
+ * department's production head (or an admin). At least one proof is required by
+ * `advanceJobOrder` before the "Mark finished" step is allowed; further pictures
+ * may still be added afterwards (e.g. photos taken after completion).
  */
 export async function addJobOrderProof(quotationId: string, dept: string, doc: SaleDoc): Promise<void> {
   const user = await getCurrentUser();
@@ -445,7 +445,8 @@ export async function addJobOrderProof(quotationId: string, dept: string, doc: S
   const { cls, wf } = await loadWorkflow(quotationId);
   const jo = wf.jobOrders[deptKey];
   if (!jo) throw new Error("No job order for this department.");
-  if (jo.status === "finished") throw new Error("This job order is already finished.");
+  // Proofs may be added at any point once the job order exists — including after
+  // it's finished (e.g. the dept head attaching a picture they took later).
 
   const proof: JobOrderProof = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt, byName: user.name };
   const updated: JobOrder = { ...jo, proofs: [...(jo.proofs ?? []), proof] };

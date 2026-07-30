@@ -260,8 +260,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     // Proofing pictures: the department head (or an admin) may attach/remove
     // while the job order is open (not yet finished); everyone else views only.
     const proofs = jo?.proofs ?? [];
-    const canEditProofs = isDeptHead && status != null && status !== "finished";
-    return { status, canIssue, canAdvance, nextTo, nextLabel, awaitingReceive, proofs, canEditProofs, admin: adminViewer };
+    // The dept head (or admin) may ADD proof pictures any time the job order
+    // exists — including after it's marked finished. Removing a proof stays
+    // limited to before finish for the dept head; an admin may remove any time.
+    const canAddProofs = isDeptHead && status != null;
+    const canRemoveProofs = adminViewer || (isDeptHead && status != null && status !== "finished");
+    return { status, canIssue, canAdvance, nextTo, nextLabel, awaitingReceive, proofs, canAddProofs, canRemoveProofs };
   };
 
   // A job order is visible to its own department head. Sales, Engineers, Admins,

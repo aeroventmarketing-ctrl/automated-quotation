@@ -13,24 +13,24 @@ export interface JobProof extends SaleDoc {
 }
 
 /**
- * Proofing pictures attached to a department's job order before it can be marked
- * finished. The department's production head uploads one or more pictures; anyone
- * who can see the job order gets the view (eye) / download link. The dept head
- * can remove a proof while the job order is open; an admin can remove any proof
- * at any time.
+ * Proofing pictures attached to a department's job order. The production head
+ * (or admin) uploads one or more pictures — at least one is required before
+ * "Mark finished", and more may be added afterwards. Anyone who can see the job
+ * order gets the view (eye) / download link. The dept head can remove a proof
+ * while the job order is open; an admin can remove any proof at any time.
  */
 export function JobOrderProofs({
   orderId,
   deptKey,
   initialProofs,
-  canEdit,
-  admin = false,
+  canAdd,
+  canRemove,
 }: {
   orderId: string;
   deptKey: string;
   initialProofs: JobProof[];
-  canEdit: boolean;
-  admin?: boolean;
+  canAdd: boolean;
+  canRemove: boolean;
 }) {
   const router = useRouter();
   const [proofs, setProofs] = useState<JobProof[]>(initialProofs);
@@ -68,10 +68,8 @@ export function JobOrderProofs({
     }
   }
 
-  // The dept head manages proofs while the JO is open; an admin can always remove.
-  const canRemove = admin || canEdit;
   // Nothing to show for a plain viewer with no proofs yet.
-  if (!canEdit && !admin && proofs.length === 0) return null;
+  if (!canAdd && !canRemove && proofs.length === 0) return null;
 
   return (
     <div className="mb-2 space-y-1 rounded-md border bg-muted/20 p-2">
@@ -92,7 +90,7 @@ export function JobOrderProofs({
           </span>
         ))}
         {proofs.length === 0 && <span className="text-xs text-muted-foreground">No pictures yet.</span>}
-        {canEdit && (
+        {canAdd && (
           <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent">
             <Upload className="h-3.5 w-3.5" /> {busy ? "Uploading…" : proofs.length ? "Add pictures" : "Upload pictures"}
             <input
