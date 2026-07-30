@@ -125,6 +125,14 @@ function ProductCombobox({ value, onChange, products }: { value: string; onChang
   );
 }
 
+/** Normalise an item label for matching (drop parenthetical notes + case/space). */
+const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+/** Best stock item for an MRF line description (exact normalised name match). */
+function matchMrfStock(description: string, stockItems: StockOpt[]): StockOpt | undefined {
+  const n = normLabel(description);
+  return stockItems.find((s) => normLabel(s.name) === n);
+}
+
 export function MaterialRequests({
   orderId,
   requesterName,
@@ -187,6 +195,20 @@ export function MaterialRequests({
     } finally {
       setBusy(false);
     }
+  }
+
+  // One-click fulfilment: match each line to a stock item by name and issue the
+  // requested quantity from stock. The server caps each line at what's actually
+  // available (deducting stock, reflected in availability) and routes any
+  // shortfall / out-of-stock / unmatched line to purchasing.
+  async function autoIssue(r: ReqRow) {
+    const dispositions = r.items.map((it) => {
+      const m = matchMrfStock(it.description, stockItems);
+      return m
+        ? { action: "issue" as const, stockItemId: m.id, qty: Number(it.qty) || 0 }
+        : { action: "purchase" as const };
+    });
+    await processMaterialRequest(orderId, r.id, dispositions);
   }
 
   const hasItems = rows.some((r) => r.description.trim() !== "");
@@ -484,6 +506,12 @@ export function MaterialRequests({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {/* Warehouse checks availability first, then either issues from
                       stock (available) or sends the shortfall to purchasing. */}
+                  {r.canHandle && (
+                    <Button size="sm" className="h-7 text-xs" disabled={busy}
+                      onClick={() => { if (window.confirm(`Issue every available item on MRF #${r.formNo} from stock, and send whatever isn't in stock to purchasing?`)) run(() => autoIssue(r)); }}>
+                      Issue available from stock
+                    </Button>
+                  )}
                   {r.canHandle && (
                     <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => setIssuingId(r.id)}>Check availability &amp; process</Button>
                   )}
