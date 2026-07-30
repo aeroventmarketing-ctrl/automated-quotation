@@ -1437,37 +1437,44 @@ export async function processMaterialRequest(
 
   const dispOf = (a: LineDisposition["action"]): MRFLineDisposition =>
     a === "purchase" ? "purchase" : a === "reserve" ? "reserve" : "issue";
-  const items: MRFItem[] = mrf.items.map((it, i) => {
+  // Plan each requested line: how much is issued/reserved from stock now, and how
+  // much is short. The shortfall on a partial issue/reserve is escalated to
+  // purchasing (previously it was silently dropped).
+  const plans = mrf.items.map((it, i) => {
     const d = dispositions[i];
     const disposition = dispOf(d?.action ?? "issue");
-    // Record how much was actually issued/reserved from stock — the warehouse can
-    // issue less than requested, so this may be below the requested qty.
-    const issuedQty =
-      (disposition === "issue" || disposition === "reserve") && d?.qty != null && Number(d.qty) > 0
-        ? String(d.qty)
-        : disposition === "purchase"
-        ? undefined
-        : "0";
-    return { ...it, disposition, issuedQty };
+    const req = Number(it.qty || 0);
+    if (disposition === "purchase") return { it, disposition, issuedHere: 0, stockItemId: undefined as string | undefined, shortfall: req };
+    const got = d?.qty != null && Number(d.qty) > 0 ? Number(d.qty) : 0;
+    const issuedHere = req > 0 ? Math.min(got, req) : got;
+    return { it, disposition, issuedHere, stockItemId: d?.stockItemId || undefined, shortfall: req > 0 ? Math.max(0, req - issuedHere) : 0 };
   });
-  const matchesFor = (action: "issue" | "reserve") =>
-    dispositions
-      .filter((d) => d.action === action && d.stockItemId && Number(d.qty) > 0)
-      .map((d) => ({ stockItemId: d.stockItemId as string, qty: Number(d.qty) }));
-  const issueMatches = matchesFor("issue");
-  const reserveMatches = matchesFor("reserve");
+
+  // A short issue/reserve line splits into the issued portion (from stock) plus a
+  // "purchase" line for the un-issued balance, so the shortfall actually reaches
+  // purchasing (matching the "Partly issued · purchasing" status). Fully-issued
+  // and full-purchase lines stay a single line.
+  const items: MRFItem[] = [];
+  for (const p of plans) {
+    if (p.disposition === "purchase") {
+      items.push({ ...p.it, disposition: "purchase", issuedQty: undefined });
+      continue;
+    }
+    if (p.issuedHere > 0) items.push({ ...p.it, qty: String(p.issuedHere), disposition: p.disposition, issuedQty: String(p.issuedHere) });
+    if (p.shortfall > 0) items.push({ ...p.it, qty: String(p.shortfall), disposition: "purchase", issuedQty: undefined });
+  }
+
+  const issueMatches = plans.filter((p) => p.disposition === "issue" && p.stockItemId && p.issuedHere > 0).map((p) => ({ stockItemId: p.stockItemId as string, qty: p.issuedHere }));
+  const reserveMatches = plans.filter((p) => p.disposition === "reserve" && p.stockItemId && p.issuedHere > 0).map((p) => ({ stockItemId: p.stockItemId as string, qty: p.issuedHere }));
   const purchaseItems = items.filter((it) => it.disposition === "purchase");
 
   const anyStock = items.some((it) => it.disposition === "issue" || it.disposition === "reserve");
   const anyPurchase = purchaseItems.length > 0;
   if (!anyStock && !anyPurchase) throw new Error("Nothing to process.");
-  // A stock line issued below its requested quantity leaves a balance owing, so
-  // the MRF is only partially fulfilled — not fully "issued".
-  const anyShortfall = items.some(
-    (it) => (it.disposition === "issue" || it.disposition === "reserve") && Number(it.issuedQty ?? 0) < Number(it.qty || 0),
-  );
+  // Some issued from stock + something going to purchasing → partial; only
+  // purchasing → purchasing; everything issued in full → issued.
   const status: MaterialRequest["status"] =
-    anyPurchase ? (anyStock ? "partial" : "purchasing") : anyShortfall ? "partial" : "issued";
+    anyPurchase ? (anyStock ? "partial" : "purchasing") : "issued";
   const orderRef = quote.quoteNumber || "order";
 
   await prisma.$transaction(async (tx) => {
