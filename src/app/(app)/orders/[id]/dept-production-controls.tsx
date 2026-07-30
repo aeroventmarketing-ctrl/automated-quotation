@@ -35,6 +35,7 @@ export function DeptProductionControls({
   awaitingReceive,
   proofs,
   canEditProofs,
+  admin = false,
 }: {
   orderId: string;
   deptKey: string;
@@ -46,6 +47,7 @@ export function DeptProductionControls({
   awaitingReceive: boolean;
   proofs: JobProof[];
   canEditProofs: boolean;
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -72,7 +74,7 @@ export function DeptProductionControls({
     <div className="mb-2">
       {/* Proofing pictures — shown once the department's job order exists. */}
       {status != null && (
-        <JobOrderProofs orderId={orderId} deptKey={deptKey} initialProofs={proofs} canEdit={canEditProofs} />
+        <JobOrderProofs orderId={orderId} deptKey={deptKey} initialProofs={proofs} canEdit={canEditProofs} admin={admin} />
       )}
       <div className="flex flex-wrap items-center gap-2">
         {status == null ? (

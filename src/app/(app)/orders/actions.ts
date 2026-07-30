@@ -461,22 +461,26 @@ export async function addJobOrderProof(quotationId: string, dept: string, doc: S
 }
 
 /**
- * Remove a proofing picture from a department's job order (before it's marked
- * finished). Done by the department's production head or an admin.
+ * Remove a proofing picture from a department's job order. The department's
+ * production head may remove while the job order is still open; an admin may
+ * remove any proof at any time (even after it's marked finished).
  */
 export async function removeJobOrderProof(quotationId: string, dept: string, path: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
   const deptKey = dept as ProductionDeptKey;
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(deptKey) as WorkflowRoleKey))) {
+  const admin = isAdmin(user);
+  if (!(admin || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(deptKey) as WorkflowRoleKey))) {
     throw new Error(`Only the ${deptLabel(deptKey)} head or an admin can remove a proof.`);
   }
 
   const { cls, wf } = await loadWorkflow(quotationId);
   const jo = wf.jobOrders[deptKey];
   if (!jo) throw new Error("No job order for this department.");
-  if (jo.status === "finished") throw new Error("This job order is already finished.");
+  // The dept head may only remove while the JO is open; an admin can remove any
+  // uploaded proof, even after the job order is finished (for corrections).
+  if (jo.status === "finished" && !admin) throw new Error("This job order is already finished.");
 
   const proofs = (jo.proofs ?? []).filter((p) => p.path !== path);
   const updated: JobOrder = { ...jo, proofs: proofs.length ? proofs : undefined };
