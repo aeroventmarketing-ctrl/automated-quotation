@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { setMultiDelivery } from "../actions";
 
 /**
- * One-time choice at Phase 5: switch the order to multiple-batch delivery (for
- * large orders delivered in parts). Only Sales or an admin, and only before the
- * single-batch flow has started.
+ * Switch the order to multiple-batch delivery (for large orders delivered in
+ * parts). Only Sales or an admin, allowed from when production starts up until
+ * just before the order is actually delivered — including after the single
+ * delivery flow has begun (that progress is then set aside).
  */
 export function MultiDeliveryEntry({ orderId }: { orderId: string }) {
   const router = useRouter();
@@ -17,7 +18,7 @@ export function MultiDeliveryEntry({ orderId }: { orderId: string }) {
   const [err, setErr] = useState<string | null>(null);
 
   async function go() {
-    if (!window.confirm("Deliver this order in multiple batches? The single-delivery flow won't be used for this order.")) return;
+    if (!window.confirm("Switch this order to multiple-batch delivery? The single-delivery flow will be set aside (any single-delivery steps already done are ignored); collected payments carry over and each batch is billed, paid, checked and delivered on its own.")) return;
     setBusy(true);
     setErr(null);
     try {

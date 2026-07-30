@@ -2522,10 +2522,13 @@ export async function setMultiDelivery(quotationId: string): Promise<void> {
   if (!wf.batchDeliveryEnabled) {
     throw new Error("Enable batch delivery first before switching this order to multiple batches.");
   }
-  // Available once production has started (producing) through production finished —
-  // but not after the single-batch delivery has begun.
-  if (wf.stage !== "producing" && wf.stage !== "production_finished") {
-    throw new Error("Choose multiple-batch delivery once production has started, before the single delivery begins.");
+  // Available from when production starts (producing) up until just before the
+  // order is actually delivered — so it can still be switched to batches after
+  // the single-delivery flow (final payment / QA / delivery docs) has begun. Any
+  // collected payment carries over; the batch flow drives the order to close from
+  // whatever stage it's at. Blocked once the order is delivered/closed.
+  if (!(stageIndex(wf.stage) >= stageIndex("producing") && stageIndex(wf.stage) < stageIndex("delivered"))) {
+    throw new Error("Multiple-batch delivery can be chosen from when production starts until just before the order is delivered.");
   }
   await saveWorkflow(quotationId, cls, { ...wf, deliveryMode: "multi" });
 }

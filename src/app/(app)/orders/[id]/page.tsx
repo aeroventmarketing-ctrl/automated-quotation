@@ -430,10 +430,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canEnableBatch =
     adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey));
   const batchEnabled = wf.batchDeliveryEnabled === true;
-  // The enable toggle shows to authorized roles once production has started
-  // (and until the order switches to multi). The entry panel (1st picture)
-  // shows only after the toggle is on.
-  const inDeliveryWindow = wf.stage === "producing" || wf.stage === "production_finished";
+  // The enable toggle shows to authorized roles from when production starts up
+  // until just before the order is actually delivered — so an order can still be
+  // switched to batch delivery even after the single-delivery flow has begun
+  // (final payment / QA / delivery-doc stages). The entry panel shows once the
+  // toggle is on. Switching is blocked once the order is delivered/closed.
+  const inDeliveryWindow =
+    stageIndex(wf.stage) >= stageIndex("producing") && stageIndex(wf.stage) < stageIndex("delivered");
   const showBatchToggle = inDeliveryWindow && !multiMode && canEnableBatch;
   const showMultiEntry =
     inDeliveryWindow && !multiMode && batchEnabled && (canManageMulti || canEnableBatch);
