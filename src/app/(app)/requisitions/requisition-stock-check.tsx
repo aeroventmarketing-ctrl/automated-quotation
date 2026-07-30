@@ -15,7 +15,7 @@ interface Hit {
   onHand: number;
   available: number;
 }
-interface StockOpt { id: string; name: string }
+interface StockOpt { id: string; name: string; available?: number }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
 const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -130,13 +130,18 @@ export function RequisitionStockCheck({
         <div className="space-y-1 rounded-md border bg-background p-1.5">
           {lines.map((l) => {
             const matched = stockByName.get(normLabel(l.desc));
+            const inStock = !!matched && (matched.available ?? 0) > 0;
             return (
               <div key={l.index} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="min-w-0 flex-1 truncate">
                   {l.desc} <span className="text-muted-foreground">· {l.qty || "?"} {l.unit}</span>
-                  {!matched && <span className="ml-1 text-amber-600">· no stock match</span>}
+                  {!matched ? (
+                    <span className="ml-1 text-amber-600">· no stock match</span>
+                  ) : !inStock ? (
+                    <span className="ml-1 text-amber-600">· out of stock</span>
+                  ) : null}
                 </span>
-                {matched && l.qty > 0 && (
+                {inStock && l.qty > 0 && (
                   <button type="button" disabled={busy === l.index} onClick={() => issue(l)}
                     className="rounded border border-emerald-600/50 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-600/10 disabled:opacity-50">
                     {busy === l.index ? "Issuing…" : `Issue ${l.qty}`}

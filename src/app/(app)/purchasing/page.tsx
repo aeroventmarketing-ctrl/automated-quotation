@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { listStockItemsWithAvailability } from "@/lib/inventory";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
@@ -65,7 +66,7 @@ export default async function PurchasingPage() {
   const canDeleteStatus = (_status: string): boolean => admin;
 
   const [stockItems, suppliers, paymentTerms, allUsers] = await Promise.all([
-    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true } }).catch(() => []),
+    listStockItemsWithAvailability(),
     getSuppliers().catch(() => []),
     getPaymentTerms().catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true } }),
