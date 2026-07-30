@@ -123,6 +123,7 @@ export default async function RequisitionsPage() {
             admin={admin}
             showAmounts={showAmounts}
             showSupplier={showSupplier}
+            canCheckStock={admin || has("warehouse") || has("purchaser") || has("payment_approver")}
           />
         )}
       </div>

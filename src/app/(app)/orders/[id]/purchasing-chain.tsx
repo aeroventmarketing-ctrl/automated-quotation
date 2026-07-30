@@ -10,6 +10,7 @@ import { ApproverHighlight } from "@/components/approver-highlight";
 import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
 import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
 import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override";
+import { StockAvailabilityLookup } from "@/components/stock-availability-lookup";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { PRStatus } from "@/lib/purchasing";
@@ -113,6 +114,7 @@ export function PurchasingChain({
   admin = false,
   showAmounts = true,
   showSupplier = true,
+  showStockCheck = false,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -160,6 +162,8 @@ export function PurchasingChain({
   showAmounts?: boolean;
   /** Whether the viewer may see the supplier's name. */
   showSupplier?: boolean;
+  /** Show the read-only stock-availability lookup on each row (requisitions). */
+  showStockCheck?: boolean;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -292,6 +296,8 @@ export function PurchasingChain({
             <ul className="ml-4 list-disc text-sm text-muted-foreground">
               {r.items.map((it, i) => <li key={i}>{it}</li>)}
             </ul>
+            {/* Read-only stock availability lookup for the requested items. */}
+            {showStockCheck && <StockAvailabilityLookup terms={r.items} />}
             {r.note && <p className="mt-1 text-xs text-muted-foreground">Note: {r.note}</p>}
             {r.trail.length > 0 && (
               <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
