@@ -151,22 +151,83 @@ export default async function ManagementPage() {
   }
   const scheduleApprovers = await scheduleApproverNames().catch(() => []);
 
-  // Alerts go-live gate: before launch, hold the Management Dashboard blank of
-  // every detail EXCEPT the team calendar — the same switch that keeps the
-  // approval alarms silent until go-live. Once the gate is off / the moment
-  // passes, the full dashboard returns automatically.
+  // Alerts go-live gate: before launch, hold the Management Dashboard's live
+  // figures back — every card is shown as an empty box ("Available at go-live"),
+  // and only the team calendar stays active. Same switch that keeps the approval
+  // alarms silent until go-live; once the gate is off / the moment passes, the
+  // full dashboard returns automatically.
   const alertGate = await getAlertGoLive();
   if (alertsSuppressedNow(alertGate)) {
+    const gatedTiles = [
+      { label: "Open Orders", icon: ClipboardList },
+      { label: "Counter Sales (Mo.)", icon: Store },
+      { label: "Receivables", icon: Wallet },
+      { label: "Low / Out of Stock", icon: PackageX },
+      { label: "Unpaid Commissions", icon: Percent },
+    ];
+    const gatedTop = [
+      { label: "Order pipeline", icon: TrendingUp, wide: true },
+      { label: "Production load", icon: Factory, wide: false },
+    ];
+    const gatedSections = [
+      { label: "Departmental P&L", icon: Scale },
+      { label: "Departmental payroll", icon: Banknote },
+      { label: "Fan-body COGS", icon: Factory },
+      { label: "Unreconciled payments", icon: Coins },
+      { label: "Cash liquidations", icon: Scale },
+      { label: "Returns to supplier", icon: RotateCcw },
+      { label: "Receivables", icon: Wallet },
+      { label: "Stock alerts", icon: AlertTriangle },
+      { label: "Purchasing & commissions", icon: ShoppingCart },
+      { label: "Cash vouchers", icon: Banknote },
+    ];
     return (
       <div className="space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Management Dashboard</h1>
             <p className="text-sm text-muted-foreground">
-              The dashboard opens at go-live ({formatDateTime(new Date(alertGate.at))}). Until then only the team calendar is shown.
+              Live figures open at go-live ({formatDateTime(new Date(alertGate.at))}). Until then the boxes stay empty and only the team calendar is active.
             </p>
           </div>
         </div>
+
+        {/* KPI tile shells — labels only, figures fill in at go-live. */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {gatedTiles.map((t) => {
+            const Icon = t.icon;
+            return (
+              <Card key={t.label} className="relative overflow-hidden shadow-sm">
+                <span className="absolute inset-x-0 top-0 h-1 bg-muted" />
+                <CardContent className="flex items-start justify-between gap-2 pt-5">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t.label}</div>
+                    <div className="mt-1 text-2xl font-bold text-muted-foreground">—</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">at go-live</div>
+                  </div>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Order pipeline + production load shells. */}
+        <div className="grid gap-4 lg:grid-cols-3">
+          {gatedTop.map((s) => {
+            const Icon = s.icon;
+            return (
+              <Card key={s.label} className={`shadow-sm ${s.wide ? "lg:col-span-2" : ""}`}>
+                <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><Icon className="h-4 w-4 text-muted-foreground" /> {s.label}</CardTitle></CardHeader>
+                <CardContent><p className="py-8 text-center text-sm text-muted-foreground">Available at go-live.</p></CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Team calendar — the one live section before go-live. */}
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /> Team calendar</CardTitle>
@@ -179,6 +240,17 @@ export default async function ManagementPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Remaining section shells. */}
+        {gatedSections.map((s) => {
+          const Icon = s.icon;
+          return (
+            <Card key={s.label} className="shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><Icon className="h-4 w-4 text-muted-foreground" /> {s.label}</CardTitle></CardHeader>
+              <CardContent><p className="py-8 text-center text-sm text-muted-foreground">Available at go-live.</p></CardContent>
+            </Card>
+          );
+        })}
       </div>
     );
   }

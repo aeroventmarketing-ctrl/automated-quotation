@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { saveAlertGoLiveSetting } from "./actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,15 @@ export function AlertGoLiveSetting({ on, at, onSave }: { on: boolean; at: string
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Live clock so the status line can tell whether the go-live moment has passed.
+  // Null until mounted to avoid a server/client hydration mismatch.
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  useEffect(() => {
+    setNowMs(Date.now());
+    const t = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const hasOpened = nowMs !== null && Date.parse(savedAt) <= nowMs;
 
   async function persist(nextEnabled: boolean, nextLocal: string) {
     setBusy(true);
@@ -51,7 +60,14 @@ export function AlertGoLiveSetting({ on, at, onSave }: { on: boolean; at: string
       setEnabled(g.on);
       setSavedAt(g.at);
       setLocal(toManilaLocal(g.at));
-      setMsg(g.on ? `Saved. Alerts stay silent until ${manilaLabel(g.at)} (Manila), then only new ones fire.` : "Saved. The gate is off — alerts fire normally.");
+      const passed = Date.parse(g.at) <= Date.now();
+      setMsg(
+        !g.on
+          ? "Saved. The gate is off — alerts fire normally."
+          : passed
+            ? `Saved — but ${manilaLabel(g.at)} (Manila) is already in the past, so the gate has opened and alerts are live now. Set a future time to keep holding.`
+            : `Saved. Alerts stay silent until ${manilaLabel(g.at)} (Manila), then only new ones fire.`,
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to save");
     } finally {
@@ -83,7 +99,13 @@ export function AlertGoLiveSetting({ on, at, onSave }: { on: boolean; at: string
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Currently {enabled ? <>holding until <span className="font-semibold">{manilaLabel(savedAt)}</span> (Manila).</> : <>off — alerts fire normally.</>}
+          Currently {!enabled ? (
+            <>off — alerts fire normally.</>
+          ) : hasOpened ? (
+            <>the go-live moment has <span className="font-semibold text-emerald-700">passed — alerts are live</span> (since {manilaLabel(savedAt)} Manila). Set a future time to hold again.</>
+          ) : (
+            <>holding until <span className="font-semibold">{manilaLabel(savedAt)}</span> (Manila).</>
+          )}
         </p>
         {msg && <p className="text-xs text-emerald-700">{msg}</p>}
         {err && <p className="text-xs text-destructive">{err}</p>}
