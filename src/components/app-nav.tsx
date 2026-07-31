@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, ListChecks, Store, Megaphone } from "lucide-react";
+import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, ListChecks, Store, Megaphone, MailQuestion } from "lucide-react";
 import type { Role } from "@prisma/client";
 import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 
@@ -17,6 +17,7 @@ export const NAV = [
   { href: "/quotations", label: "Quotations", icon: FileText, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/follow-ups", label: "Follow-ups", icon: BellRing, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/marketing", label: "Marketing", icon: Megaphone, roles: ["SALES", "ENGINEER", "ADMIN"] },
+  { href: "/inbound-rfq", label: "Inbound RFQs", icon: MailQuestion, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/calendar", label: "Team Calendar", icon: CalendarDays, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/orders", label: "Orders", icon: ClipboardList, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/counter-sales", label: "Counter Sales", icon: Store, roles: ["SALES", "ADMIN"] },
