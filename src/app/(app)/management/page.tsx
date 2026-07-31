@@ -27,6 +27,7 @@ import type { DeptSplit } from "@/lib/department-pnl";
 import { FanCogsEditor } from "./fan-cogs-editor";
 import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
 import { getTestMode } from "@/lib/test-mode";
+import { getAlertGoLive, alertsSuppressedNow } from "@/lib/alert-golive";
 import { TestModeBanner } from "@/components/test-mode-banner";
 import { ActivityBell } from "@/components/activity-bell";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -149,6 +150,38 @@ export default async function ManagementPage() {
     scheduleMissing = true;
   }
   const scheduleApprovers = await scheduleApproverNames().catch(() => []);
+
+  // Alerts go-live gate: before launch, hold the Management Dashboard blank of
+  // every detail EXCEPT the team calendar — the same switch that keeps the
+  // approval alarms silent until go-live. Once the gate is off / the moment
+  // passes, the full dashboard returns automatically.
+  const alertGate = await getAlertGoLive();
+  if (alertsSuppressedNow(alertGate)) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Management Dashboard</h1>
+            <p className="text-sm text-muted-foreground">
+              The dashboard opens at go-live ({formatDateTime(new Date(alertGate.at))}). Until then only the team calendar is shown.
+            </p>
+          </div>
+        </div>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /> Team calendar</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {scheduleMissing ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet.</p>
+            ) : (
+              <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} viewerId={viewer?.id ?? ""} users={scheduleUsers} calendars={scheduleCalendars} canManageCalendars={canApproveSchedule} scheduleApprovers={scheduleApprovers} />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Today in Manila (PH) for consistent deadline maths regardless of server TZ.
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
