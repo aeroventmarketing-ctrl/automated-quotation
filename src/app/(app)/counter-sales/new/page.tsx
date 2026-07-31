@@ -12,7 +12,7 @@ export default async function NewCounterSalePage() {
 
   const [customers, stockItems, salespeople] = await Promise.all([
     prisma.customer.findMany({ orderBy: { company: "asc" }, select: { id: true, company: true } }),
-    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true, sellPrice: true, quantity: true } }),
+    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true, sellPrice: true, quantity: true, sku: true, category: true, location: true } }),
     getSalespeople(),
   ]);
 
@@ -24,7 +24,7 @@ export default async function NewCounterSalePage() {
       </div>
       <CounterSaleForm
         customers={customers}
-        stockItems={stockItems.map((s) => ({ id: s.id, name: s.name, unit: s.unit, sellPrice: Number(s.sellPrice), quantity: Number(s.quantity) }))}
+        stockItems={stockItems.map((s) => ({ id: s.id, name: s.name, unit: s.unit, sellPrice: Number(s.sellPrice), quantity: Number(s.quantity), sku: s.sku, category: s.category, location: s.location }))}
         salespeople={salespeople}
       />
     </div>
