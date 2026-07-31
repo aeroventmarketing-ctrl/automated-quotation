@@ -10,6 +10,7 @@
 import Papa from "papaparse";
 import { prisma } from "@/lib/db";
 import { Family } from "@prisma/client";
+import { getAccountsRegistry, saveAccountsRegistry } from "@/lib/account";
 
 export type ImportType = "catalogue" | "pricelist" | "ratings" | "customers";
 
@@ -256,7 +257,7 @@ export async function importRatings(csv: string): Promise<ImportResult> {
  * Skips rows whose client already exists — matched by email (case-insensitive)
  * when present, otherwise by company name — and de-duplicates within the file.
  */
-export async function importCustomers(csv: string): Promise<ImportResult> {
+export async function importCustomers(csv: string, opts?: { toMarketingList?: boolean }): Promise<ImportResult> {
   const rows = parse(csv);
   const res: ImportResult = { inserted: 0, updated: 0, errors: [], skipped: 0 };
   const clean = (s: string | undefined) => (s ?? "").trim();
@@ -315,10 +316,29 @@ export async function importCustomers(csv: string): Promise<ImportResult> {
     await prisma.customer.createMany({ data: toCreate });
   }
   res.inserted = toCreate.length;
+
+  // Optionally add the newly-created clients to the email-marketing list.
+  if (opts?.toMarketingList && toCreate.length) {
+    const emails = toCreate.map((v) => v.email).filter((x): x is string => !!x);
+    const companies = toCreate.filter((v) => !v.email).map((v) => v.company);
+    const created = await prisma.customer.findMany({
+      where: { OR: [...(emails.length ? [{ email: { in: emails } }] : []), ...(companies.length ? [{ company: { in: companies } }] : [])] },
+      select: { id: true },
+    });
+    if (created.length) {
+      const accounts = await getAccountsRegistry();
+      for (const c of created) {
+        const a = accounts[c.id] ?? { history: [], conversations: [] };
+        a.marketingList = true;
+        accounts[c.id] = a;
+      }
+      await saveAccountsRegistry(accounts);
+    }
+  }
   return res;
 }
 
-export async function runImport(type: ImportType, csv: string): Promise<ImportResult> {
+export async function runImport(type: ImportType, csv: string, opts?: { toMarketingList?: boolean }): Promise<ImportResult> {
   switch (type) {
     case "catalogue":
       return importCatalogue(csv);
@@ -327,7 +347,7 @@ export async function runImport(type: ImportType, csv: string): Promise<ImportRe
     case "ratings":
       return importRatings(csv);
     case "customers":
-      return importCustomers(csv);
+      return importCustomers(csv, opts);
     default:
       return { inserted: 0, updated: 0, errors: [{ row: 0, message: "Unknown import type" }] };
   }

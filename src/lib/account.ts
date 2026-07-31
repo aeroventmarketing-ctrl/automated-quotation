@@ -43,6 +43,11 @@ export interface AccountData {
   // "Constant communication" nudges sent to a client who has an open inquiry but
   // no quotation sent yet — one entry per automated inquiry follow-up.
   inquiryFollowUp?: { sent: { at: string }[] };
+  // On the email-marketing list (populated by the client import / a per-client
+  // toggle) — the audience for marketing campaigns & recurring check-ins.
+  marketingList?: boolean;
+  // Automatic recurring marketing check-ins sent to this client — one per send.
+  marketingFollowUp?: { sent: { at: string }[] };
 }
 
 /** The current sales in-charge (the open assignment), or null. */
@@ -74,13 +79,21 @@ function parseAccounts(config: unknown): Record<string, AccountData> {
     const convs = rec?.conversations;
     const inq = rec?.inquiryFollowUp as { sent?: unknown } | undefined;
     const inqSent = inq && Array.isArray(inq.sent) ? (inq.sent as { at: string }[]) : null;
-    if (Array.isArray(hist) || Array.isArray(convs) || rec?.optOutFollowUp != null || rec?.terms != null || inqSent) {
+    const mkt = rec?.marketingFollowUp as { sent?: unknown } | undefined;
+    const mktSent = mkt && Array.isArray(mkt.sent) ? (mkt.sent as { at: string }[]) : null;
+    const onMktList = rec?.marketingList === true;
+    if (
+      Array.isArray(hist) || Array.isArray(convs) || rec?.optOutFollowUp != null ||
+      rec?.terms != null || inqSent || mktSent || onMktList
+    ) {
       out[cid] = {
         history: Array.isArray(hist) ? (hist as AccountAssignment[]) : [],
         conversations: Array.isArray(convs) ? (convs as ConversationEntry[]) : [],
         optOutFollowUp: rec?.optOutFollowUp === true,
         terms: rec?.terms === true,
         ...(inqSent ? { inquiryFollowUp: { sent: inqSent } } : {}),
+        ...(onMktList ? { marketingList: true } : {}),
+        ...(mktSent ? { marketingFollowUp: { sent: mktSent } } : {}),
       };
     }
   }

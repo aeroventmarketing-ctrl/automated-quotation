@@ -50,6 +50,7 @@ export default function ImportPage() {
   const [cleared, setCleared] = useState<number | null>(null);
   const [clearPw, setClearPw] = useState("");
   const [loaded, setLoaded] = useState<{ name: string; rows: number } | null>(null);
+  const [toMarketingList, setToMarketingList] = useState(true);
 
   async function clearAll() {
     if (
@@ -81,7 +82,7 @@ export default function ImportPage() {
       const res = await fetch("/api/admin/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, csv }),
+        body: JSON.stringify({ type, csv, toMarketingList: type === "customers" ? toMarketingList : undefined }),
       });
       const text = await res.text();
       let data: Result & { error?: string };
@@ -227,6 +228,13 @@ export default function ImportPage() {
             Excel files are converted automatically — the first sheet&apos;s first row must be the
             column headers shown below. You can review/edit the result in the box before importing.
           </p>
+
+          {type === "customers" && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="h-4 w-4" checked={toMarketingList} onChange={(e) => setToMarketingList(e.target.checked)} />
+              Add these clients to the email-marketing list
+            </label>
+          )}
 
           {loaded && (
             <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">

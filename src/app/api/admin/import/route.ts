@@ -9,6 +9,7 @@ export const maxDuration = 60;
 const bodySchema = z.object({
   type: z.enum(["catalogue", "pricelist", "ratings", "customers"]),
   csv: z.string().min(1),
+  toMarketingList: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runImport(body.type, body.csv);
+    const result = await runImport(body.type, body.csv, { toMarketingList: body.toMarketingList });
     return NextResponse.json(result);
   } catch (err) {
     console.error("import error", err);
