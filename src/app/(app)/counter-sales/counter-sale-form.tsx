@@ -97,10 +97,10 @@ export function CounterSaleForm({
         <CardContent className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label className="text-xs">Existing client</Label>
+              <Label className="text-xs">Existing Client</Label>
               <Input placeholder="Search company / name…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
               <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                <option value="__new">+ New client (walk-in)</option>
+                <option value="__new">+ New Client (Walk-in)</option>
                 {listCustomers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
               </Select>
             </div>
@@ -108,11 +108,11 @@ export function CounterSaleForm({
           {isNewCustomer && (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label className="text-xs">Company / name <span className="text-destructive">*</span></Label>
+                <Label className="text-xs">Company / Name <span className="text-destructive">*</span></Label>
                 <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company or personal name" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Contact person</Label>
+                <Label className="text-xs">Contact Person</Label>
                 <Input value={contactName} onChange={(e) => setContactName(e.target.value)} />
               </div>
               <div className="space-y-1">
@@ -141,8 +141,8 @@ export function CounterSaleForm({
               <div className="space-y-1 sm:col-span-4">
                 <Label className="text-[11px] text-muted-foreground">Item</Label>
                 <Select value={l.stockItemId} onChange={(e) => pickStock(i, e.target.value)}>
-                  <option value="__adhoc">Ad-hoc / not in inventory</option>
-                  {stockItems.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.quantity} {s.unit} on hand</option>)}
+                  <option value="__adhoc">Ad-hoc / Not In Inventory</option>
+                  {stockItems.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.quantity} {s.unit} On Hand</option>)}
                 </Select>
               </div>
               <div className="space-y-1 sm:col-span-3">
@@ -154,7 +154,7 @@ export function CounterSaleForm({
                 <Input className="text-right" type="number" min={0} step="any" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} />
               </div>
               <div className="space-y-1 sm:col-span-2">
-                <Label className="text-[11px] text-muted-foreground">Unit price</Label>
+                <Label className="text-[11px] text-muted-foreground">Unit Price</Label>
                 <Input className="text-right" type="number" min={0} step="any" value={l.unitPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value })} />
               </div>
               <div className="flex items-center justify-between gap-2 sm:col-span-2">
@@ -166,31 +166,31 @@ export function CounterSaleForm({
             </div>
           ))}
           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> Add item
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
           </Button>
         </CardContent>
       </Card>
 
       {/* Sale details */}
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Sale &amp; payment</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Sale &amp; Payment</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1">
-              <Label className="text-xs">VAT presentation</Label>
+              <Label className="text-xs">VAT Presentation</Label>
               <Select value={vatMode} onChange={(e) => setVatMode(e.target.value as "INCLUSIVE" | "EXCLUSIVE")}>
-                <option value="INCLUSIVE">VAT inclusive (SI + CR + DR)</option>
-                <option value="EXCLUSIVE">VAT exclusive (Delivery Form + Acknowledgement)</option>
+                <option value="INCLUSIVE">VAT Inclusive (SI + CR + DR)</option>
+                <option value="EXCLUSIVE">VAT Exclusive (Delivery Form + Acknowledgement)</option>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Payment method</Label>
+              <Label className="text-xs">Payment Method</Label>
               <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
                 {PAYMENT_METHODS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Credited salesperson</Label>
+              <Label className="text-xs">Credited Salesperson</Label>
               <Select value={salespersonId} onChange={(e) => setSalespersonId(e.target.value)}>
                 <option value="">— None —</option>
                 {salespeople.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -203,14 +203,14 @@ export function CounterSaleForm({
           </div>
 
           <div className="ml-auto max-w-xs space-y-1 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Net{vatMode === "INCLUSIVE" ? " of VAT" : ""}</span><span className="tabular-nums">{formatCurrency(subtotal)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Net{vatMode === "INCLUSIVE" ? " Of VAT" : ""}</span><span className="tabular-nums">{formatCurrency(subtotal)}</span></div>
             {vatMode === "INCLUSIVE" && <div className="flex justify-between"><span className="text-muted-foreground">VAT (12%)</span><span className="tabular-nums">{formatCurrency(vat)}</span></div>}
             <div className="flex justify-between border-t pt-1 text-base font-semibold"><span>Total</span><span className="tabular-nums">{formatCurrency(grand)}</span></div>
           </div>
 
           {err && <p className="text-sm text-destructive">{err}</p>}
           <div className="flex items-center gap-2">
-            <Button disabled={busy} onClick={submit}>{busy ? "Creating…" : "Create sale"}</Button>
+            <Button disabled={busy} onClick={submit}>{busy ? "Creating…" : "Create Sale"}</Button>
             <span className="text-xs text-muted-foreground">You&apos;ll attach the documents and complete the sale on the next screen.</span>
           </div>
         </CardContent>

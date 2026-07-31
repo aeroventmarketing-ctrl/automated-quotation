@@ -47,11 +47,11 @@ export function CounterSaleActions({
             {admin && (
               <label className="flex items-center gap-1 text-xs text-muted-foreground">
                 <input type="checkbox" className="h-3.5 w-3.5" checked={override} onChange={(e) => setOverride(e.target.checked)} />
-                Override stock
+                Override Stock
               </label>
             )}
             <Button size="sm" disabled={busy === "complete"} onClick={() => run("complete", () => completeCounterSale(saleId, { overrideStock: override }))}>
-              {busy === "complete" ? "Completing…" : "Complete sale"}
+              {busy === "complete" ? "Completing…" : "Complete Sale"}
             </Button>
             <Button size="sm" variant="outline" disabled={busy === "discard"} onClick={() => { if (window.confirm("Discard this draft sale?")) run("discard", () => deleteCounterSaleDraft(saleId)); }}>
               Discard
@@ -60,7 +60,7 @@ export function CounterSaleActions({
         )}
         {status === "COMPLETED" && nonCash && !paymentCleared && (
           <Button size="sm" variant="outline" disabled={busy === "clear"} onClick={() => run("clear", () => markCounterPaymentCleared(saleId))}>
-            {busy === "clear" ? "Saving…" : "Mark payment cleared"}
+            {busy === "clear" ? "Saving…" : "Mark Payment Cleared"}
           </Button>
         )}
         {status !== "VOID" && admin && status === "COMPLETED" && (
@@ -72,7 +72,7 @@ export function CounterSaleActions({
       {/* Expected clearing date for an uncleared non-cash payment. */}
       {status === "COMPLETED" && nonCash && !paymentCleared && (
         <label className="flex items-center gap-1 text-xs text-muted-foreground">
-          Expected clearing
+          Expected Clearing
           <Input type="date" className="h-7 w-auto text-xs" defaultValue={paymentDue} onChange={(e) => run("due", () => setCounterPaymentDue(saleId, e.target.value || null))} />
         </label>
       )}

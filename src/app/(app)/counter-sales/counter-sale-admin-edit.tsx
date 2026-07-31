@@ -70,10 +70,10 @@ export function CounterSaleAdminEdit({
     return (
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent">
-          <Pencil className="h-3.5 w-3.5" /> Edit sale (admin)
+          <Pencil className="h-3.5 w-3.5" /> Edit Sale (Admin)
         </button>
         <button type="button" onClick={del} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50">
-          <Trash2 className="h-3.5 w-3.5" /> {busy ? "…" : "Delete sale"}
+          <Trash2 className="h-3.5 w-3.5" /> {busy ? "…" : "Delete Sale"}
         </button>
         {err && <span className="text-xs text-destructive">{err}</span>}
       </div>
@@ -83,7 +83,7 @@ export function CounterSaleAdminEdit({
   return (
     <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-800 dark:bg-amber-950/30">
       <div className="flex items-center justify-between">
-        <div className="text-xs font-semibold text-amber-800 dark:text-amber-300">Edit sale (admin)</div>
+        <div className="text-xs font-semibold text-amber-800 dark:text-amber-300">Edit Sale (Admin)</div>
         <button type="button" onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Close"><X className="h-4 w-4" /></button>
       </div>
       <p className="text-[11px] text-amber-700 dark:text-amber-400">Saving a completed sale returns its old stock and re-deducts the edited quantities, and re-computes commission.</p>
@@ -101,7 +101,7 @@ export function CounterSaleAdminEdit({
           </div>
         ))}
         <button type="button" onClick={() => setLines((ls) => [...ls, { stockItemId: null, description: "", unit: "pcs", qty: "1", unitPrice: "" }])} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-          <Plus className="h-3 w-3" /> Add ad-hoc line
+          <Plus className="h-3 w-3" /> Add Ad-hoc Line
         </button>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -119,7 +119,7 @@ export function CounterSaleAdminEdit({
       </div>
       <Input className="h-8" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
       <div className="flex items-center gap-2">
-        <Button size="sm" className="h-8" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</Button>
+        <Button size="sm" className="h-8" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save Changes"}</Button>
         <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
         {err && <span className="text-xs text-destructive">{err}</span>}
       </div>

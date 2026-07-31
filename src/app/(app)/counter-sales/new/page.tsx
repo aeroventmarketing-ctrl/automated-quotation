@@ -18,7 +18,7 @@ export default async function NewCounterSalePage() {
   return (
     <div className="space-y-4 p-4 md:p-6">
       <div>
-        <h1 className="text-lg font-semibold">New counter sale</h1>
+        <h1 className="text-lg font-semibold">New Counter Sale</h1>
         <p className="text-sm text-muted-foreground">Record a walk-in purchase. Documents are attached and stock is deducted after you complete the sale.</p>
       </div>
       <CounterSaleForm

@@ -39,12 +39,12 @@ export default async function CounterSalesPage() {
           <p className="text-sm text-muted-foreground">Walk-in / over-the-counter cash sales of stock items.</p>
         </div>
         <Button asChild size="sm">
-          <Link href="/counter-sales/new">New sale</Link>
+          <Link href="/counter-sales/new">New Sale</Link>
         </Button>
       </div>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Recent sales</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Recent Sales</CardTitle></CardHeader>
         <CardContent>
           {sales.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No counter sales yet. Start one with &ldquo;New sale&rdquo;.</p>
