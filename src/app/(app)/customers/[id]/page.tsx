@@ -12,10 +12,11 @@ import { payableTotal } from "@/lib/quote";
 import { Pencil } from "lucide-react";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
 import { getSalespeople } from "@/lib/sales-personnel";
-import { setFollowUpOptOut } from "../actions";
+import { setFollowUpOptOut, setMarketingList } from "../actions";
 import { CustomerHeader } from "./customer-header";
 import { AccountPanel } from "./account-panel";
 import { FollowUpOptOut } from "./follow-up-optout";
+import { MarketingListToggle } from "./marketing-list-toggle";
 import { ConversationPanel, type ConversationBoxData } from "./conversation-panel";
 import { TransferQuotation } from "./transfer-quotation";
 import { DeleteInquiry } from "./delete-inquiry";
@@ -382,6 +383,13 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
         customerId={customer.id}
         optOut={accountData?.optOutFollowUp === true}
         onSave={setFollowUpOptOut}
+      />
+
+      {/* Email-marketing list membership */}
+      <MarketingListToggle
+        customerId={customer.id}
+        onList={accountData?.marketingList === true}
+        onSave={setMarketingList}
       />
 
       {/* Conversation history (follow-ups) — one box per quotation */}

@@ -38,6 +38,56 @@ const fmtDate = (d: Date) =>
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+export interface InquiryFollowUpInput {
+  company: string;
+  contactName: string | null;
+  salesName: string;
+  /** What the client originally enquired about, if recorded. */
+  projectName: string | null;
+}
+
+/**
+ * "Constant communication" email for a client who has an open inquiry but no
+ * quotation sent yet — a warm check-in that keeps the relationship alive without
+ * referencing a specific quote. Always offers an easy opt-out.
+ */
+export function buildInquiryFollowUpEmail(i: InquiryFollowUpInput): BuiltEmail {
+  const greetingName = i.contactName?.trim() || i.company;
+  const about = i.projectName?.trim() ? ` regarding ${i.projectName.trim()}` : "";
+
+  const subject = `Just checking in from ${COMPANY.name}`;
+
+  const text = [
+    `Dear ${greetingName},`,
+    ``,
+    `We wanted to check in and see how things are going${about}. We'd be glad to help you move forward whenever you're ready — whether that's preparing a quotation, answering technical questions, or discussing options for your project.`,
+    ``,
+    `If there's anything we can assist with, simply reply to this email and we'll get right back to you.`,
+    ``,
+    COMPANY.closing,
+    ``,
+    COMPANY.signoff,
+    i.salesName,
+    COMPANY.signatory,
+    ``,
+    `—`,
+    `If you'd prefer not to receive these check-ins, just reply and let us know and we'll stop.`,
+  ].join("\n");
+
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1f2933;max-width:560px">
+  <p>Dear ${esc(greetingName)},</p>
+  <p>We wanted to check in and see how things are going${about ? ` regarding ${esc(i.projectName!.trim())}` : ""}. We'd be glad to help you move forward whenever you're ready — whether that's preparing a quotation, answering technical questions, or discussing options for your project.</p>
+  <p>If there's anything we can assist with, simply reply to this email and we'll get right back to you.</p>
+  <p>${esc(COMPANY.closing)}</p>
+  <p style="margin-bottom:2px">${esc(COMPANY.signoff)}</p>
+  <p style="margin-top:0"><strong>${esc(i.salesName)}</strong><br>${esc(COMPANY.signatory)}</p>
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
+  <p style="font-size:12px;color:#7d9199">If you'd prefer not to receive these check-ins, just reply and let us know and we'll stop.</p>
+</div>`;
+
+  return { subject, text, html };
+}
+
 export function buildFollowUpEmail(i: FollowUpEmailInput): BuiltEmail {
   const greetingName = i.contactName?.trim() || i.company;
   const project = i.projectName?.trim() ? ` for ${i.projectName.trim()}` : "";

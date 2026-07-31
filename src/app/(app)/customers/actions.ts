@@ -400,6 +400,23 @@ export async function setFollowUpOptOut(customerId: string, optOut: boolean): Pr
 }
 
 /**
+ * Add or remove a client from the email-marketing list. Any signed-in user may
+ * change it; the flag rides in the account registry (no schema change).
+ */
+export async function setMarketingList(customerId: string, on: boolean): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const accounts = await getAccountsRegistry();
+  const data: AccountData = accounts[customerId] ?? { history: [], conversations: [] };
+  data.marketingList = on;
+  accounts[customerId] = data;
+  await saveAccountsRegistry(accounts);
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/marketing");
+  return on;
+}
+
+/**
  * Admin-only: mark a client as a "terms" client (or clear it). A terms client
  * can confirm a sale — and enable "Save sale" — with only the Purchase Order
  * attached; a regular client must submit all core documents first. The flag

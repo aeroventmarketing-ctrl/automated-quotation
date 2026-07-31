@@ -11,6 +11,9 @@ interface Config {
   maxNudges: number;
   enabled: boolean;
   dryRun: boolean;
+  inquiryEnabled: boolean;
+  inquiryEveryDays: number;
+  inquiryMaxNudges: number;
 }
 
 interface RunItem {
@@ -19,6 +22,7 @@ interface RunItem {
   nudge: number;
   action: "sent" | "preview" | "skipped";
   reason?: string;
+  kind?: "quote" | "inquiry";
 }
 interface RunResult {
   due: number;
@@ -60,6 +64,9 @@ export function FollowUpSetting({
   maxNudges,
   enabled: initEnabled,
   dryRun: initDryRun,
+  inquiryEnabled: initInquiryEnabled,
+  inquiryEveryDays: initInquiryEveryDays,
+  inquiryMaxNudges: initInquiryMaxNudges,
   onSave,
   onPreview,
 }: {
@@ -67,6 +74,9 @@ export function FollowUpSetting({
   maxNudges: number;
   enabled: boolean;
   dryRun: boolean;
+  inquiryEnabled: boolean;
+  inquiryEveryDays: number;
+  inquiryMaxNudges: number;
   onSave: (input: Config) => Promise<Config>;
   onPreview: () => Promise<RunResult>;
 }) {
@@ -74,6 +84,9 @@ export function FollowUpSetting({
   const [max, setMax] = useState(String(maxNudges));
   const [enabled, setEnabled] = useState(initEnabled);
   const [dryRun, setDryRun] = useState(initDryRun);
+  const [inquiryEnabled, setInquiryEnabled] = useState(initInquiryEnabled);
+  const [inquiryEvery, setInquiryEvery] = useState(String(initInquiryEveryDays));
+  const [inquiryMax, setInquiryMax] = useState(String(initInquiryMaxNudges));
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -93,16 +106,24 @@ export function FollowUpSetting({
       const offsets = parseDays();
       if (offsets.length === 0) throw new Error("Enter at least one follow-up day, e.g. 3, 7, 14.");
       const wantMax = parseInt(max, 10);
+      const wantEvery = parseInt(inquiryEvery, 10);
+      const wantInqMax = parseInt(inquiryMax, 10);
       const saved = await onSave({
         offsetsDays: offsets,
         maxNudges: Number.isFinite(wantMax) && wantMax >= 1 ? wantMax : offsets.length,
         enabled: next?.enabled ?? enabled,
         dryRun: next?.dryRun ?? dryRun,
+        inquiryEnabled: next?.inquiryEnabled ?? inquiryEnabled,
+        inquiryEveryDays: Number.isFinite(wantEvery) && wantEvery > 0 ? wantEvery : 30,
+        inquiryMaxNudges: Number.isFinite(wantInqMax) && wantInqMax >= 1 ? wantInqMax : 6,
       });
       setDaysStr(saved.offsetsDays.join(", "));
       setMax(String(saved.maxNudges));
       setEnabled(saved.enabled);
       setDryRun(saved.dryRun);
+      setInquiryEnabled(saved.inquiryEnabled);
+      setInquiryEvery(String(saved.inquiryEveryDays));
+      setInquiryMax(String(saved.inquiryMaxNudges));
       setMsg({ ok: true, text: "Saved." });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to save" });
@@ -190,6 +211,40 @@ export function FollowUpSetting({
 
         <hr className="border-border" />
 
+        {/* Inquiry "constant communication" check-ins */}
+        <div className="space-y-3">
+          <div>
+            <div className="text-sm font-medium">Inquiry check-ins (clients not yet quoted)</div>
+            <p className="text-xs text-muted-foreground">
+              Keep in touch with clients who have an open inquiry but no quotation sent yet — a periodic
+              &ldquo;just checking in&rdquo; email for constant communication. Independent of the quote
+              follow-ups above; still respects dry-run, opt-out, and the Resend setup.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="fu-inq-every" className="text-xs">Days between check-ins</Label>
+              <Input id="fu-inq-every" type="number" min={1} value={inquiryEvery} onChange={(e) => setInquiryEvery(e.target.value)} className="h-9 w-32" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="fu-inq-max" className="text-xs">Max check-ins</Label>
+              <Input id="fu-inq-max" type="number" min={1} value={inquiryMax} onChange={(e) => setInquiryMax(e.target.value)} className="h-9 w-24" />
+            </div>
+            <Button onClick={() => save()} disabled={busy} size="sm">
+              {busy ? "Saving…" : "Save check-in cadence"}
+            </Button>
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch checked={inquiryEnabled} disabled={busy} onChange={() => save({ inquiryEnabled: !inquiryEnabled })} />
+            <div>
+              <div className="text-sm font-medium">Automatic inquiry check-ins</div>
+              <div className="text-xs text-muted-foreground">Emails un-quoted inquiry clients on the cadence above (still off while dry-run is on).</div>
+            </div>
+          </div>
+        </div>
+
+        <hr className="border-border" />
+
         {/* Preview run */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
@@ -212,6 +267,7 @@ export function FollowUpSetting({
                     <li key={idx} className="flex items-center justify-between gap-3">
                       <span className="truncate">
                         {it.company} <span className="text-muted-foreground">· {it.quoteNumber} · nudge #{it.nudge}</span>
+                        {it.kind === "inquiry" && <span className="ml-1 rounded bg-sky-500/15 px-1 py-0.5 text-[10px] text-sky-700">check-in</span>}
                       </span>
                       <span className={it.action === "skipped" ? "text-amber-600" : "text-emerald-600"}>
                         {it.action === "preview" ? "would email" : it.action}

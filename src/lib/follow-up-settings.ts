@@ -19,6 +19,13 @@ export interface FollowUpConfig extends FollowUpSettings {
   enabled: boolean;
   /** When true, compute + log but never send (default true). */
   dryRun: boolean;
+  /** Independent switch for "constant communication" emails to inquiry clients
+   *  who have no quotation sent yet (default false). Shares the dry-run flag. */
+  inquiryEnabled: boolean;
+  /** Days between each inquiry-client nudge (default 30). */
+  inquiryEveryDays: number;
+  /** Hard cap on how many inquiry nudges a client will ever receive (default 6). */
+  inquiryMaxNudges: number;
 }
 
 export function normalizeFollowUpConfig(
@@ -34,11 +41,19 @@ export function normalizeFollowUpConfig(
   const wantMax = Number.isFinite(rawMax) && rawMax >= 1 ? rawMax : FOLLOW_UP_DEFAULTS.maxNudges;
   const maxNudges = Math.min(wantMax, offsetsDays.length);
 
+  const rawEvery = Math.floor(Number(input?.inquiryEveryDays));
+  const inquiryEveryDays = Number.isFinite(rawEvery) && rawEvery > 0 ? rawEvery : 30;
+  const rawInqMax = Math.floor(Number(input?.inquiryMaxNudges));
+  const inquiryMaxNudges = Number.isFinite(rawInqMax) && rawInqMax >= 1 ? rawInqMax : 6;
+
   return {
     offsetsDays,
     maxNudges,
     enabled: input?.enabled === true, // default OFF
     dryRun: input?.dryRun !== false, // default ON (safe)
+    inquiryEnabled: input?.inquiryEnabled === true, // default OFF
+    inquiryEveryDays,
+    inquiryMaxNudges,
   };
 }
 

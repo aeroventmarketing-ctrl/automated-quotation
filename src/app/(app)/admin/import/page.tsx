@@ -25,11 +25,17 @@ const SPECS: Record<string, { cols: string; sample: string }> = {
     sample:
       "modelCode,rpm,airflow_m3hr,staticPressure_pa,power_kw,efficiency\nAX-500-D,1440,0,300,1.0,0\nAX-500-D,1440,3000,250,1.6,0.62\nAX-500-D,1440,6000,120,2.0,0.5",
   },
+  customers: {
+    cols: "company, contactName, email, phone, address, notes",
+    sample:
+      "company,contactName,email,phone,address,notes\nAcme Manufacturing,Juan Dela Cruz,juan@acme.example,0917-000-0000,Laguna,From trade show list",
+  },
 };
 
 interface Result {
   inserted: number;
   updated: number;
+  skipped?: number;
   errors: { row: number; message: string }[];
 }
 
@@ -44,6 +50,7 @@ export default function ImportPage() {
   const [cleared, setCleared] = useState<number | null>(null);
   const [clearPw, setClearPw] = useState("");
   const [loaded, setLoaded] = useState<{ name: string; rows: number } | null>(null);
+  const [toMarketingList, setToMarketingList] = useState(true);
 
   async function clearAll() {
     if (
@@ -75,7 +82,7 @@ export default function ImportPage() {
       const res = await fetch("/api/admin/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, csv }),
+        body: JSON.stringify({ type, csv, toMarketingList: type === "customers" ? toMarketingList : undefined }),
       });
       const text = await res.text();
       let data: Result & { error?: string };
@@ -200,6 +207,7 @@ export default function ImportPage() {
                 <option value="catalogue">Catalogue</option>
                 <option value="pricelist">Pricelist</option>
                 <option value="ratings">Rating points</option>
+                <option value="customers">Clients / customers</option>
               </Select>
             </div>
             <label className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent">
@@ -220,6 +228,13 @@ export default function ImportPage() {
             Excel files are converted automatically — the first sheet&apos;s first row must be the
             column headers shown below. You can review/edit the result in the box before importing.
           </p>
+
+          {type === "customers" && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="h-4 w-4" checked={toMarketingList} onChange={(e) => setToMarketingList(e.target.checked)} />
+              Add these clients to the email-marketing list
+            </label>
+          )}
 
           {loaded && (
             <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -268,7 +283,7 @@ export default function ImportPage() {
         <Card>
           <CardHeader><CardTitle>Result</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <p className="text-emerald-700">Inserted: {result.inserted} · Updated: {result.updated}</p>
+            <p className="text-emerald-700">Inserted: {result.inserted} · Updated: {result.updated}{result.skipped ? ` · Skipped (already exist): ${result.skipped}` : ""}</p>
             {result.errors.length > 0 ? (
               <div>
                 <p className="font-medium text-destructive">Errors ({result.errors.length}):</p>

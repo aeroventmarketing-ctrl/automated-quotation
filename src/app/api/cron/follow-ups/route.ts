@@ -9,6 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { runFollowUps } from "@/lib/follow-up-runner";
+import { runMarketingRecurring } from "@/lib/marketing-runner";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,8 +27,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const result = await runFollowUps({ live: true });
-    return NextResponse.json(result);
+    const [followUps, marketing] = await Promise.all([
+      runFollowUps({ live: true }),
+      runMarketingRecurring({ live: true }),
+    ]);
+    return NextResponse.json({ followUps, marketing });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Follow-up run failed";
     return NextResponse.json({ error: message }, { status: 500 });
