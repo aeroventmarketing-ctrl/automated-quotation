@@ -502,6 +502,9 @@ const followUpSettingsSchema = z.object({
   maxNudges: z.number(),
   enabled: z.boolean(),
   dryRun: z.boolean(),
+  inquiryEnabled: z.boolean().optional(),
+  inquiryEveryDays: z.number().optional(),
+  inquiryMaxNudges: z.number().optional(),
 });
 export async function saveFollowUpSettingsAction(
   input: z.infer<typeof followUpSettingsSchema>,

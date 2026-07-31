@@ -17,18 +17,19 @@ import { config } from "@/lib/config";
 import { evaluateFollowUp, sentAtFrom, nudgesSentFrom } from "@/lib/follow-up";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
-import { buildFollowUpEmail } from "@/lib/follow-up-email";
+import { buildFollowUpEmail, buildInquiryFollowUpEmail } from "@/lib/follow-up-email";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
 
 export type RunAction = "sent" | "preview" | "skipped";
 
 export interface RunItem {
-  quoteNumber: string;
+  quoteNumber: string; // quote number, or the inquiry's project label for inquiry check-ins
   company: string;
   to: string | null;
   nudge: number;
   action: RunAction;
   reason?: string;
+  kind?: "quote" | "inquiry";
 }
 
 export interface FollowUpRunResult {
@@ -105,7 +106,7 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
 
     due++;
     const c = q.inquiry.customer;
-    const base: RunItem = { quoteNumber: q.quoteNumber, company: c.company, to: c.email, nudge: result.nudgeNumber, action: "skipped" };
+    const base: RunItem = { quoteNumber: q.quoteNumber, company: c.company, to: c.email, nudge: result.nudgeNumber, action: "skipped", kind: "quote" };
 
     if (accounts[c.id]?.optOutFollowUp) {
       skipped++;
@@ -190,6 +191,78 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
     }
   }
 
+  // --- Inquiry "constant communication" pass -------------------------------
+  // Clients with an OPEN inquiry and no quotation ever sent get a periodic
+  // check-in (every `inquiryEveryDays`, up to `inquiryMaxNudges`), one nudge per
+  // client. Independent switch (`inquiryEnabled`), still gated by dry-run + keys.
+  const inquiryLive = opts.live && settings.inquiryEnabled && !settings.dryRun && canSend;
+  const inqOffsets = Array.from({ length: settings.inquiryMaxNudges }, (_, i) => (i + 1) * settings.inquiryEveryDays);
+  const inqSettings = { offsetsDays: inqOffsets, maxNudges: settings.inquiryMaxNudges };
+
+  // Clients who HAVE been quoted (any inquiry sent/won/lost) are excluded — they
+  // belong to the quotation follow-up flow, not the "not yet quoted" check-ins.
+  const quotedCustomerIds = new Set(
+    (await prisma.inquiry.findMany({ where: { status: { in: ["SENT", "WON", "LOST"] } }, select: { customerId: true } })).map((i) => i.customerId),
+  );
+  const openInquiries = await prisma.inquiry.findMany({
+    where: { status: { notIn: ["SENT", "WON", "LOST"] } },
+    include: { customer: true, createdBy: true },
+    orderBy: { createdAt: "asc" },
+  });
+  // One check-in per client, anchored on their earliest open inquiry.
+  const inquiryByCustomer = new Map<string, (typeof openInquiries)[number]>();
+  for (const inq of openInquiries) {
+    if (quotedCustomerIds.has(inq.customerId)) continue;
+    if (!inquiryByCustomer.has(inq.customerId)) inquiryByCustomer.set(inq.customerId, inq);
+  }
+
+  for (const inq of inquiryByCustomer.values()) {
+    const c = inq.customer;
+    const nudgesSent = accounts[c.id]?.inquiryFollowUp?.sent?.length ?? 0;
+    const result = evaluateFollowUp({ sentAt: inq.createdAt, validUntil: null, won: false, nudgesSent, now }, inqSettings);
+    if (result.state !== "due") continue;
+
+    due++;
+    const base: RunItem = { quoteNumber: inq.projectName?.trim() || "(inquiry)", company: c.company, to: c.email, nudge: result.nudgeNumber, action: "skipped", kind: "inquiry" };
+
+    if (accounts[c.id]?.optOutFollowUp) { skipped++; items.push({ ...base, reason: "opted out" }); continue; }
+    if (!c.email) { skipped++; items.push({ ...base, reason: "no email on file" }); continue; }
+
+    const email = buildInquiryFollowUpEmail({ company: c.company, contactName: c.contactName, salesName: inq.createdBy.name, projectName: inq.projectName ?? null });
+
+    if (!inquiryLive) { previewed++; items.push({ ...base, action: "preview" }); continue; }
+    if (sent >= SEND_CAP_PER_RUN) { skipped++; items.push({ ...base, reason: "per-run send cap reached" }); continue; }
+
+    try {
+      await sendEmail({ from, to: c.email, subject: email.subject, text: email.text, html: email.html, replyTo: inq.createdBy.email ?? undefined });
+
+      const acct = accounts[c.id] ?? { history: [], conversations: [] };
+      acct.inquiryFollowUp = { sent: [...(acct.inquiryFollowUp?.sent ?? []), { at: now.toISOString() }] };
+      const entry: ConversationEntry = {
+        id: randomUUID(),
+        date: now.toISOString(),
+        channel: "Email",
+        contactPerson: c.contactName ?? c.company,
+        message: `Automated check-in sent (constant communication #${result.nudgeNumber}).`,
+        quoteNumber: null,
+        nextFollowUp: null,
+        loggedById: inq.createdById,
+        loggedByName: inq.createdBy.name,
+        createdAt: now.toISOString(),
+      };
+      acct.conversations = [...(acct.conversations ?? []), entry];
+      accounts[c.id] = acct;
+      accountsDirty = true;
+
+      sent++;
+      items.push({ ...base, action: "sent" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "send failed";
+      errors.push(`${c.company} (inquiry): ${msg}`);
+      items.push({ ...base, reason: "send failed" });
+    }
+  }
+
   if (accountsDirty) await saveAccountsRegistry(accounts);
 
   return {
@@ -197,7 +270,7 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
     live: effectiveLive,
     requestedLive: opts.live,
     reason,
-    evaluated: quotes.length,
+    evaluated: quotes.length + inquiryByCustomer.size,
     due,
     sent,
     previewed,
