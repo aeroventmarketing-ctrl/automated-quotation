@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getSignatureMap } from "@/lib/signature";
 import { getWorkflowRoles, WORKFLOW_ROLES } from "@/lib/workflow-roles";
+import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { setUserWorkflowRolesAction } from "../actions";
 import { WorkflowRolesManager } from "../workflow-roles/workflow-roles-manager";
@@ -10,12 +11,14 @@ import { LoginAuditCard } from "./login-audit";
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
-  const [users, signatures, assignments] = await Promise.all([
+  const [users, signatures, assignments, salesPersonnelIds] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
     getSignatureMap(),
     getWorkflowRoles(),
+    getSalesPersonnelIds(),
   ]);
   const workflowRoleOptions = WORKFLOW_ROLES.map((r) => ({ key: r.key, label: r.label, group: r.group }));
+  const salesSet = new Set(salesPersonnelIds);
   const byName = [...users].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
@@ -29,6 +32,7 @@ export default async function AdminUsersPage() {
           salesCode: u.salesCode ?? "",
           signature: signatures[u.id] ?? null,
           workflowRoles: assignments[u.id] ?? [],
+          salesPersonnel: salesSet.has(u.id),
         }))}
         workflowRoleOptions={workflowRoleOptions}
       />

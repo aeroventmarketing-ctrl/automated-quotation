@@ -9,11 +9,11 @@ import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { upsertUser, deleteUser, reassignAndDeleteUser, setUserPassword, saveUserSignature } from "../actions";
+import { upsertUser, deleteUser, reassignAndDeleteUser, setUserPassword, saveUserSignature, setUserSalesPersonnelAction } from "../actions";
 
 const ROLES = ["SALES", "ENGINEER", "ADMIN", "OTHER"];
 
-interface U { id: string; email: string; name: string; role: string; salesCode: string; signature: string | null; workflowRoles: string[] }
+interface U { id: string; email: string; name: string; role: string; salesCode: string; signature: string | null; workflowRoles: string[]; salesPersonnel: boolean }
 interface WfRole { key: string; label: string; group: string }
 
 /** Read an image file, downscale to ≤600px wide, and return a PNG data URL. */
@@ -158,6 +158,20 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
     }
   }
 
+  // --- Sales-personnel toggle (creditable on a sale without a SALES role) ---
+  const [salesBusy, setSalesBusy] = useState<string | null>(null);
+  async function toggleSalesPersonnel(u: U, on: boolean) {
+    setSalesBusy(u.id);
+    try {
+      await setUserSalesPersonnelAction({ userId: u.id, on });
+      router.refresh();
+    } catch (e) {
+      setDelErr(e instanceof Error ? e.message : "Failed to update sales-personnel");
+    } finally {
+      setSalesBusy(null);
+    }
+  }
+
   // --- Password reset ---
   const [pwUser, setPwUser] = useState<U | null>(null);
   const [pw, setPw] = useState("");
@@ -293,7 +307,7 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
           {delErr && <p className="mb-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{delErr}</p>}
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Letter</TableHead><TableHead>Signature</TableHead><TableHead></TableHead></TableRow>
+              <TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Sales credit</TableHead><TableHead>Letter</TableHead><TableHead>Signature</TableHead><TableHead></TableHead></TableRow>
             </TableHeader>
             <TableBody>
               {users.map((u) => (
@@ -308,6 +322,22 @@ export function UsersManager({ users, workflowRoleOptions }: { users: U[]; workf
                           <span key={k} className="inline-flex rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[10px] font-medium text-primary">{roleLabel(k)}</span>
                         ))}
                       </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {u.role === "SALES" ? (
+                      <span className="text-xs text-muted-foreground">Yes · Sales role</span>
+                    ) : (
+                      <label className="flex items-center gap-1.5 text-xs">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5"
+                          checked={u.salesPersonnel}
+                          disabled={salesBusy === u.id}
+                          onChange={(e) => toggleSalesPersonnel(u, e.target.checked)}
+                        />
+                        {salesBusy === u.id ? "Saving…" : "Credit as salesperson"}
+                      </label>
                     )}
                   </TableCell>
                   <TableCell>{u.salesCode || "—"}</TableCell>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCounterSaleViewer } from "@/lib/counter-sale-access";
+import { getSalespeople } from "@/lib/sales-personnel";
 import { CounterSaleForm } from "../counter-sale-form";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export default async function NewCounterSalePage() {
   const [customers, stockItems, salespeople] = await Promise.all([
     prisma.customer.findMany({ orderBy: { company: "asc" }, select: { id: true, company: true } }),
     prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true, sellPrice: true, quantity: true } }),
-    prisma.user.findMany({ where: { role: "SALES" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    getSalespeople(),
   ]);
 
   return (
