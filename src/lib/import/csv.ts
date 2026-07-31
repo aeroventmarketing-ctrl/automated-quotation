@@ -11,7 +11,7 @@ import Papa from "papaparse";
 import { prisma } from "@/lib/db";
 import { Family } from "@prisma/client";
 
-export type ImportType = "catalogue" | "pricelist" | "ratings";
+export type ImportType = "catalogue" | "pricelist" | "ratings" | "customers";
 
 export interface RowError {
   row: number;
@@ -21,6 +21,8 @@ export interface ImportResult {
   inserted: number;
   updated: number;
   errors: RowError[];
+  /** Rows skipped because a matching client already exists (customers import). */
+  skipped?: number;
 }
 
 function parse(csv: string): Record<string, string>[] {
@@ -248,6 +250,74 @@ export async function importRatings(csv: string): Promise<ImportResult> {
   return res;
 }
 
+/**
+ * Import clients into the Customer table (for the client list / email marketing).
+ * Columns: company (required), contactName, email, phone, address, notes.
+ * Skips rows whose client already exists — matched by email (case-insensitive)
+ * when present, otherwise by company name — and de-duplicates within the file.
+ */
+export async function importCustomers(csv: string): Promise<ImportResult> {
+  const rows = parse(csv);
+  const res: ImportResult = { inserted: 0, updated: 0, errors: [], skipped: 0 };
+  const clean = (s: string | undefined) => (s ?? "").trim();
+
+  interface CRow {
+    company: string;
+    contactName: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    notes: string | null;
+  }
+  const valid: CRow[] = [];
+  const seenEmail = new Set<string>();
+  const seenCompany = new Set<string>();
+  rows.forEach((r, i) => {
+    const line = i + 2;
+    try {
+      const company = clean(r.company);
+      if (!company) throw new Error("company is required");
+      const email = clean(r.email) || null;
+      // De-duplicate within the uploaded file.
+      if (email) {
+        const k = email.toLowerCase();
+        if (seenEmail.has(k)) throw new Error(`duplicate email "${email}" in file`);
+        seenEmail.add(k);
+      } else {
+        const k = company.toLowerCase();
+        if (seenCompany.has(k)) throw new Error(`duplicate company "${company}" in file (add an email to distinguish)`);
+        seenCompany.add(k);
+      }
+      valid.push({
+        company,
+        contactName: clean(r.contactName) || null,
+        email,
+        phone: clean(r.phone) || null,
+        address: clean(r.address) || null,
+        notes: clean(r.notes) || null,
+      });
+    } catch (e) {
+      res.errors.push({ row: line, message: e instanceof Error ? e.message : "Unknown error" });
+    }
+  });
+  if (valid.length === 0) return res;
+
+  // Skip clients that already exist. The customer table is modest, so a single
+  // fetch + in-memory match is simplest and avoids case-sensitive `in` filters.
+  const existing = await prisma.customer.findMany({ select: { email: true, company: true } });
+  const existEmails = new Set(existing.map((e) => (e.email ?? "").trim().toLowerCase()).filter(Boolean));
+  const existCompanies = new Set(existing.map((e) => e.company.trim().toLowerCase()));
+  const toCreate = valid.filter((v) =>
+    v.email ? !existEmails.has(v.email.toLowerCase()) : !existCompanies.has(v.company.toLowerCase()),
+  );
+  res.skipped = valid.length - toCreate.length;
+  if (toCreate.length) {
+    await prisma.customer.createMany({ data: toCreate });
+  }
+  res.inserted = toCreate.length;
+  return res;
+}
+
 export async function runImport(type: ImportType, csv: string): Promise<ImportResult> {
   switch (type) {
     case "catalogue":
@@ -256,6 +326,8 @@ export async function runImport(type: ImportType, csv: string): Promise<ImportRe
       return importPricelist(csv);
     case "ratings":
       return importRatings(csv);
+    case "customers":
+      return importCustomers(csv);
     default:
       return { inserted: 0, updated: 0, errors: [{ row: 0, message: "Unknown import type" }] };
   }

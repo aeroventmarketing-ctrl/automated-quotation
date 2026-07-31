@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const bodySchema = z.object({
-  type: z.enum(["catalogue", "pricelist", "ratings"]),
+  type: z.enum(["catalogue", "pricelist", "ratings", "customers"]),
   csv: z.string().min(1),
 });
 

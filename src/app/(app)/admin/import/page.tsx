@@ -25,11 +25,17 @@ const SPECS: Record<string, { cols: string; sample: string }> = {
     sample:
       "modelCode,rpm,airflow_m3hr,staticPressure_pa,power_kw,efficiency\nAX-500-D,1440,0,300,1.0,0\nAX-500-D,1440,3000,250,1.6,0.62\nAX-500-D,1440,6000,120,2.0,0.5",
   },
+  customers: {
+    cols: "company, contactName, email, phone, address, notes",
+    sample:
+      "company,contactName,email,phone,address,notes\nAcme Manufacturing,Juan Dela Cruz,juan@acme.example,0917-000-0000,Laguna,From trade show list",
+  },
 };
 
 interface Result {
   inserted: number;
   updated: number;
+  skipped?: number;
   errors: { row: number; message: string }[];
 }
 
@@ -200,6 +206,7 @@ export default function ImportPage() {
                 <option value="catalogue">Catalogue</option>
                 <option value="pricelist">Pricelist</option>
                 <option value="ratings">Rating points</option>
+                <option value="customers">Clients / customers</option>
               </Select>
             </div>
             <label className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent">
@@ -268,7 +275,7 @@ export default function ImportPage() {
         <Card>
           <CardHeader><CardTitle>Result</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <p className="text-emerald-700">Inserted: {result.inserted} · Updated: {result.updated}</p>
+            <p className="text-emerald-700">Inserted: {result.inserted} · Updated: {result.updated}{result.skipped ? ` · Skipped (already exist): ${result.skipped}` : ""}</p>
             {result.errors.length > 0 ? (
               <div>
                 <p className="font-medium text-destructive">Errors ({result.errors.length}):</p>
