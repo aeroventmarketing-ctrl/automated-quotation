@@ -20,6 +20,7 @@ import { setDisabledRoles } from "@/lib/role-access";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
+import { setUserSalesPersonnel } from "@/lib/sales-personnel";
 import { setFanMotorBrand } from "@/lib/fan-motor-brand";
 import { saveAiUsageLimit } from "@/lib/ai/usage";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -28,6 +29,18 @@ async function assertAdmin() {
   const user = await getCurrentUser();
   if (!isAdmin(user)) throw new Error("Admin access required");
   return user!;
+}
+
+/**
+ * Mark (or unmark) a user as "sales personnel" — creditable on a sale even when
+ * their app-access role isn't SALES (e.g. an Engineer who also sells).
+ */
+export async function setUserSalesPersonnelAction(input: { userId: string; on: boolean }): Promise<void> {
+  await assertAdmin();
+  const { userId, on } = z.object({ userId: z.string().min(1), on: z.boolean() }).parse(input);
+  await setUserSalesPersonnel(userId, on);
+  revalidatePath("/admin/users");
+  revalidatePath("/counter-sales/new");
 }
 
 /** Enable/disable which base roles may access AeroERP (ADMIN is always enabled). */

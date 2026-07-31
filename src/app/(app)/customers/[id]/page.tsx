@@ -11,6 +11,7 @@ import { saleFromClassification, isSaleConfirmed, collectedTotal, ARRANGEMENT_LA
 import { payableTotal } from "@/lib/quote";
 import { Pencil } from "lucide-react";
 import { getAccountData, currentOwner, type AccountAssignment } from "@/lib/account";
+import { getSalespeople } from "@/lib/sales-personnel";
 import { setFollowUpOptOut } from "../actions";
 import { CustomerHeader } from "./customer-header";
 import { AccountPanel } from "./account-panel";
@@ -44,8 +45,9 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
       },
     }),
     getCurrentUser(),
-    // Only salespeople can be a customer's sales in-charge.
-    prisma.user.findMany({ where: { role: "SALES" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // Only salespeople can be a customer's sales in-charge (SALES role + anyone
+    // flagged as sales personnel, e.g. an Engineer who also sells).
+    getSalespeople(),
     getAccountData(id),
     prisma.customer.findMany({ orderBy: { company: "asc" }, select: { id: true, company: true } }),
   ]);

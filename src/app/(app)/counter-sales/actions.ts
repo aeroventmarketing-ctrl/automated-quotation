@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/activity-log";
 import { applyStockChange } from "@/lib/inventory";
 import { round2 } from "@/lib/quote";
 import { getCounterSaleViewer } from "@/lib/counter-sale-access";
+import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import {
   counterTotals,
   coerceCounterDocs,
@@ -97,8 +98,9 @@ export async function createCounterSale(input: CounterSaleInput): Promise<void> 
   if (input.salespersonId) {
     const sp = await prisma.user.findUnique({ where: { id: input.salespersonId }, select: { name: true } });
     salespersonName = sp?.name ?? null;
-  } else if (user.role === "SALES") {
-    // Default the credited salesperson to the recording user when they're Sales.
+  } else if (user.role === "SALES" || (await getSalesPersonnelIds()).includes(user.id)) {
+    // Default the credited salesperson to the recording user when they can be
+    // credited on sales (a SALES role, or flagged sales personnel).
     input.salespersonId = user.id;
     salespersonName = user.name;
   }

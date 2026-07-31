@@ -63,8 +63,8 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
             <span className="text-muted-foreground">/</span>
             <h1 className="font-mono text-base font-semibold">{sale.saleNumber ?? "Draft sale"}</h1>
             <Badge variant={STATUS_VARIANT[status]} className="font-normal">{COUNTER_STATUS_LABEL[status]}</Badge>
-            <Badge variant={vatMode === "INCLUSIVE" ? "secondary" : "default"} className="font-normal">{vatMode === "INCLUSIVE" ? "VAT inclusive" : "VAT exclusive"}</Badge>
-            {uncleared && <Badge variant="warning" className="font-normal">Payment uncleared</Badge>}
+            <Badge variant={vatMode === "INCLUSIVE" ? "secondary" : "default"} className="font-normal">{vatMode === "INCLUSIVE" ? "VAT Inclusive" : "VAT Exclusive"}</Badge>
+            {uncleared && <Badge variant="warning" className="font-normal">Payment Uncleared</Badge>}
           </div>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {sale.customer.company}
@@ -73,7 +73,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
           </p>
           {(admin || user?.role === "SALES" || user?.role === "ENGINEER") && (
             <Link href={`/inquiries/new?customerId=${sale.customerId}`} className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
-              <FileText className="h-3.5 w-3.5" /> Quote this client (new inquiry)
+              <FileText className="h-3.5 w-3.5" /> Quote This Client (New Inquiry)
             </Link>
           )}
         </div>
@@ -115,7 +115,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
               ))}
             </ul>
             <div className="ml-auto mt-3 max-w-xs space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Net{vatMode === "INCLUSIVE" ? " of VAT" : ""}</span><span className="tabular-nums">{formatCurrency(Number(sale.subtotal))}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Net{vatMode === "INCLUSIVE" ? " Of VAT" : ""}</span><span className="tabular-nums">{formatCurrency(Number(sale.subtotal))}</span></div>
               {vatMode === "INCLUSIVE" && <div className="flex justify-between"><span className="text-muted-foreground">VAT (12%)</span><span className="tabular-nums">{formatCurrency(Number(sale.vat))}</span></div>}
               <div className="flex justify-between border-t pt-1 text-base font-semibold"><span>Total</span><span className="tabular-nums">{formatCurrency(Number(sale.total))}</span></div>
             </div>
@@ -127,7 +127,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
           <CardHeader className="pb-2"><CardTitle className="text-sm">Payment</CardTitle></CardHeader>
           <CardContent className="space-y-1.5 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Method</span><span>{paymentMethodLabel(sale.paymentMethod)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Amount paid</span><span className="tabular-nums">{formatCurrency(Number(sale.amountPaid))}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Amount Paid</span><span className="tabular-nums">{formatCurrency(Number(sale.amountPaid))}</span></div>
             {status === "COMPLETED" && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Status</span>
@@ -136,7 +136,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
                   : <span className="text-amber-700">Uncleared</span>}
               </div>
             )}
-            {sale.paymentDueAt && <div className="flex justify-between"><span className="text-muted-foreground">Expected clearing</span><span>{fmtDate(sale.paymentDueAt)}</span></div>}
+            {sale.paymentDueAt && <div className="flex justify-between"><span className="text-muted-foreground">Expected Clearing</span><span>{fmtDate(sale.paymentDueAt)}</span></div>}
             <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">
               <div>Recorded by {sale.soldByName}</div>
               {sale.salespersonName && <div>Salesperson: {sale.salespersonName}</div>}
