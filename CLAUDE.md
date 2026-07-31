@@ -169,3 +169,28 @@ Files:
   `recordOrderPayment`, `saveMultiBatchPod`, `removeMultiBatchPod`,
   `saveMultiBatchDoc`, `removeMultiBatchDoc`, `removeMultiBatchProof`) and the
   delivery / batch types & status logic in `src/lib/order-workflow.ts`
+
+## 🔐 Database migrations — always enable RLS on new tables
+
+Supabase exposes every `public`-schema table through its REST API (authenticated
+by the public anon key). This app never uses that API for data — all data access
+is via **Prisma** as the table owner (`postgres`), which **bypasses RLS** — so we
+keep every public table under **RLS with no policies** (deny-all for the public
+API, invisible to Prisma). See migration `0038_enable_rls`.
+
+**Rule:** any migration that **creates a table** MUST end with the idempotent
+enable-RLS block below, so a new table never ships with RLS disabled (which would
+re-trigger the Supabase `rls_disabled_in_public` advisory):
+
+```sql
+do $$
+declare t record;
+begin
+  for t in select tablename from pg_tables where schemaname = 'public' loop
+    execute format('alter table public.%I enable row level security;', t.tablename);
+  end loop;
+end $$;
+```
+
+Do **not** add policies (deny-all is intended) and do **not** use `FORCE ROW
+LEVEL SECURITY` (that would also block the owner / Prisma).
