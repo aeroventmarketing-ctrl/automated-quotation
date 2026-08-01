@@ -1538,8 +1538,10 @@ const WIND_VENT_PRICE: Record<string, Record<string, number>> = {
   "Stainless Steel": { "12": 13082, "15": 17940, "24": 29900, "27": 31769, "32": 41860, "36": 53820 },
 };
 // "With paint" is a Galvanized Iron option only (Aluminum / Stainless are left
-// unpainted) — it adds a flat ₱1,500 (net) on the chosen throat diameter.
-const WIND_VENT_PAINT_ADD = 1500;
+// unpainted) — it adds this (net) on the chosen throat diameter: ₱1,500 up to
+// 32", ₱2,300 on the 36".
+const WIND_VENT_PAINT_ADD: Record<string, number> = { "12": 1500, "15": 1500, "24": 1500, "27": 1500, "32": 1500, "36": 2300 };
+const windVentPaintAdd = (size: string): number => WIND_VENT_PAINT_ADD[size] ?? 1500;
 const windVentPainted = (specs: LineSpecs): boolean => !!specs.windVentPaint && specs.material === "Galvanized Iron";
 const isWindVent = (specs: { type: string }): boolean => specs.type === "Wind Driven Roof Ventilator";
 /** Net (VAT-exclusive) price for a roof ventilator by material × throat diameter, or null. */
@@ -1547,7 +1549,7 @@ function windVentNet(specs: LineSpecs): number | null {
   if (!WIND_VENT_MATERIALS.includes(specs.material) || !specs.sizeL) return null;
   const base = WIND_VENT_PRICE[specs.material]?.[specs.sizeL];
   if (base == null) return null;
-  return base + (windVentPainted(specs) ? WIND_VENT_PAINT_ADD : 0);
+  return base + (windVentPainted(specs) ? windVentPaintAdd(specs.sizeL) : 0);
 }
 /** Auto unit price (VAT-inclusive, as stored) for a roof ventilator, or null. */
 function windVentUnitPrice(specs: LineSpecs, vatRate: number): number | null {
@@ -4103,7 +4105,7 @@ export function QuotationBuilder({
                 <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type}
                   checked={!!c.windVentPaint}
                   onChange={(e) => applyAccessory(l.id, { windVentPaint: e.target.checked, ...(e.target.checked ? { material: "Galvanized Iron" } : {}) })} />
-                With paint (G.I. +₱1,500)
+                With paint (G.I. +₱{windVentPaintAdd(c.sizeL).toLocaleString()})
               </label>
             </>
           ) : isAluDuct(c) ? (
