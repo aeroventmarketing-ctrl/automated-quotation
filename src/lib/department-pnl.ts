@@ -212,11 +212,13 @@ export interface OfficeCostEntry {
   sku: string | null;
   unitCost: number; // net (VAT-exclusive) supplier cost per unit
   vatInclusive: boolean; // whether the chosen supplier prices VAT-inclusive (creditable input VAT)
+  company?: string | null; // the supplier the cost came from (for the input-VAT-by-supplier breakdown)
 }
 
 export interface OfficeCostHit {
   unitCost: number;
   vatInclusive: boolean;
+  company?: string | null; // supplier company (for input-VAT attribution)
 }
 
 const normText = (s: unknown) => str(s).toLowerCase().replace(/\s+/g, " ");
@@ -253,7 +255,7 @@ export function officeCostLookup(entries: OfficeCostEntry[]): (haystack: string)
       tokens,
       codes: tokens.filter(hasDigit),
       sku: e.sku ? normText(e.sku).replace(/[^a-z0-9]/g, "") : null,
-      hit: { unitCost: e.unitCost, vatInclusive: e.vatInclusive },
+      hit: { unitCost: e.unitCost, vatInclusive: e.vatInclusive, company: e.company ?? null },
     };
   });
   return (haystackRaw: string): OfficeCostHit | null => {

@@ -299,7 +299,10 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
                     <Link href={`/quotations/${q.id}`} className="font-medium hover:underline">{q.quoteNumber}</Link>
                   </TableCell>
                   <TableCell>{q.preparedByName}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(q.total, q.currency)}</TableCell>
+                  {/* The client-facing total = the deal value after the quote's
+                      mark-up / discount (payableTotal), so it matches the Order
+                      amount above — not the raw pre-mark-up line sum (q.total). */}
+                  <TableCell className="text-right">{formatCurrency(q.deal, q.currency)}</TableCell>
                   <TableCell>{formatDate(q.createdAt)}</TableCell>
                   <TableCell><QuotationStatusBadge status={q.status} /></TableCell>
                   <TableCell className="text-right">

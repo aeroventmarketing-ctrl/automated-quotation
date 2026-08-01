@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getDepartmentPnl, getPnlDetail, type PnlReport, type PnlDetail } from "./pnl-actions";
 import { PnlFullDetail, DeptDrill } from "./pnl-detail";
@@ -37,6 +38,7 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
   const [customFrom, setCustomFrom] = useState(report.from);
   const [customTo, setCustomTo] = useState(report.to);
   const [openKey, setOpenKey] = useState<DeptKey | "company" | null>(null);
+  const [vatOpen, setVatOpen] = useState(false);
   const [detail, setDetail] = useState<PnlDetail | null>(null);
   const [detailFor, setDetailFor] = useState<string | null>(null);
   const [detailPending, startDetail] = useTransition();
@@ -196,9 +198,17 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
         </table>
       </div>
 
-      {/* VAT for BIR — a pass-through, kept out of the profit figures above. */}
+      {/* VAT for BIR — a pass-through, kept out of the profit figures above.
+          Click to break Output VAT down per order and Input VAT per supplier. */}
       <div className="rounded-lg border p-3">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">VAT (for BIR — not in the profit above)</div>
+        <button
+          type="button"
+          onClick={() => { setVatOpen((o) => !o); ensureDetail(); }}
+          className="mb-2 flex w-full items-center gap-1.5 text-left"
+        >
+          <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${vatOpen ? "rotate-90" : ""}`} />
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">VAT (for BIR — not in the profit above)</span>
+        </button>
         <div className="grid grid-cols-3 gap-3 text-sm">
           <div>
             <div className="text-xs text-muted-foreground">Output VAT (on sales)</div>
@@ -213,6 +223,75 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
             <div className={`mt-0.5 font-semibold tabular-nums ${report.vat.payable >= 0 ? "" : "text-emerald-700 dark:text-emerald-400"}`}>{formatCurrency(report.vat.payable)}</div>
           </div>
         </div>
+        {vatOpen && (detailReady && detail ? (
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            {/* Output VAT — per order number */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Output VAT · per order ({detail.vatOutputByOrder.length})</div>
+              {detail.vatOutputByOrder.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No VAT-charged sales in this period.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[18rem] text-xs">
+                    <thead>
+                      <tr className="border-b text-[11px] text-muted-foreground">
+                        <th className="py-1 pr-2 text-left font-medium">Order · Customer</th>
+                        <th className="py-1 pl-2 text-right font-medium">Output VAT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.vatOutputByOrder.map((o) => (
+                        <tr key={o.quotationId} className="border-t align-top">
+                          <td className="py-1 pr-2">
+                            <Link href={o.href ?? `/quotations/${o.quotationId}`} className="font-mono text-[11px] text-primary hover:underline">{o.quoteNumber}</Link>
+                            <div className="text-muted-foreground">{o.customer}</div>
+                          </td>
+                          <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(o.output)}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 font-semibold">
+                        <td className="py-1 pr-2">Total output VAT</td>
+                        <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(report.vat.output)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            {/* Input VAT — per supplier's name */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Input VAT · per supplier ({detail.vatInputBySupplier.length})</div>
+              {detail.vatInputBySupplier.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No creditable input VAT in this period.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[18rem] text-xs">
+                    <thead>
+                      <tr className="border-b text-[11px] text-muted-foreground">
+                        <th className="py-1 pr-2 text-left font-medium">Supplier</th>
+                        <th className="py-1 pl-2 text-right font-medium">Input VAT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.vatInputBySupplier.map((s, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="py-1 pr-2">{s.supplier}</td>
+                          <td className="py-1 pl-2 text-right tabular-nums text-muted-foreground">− {formatCurrency(s.input)}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 font-semibold">
+                        <td className="py-1 pr-2">Total input VAT</td>
+                        <td className="py-1 pl-2 text-right tabular-nums">− {formatCurrency(report.vat.input)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">{detailPending ? "Loading details…" : "…"}</p>
+        ))}
       </div>
 
       {/* Notes */}

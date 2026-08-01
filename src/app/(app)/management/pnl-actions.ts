@@ -92,7 +92,7 @@ async function buildCostResolvers() {
         if (!(l.price && l.price > 0)) continue;
         const incl = vatFor(l.supplierId, l.company);
         const unitCost = round2(incl ? l.price / (1 + VAT_RATE) : l.price);
-        if (!best || unitCost < best.unitCost) best = { name: p.name, sku: p.sku, unitCost, vatInclusive: incl };
+        if (!best || unitCost < best.unitCost) best = { name: p.name, sku: p.sku, unitCost, vatInclusive: incl, company: l.company };
       }
       return best;
     })
@@ -327,12 +327,27 @@ export interface PnlExpenseItem {
   amount: number;
 }
 export type PnlVatByDept = Record<DeptKey, { output: number; input: number; payable: number }>;
+/** Output VAT contributed by one order (quotation / counter sale). */
+export interface PnlVatOrder {
+  quotationId: string;
+  href?: string;
+  quoteNumber: string;
+  customer: string;
+  output: number;
+}
+/** Input VAT credited from one supplier (material POs + bought-in goods). */
+export interface PnlVatSupplier {
+  supplier: string;
+  input: number;
+}
 export interface PnlDetail {
   from: string;
   to: string;
   sales: PnlSaleDetail[];
   expenses: PnlExpenseItem[];
   vatByDept: PnlVatByDept;
+  vatOutputByOrder: PnlVatOrder[];
+  vatInputBySupplier: PnlVatSupplier[];
 }
 
 /**
@@ -364,6 +379,11 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   });
   const outputVatByDept = zeroSplit();
   const inputVatByDept = zeroSplit();
+  // Output VAT per order, and input VAT per supplier — the two VAT breakdowns.
+  const vatOutputByOrder: PnlVatOrder[] = [];
+  const inputVatBySupplier = new Map<string, number>();
+  const addSupplierVat = (name: string, v: number) =>
+    inputVatBySupplier.set(name, round2((inputVatBySupplier.get(name) ?? 0) + v));
   const sales: PnlSaleDetail[] = [];
   for (const q of quotations) {
     const sale = saleFromClassification(q.classification);
@@ -374,6 +394,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     const disc = Number(q.discountPct) || 0;
     const chargesVat = q.vatMode !== "EXCLUSIVE";
     const lines: PnlSaleLine[] = [];
+    let orderOutputVat = 0;
     for (const it of q.items) {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Record<string, unknown>;
       const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
@@ -396,7 +417,11 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         const hit = officeCostOfLine(specs, officeLineHaystack(it.descriptionSnapshot, specs));
         officeCost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : null;
         officeShare = round2(net - (officeCost ?? 0)); // margin: selling less supplier cost
-        if (hit?.vatInclusive && officeCost) inputVatByDept.office = round2(inputVatByDept.office + round2(officeCost * VAT_RATE));
+        if (hit?.vatInclusive && officeCost) {
+          const v = round2(officeCost * VAT_RATE);
+          inputVatByDept.office = round2(inputVatByDept.office + v);
+          addSupplierVat(hit.company || "Bought-in goods", v);
+        }
       } else {
         deptShare = round2(net / 1.3);
         officeShare = round2(net - deptShare);
@@ -406,21 +431,24 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         // net is the Office's sale, not the netted margin.
         outputVatByDept[dept] = round2(outputVatByDept[dept] + round2(deptShare * VAT_RATE));
         outputVatByDept.office = round2(outputVatByDept.office + round2((routing === "office_full" ? net : officeShare) * VAT_RATE));
+        orderOutputVat = round2(orderOutputVat + round2(net * VAT_RATE));
       }
       const label = productLabel(specs, it.descriptionSnapshot);
       lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost });
     }
     if (!lines.length) continue;
+    const customer = q.inquiry?.customer?.company ?? "—";
     sales.push({
       quotationId: q.id,
       quoteNumber: q.quoteNumber,
       customerId: q.inquiry?.customer?.id ?? null,
-      customer: q.inquiry?.customer?.company ?? "—",
+      customer,
       recognizedAt: ymd,
       basis: sale!.arrangement === "terms" ? "PO date" : "Payment date",
       net: round2(lines.reduce((a, l) => a + l.net, 0)),
       lines,
     });
+    if (orderOutputVat > 0) vatOutputByOrder.push({ quotationId: q.id, quoteNumber: q.quoteNumber, customer, output: orderOutputVat });
   }
   // Counter sales (walk-in) → Office, as margin (net less stock COGS).
   const counterSalesD = await prisma.counterSale.findMany({
@@ -434,7 +462,11 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     if (!ymdInRange(ymd, lo, hi)) continue;
     const net = Number(cs.subtotal) || 0;
     const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCost.get(i.stockItemId) ?? 0) * Number(i.qty) : 0), 0));
-    if (cs.vatMode !== "EXCLUSIVE") outputVatByDept.office = round2(outputVatByDept.office + round2(net * VAT_RATE));
+    if (cs.vatMode !== "EXCLUSIVE") {
+      const v = round2(net * VAT_RATE);
+      outputVatByDept.office = round2(outputVatByDept.office + v);
+      vatOutputByOrder.push({ quotationId: cs.id, href: `/counter-sales/${cs.id}`, quoteNumber: cs.saleNumber ?? "Counter sale", customer: cs.customer.company, output: v });
+    }
     const n = cs.items.length;
     sales.push({
       quotationId: cs.id,
@@ -467,7 +499,11 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     const gross = poTotals(po).total;
     const net = incl ? round2(gross / (1 + VAT_RATE)) : round2(gross);
     expenses.push({ dept, source: "Purchase order", ref: po.poNumber, date: manilaYMD(releasedAt), amount: net });
-    if (incl) inputVatByDept[dept] = round2(inputVatByDept[dept] + round2(net * VAT_RATE));
+    if (incl) {
+      const v = round2(net * VAT_RATE);
+      inputVatByDept[dept] = round2(inputVatByDept[dept] + v);
+      addSupplierVat(po.supplier.company || "—", v);
+    }
   }
   const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const crs = await prisma.cashRequest.findMany({
@@ -503,5 +539,10 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     ]),
   ) as PnlVatByDept;
 
-  return { from: lo, to: hi, sales, expenses, vatByDept };
+  vatOutputByOrder.sort((a, b) => b.output - a.output || a.quoteNumber.localeCompare(b.quoteNumber));
+  const vatInputBySupplier: PnlVatSupplier[] = [...inputVatBySupplier.entries()]
+    .map(([supplier, input]) => ({ supplier, input }))
+    .sort((a, b) => b.input - a.input || a.supplier.localeCompare(b.supplier));
+
+  return { from: lo, to: hi, sales, expenses, vatByDept, vatOutputByOrder, vatInputBySupplier };
 }
