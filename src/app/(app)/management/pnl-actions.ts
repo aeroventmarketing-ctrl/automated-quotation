@@ -8,6 +8,7 @@ import { saleFromClassification } from "@/lib/sale";
 import { coerceChainLog } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { getProducts } from "@/lib/product-catalog";
+import { getOfficeResaleProductIds } from "@/lib/office-resale";
 import { getSuppliers } from "@/lib/suppliers";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { payrollExpenseForRange } from "./payroll-actions";
@@ -97,7 +98,17 @@ async function buildCostResolvers() {
     .filter((e): e is OfficeCostEntry => e != null && e.unitCost > 0);
   const officeCostOf = officeCostLookup(costEntries);
 
-  return { cogsOf, officeCostOf, supplierVatInclusive };
+  // Products flagged as Office/resale (finished goods bought and resold) — a sale
+  // of one is booked entirely to Office, never a production department, whatever
+  // its category. Matched to a line the same way costs are (name / model / SKU).
+  const resaleIds = new Set(await getOfficeResaleProductIds());
+  const resaleEntries: OfficeCostEntry[] = products
+    .filter((p) => resaleIds.has(p.id))
+    .map((p) => ({ name: p.name, sku: p.sku, unitCost: 1, vatInclusive: false }));
+  const resaleLookup = officeCostLookup(resaleEntries);
+  const isOfficeResale = (haystack: string): boolean => resaleLookup(haystack) != null;
+
+  return { cogsOf, officeCostOf, supplierVatInclusive, isOfficeResale };
 }
 
 /** Stock unit-cost lookup for the items sold across a set of counter sales. */
@@ -138,7 +149,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   let outputVat = 0;
   let inputVat = 0;
 
-  const { cogsOf, officeCostOf, supplierVatInclusive } = await buildCostResolvers();
+  const { cogsOf, officeCostOf, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
   const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales ---------------------------------------------------------------
@@ -168,12 +179,15 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
       if (net === 0) continue;
       // Output VAT is charged on the full selling price regardless of the split.
       if (chargesVat) outputVat = round2(outputVat + round2(net * VAT_RATE));
-      const routing = lineRouting(specs).routing;
+      const haystack = officeLineHaystack(it.descriptionSnapshot, specs);
+      let routing = lineRouting(specs).routing;
+      // A flagged Office/resale product is booked entirely to Office.
+      if (routing !== "office_full" && isOfficeResale(haystack)) routing = "office_full";
       if (routing === "office_full") {
         // Bought-in good: Office keeps the margin — selling net less the supplier
         // cost. The cost is netted here (not booked as a separate expense); its
         // input VAT is still creditable.
-        const hit = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
+        const hit = officeCostOf(haystack);
         const cost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : 0;
         sales.office = round2(sales.office + round2(net - cost));
         if (hit?.vatInclusive && cost) inputVat = round2(inputVat + round2(cost * VAT_RATE));
@@ -325,7 +339,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error("Invalid date range.");
   const [lo, hi] = from <= to ? [from, to] : [to, from];
 
-  const { cogsOf, officeCostOf, supplierVatInclusive } = await buildCostResolvers();
+  const { cogsOf, officeCostOf, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
   const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales detail --------------------------------------------------------
@@ -357,7 +371,12 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Record<string, unknown>;
       const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
       if (net === 0) continue;
-      const { dept, routing } = lineRouting(specs);
+      let { dept, routing } = lineRouting(specs);
+      // A flagged Office/resale product is booked entirely to Office.
+      if (routing !== "office_full" && isOfficeResale(officeLineHaystack(it.descriptionSnapshot, specs))) {
+        dept = "office";
+        routing = "office_full";
+      }
       let cogs: number | null = null;
       let officeCost: number | null = null;
       let deptShare = 0;

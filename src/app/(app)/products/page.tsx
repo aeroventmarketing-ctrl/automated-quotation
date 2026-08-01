@@ -4,6 +4,7 @@ import { canViewPrices, canViewSupplier } from "@/lib/price-visibility";
 import { Card, CardContent } from "@/components/ui/card";
 import { getProducts, type ProductRow } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
+import { getOfficeResaleProductIds } from "@/lib/office-resale";
 import { ProductManager } from "./product-manager";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function ProductsPage() {
   } catch {
     tableMissing = true;
   }
+  const resaleIds = await getOfficeResaleProductIds().catch(() => []);
 
   return (
     <div className="space-y-6">
@@ -63,7 +65,7 @@ export default async function ProductsPage() {
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <ProductManager products={products} suppliers={suppliers} canManage={canManage} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} />
+            <ProductManager products={products} suppliers={suppliers} canManage={canManage} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
           </CardContent>
         </Card>
       )}

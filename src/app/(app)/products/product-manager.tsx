@@ -13,7 +13,7 @@ import { qrSvg } from "@/lib/qr";
 import type { Supplier } from "@/lib/suppliers";
 import type { ProductSupplierLink } from "@/lib/products";
 import type { ProductRow } from "@/lib/product-catalog";
-import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts, deleteProducts, clearAllProducts } from "./actions";
+import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts, deleteProducts, clearAllProducts, setProductOfficeResaleAction } from "./actions";
 import { BulkImport } from "./bulk-import";
 import { ProductScanBox } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -100,7 +100,7 @@ function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplier
   );
 }
 
-function ProductRowView({ product, canManage, showPrices, showSuppliers, suppliers, scanTarget, scanNonce, selectable, selected, onToggle, colSpan }: { product: ProductRow; canManage: boolean; showPrices: boolean; showSuppliers: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number; selectable: boolean; selected: boolean; onToggle: () => void; colSpan: number }) {
+function ProductRowView({ product, canManage, showPrices, showSuppliers, suppliers, scanTarget, scanNonce, selectable, selected, onToggle, colSpan, officeResale }: { product: ProductRow; canManage: boolean; showPrices: boolean; showSuppliers: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number; selectable: boolean; selected: boolean; onToggle: () => void; colSpan: number; officeResale: boolean }) {
   const router = useRouter();
   const [panel, setPanel] = useState<"none" | "edit" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
@@ -112,6 +112,14 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
   const [sups, setSups] = useState<ProductSupplierLink[]>(product.suppliers);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [resale, setResale] = useState(officeResale);
+  const [resaleBusy, setResaleBusy] = useState(false);
+  async function toggleResale() {
+    setResaleBusy(true); setErr(null);
+    try { setResale(await setProductOfficeResaleAction(product.id, !resale)); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setResaleBusy(false); }
+  }
 
   // A scan that matches this product opens its Label panel and scrolls to it.
   useEffect(() => {
@@ -141,7 +149,10 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
           </TableCell>
         )}
         <TableCell>
-          <div className="font-medium">{product.name}</div>
+          <div className="font-medium">
+            {product.name}
+            {resale && <Badge variant="secondary" className="ml-2 font-normal text-violet-700">Office/resale</Badge>}
+          </div>
           <div className="text-xs text-muted-foreground">{[product.sku ? `SKU ${product.sku}` : null, product.category].filter(Boolean).join(" · ")}</div>
         </TableCell>
         <TableCell className="text-sm text-muted-foreground">{product.unit}</TableCell>
@@ -179,6 +190,13 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
                 <div className="mb-1 text-xs text-muted-foreground">Suppliers</div>
                 <SupplierEditor value={sups} onChange={setSups} suppliers={suppliers} />
               </div>
+              <label className="flex items-start gap-2 text-xs">
+                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={resale} disabled={resaleBusy} onChange={toggleResale} />
+                <span>
+                  <span className="font-medium">Office / resale</span> — a bought &amp; resold finished good.
+                  Its sales are booked entirely to <b>Office</b> in the Departmental P&amp;L, never to a production department.
+                </span>
+              </label>
               <div className="flex items-center gap-2">
                 <Button size="sm" className="h-8" disabled={busy} onClick={() => run(() => updateProduct({ id: product.id, name, unit, category, note, suppliers: sups }))}>{busy ? "…" : "Save"}</Button>
                 <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={() => run(() => deleteProduct(product.id))}>Delete</Button>
@@ -211,8 +229,9 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
   );
 }
 
-export function ProductManager({ products, suppliers, canManage, admin = false, showPrices, showSuppliers = true }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean }) {
+export function ProductManager({ products, suppliers, canManage, admin = false, showPrices, showSuppliers = true, resaleIds = [] }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean; resaleIds?: string[] }) {
   const router = useRouter();
+  const resaleSet = useMemo(() => new Set(resaleIds), [resaleIds]);
   const [showAdd, setShowAdd] = useState(false);
   // Multi-select for bulk delete (managers only).
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -525,7 +544,7 @@ export function ProductManager({ products, suppliers, canManage, admin = false, 
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} showPrices={showPrices} showSuppliers={showSuppliers} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} selectable={selectable} selected={selected.has(p.id)} onToggle={() => toggleOne(p.id)} colSpan={cols} />)}
+                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} showPrices={showPrices} showSuppliers={showSuppliers} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} selectable={selectable} selected={selected.has(p.id)} onToggle={() => toggleOne(p.id)} colSpan={cols} officeResale={resaleSet.has(p.id)} />)}
                 </Fragment>
               ))}
             </TableBody>

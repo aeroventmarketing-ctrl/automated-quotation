@@ -9,6 +9,7 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { nextProductSku } from "@/lib/product-catalog";
 import { coerceProductSuppliers, type ProductSupplierLink } from "@/lib/products";
 import { getSuppliers, rememberSupplier } from "@/lib/suppliers";
+import { setOfficeResaleProduct } from "@/lib/office-resale";
 
 async function requireProductManager() {
   const user = await getCurrentUser();
@@ -68,6 +69,19 @@ export async function updateProduct(input: { id: string } & z.infer<typeof produ
     },
   });
   revalidatePath("/products");
+}
+
+/**
+ * Flag a product as "Office / resale" (a bought-and-resold finished good). Its
+ * sales are then booked entirely to the Office profit centre in the Departmental
+ * P&L, never to a production department. Purchaser / admin only.
+ */
+export async function setProductOfficeResaleAction(id: string, on: boolean): Promise<boolean> {
+  await requireProductManager();
+  await setOfficeResaleProduct(id, on);
+  revalidatePath("/products");
+  revalidatePath("/management");
+  return on;
 }
 
 export async function deleteProduct(id: string): Promise<void> {
