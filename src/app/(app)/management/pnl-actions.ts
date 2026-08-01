@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { round2 } from "@/lib/quote";
+import { round2, readPricing, applyPricing, type PricingAdjust } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { saleFromClassification } from "@/lib/sale";
 import { coerceChainLog } from "@/lib/purchase-chain-row";
@@ -54,11 +54,27 @@ export interface PnlReport {
   fanLinesPending: number; // fan lines booked entirely to Office (no COGS yet)
   officeCostUnmatched: number; // bought-in lines with no Products-tab cost matched
   officeUnmatchedItems: string[]; // distinct labels of those unmatched goods
+  markupIncome: number; // "Income from Mark up" — quote mark-ups, booked to Office (net)
+  clientDiscounts: number; // "Client Discounts" — quote discounts, an Office expense (net)
   vat: { output: number; input: number; payable: number }; // VAT for BIR (not in profit)
 }
 
 function addSplit(into: DeptSplit, from: DeptSplit) {
   for (const k of Object.keys(into) as DeptKey[]) into[k] = round2(into[k] + from[k]);
+}
+
+/**
+ * A quote's mark-up and discount as VAT-exclusive (net) amounts. Departments book
+ * their sales at the list price before either; the mark-up is Office income
+ * ("Income from Mark up") and the discount an Office expense ("Client Discounts").
+ * Mark-up/discount that were entered on a VAT-inclusive quote include VAT, so
+ * strip it — the VAT part flows through Output VAT, not the profit lines.
+ */
+function markupDiscountNet(grossSum: number, vatMode: string, pricing: PricingAdjust): { markupNet: number; discountNet: number } {
+  const displayedNet = vatMode === "INCLUSIVE" ? grossSum : grossSum / (1 + VAT_RATE);
+  const { markupAmt, discountAmt } = applyPricing(displayedNet, pricing);
+  const toNet = (x: number) => (vatMode === "INCLUSIVE" ? x / (1 + VAT_RATE) : x);
+  return { markupNet: round2(toNet(markupAmt)), discountNet: round2(toNet(discountAmt)) };
 }
 
 /**
@@ -155,6 +171,8 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   const officeUnmatched = new Set<string>();
   let outputVat = 0;
   let inputVat = 0;
+  let markupIncome = 0;
+  let clientDiscounts = 0;
 
   const { cogsOf, officeCostOfLine, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
   const cutoff = testModeCreatedAtFilter(await getTestMode());
@@ -175,14 +193,17 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     if (!recAt) continue;
     if (!ymdInRange(manilaYMD(recAt), lo, hi)) continue;
     salesCount += 1;
-    const disc = Number(q.discountPct) || 0;
     // A VAT-exclusive quote charges the client no VAT — no output VAT on it.
     const chargesVat = q.vatMode !== "EXCLUSIVE";
+    // Departments book the LIST price before the quote's mark-up / discount; the
+    // mark-up becomes Office income and the discount an Office expense below.
+    let grossSum = 0;
     for (const it of q.items) {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object"
         ? it.specsSnapshot
         : {}) as Record<string, unknown>;
-      const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
+      grossSum += (Number(it.unitPrice) || 0) * (Number(it.qty) || 0);
+      const net = lineNetOf(Number(it.unitPrice), it.qty, 0);
       if (net === 0) continue;
       // Output VAT is charged on the full selling price regardless of the split.
       if (chargesVat) outputVat = round2(outputVat + round2(net * VAT_RATE));
@@ -195,7 +216,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         // cost. The cost is netted here (not booked as a separate expense); its
         // input VAT is still creditable.
         const hit = officeCostOfLine(specs, haystack);
-        const cost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : 0;
+        const cost = hit ? round2(hit.unitCost * it.qty) : 0;
         sales.office = round2(sales.office + round2(net - cost));
         if (hit?.vatInclusive && cost) inputVat = round2(inputVat + round2(cost * VAT_RATE));
         if (!hit) {
@@ -210,6 +231,18 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
       } else {
         addSplit(sales, lineSalesSplit(specs, net, 0));
       }
+    }
+    // Quote-level mark-up → Office income; discount → Office expense (both net).
+    const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, readPricing(q.classification, Number(q.discountPct)));
+    if (markupNet) {
+      sales.office = round2(sales.office + markupNet);
+      markupIncome = round2(markupIncome + markupNet);
+      if (chargesVat) outputVat = round2(outputVat + round2(markupNet * VAT_RATE));
+    }
+    if (discountNet) {
+      expenses.office = round2(expenses.office + discountNet);
+      clientDiscounts = round2(clientDiscounts + discountNet);
+      if (chargesVat) outputVat = round2(outputVat - round2(discountNet * VAT_RATE));
     }
   }
 
@@ -293,7 +326,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
 
   const vat = { output: outputVat, input: inputVat, payable: round2(outputVat - inputVat) };
 
-  return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending, officeCostUnmatched, officeUnmatchedItems: [...officeUnmatched].sort(), vat };
+  return { from: lo, to: hi, rows, totals, salesCount, fanLinesPending, officeCostUnmatched, officeUnmatchedItems: [...officeUnmatched].sort(), markupIncome, clientDiscounts, vat };
 }
 
 // --- Drill-down detail (spot-check / audit) -------------------------------
@@ -348,6 +381,8 @@ export interface PnlDetail {
   vatByDept: PnlVatByDept;
   vatOutputByOrder: PnlVatOrder[];
   vatInputBySupplier: PnlVatSupplier[];
+  markupIncome: number; // "Income from Mark up" — Office income (net)
+  clientDiscounts: number; // "Client Discounts" — Office expense (net)
 }
 
 /**
@@ -379,6 +414,8 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   });
   const outputVatByDept = zeroSplit();
   const inputVatByDept = zeroSplit();
+  let markupIncome = 0;
+  let clientDiscounts = 0;
   // Output VAT per order, and input VAT per supplier — the two VAT breakdowns.
   const vatOutputByOrder: PnlVatOrder[] = [];
   const inputVatBySupplier = new Map<string, number>();
@@ -391,13 +428,14 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     if (!recAt) continue;
     const ymd = manilaYMD(recAt);
     if (!ymdInRange(ymd, lo, hi)) continue;
-    const disc = Number(q.discountPct) || 0;
     const chargesVat = q.vatMode !== "EXCLUSIVE";
     const lines: PnlSaleLine[] = [];
     let orderOutputVat = 0;
+    let grossSum = 0;
     for (const it of q.items) {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Record<string, unknown>;
-      const net = lineNetOf(Number(it.unitPrice), it.qty, disc);
+      grossSum += (Number(it.unitPrice) || 0) * (Number(it.qty) || 0);
+      const net = lineNetOf(Number(it.unitPrice), it.qty, 0);
       if (net === 0) continue;
       let { dept, routing } = lineRouting(specs);
       // A flagged Office/resale product is booked entirely to Office.
@@ -415,7 +453,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         officeShare = round2(net - cogs);
       } else if (routing === "office_full") {
         const hit = officeCostOfLine(specs, officeLineHaystack(it.descriptionSnapshot, specs));
-        officeCost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : null;
+        officeCost = hit ? round2(hit.unitCost * it.qty) : null;
         officeShare = round2(net - (officeCost ?? 0)); // margin: selling less supplier cost
         if (hit?.vatInclusive && officeCost) {
           const v = round2(officeCost * VAT_RATE);
@@ -437,6 +475,15 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost });
     }
     if (!lines.length) continue;
+    // Quote-level mark-up → Office income; discount → Office expense (both net).
+    const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, readPricing(q.classification, Number(q.discountPct)));
+    markupIncome = round2(markupIncome + markupNet);
+    clientDiscounts = round2(clientDiscounts + discountNet);
+    if (chargesVat) {
+      const adj = round2(round2(markupNet * VAT_RATE) - round2(discountNet * VAT_RATE));
+      outputVatByDept.office = round2(outputVatByDept.office + adj);
+      orderOutputVat = round2(orderOutputVat + adj);
+    }
     const customer = q.inquiry?.customer?.company ?? "—";
     sales.push({
       quotationId: q.id,
@@ -544,5 +591,5 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     .map(([supplier, input]) => ({ supplier, input }))
     .sort((a, b) => b.input - a.input || a.supplier.localeCompare(b.supplier));
 
-  return { from: lo, to: hi, sales, expenses, vatByDept, vatOutputByOrder, vatInputBySupplier };
+  return { from: lo, to: hi, sales, expenses, vatByDept, vatOutputByOrder, vatInputBySupplier, markupIncome, clientDiscounts };
 }

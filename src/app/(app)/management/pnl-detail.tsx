@@ -74,21 +74,33 @@ export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
                     </tr>
                   )),
                 )}
+                {detail.markupIncome !== 0 && (
+                  <tr className="border-t-2 font-medium">
+                    <td className="py-1 pr-2" colSpan={2}>Income from Mark up <span className="text-[10px] text-muted-foreground">quote mark-ups → Office</span></td>
+                    <td className="py-1 px-2 text-muted-foreground">—</td>
+                    <td className="py-1 px-2 text-right text-muted-foreground">—</td>
+                    <td className="py-1 px-2 text-right text-muted-foreground">—</td>
+                    <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(detail.markupIncome)}</td>
+                    <td className="py-1 pl-2 text-right text-muted-foreground">—</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
-      <ExpenseTable items={detail.expenses} />
+      <ExpenseTable items={detail.expenses} extra={{ label: "Client Discounts", amount: detail.clientDiscounts }} />
     </div>
   );
 }
 
-function ExpenseTable({ items }: { items: PnlDetail["expenses"] }) {
+function ExpenseTable({ items, extra }: { items: PnlDetail["expenses"]; extra?: { label: string; amount: number } | null }) {
+  const hasExtra = !!extra && extra.amount !== 0;
+  const count = items.length + (hasExtra ? 1 : 0);
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expense detail ({items.length})</div>
-      {items.length === 0 ? (
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expense detail ({count})</div>
+      {count === 0 ? (
         <p className="text-xs text-muted-foreground">No expenses recorded in this period.</p>
       ) : (
         <div className="overflow-x-auto">
@@ -112,6 +124,15 @@ function ExpenseTable({ items }: { items: PnlDetail["expenses"] }) {
                   <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(e.amount)}</td>
                 </tr>
               ))}
+              {hasExtra && (
+                <tr className="border-t">
+                  <td className="py-1 pr-2 text-muted-foreground">—</td>
+                  <td className="py-1 px-2 font-medium">{extra!.label}</td>
+                  <td className="py-1 px-2 text-muted-foreground">—</td>
+                  <td className="py-1 px-2">{DEPT_LABEL.office}</td>
+                  <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(extra!.amount)}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -160,6 +181,9 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
   const costTotal = groups.reduce((a, g) => a + g.lines.reduce((b, r) => b + lineCogs(r.l), 0), 0);
   const exp = detail.expenses.filter((e) => e.dept === deptKey);
   const vat = detail.vatByDept[deptKey];
+  // Office also carries the quote mark-ups (income) and client discounts (expense).
+  const markup = isOffice ? detail.markupIncome : 0;
+  const discounts = isOffice ? detail.clientDiscounts : 0;
 
   return (
     <div className="space-y-4">
@@ -167,7 +191,7 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
 
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{DEPT_LABEL[deptKey]} sales ({rowCount})</div>
-        {rowCount === 0 ? (
+        {rowCount === 0 && markup === 0 ? (
           <p className="text-xs text-muted-foreground">No sales for this department in the period.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -211,11 +235,19 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                     </Fragment>
                   );
                 })}
+                {isOffice && markup !== 0 && (
+                  <tr className="border-t">
+                    <td className="py-1 pr-2" colSpan={2}><span className="font-medium">Income from Mark up</span> <span className="text-[10px] text-muted-foreground">quote mark-ups</span></td>
+                    <td className="py-1 px-2 text-right text-muted-foreground">—</td>
+                    <td className="py-1 px-2 text-right text-muted-foreground">—</td>
+                    <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(markup)}</td>
+                  </tr>
+                )}
                 <tr className="border-t-2 font-semibold">
                   <td className="py-1 pr-2" colSpan={2}>Total sales</td>
                   <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(netTotal)}</td>
                   {isOffice && <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">− {formatCurrency(costTotal)}</td>}
-                  <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(salesTotal)}</td>
+                  <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(salesTotal + markup)}</td>
                 </tr>
               </tbody>
             </table>
@@ -223,7 +255,7 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
         )}
       </div>
 
-      <ExpenseTable items={exp} />
+      <ExpenseTable items={exp} extra={isOffice ? { label: "Client Discounts", amount: discounts } : null} />
     </div>
   );
 }
