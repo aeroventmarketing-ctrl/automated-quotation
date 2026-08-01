@@ -27,7 +27,7 @@ export function MobileNav({ role, name, workflowRoles = [], dashboardAlerts = {}
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-md border bg-background p-2 shadow-lg">
+          <div className="absolute right-0 top-full z-50 mt-2 max-h-[80vh] w-56 overflow-y-auto overscroll-contain rounded-md border bg-background p-2 shadow-lg">
             <div className="px-3 pb-2 text-xs text-muted-foreground">
               {name} · {role}
             </div>
