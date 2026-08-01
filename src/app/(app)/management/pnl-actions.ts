@@ -11,7 +11,7 @@ import { getProducts } from "@/lib/product-catalog";
 import { getOfficeResaleProductIds } from "@/lib/office-resale";
 import { getSuppliers } from "@/lib/suppliers";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
-import { getAlertGoLive, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
+import { getAlertGoLive } from "@/lib/alert-golive";
 import { payrollExpenseForRange } from "./payroll-actions";
 import {
   PNL_DEPARTMENTS,
@@ -36,22 +36,16 @@ import {
 const VAT_RATE = config.vatRate || 0.12;
 const PROD_DEPT_KEYS = new Set<DeptKey>(["fans", "duct", "accessories", "motor"]);
 
-/** The later of two `createdAt > x` cutoffs (test-mode and the alerts go-live gate). */
-function laterCutoff(a: { gt: Date } | undefined, b: { gt: Date } | undefined): { gt: Date } | undefined {
-  if (a && b) return { gt: a.gt > b.gt ? a.gt : b.gt };
-  return a ?? b;
-}
-
 /**
- * The P&L's createdAt cutoff: hide everything created before the test-mode cutoff
- * AND/OR the alerts go-live moment (whichever is later). While the go-live gate is
- * on, the P&L — like the rest of the dashboard — shows only post-go-live activity.
+ * While the alerts go-live gate is on, the P&L never counts activity dated before
+ * the launch day. Records are recognised by WHEN THEY HAPPENED — sales on their
+ * payment / PO date, expenses on their release date — not when the row was
+ * created, so a pre-launch order that's paid after go-live still counts. Returns
+ * the go-live Manila day to floor the report's start (or null when the gate is off).
  */
-async function pnlCreatedCutoff(): Promise<{ gt: Date } | undefined> {
-  return laterCutoff(
-    testModeCreatedAtFilter(await getTestMode()),
-    alertGoLiveCreatedAtFilter(await getAlertGoLive()),
-  );
+async function goLiveFloorYMD(): Promise<string | null> {
+  const g = await getAlertGoLive();
+  return g.on ? manilaYMD(g.at) : null;
 }
 
 export interface PnlRow {
@@ -180,7 +174,10 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
     throw new Error("Invalid date range.");
   }
-  const [lo, hi] = from <= to ? [from, to] : [to, from];
+  const [lo0, hi] = from <= to ? [from, to] : [to, from];
+  // Go-live gate on → floor the report at the launch day (by payment/release date).
+  const goLiveFloor = await goLiveFloorYMD();
+  const lo = goLiveFloor && goLiveFloor > lo0 ? goLiveFloor : lo0;
 
   const sales = zeroSplit();
   const expenses = zeroSplit();
@@ -194,7 +191,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   let clientDiscounts = 0;
 
   const { cogsOf, officeCostOfLine, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
-  const cutoff = await pnlCreatedCutoff();
+  const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales ---------------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
@@ -423,10 +420,13 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error("Invalid date range.");
-  const [lo, hi] = from <= to ? [from, to] : [to, from];
+  const [lo0, hi] = from <= to ? [from, to] : [to, from];
+  // Go-live gate on → floor the report at the launch day (by payment/release date).
+  const goLiveFloor = await goLiveFloorYMD();
+  const lo = goLiveFloor && goLiveFloor > lo0 ? goLiveFloor : lo0;
 
   const { cogsOf, officeCostOfLine, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
-  const cutoff = await pnlCreatedCutoff();
+  const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales detail --------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
