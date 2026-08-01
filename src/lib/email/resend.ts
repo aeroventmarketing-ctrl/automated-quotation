@@ -5,6 +5,10 @@
  * and the scheduler stays in dry-run.
  */
 
+export interface SendEmailAttachment {
+  filename: string;
+  content: string; // base64-encoded file content
+}
 export interface SendEmailInput {
   from: string; // "Name <address@your-domain>"
   to: string;
@@ -12,6 +16,7 @@ export interface SendEmailInput {
   text: string;
   html?: string;
   replyTo?: string;
+  attachments?: SendEmailAttachment[];
 }
 
 /** True when a Resend API key is configured (i.e. live sending is possible). */
@@ -37,6 +42,7 @@ export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> 
       text: input.text,
       ...(input.html ? { html: input.html } : {}),
       ...(input.replyTo ? { reply_to: input.replyTo } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
   });
 
