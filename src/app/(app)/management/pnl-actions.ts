@@ -234,7 +234,11 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         const hit = officeCostOfLine(specs, haystack);
         const cost = hit ? round2(hit.unitCost * it.qty) : 0;
         sales.office = round2(sales.office + round2(net - cost));
-        if (hit?.vatInclusive && cost) inputVat = round2(inputVat + round2(cost * VAT_RATE));
+        // Resale-COGS input VAT is credited at the point of sale. While the go-live
+        // gate is on, the resold goods are opening stock (bought pre-launch), so
+        // their input VAT belongs to the pre-launch period — don't credit it here;
+        // only genuine post-go-live material POs generate input VAT.
+        if (hit?.vatInclusive && cost && !goLiveFloor) inputVat = round2(inputVat + round2(cost * VAT_RATE));
         if (!hit) {
           officeCostUnmatched += 1;
           const label = productLabel(specs, it.descriptionSnapshot);
@@ -486,7 +490,10 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         const hit = officeCostOfLine(specs, officeLineHaystack(it.descriptionSnapshot, specs));
         officeCost = hit ? round2(hit.unitCost * it.qty) : null;
         officeShare = round2(net - (officeCost ?? 0)); // margin: selling less supplier cost
-        if (hit?.vatInclusive && officeCost) {
+        // While the go-live gate is on, resold goods are pre-launch opening stock,
+        // so their input VAT belongs to the pre-launch period — skip it (only
+        // post-go-live material POs generate input VAT).
+        if (hit?.vatInclusive && officeCost && !goLiveFloor) {
           const v = round2(officeCost * VAT_RATE);
           inputVatByDept.office = round2(inputVatByDept.office + v);
           addSupplierVat(hit.company || "Bought-in goods", v);
