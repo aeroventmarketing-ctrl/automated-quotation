@@ -24,6 +24,7 @@ import { getDepartmentPnl, type PnlReport } from "./pnl-actions";
 import { PayrollEditor } from "./payroll-editor";
 import { canManagePayroll, getPayrollMonth } from "./payroll-actions";
 import type { DeptSplit } from "@/lib/department-pnl";
+import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { FanCogsEditor } from "./fan-cogs-editor";
 import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
 import { getTestMode } from "@/lib/test-mode";
@@ -120,10 +121,14 @@ export default async function ManagementPage() {
   const alertGate = await getAlertGoLive();
   const goLiveCutoff = alertGoLiveCreatedAtFilter(alertGate); // { gt: Date } | undefined
   const createdFilter = goLiveCutoff ? { createdAt: goLiveCutoff } : {};
+  // Orders are recognised on their sale's payment / PO date (not creation), so a
+  // pre-launch order paid after go-live still counts. Everything else (stock,
+  // vouchers, purchasing, …) keys off its own activity/creation date above.
+  const goLiveFloorYMD = alertGate.on ? manilaYMD(alertGate.at) : null;
 
   const [wonQuotes, stockItems, commissions, prPending] = await Promise.all([
     prisma.quotation.findMany({
-      where: { inquiry: { status: "WON" }, ...createdFilter },
+      where: { inquiry: { status: "WON" } },
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
     prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),
@@ -311,6 +316,11 @@ export default async function ManagementPage() {
   for (const q of wonQuotes) {
     const sale = saleFromClassification(q.classification);
     if (!sale || !isSaleConfirmed(sale)) continue;
+    // Go-live gate on → skip orders recognised (paid / PO-dated) before launch day.
+    if (goLiveFloorYMD) {
+      const recAt = saleRecognitionDate(sale);
+      if (!recAt || manilaYMD(recAt) < goLiveFloorYMD) continue;
+    }
     orderCount++;
     const wf = readOrderWorkflow(q.classification);
     stageCount.set(wf.stage, (stageCount.get(wf.stage) ?? 0) + 1);
