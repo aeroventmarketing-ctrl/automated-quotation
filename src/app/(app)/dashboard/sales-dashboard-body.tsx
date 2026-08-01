@@ -163,7 +163,7 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
   });
   const monthCount = new Map(months.map((d) => [monthKey(d), 0]));
   // --- Salesperson (actual sales) + customers (quoted, last 30 days) -------
-  const salesMap = new Map<string, number>(); // total sales value per salesperson, 30d
+  const salesMap = new Map<string, number>(); // total sales value per salesperson, this calendar month
   const custMap = new Map<string, number>(); // quoted value per customer, 30d
   // --- Per-month total SALES value per salesperson (top salesperson of month) -
   const monthSales = new Map(months.map((d) => [monthKey(d), new Map<string, number>()]));
@@ -200,16 +200,16 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
       const smk = monthKey(sd);
       const sms = monthSales.get(smk);
       if (sms) sms.set(name, (sms.get(name) ?? 0) + deal);
-      if (sd >= since30) salesMap.set(name, (salesMap.get(name) ?? 0) + deal);
+      if (smk === currentMK) salesMap.set(name, (salesMap.get(name) ?? 0) + deal);
       if (smk === currentMK) salesMTD += deal;
     }
   }
 
-  // Top salesperson by total sales value, ranked per calendar month. This month's
-  // leader takes the spot as soon as this month has a sale; until then the most
-  // recent prior month's winner keeps it (e.g. June's winner is shown all through
-  // July until a July leader emerges and replaces them). Same person leading again
-  // → no visible change. The label names the month whose sales earned the spot.
+  // Top salesperson of the month — the winner of the most recently COMPLETED
+  // calendar month, held unchanged for the whole current month and rolling over
+  // only when the month ends. So all through August we show July's winner; on
+  // 1 Sept it switches to August's. In-progress-month sales never change it.
+  // The label names the month whose sales earned the spot.
   const leaderOf = (mk: string): { name: string; amount: number } | null => {
     const ms = monthSales.get(mk);
     if (!ms || ms.size === 0) return null;
@@ -219,7 +219,9 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
     return best ? { name: best, amount: bestV } : null;
   };
   let topSales: { name: string; amount: number; monthLabel: string } | null = null;
-  for (let i = months.length - 1; i >= 0; i--) {
+  // Start at the PREVIOUS month (skip the current, in-progress one) and take the
+  // most recent completed month that has a winner.
+  for (let i = months.length - 2; i >= 0; i--) {
     const found = leaderOf(monthKey(months[i]));
     if (found) {
       topSales = { ...found, monthLabel: months[i].toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
@@ -476,10 +478,10 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
         <Card>
           <CardHeader className="flex-row items-baseline justify-between space-y-0">
             <CardTitle>Sales by salesperson</CardTitle>
-            <span className="text-xs text-muted-foreground">total sales · last {LINE_DAYS} days</span>
+            <span className="text-xs text-muted-foreground">total sales · this month</span>
           </CardHeader>
           <CardContent className="space-y-2.5 pt-1">
-            {bySales.length === 0 && <p className="text-sm text-muted-foreground">No sales recorded in this window.</p>}
+            {bySales.length === 0 && <p className="text-sm text-muted-foreground">No sales recorded this month yet.</p>}
             {bySales.map((s) => (
               <div key={s.name} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 truncate text-xs text-muted-foreground" title={s.name}>{s.name}</span>
