@@ -1,9 +1,10 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { getPnlDetail, type PnlDetail, type PnlSaleDetail, type PnlSaleLine } from "./pnl-actions";
 import { DEPT_LABEL, type DeptKey } from "@/lib/department-pnl";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 
 export { getPnlDetail };
 export type { PnlDetail };
@@ -141,16 +142,22 @@ function VatTiles({ output, input, payable }: { output: number; input: number; p
 /** One department's drill-down: its VAT, its sales lines, and its expenses. */
 export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: DeptKey }) {
   const isOffice = deptKey === "office";
-  const rows: { s: PnlSaleDetail; l: PnlSaleLine; amt: number }[] = [];
+  const lineCogs = (l: PnlSaleLine) => (l.routing === "office_full" && l.officeCost != null ? l.officeCost : 0);
+  // Group the department's sale lines per order (quote number) so each order gets
+  // its own Line net / Less COGS / To-<dept> subtotal, under one grand total.
+  const groups: { s: PnlSaleDetail; lines: { l: PnlSaleLine; amt: number }[] }[] = [];
   for (const s of detail.sales) {
+    const lines: { l: PnlSaleLine; amt: number }[] = [];
     for (const l of s.lines) {
       const amt = isOffice ? l.officeShare : l.dept === deptKey ? l.deptShare : 0;
-      if (amt > 0) rows.push({ s, l, amt });
+      if (amt > 0) lines.push({ l, amt });
     }
+    if (lines.length) groups.push({ s, lines });
   }
-  const salesTotal = rows.reduce((a, r) => a + r.amt, 0);
-  const netTotal = rows.reduce((a, r) => a + r.l.net, 0);
-  const costTotal = rows.reduce((a, r) => a + (r.l.routing === "office_full" && r.l.officeCost != null ? r.l.officeCost : 0), 0);
+  const rowCount = groups.reduce((a, g) => a + g.lines.length, 0);
+  const salesTotal = groups.reduce((a, g) => a + g.lines.reduce((b, r) => b + r.amt, 0), 0);
+  const netTotal = groups.reduce((a, g) => a + g.lines.reduce((b, r) => b + r.l.net, 0), 0);
+  const costTotal = groups.reduce((a, g) => a + g.lines.reduce((b, r) => b + lineCogs(r.l), 0), 0);
   const exp = detail.expenses.filter((e) => e.dept === deptKey);
   const vat = detail.vatByDept[deptKey];
 
@@ -159,8 +166,8 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
       <VatTiles output={vat.output} input={vat.input} payable={vat.payable} />
 
       <div className="space-y-2">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{DEPT_LABEL[deptKey]} sales ({rows.length})</div>
-        {rows.length === 0 ? (
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{DEPT_LABEL[deptKey]} sales ({rowCount})</div>
+        {rowCount === 0 ? (
           <p className="text-xs text-muted-foreground">No sales for this department in the period.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -175,19 +182,35 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i} className="border-t align-top">
-                    <td className="py-1 pr-2"><SaleRef s={r.s} /></td>
-                    <td className="py-1 px-2">{r.l.label}{r.l.qty > 1 ? ` ×${r.l.qty}` : ""}<span className="ml-1 text-[10px] text-muted-foreground">{ROUTING_LABEL[r.l.routing] ?? ""}</span></td>
-                    <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(r.l.net)}</td>
-                    {isOffice && (
-                      <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
-                        {r.l.routing === "office_full" ? (r.l.officeCost != null ? `− ${formatCurrency(r.l.officeCost)}` : <span className="text-amber-600">no COGS</span>) : "—"}
-                      </td>
-                    )}
-                    <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(r.amt)}</td>
-                  </tr>
-                ))}
+                {groups.map((g, gi) => {
+                  const gNet = g.lines.reduce((a, r) => a + r.l.net, 0);
+                  const gCogs = g.lines.reduce((a, r) => a + lineCogs(r.l), 0);
+                  const gAmt = g.lines.reduce((a, r) => a + r.amt, 0);
+                  return (
+                    <Fragment key={`${g.s.quoteNumber}-${gi}`}>
+                      {g.lines.map((r, i) => (
+                        <tr key={i} className={cn("align-top", i === 0 && "border-t")}>
+                          <td className="py-1 pr-2">{i === 0 && <SaleRef s={g.s} />}</td>
+                          <td className="py-1 px-2">{r.l.label}{r.l.qty > 1 ? ` ×${r.l.qty}` : ""}<span className="ml-1 text-[10px] text-muted-foreground">{ROUTING_LABEL[r.l.routing] ?? ""}</span></td>
+                          <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(r.l.net)}</td>
+                          {isOffice && (
+                            <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
+                              {r.l.routing === "office_full" ? (r.l.officeCost != null ? `− ${formatCurrency(r.l.officeCost)}` : <span className="text-amber-600">no COGS</span>) : "—"}
+                            </td>
+                          )}
+                          <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(r.amt)}</td>
+                        </tr>
+                      ))}
+                      {/* Per-order subtotal */}
+                      <tr className="bg-muted/40 text-[11px] font-medium">
+                        <td className="py-1 pr-2 text-right text-muted-foreground" colSpan={2}>Subtotal · {g.s.quoteNumber}</td>
+                        <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(gNet)}</td>
+                        {isOffice && <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">− {formatCurrency(gCogs)}</td>}
+                        <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(gAmt)}</td>
+                      </tr>
+                    </Fragment>
+                  );
+                })}
                 <tr className="border-t-2 font-semibold">
                   <td className="py-1 pr-2" colSpan={2}>Total sales</td>
                   <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(netTotal)}</td>
