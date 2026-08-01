@@ -55,9 +55,9 @@ export default async function SalesReportPage({
                   <thead>
                     <tr className="text-left text-[11px] text-gray-500">
                       <th className="py-1 pr-2 font-medium">Date</th>
+                      <th className="py-1 px-2 font-medium">Quote #</th>
                       <th className="py-1 px-2 font-medium">Customer</th>
                       <th className="py-1 px-2 font-medium">Source</th>
-                      <th className="py-1 px-2 text-center font-medium">Quotes</th>
                       <th className="py-1 px-2 text-right font-medium">Value</th>
                       <th className="py-1 px-2 text-right font-medium">Collected</th>
                       <th className="py-1 pl-2 text-right font-medium">Balance</th>
@@ -65,11 +65,11 @@ export default async function SalesReportPage({
                   </thead>
                   <tbody>
                     {g.rows.map((r) => (
-                      <tr key={r.inquiryId} className="border-t border-gray-100">
+                      <tr key={r.quotationId} className="border-t border-gray-100">
                         <td className="py-1 pr-2 whitespace-nowrap">{formatDate(r.dateISO)}</td>
+                        <td className="py-1 px-2 font-mono text-[11px] whitespace-nowrap">{r.quoteNumber}</td>
                         <td className="py-1 px-2">{r.company}</td>
                         <td className="py-1 px-2 text-gray-600">{r.source}</td>
-                        <td className="py-1 px-2 text-center tabular-nums">{r.quotes}</td>
                         <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(r.value, report.currency)}</td>
                         <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(r.collected, report.currency)}</td>
                         <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(r.balance, report.currency)}</td>

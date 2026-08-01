@@ -16,13 +16,13 @@ const s = StyleSheet.create({
   sub: { flexDirection: "row", borderTopWidth: 1, borderColor: "#999", paddingVertical: 2, fontWeight: "bold" },
   grand: { flexDirection: "row", borderTopWidth: 2, borderColor: "#000", paddingVertical: 4, marginTop: 8, fontWeight: "bold" },
   h: { fontSize: 7, color: "#666" },
-  cDate: { width: "13%" },
-  cCust: { width: "31%" },
-  cSrc: { width: "12%", color: "#555" },
-  cQ: { width: "8%", textAlign: "center" },
-  cV: { width: "12%", textAlign: "right" },
-  cC: { width: "12%", textAlign: "right" },
-  cB: { width: "12%", textAlign: "right" },
+  cDate: { width: "11%" },
+  cQuote: { width: "17%" },
+  cCust: { width: "24%" },
+  cSrc: { width: "10%", color: "#555" },
+  cV: { width: "12.66%", textAlign: "right" },
+  cC: { width: "12.66%", textAlign: "right" },
+  cB: { width: "12.66%", textAlign: "right" },
 });
 
 const fmt = (n: number) => n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -48,26 +48,26 @@ export function SalesReportPdf({ report }: { report: SalesReport }) {
                 </View>
                 <View style={s.headRow}>
                   <Text style={[s.cDate, s.h]}>Date</Text>
+                  <Text style={[s.cQuote, s.h]}>Quote #</Text>
                   <Text style={[s.cCust, s.h]}>Customer</Text>
                   <Text style={[s.cSrc, s.h]}>Source</Text>
-                  <Text style={[s.cQ, s.h]}>Quotes</Text>
                   <Text style={[s.cV, s.h]}>Value</Text>
                   <Text style={[s.cC, s.h]}>Collected</Text>
                   <Text style={[s.cB, s.h]}>Balance</Text>
                 </View>
                 {g.rows.map((r) => (
-                  <View style={s.row} key={r.inquiryId}>
+                  <View style={s.row} key={r.quotationId}>
                     <Text style={s.cDate}>{day(r.dateISO)}</Text>
+                    <Text style={s.cQuote}>{r.quoteNumber}</Text>
                     <Text style={s.cCust}>{r.company}</Text>
                     <Text style={s.cSrc}>{r.source}</Text>
-                    <Text style={s.cQ}>{r.quotes}</Text>
                     <Text style={s.cV}>{fmt(r.value)}</Text>
                     <Text style={s.cC}>{fmt(r.collected)}</Text>
                     <Text style={s.cB}>{fmt(r.balance)}</Text>
                   </View>
                 ))}
                 <View style={s.sub}>
-                  <Text style={{ width: "64%" }}>Subtotal · {g.salesperson}</Text>
+                  <Text style={{ width: "62%" }}>Subtotal · {g.salesperson}</Text>
                   <Text style={s.cV}>{fmt(g.value)}</Text>
                   <Text style={s.cC}>{fmt(g.collected)}</Text>
                   <Text style={s.cB}>{fmt(g.balance)}</Text>
@@ -75,7 +75,7 @@ export function SalesReportPdf({ report }: { report: SalesReport }) {
               </View>
             ))}
             <View style={s.grand}>
-              <Text style={{ width: "64%" }}>GRAND TOTAL · {report.totals.count} won</Text>
+              <Text style={{ width: "62%" }}>GRAND TOTAL · {report.totals.count} won</Text>
               <Text style={s.cV}>{fmt(report.totals.value)}</Text>
               <Text style={s.cC}>{fmt(report.totals.collected)}</Text>
               <Text style={s.cB}>{fmt(report.totals.balance)}</Text>
