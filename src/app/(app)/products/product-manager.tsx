@@ -424,6 +424,12 @@ export function ProductManager({ products, suppliers, canManage, admin = false, 
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add product</Button>
               <BulkImport />
+              {products.length > 0 && (
+                <>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={exportCsv}>Download CSV</Button>
+                </>
+              )}
               <Link href="/products/labels" className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">Labels</Link>
               {unsourced > 0 && (
                 <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={busy} onClick={cleanupUnsourced}>
@@ -467,7 +473,8 @@ export function ProductManager({ products, suppliers, canManage, admin = false, 
           className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-sm hover:bg-accent" title={dir === "asc" ? "Ascending" : "Descending"}>
           {dir === "asc" ? "↑ Asc" : "↓ Desc"}
         </button>
-        {products.length > 0 && (
+        {/* Download stays available to view-only roles (who don't get the action row above). */}
+        {!canManage && products.length > 0 && (
           <div className="flex items-center gap-1.5">
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>

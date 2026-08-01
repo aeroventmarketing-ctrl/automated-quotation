@@ -687,6 +687,12 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add stock item</Button>
               <BulkImport />
+              {items.length > 0 && (
+                <>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={exportCsv}>Download CSV</Button>
+                </>
+              )}
               {dupCount > 0 && (
                 <Button size="sm" variant="outline" className="text-amber-700 hover:text-amber-700" disabled={busy} onClick={mergeDupes}>
                   {busy ? "…" : `Merge duplicates (${dupCount})`}
@@ -757,7 +763,8 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
             {statusFilter === "out" ? "Out of stock" : "Low stock"} ({filtered.length}) <X className="h-3.5 w-3.5" />
           </button>
         )}
-        {items.length > 0 && (
+        {/* Download stays available to view-only roles (who don't get the action row above). */}
+        {!canCreate && items.length > 0 && (
           <div className="flex items-center gap-1.5">
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>
