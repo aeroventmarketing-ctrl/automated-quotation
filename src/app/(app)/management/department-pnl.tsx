@@ -222,7 +222,7 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
           {" "}(Terms clients on PO date, others on payment date). Click a department — or Company — for its sales, expenses and VAT.
         </div>
         <div>
-          Sales are net of VAT: production lines keep net ÷ 1.3 with the balance to Office; for bought-in goods (KDK, AlphaAir, VFD, induction motors) Office keeps the margin — selling net less the Products-tab supplier cost (net). Expenses are material POs (net), cash vouchers released in the period, and payroll.
+          Sales are net of VAT: production lines keep net ÷ 1.3 with the balance to Office; for bought-in goods (KDK, AlphaAir, VFD, induction motors) Office keeps the margin — selling net less the item&apos;s COGS (the Products-tab supplier / unit price, net). Expenses are material POs (net), cash vouchers released in the period, and payroll.
         </div>
         <div>
           VAT is a pass-through, kept out of profit. Output VAT is 12% of VAT-charged sales (VAT-exclusive quotes excluded). Input VAT is 12% of purchases from VAT-inclusive (EWT-capable) suppliers — material POs and bought-in goods; cash vouchers and payroll carry none.
@@ -234,7 +234,7 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
         )}
         {report.officeCostUnmatched > 0 && (
           <div className="text-amber-700 dark:text-amber-500">
-            {report.officeCostUnmatched} bought-in line{report.officeCostUnmatched === 1 ? " has" : "s have"} no matching Products-tab supplier cost — Office income is overstated until the product (with a supplier price) is on file.
+            {report.officeCostUnmatched} bought-in line{report.officeCostUnmatched === 1 ? " has" : "s have"} no matching COGS (the Products-tab supplier / unit price) — Office income is overstated until the product (with a supplier price) is on file.
             {report.officeUnmatchedItems.length > 0 && (
               <span> Needs a supplier price: {report.officeUnmatchedItems.join(", ")}.</span>
             )}
