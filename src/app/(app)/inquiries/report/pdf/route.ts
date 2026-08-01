@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import React from "react";
 import { getCurrentUser } from "@/lib/auth";
-import { buildSalesReport } from "@/lib/sales-report";
+import { buildSalesReport, type ReportBasis } from "@/lib/sales-report";
 import { SalesReportPdf } from "@/lib/pdf/sales-report-pdf";
 
 export const runtime = "nodejs";
@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const from = ymd(req.nextUrl.searchParams.get("from"), `${today.slice(0, 7)}-01`);
   const to = ymd(req.nextUrl.searchParams.get("to"), today);
-  const report = await buildSalesReport(from, to);
+  const basis: ReportBasis = req.nextUrl.searchParams.get("basis") === "won" ? "won" : "created";
+  const report = await buildSalesReport(from, to, basis);
 
   const buf = await renderToBuffer(React.createElement(SalesReportPdf, { report }) as React.ReactElement<DocumentProps>);
   return new NextResponse(buf as unknown as BodyInit, {

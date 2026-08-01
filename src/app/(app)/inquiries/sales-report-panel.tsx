@@ -7,25 +7,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { emailSalesReport } from "./report/actions";
+import type { ReportBasis } from "@/lib/sales-report";
 
 /** WON sales report generator — pick a date range, then view / print / export /
  *  email the deals each salesperson closed. Shown at the bottom of the WON tab. */
 export function SalesReportPanel({ initialFrom, initialTo, emailReady }: { initialFrom: string; initialTo: string; emailReady: boolean }) {
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
+  const [basis, setBasis] = useState<ReportBasis>("created");
   const [showEmail, setShowEmail] = useState(false);
   const [recipient, setRecipient] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to);
-  const qs = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const qs = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&basis=${basis}`;
 
   async function send() {
     setBusy(true);
     setMsg(null);
     try {
-      const r = await emailSalesReport(from, to, recipient);
+      const r = await emailSalesReport(from, to, recipient, basis);
       setMsg({ ok: r.ok, text: r.message });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Send failed." });
@@ -43,7 +45,7 @@ export function SalesReportPanel({ initialFrom, initialTo, emailReady }: { initi
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Pick a date range; the report groups every WON inquiry by its salesperson with per-person and grand subtotals. View or print it, download Excel / PDF, or email it.
+          Pick a date range and basis; the report groups every WON inquiry by its salesperson with per-person and grand subtotals. <b>Created</b> dates each by its won quotation&rsquo;s creation date (the revision date if revised); <b>Won</b> by the payment date. View or print it, download Excel / PDF, or email it.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
@@ -53,6 +55,22 @@ export function SalesReportPanel({ initialFrom, initialTo, emailReady }: { initi
           <div className="space-y-1">
             <Label className="text-xs">To</Label>
             <Input type="date" className="h-9 w-40" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Date basis</Label>
+            <div className="inline-flex h-9 rounded-md border p-0.5">
+              {([["created", "Created"], ["won", "Won"]] as [ReportBasis, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setBasis(key)}
+                  title={key === "created" ? "Won quotation's creation date (revision date if revised)" : "Payment date"}
+                  className={`rounded px-3 text-xs font-medium transition-colors ${basis === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm" disabled={!valid}>

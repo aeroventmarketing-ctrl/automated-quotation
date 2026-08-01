@@ -4,8 +4,8 @@ import { Printer, FileSpreadsheet, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /** Print + export controls for the sales-report view (hidden when printing). */
-export function ReportPrintBar({ from, to }: { from: string; to: string }) {
-  const qs = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+export function ReportPrintBar({ from, to, basis }: { from: string; to: string; basis: string }) {
+  const qs = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&basis=${encodeURIComponent(basis)}`;
   return (
     <div className="flex flex-wrap items-center gap-2 print:hidden">
       <Button size="sm" onClick={() => window.print()}>

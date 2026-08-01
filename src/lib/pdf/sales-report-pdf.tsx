@@ -1,7 +1,7 @@
 import React from "react";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { COMPANY } from "@/lib/config";
-import type { SalesReport } from "@/lib/sales-report";
+import { REPORT_BASIS_LABEL, type SalesReport } from "@/lib/sales-report";
 
 const s = StyleSheet.create({
   page: { padding: 28, fontSize: 8, color: "#111" },
@@ -34,7 +34,7 @@ export function SalesReportPdf({ report }: { report: SalesReport }) {
       <Page size="A4" style={s.page}>
         <Text style={s.company}>{COMPANY.name}</Text>
         <Text style={s.title}>Sales Report — WON Inquiries (per Salesperson)</Text>
-        <Text style={s.meta}>{report.from} to {report.to}</Text>
+        <Text style={s.meta}>{report.from} to {report.to} · by {REPORT_BASIS_LABEL[report.basis]}</Text>
 
         {report.totals.count === 0 ? (
           <Text style={{ textAlign: "center", color: "#555", marginTop: 20 }}>No WON inquiries in this date range.</Text>

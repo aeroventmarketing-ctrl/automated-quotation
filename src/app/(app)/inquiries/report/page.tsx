@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { COMPANY } from "@/lib/config";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
-import { buildSalesReport } from "@/lib/sales-report";
+import { buildSalesReport, REPORT_BASIS_LABEL, type ReportBasis } from "@/lib/sales-report";
 import { ReportPrintBar } from "./report-print-bar";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +14,14 @@ function todayYmdManila(): string {
 export default async function SalesReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; basis?: string }>;
 }) {
   const sp = await searchParams;
   const today = todayYmdManila();
   const from = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : `${today.slice(0, 7)}-01`;
   const to = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : today;
-  const report = await buildSalesReport(from, to).catch(() => null);
+  const basis: ReportBasis = sp.basis === "won" ? "won" : "created";
+  const report = await buildSalesReport(from, to, basis).catch(() => null);
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-2 print:p-0">
@@ -28,7 +29,7 @@ export default async function SalesReportPage({
         <Link href="/inquiries?status=WON" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Back to WON inquiries
         </Link>
-        <ReportPrintBar from={from} to={to} />
+        <ReportPrintBar from={from} to={to} basis={basis} />
       </div>
 
       <div className="rounded-lg border bg-white p-6 text-black print:border-0 print:p-0">
@@ -36,7 +37,7 @@ export default async function SalesReportPage({
           <div className="text-lg font-bold">{COMPANY.name}</div>
           <div className="text-sm font-semibold">Sales Report — WON Inquiries (per Salesperson)</div>
           <div className="text-xs text-gray-600">
-            {formatDate(from)} – {formatDate(to)} · Generated {formatDateTime(new Date())}
+            {formatDate(from)} – {formatDate(to)} · by {REPORT_BASIS_LABEL[basis]} · Generated {formatDateTime(new Date())}
           </div>
         </div>
 

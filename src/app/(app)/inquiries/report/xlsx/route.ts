@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getCurrentUser } from "@/lib/auth";
 import { COMPANY } from "@/lib/config";
-import { buildSalesReport } from "@/lib/sales-report";
+import { buildSalesReport, REPORT_BASIS_LABEL, type ReportBasis } from "@/lib/sales-report";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const from = ymd(req.nextUrl.searchParams.get("from"), `${today.slice(0, 7)}-01`);
   const to = ymd(req.nextUrl.searchParams.get("to"), today);
-  const report = await buildSalesReport(from, to);
+  const basis: ReportBasis = req.nextUrl.searchParams.get("basis") === "won" ? "won" : "created";
+  const report = await buildSalesReport(from, to, basis);
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("WON Sales Report");
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   const sub = ws.addRow(["Sales Report — WON Inquiries (per Salesperson)"]);
   sub.font = { bold: true };
   ws.mergeCells(sub.number, 1, sub.number, 7);
-  ws.mergeCells(ws.addRow([`${from} to ${to}`]).number, 1, ws.rowCount, 7);
+  ws.mergeCells(ws.addRow([`${from} to ${to} · by ${REPORT_BASIS_LABEL[basis]}`]).number, 1, ws.rowCount, 7);
   ws.addRow([]);
 
   const header = (r: ExcelJS.Row) => { r.font = { bold: true }; r.eachCell((c) => (c.border = { bottom: { style: "thin" } })); };
