@@ -279,6 +279,34 @@ export function officeLineHaystack(description: string, specs: Specs): string {
     .join(" ");
 }
 
+// --- Wind Driven Roof Ventilator supplier cost ----------------------------
+// This bought-in roof ventilator is priced by throat diameter × material, so a
+// single Products-tab price can't express its cost. Supplier price (net /
+// VAT-exclusive) by material × throat diameter; "with paint" (Galvanized Iron
+// only) uses the G.I.-with-paint column. Mirrors the quotation selling grid.
+const WIND_VENT_SUPPLIER_COST: Record<string, Record<string, number>> = {
+  gi: { "12": 3500, "15": 5000, "24": 8000, "27": 8500, "32": 10000, "36": 15000 },
+  giPaint: { "12": 4500, "15": 6000, "24": 9000, "27": 9500, "32": 11000, "36": 16500 },
+  aluminum: { "12": 5950, "15": 9500, "24": 12500, "27": 14450, "32": 18500, "36": 24500 },
+  stainless: { "12": 8750, "15": 12000, "24": 20000, "27": 21250, "32": 28000, "36": 36000 },
+};
+/** Supplier COGS for a Wind Driven Roof Ventilator line, or null if not one. */
+export function windVentSupplierCost(specs: Specs): OfficeCostHit | null {
+  if (str(specs.type) !== "Wind Driven Roof Ventilator") return null;
+  const size = sizeKey(specs.sizeL ?? specs.size ?? specs.inches);
+  if (!size) return null;
+  const material = str(specs.material).toLowerCase();
+  let col: string | null = null;
+  if (/galvan/.test(material)) col = specs.windVentPaint ? "giPaint" : "gi";
+  else if (/alumin/.test(material)) col = "aluminum";
+  else if (/stainless/.test(material)) col = "stainless";
+  if (!col) return null;
+  const unitCost = WIND_VENT_SUPPLIER_COST[col]?.[size];
+  if (unitCost == null) return null;
+  // Prices are VAT-exclusive (net) — no creditable input VAT assumed.
+  return { unitCost, vatInclusive: false };
+}
+
 // --- Sale recognition -----------------------------------------------------
 /**
  * The date a confirmed sale is recognised: a Terms (PO) client is booked on the

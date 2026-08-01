@@ -22,6 +22,7 @@ import {
   fanCogsLookup,
   officeCostLookup,
   officeLineHaystack,
+  windVentSupplierCost,
   productLabel,
   manilaYMD,
   ymdInRange,
@@ -108,7 +109,13 @@ async function buildCostResolvers() {
   const resaleLookup = officeCostLookup(resaleEntries);
   const isOfficeResale = (haystack: string): boolean => resaleLookup(haystack) != null;
 
-  return { cogsOf, officeCostOf, supplierVatInclusive, isOfficeResale };
+  // Office cost for a bought-in line: a Wind Driven Roof Ventilator is priced
+  // from its own throat-diameter × material supplier grid; everything else falls
+  // back to the Products-tab name / model / SKU cost match.
+  const officeCostOfLine = (specs: Record<string, unknown>, haystack: string) =>
+    windVentSupplierCost(specs) ?? officeCostOf(haystack);
+
+  return { cogsOf, officeCostOf, officeCostOfLine, supplierVatInclusive, isOfficeResale };
 }
 
 /** Stock unit-cost lookup for the items sold across a set of counter sales. */
@@ -149,7 +156,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   let outputVat = 0;
   let inputVat = 0;
 
-  const { cogsOf, officeCostOf, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
+  const { cogsOf, officeCostOfLine, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
   const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales ---------------------------------------------------------------
@@ -187,7 +194,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         // Bought-in good: Office keeps the margin — selling net less the supplier
         // cost. The cost is netted here (not booked as a separate expense); its
         // input VAT is still creditable.
-        const hit = officeCostOf(haystack);
+        const hit = officeCostOfLine(specs, haystack);
         const cost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : 0;
         sales.office = round2(sales.office + round2(net - cost));
         if (hit?.vatInclusive && cost) inputVat = round2(inputVat + round2(cost * VAT_RATE));
@@ -339,7 +346,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error("Invalid date range.");
   const [lo, hi] = from <= to ? [from, to] : [to, from];
 
-  const { cogsOf, officeCostOf, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
+  const { cogsOf, officeCostOfLine, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
   const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales detail --------------------------------------------------------
@@ -386,7 +393,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         deptShare = cogs;
         officeShare = round2(net - cogs);
       } else if (routing === "office_full") {
-        const hit = officeCostOf(officeLineHaystack(it.descriptionSnapshot, specs));
+        const hit = officeCostOfLine(specs, officeLineHaystack(it.descriptionSnapshot, specs));
         officeCost = hit ? round2(hit.unitCost * it.qty * (1 - disc / 100)) : null;
         officeShare = round2(net - (officeCost ?? 0)); // margin: selling less supplier cost
         if (hit?.vatInclusive && officeCost) inputVatByDept.office = round2(inputVatByDept.office + round2(officeCost * VAT_RATE));
