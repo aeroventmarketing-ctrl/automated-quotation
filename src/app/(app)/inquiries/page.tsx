@@ -7,7 +7,10 @@ import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { TestModeBanner } from "@/components/test-mode-banner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { config } from "@/lib/config";
+import { emailConfigured } from "@/lib/email/resend";
 import { InquiriesTable } from "./inquiries-table";
+import { SalesReportPanel } from "./sales-report-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +84,7 @@ export default async function InquiriesPage({
     getCurrentUser(),
   ]);
   const admin = isAdmin(user);
+  const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const rows = inquiries.map((inq) => ({
     id: inq.id,
     company: inq.customer.company,
@@ -131,6 +135,16 @@ export default async function InquiriesPage({
           />
         </CardContent>
       </Card>
+
+      {/* WON sales report — date range, grouped per salesperson, view / print /
+          Excel / PDF / email. Shown when filtered to WON. */}
+      {status === "WON" && (
+        <SalesReportPanel
+          initialFrom={`${phToday.slice(0, 7)}-01`}
+          initialTo={phToday}
+          emailReady={emailConfigured() && !!config.followUpFromEmail}
+        />
+      )}
     </div>
   );
 }
