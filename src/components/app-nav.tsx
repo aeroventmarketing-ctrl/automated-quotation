@@ -61,9 +61,9 @@ const QC_ROLES = new Set<string>(["quality_inspector", "quality_inspector_2"]);
 const QC_DEAD_END_TABS = ["/inventory", "/products", "/requisitions"];
 
 export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
-  // Accounting sees Inventory (read-only, like the Plant Manager); Products and
-  // the standalone Sales Dashboard stay hidden. Keeps Commissions (payouts).
-  accounting: { hide: ["/products", "/dashboard"], show: ["/requisitions"] },
+  // Accounting sees Inventory (read-only, like the Plant Manager) and the Sales
+  // Dashboard; Products stays hidden. Keeps Commissions (payouts).
+  accounting: { hide: ["/products"], show: ["/requisitions", "/dashboard"] },
   // Consolidated-dashboard roles (except Accounting): hide the standalone Sales
   // Dashboard and the Commissions tab — sales-rep payout data none of them need
   // (only Accounting, who pays them, and Sales / Engineer / Admin keep it). Also

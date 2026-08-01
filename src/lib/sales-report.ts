@@ -71,7 +71,7 @@ export async function buildSalesReport(from: string, to: string, basis: ReportBa
       source: true,
       customer: { select: { company: true } },
       createdBy: { select: { name: true } },
-      quotations: { select: { classification: true, total: true, discountPct: true, vatMode: true, currency: true, createdAt: true } },
+      quotations: { select: { classification: true, total: true, discountPct: true, vatMode: true, currency: true, createdAt: true, preparedBy: { select: { name: true } } } },
     },
   });
 
@@ -89,18 +89,23 @@ export async function buildSalesReport(from: string, to: string, basis: ReportBa
       collected = round2(collected + collectedTotal(saleFromClassification(q.classification)));
     }
 
-    // The date this won inquiry is booked on, per the chosen basis.
+    // The date this won inquiry is booked on, and the salesperson credited, both
+    // from the "primary" won quotation — the report credits by the quotation's
+    // preparedBy (like the Sales Dashboard), not the inquiry creator.
+    type Q = (typeof inq.quotations)[number];
     let dateISO: string | null = null;
+    let primary: Q | undefined;
     if (basis === "won") {
-      const recs = confirmed
-        .map((q) => saleRecognitionDate(saleFromClassification(q.classification)))
-        .filter((d): d is string => !!d)
-        .sort();
-      dateISO = recs[0] ?? null; // earliest payment / PO date
+      for (const q of confirmed) {
+        const iso = saleRecognitionDate(saleFromClassification(q.classification));
+        if (iso && (dateISO == null || iso < dateISO)) { dateISO = iso; primary = q; } // earliest payment / PO date
+      }
     } else {
       const pool = confirmed.length ? confirmed : inq.quotations;
-      const dates = pool.map(quoteCreatedISO).sort();
-      dateISO = dates[dates.length - 1] ?? inq.createdAt.toISOString(); // latest revision's date
+      for (const q of pool) {
+        const iso = quoteCreatedISO(q);
+        if (dateISO == null || iso > dateISO) { dateISO = iso; primary = q; } // latest revision's date
+      }
     }
     if (!dateISO) continue; // "won" with no payment date yet → not booked
     const ymd = manilaYMD(dateISO);
@@ -116,7 +121,7 @@ export async function buildSalesReport(from: string, to: string, basis: ReportBa
       collected,
       balance: round2(Math.max(0, value - collected)),
     };
-    const key = inq.createdBy.name || "—";
+    const key = primary?.preparedBy?.name || inq.createdBy.name || "—";
     (byPerson.get(key) ?? byPerson.set(key, []).get(key)!).push(row);
   }
 
