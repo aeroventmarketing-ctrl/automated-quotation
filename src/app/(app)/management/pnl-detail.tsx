@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import Link from "next/link";
-import { getPnlDetail, type PnlDetail, type PnlSaleDetail, type PnlSaleLine } from "./pnl-actions";
+import { getPnlDetail, type PnlDetail, type PnlSaleDetail, type PnlSaleLine, type PnlOrderAmount } from "./pnl-actions";
 import { DEPT_LABEL, type DeptKey } from "@/lib/department-pnl";
 import { formatCurrency, cn } from "@/lib/utils";
 
@@ -74,29 +74,33 @@ export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
                     </tr>
                   )),
                 )}
-                {detail.markupIncome !== 0 && (
-                  <tr className="border-t-2 font-medium">
-                    <td className="py-1 pr-2" colSpan={2}>Income from Mark up <span className="text-[10px] text-muted-foreground">quote mark-ups → Office</span></td>
-                    <td className="py-1 px-2 text-muted-foreground">—</td>
-                    <td className="py-1 px-2 text-right text-muted-foreground">—</td>
-                    <td className="py-1 px-2 text-right text-muted-foreground">—</td>
-                    <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(detail.markupIncome)}</td>
-                    <td className="py-1 pl-2 text-right text-muted-foreground">—</td>
+                {detail.markupByOrder.map((o) => (
+                  <tr key={`mk-${o.quotationId}`} className="border-t">
+                    <td className="py-1 pr-2 align-top">
+                      <Link href={o.href ?? `/quotations/${o.quotationId}`} className="font-mono text-[11px] text-primary hover:underline">{o.quoteNumber}</Link>
+                      <div className="text-[10px] text-muted-foreground">{o.customer}</div>
+                    </td>
+                    <td className="py-1 px-2 align-top font-medium">Income from Mark up</td>
+                    <td className="py-1 px-2 align-top text-muted-foreground">—</td>
+                    <td className="py-1 px-2 text-right align-top text-muted-foreground">—</td>
+                    <td className="py-1 px-2 text-right align-top text-muted-foreground">—</td>
+                    <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(o.amount)}</td>
+                    <td className="py-1 pl-2 text-right align-top text-muted-foreground">—</td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
-      <ExpenseTable items={detail.expenses} extra={{ label: "Client Discounts", amount: detail.clientDiscounts }} />
+      <ExpenseTable items={detail.expenses} extra={{ label: "Client Discount", rows: detail.discountByOrder }} />
     </div>
   );
 }
 
-function ExpenseTable({ items, extra }: { items: PnlDetail["expenses"]; extra?: { label: string; amount: number } | null }) {
-  const hasExtra = !!extra && extra.amount !== 0;
-  const count = items.length + (hasExtra ? 1 : 0);
+function ExpenseTable({ items, extra }: { items: PnlDetail["expenses"]; extra?: { label: string; rows: PnlOrderAmount[] } | null }) {
+  const extraRows = extra?.rows ?? [];
+  const count = items.length + extraRows.length;
   return (
     <div className="space-y-2">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expense detail ({count})</div>
@@ -124,15 +128,18 @@ function ExpenseTable({ items, extra }: { items: PnlDetail["expenses"]; extra?: 
                   <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(e.amount)}</td>
                 </tr>
               ))}
-              {hasExtra && (
-                <tr className="border-t">
+              {extraRows.map((r) => (
+                <tr key={`x-${r.quotationId}`} className="border-t">
                   <td className="py-1 pr-2 text-muted-foreground">—</td>
                   <td className="py-1 px-2 font-medium">{extra!.label}</td>
-                  <td className="py-1 px-2 text-muted-foreground">—</td>
+                  <td className="py-1 px-2">
+                    <Link href={r.href ?? `/quotations/${r.quotationId}`} className="font-mono text-[11px] text-primary hover:underline">{r.quoteNumber}</Link>
+                    <span className="ml-1 text-[10px] text-muted-foreground">{r.customer}</span>
+                  </td>
                   <td className="py-1 px-2">{DEPT_LABEL.office}</td>
-                  <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(extra!.amount)}</td>
+                  <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(r.amount)}</td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
@@ -183,7 +190,6 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
   const vat = detail.vatByDept[deptKey];
   // Office also carries the quote mark-ups (income) and client discounts (expense).
   const markup = isOffice ? detail.markupIncome : 0;
-  const discounts = isOffice ? detail.clientDiscounts : 0;
 
   return (
     <div className="space-y-4">
@@ -235,14 +241,18 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                     </Fragment>
                   );
                 })}
-                {isOffice && markup !== 0 && (
-                  <tr className="border-t">
-                    <td className="py-1 pr-2" colSpan={2}><span className="font-medium">Income from Mark up</span> <span className="text-[10px] text-muted-foreground">quote mark-ups</span></td>
+                {isOffice && detail.markupByOrder.map((o) => (
+                  <tr key={`mk-${o.quotationId}`} className="border-t align-top">
+                    <td className="py-1 pr-2">
+                      <Link href={o.href ?? `/quotations/${o.quotationId}`} className="font-mono text-[11px] text-primary hover:underline">{o.quoteNumber}</Link>
+                      <div className="text-[10px] text-muted-foreground">{o.customer}</div>
+                    </td>
+                    <td className="py-1 px-2"><span className="font-medium">Income from Mark up</span></td>
                     <td className="py-1 px-2 text-right text-muted-foreground">—</td>
                     <td className="py-1 px-2 text-right text-muted-foreground">—</td>
-                    <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(markup)}</td>
+                    <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(o.amount)}</td>
                   </tr>
-                )}
+                ))}
                 <tr className="border-t-2 font-semibold">
                   <td className="py-1 pr-2" colSpan={2}>Total sales</td>
                   <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(netTotal)}</td>
@@ -255,7 +265,7 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
         )}
       </div>
 
-      <ExpenseTable items={exp} extra={isOffice ? { label: "Client Discounts", amount: discounts } : null} />
+      <ExpenseTable items={exp} extra={isOffice ? { label: "Client Discount", rows: detail.discountByOrder } : null} />
     </div>
   );
 }

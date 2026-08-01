@@ -373,6 +373,14 @@ export interface PnlVatSupplier {
   supplier: string;
   input: number;
 }
+/** A per-order amount (mark-up income / client discount) with a link to the order. */
+export interface PnlOrderAmount {
+  quotationId: string;
+  href?: string;
+  quoteNumber: string;
+  customer: string;
+  amount: number;
+}
 export interface PnlDetail {
   from: string;
   to: string;
@@ -383,6 +391,8 @@ export interface PnlDetail {
   vatInputBySupplier: PnlVatSupplier[];
   markupIncome: number; // "Income from Mark up" — Office income (net)
   clientDiscounts: number; // "Client Discounts" — Office expense (net)
+  markupByOrder: PnlOrderAmount[]; // mark-up income per order (clickable)
+  discountByOrder: PnlOrderAmount[]; // client discount per order (clickable)
 }
 
 /**
@@ -416,6 +426,8 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const inputVatByDept = zeroSplit();
   let markupIncome = 0;
   let clientDiscounts = 0;
+  const markupByOrder: PnlOrderAmount[] = [];
+  const discountByOrder: PnlOrderAmount[] = [];
   // Output VAT per order, and input VAT per supplier — the two VAT breakdowns.
   const vatOutputByOrder: PnlVatOrder[] = [];
   const inputVatBySupplier = new Map<string, number>();
@@ -475,16 +487,18 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost });
     }
     if (!lines.length) continue;
+    const customer = q.inquiry?.customer?.company ?? "—";
     // Quote-level mark-up → Office income; discount → Office expense (both net).
     const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, readPricing(q.classification, Number(q.discountPct)));
     markupIncome = round2(markupIncome + markupNet);
     clientDiscounts = round2(clientDiscounts + discountNet);
+    if (markupNet > 0) markupByOrder.push({ quotationId: q.id, quoteNumber: q.quoteNumber, customer, amount: markupNet });
+    if (discountNet > 0) discountByOrder.push({ quotationId: q.id, quoteNumber: q.quoteNumber, customer, amount: discountNet });
     if (chargesVat) {
       const adj = round2(round2(markupNet * VAT_RATE) - round2(discountNet * VAT_RATE));
       outputVatByDept.office = round2(outputVatByDept.office + adj);
       orderOutputVat = round2(orderOutputVat + adj);
     }
-    const customer = q.inquiry?.customer?.company ?? "—";
     sales.push({
       quotationId: q.id,
       quoteNumber: q.quoteNumber,
@@ -590,6 +604,8 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const vatInputBySupplier: PnlVatSupplier[] = [...inputVatBySupplier.entries()]
     .map(([supplier, input]) => ({ supplier, input }))
     .sort((a, b) => b.input - a.input || a.supplier.localeCompare(b.supplier));
+  markupByOrder.sort((a, b) => b.amount - a.amount || a.quoteNumber.localeCompare(b.quoteNumber));
+  discountByOrder.sort((a, b) => b.amount - a.amount || a.quoteNumber.localeCompare(b.quoteNumber));
 
-  return { from: lo, to: hi, sales, expenses, vatByDept, vatOutputByOrder, vatInputBySupplier, markupIncome, clientDiscounts };
+  return { from: lo, to: hi, sales, expenses, vatByDept, vatOutputByOrder, vatInputBySupplier, markupIncome, clientDiscounts, markupByOrder, discountByOrder };
 }
