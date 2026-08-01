@@ -184,6 +184,7 @@ interface LineSpecs {
   canvassUnit?: string; // canvass connector pricing basis ("per meter" / "per box")
   powderCoated?: boolean; // accessory powder-coat finish flag
   insectScreen?: boolean; // Air Terminals (except Vent Cap): insect screen, +20% on the price
+  windVentPaint?: boolean; // Wind Driven Roof Ventilator: "G.I. with Paint" option (+₱1,500 net, Galvanized Iron only)
   movement?: string; // motorized damper movement (open/close, modulating, adjustable)
   // Air-curtain client inputs (installation height + door width with units).
   acHeight?: number | null;
@@ -1536,11 +1537,17 @@ const WIND_VENT_PRICE: Record<string, Record<string, number>> = {
   Aluminum: { "12": 8896, "15": 12708, "24": 17193, "27": 21603, "32": 21678, "36": 27658 },
   "Stainless Steel": { "12": 13082, "15": 17940, "24": 29900, "27": 31769, "32": 41860, "36": 53820 },
 };
+// "With paint" is a Galvanized Iron option only (Aluminum / Stainless are left
+// unpainted) — it adds a flat ₱1,500 (net) on the chosen throat diameter.
+const WIND_VENT_PAINT_ADD = 1500;
+const windVentPainted = (specs: LineSpecs): boolean => !!specs.windVentPaint && specs.material === "Galvanized Iron";
 const isWindVent = (specs: { type: string }): boolean => specs.type === "Wind Driven Roof Ventilator";
 /** Net (VAT-exclusive) price for a roof ventilator by material × throat diameter, or null. */
 function windVentNet(specs: LineSpecs): number | null {
   if (!WIND_VENT_MATERIALS.includes(specs.material) || !specs.sizeL) return null;
-  return WIND_VENT_PRICE[specs.material]?.[specs.sizeL] ?? null;
+  const base = WIND_VENT_PRICE[specs.material]?.[specs.sizeL];
+  if (base == null) return null;
+  return base + (windVentPainted(specs) ? WIND_VENT_PAINT_ADD : 0);
 }
 /** Auto unit price (VAT-inclusive, as stored) for a roof ventilator, or null. */
 function windVentUnitPrice(specs: LineSpecs, vatRate: number): number | null {
@@ -1552,7 +1559,7 @@ function buildWindVentDescription(specs: LineSpecs): string {
   const lines: string[] = [];
   if (specs.type) lines.push(specs.type);
   if (specs.sizeL) lines.push(`${specs.sizeL}" Throat Diameter`);
-  if (WIND_VENT_MATERIALS.includes(specs.material)) lines.push(`${accMaterialLabel(specs.material)} Material`);
+  if (WIND_VENT_MATERIALS.includes(specs.material)) lines.push(`${accMaterialLabel(specs.material)}${windVentPainted(specs) ? " with Paint" : ""} Material`);
   return lines.join("\n");
 }
 // Aluminum Duct (Other Products / Aerovent, MaxAir): sold per size × 10 m box.
@@ -3124,6 +3131,11 @@ export function QuotationBuilder({
         if (specs.material !== "Black Iron") specs.ductPainted = false;
         // Insect Screen is an Air Terminals option (not Vent Cap) — drop when N/A.
         if (!insectScreenApplies(specs)) specs.insectScreen = false;
+        // Wind Driven Roof Ventilator "with paint" is a Galvanized Iron option
+        // only — force GI (Aluminum / Stainless are unpainted).
+        if (isWindVent(specs) && specs.windVentPaint && specs.material !== "Galvanized Iron") {
+          specs.material = "Galvanized Iron";
+        }
         // Air Duct: switching shape (Round ↔ Square/Rectangle) converts the cross
         // section by equal area, rounding UP to the next even number (20×20 → Ø24;
         // Ø24 → 22×22). The calc types use the A/B fields; other air ducts use the
@@ -4083,8 +4095,16 @@ export function QuotationBuilder({
                 onChange={(e) => applyAccessory(l.id, { material: e.target.value })}
               >
                 <option value="" disabled>Material…</option>
-                {WIND_VENT_MATERIALS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                {(c.windVentPaint ? ["Galvanized Iron"] : WIND_VENT_MATERIALS).map((m) => (<option key={m} value={m}>{m}</option>))}
               </Select>
+              {/* "With paint" is a Galvanized Iron option (+₱1,500 net). Ticking it
+                  forces GI and hides Aluminum / Stainless (both left unpainted). */}
+              <label className="flex h-9 items-center gap-1.5 whitespace-nowrap text-sm">
+                <input type="checkbox" className="h-4 w-4" disabled={!editable || !c.type}
+                  checked={!!c.windVentPaint}
+                  onChange={(e) => applyAccessory(l.id, { windVentPaint: e.target.checked, ...(e.target.checked ? { material: "Galvanized Iron" } : {}) })} />
+                With paint (G.I. +₱1,500)
+              </label>
             </>
           ) : isAluDuct(c) ? (
             // Aluminum Duct: size dropdown (per size × 10 m).
