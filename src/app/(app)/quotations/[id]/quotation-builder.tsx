@@ -2760,17 +2760,10 @@ export function QuotationBuilder({
   // (priced VAT-exclusive when the quote is in an exclusive mode); the catalogue
   // price is stored VAT-inclusive and the mode strips/adds VAT for display.
   const effectiveVatMode = vatMode;
-  // Gross (VAT-inclusive) line total. Normally qty × unit price; for the Duct
-  // Angle corner it's VAT applied to the NET line total — round2(netUnit × qty)
-  // × 1.12 — so the net matches the per-piece sheet exactly, with no per-unit
-  // gross rounding drift at large quantities.
-  const lineGross = (l: Line): number => {
-    if (l.specs.category === "Ventilation Accessories" && l.specs.type === "Duct Angle corner") {
-      const netUnit = round2(l.unitPrice / (1 + vatRate));
-      return round2(round2(netUnit * l.qty) * (1 + vatRate));
-    }
-    return round2(l.qty * l.unitPrice);
-  };
+  // Gross (VAT-inclusive) line total = quantity × unit price, for every product
+  // (the Duct Angle corner included, so 500 × ₱8 reads as exactly ₱4,000 rather
+  // than net-rounding to ₱3,998.40).
+  const lineGross = (l: Line): number => round2(l.qty * l.unitPrice);
   const totals = useMemo(() => {
     const gross = lines.reduce((a, l) => a + lineGross(l), 0); // VAT-inclusive
     const net = gross / (1 + vatRate);
