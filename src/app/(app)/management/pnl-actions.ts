@@ -11,6 +11,7 @@ import { getProducts } from "@/lib/product-catalog";
 import { getOfficeResaleProductIds } from "@/lib/office-resale";
 import { getSuppliers } from "@/lib/suppliers";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
+import { getAlertGoLive, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
 import { payrollExpenseForRange } from "./payroll-actions";
 import {
   PNL_DEPARTMENTS,
@@ -34,6 +35,24 @@ import {
 
 const VAT_RATE = config.vatRate || 0.12;
 const PROD_DEPT_KEYS = new Set<DeptKey>(["fans", "duct", "accessories", "motor"]);
+
+/** The later of two `createdAt > x` cutoffs (test-mode and the alerts go-live gate). */
+function laterCutoff(a: { gt: Date } | undefined, b: { gt: Date } | undefined): { gt: Date } | undefined {
+  if (a && b) return { gt: a.gt > b.gt ? a.gt : b.gt };
+  return a ?? b;
+}
+
+/**
+ * The P&L's createdAt cutoff: hide everything created before the test-mode cutoff
+ * AND/OR the alerts go-live moment (whichever is later). While the go-live gate is
+ * on, the P&L — like the rest of the dashboard — shows only post-go-live activity.
+ */
+async function pnlCreatedCutoff(): Promise<{ gt: Date } | undefined> {
+  return laterCutoff(
+    testModeCreatedAtFilter(await getTestMode()),
+    alertGoLiveCreatedAtFilter(await getAlertGoLive()),
+  );
+}
 
 export interface PnlRow {
   key: DeptKey;
@@ -175,7 +194,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   let clientDiscounts = 0;
 
   const { cogsOf, officeCostOfLine, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
-  const cutoff = testModeCreatedAtFilter(await getTestMode());
+  const cutoff = await pnlCreatedCutoff();
 
   // --- Sales ---------------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
@@ -407,7 +426,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const [lo, hi] = from <= to ? [from, to] : [to, from];
 
   const { cogsOf, officeCostOfLine, supplierVatInclusive, isOfficeResale } = await buildCostResolvers();
-  const cutoff = testModeCreatedAtFilter(await getTestMode());
+  const cutoff = await pnlCreatedCutoff();
 
   // --- Sales detail --------------------------------------------------------
   const quotations = await prisma.quotation.findMany({
