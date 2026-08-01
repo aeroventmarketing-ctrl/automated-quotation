@@ -31,7 +31,7 @@ function SaleRef({ s }: { s: PnlSaleDetail }) {
 
 function CostNote({ l }: { l: PnlSaleLine }) {
   if (l.routing === "fan") return l.cogs && l.cogs > 0 ? <>{formatCurrency(l.cogs)}</> : <span className="text-amber-600">no COGS</span>;
-  if (l.routing === "office_full") return l.officeCost != null ? <span className="text-muted-foreground">−{formatCurrency(l.officeCost)}</span> : <span className="text-amber-600">no cost</span>;
+  if (l.routing === "office_full") return l.officeCost != null ? <span className="text-muted-foreground">−{formatCurrency(l.officeCost)}</span> : <span className="text-amber-600">no COGS</span>;
   return <span className="text-muted-foreground">—</span>;
 }
 
@@ -54,7 +54,7 @@ export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
                   <th className="py-1.5 px-2 text-right font-medium">Net</th>
                   <th className="py-1.5 px-2 text-right font-medium">Dept</th>
                   <th className="py-1.5 px-2 text-right font-medium">Office</th>
-                  <th className="py-1.5 pl-2 text-right font-medium">COGS / cost</th>
+                  <th className="py-1.5 pl-2 text-right font-medium">COGS</th>
                 </tr>
               </thead>
               <tbody>
@@ -170,7 +170,7 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                   <th className="py-1.5 pr-2 text-left font-medium">Date · Quote · Customer</th>
                   <th className="py-1.5 px-2 text-left font-medium">Item</th>
                   <th className="py-1.5 px-2 text-right font-medium">Line net</th>
-                  {isOffice && <th className="py-1.5 px-2 text-right font-medium">Less cost</th>}
+                  {isOffice && <th className="py-1.5 px-2 text-right font-medium">Less COGS</th>}
                   <th className="py-1.5 pl-2 text-right font-medium">To {DEPT_LABEL[deptKey]}</th>
                 </tr>
               </thead>
@@ -182,7 +182,7 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                     <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(r.l.net)}</td>
                     {isOffice && (
                       <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
-                        {r.l.routing === "office_full" ? (r.l.officeCost != null ? `− ${formatCurrency(r.l.officeCost)}` : <span className="text-amber-600">no cost</span>) : "—"}
+                        {r.l.routing === "office_full" ? (r.l.officeCost != null ? `− ${formatCurrency(r.l.officeCost)}` : <span className="text-amber-600">no COGS</span>) : "—"}
                       </td>
                     )}
                     <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(r.amt)}</td>
