@@ -38,6 +38,7 @@ function CostNote({ l }: { l: PnlSaleLine }) {
 
 /** The full audit view — every sale and every expense (the Company drill-down). */
 export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
+  const markupMap = new Map(detail.markupByOrder.map((o) => [o.quotationId, o.amount]));
   return (
     <div className="space-y-5">
       <div className="space-y-2">
@@ -59,35 +60,37 @@ export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
                 </tr>
               </thead>
               <tbody>
-                {detail.sales.map((s) =>
-                  s.lines.map((l, i) => (
-                    <tr key={`${s.quoteNumber}-${i}`} className={i === 0 ? "border-t" : ""}>
-                      <td className="py-1 pr-2 align-top">{i === 0 && <SaleRef s={s} />}</td>
-                      <td className="py-1 px-2 align-top">{l.label}{l.qty > 1 ? ` ×${l.qty}` : ""}</td>
-                      <td className="py-1 px-2 align-top text-muted-foreground">{ROUTING_LABEL[l.routing] ?? l.routing}</td>
-                      <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(l.net)}</td>
-                      <td className="py-1 px-2 text-right align-top tabular-nums">
-                        {l.deptShare > 0 ? <span>{formatCurrency(l.deptShare)}<span className="ml-1 text-[10px] text-muted-foreground">{DEPT_LABEL[l.dept]}</span></span> : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(l.officeShare)}</td>
-                      <td className="py-1 pl-2 text-right align-top tabular-nums"><CostNote l={l} /></td>
-                    </tr>
-                  )),
-                )}
-                {detail.markupByOrder.map((o) => (
-                  <tr key={`mk-${o.quotationId}`} className="border-t">
-                    <td className="py-1 pr-2 align-top">
-                      <Link href={o.href ?? `/quotations/${o.quotationId}`} className="font-mono text-[11px] text-primary hover:underline">{o.quoteNumber}</Link>
-                      <div className="text-[10px] text-muted-foreground">{o.customer}</div>
-                    </td>
-                    <td className="py-1 px-2 align-top font-medium">Income from Mark up</td>
-                    <td className="py-1 px-2 align-top text-muted-foreground">—</td>
-                    <td className="py-1 px-2 text-right align-top text-muted-foreground">—</td>
-                    <td className="py-1 px-2 text-right align-top text-muted-foreground">—</td>
-                    <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(o.amount)}</td>
-                    <td className="py-1 pl-2 text-right align-top text-muted-foreground">—</td>
-                  </tr>
-                ))}
+                {detail.sales.map((s) => {
+                  const mk = markupMap.get(s.quotationId) ?? 0;
+                  return (
+                    <Fragment key={s.quoteNumber}>
+                      {s.lines.map((l, i) => (
+                        <tr key={i} className={i === 0 ? "border-t" : ""}>
+                          <td className="py-1 pr-2 align-top">{i === 0 && <SaleRef s={s} />}</td>
+                          <td className="py-1 px-2 align-top">{l.label}{l.qty > 1 ? ` ×${l.qty}` : ""}</td>
+                          <td className="py-1 px-2 align-top text-muted-foreground">{ROUTING_LABEL[l.routing] ?? l.routing}</td>
+                          <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(l.net)}</td>
+                          <td className="py-1 px-2 text-right align-top tabular-nums">
+                            {l.deptShare > 0 ? <span>{formatCurrency(l.deptShare)}<span className="ml-1 text-[10px] text-muted-foreground">{DEPT_LABEL[l.dept]}</span></span> : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(l.officeShare)}</td>
+                          <td className="py-1 pl-2 text-right align-top tabular-nums"><CostNote l={l} /></td>
+                        </tr>
+                      ))}
+                      {mk > 0 && (
+                        <tr>
+                          <td className="py-1 pr-2" />
+                          <td className="py-1 px-2 font-medium">Income from Mark up</td>
+                          <td className="py-1 px-2 text-muted-foreground">—</td>
+                          <td className="py-1 px-2 text-right text-muted-foreground">—</td>
+                          <td className="py-1 px-2 text-right text-muted-foreground">—</td>
+                          <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(mk)}</td>
+                          <td className="py-1 pl-2 text-right text-muted-foreground">—</td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -190,6 +193,7 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
   const vat = detail.vatByDept[deptKey];
   // Office also carries the quote mark-ups (income) and client discounts (expense).
   const markup = isOffice ? detail.markupIncome : 0;
+  const markupMap = new Map(detail.markupByOrder.map((o) => [o.quotationId, o.amount]));
 
   return (
     <div className="space-y-4">
@@ -215,7 +219,8 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                 {groups.map((g, gi) => {
                   const gNet = g.lines.reduce((a, r) => a + r.l.net, 0);
                   const gCogs = g.lines.reduce((a, r) => a + lineCogs(r.l), 0);
-                  const gAmt = g.lines.reduce((a, r) => a + r.amt, 0);
+                  const gMarkup = isOffice ? (markupMap.get(g.s.quotationId) ?? 0) : 0;
+                  const gAmt = g.lines.reduce((a, r) => a + r.amt, 0) + gMarkup;
                   return (
                     <Fragment key={`${g.s.quoteNumber}-${gi}`}>
                       {g.lines.map((r, i) => (
@@ -231,6 +236,16 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                           <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(r.amt)}</td>
                         </tr>
                       ))}
+                      {/* Mark-up income booked to this same order */}
+                      {gMarkup > 0 && (
+                        <tr className="align-top">
+                          <td className="py-1 pr-2" />
+                          <td className="py-1 px-2"><span className="font-medium">Income from Mark up</span></td>
+                          <td className="py-1 px-2 text-right text-muted-foreground">—</td>
+                          {isOffice && <td className="py-1 px-2 text-right text-muted-foreground">—</td>}
+                          <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(gMarkup)}</td>
+                        </tr>
+                      )}
                       {/* Per-order subtotal */}
                       <tr className="bg-muted/40 text-[11px] font-medium">
                         <td className="py-1 pr-2 text-right text-muted-foreground" colSpan={2}>Subtotal · {g.s.quoteNumber}</td>
@@ -241,18 +256,6 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                     </Fragment>
                   );
                 })}
-                {isOffice && detail.markupByOrder.map((o) => (
-                  <tr key={`mk-${o.quotationId}`} className="border-t align-top">
-                    <td className="py-1 pr-2">
-                      <Link href={o.href ?? `/quotations/${o.quotationId}`} className="font-mono text-[11px] text-primary hover:underline">{o.quoteNumber}</Link>
-                      <div className="text-[10px] text-muted-foreground">{o.customer}</div>
-                    </td>
-                    <td className="py-1 px-2"><span className="font-medium">Income from Mark up</span></td>
-                    <td className="py-1 px-2 text-right text-muted-foreground">—</td>
-                    <td className="py-1 px-2 text-right text-muted-foreground">—</td>
-                    <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(o.amount)}</td>
-                  </tr>
-                ))}
                 <tr className="border-t-2 font-semibold">
                   <td className="py-1 pr-2" colSpan={2}>Total sales</td>
                   <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(netTotal)}</td>
