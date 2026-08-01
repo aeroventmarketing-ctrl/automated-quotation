@@ -1,11 +1,12 @@
 /**
- * WON-inquiries sales report — the deals each salesperson closed in a date range,
- * grouped and subtotalled per salesperson. Shared by the on-screen/print view,
- * the Excel and PDF exports, and the email sender so all four stay in sync.
+ * WON sales report — the deals each salesperson closed in a date range, one row
+ * per confirmed order (won quotation), grouped and subtotalled per salesperson.
+ * Shared by the on-screen/print view, the Excel and PDF exports, and the email
+ * sender so all four stay in sync.
  *
- * The date range is on the inquiry's creation date (the "Created" column shown on
- * the Inquiries tab), bounded in Manila time. "Value" is the deal value of the
- * inquiry's confirmed sale(s) (payableTotal), and "Collected" what's been paid.
+ * One row per WON quotation (not per inquiry), so a customer with several orders
+ * shows each order on its own date. "Value" is the order's deal value
+ * (payableTotal), "Collected" what's been paid, credited to its preparer.
  */
 import { prisma } from "@/lib/db";
 import { payableTotal, round2 } from "@/lib/quote";
@@ -22,12 +23,12 @@ export type ReportBasis = "created" | "won";
 export const REPORT_BASIS_LABEL: Record<ReportBasis, string> = { created: "Quotation date", won: "Payment date" };
 
 export interface SalesReportRow {
-  inquiryId: string;
+  quotationId: string;
+  quoteNumber: string;
   company: string;
   source: string;
   dateISO: string;
-  quotes: number;
-  value: number; // deal value (VAT-inclusive), confirmed sale(s)
+  value: number; // deal value (VAT-inclusive) of this order
   collected: number;
   balance: number;
 }
@@ -71,58 +72,40 @@ export async function buildSalesReport(from: string, to: string, basis: ReportBa
       source: true,
       customer: { select: { company: true } },
       createdBy: { select: { name: true } },
-      quotations: { select: { classification: true, total: true, discountPct: true, vatMode: true, currency: true, createdAt: true, preparedBy: { select: { name: true } } } },
+      quotations: { select: { id: true, quoteNumber: true, classification: true, total: true, discountPct: true, vatMode: true, currency: true, createdAt: true, preparedBy: { select: { name: true } } } },
     },
   });
 
   const currency = inquiries.flatMap((i) => i.quotations).find((q) => q.currency)?.currency ?? "PHP";
   const byPerson = new Map<string, SalesReportRow[]>();
+  // One row per CONFIRMED order (won quotation) — a customer with several orders
+  // shows each on its own date, credited to that quotation's preparer.
   for (const inq of inquiries) {
-    const confirmed = inq.quotations.filter((q) => {
-      const s = saleFromClassification(q.classification);
-      return !!s && isSaleConfirmed(s);
-    });
-    let value = 0;
-    let collected = 0;
-    for (const q of confirmed) {
-      value = round2(value + payableTotal(q));
-      collected = round2(collected + collectedTotal(saleFromClassification(q.classification)));
-    }
+    for (const q of inq.quotations) {
+      const sale = saleFromClassification(q.classification);
+      if (!sale || !isSaleConfirmed(sale)) continue;
 
-    // The date this won inquiry is booked on, and the salesperson credited, both
-    // from the "primary" won quotation — the report credits by the quotation's
-    // preparedBy (like the Sales Dashboard), not the inquiry creator.
-    type Q = (typeof inq.quotations)[number];
-    let dateISO: string | null = null;
-    let primary: Q | undefined;
-    if (basis === "won") {
-      for (const q of confirmed) {
-        const iso = saleRecognitionDate(saleFromClassification(q.classification));
-        if (iso && (dateISO == null || iso < dateISO)) { dateISO = iso; primary = q; } // earliest payment / PO date
-      }
-    } else {
-      const pool = confirmed.length ? confirmed : inq.quotations;
-      for (const q of pool) {
-        const iso = quoteCreatedISO(q);
-        if (dateISO == null || iso > dateISO) { dateISO = iso; primary = q; } // latest revision's date
-      }
-    }
-    if (!dateISO) continue; // "won" with no payment date yet → not booked
-    const ymd = manilaYMD(dateISO);
-    if (ymd < lo || ymd > hi) continue;
+      // The date this order is booked on, per the chosen basis.
+      const dateISO = basis === "won" ? saleRecognitionDate(sale) : quoteCreatedISO(q);
+      if (!dateISO) continue; // "won" with no payment date yet → not booked
+      const ymd = manilaYMD(dateISO);
+      if (ymd < lo || ymd > hi) continue;
 
-    const row: SalesReportRow = {
-      inquiryId: inq.id,
-      company: inq.customer.company,
-      source: String(inq.source),
-      dateISO,
-      quotes: inq.quotations.length,
-      value,
-      collected,
-      balance: round2(Math.max(0, value - collected)),
-    };
-    const key = primary?.preparedBy?.name || inq.createdBy.name || "—";
-    (byPerson.get(key) ?? byPerson.set(key, []).get(key)!).push(row);
+      const value = round2(payableTotal(q));
+      const collected = round2(collectedTotal(sale));
+      const row: SalesReportRow = {
+        quotationId: q.id,
+        quoteNumber: q.quoteNumber,
+        company: inq.customer.company,
+        source: String(inq.source),
+        dateISO,
+        value,
+        collected,
+        balance: round2(Math.max(0, value - collected)),
+      };
+      const key = q.preparedBy?.name || inq.createdBy.name || "—";
+      (byPerson.get(key) ?? byPerson.set(key, []).get(key)!).push(row);
+    }
   }
 
   const groups: SalesReportGroup[] = [...byPerson.entries()]

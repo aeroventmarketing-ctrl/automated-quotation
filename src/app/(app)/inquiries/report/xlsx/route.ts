@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("WON Sales Report");
   ws.columns = [
-    { width: 14 }, { width: 34 }, { width: 12 }, { width: 9 }, { width: 16 }, { width: 16 }, { width: 16 },
+    { width: 12 }, { width: 22 }, { width: 32 }, { width: 12 }, { width: 16 }, { width: 16 }, { width: 16 },
   ];
   const money = '#,##0.00';
 
@@ -41,10 +41,10 @@ export async function GET(req: NextRequest) {
   for (const g of report.groups) {
     const gh = ws.addRow([g.salesperson, `${g.count} won`]);
     gh.font = { bold: true };
-    const head = ws.addRow(["Date", "Customer", "Source", "Quotes", "Value", "Collected", "Balance"]);
+    const head = ws.addRow(["Date", "Quote #", "Customer", "Source", "Value", "Collected", "Balance"]);
     header(head);
     for (const row of g.rows) {
-      const r = ws.addRow([row.dateISO.slice(0, 10), row.company, row.source, row.quotes, row.value, row.collected, row.balance]);
+      const r = ws.addRow([row.dateISO.slice(0, 10), row.quoteNumber, row.company, row.source, row.value, row.collected, row.balance]);
       [5, 6, 7].forEach((c) => (r.getCell(c).numFmt = money));
     }
     const st = ws.addRow([`Subtotal · ${g.salesperson}`, "", "", "", g.value, g.collected, g.balance]);
