@@ -149,6 +149,8 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
     }
   }
   const salesTotal = rows.reduce((a, r) => a + r.amt, 0);
+  const netTotal = rows.reduce((a, r) => a + r.l.net, 0);
+  const costTotal = rows.reduce((a, r) => a + (r.l.routing === "office_full" && r.l.officeCost != null ? r.l.officeCost : 0), 0);
   const exp = detail.expenses.filter((e) => e.dept === deptKey);
   const vat = detail.vatByDept[deptKey];
 
@@ -187,7 +189,9 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                   </tr>
                 ))}
                 <tr className="border-t-2 font-semibold">
-                  <td className="py-1 pr-2" colSpan={isOffice ? 4 : 3}>Total sales</td>
+                  <td className="py-1 pr-2" colSpan={2}>Total sales</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(netTotal)}</td>
+                  {isOffice && <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">− {formatCurrency(costTotal)}</td>}
                   <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(salesTotal)}</td>
                 </tr>
               </tbody>
