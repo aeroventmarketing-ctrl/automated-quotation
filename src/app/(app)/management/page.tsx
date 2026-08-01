@@ -27,7 +27,7 @@ import type { DeptSplit } from "@/lib/department-pnl";
 import { FanCogsEditor } from "./fan-cogs-editor";
 import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
 import { getTestMode } from "@/lib/test-mode";
-import { getAlertGoLive, alertsSuppressedNow } from "@/lib/alert-golive";
+import { getAlertGoLive, alertsSuppressedNow, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
 import { TestModeBanner } from "@/components/test-mode-banner";
 import { ActivityBell } from "@/components/activity-bell";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -114,14 +114,21 @@ function Bar({ label, value, max, color, tag, href }: { label: string; value: nu
 }
 
 export default async function ManagementPage() {
+  // Alerts go-live gate: while it's on, the whole dashboard is scoped to activity
+  // from the go-live moment onward — before launch it's blank, after launch only
+  // records created after go-live count, so the pre-launch backlog never shows.
+  const alertGate = await getAlertGoLive();
+  const goLiveCutoff = alertGoLiveCreatedAtFilter(alertGate); // { gt: Date } | undefined
+  const createdFilter = goLiveCutoff ? { createdAt: goLiveCutoff } : {};
+
   const [wonQuotes, stockItems, commissions, prPending] = await Promise.all([
     prisma.quotation.findMany({
-      where: { inquiry: { status: "WON" } },
+      where: { inquiry: { status: "WON" }, ...createdFilter },
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
-    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" } }).catch(() => []),
-    prisma.commission.findMany({ where: { paid: false }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } }, counterSale: { select: { paymentCleared: true } } } }).catch(() => []),
-    prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] } }, select: { id: true, quotationId: true } }).catch(() => []),
+    prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),
+    prisma.commission.findMany({ where: { paid: false, ...createdFilter }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } }, counterSale: { select: { paymentCleared: true } } } }).catch(() => []),
+    prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...createdFilter }, select: { id: true, quotationId: true } }).catch(() => []),
   ]);
 
   // Orders (by quotation id) that currently have an open purchase request → Phase 4.
@@ -151,12 +158,10 @@ export default async function ManagementPage() {
   }
   const scheduleApprovers = await scheduleApproverNames().catch(() => []);
 
-  // Alerts go-live gate: before launch, hold the Management Dashboard's live
-  // figures back — every card is shown as an empty box ("Available at go-live"),
-  // and only the team calendar stays active. Same switch that keeps the approval
-  // alarms silent until go-live; once the gate is off / the moment passes, the
-  // full dashboard returns automatically.
-  const alertGate = await getAlertGoLive();
+  // Before launch, hold the Management Dashboard's live figures back — every card
+  // is shown as an empty box ("Available at go-live"), and only the team calendar
+  // stays active. Once the moment passes, the dashboard returns, scoped to
+  // post-go-live activity (via `createdFilter` above) while the gate stays on.
   if (alertsSuppressedNow(alertGate)) {
     const gatedTiles = [
       { label: "Open Orders", icon: ClipboardList },
@@ -383,7 +388,8 @@ export default async function ManagementPage() {
 
   // Printed cash vouchers — number, details, and whether they tally with the
   // approved requests they cover (voucher total vs Σ current net PO amounts).
-  const printedVouchers = await getPrintedVouchers().catch(() => []);
+  const printedVouchers = (await getPrintedVouchers().catch(() => []))
+    .filter((v) => !goLiveCutoff || (v.printedAt && new Date(v.printedAt) > goLiveCutoff.gt));
   const voucherPrIds = [...new Set(printedVouchers.flatMap((v) => v.ids))];
   const voucherPrs = voucherPrIds.length
     ? await prisma.purchaseRequest.findMany({ where: { id: { in: voucherPrIds } }, select: { id: true, po: true, reconciliation: true } }).catch(() => [])
@@ -424,7 +430,7 @@ export default async function ManagementPage() {
   }[] = [];
   try {
     const crs = await prisma.cashRequest.findMany({
-      where: { status: { in: ["RECEIVED", "LIQUIDATED", "SETTLED"] } },
+      where: { status: { in: ["RECEIVED", "LIQUIDATED", "SETTLED"] }, ...createdFilter },
       orderBy: { createdAt: "desc" },
       take: 200,
       select: { id: true, number: true, purpose: true, amount: true, requestedByName: true, liquidation: true },
@@ -467,7 +473,7 @@ export default async function ManagementPage() {
   const returnRows: ReturnRow[] = [];
   if (seesReturns) {
     const retPrs = await prisma.purchaseRequest
-      .findMany({ select: { id: true, quotationId: true, dept: true, returns: true, quotation: { select: { quoteNumber: true } } } })
+      .findMany({ where: createdFilter, select: { id: true, quotationId: true, dept: true, returns: true, quotation: { select: { quoteNumber: true } } } })
       .catch(() => [] as { id: string; quotationId: string | null; dept: string | null; returns: unknown; quotation: { quoteNumber: string | null } | null }[]);
     for (const pr of retPrs) {
       const rets = coercePurchaseReturns(pr.returns);
@@ -496,10 +502,11 @@ export default async function ManagementPage() {
   }
   const openReturns = returnRows.filter((r) => !r.done).length;
 
-  // Counter sales (walk-in) completed this calendar month.
+  // Counter sales (walk-in) completed this calendar month — but not before go-live.
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const csStart = goLiveCutoff && goLiveCutoff.gt > monthStart ? goLiveCutoff.gt : monthStart;
   const counterMonth = await prisma.counterSale
-    .aggregate({ _sum: { total: true }, _count: true, where: { status: "COMPLETED", completedAt: { gte: monthStart } } })
+    .aggregate({ _sum: { total: true }, _count: true, where: { status: "COMPLETED", completedAt: { gte: csStart } } })
     .catch(() => null);
   const csMonthTotal = Number(counterMonth?._sum.total ?? 0);
   const csMonthCount = counterMonth?._count ?? 0;
