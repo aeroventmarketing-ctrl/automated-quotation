@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Check, Upload, Trash2, Plus, FileText, Download, Eye } from "lucide-react";
+import { Check, Upload, Trash2, Plus, FileText, Download, Eye, ScanLine } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { recordSale, clearSale } from "../actions";
 import {
@@ -74,6 +74,9 @@ export function SalePanel({
   const [note, setNote] = useState(initialSale?.note ?? "");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Per-payment deposit-slip read status (shown inline next to each proof).
+  const [slipStatus, setSlipStatus] = useState<Record<string, { tone: "muted" | "ok" | "bad"; text: string }>>({});
+  const [readingId, setReadingId] = useState<string | null>(null);
 
   const draft: SaleRecord = { arrangement, po, payments };
   const confirmed = isSaleConfirmed(draft);
@@ -137,41 +140,44 @@ export function SalePanel({
       const doc = await upload(file);
       if (!doc) return;
       setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
-      // AI-read the deposit slip / proof of payment: follow the machine-validated
-      // (or computer-generated) date + amount. Handwritten-only proofs aren't
-      // accepted — their figures are NOT auto-filled and only an admin can save
-      // a payment from them (enforced server-side in recordSale).
-      setMsg("Reading slip…");
-      try {
-        const res = await fetch("/api/ai/read-deposit-slip", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quotationId, path: doc.path }),
-        });
-        const j = await res.json();
-        if (res.ok && j.validated) {
-          // Tally the AI-read figures against what the user typed; the slip is
-          // authoritative, so a mismatch is corrected to the slip's date + amount.
-          const current = payments.find((p) => p.id === id);
-          const userAmt = Number(current?.amount) || 0;
-          const userDate = (current?.date || "").slice(0, 10);
-          const aiAmt = typeof j.amount === "number" ? j.amount : userAmt;
-          const aiDate = typeof j.date === "string" ? j.date : userDate;
-          const tallied = userAmt > 0 && Math.abs(userAmt - aiAmt) < 0.005 && userDate === aiDate;
-          setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, date: aiDate, amount: aiAmt } : p)));
-          setMsg(
-            `Read from validated slip — ${formatCurrency(aiAmt, currency)} on ${aiDate}.`
-            + (userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""),
-          );
-        } else if (res.ok) {
-          setMsg("This proof isn't machine-validated / computer-generated, so its date & amount weren't auto-filled — only an admin can record a payment from it.");
-        } else {
-          setMsg(j.error ?? "Couldn't read the slip. Enter the amount and date manually.");
-        }
-      } catch {
-        setMsg("Couldn't read the slip. Enter the amount and date manually.");
-      }
+      await readSlip(id, doc.path);
     } finally { setBusy(false); }
+  }
+  // AI-read a payment's deposit slip / proof of payment. A validated (machine-
+  // validated or computer-generated) slip fills the row's amount + date and its
+  // figures are authoritative; handwritten-only proofs aren't accepted. Works on
+  // a freshly uploaded proof or on an already-attached one (the "Read slip"
+  // button), with the result shown inline next to that payment.
+  async function readSlip(id: string, path: string) {
+    setReadingId(id);
+    setSlipStatus((s) => ({ ...s, [id]: { tone: "muted", text: "Reading slip…" } }));
+    try {
+      const res = await fetch("/api/ai/read-deposit-slip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quotationId, path }),
+      });
+      const j = await res.json();
+      if (res.ok && j.validated) {
+        // The slip is authoritative — correct any mismatch to its date + amount.
+        const current = payments.find((p) => p.id === id);
+        const userAmt = Number(current?.amount) || 0;
+        const userDate = (current?.date || "").slice(0, 10);
+        const aiAmt = typeof j.amount === "number" ? j.amount : userAmt;
+        const aiDate = typeof j.date === "string" ? j.date : userDate;
+        const tallied = userAmt > 0 && Math.abs(userAmt - aiAmt) < 0.005 && userDate === aiDate;
+        setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, date: aiDate, amount: aiAmt } : p)));
+        setSlipStatus((s) => ({ ...s, [id]: { tone: "ok", text: `✓ Validated — ${formatCurrency(aiAmt, currency)} on ${aiDate}.${userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""}` } }));
+      } else if (res.ok) {
+        setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: "✗ Not machine-validated / computer-generated — amount & date not filled. Only an admin can record this." } }));
+      } else {
+        setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: j.error ?? "Couldn't read the slip. Enter the figures manually." } }));
+      }
+    } catch {
+      setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: "Couldn't read the slip. Enter the figures manually." } }));
+    } finally {
+      setReadingId(null);
+    }
   }
   async function onDocFile(key: string, file: File) {
     setBusy(true); setMsg(null);
@@ -351,8 +357,12 @@ export function SalePanel({
               {arrangement === "terms" ? "On terms — PO alone confirms the sale; add payments as they arrive." : "Add the down payment / full payment to confirm the sale."}
             </p>
           )}
-          {payments.map((p) => (
-            <div key={p.id} className="grid grid-cols-2 items-center gap-2 rounded-md border p-2 md:grid-cols-12">
+          {payments.map((p) => {
+            const st = slipStatus[p.id];
+            const reading = readingId === p.id;
+            return (
+            <div key={p.id} className="space-y-1 rounded-md border p-2">
+              <div className="grid grid-cols-2 items-center gap-2 md:grid-cols-12">
               <Select className="h-8 md:col-span-3" value={p.kind} disabled={!canEdit} onChange={(e) => updatePayment(p.id, { kind: e.target.value as PaymentKind })}>
                 {PAYMENT_KINDS.map((k) => (<option key={k} value={k}>{PAYMENT_KIND_LABEL[k]}</option>))}
               </Select>
@@ -370,6 +380,11 @@ export function SalePanel({
                     <a href={docDownload(p.proof)} className="text-muted-foreground hover:text-primary" title="Download proof" aria-label="Download proof">
                       <Download className="h-3.5 w-3.5" />
                     </a>
+                    {canEdit && p.kind !== "ewt" && (
+                      <button type="button" title="Read slip with AI" aria-label="Read slip with AI" disabled={reading || busy} onClick={() => p.proof && readSlip(p.id, p.proof.path)} className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary disabled:opacity-50">
+                        <ScanLine className="h-3.5 w-3.5" /> <span className="text-[11px]">{reading ? "reading…" : "read slip"}</span>
+                      </button>
+                    )}
                   </div>
                 ) : canEdit ? (
                   <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-primary underline">
@@ -385,8 +400,13 @@ export function SalePanel({
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}
+              </div>
+              {st && (
+                <p className={`text-[11px] ${st.tone === "ok" ? "text-emerald-600" : st.tone === "bad" ? "text-destructive" : "text-muted-foreground"}`}>{st.text}</p>
+              )}
             </div>
-          ))}
+            );
+          })}
           {canEdit && (
             <Button
               variant="outline"
