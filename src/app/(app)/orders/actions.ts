@@ -3156,7 +3156,8 @@ export async function recordOrderPayment(quotationId: string, input: z.infer<typ
   // Deposit-slip rule: a non-machine-validated / non-computer-generated proof may
   // only be recorded by an admin; a validated slip's date + amount are
   // authoritative (the payment follows the slip). Throws for a blocked non-admin.
-  const [payment] = applyPaymentSlipRules(cls, [basePayment], { isAdmin: isAdmin(user) });
+  const canOverride = isAdmin(user) || userHasWorkflowRole(roles, user.id, "accounting");
+  const [payment] = applyPaymentSlipRules(cls, [basePayment], { canOverride });
   await prisma.quotation.update({
     where: { id: quotationId },
     data: { classification: { ...cls, sale: { ...sale, payments: [...sale.payments, payment] } } as unknown as Prisma.InputJsonObject },
