@@ -50,6 +50,7 @@ import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDe
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
+import { orderBoughtInLines } from "@/lib/department-pnl";
 import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
@@ -1135,6 +1136,55 @@ export async function createDepartmentRequisition(
   // or an admin adds products (with a supplier and price) on the Products page.
   revalidatePath("/requisitions");
   revalidatePath("/purchasing");
+}
+
+/**
+ * Raise a supplier requisition (→ PO) for an order's BOUGHT-IN products — the
+ * "buy" equivalent of the auto job orders for fabricated items. Pulls only the
+ * bought-in product lines (fabricated items and typed service / charges are
+ * excluded), links the requisition to the order, and files it as an Office
+ * requisition (APPROVED) so the Purchaser can prepare the PO directly.
+ */
+export async function raiseOrderRequisition(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  const allowed = isAdmin(user)
+    || user.role === "SALES"
+    || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)
+    || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
+  if (!allowed) throw new Error("Only Sales, the Purchaser, Logistics or an admin can raise a supplier requisition.");
+
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, quoteNumber: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
+  });
+  if (!quote) throw new Error("Order not found.");
+  const boughtIn = orderBoughtInLines(quote.items);
+  if (boughtIn.length === 0) throw new Error("This order has no bought-in products to purchase — fabricated items and service charges aren't included in a PO.");
+
+  // Don't duplicate an open supplier requisition already raised for this order.
+  const existing = await prisma.purchaseRequest.count({
+    where: { quotationId, kind: "department", status: { notIn: ["REJECTED", "COMPLETED"] } },
+  });
+  if (existing > 0) throw new Error("A supplier requisition for this order's items already exists — process it in Purchasing.");
+
+  const items = boughtIn.map((b) => mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit" }));
+  await prisma.purchaseRequest.create({
+    data: {
+      kind: "department",
+      dept: OFFICE_DEPT_KEY,
+      quotationId,
+      items: items as Prisma.InputJsonValue,
+      note: `Bought-in items for order ${quote.quoteNumber}`,
+      createdById: user.id,
+      createdByName: user.name,
+      status: "APPROVED", // Office requisition → straight to the Purchaser for the PO
+    },
+  });
+  revalidatePath("/requisitions");
+  revalidatePath("/purchasing");
+  revalidatePath(`/orders/${quotationId}`);
 }
 
 /**
