@@ -13,7 +13,7 @@ import { QuotationStatusBadge } from "@/components/status-badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { formatCurrency } from "@/lib/utils";
 import { config } from "@/lib/config";
-import { applyPricing, DEFAULT_PRICING, type PricingAdjust, type AdjustMode } from "@/lib/quote";
+import { applyPricing, pricingForVatMode, DEFAULT_PRICING, type PricingAdjust, type AdjustMode } from "@/lib/quote";
 import {
   lookupMotor,
   motorModelCode,
@@ -2769,7 +2769,7 @@ export function QuotationBuilder({
     const net = gross / (1 + vatRate);
     const exclusive = effectiveVatMode !== "INCLUSIVE";
     const displayedNet = exclusive ? net : gross;
-    const { markupAmt, afterMarkup, discountAmt, finalNet } = applyPricing(displayedNet, pricing);
+    const { markupAmt, afterMarkup, discountAmt, finalNet } = applyPricing(displayedNet, pricingForVatMode(pricing, effectiveVatMode, vatRate));
     const addVat = effectiveVatMode === "EXCLUSIVE_PLUS";
     const vatAmt = addVat ? finalNet * vatRate : 0;
     const grandTotal = finalNet + vatAmt;
