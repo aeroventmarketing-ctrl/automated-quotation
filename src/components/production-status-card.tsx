@@ -73,7 +73,7 @@ export function ProductionStatusCard({ status, maskClient = false }: { status: P
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm"><CalendarClock className="h-4 w-4 text-muted-foreground" /> Production status</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-sm"><CalendarClock className="h-4 w-4 text-muted-foreground" /> Production Status</CardTitle>
       </CardHeader>
       <CardContent>
         {total === 0 ? (
