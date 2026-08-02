@@ -240,7 +240,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           delivery — visible/downloadable here too. */}
       <BatchDocumentList
         batches={readOrderWorkflow(quotation.classification).deliveryBatches}
-        vatInclusive={quotation.vatMode === "INCLUSIVE"}
+        vatInclusive={quotation.vatMode !== "EXCLUSIVE"}
       />
     </div>
   );

@@ -5985,7 +5985,7 @@ export function QuotationBuilder({
           canEdit={(isPreparer || isAdmin) && quotation.status !== "DRAFT" && quotation.status !== "PENDING_APPROVAL"}
           canClear={canClearSale}
           clientTerms={clientTerms}
-          vatInclusive={quotation.vatMode === "INCLUSIVE"}
+          vatInclusive={quotation.vatMode !== "EXCLUSIVE"}
         />
       )}
 
