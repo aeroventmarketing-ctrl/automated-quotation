@@ -14,7 +14,7 @@ import { raiseOrderRequisition } from "../actions";
  * bought-in products; fabricated items and service/charges are excluded), and
  * files an order-linked Office requisition the Purchaser can turn into a PO.
  */
-export function RaiseOrderRequisition({ orderId, items, alreadyRaised }: { orderId: string; items: { name: string; qty: number; unitPrice: number | null }[]; alreadyRaised: boolean }) {
+export function RaiseOrderRequisition({ orderId, items, alreadyRaised, paymentCleared }: { orderId: string; items: { name: string; qty: number; unitPrice: number | null }[]; alreadyRaised: boolean; paymentCleared: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -53,9 +53,10 @@ export function RaiseOrderRequisition({ orderId, items, alreadyRaised }: { order
         </p>
       ) : (
         <div className="flex items-center gap-2">
-          <Button size="sm" className="h-8 text-xs" disabled={busy} onClick={submit}>
+          <Button size="sm" className="h-8 text-xs" disabled={busy || !paymentCleared} onClick={submit}>
             <ShoppingCart className="mr-1 h-3.5 w-3.5" /> {busy ? "Raising…" : "Raise supplier requisition"}
           </Button>
+          {!paymentCleared && <span className="text-xs text-muted-foreground">Available once payment is cleared.</span>}
           {err && <span className="text-xs text-destructive">{err}</span>}
         </div>
       )}
