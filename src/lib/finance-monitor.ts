@@ -1,0 +1,143 @@
+/**
+ * Finance-monitor data — the Receivables, Unreconciled payments, Cash vouchers,
+ * Stock alerts and Purchasing & commissions figures shown on the Management
+ * Dashboard, packaged so other surfaces (e.g. Accounting's My Dashboard) can show
+ * the same cards from one source of truth. Scoped to post-go-live activity while
+ * the alerts go-live gate is on, exactly like the Management Dashboard.
+ */
+import { prisma } from "@/lib/db";
+import { payableTotal, round2 } from "@/lib/quote";
+import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
+import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
+import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
+import { getPrintedVouchers, type PrintedVoucherLine } from "@/lib/purchase-voucher";
+import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
+import { getAlertGoLive, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
+
+export interface UnbalancedRow {
+  orderId: string;
+  customerId: string;
+  company: string;
+  quoteNumber: string;
+  value: number;
+  collected: number;
+  balance: number;
+  delivered: boolean;
+  closed: boolean;
+}
+export interface LowStockRow { id: string; name: string; unit: string; quantity: number }
+export type VoucherState = "mismatch" | "awaiting" | "tallied";
+export interface VoucherRow {
+  no: string;
+  paidTo: string;
+  lines: PrintedVoucherLine[];
+  total: number;
+  approvedTotal: number;
+  state: VoucherState;
+  printedByName: string;
+  printedAt: string;
+}
+export interface FinanceMonitor {
+  outstanding: number;
+  billed: number;
+  collected: number;
+  collectedPct: number;
+  unbalanced: UnbalancedRow[];
+  deliveredUnpaid: number;
+  lowStock: LowStockRow[];
+  prPendingCount: number;
+  commissionsUnpaidCount: number;
+  unpaidCommission: number;
+  vouchers: VoucherRow[];
+}
+
+/** Compute the finance-monitor figures (mirrors the Management Dashboard). */
+export async function getFinanceMonitor(): Promise<FinanceMonitor> {
+  const alertGate = await getAlertGoLive();
+  const goLiveCutoff = alertGoLiveCreatedAtFilter(alertGate); // { gt: Date } | undefined
+  const createdFilter = goLiveCutoff ? { createdAt: goLiveCutoff } : {};
+  const goLiveFloorYMD = alertGate.on ? manilaYMD(alertGate.at) : null;
+
+  const [wonQuotes, stockItems, commissions, prPending] = await Promise.all([
+    prisma.quotation.findMany({
+      where: { inquiry: { status: "WON" } },
+      select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
+    }),
+    prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),
+    prisma.commission.findMany({ where: { paid: false, ...createdFilter }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } }, counterSale: { select: { paymentCleared: true } } } }).catch(() => []),
+    prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...createdFilter }, select: { id: true } }).catch(() => []),
+  ]);
+
+  // Receivables + unreconciled — confirmed orders recognised after go-live.
+  let outstanding = 0;
+  let billed = 0;
+  let collected = 0;
+  const unbalanced: UnbalancedRow[] = [];
+  for (const q of wonQuotes) {
+    const sale = saleFromClassification(q.classification);
+    if (!sale || !isSaleConfirmed(sale)) continue;
+    if (goLiveFloorYMD) {
+      const recAt = saleRecognitionDate(sale);
+      if (!recAt || manilaYMD(recAt) < goLiveFloorYMD) continue;
+    }
+    const wf = readOrderWorkflow(q.classification);
+    const value = round2(payableTotal(q));
+    const paid = round2(collectedTotal(sale));
+    billed = round2(billed + value);
+    collected = round2(collected + paid);
+    const balance = round2(value - paid);
+    if (balance > 0.005) {
+      outstanding = round2(outstanding + balance);
+      unbalanced.push({
+        orderId: q.id,
+        customerId: q.inquiry?.customer?.id ?? "",
+        company: q.inquiry?.customer?.company ?? "—",
+        quoteNumber: q.quoteNumber,
+        value,
+        collected: paid,
+        balance,
+        delivered: stageIndex(wf.stage) >= stageIndex("delivered"),
+        closed: wf.stage === "closed",
+      });
+    }
+  }
+  unbalanced.sort((a, b) => Number(b.delivered) - Number(a.delivered) || b.balance - a.balance);
+  const deliveredUnpaid = unbalanced.filter((u) => u.delivered).length;
+  const collectedPct = billed > 0 ? Math.round((collected / billed) * 100) : 0;
+
+  const lowStock: LowStockRow[] = stockItems
+    .filter((i) => { const q = Number(i.quantity); const r = Number(i.reorderLevel); return q <= 0 || (r > 0 && q <= r); })
+    .map((i) => ({ id: i.id, name: i.name, unit: i.unit, quantity: Number(i.quantity) }));
+
+  // Commissions count once the order is fully paid (matches the Commissions page).
+  const payableCommissions = commissions.filter((c) => {
+    const ov = Number(c.orderValue);
+    if (c.counterSale) return c.counterSale.paymentCleared;
+    if (c.quotation) {
+      const col = collectedTotal(saleFromClassification(c.quotation.classification));
+      return ov > 0 && col >= ov - 0.005;
+    }
+    return false;
+  });
+  const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + Number(c.amount), 0));
+
+  // Printed cash vouchers (after go-live) and whether they tally with their POs.
+  const printedVouchers = (await getPrintedVouchers().catch(() => []))
+    .filter((v) => !goLiveCutoff || (v.printedAt && new Date(v.printedAt) > goLiveCutoff.gt));
+  const voucherPrIds = [...new Set(printedVouchers.flatMap((v) => v.ids))];
+  const voucherPrs = voucherPrIds.length
+    ? await prisma.purchaseRequest.findMany({ where: { id: { in: voucherPrIds } }, select: { id: true, po: true, reconciliation: true } }).catch(() => [])
+    : [];
+  const voucherPrNet = new Map(voucherPrs.map((pr) => { const po = coercePurchaseOrder(pr.po); return [pr.id, po ? poTotals(po).net : 0]; }));
+  const voucherReconciled = new Map(voucherPrs.map((pr) => [pr.id, isReconciled(coerceReconciliation(pr.reconciliation))]));
+  const vouchers: VoucherRow[] = printedVouchers.map((v) => {
+    const approvedTotal = round2(v.ids.reduce((s, id) => s + (voucherPrNet.get(id) ?? 0), 0));
+    const amountMatches = Math.abs(approvedTotal - round2(v.total)) < 0.01;
+    const reconciled = v.ids.length > 0 && v.ids.every((id) => voucherReconciled.get(id));
+    const state: VoucherState = !amountMatches ? "mismatch" : reconciled ? "tallied" : "awaiting";
+    return { no: v.no, paidTo: v.paidTo, lines: v.lines, total: v.total, approvedTotal, state, printedByName: v.printedByName, printedAt: v.printedAt };
+  });
+
+  return { outstanding, billed, collected, collectedPct, unbalanced, deliveredUnpaid, lowStock, prPendingCount: prPending.length, commissionsUnpaidCount: payableCommissions.length, unpaidCommission, vouchers };
+}

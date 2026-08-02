@@ -11,6 +11,8 @@ import { prisma } from "@/lib/db";
 import { STOCK_ACTION_LABEL, coerceStockDoc, type StockActionView } from "@/lib/stock-action";
 import { PendingStockActions } from "../inventory/pending-stock-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getFinanceMonitor } from "@/lib/finance-monitor";
+import { FinanceMonitorCards } from "@/components/finance-monitor-cards";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw } from "lucide-react";
@@ -99,6 +101,10 @@ export default async function MyDashboardPage() {
   // admin — surfaced here so both parties (and admins) are notified.
   const invWarehouse = admin || userHasWorkflowRole(assignments, user.id, "warehouse" as WorkflowRoleKey);
   const invPurchaser = admin || userHasWorkflowRole(assignments, user.id, "purchaser" as WorkflowRoleKey);
+  // Accounting gets the finance-monitor cards (Receivables, Unreconciled
+  // payments, Cash vouchers, Stock alerts, Purchasing & commissions) here too.
+  const isAccounting = userHasWorkflowRole(assignments, user.id, "accounting" as WorkflowRoleKey);
+  const finance = isAccounting ? await getFinanceMonitor().catch(() => null) : null;
   const stockPending: StockActionView[] = (invWarehouse || invPurchaser)
     ? (await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" }, take: 50 }).catch(() => [])).map((a) => ({
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
@@ -124,6 +130,16 @@ export default async function MyDashboardPage() {
 
       {/* Admins see the Sales Dashboard first, above the production sections. */}
       {showSalesAbove && <SalesDashboardBody embedded />}
+
+      {/* Accounting finance monitor — Receivables, Unreconciled payments, Cash
+          vouchers, Stock alerts, Purchasing & commissions (same as the
+          Management Dashboard, scoped to post-go-live). */}
+      {finance && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">Finance monitor</h2>
+          <FinanceMonitorCards data={finance} />
+        </div>
+      )}
 
       {/* Production status — On time / Near due / Late, clickable to the client. */}
       <ProductionStatusCard status={production} maskClient={maskProdClient} />
