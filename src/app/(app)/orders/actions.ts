@@ -1158,9 +1158,15 @@ export async function raiseOrderRequisition(quotationId: string): Promise<void> 
 
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, quoteNumber: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
+    select: { id: true, quoteNumber: true, classification: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
   });
   if (!quote) throw new Error("Order not found.");
+  // Payment must be cleared first — the order has to be released (Phase 1 done)
+  // before goods can be purchased for it.
+  const wf = readOrderWorkflow(quote.classification);
+  if (stageIndex(wf.stage) < stageIndex("released")) {
+    throw new Error("Payment must be cleared before a supplier requisition can be raised for this order.");
+  }
   const boughtIn = orderBoughtInLines(quote.items);
   if (boughtIn.length === 0) throw new Error("This order has no bought-in products to purchase — fabricated items and service charges aren't included in a PO.");
 

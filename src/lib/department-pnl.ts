@@ -137,7 +137,12 @@ export function orderBoughtInLines(
   return items
     .filter((it) => {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
-      return lineRouting(specs).routing === "office_full" && !isServiceLine(specs);
+      // A real bought-in product is a catalogue selection — it always carries a
+      // product `type` (Wind Driven Roof Ventilator, KDK Cabinet Fan, …). A typed
+      // service / charge (Mobilization, Delivery, Installation) has only a brand /
+      // free-text description and NO type, even when filed under "Other Products",
+      // so it slips past the blank-category service check — exclude those too.
+      return lineRouting(specs).routing === "office_full" && !isServiceLine(specs) && str(specs.type) !== "";
     })
     .map((it) => {
       const specs = (it.specsSnapshot ?? {}) as Specs;

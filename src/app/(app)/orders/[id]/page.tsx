@@ -881,7 +881,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Bought-in products · supplier requisition</CardTitle></CardHeader>
           <CardContent>
-            <RaiseOrderRequisition orderId={quote.id} items={boughtInProductLines} alreadyRaised={supplierReqRaised} />
+            <RaiseOrderRequisition orderId={quote.id} items={boughtInProductLines} alreadyRaised={supplierReqRaised} paymentCleared={stageIndex(wf.stage) >= stageIndex("released")} />
           </CardContent>
         </Card>
       )}
