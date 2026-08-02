@@ -402,6 +402,22 @@ export interface PnlOrderAmount {
   customer: string;
   amount: number;
 }
+/** One order's mark-up / discount inputs and the net-of-VAT figures they produce. */
+export interface PnlPricingAudit {
+  quotationId: string;
+  quoteNumber: string;
+  customer: string;
+  vatMode: string; // INCLUSIVE | EXCLUSIVE | EXCLUSIVE_PLUS
+  grossBase: number; // Σ line gross (VAT-inclusive)
+  orderNet: number; // grossBase ÷ 1.12
+  markupMode: string; // percent | amount (as entered)
+  markupValue: number; // as entered
+  discountMode: string;
+  discountValue: number;
+  markupNet: number; // net-of-VAT mark-up booked to Office income
+  discountNet: number; // net-of-VAT discount booked to Office expense
+}
+
 export interface PnlDetail {
   from: string;
   to: string;
@@ -414,6 +430,7 @@ export interface PnlDetail {
   clientDiscounts: number; // "Client Discounts" — Office expense (net)
   markupByOrder: PnlOrderAmount[]; // mark-up income per order (clickable)
   discountByOrder: PnlOrderAmount[]; // client discount per order (clickable)
+  pricingAudit: PnlPricingAudit[]; // per-order mark-up/discount inputs → net (self-check)
 }
 
 /**
@@ -452,6 +469,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   let clientDiscounts = 0;
   const markupByOrder: PnlOrderAmount[] = [];
   const discountByOrder: PnlOrderAmount[] = [];
+  const pricingAudit: PnlPricingAudit[] = [];
   // Output VAT per order, and input VAT per supplier — the two VAT breakdowns.
   const vatOutputByOrder: PnlVatOrder[] = [];
   const inputVatBySupplier = new Map<string, number>();
@@ -516,11 +534,21 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     if (!lines.length) continue;
     const customer = q.inquiry?.customer?.company ?? "—";
     // Quote-level mark-up → Office income; discount → Office expense (both net).
-    const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, readPricing(q.classification, Number(q.discountPct)));
+    const pricing = readPricing(q.classification, Number(q.discountPct));
+    const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, pricing);
     markupIncome = round2(markupIncome + markupNet);
     clientDiscounts = round2(clientDiscounts + discountNet);
     if (markupNet > 0) markupByOrder.push({ quotationId: q.id, quoteNumber: q.quoteNumber, customer, amount: markupNet });
     if (discountNet > 0) discountByOrder.push({ quotationId: q.id, quoteNumber: q.quoteNumber, customer, amount: discountNet });
+    if (pricing.markupValue > 0 || pricing.discountValue > 0) {
+      pricingAudit.push({
+        quotationId: q.id, quoteNumber: q.quoteNumber, customer, vatMode: q.vatMode,
+        grossBase: round2(grossSum), orderNet: round2(grossSum / (1 + VAT_RATE)),
+        markupMode: pricing.markupMode, markupValue: pricing.markupValue,
+        discountMode: pricing.discountMode, discountValue: pricing.discountValue,
+        markupNet, discountNet,
+      });
+    }
     if (chargesVat) {
       const adj = round2(round2(markupNet * VAT_RATE) - round2(discountNet * VAT_RATE));
       outputVatByDept.office = round2(outputVatByDept.office + adj);
@@ -634,5 +662,6 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   markupByOrder.sort((a, b) => b.amount - a.amount || a.quoteNumber.localeCompare(b.quoteNumber));
   discountByOrder.sort((a, b) => b.amount - a.amount || a.quoteNumber.localeCompare(b.quoteNumber));
 
-  return { from: lo, to: hi, sales, expenses, vatByDept, vatOutputByOrder, vatInputBySupplier, markupIncome, clientDiscounts, markupByOrder, discountByOrder };
+  pricingAudit.sort((a, b) => a.quoteNumber.localeCompare(b.quoteNumber));
+  return { from: lo, to: hi, sales, expenses, vatByDept, vatOutputByOrder, vatInputBySupplier, markupIncome, clientDiscounts, markupByOrder, discountByOrder, pricingAudit };
 }

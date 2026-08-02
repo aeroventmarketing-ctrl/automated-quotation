@@ -2,9 +2,82 @@
 
 import { Fragment } from "react";
 import Link from "next/link";
-import { getPnlDetail, type PnlDetail, type PnlSaleDetail, type PnlSaleLine, type PnlOrderAmount } from "./pnl-actions";
+import { getPnlDetail, type PnlDetail, type PnlSaleDetail, type PnlSaleLine, type PnlOrderAmount, type PnlPricingAudit } from "./pnl-actions";
 import { DEPT_LABEL, type DeptKey } from "@/lib/department-pnl";
 import { formatCurrency, cn } from "@/lib/utils";
+
+const VAT_MODE_LABEL: Record<string, string> = { INCLUSIVE: "Inclusive", EXCLUSIVE: "Excl. ÷1.12", EXCLUSIVE_PLUS: "Excl. +12%" };
+const r2 = (n: number) => Math.round((n + 1e-9) * 100) / 100;
+
+/**
+ * Independently recompute a row's net-of-VAT mark-up / discount from its inputs —
+ * a self-contained re-implementation of the server's pricing math (mark-up by the
+ * margin method, flat amounts VAT-inclusive in +12%), so the ✓ genuinely
+ * cross-checks the booked figures rather than echoing the same code.
+ */
+function expectedNets(a: PnlPricingAudit): { markupNet: number; discountNet: number } {
+  const F = 1.12;
+  // For +12%, a flat (amount) mark-up/discount is VAT-inclusive → scale by 1.12.
+  const mV = a.vatMode === "EXCLUSIVE_PLUS" && a.markupMode === "amount" ? a.markupValue / F : a.markupValue;
+  const dV = a.vatMode === "EXCLUSIVE_PLUS" && a.discountMode === "amount" ? a.discountValue / F : a.discountValue;
+  const displayedNet = a.vatMode === "INCLUSIVE" ? a.grossBase : a.grossBase / F;
+  const afterMarkup = a.markupMode === "percent" ? (1 - mV / 100 > 0 ? displayedNet / (1 - mV / 100) : displayedNet) : displayedNet + mV;
+  const markupAmt = afterMarkup - displayedNet;
+  const discountAmt = a.discountMode === "percent" ? afterMarkup * (dV / 100) : dV;
+  const toNet = (x: number) => (a.vatMode === "INCLUSIVE" ? x / F : x);
+  return { markupNet: r2(toNet(markupAmt)), discountNet: r2(toNet(discountAmt)) };
+}
+
+function PricingAudit({ rows }: { rows: PnlPricingAudit[] }) {
+  const fmtIn = (mode: string, val: number) => (val > 0 ? (mode === "percent" ? `${val}%` : formatCurrency(val)) : "—");
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mark-up &amp; discount audit ({rows.length})</div>
+      <p className="text-[11px] text-muted-foreground">
+        Each order&apos;s VAT mode, the mark-up / discount entered, and the net-of-VAT figures the P&amp;L books. Quick check: a <strong>%</strong> adjustment = the marked-up net × %; a <strong>flat ₱</strong> amount = amount ÷ 1.12 (Inclusive / +12%) or the full amount (÷1.12 mode). The VAT slice sits in Output VAT. <span className="text-emerald-600">✓</span> = the booked figure reproduces from the inputs.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[46rem] text-xs">
+          <thead>
+            <tr className="border-b text-[11px] text-muted-foreground">
+              <th className="py-1.5 pr-2 text-left font-medium">Quote · Customer</th>
+              <th className="py-1.5 px-2 text-left font-medium">VAT mode</th>
+              <th className="py-1.5 px-2 text-right font-medium">Gross (incl. VAT)</th>
+              <th className="py-1.5 px-2 text-right font-medium">Net base</th>
+              <th className="py-1.5 px-2 text-right font-medium">Mark-up in</th>
+              <th className="py-1.5 px-2 text-right font-medium">→ net</th>
+              <th className="py-1.5 px-2 text-right font-medium">Discount in</th>
+              <th className="py-1.5 px-2 text-right font-medium">→ net</th>
+              <th className="py-1.5 pl-2 text-center font-medium">✓</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((a) => {
+              const exp = expectedNets(a);
+              const ok = Math.abs(exp.markupNet - a.markupNet) < 0.02 && Math.abs(exp.discountNet - a.discountNet) < 0.02;
+              return (
+                <tr key={a.quotationId} className="border-t">
+                  <td className="py-1 pr-2 align-top">
+                    <Link href={`/quotations/${a.quotationId}`} className="block font-mono text-[11px] text-primary hover:underline">{a.quoteNumber}</Link>
+                    <span className="text-muted-foreground">{a.customer}</span>
+                  </td>
+                  <td className="py-1 px-2 align-top">{VAT_MODE_LABEL[a.vatMode] ?? a.vatMode}</td>
+                  <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(a.grossBase)}</td>
+                  <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(a.orderNet)}</td>
+                  <td className="py-1 px-2 text-right align-top tabular-nums">{fmtIn(a.markupMode, a.markupValue)}</td>
+                  <td className="py-1 px-2 text-right align-top tabular-nums">{a.markupNet > 0 ? formatCurrency(a.markupNet) : "—"}</td>
+                  <td className="py-1 px-2 text-right align-top tabular-nums">{fmtIn(a.discountMode, a.discountValue)}</td>
+                  <td className="py-1 px-2 text-right align-top tabular-nums">{a.discountNet > 0 ? formatCurrency(a.discountNet) : "—"}</td>
+                  <td className="py-1 pl-2 text-center align-top">{ok ? <span className="text-emerald-600">✓</span> : <span className="font-semibold text-red-600">✗</span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export { getPnlDetail };
 export type { PnlDetail };
@@ -97,6 +170,7 @@ export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
         )}
       </div>
       <ExpenseTable items={detail.expenses} extra={{ label: "Client Discount", rows: detail.discountByOrder }} />
+      {detail.pricingAudit.length > 0 && <PricingAudit rows={detail.pricingAudit} />}
     </div>
   );
 }
