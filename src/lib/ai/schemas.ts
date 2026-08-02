@@ -74,6 +74,7 @@ export const depositSlipReadSchema = z.object({
   amount: z.number().nullable().default(null), // peso amount from the machine/computer text
   reference: z.string().nullable().default(null), // reference / transaction / OR number
   bank: z.string().nullable().default(null),
+  confidence: z.number().nullable().default(null), // 0..1 — how sure the exact digits were read
   warnings: z.array(z.string()).default([]),
 });
 

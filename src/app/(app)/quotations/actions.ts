@@ -611,7 +611,9 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
   // amount are authoritative (the payment follows the slip). Throws for a
   // blocked non-admin.
   const grandfatheredIds = new Set((existing?.payments ?? []).map((p) => p.id));
-  const payments = applyPaymentSlipRules(cls, data.payments as SalePayment[], { isAdmin: isAdmin(user), grandfatheredIds });
+  // Admin / accounting validate payment figures (and can correct a mis-read slip).
+  const canOverride = isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting");
+  const payments = applyPaymentSlipRules(cls, data.payments as SalePayment[], { canOverride, grandfatheredIds });
   const sale: SaleRecord = { ...data, payments, recordedById: user.id, soldAt: existing?.soldAt };
   const confirmed = isSaleConfirmed(sale);
   sale.soldAt = confirmed ? sale.soldAt ?? new Date().toISOString() : undefined;

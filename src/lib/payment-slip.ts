@@ -62,11 +62,12 @@ export function slipValidationFor(cls: Cls | null | undefined, path: string | nu
  *
  * For every cash payment (a down / full / progress collection with an amount):
  *  - it MUST carry a machine-validated / computer-generated proof; a payment with
- *    no proof, or a non-validated proof, is **blocked** for a non-admin;
- *  - a **validated** proof is authoritative: the payment's date + amount are
- *    overwritten with the machine/computer figures (they always follow the slip,
- *    so any mismatch with the user's typed figures is corrected to the slip);
- *  - an admin may always proceed (manual override).
+ *    no proof, or a non-validated proof, is **blocked** unless the user can
+ *    validate (`canOverride` = admin / accounting);
+ *  - a **validated** proof is authoritative for ordinary users: the payment's
+ *    date + amount are overwritten with the machine/computer figures. But a
+ *    validator (admin / accounting) keeps their own entered figures — so they can
+ *    CORRECT a mis-read slip (e.g. a blurry photo the AI read wrong).
  *
  * Exemptions (never blocked, never altered):
  *  - **EWT withheld (BIR 2307)** — a tax withholding verified from the 2307 by
@@ -75,12 +76,12 @@ export function slipValidationFor(cls: Cls | null | undefined, path: string | nu
  *  - payments **already saved** before this feature (`grandfatheredIds`), so
  *    editing a legacy sale isn't blocked.
  *
- * Returns the (possibly adjusted) payments. Throws for a blocked non-admin.
+ * Returns the (possibly adjusted) payments. Throws for a blocked ordinary user.
  */
 export function applyPaymentSlipRules(
   cls: Cls | null | undefined,
   payments: SalePayment[],
-  opts: { isAdmin: boolean; grandfatheredIds?: Set<string> },
+  opts: { canOverride: boolean; grandfatheredIds?: Set<string> },
 ): SalePayment[] {
   const validations = readSlipValidations(cls);
   return payments.map((p) => {
@@ -91,23 +92,23 @@ export function applyPaymentSlipRules(
     if (opts.grandfatheredIds?.has(p.id)) return p;
     const amount = Number(p.amount) || 0;
     if (amount <= 0) return p; // nothing collected yet
+    // A validator (admin / accounting) always keeps their own figures — so they
+    // can correct a mis-read slip, and aren't blocked by a missing/invalid one.
+    if (opts.canOverride) return p;
     const v = p.proof?.path ? validations[p.proof.path] : undefined;
     if (v?.validated) {
-      // A validated slip is authoritative: follow its date + amount.
+      // For an ordinary user a validated slip is authoritative: follow it.
       return {
         ...p,
         amount: typeof v.amount === "number" ? v.amount : p.amount,
         date: v.date || p.date,
       };
     }
-    // No proof, or a non-validated proof → block non-admins (admin may override).
-    if (!opts.isAdmin) {
-      throw new Error(
-        p.proof?.path
-          ? `The proof "${p.proof.name}" couldn't be accepted as a machine-validated or computer-generated slip. Upload a valid proof — or ask an admin to record it manually.`
-          : `This payment needs a machine-validated deposit slip or a computer-generated transfer proof attached before it can be recorded — or ask an admin to record it manually.`,
-      );
-    }
-    return p; // admin override — keep the manually-entered figures
+    // No proof, or a non-validated proof → blocked for an ordinary user.
+    throw new Error(
+      p.proof?.path
+        ? `The proof "${p.proof.name}" couldn't be accepted as a machine-validated or computer-generated slip. Upload a valid proof — or ask an admin / accounting to record it.`
+        : `This payment needs a machine-validated deposit slip or a computer-generated transfer proof attached before it can be recorded — or ask an admin / accounting to record it.`,
+    );
   });
 }

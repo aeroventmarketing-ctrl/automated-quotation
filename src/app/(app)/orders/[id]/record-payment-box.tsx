@@ -59,7 +59,8 @@ export function RecordPaymentBox({ orderId, currency, orderAmount, amountPaid }:
           + (userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""));
       } else if (res.ok) {
         setInfo(null);
-        setErr("This proof isn't machine-validated / computer-generated, so its figures weren't auto-filled — only an admin can record a payment from it.");
+        const w = Array.isArray(j.warnings) && j.warnings.length ? String(j.warnings[0]) : "This proof isn't machine-validated / computer-generated, so its figures weren't auto-filled.";
+        setErr(`${w} Admin / accounting can verify and record it.`);
       } else {
         setInfo(null);
         setErr(j.error ?? "Couldn't read the slip. Enter the amount manually.");

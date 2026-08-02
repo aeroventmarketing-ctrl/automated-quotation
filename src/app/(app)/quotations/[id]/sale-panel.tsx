@@ -197,7 +197,8 @@ export function SalePanel({
         setPayments((ps) => withAutoFull(ps.map((p) => (p.id === id ? { ...p, date: aiDate, amount: aiAmt } : p)), dealTotal));
         setSlipStatus((s) => ({ ...s, [id]: { tone: "ok", text: `✓ Validated — ${formatCurrency(aiAmt, currency)} on ${aiDate}.${userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""}${nowFull ? " Covers the order total → set to Full payment." : ""}` } }));
       } else if (res.ok) {
-        setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: "✗ Not machine-validated / computer-generated — amount & date not filled. Only an admin can record this." } }));
+        const w = Array.isArray(j.warnings) && j.warnings.length ? String(j.warnings[0]) : "Not machine-validated / computer-generated — amount & date not filled.";
+        setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: `✗ ${w} Admin / accounting can verify and record it.` } }));
       } else {
         setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: j.error ?? "Couldn't read the slip. Enter the figures manually." } }));
       }

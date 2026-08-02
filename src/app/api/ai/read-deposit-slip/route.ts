@@ -22,26 +22,28 @@ const bodySchema = z.object({
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 const SYSTEM = `You read a proof of payment for a Philippine company to auto-fill a collected payment's DATE and AMOUNT.
-The proof is a bank deposit slip, a bank/e-wallet transfer confirmation, or an official receipt.
+The proof is a bank deposit slip, a bank/e-wallet transfer confirmation (e.g. InstaPay, PESONet, GCash), or an official receipt.
 
 CRITICAL RULES:
 - Only trust the bank's MACHINE-VALIDATION imprint (the teller machine's printed stamp of date, amount and reference) or fully COMPUTER-GENERATED text (a bank-app / online-transfer / e-wallet confirmation, or a computer-printed receipt).
-- IGNORE anything HANDWRITTEN. Do NOT read a date or amount that is only handwritten. If the amount and date are only handwritten (no machine validation, not computer-generated), set handwrittenOnly=true and leave date/amount null.
+- IGNORE anything HANDWRITTEN, and IGNORE any text/label/annotation drawn or overlaid ON TOP of a screenshot by a person. Read ONLY the bank/app's own printed fields. If the amount and date are only handwritten, set handwrittenOnly=true and leave date/amount null.
+- For a transfer confirmation, the AMOUNT is the "Total Amount" (or "Principal Amount" / "Amount") field, and the DATE is the "Transaction Date" (or "Date"). Read the exact digits of that field — do not confuse it with a reference number, account number, trace number or fee.
+- ACCURACY OVER COMPLETENESS. If the image is blurry, has glare/reflection, is cropped, low-resolution, or you are not highly sure of the EXACT digits, set a LOW confidence, leave the unreadable field null, and add a warning. NEVER guess, approximate, or invent an amount or date.
 - Amounts are Philippine pesos; ignore the "₱"/"PHP" symbol and thousands separators. Return the date as YYYY-MM-DD.
-- Never invent numbers. If you cannot read a machine/computer figure, use null and add a warning.
 Return STRICT JSON only.`;
 
 const USER_PROMPT = `From the attached proof of payment, return JSON with this exact shape:
 {
-  "documentType": string|null,      // e.g. "bank deposit slip", "online transfer", "official receipt"
+  "documentType": string|null,      // e.g. "InstaPay transfer", "bank deposit slip", "official receipt"
   "machineValidated": boolean,      // true if a bank teller MACHINE-VALIDATION imprint is present
   "computerGenerated": boolean,     // true if the proof is fully computer-generated (app / e-transfer / printed receipt)
   "handwrittenOnly": boolean,       // true if the date/amount are ONLY handwritten
-  "date": string|null,              // YYYY-MM-DD from the machine/computer text (null if only handwritten)
-  "amount": number|null,            // peso amount from the machine/computer text (null if only handwritten)
-  "reference": string|null,         // reference / transaction / OR number if shown
+  "date": string|null,              // YYYY-MM-DD from the Transaction Date / Date (null if unsure)
+  "amount": number|null,            // peso Total Amount / Principal Amount (null if unsure)
+  "reference": string|null,         // reference / transaction / trace / OR number if shown
   "bank": string|null,              // bank / e-wallet name if shown
-  "warnings": [ string ]            // e.g. "amount handwritten", "validation faint"
+  "confidence": number,             // 0..1 — how sure you are of the EXACT amount + date digits (low if blurry/glare/cropped)
+  "warnings": [ string ]            // e.g. "image blurry", "glare over amount", "amount handwritten"
 }`;
 
 export async function POST(req: NextRequest) {
@@ -119,7 +121,14 @@ export async function POST(req: NextRequest) {
     const r = await callClaudeJson({ system: SYSTEM, content, schema: depositSlipReadSchema, maxTokens: 1000 });
     const date = r.date ?? null;
     const amount = r.amount ?? null;
-    const validated = Boolean((r.machineValidated || r.computerGenerated) && !r.handwrittenOnly && date != null && amount != null);
+    // Require decent confidence so a blurry / glare photo is refused rather than
+    // guessed. If the model didn't return a number, treat it as unsure.
+    const CONFIDENCE_MIN = 0.7;
+    const confidence = typeof r.confidence === "number" ? r.confidence : 0;
+    const validated = Boolean(
+      (r.machineValidated || r.computerGenerated) && !r.handwrittenOnly
+      && date != null && amount != null && confidence >= CONFIDENCE_MIN,
+    );
 
     // Stamp the validation on the classification so the save action can enforce
     // it and follow the machine/computer figures.
@@ -141,11 +150,16 @@ export async function POST(req: NextRequest) {
     });
 
     const warnings = [...(r.warnings ?? [])];
-    if (!validated && !warnings.length) {
-      warnings.push("No machine validation / computer-generated text found — handwritten figures are not accepted.");
+    if (!validated) {
+      if ((r.machineValidated || r.computerGenerated) && !r.handwrittenOnly && date != null && amount != null && confidence < CONFIDENCE_MIN) {
+        warnings.push("The image is unclear (blurry / glare), so the figures weren't auto-filled. Upload a clearer copy or enter them manually.");
+      } else if (!warnings.length) {
+        warnings.push("No machine validation / computer-generated text found — handwritten figures are not accepted.");
+      }
     }
     return NextResponse.json({
       validated,
+      confidence,
       date,
       amount,
       reference: r.reference ?? null,
