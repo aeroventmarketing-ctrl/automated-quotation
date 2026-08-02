@@ -12,7 +12,7 @@ import { STOCK_ACTION_LABEL, coerceStockDoc, type StockActionView } from "@/lib/
 import { PendingStockActions } from "../inventory/pending-stock-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getFinanceMonitor } from "@/lib/finance-monitor";
-import { FinanceMonitorCards } from "@/components/finance-monitor-cards";
+import { UnreconciledPaymentsCard, CashVouchersCard, FinanceStatsRow } from "@/components/finance-monitor-cards";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw } from "lucide-react";
@@ -117,210 +117,235 @@ export default async function MyDashboardPage() {
       }))
     : [];
 
+  const header = (
+    <div>
+      <h1 className="text-2xl font-bold">{admin ? "Production Dashboard" : "My Dashboard"}</h1>
+      <p className="text-sm text-muted-foreground">
+        {user.name}
+        {data.roleLabels.length > 0 ? ` · ${data.roleLabels.join(" · ")}` : ""}
+      </p>
+    </div>
+  );
+
+  // Counts by area — click a box to jump to that area's items below.
+  const ordersGrid = data.byArea.length > 0 && (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {data.byArea.map((a) => {
+        const Icon = AREA_ICON[a.area];
+        return (
+          <Link key={a.area} href={`#area-${a.area}`} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+              <CardContent className="flex items-center gap-3 py-4">
+                <Icon className={`h-6 w-6 ${AREA_COLOR[a.area]}`} />
+                <div>
+                  <div className="text-2xl font-bold tabular-nums leading-none">{a.count}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{a.label}</div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        );
+      })}
+    </div>
+  );
+
+  const pendingCard = (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          Pending Your Action
+          {data.pending.length > 0 && (
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              {data.pending.length}
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.pending.length === 0 ? (
+          <div className="flex flex-col items-center gap-1 py-8 text-center">
+            <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+            <p className="text-sm text-muted-foreground">Nothing waiting on you. You&apos;re all caught up. 🎉</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {data.byArea.map((a) => {
+              const Icon = AREA_ICON[a.area];
+              return (
+                <div key={a.area} id={`area-${a.area}`} className="scroll-mt-16 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Icon className={`h-3.5 w-3.5 ${AREA_COLOR[a.area]}`} /> {a.label} <span className="text-muted-foreground/70">({a.count})</span>
+                  </div>
+                  {data.pending.filter((t) => t.area === a.area).map((t) => <TaskRow key={t.key} t={t} />)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  // Inventory approvals — double-handshake stock actions awaiting the
+  // Warehouseman / Purchaser (and visible to admins).
+  const inventoryCard = (invWarehouse || invPurchaser) ? (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          Inventory Approvals
+          {stockPending.length > 0 && (
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">{stockPending.length}</span>
+          )}
+          <Link href="/inventory#inv-items" className="ml-auto text-xs font-medium text-primary hover:underline">Open Inventory →</Link>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {stockPending.length === 0 ? (
+          <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
+            No stock actions awaiting a double-handshake approval.
+          </div>
+        ) : (
+          <PendingStockActions pending={stockPending} />
+        )}
+      </CardContent>
+    </Card>
+  ) : null;
+
+  // Materials notifications — MRF completed / partially released.
+  const materialsCard = data.materialsFeed.length > 0 ? (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-sm">Materials — MRF Status</CardTitle></CardHeader>
+      <CardContent>
+        <ul className="divide-y">
+          {data.materialsFeed.map((m) => (
+            <li key={m.key}>
+              <Link href={m.href} className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-accent">
+                <Boxes className="h-4 w-4 shrink-0 text-teal-600" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">MRF #{m.formNo} · {m.dept}</span>
+                    <Badge variant={m.variant} className="font-normal">{m.label}</Badge>
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {m.orderRef}{m.client ? ` · ${m.client}` : ""}{m.when ? ` · ${fmtWhen(m.when)}` : ""}
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  ) : null;
+
+  // Supplier returns — the return-to-supplier lifecycle.
+  const returnsCard = data.returnsFeed.length > 0 ? (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-sm">Returns To Supplier — Status</CardTitle></CardHeader>
+      <CardContent>
+        <ul className="divide-y">
+          {data.returnsFeed.map((r) => (
+            <li key={r.key}>
+              <Link href={r.href} className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-accent">
+                <RotateCcw className={`h-4 w-4 shrink-0 ${r.variant === "warning" ? "text-amber-600" : r.variant === "success" ? "text-emerald-600" : "text-muted-foreground"}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate font-medium">{r.items}</span>
+                    <Badge variant={r.variant} className="font-normal">{r.stageLabel}</Badge>
+                    {r.yourStep && <Badge variant="destructive" className="font-normal">Your step</Badge>}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {r.orderRef}{r.awaiting ? ` · Awaiting: ${r.awaiting}` : " · Complete"}{r.when ? ` · ${fmtWhen(r.when)}` : ""}
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  ) : null;
+
+  const productionCard = <ProductionStatusCard status={production} maskClient={maskProdClient} />;
+
+  // Your recent activity — progress / things you've done.
+  const activityCard = (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Your Recent Activity</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.activity.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No recorded activity yet.</p>
+        ) : (
+          <ul className="divide-y">
+            {data.activity.map((a) => {
+              const inner = (
+                <div className="flex items-start gap-3 py-2.5">
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary/60" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm">{a.summary}</div>
+                    <div className="text-[11px] text-muted-foreground">{fmtWhen(a.createdAt)}</div>
+                  </div>
+                  {a.href && <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" />}
+                </div>
+              );
+              return a.href ? (
+                <li key={a.id}>
+                  <Link href={a.href} className="block rounded-md px-1 hover:bg-accent">{inner}</Link>
+                </li>
+              ) : (
+                <li key={a.id} className="px-1">{inner}</li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  // Accounting's My Dashboard uses a bespoke card order:
+  //   Orders → Pending your action → Unreconciled payments → Cash vouchers →
+  //   Receivables / Stock alerts / Purchasing & commissions → Production status →
+  //   Your recent activity. (Any inventory / materials / returns cards — normally
+  //   empty for Accounting — trail just before recent activity.)
+  if (finance) {
+    return (
+      <div className="space-y-6">
+        <AutoRefresh />
+        {header}
+        {ordersGrid}
+        {pendingCard}
+        <UnreconciledPaymentsCard data={finance} />
+        <CashVouchersCard data={finance} />
+        <FinanceStatsRow data={finance} />
+        {productionCard}
+        {inventoryCard}
+        {materialsCard}
+        {returnsCard}
+        {activityCard}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <AutoRefresh />
-      <div>
-        <h1 className="text-2xl font-bold">{admin ? "Production Dashboard" : "My Dashboard"}</h1>
-        <p className="text-sm text-muted-foreground">
-          {user.name}
-          {data.roleLabels.length > 0 ? ` · ${data.roleLabels.join(" · ")}` : ""}
-        </p>
-      </div>
+      {header}
 
-      {/* Admins see the Sales Dashboard first, above the production sections. */}
+      {/* Admins / Sales see the Sales Dashboard first, above the production sections. */}
       {showSalesAbove && <SalesDashboardBody embedded />}
 
-      {/* Accounting finance monitor — Receivables, Unreconciled payments, Cash
-          vouchers, Stock alerts, Purchasing & commissions (same as the
-          Management Dashboard, scoped to post-go-live). */}
-      {finance && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Finance monitor</h2>
-          <FinanceMonitorCards data={finance} />
-        </div>
-      )}
-
-      {/* Production status — On time / Near due / Late, clickable to the client. */}
-      <ProductionStatusCard status={production} maskClient={maskProdClient} />
-
-      {/* Inventory approvals — double-handshake stock actions awaiting the
-          Warehouseman / Purchaser (and visible to admins). Click through to the
-          item on the Inventory page, or approve / reject right here. */}
-      {(invWarehouse || invPurchaser) && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              Inventory approvals
-              {stockPending.length > 0 && (
-                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">{stockPending.length}</span>
-              )}
-              <Link href="/inventory#inv-items" className="ml-auto text-xs font-medium text-primary hover:underline">Open Inventory →</Link>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {stockPending.length === 0 ? (
-              <div className="flex items-center gap-2 py-1 text-sm text-emerald-700">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/10">✓</span>
-                No stock actions awaiting a double-handshake approval.
-              </div>
-            ) : (
-              <PendingStockActions pending={stockPending} />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Counts by area — click a box to jump to that area's items below. */}
-      {data.byArea.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {data.byArea.map((a) => {
-            const Icon = AREA_ICON[a.area];
-            return (
-              <Link key={a.area} href={`#area-${a.area}`} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
-                <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
-                  <CardContent className="flex items-center gap-3 py-4">
-                    <Icon className={`h-6 w-6 ${AREA_COLOR[a.area]}`} />
-                    <div>
-                      <div className="text-2xl font-bold tabular-nums leading-none">{a.count}</div>
-                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{a.label}</div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Pending your action */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            Pending your action
-            {data.pending.length > 0 && (
-              <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                {data.pending.length}
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.pending.length === 0 ? (
-            <div className="flex flex-col items-center gap-1 py-8 text-center">
-              <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-              <p className="text-sm text-muted-foreground">Nothing waiting on you. You&apos;re all caught up. 🎉</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {data.byArea.map((a) => {
-                const Icon = AREA_ICON[a.area];
-                return (
-                  <div key={a.area} id={`area-${a.area}`} className="scroll-mt-16 space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      <Icon className={`h-3.5 w-3.5 ${AREA_COLOR[a.area]}`} /> {a.label} <span className="text-muted-foreground/70">({a.count})</span>
-                    </div>
-                    {data.pending.filter((t) => t.area === a.area).map((t) => <TaskRow key={t.key} t={t} />)}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Materials notifications — MRF completed / partially released, shown to
-          Admin, Warehouse, Purchaser and the requesting department. */}
-      {data.materialsFeed.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Materials — MRF status</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="divide-y">
-              {data.materialsFeed.map((m) => (
-                <li key={m.key}>
-                  <Link href={m.href} className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-accent">
-                    <Boxes className="h-4 w-4 shrink-0 text-teal-600" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">MRF #{m.formNo} · {m.dept}</span>
-                        <Badge variant={m.variant} className="font-normal">{m.label}</Badge>
-                      </div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {m.orderRef}{m.client ? ` · ${m.client}` : ""}{m.when ? ` · ${fmtWhen(m.when)}` : ""}
-                      </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Supplier returns — the return-to-supplier lifecycle, shown to the
-          Purchaser, Warehouse, Plant Manager, Logistics and admins. */}
-      {data.returnsFeed.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Returns to supplier — status</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="divide-y">
-              {data.returnsFeed.map((r) => (
-                <li key={r.key}>
-                  <Link href={r.href} className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-accent">
-                    <RotateCcw className={`h-4 w-4 shrink-0 ${r.variant === "warning" ? "text-amber-600" : r.variant === "success" ? "text-emerald-600" : "text-muted-foreground"}`} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate font-medium">{r.items}</span>
-                        <Badge variant={r.variant} className="font-normal">{r.stageLabel}</Badge>
-                        {r.yourStep && <Badge variant="destructive" className="font-normal">Your step</Badge>}
-                      </div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {r.orderRef}{r.awaiting ? ` · Awaiting: ${r.awaiting}` : " · Complete"}{r.when ? ` · ${fmtWhen(r.when)}` : ""}
-                      </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Your recent activity — progress / things you've done. */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Your recent activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.activity.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No recorded activity yet.</p>
-          ) : (
-            <ul className="divide-y">
-              {data.activity.map((a) => {
-                const inner = (
-                  <div className="flex items-start gap-3 py-2.5">
-                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary/60" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm">{a.summary}</div>
-                      <div className="text-[11px] text-muted-foreground">{fmtWhen(a.createdAt)}</div>
-                    </div>
-                    {a.href && <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" />}
-                  </div>
-                );
-                return a.href ? (
-                  <li key={a.id}>
-                    <Link href={a.href} className="block rounded-md px-1 hover:bg-accent">{inner}</Link>
-                  </li>
-                ) : (
-                  <li key={a.id} className="px-1">{inner}</li>
-                );
-              })}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      {productionCard}
+      {inventoryCard}
+      {ordersGrid}
+      {pendingCard}
+      {materialsCard}
+      {returnsCard}
+      {activityCard}
     </div>
   );
 }

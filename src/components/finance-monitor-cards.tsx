@@ -11,19 +11,29 @@ const CURRENCY = "PHP";
  * The Receivables / Unreconciled payments / Cash vouchers / Stock alerts /
  * Purchasing & commissions cards, rendered from shared finance-monitor data.
  * Used on the Management Dashboard's audience and on Accounting's My Dashboard.
+ *
+ * The individual cards are exported too, so a surface (e.g. Accounting's My
+ * Dashboard) can interleave them with its own cards in a bespoke order.
  */
 export function FinanceMonitorCards({ data }: { data: FinanceMonitor }) {
-  const { unbalanced, outstanding, deliveredUnpaid, collected, billed, collectedPct, lowStock, prPendingCount, commissionsUnpaidCount, unpaidCommission, vouchers } = data;
-  const notTallied = vouchers.filter((v) => v.state === "mismatch").length;
-  const awaiting = vouchers.filter((v) => v.state === "awaiting").length;
-
   return (
     <div className="space-y-4">
-      {/* Unreconciled payments */}
+      <UnreconciledPaymentsCard data={data} />
+      <FinanceStatsRow data={data} />
+      <CashVouchersCard data={data} />
+    </div>
+  );
+}
+
+/** Unreconciled payments — confirmed orders with an outstanding balance. */
+export function UnreconciledPaymentsCard({ data }: { data: FinanceMonitor }) {
+  const { unbalanced, outstanding, deliveredUnpaid } = data;
+  return (
+    <div className="space-y-4">
       <Card className={`shadow-sm ${unbalanced.length > 0 ? "border-amber-300 dark:border-amber-900" : ""}`}>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <Coins className="h-4 w-4 text-muted-foreground" /> Unreconciled payments
+            <Coins className="h-4 w-4 text-muted-foreground" /> Unreconciled Payments
             {unbalanced.length > 0 && (
               <span className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">{unbalanced.length}</span>
             )}
@@ -73,7 +83,14 @@ export function FinanceMonitorCards({ data }: { data: FinanceMonitor }) {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
 
+/** Receivables + Stock alerts + Purchasing & commissions, in one 3-up row. */
+export function FinanceStatsRow({ data }: { data: FinanceMonitor }) {
+  const { outstanding, collected, billed, collectedPct, lowStock, prPendingCount, commissionsUnpaidCount, unpaidCommission } = data;
+  return (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Receivables */}
         <Card className="shadow-sm">
@@ -101,7 +118,7 @@ export function FinanceMonitorCards({ data }: { data: FinanceMonitor }) {
 
         {/* Stock alerts */}
         <Card className="shadow-sm">
-          <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4 text-muted-foreground" /> Stock alerts</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4 text-muted-foreground" /> Stock Alerts</CardTitle></CardHeader>
           <CardContent>
             {lowStock.length === 0 ? (
               <div className="flex items-center gap-2 py-2 text-sm text-emerald-700">
@@ -130,7 +147,7 @@ export function FinanceMonitorCards({ data }: { data: FinanceMonitor }) {
 
         {/* Purchasing & commissions */}
         <Card className="shadow-sm">
-          <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><ShoppingCart className="h-4 w-4 text-muted-foreground" /> Purchasing &amp; commissions</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><ShoppingCart className="h-4 w-4 text-muted-foreground" /> Purchasing &amp; Commissions</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
               <Link href="/purchasing" className="text-muted-foreground hover:underline">Purchase requests in progress</Link>
@@ -147,12 +164,19 @@ export function FinanceMonitorCards({ data }: { data: FinanceMonitor }) {
           </CardContent>
         </Card>
       </div>
+  );
+}
 
-      {/* Cash vouchers */}
+/** Printed cash vouchers and whether they tally with their POs. */
+export function CashVouchersCard({ data }: { data: FinanceMonitor }) {
+  const { vouchers } = data;
+  const notTallied = vouchers.filter((v) => v.state === "mismatch").length;
+  const awaiting = vouchers.filter((v) => v.state === "awaiting").length;
+  return (
       <Card className="shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <Banknote className="h-4 w-4 text-muted-foreground" /> Cash vouchers
+            <Banknote className="h-4 w-4 text-muted-foreground" /> Cash Vouchers
             {vouchers.length > 0 && (
               <span className="ml-1 text-xs font-normal text-muted-foreground">({notTallied} not tallied · {awaiting} awaiting reconciliation)</span>
             )}
@@ -197,6 +221,5 @@ export function FinanceMonitorCards({ data }: { data: FinanceMonitor }) {
           )}
         </CardContent>
       </Card>
-    </div>
   );
 }
