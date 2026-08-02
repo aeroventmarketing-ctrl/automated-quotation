@@ -3014,7 +3014,7 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   // OR-CR-AF / Delivery Receipt / BIR 2307) before approving its delivery
   // documents. VAT-exclusive deals don't require the Sales Invoice or BIR 2307.
   if (stepKey === "delivery_docs") {
-    const required = afterPaymentDocTypes(quote.vatMode === "INCLUSIVE");
+    const required = afterPaymentDocTypes(quote.vatMode !== "EXCLUSIVE");
     const missing = required.filter((t) => (batch.docs?.[t.key]?.length ?? 0) === 0);
     if (missing.length) throw new Error(`Attach this batch's ${missing.map((t) => t.label).join(", ")} first.`);
   }
@@ -3462,7 +3462,7 @@ export async function fileDocuments(quotationId: string): Promise<void> {
   // 2307 may lag). Re-filing an already-closed order is idempotent.
   if (wf.stage === "docs_received") {
     const vq = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { vatMode: true } });
-    const vatInclusive = vq?.vatMode === "INCLUSIVE";
+    const vatInclusive = vq?.vatMode !== "EXCLUSIVE";
     const closeState = closeDocsState(saleFromClassification(cls)?.docs, vatInclusive);
     if (!closeState.appear) throw new Error("Upload all required closing documents before filing.");
     await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
