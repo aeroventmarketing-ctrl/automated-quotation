@@ -610,8 +610,8 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
   // -generated proof may only be saved by an admin; a validated slip's date +
   // amount are authoritative (the payment follows the slip). Throws for a
   // blocked non-admin.
-  const grandfatheredPaths = new Set((existing?.payments ?? []).map((p) => p.proof?.path).filter((x): x is string => !!x));
-  const payments = applyPaymentSlipRules(cls, data.payments as SalePayment[], { isAdmin: isAdmin(user), grandfatheredPaths });
+  const grandfatheredIds = new Set((existing?.payments ?? []).map((p) => p.id));
+  const payments = applyPaymentSlipRules(cls, data.payments as SalePayment[], { isAdmin: isAdmin(user), grandfatheredIds });
   const sale: SaleRecord = { ...data, payments, recordedById: user.id, soldAt: existing?.soldAt };
   const confirmed = isSaleConfirmed(sale);
   sale.soldAt = confirmed ? sale.soldAt ?? new Date().toISOString() : undefined;

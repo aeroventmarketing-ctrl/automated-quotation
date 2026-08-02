@@ -49,9 +49,14 @@ export function RecordPaymentBox({ orderId, currency, orderAmount, amountPaid }:
       });
       const j = await res.json();
       if (res.ok && j.validated) {
-        if (typeof j.amount === "number") setAmount(String(j.amount));
+        // The slip is authoritative; correct a typed amount to match it.
+        const userAmt = Number(amount) || 0;
+        const aiAmt = typeof j.amount === "number" ? j.amount : userAmt;
+        const tallied = userAmt > 0 && Math.abs(userAmt - aiAmt) < 0.005;
+        setAmount(String(aiAmt));
         setSlipDate(typeof j.date === "string" ? j.date : null);
-        setInfo(`Read from validated slip — ${formatCurrency(Number(j.amount) || 0, currency)}${j.date ? ` on ${j.date}` : ""}.`);
+        setInfo(`Read from validated slip — ${formatCurrency(aiAmt, currency)}${j.date ? ` on ${j.date}` : ""}.`
+          + (userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""));
       } else if (res.ok) {
         setInfo(null);
         setErr("This proof isn't machine-validated / computer-generated, so its figures weren't auto-filled — only an admin can record a payment from it.");

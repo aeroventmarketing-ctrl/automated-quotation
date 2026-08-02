@@ -150,10 +150,19 @@ export function SalePanel({
         });
         const j = await res.json();
         if (res.ok && j.validated) {
-          setPayments((ps) => ps.map((p) => (p.id === id
-            ? { ...p, date: typeof j.date === "string" ? j.date : p.date, amount: typeof j.amount === "number" ? j.amount : p.amount }
-            : p)));
-          setMsg(`Read from validated slip — ${formatCurrency(Number(j.amount) || 0, currency)} on ${j.date}.`);
+          // Tally the AI-read figures against what the user typed; the slip is
+          // authoritative, so a mismatch is corrected to the slip's date + amount.
+          const current = payments.find((p) => p.id === id);
+          const userAmt = Number(current?.amount) || 0;
+          const userDate = (current?.date || "").slice(0, 10);
+          const aiAmt = typeof j.amount === "number" ? j.amount : userAmt;
+          const aiDate = typeof j.date === "string" ? j.date : userDate;
+          const tallied = userAmt > 0 && Math.abs(userAmt - aiAmt) < 0.005 && userDate === aiDate;
+          setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, date: aiDate, amount: aiAmt } : p)));
+          setMsg(
+            `Read from validated slip — ${formatCurrency(aiAmt, currency)} on ${aiDate}.`
+            + (userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""),
+          );
         } else if (res.ok) {
           setMsg("This proof isn't machine-validated / computer-generated, so its date & amount weren't auto-filled — only an admin can record a payment from it.");
         } else {
