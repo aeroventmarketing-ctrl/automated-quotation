@@ -25,15 +25,40 @@ export function RecordPaymentBox({ orderId, currency, orderAmount, amountPaid }:
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [proof, setProof] = useState<SaleDoc | null>(null);
+  const [slipDate, setSlipDate] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const remaining = Math.max(0, orderAmount - amountPaid);
 
+  function clearProof() { setProof(null); setSlipDate(null); setInfo(null); setErr(null); }
+
   async function uploadProof(file: File) {
-    setUploading(true); setErr(null);
+    setUploading(true); setErr(null); setInfo(null); setSlipDate(null);
     try {
-      setProof(await uploadDocument("/api/sale-uploads", file, { quotationId: orderId }) as SaleDoc);
+      const doc = await uploadDocument("/api/sale-uploads", file, { quotationId: orderId }) as SaleDoc;
+      setProof(doc);
+      // AI-read the deposit slip: follow the machine-validated / computer-generated
+      // date + amount. Handwritten-only proofs aren't accepted (server-enforced;
+      // only an admin can record from them).
+      setInfo("Reading slip…");
+      const res = await fetch("/api/ai/read-deposit-slip", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quotationId: orderId, path: doc.path }),
+      });
+      const j = await res.json();
+      if (res.ok && j.validated) {
+        if (typeof j.amount === "number") setAmount(String(j.amount));
+        setSlipDate(typeof j.date === "string" ? j.date : null);
+        setInfo(`Read from validated slip — ${formatCurrency(Number(j.amount) || 0, currency)}${j.date ? ` on ${j.date}` : ""}.`);
+      } else if (res.ok) {
+        setInfo(null);
+        setErr("This proof isn't machine-validated / computer-generated, so its figures weren't auto-filled — only an admin can record a payment from it.");
+      } else {
+        setInfo(null);
+        setErr(j.error ?? "Couldn't read the slip. Enter the amount manually.");
+      }
     } catch (e) { setErr(e instanceof Error ? e.message : "Upload failed"); }
     finally { setUploading(false); }
   }
@@ -43,8 +68,8 @@ export function RecordPaymentBox({ orderId, currency, orderAmount, amountPaid }:
     if (amt <= 0) { setErr("Enter a payment amount greater than zero."); return; }
     setBusy(true); setErr(null);
     try {
-      await recordOrderPayment(orderId, { amount: amt, note, proof });
-      setOpen(false); setAmount(""); setNote(""); setProof(null);
+      await recordOrderPayment(orderId, { amount: amt, note, proof, date: slipDate ?? undefined });
+      setOpen(false); setAmount(""); setNote(""); clearProof();
       router.refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(false); }
@@ -74,7 +99,8 @@ export function RecordPaymentBox({ orderId, currency, orderAmount, amountPaid }:
               <span className="inline-flex items-center gap-1.5 text-xs">
                 <a href={docView(proof)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline"><FileText className="h-3.5 w-3.5" /> {proof.name}</a>
                 <a href={docView(proof)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary" title="View" aria-label="View"><Eye className="h-3.5 w-3.5" /></a>
-                <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => setProof(null)} aria-label="Remove"><Trash2 className="h-3.5 w-3.5" /></button>
+                <button type="button" className="text-muted-foreground hover:text-destructive" onClick={clearProof} aria-label="Remove"><Trash2 className="h-3.5 w-3.5" /></button>
+                {slipDate && <span className="text-[11px] text-muted-foreground">· slip date {slipDate}</span>}
               </span>
             ) : (
               <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs hover:bg-accent">
@@ -89,6 +115,7 @@ export function RecordPaymentBox({ orderId, currency, orderAmount, amountPaid }:
           </div>
         </div>
       )}
+      {info && <p className="mt-1 text-xs text-emerald-600">{info}</p>}
       {err && <p className="mt-1 text-xs text-destructive">{err}</p>}
     </div>
   );

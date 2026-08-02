@@ -135,7 +135,33 @@ export function SalePanel({
     setBusy(true); setMsg(null);
     try {
       const doc = await upload(file);
-      if (doc) setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
+      if (!doc) return;
+      setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
+      // AI-read the deposit slip / proof of payment: follow the machine-validated
+      // (or computer-generated) date + amount. Handwritten-only proofs aren't
+      // accepted — their figures are NOT auto-filled and only an admin can save
+      // a payment from them (enforced server-side in recordSale).
+      setMsg("Reading slip…");
+      try {
+        const res = await fetch("/api/ai/read-deposit-slip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quotationId, path: doc.path }),
+        });
+        const j = await res.json();
+        if (res.ok && j.validated) {
+          setPayments((ps) => ps.map((p) => (p.id === id
+            ? { ...p, date: typeof j.date === "string" ? j.date : p.date, amount: typeof j.amount === "number" ? j.amount : p.amount }
+            : p)));
+          setMsg(`Read from validated slip — ${formatCurrency(Number(j.amount) || 0, currency)} on ${j.date}.`);
+        } else if (res.ok) {
+          setMsg("This proof isn't machine-validated / computer-generated, so its date & amount weren't auto-filled — only an admin can record a payment from it.");
+        } else {
+          setMsg(j.error ?? "Couldn't read the slip. Enter the amount and date manually.");
+        }
+      } catch {
+        setMsg("Couldn't read the slip. Enter the amount and date manually.");
+      }
     } finally { setBusy(false); }
   }
   async function onDocFile(key: string, file: File) {
