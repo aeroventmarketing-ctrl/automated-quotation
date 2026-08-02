@@ -33,6 +33,32 @@ const newId = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
+/**
+ * Auto-designate full payment: clients may pay any amount in any number of
+ * instalments (no 50% floor). The payment that makes the running total tally to
+ * the order total flips from "Down payment" to "Full payment" — so a single
+ * payment covering the whole deal, or the instalment that completes it, reads as
+ * Full. Only a "down" payment is switched (progress / EWT are left alone), and it
+ * only ever promotes down → full (never the reverse). The figures stay manually
+ * verified by admin / accounting on review.
+ */
+function withAutoFull(list: SalePayment[], total: number): SalePayment[] {
+  if (!(total > 0)) return list;
+  let running = 0;
+  for (let i = 0; i < list.length; i++) {
+    running += Number(list[i].amount) || 0;
+    if (running >= total - 0.01) {
+      if (list[i].kind === "down") {
+        const next = [...list];
+        next[i] = { ...next[i], kind: "full" };
+        return next;
+      }
+      return list; // total reached, but the completing payment isn't a down payment
+    }
+  }
+  return list; // never reaches the order total
+}
+
 // View opens the file inline; download forces a save with its original name.
 const docLink = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
@@ -69,7 +95,7 @@ export function SalePanel({
     clientTerms ? "terms" : initialSale?.arrangement ?? "downpayment_full",
   );
   const [po, setPo] = useState<SaleDoc | null>(initialSale?.po ?? null);
-  const [payments, setPayments] = useState<SalePayment[]>(initialSale?.payments ?? []);
+  const [payments, setPayments] = useState<SalePayment[]>(() => withAutoFull(initialSale?.payments ?? [], dealTotal));
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialSale?.docs ?? {});
   const [note, setNote] = useState(initialSale?.note ?? "");
   const [busy, setBusy] = useState(false);
@@ -166,8 +192,10 @@ export function SalePanel({
         const aiAmt = typeof j.amount === "number" ? j.amount : userAmt;
         const aiDate = typeof j.date === "string" ? j.date : userDate;
         const tallied = userAmt > 0 && Math.abs(userAmt - aiAmt) < 0.005 && userDate === aiDate;
-        setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, date: aiDate, amount: aiAmt } : p)));
-        setSlipStatus((s) => ({ ...s, [id]: { tone: "ok", text: `✓ Validated — ${formatCurrency(aiAmt, currency)} on ${aiDate}.${userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""}` } }));
+        const newTotal = payments.reduce((sum, pp) => sum + (pp.id === id ? aiAmt : Number(pp.amount) || 0), 0);
+        const nowFull = dealTotal > 0 && newTotal >= dealTotal - 0.01;
+        setPayments((ps) => withAutoFull(ps.map((p) => (p.id === id ? { ...p, date: aiDate, amount: aiAmt } : p)), dealTotal));
+        setSlipStatus((s) => ({ ...s, [id]: { tone: "ok", text: `✓ Validated — ${formatCurrency(aiAmt, currency)} on ${aiDate}.${userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""}${nowFull ? " Covers the order total → set to Full payment." : ""}` } }));
       } else if (res.ok) {
         setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: "✗ Not machine-validated / computer-generated — amount & date not filled. Only an admin can record this." } }));
       } else {
@@ -194,7 +222,7 @@ export function SalePanel({
     setPayments((ps) => [...ps, { id: newId(), kind: "down", amount: 0, date: today(), proof: null }]);
   }
   function updatePayment(id: string, patch: Partial<SalePayment>) {
-    setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    setPayments((ps) => withAutoFull(ps.map((p) => (p.id === id ? { ...p, ...patch } : p)), dealTotal));
   }
   function removePayment(id: string) {
     setPayments((ps) => ps.filter((p) => p.id !== id));
