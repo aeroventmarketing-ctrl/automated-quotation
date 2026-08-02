@@ -9,8 +9,9 @@ export const AI_RECEIPT_READ_LIMIT = 3;
 
 /**
  * How many times the AI "Read slip" may be run against a single order's deposit
- * slips / proofs of payment. Persisted on the sale classification. Once reached,
- * the figures must be checked and keyed in manually (an admin can always record
- * a payment manually).
+ * slips / proofs of payment, for NON-admin users. Persisted on the sale
+ * classification. Once reached, non-admins must check the slip and key the
+ * figures in manually. Admins have no limit (and their reads don't consume the
+ * shared budget).
  */
-export const AI_DEPOSIT_SLIP_READ_LIMIT = 8;
+export const AI_DEPOSIT_SLIP_READ_LIMIT = 3;

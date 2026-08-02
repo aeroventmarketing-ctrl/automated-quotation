@@ -79,11 +79,13 @@ export async function POST(req: NextRequest) {
   const cls = ((quote.classification as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
 
   // Cap the AI reads per order so figures are verified by hand instead of relying
-  // on repeated reads. The count is persisted on the classification.
+  // on repeated reads. Admins are exempt (no limit, and their reads don't consume
+  // the shared budget). The count is persisted on the classification.
+  const admin = isAdmin(user);
   const reads = typeof cls.depositSlipReadCount === "number" ? cls.depositSlipReadCount : 0;
-  if (reads >= AI_DEPOSIT_SLIP_READ_LIMIT) {
+  if (!admin && reads >= AI_DEPOSIT_SLIP_READ_LIMIT) {
     return NextResponse.json({
-      error: `AI read limit reached (${AI_DEPOSIT_SLIP_READ_LIMIT} of ${AI_DEPOSIT_SLIP_READ_LIMIT} used for this order). Check the slip and enter the figures manually.`,
+      error: `AI read limit reached (${AI_DEPOSIT_SLIP_READ_LIMIT} of ${AI_DEPOSIT_SLIP_READ_LIMIT} used for this order). Check the slip and enter the figures manually — or ask an admin.`,
       limitReached: true,
       reads,
       limit: AI_DEPOSIT_SLIP_READ_LIMIT,
@@ -143,7 +145,7 @@ export async function POST(req: NextRequest) {
       readAt: new Date().toISOString(),
     };
     const slipValidations = { ...((cls.slipValidations as Record<string, unknown>) ?? {}), [body.path]: stamp };
-    const usedReads = reads + 1;
+    const usedReads = admin ? reads : reads + 1; // admin reads don't consume the budget
     await prisma.quotation.update({
       where: { id: body.quotationId },
       data: { classification: { ...cls, slipValidations, depositSlipReadCount: usedReads } as unknown as Prisma.InputJsonValue },
@@ -167,8 +169,8 @@ export async function POST(req: NextRequest) {
       documentType: r.documentType ?? null,
       warnings,
       reads: usedReads,
-      limit: AI_DEPOSIT_SLIP_READ_LIMIT,
-      remaining: Math.max(0, AI_DEPOSIT_SLIP_READ_LIMIT - usedReads),
+      limit: admin ? null : AI_DEPOSIT_SLIP_READ_LIMIT,
+      remaining: admin ? null : Math.max(0, AI_DEPOSIT_SLIP_READ_LIMIT - usedReads),
     });
   } catch (err) {
     console.error("read-deposit-slip error", err);
