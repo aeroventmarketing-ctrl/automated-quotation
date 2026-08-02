@@ -187,23 +187,27 @@ export function SalePanel({
       if (res.ok && j.validated) {
         const current = payments.find((p) => p.id === id);
         const userAmt = Number(current?.amount) || 0;
-        const userDate = (current?.date || "").slice(0, 10);
+        const rawDate = (current?.date || "").slice(0, 10);
         const aiAmt = typeof j.amount === "number" ? j.amount : 0;
         const aiDate = typeof j.date === "string" ? j.date : "";
-        // NEVER clobber a figure you already typed — fill only an empty field.
-        // If the slip disagrees with your entry, keep yours and flag it so
-        // admin / accounting can confirm which is correct.
-        const finalAmt = userAmt > 0 ? userAmt : aiAmt;
-        const finalDate = userDate || aiDate;
+        // Amount: never clobber a figure you typed — fill only an empty one.
+        const amtTyped = userAmt > 0;
+        const finalAmt = amtTyped ? userAmt : aiAmt;
+        // Date: a new row defaults to today, so treat today / empty as "not set"
+        // and let the slip's date fill it; keep a date you deliberately changed.
+        const dateIsDefault = !rawDate || rawDate === today();
+        const finalDate = dateIsDefault ? (aiDate || rawDate || today()) : rawDate;
         const newTotal = payments.reduce((sum, pp) => sum + (pp.id === id ? finalAmt : Number(pp.amount) || 0), 0);
         const nowFull = dealTotal > 0 && newTotal >= dealTotal - 0.01;
         setPayments((ps) => withAutoFull(ps.map((p) => (p.id === id ? { ...p, date: finalDate, amount: finalAmt } : p)), dealTotal));
-        const mismatch = userAmt > 0 && !(Math.abs(userAmt - aiAmt) < 0.005 && userDate === aiDate);
+        // Mismatch = a typed amount, or a deliberately-set date, that differs from the slip.
+        const amtMismatch = amtTyped && Math.abs(userAmt - aiAmt) >= 0.005;
+        const dateMismatch = !dateIsDefault && !!aiDate && rawDate !== aiDate;
         const fullNote = nowFull ? " Covers the order total → set to Full payment." : "";
-        if (mismatch) {
-          setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: `⚠ Slip reads ${formatCurrency(aiAmt, currency)} on ${aiDate}, but you entered ${formatCurrency(userAmt, currency)} on ${userDate}. Kept your entry — admin / accounting should confirm the correct figure.${fullNote}` } }));
+        if (amtMismatch || dateMismatch) {
+          setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: `⚠ Slip reads ${formatCurrency(aiAmt, currency)} on ${aiDate}, but you entered ${formatCurrency(userAmt, currency)} on ${rawDate}. Kept your entry — admin / accounting should confirm the correct figure.${fullNote}` } }));
         } else {
-          setSlipStatus((s) => ({ ...s, [id]: { tone: "ok", text: `✓ Validated — ${formatCurrency(finalAmt, currency)} on ${finalDate}.${userAmt > 0 ? " Tallies with your entry." : " Filled from the slip."}${fullNote}` } }));
+          setSlipStatus((s) => ({ ...s, [id]: { tone: "ok", text: `✓ Validated — ${formatCurrency(finalAmt, currency)} on ${finalDate}.${amtTyped ? " Tallies with your entry." : " Filled from the slip."}${fullNote}` } }));
         }
       } else if (res.ok) {
         const w = Array.isArray(j.warnings) && j.warnings.length ? String(j.warnings[0]) : "Not machine-validated / computer-generated — amount & date not filled.";
