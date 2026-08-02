@@ -63,9 +63,11 @@ export function PurchaseOrderPanel({
     setCompany(s.company);
     setAttention([s.contactPerson, s.contactNumber].filter(Boolean).join(" - "));
     if (s.address) setAddress(s.address);
-    // Auto-set the EWT toggle from the supplier's EWT-capable flag.
-    setWithEwt(s.ewt);
-    if (s.ewt && !(Number(ewtPct) > 0)) setEwtPct("1");
+    // Auto-set the EWT toggle from the supplier's EWT-capable flag — except the
+    // WDRV supplier (JOEL LATERO SHOP), which is non-VATable so EWT never applies.
+    const noEwt = s.company.trim().toLowerCase() === WDRV_SUPPLIER.toLowerCase();
+    setWithEwt(noEwt ? false : s.ewt);
+    if (!noEwt && s.ewt && !(Number(ewtPct) > 0)) setEwtPct("1");
     // Auto-fill the PO remarks from the supplier's saved remark (e.g. terms).
     if (s.remarks?.trim()) setRemarks(s.remarks.trim());
     setSupplierOpen(false);
@@ -100,11 +102,17 @@ export function PurchaseOrderPanel({
       const saved = suppliers.find((s) => s.company.trim().toLowerCase() === WDRV_SUPPLIER.toLowerCase());
       if (saved) pickSupplier(saved);
       else setCompany(WDRV_SUPPLIER);
+      setWithEwt(false); // JOEL LATERO SHOP is non-VATable — no EWT.
       return;
     }
     if (filtered && eligible.length === 1) { autoPicked.current = true; pickSupplier(eligible[0]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // JOEL LATERO SHOP is non-VATable — EWT never applies, however the supplier is
+  // set (picked, auto-filled or typed).
+  useEffect(() => {
+    if (company.trim().toLowerCase() === WDRV_SUPPLIER.toLowerCase()) setWithEwt(false);
+  }, [company]);
   const [ewtPct, setEwtPct] = useState(String(po?.ewtPct && po.ewtPct > 0 ? po.ewtPct : 1));
   const [ewtMethod, setEwtMethod] = useState<"percent" | "amount">(po?.ewtMode === "amount" ? "amount" : "percent");
   const [ewtAmount, setEwtAmount] = useState(String(po?.ewtAmount && po.ewtAmount > 0 ? po.ewtAmount : ""));
