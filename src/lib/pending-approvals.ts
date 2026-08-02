@@ -25,8 +25,11 @@ interface Viewer {
 /** Confirmed orders awaiting `user`'s approval (empty for users who owe nothing). */
 export async function pendingApprovalsForUser(user: Viewer): Promise<PendingApproval[]> {
   const [quotes, assignments, baseline, golive] = await Promise.all([
+    // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
+    // revision reopens the inquiry (status leaves WON), so a WON filter would
+    // drop confirmed orders that still owe this user an approval. isSaleConfirmed
+    // below is the real gate, exactly as the departmental P&L does it.
     prisma.quotation.findMany({
-      where: { inquiry: { status: "WON" } },
       include: { inquiry: { include: { customer: true } } },
       orderBy: { createdAt: "desc" },
     }),
