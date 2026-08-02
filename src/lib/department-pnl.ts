@@ -144,7 +144,19 @@ export function orderBoughtInLines(
       // Supplier-facing name: drop Aerovent's own brand (the supplier ships it as
       // "Wind Driven Roof Ventilator", not "Aerovent Wind Driven Roof Ventilator").
       const raw = productLabel(specs, it.descriptionSnapshot) || it.descriptionSnapshot || "Item";
-      const name = raw.replace(/^aerovent\s+/i, "").trim() || raw;
+      let name = raw.replace(/^aerovent\s+/i, "").trim() || raw;
+      // Size × material priced products (WDRV): append the throat size + material
+      // so otherwise-identical lines are distinguishable on the PO.
+      if (str(specs.type) === "Wind Driven Roof Ventilator") {
+        const size = sizeKey(specs.sizeL ?? specs.size ?? specs.inches);
+        const mat = str(specs.material).toLowerCase();
+        const matLabel = /galvan/.test(mat) ? (specs.windVentPaint === true ? "G.I. with paint" : "G.I.")
+          : /alumin/.test(mat) ? "Aluminum"
+          : /stainless/.test(mat) ? "Stainless"
+          : str(specs.material);
+        const detail = [size ? `${size}"` : "", matLabel].filter(Boolean).join(" ");
+        if (detail) name = `${name} — ${detail}`;
+      }
       // Supplier unit price from the product's price grid (WDRV: size × material).
       const grid = windVentSupplierCost(specs);
       return { name, qty: Number(it.qty) || 1, unitPrice: grid ? grid.unitCost : null };
