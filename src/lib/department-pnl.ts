@@ -134,7 +134,7 @@ export function isServiceLine(specs: Specs): boolean {
 export function orderBoughtInLines(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
 ): { name: string; qty: number; unitPrice: number | null }[] {
-  return items
+  const lines = items
     .filter((it) => {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
       // A real bought-in product is a catalogue selection — it always carries a
@@ -166,6 +166,19 @@ export function orderBoughtInLines(
       const grid = windVentSupplierCost(specs);
       return { name, qty: Number(it.qty) || 1, unitPrice: grid ? grid.unitCost : null };
     });
+
+  // Combine identical products — same name means same product, size & material —
+  // into one line, summing the quantity, so the requisition / PO shows a single
+  // row per product (e.g. 4 + 8 + 5 → one line of 17) instead of a row per
+  // quotation line.
+  const combined = new Map<string, { name: string; qty: number; unitPrice: number | null }>();
+  for (const l of lines) {
+    const key = `${l.name}||${l.unitPrice ?? ""}`;
+    const existing = combined.get(key);
+    if (existing) existing.qty += l.qty;
+    else combined.set(key, { ...l });
+  }
+  return [...combined.values()];
 }
 
 // --- Amounts --------------------------------------------------------------
