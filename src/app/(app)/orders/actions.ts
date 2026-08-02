@@ -43,7 +43,7 @@ import {
   type MRFLineDisposition,
   type OrderConversation,
 } from "@/lib/order-workflow";
-import { buildAutoJobOrders } from "@/lib/job-order-autogen";
+import { buildAutoJobOrders, quotationJobOrderDepts } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
@@ -1151,9 +1151,10 @@ export async function raiseOrderRequisition(quotationId: string): Promise<void> 
   const roles = await getWorkflowRoles();
   const allowed = isAdmin(user)
     || user.role === "SALES"
+    || user.role === "ENGINEER"
     || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)
     || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
-  if (!allowed) throw new Error("Only Sales, the Purchaser, Logistics or an admin can raise a supplier requisition.");
+  if (!allowed) throw new Error("Only Sales, the Engineer, the Purchaser, Logistics or an admin can raise a supplier requisition.");
 
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
@@ -1189,6 +1190,59 @@ export async function raiseOrderRequisition(quotationId: string): Promise<void> 
   revalidatePath("/requisitions");
   revalidatePath("/purchasing");
   revalidatePath(`/orders/${quotationId}`);
+}
+
+/**
+ * Release a bought-in-only order past production. Some orders carry only goods
+ * bought from a supplier (no department fabricates anything) — Aerovent never
+ * produces them, so they skip Phase 2 production entirely. The Engineer (or an
+ * admin) raises the supplier requisition, the Purchaser buys the goods, and once
+ * the purchase has happened this advances the order straight to "production
+ * finished" so the normal Phase 5 flow (final payment → delivery) resumes.
+ */
+export async function releaseBoughtInOrder(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || user.role === "ENGINEER" || userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey))) {
+    throw new Error("Only the Engineer, Technical Head or an admin can release a bought-in order.");
+  }
+
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { id: true, quoteNumber: true, classification: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
+  });
+  if (!quote) throw new Error("Order not found.");
+  const wf = readOrderWorkflow(quote.classification);
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  if (wf.stage !== "released") throw new Error("Only an order awaiting production release can be released this way.");
+
+  // Bought-in-only: no department fabricates anything, and there ARE bought-in
+  // products to buy. A fabricated order must go through production instead.
+  const boughtIn = orderBoughtInLines(quote.items);
+  if (boughtIn.length === 0) throw new Error("This order has no bought-in products.");
+  const joDepts = quotationJobOrderDepts(quote.items);
+  if (Object.values(joDepts).some(Boolean) || Object.keys(wf.jobOrders).length > 0) {
+    throw new Error("This order has fabricated items — it must go through production.");
+  }
+
+  // The goods must be physically received first — the supplier requisition has to
+  // have reached the warehouse-received (or a later) stage before delivery.
+  const received: PRStatus[] = ["RECEIVED", "PLANT_APPROVED", "COMPLETED"];
+  const inHand = await prisma.purchaseRequest.count({
+    where: { quotationId, kind: "department", status: { in: received } },
+  });
+  if (inHand === 0) throw new Error("The supplier goods must be physically received (Warehouseman approved) before this order can be released.");
+
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "production_finished", approvals: stamp(wf, "boughtin_released", user) });
+  await logActivity(user, {
+    action: "order.boughtin.release",
+    category: "order",
+    summary: `Released bought-in order (skips production) — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
 }
 
 /**

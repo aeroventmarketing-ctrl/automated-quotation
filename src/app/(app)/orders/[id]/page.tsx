@@ -24,7 +24,7 @@ import {
   type OrderStage,
   type ProductionDeptKey,
 } from "@/lib/order-workflow";
-import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poLinesFromPRItems } from "@/lib/purchase-order";
@@ -62,6 +62,7 @@ import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { RaiseOrderRequisition } from "./raise-order-requisition";
+import { BoughtInProduction } from "./bought-in-production";
 import { orderBoughtInLines } from "@/lib/department-pnl";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
@@ -664,10 +665,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // / admin, with a one-click raise that files an order-linked Office requisition.
   const boughtInProductLines = orderBoughtInLines(quote.items);
   const canRaiseReq = !restricted && (
-    adminViewer || viewer?.role === "SALES" ||
+    adminViewer || viewer?.role === "SALES" || viewer?.role === "ENGINEER" ||
     (viewer != null && (userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey) || userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey)))
   );
   const supplierReqRaised = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED");
+  // A bought-in-only order (goods bought from a supplier, nothing fabricated)
+  // skips production: it has bought-in products but no department produces
+  // anything. It's released to Phase 5 once the Purchaser has bought the goods.
+  const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
+  const supplierReqReceived = purchaseRows.some((r) => r.isDept && prMainIndex(r.status as PRStatus) >= prMainIndex("RECEIVED"));
+  const canReleaseBoughtIn = adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey));
 
   return (
     <div className="space-y-5">
@@ -759,6 +766,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <CardContent>
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="text-sm text-muted-foreground">Job orders are issued once Phase 1 is complete.</p>
+          ) : boughtInOnly && wf.stage === "released" ? (
+            <BoughtInProduction
+              orderId={quote.id}
+              reqRaised={supplierReqRaised}
+              reqReceived={supplierReqReceived}
+              canRelease={canReleaseBoughtIn}
+            />
           ) : (
             <div className="space-y-4">
               <JobOrderManager
