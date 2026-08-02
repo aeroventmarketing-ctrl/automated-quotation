@@ -118,8 +118,10 @@ export default async function PurchasingPage() {
       }),
     ]);
     // Department requisitions share the same combine-by-supplier workspace as
-    // order material requests.
-    const allPrs = [...orderPrs, ...deptPrs];
+    // order material requests. A bought-in supplier requisition is BOTH a
+    // department requisition AND order-linked (has a quotationId), so it matches
+    // both queries — dedupe by id so it renders once, not twice.
+    const allPrs = [...new Map([...orderPrs, ...deptPrs].map((pr) => [pr.id, pr])).values()];
     const quotationIds = [...new Set(orderPrs.map((p) => p.quotationId).filter((q): q is string => !!q))];
     const quotations = quotationIds.length
       ? await prisma.quotation.findMany({ where: { id: { in: quotationIds } }, include: { inquiry: { include: { customer: true } } } })
@@ -269,7 +271,12 @@ export default async function PurchasingPage() {
     const completedDeptWithReturns = (
       await prisma.purchaseRequest.findMany({ where: { kind: "department", status: "COMPLETED" }, orderBy: { createdAt: "desc" } })
     ).filter((pr) => hasUnresolvedReturn(coercePurchaseReturns(pr.returns)));
-    deptRows = [...unbatched.filter((pr) => pr.kind === "department"), ...completedDeptWithReturns].map((pr) =>
+    // Order-linked (bought-in supplier) requisitions carry a quotationId and are
+    // shown under their order above — keep them out of the generic Department
+    // requisitions section so they render exactly once.
+    deptRows = [...unbatched.filter((pr) => pr.kind === "department"), ...completedDeptWithReturns]
+      .filter((pr) => !pr.quotationId)
+      .map((pr) =>
       buildPurchaseChainRow(pr, {
         mrfNo: null,
         canManagePO,
