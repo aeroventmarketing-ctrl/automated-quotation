@@ -11,7 +11,8 @@ import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
-import { isSaleConfirmed, saleFromClassification, type SaleRecord } from "@/lib/sale";
+import { isSaleConfirmed, saleFromClassification, type SaleRecord, type SalePayment } from "@/lib/sale";
+import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { getInquiryDocs } from "@/lib/inquiry-docs-store";
 import { inquiryDocsMissing } from "@/lib/inquiry-docs";
 import { findDuplicateQuotes, type DuplicateMatch } from "@/lib/quote-duplicates";
@@ -605,7 +606,13 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
 
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const existing = saleFromClassification(cls);
-  const sale: SaleRecord = { ...data, recordedById: user.id, soldAt: existing?.soldAt };
+  // Deposit-slip rule: a payment backed by a non-machine-validated / non-computer
+  // -generated proof may only be saved by an admin; a validated slip's date +
+  // amount are authoritative (the payment follows the slip). Throws for a
+  // blocked non-admin.
+  const grandfatheredIds = new Set((existing?.payments ?? []).map((p) => p.id));
+  const payments = applyPaymentSlipRules(cls, data.payments as SalePayment[], { isAdmin: isAdmin(user), grandfatheredIds });
+  const sale: SaleRecord = { ...data, payments, recordedById: user.id, soldAt: existing?.soldAt };
   const confirmed = isSaleConfirmed(sale);
   sale.soldAt = confirmed ? sale.soldAt ?? new Date().toISOString() : undefined;
 

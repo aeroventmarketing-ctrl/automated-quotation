@@ -49,6 +49,7 @@ import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDep
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
+import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
@@ -3116,6 +3117,7 @@ export async function cancelMultiBatch(quotationId: string, batchId: string): Pr
 const recordPaymentSchema = z.object({
   amount: z.coerce.number(),
   note: z.string().optional(),
+  date: z.string().optional(), // collection date from a validated slip (or admin manual)
   proof: z.object({ path: z.string(), name: z.string(), uploadedAt: z.string() }).nullish(),
 });
 
@@ -3143,14 +3145,18 @@ export async function recordOrderPayment(quotationId: string, input: z.infer<typ
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const sale = saleFromClassification(cls);
   if (!sale) throw new Error("Record the sale before collecting a payment.");
-  const payment: SalePayment = {
+  const basePayment: SalePayment = {
     id: randomUUID(),
     kind: "progress",
     amount,
-    date: new Date().toISOString(),
+    date: (d.date ?? "").trim() || new Date().toISOString(),
     note: (d.note ?? "").trim() || undefined,
     proof: d.proof ?? null,
   };
+  // Deposit-slip rule: a non-machine-validated / non-computer-generated proof may
+  // only be recorded by an admin; a validated slip's date + amount are
+  // authoritative (the payment follows the slip). Throws for a blocked non-admin.
+  const [payment] = applyPaymentSlipRules(cls, [basePayment], { isAdmin: isAdmin(user) });
   await prisma.quotation.update({
     where: { id: quotationId },
     data: { classification: { ...cls, sale: { ...sale, payments: [...sale.payments, payment] } } as unknown as Prisma.InputJsonObject },

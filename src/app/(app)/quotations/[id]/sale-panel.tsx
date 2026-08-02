@@ -135,7 +135,42 @@ export function SalePanel({
     setBusy(true); setMsg(null);
     try {
       const doc = await upload(file);
-      if (doc) setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
+      if (!doc) return;
+      setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
+      // AI-read the deposit slip / proof of payment: follow the machine-validated
+      // (or computer-generated) date + amount. Handwritten-only proofs aren't
+      // accepted — their figures are NOT auto-filled and only an admin can save
+      // a payment from them (enforced server-side in recordSale).
+      setMsg("Reading slip…");
+      try {
+        const res = await fetch("/api/ai/read-deposit-slip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quotationId, path: doc.path }),
+        });
+        const j = await res.json();
+        if (res.ok && j.validated) {
+          // Tally the AI-read figures against what the user typed; the slip is
+          // authoritative, so a mismatch is corrected to the slip's date + amount.
+          const current = payments.find((p) => p.id === id);
+          const userAmt = Number(current?.amount) || 0;
+          const userDate = (current?.date || "").slice(0, 10);
+          const aiAmt = typeof j.amount === "number" ? j.amount : userAmt;
+          const aiDate = typeof j.date === "string" ? j.date : userDate;
+          const tallied = userAmt > 0 && Math.abs(userAmt - aiAmt) < 0.005 && userDate === aiDate;
+          setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, date: aiDate, amount: aiAmt } : p)));
+          setMsg(
+            `Read from validated slip — ${formatCurrency(aiAmt, currency)} on ${aiDate}.`
+            + (userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""),
+          );
+        } else if (res.ok) {
+          setMsg("This proof isn't machine-validated / computer-generated, so its date & amount weren't auto-filled — only an admin can record a payment from it.");
+        } else {
+          setMsg(j.error ?? "Couldn't read the slip. Enter the amount and date manually.");
+        }
+      } catch {
+        setMsg("Couldn't read the slip. Enter the amount and date manually.");
+      }
     } finally { setBusy(false); }
   }
   async function onDocFile(key: string, file: File) {

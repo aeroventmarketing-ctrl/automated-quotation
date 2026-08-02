@@ -60,3 +60,21 @@ export const receiptReadSchema = z.object({
 });
 
 export type ReceiptRead = z.infer<typeof receiptReadSchema>;
+
+// --- Deposit-slip / proof-of-payment reading --------------------------------
+// Reads a bank deposit slip / online-transfer proof to auto-fill a payment's
+// date + amount. ONLY the machine-validation imprint or computer-generated text
+// counts — handwritten figures are ignored and must NOT be accepted.
+export const depositSlipReadSchema = z.object({
+  documentType: z.string().nullable().default(null), // e.g. "bank deposit slip", "online transfer"
+  machineValidated: z.boolean().default(false), // bank teller machine validation imprint present
+  computerGenerated: z.boolean().default(false), // fully computer-generated proof (app / e-transfer)
+  handwrittenOnly: z.boolean().default(false), // the date/amount are only handwritten
+  date: z.string().nullable().default(null), // YYYY-MM-DD read from the machine/computer text
+  amount: z.number().nullable().default(null), // peso amount from the machine/computer text
+  reference: z.string().nullable().default(null), // reference / transaction / OR number
+  bank: z.string().nullable().default(null),
+  warnings: z.array(z.string()).default([]),
+});
+
+export type DepositSlipRead = z.infer<typeof depositSlipReadSchema>;
