@@ -673,7 +673,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // skips production: it has bought-in products but no department produces
   // anything. It's released to Phase 5 once the Purchaser has bought the goods.
   const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
-  const supplierReqPurchased = purchaseRows.some((r) => r.isDept && prMainIndex(r.status as PRStatus) >= prMainIndex("PURCHASED"));
+  const supplierReqReceived = purchaseRows.some((r) => r.isDept && prMainIndex(r.status as PRStatus) >= prMainIndex("RECEIVED"));
   const canReleaseBoughtIn = adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey));
 
   return (
@@ -770,7 +770,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <BoughtInProduction
               orderId={quote.id}
               reqRaised={supplierReqRaised}
-              reqPurchased={supplierReqPurchased}
+              reqReceived={supplierReqReceived}
               canRelease={canReleaseBoughtIn}
             />
           ) : (

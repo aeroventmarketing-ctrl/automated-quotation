@@ -1226,13 +1226,13 @@ export async function releaseBoughtInOrder(quotationId: string): Promise<void> {
     throw new Error("This order has fabricated items — it must go through production.");
   }
 
-  // The Purchaser must have bought the goods first — the supplier requisition has
-  // to have reached the purchase (or a later) stage before delivery can proceed.
-  const afterPurchaser: PRStatus[] = ["PURCHASED", "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED", "COMPLETED"];
-  const purchased = await prisma.purchaseRequest.count({
-    where: { quotationId, kind: "department", status: { in: afterPurchaser } },
+  // The goods must be physically received first — the supplier requisition has to
+  // have reached the warehouse-received (or a later) stage before delivery.
+  const received: PRStatus[] = ["RECEIVED", "PLANT_APPROVED", "COMPLETED"];
+  const inHand = await prisma.purchaseRequest.count({
+    where: { quotationId, kind: "department", status: { in: received } },
   });
-  if (purchased === 0) throw new Error("Raise the supplier requisition and let the Purchaser buy the goods before releasing this order.");
+  if (inHand === 0) throw new Error("The supplier goods must be physically received (Warehouseman approved) before this order can be released.");
 
   await saveWorkflow(quotationId, cls, { ...wf, stage: "production_finished", approvals: stamp(wf, "boughtin_released", user) });
   await logActivity(user, {

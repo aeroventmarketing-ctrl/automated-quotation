@@ -11,17 +11,17 @@ import { releaseBoughtInOrder } from "../actions";
  * goods bought from a supplier. Aerovent never produces these, so they skip
  * production: the Engineer raises the supplier requisition (card below), the
  * Purchaser buys the goods, and then the order is released straight to Phase 5.
- * The release button stays disabled until the Purchaser has bought the goods.
+ * The release button stays disabled until the goods are physically received.
  */
 export function BoughtInProduction({
   orderId,
   reqRaised,
-  reqPurchased,
+  reqReceived,
   canRelease,
 }: {
   orderId: string;
   reqRaised: boolean;
-  reqPurchased: boolean;
+  reqReceived: boolean;
   canRelease: boolean;
 }) {
   const router = useRouter();
@@ -52,19 +52,19 @@ export function BoughtInProduction({
       <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm dark:border-sky-900/50 dark:bg-sky-950/30">
         <p className="font-medium text-sky-800 dark:text-sky-300">Bought-in order — no fabrication</p>
         <p className="mt-0.5 text-xs text-sky-700/80 dark:text-sky-300/70">
-          This order carries only goods bought from a supplier, so it skips production. Raise the supplier requisition (below), the Purchaser buys the goods, then release the order to continue to final payment &amp; delivery.
+          This order carries only goods bought from a supplier, so it skips production. Raise the supplier requisition (below), the Purchaser buys the goods, then release the order once the goods are physically received to continue to final payment &amp; delivery.
         </p>
       </div>
       <div className="space-y-1 text-sm">
         {step(reqRaised, "Supplier requisition raised")}
-        {step(reqPurchased, "Purchaser bought the goods")}
+        {step(reqReceived, "Goods physically received (Warehouseman approved)")}
       </div>
       {canRelease && (
         <div className="flex items-center gap-2">
-          <Button size="sm" className="h-8 text-xs" disabled={busy || !reqPurchased} onClick={release}>
+          <Button size="sm" className="h-8 text-xs" disabled={busy || !reqReceived} onClick={release}>
             <PackageCheck className="mr-1 h-3.5 w-3.5" /> {busy ? "Releasing…" : "Release to delivery"}
           </Button>
-          {!reqPurchased && <span className="text-xs text-muted-foreground">Available once the Purchaser has bought the goods.</span>}
+          {!reqReceived && <span className="text-xs text-muted-foreground">Available once the goods are physically received.</span>}
           {err && <span className="text-xs text-destructive">{err}</span>}
         </div>
       )}
