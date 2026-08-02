@@ -127,8 +127,11 @@ export default async function ManagementPage() {
   const goLiveFloorYMD = alertGate.on ? manilaYMD(alertGate.at) : null;
 
   const [wonQuotes, stockItems, commissions, prPending] = await Promise.all([
+    // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
+    // revision reopens the inquiry (status leaves WON), so a WON filter drops
+    // confirmed, already-paid orders. isSaleConfirmed below is the real gate,
+    // exactly as the departmental P&L does it.
     prisma.quotation.findMany({
-      where: { inquiry: { status: "WON" } },
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
     prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),

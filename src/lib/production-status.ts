@@ -44,9 +44,12 @@ export async function getProductionStatus(): Promise<ProductionStatus> {
   // Today in Manila (PH) so the deadline maths matches the rest of the app.
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
+  // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
+  // revision reopens the inquiry (status leaves WON), so a WON filter drops
+  // confirmed orders that are still in production. isSaleConfirmed below is the
+  // real gate, exactly as the departmental P&L does it.
   const wonQuotes = await prisma.quotation
     .findMany({
-      where: { inquiry: { status: "WON" } },
       select: {
         id: true,
         classification: true,
