@@ -96,6 +96,10 @@ function accessoryDimensions(s: Record<string, unknown>): AccessoryDimension[] {
 const isFan = (s: Record<string, unknown>) => {
   const cat = str(s.category).toLowerCase();
   if (isMotorController(s) || isAccessory(s)) return false;
+  // Bought-in / resale goods live under "Other Products" (KDK, AlphaAir, Wind
+  // Driven Roof Ventilator, …). They're purchased, not fabricated, so they never
+  // produce a job order — even when the name contains "roof"/"fan" wording.
+  if (str(s.category) === "Other Products") return false;
   return /centrifugal|axial|propeller|tubular|cabinet|panel|roof|blower|fan/.test(cat + " " + str(s.type).toLowerCase());
 };
 
