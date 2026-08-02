@@ -9,7 +9,7 @@
  */
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
-import { applyPricing, type PricingAdjust } from "@/lib/quote";
+import { applyPricing, pricingForVatMode, type PricingAdjust } from "@/lib/quote";
 import { imageDataUrlSize } from "@/lib/signature";
 import { HEADER_LOGO, HEADER_LOGO_RATIO } from "./header-logo";
 
@@ -248,7 +248,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const pricing: PricingAdjust =
     data.pricing ?? { markupMode: "percent", markupValue: 0, discountMode: "percent", discountValue: data.discountPct };
   const baseNet = money(data.total * f);
-  const adj = applyPricing(baseNet, pricing);
+  const adj = applyPricing(baseNet, pricingForVatMode(pricing, data.vatMode, data.vatRate));
   const markedNet = money(adj.afterMarkup); // net incl. hidden mark-up
   const mFactor = baseNet > 0 ? markedNet / baseNet : 1;
   let r = H3 + 1;

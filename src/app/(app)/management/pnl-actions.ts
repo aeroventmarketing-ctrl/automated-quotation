@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { round2, readPricing, applyPricing, type PricingAdjust } from "@/lib/quote";
+import { round2, readPricing, applyPricing, pricingForVatMode, type PricingAdjust } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { saleFromClassification } from "@/lib/sale";
 import { coerceChainLog } from "@/lib/purchase-chain-row";
@@ -85,7 +85,8 @@ function addSplit(into: DeptSplit, from: DeptSplit) {
  */
 function markupDiscountNet(grossSum: number, vatMode: string, pricing: PricingAdjust): { markupNet: number; discountNet: number } {
   const displayedNet = vatMode === "INCLUSIVE" ? grossSum : grossSum / (1 + VAT_RATE);
-  const { markupAmt, discountAmt } = applyPricing(displayedNet, pricing);
+  // A flat mark-up/discount is VAT-inclusive in EXCLUSIVE_PLUS too (matches INCLUSIVE).
+  const { markupAmt, discountAmt } = applyPricing(displayedNet, pricingForVatMode(pricing, vatMode, VAT_RATE));
   const toNet = (x: number) => (vatMode === "INCLUSIVE" ? x / (1 + VAT_RATE) : x);
   return { markupNet: round2(toNet(markupAmt)), discountNet: round2(toNet(discountAmt)) };
 }

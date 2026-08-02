@@ -136,6 +136,25 @@ export function applyPricing(displayedNet: number, p: PricingAdjust) {
  *  - EXCLUSIVE (÷)   → (gross/1.12) − discount
  *  - EXCLUSIVE_PLUS  → ((gross/1.12) − discount) + 12% VAT
  */
+/**
+ * The pricing to apply for a given VAT mode. For EXCLUSIVE_PLUS the client price
+ * is presented as net + 12% VAT, so a FLAT (amount) mark-up / discount — a
+ * VAT-INCLUSIVE peso figure the user typed — is scaled DOWN by 1.12 before it's
+ * applied to the net base and grossed back up. That makes a flat ₱X mark-up /
+ * discount move the client total by exactly ₱X, identical to VAT inclusive.
+ * Percentages need no scaling (they track the base); INCLUSIVE and EXCLUSIVE
+ * (÷1.12) are returned unchanged.
+ */
+export function pricingForVatMode(p: PricingAdjust, vatMode: string, vatRate = config.vatRate): PricingAdjust {
+  if (vatMode !== "EXCLUSIVE_PLUS") return p;
+  const f = 1 + vatRate;
+  return {
+    ...p,
+    markupValue: p.markupMode === "amount" ? p.markupValue / f : p.markupValue,
+    discountValue: p.discountMode === "amount" ? p.discountValue / f : p.discountValue,
+  };
+}
+
 export function payableTotal(
   q: {
     total: number | Prisma.Decimal;
@@ -149,7 +168,7 @@ export function payableTotal(
   const net = gross / (1 + vatRate);
   const exclusive = q.vatMode !== "INCLUSIVE";
   const displayedNet = exclusive ? net : gross;
-  const pricing = readPricing(q.classification, Number(q.discountPct));
+  const pricing = pricingForVatMode(readPricing(q.classification, Number(q.discountPct)), q.vatMode, vatRate);
   const { finalNet } = applyPricing(displayedNet, pricing);
   const vatAmt = q.vatMode === "EXCLUSIVE_PLUS" ? finalNet * vatRate : 0;
   return round2(finalNet + vatAmt);
