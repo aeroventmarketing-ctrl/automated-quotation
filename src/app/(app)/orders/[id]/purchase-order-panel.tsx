@@ -20,6 +20,12 @@ function todayInput(): string {
   return parts; // en-CA gives yyyy-mm-dd
 }
 
+// Wind Driven Roof Ventilator is always bought from this supplier — a new PO
+// that carries it auto-fills the supplier (matched to the saved supplier record
+// when it exists, so contact & address fill in too).
+const WDRV_SUPPLIER = "JOEL LATERO SHOP";
+const isWdrvLine = (desc: string) => /wind driven roof ventilator/i.test(desc);
+
 export function PurchaseOrderPanel({
   prId,
   orderId,
@@ -83,11 +89,20 @@ export function PurchaseOrderPanel({
     : eligible;
   const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices));
 
-  // When exactly one supplier carries the products, auto-populate it (new PO only).
+  // Auto-populate the supplier on a new PO (once, when none is chosen yet):
+  //  • Wind Driven Roof Ventilator is always sourced from JOEL LATERO SHOP.
+  //  • Otherwise, when exactly one catalogued supplier carries the products.
   const autoPicked = useRef(false);
   useEffect(() => {
-    if (autoPicked.current) return;
-    if (!po && !company && filtered && eligible.length === 1) { autoPicked.current = true; pickSupplier(eligible[0]); }
+    if (autoPicked.current || po || company) return;
+    if (lines.some((l) => isWdrvLine(l.description))) {
+      autoPicked.current = true;
+      const saved = suppliers.find((s) => s.company.trim().toLowerCase() === WDRV_SUPPLIER.toLowerCase());
+      if (saved) pickSupplier(saved);
+      else setCompany(WDRV_SUPPLIER);
+      return;
+    }
+    if (filtered && eligible.length === 1) { autoPicked.current = true; pickSupplier(eligible[0]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [ewtPct, setEwtPct] = useState(String(po?.ewtPct && po.ewtPct > 0 ? po.ewtPct : 1));
