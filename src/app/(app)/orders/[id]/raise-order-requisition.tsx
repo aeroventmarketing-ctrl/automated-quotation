@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
@@ -18,8 +18,11 @@ export function RaiseOrderRequisition({ orderId, items, alreadyRaised, paymentCl
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const inFlight = useRef(false);
 
   async function submit() {
+    if (inFlight.current) return; // ignore a fast double-click before `busy` renders
+    inFlight.current = true;
     setBusy(true); setErr(null);
     try {
       await raiseOrderRequisition(orderId);
@@ -28,6 +31,7 @@ export function RaiseOrderRequisition({ orderId, items, alreadyRaised, paymentCl
       setErr(e instanceof Error ? e.message : "Failed to raise the requisition.");
     } finally {
       setBusy(false);
+      inFlight.current = false;
     }
   }
 
