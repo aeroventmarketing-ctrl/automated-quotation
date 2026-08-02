@@ -49,14 +49,20 @@ export function RecordPaymentBox({ orderId, currency, orderAmount, amountPaid }:
       });
       const j = await res.json();
       if (res.ok && j.validated) {
-        // The slip is authoritative; correct a typed amount to match it.
+        // Never clobber a typed amount — fill only an empty field; flag a mismatch.
         const userAmt = Number(amount) || 0;
-        const aiAmt = typeof j.amount === "number" ? j.amount : userAmt;
-        const tallied = userAmt > 0 && Math.abs(userAmt - aiAmt) < 0.005;
-        setAmount(String(aiAmt));
+        const aiAmt = typeof j.amount === "number" ? j.amount : 0;
         setSlipDate(typeof j.date === "string" ? j.date : null);
-        setInfo(`Read from validated slip — ${formatCurrency(aiAmt, currency)}${j.date ? ` on ${j.date}` : ""}.`
-          + (userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""));
+        if (userAmt > 0) {
+          if (Math.abs(userAmt - aiAmt) < 0.005) {
+            setInfo(`Read from validated slip — ${formatCurrency(aiAmt, currency)}${j.date ? ` on ${j.date}` : ""}. Tallies with your entry.`);
+          } else {
+            setErr(`Slip reads ${formatCurrency(aiAmt, currency)}${j.date ? ` on ${j.date}` : ""}, but you entered ${formatCurrency(userAmt, currency)}. Kept your entry — admin / accounting should confirm the correct figure.`);
+          }
+        } else {
+          setAmount(String(aiAmt));
+          setInfo(`Read from validated slip — ${formatCurrency(aiAmt, currency)}${j.date ? ` on ${j.date}` : ""}.`);
+        }
       } else if (res.ok) {
         setInfo(null);
         const w = Array.isArray(j.warnings) && j.warnings.length ? String(j.warnings[0]) : "This proof isn't machine-validated / computer-generated, so its figures weren't auto-filled.";
