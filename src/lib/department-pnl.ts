@@ -125,6 +125,26 @@ export function isServiceLine(specs: Specs): boolean {
   return str(specs.category).trim() === "";
 }
 
+/**
+ * The BOUGHT-IN products on an order's lines — what a supplier requisition / PO
+ * would cover. Excludes Aerovent-fabricated items (fans / ducts / accessories /
+ * motor starters) and typed service / charge lines (Mobilization, Delivery,
+ * Installation), keeping only the resale goods (KDK, WDRV, VFD, …).
+ */
+export function orderBoughtInLines(
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+): { name: string; qty: number }[] {
+  return items
+    .filter((it) => {
+      const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
+      return lineRouting(specs).routing === "office_full" && !isServiceLine(specs);
+    })
+    .map((it) => {
+      const specs = (it.specsSnapshot ?? {}) as Specs;
+      return { name: productLabel(specs, it.descriptionSnapshot) || it.descriptionSnapshot || "Item", qty: Number(it.qty) || 1 };
+    });
+}
+
 // --- Amounts --------------------------------------------------------------
 export type DeptSplit = Record<DeptKey, number>;
 export const zeroSplit = (): DeptSplit => ({ fans: 0, duct: 0, accessories: 0, motor: 0, office: 0 });

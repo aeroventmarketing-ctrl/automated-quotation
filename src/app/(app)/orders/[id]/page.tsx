@@ -61,6 +61,8 @@ import { ConversationLog } from "./conversation-log";
 import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
+import { RaiseOrderRequisition } from "./raise-order-requisition";
+import { orderBoughtInLines } from "@/lib/department-pnl";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
 import { SaleDocumentList } from "./sale-document-list";
@@ -657,6 +659,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     };
   });
 
+  // Bought-in products on this order → a supplier requisition (→ PO). Excludes
+  // fabricated items and service charges. Shown to Sales / Purchaser / Logistics
+  // / admin, with a one-click raise that files an order-linked Office requisition.
+  const boughtInProductLines = orderBoughtInLines(quote.items);
+  const canRaiseReq = !restricted && (
+    adminViewer || viewer?.role === "SALES" ||
+    (viewer != null && (userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey) || userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey)))
+  );
+  const supplierReqRaised = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED");
+
   return (
     <div className="space-y-5">
       <AutoRefresh />
@@ -845,6 +857,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
             <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} showMrfDoc={!hideMrfDoc} admin={adminViewer} canCheckStock={canReleaseMaterials} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bought-in products → supplier requisition (→ PO). Only for orders that
+          carry resale goods; fabricated items and service charges are excluded. */}
+      {canRaiseReq && boughtInProductLines.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Bought-in products · supplier requisition</CardTitle></CardHeader>
+          <CardContent>
+            <RaiseOrderRequisition orderId={quote.id} items={boughtInProductLines} alreadyRaised={supplierReqRaised} />
           </CardContent>
         </Card>
       )}
