@@ -1170,28 +1170,33 @@ export async function raiseOrderRequisition(quotationId: string): Promise<void> 
   const boughtIn = orderBoughtInLines(quote.items);
   if (boughtIn.length === 0) throw new Error("This order has no bought-in products to purchase — fabricated items and service charges aren't included in a PO.");
 
-  // Don't duplicate an open supplier requisition already raised for this order.
-  const existing = await prisma.purchaseRequest.count({
-    where: { quotationId, kind: "department", status: { notIn: ["REJECTED", "COMPLETED"] } },
-  });
-  if (existing > 0) throw new Error("A supplier requisition for this order's items already exists — process it in Purchasing.");
-
   // Encode the supplier grid price (when known) so the PO auto-fills unit price.
   const items = boughtIn.map((b) => {
     const line = mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit" });
     return b.unitPrice != null ? `${line} · @${b.unitPrice}` : line;
   });
-  await prisma.purchaseRequest.create({
-    data: {
-      kind: "department",
-      dept: OFFICE_DEPT_KEY,
-      quotationId,
-      items: items as Prisma.InputJsonValue,
-      note: `Bought-in items for order ${quote.quoteNumber}`,
-      createdById: user.id,
-      createdByName: user.name,
-      status: "APPROVED", // Office requisition → straight to the Purchaser for the PO
-    },
+
+  // Check-then-create inside a transaction, serialized per order with a Postgres
+  // advisory lock so two concurrent raises (double-click / two tabs) can't both
+  // pass the "already exists?" check and file duplicate requisitions.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${quotationId}))`;
+    const existing = await tx.purchaseRequest.count({
+      where: { quotationId, kind: "department", status: { notIn: ["REJECTED", "COMPLETED"] } },
+    });
+    if (existing > 0) throw new Error("A supplier requisition for this order's items already exists — process it in Purchasing.");
+    await tx.purchaseRequest.create({
+      data: {
+        kind: "department",
+        dept: OFFICE_DEPT_KEY,
+        quotationId,
+        items: items as Prisma.InputJsonValue,
+        note: `Bought-in items for order ${quote.quoteNumber}`,
+        createdById: user.id,
+        createdByName: user.name,
+        status: "APPROVED", // Office requisition → straight to the Purchaser for the PO
+      },
+    });
   });
   revalidatePath("/requisitions");
   revalidatePath("/purchasing");
