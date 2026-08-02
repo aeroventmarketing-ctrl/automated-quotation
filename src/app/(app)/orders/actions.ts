@@ -1169,7 +1169,11 @@ export async function raiseOrderRequisition(quotationId: string): Promise<void> 
   });
   if (existing > 0) throw new Error("A supplier requisition for this order's items already exists — process it in Purchasing.");
 
-  const items = boughtIn.map((b) => mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit" }));
+  // Encode the supplier grid price (when known) so the PO auto-fills unit price.
+  const items = boughtIn.map((b) => {
+    const line = mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit" });
+    return b.unitPrice != null ? `${line} · @${b.unitPrice}` : line;
+  });
   await prisma.purchaseRequest.create({
     data: {
       kind: "department",

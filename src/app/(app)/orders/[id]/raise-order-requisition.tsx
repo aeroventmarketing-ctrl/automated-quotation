@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatCurrency } from "@/lib/utils";
 import { raiseOrderRequisition } from "../actions";
 
 /**
@@ -13,7 +14,7 @@ import { raiseOrderRequisition } from "../actions";
  * bought-in products; fabricated items and service/charges are excluded), and
  * files an order-linked Office requisition the Purchaser can turn into a PO.
  */
-export function RaiseOrderRequisition({ orderId, items, alreadyRaised }: { orderId: string; items: { name: string; qty: number }[]; alreadyRaised: boolean }) {
+export function RaiseOrderRequisition({ orderId, items, alreadyRaised }: { orderId: string; items: { name: string; qty: number; unitPrice: number | null }[]; alreadyRaised: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -39,7 +40,10 @@ export function RaiseOrderRequisition({ orderId, items, alreadyRaised }: { order
         {items.map((it, i) => (
           <li key={i} className="flex items-center justify-between gap-2 py-0.5">
             <span className="min-w-0 truncate">{it.name}</span>
-            <span className="shrink-0 tabular-nums text-muted-foreground">×{it.qty}</span>
+            <span className="flex shrink-0 items-center gap-3 tabular-nums text-muted-foreground">
+              <span>×{it.qty}</span>
+              {it.unitPrice != null && <span>@ {formatCurrency(it.unitPrice)}</span>}
+            </span>
           </li>
         ))}
       </ul>

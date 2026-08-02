@@ -133,7 +133,7 @@ export function isServiceLine(specs: Specs): boolean {
  */
 export function orderBoughtInLines(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
-): { name: string; qty: number }[] {
+): { name: string; qty: number; unitPrice: number | null }[] {
   return items
     .filter((it) => {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
@@ -141,7 +141,13 @@ export function orderBoughtInLines(
     })
     .map((it) => {
       const specs = (it.specsSnapshot ?? {}) as Specs;
-      return { name: productLabel(specs, it.descriptionSnapshot) || it.descriptionSnapshot || "Item", qty: Number(it.qty) || 1 };
+      // Supplier-facing name: drop Aerovent's own brand (the supplier ships it as
+      // "Wind Driven Roof Ventilator", not "Aerovent Wind Driven Roof Ventilator").
+      const raw = productLabel(specs, it.descriptionSnapshot) || it.descriptionSnapshot || "Item";
+      const name = raw.replace(/^aerovent\s+/i, "").trim() || raw;
+      // Supplier unit price from the product's price grid (WDRV: size × material).
+      const grid = windVentSupplierCost(specs);
+      return { name, qty: Number(it.qty) || 1, unitPrice: grid ? grid.unitCost : null };
     });
 }
 

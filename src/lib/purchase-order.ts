@@ -123,16 +123,21 @@ export function coercePurchaseOrder(value: unknown): PurchaseOrder | null {
  * whole string in the description when it doesn't match that shape.
  */
 export function poLineFromPRItem(item: string): POLine {
-  const raw = String(item ?? "").trim();
+  const raw0 = String(item ?? "").trim();
+  // Pull off an optional trailing " · @<price>" (a supplier grid price the
+  // requisition carried) so the PO line auto-fills its unit price.
+  const pm = raw0.match(PO_PRICE_MARKER);
+  const unitPrice = pm ? pm[1].replace(/,/g, "") : "";
+  const raw = pm ? raw0.replace(PO_PRICE_MARKER, "").trim() : raw0;
   const parts = raw.split(" · ");
   if (parts.length >= 2) {
     const qtyUnit = parts[0].trim();
     const description = parts.slice(1).join(" · ").trim();
     const m = qtyUnit.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
-    if (m) return { description, qty: m[1], unit: m[2], unitPrice: "" };
-    return { description, qty: "", unit: qtyUnit, unitPrice: "" };
+    if (m) return { description, qty: m[1], unit: m[2], unitPrice };
+    return { description, qty: "", unit: qtyUnit, unitPrice };
   }
-  return { description: raw, qty: "", unit: "", unitPrice: "" };
+  return { description: raw, qty: "", unit: "", unitPrice };
 }
 
 /**
@@ -196,7 +201,17 @@ export function poLinesFromPRItems(items: string[]): POLine[] {
     .map((s) => poLineFromPRItem(stripToPurchasePrefix(s)));
 }
 
-/** Clean PR item lines for a text preview: drop issued records, strip the "to purchase" marker. */
+/**
+ * Optional trailing " · @<price>" a requisition can carry (a supplier grid price,
+ * e.g. from the Wind Driven Roof Ventilator size × material grid) so the PO
+ * auto-fills the unit price. Informational only — stripped from text previews.
+ */
+const PO_PRICE_MARKER = /\s*·\s*@\s*([\d,]+(?:\.\d+)?)\s*$/;
+export function stripPoPriceMarker(item: string): string {
+  return String(item ?? "").replace(PO_PRICE_MARKER, "").trim();
+}
+
+/** Clean PR item lines for a text preview: drop issued records, strip the "to purchase" + price markers. */
 export function displayPRItems(items: string[]): string[] {
-  return (Array.isArray(items) ? items : []).filter((s) => !isIssuedFromStockLine(s)).map(stripToPurchasePrefix);
+  return (Array.isArray(items) ? items : []).filter((s) => !isIssuedFromStockLine(s)).map((s) => stripPoPriceMarker(stripToPurchasePrefix(s)));
 }
