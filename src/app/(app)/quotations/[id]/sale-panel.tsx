@@ -185,17 +185,26 @@ export function SalePanel({
       });
       const j = await res.json();
       if (res.ok && j.validated) {
-        // The slip is authoritative — correct any mismatch to its date + amount.
         const current = payments.find((p) => p.id === id);
         const userAmt = Number(current?.amount) || 0;
         const userDate = (current?.date || "").slice(0, 10);
-        const aiAmt = typeof j.amount === "number" ? j.amount : userAmt;
-        const aiDate = typeof j.date === "string" ? j.date : userDate;
-        const tallied = userAmt > 0 && Math.abs(userAmt - aiAmt) < 0.005 && userDate === aiDate;
-        const newTotal = payments.reduce((sum, pp) => sum + (pp.id === id ? aiAmt : Number(pp.amount) || 0), 0);
+        const aiAmt = typeof j.amount === "number" ? j.amount : 0;
+        const aiDate = typeof j.date === "string" ? j.date : "";
+        // NEVER clobber a figure you already typed — fill only an empty field.
+        // If the slip disagrees with your entry, keep yours and flag it so
+        // admin / accounting can confirm which is correct.
+        const finalAmt = userAmt > 0 ? userAmt : aiAmt;
+        const finalDate = userDate || aiDate;
+        const newTotal = payments.reduce((sum, pp) => sum + (pp.id === id ? finalAmt : Number(pp.amount) || 0), 0);
         const nowFull = dealTotal > 0 && newTotal >= dealTotal - 0.01;
-        setPayments((ps) => withAutoFull(ps.map((p) => (p.id === id ? { ...p, date: aiDate, amount: aiAmt } : p)), dealTotal));
-        setSlipStatus((s) => ({ ...s, [id]: { tone: "ok", text: `✓ Validated — ${formatCurrency(aiAmt, currency)} on ${aiDate}.${userAmt > 0 ? (tallied ? " Tallies with your entry." : " Adjusted to match the slip.") : ""}${nowFull ? " Covers the order total → set to Full payment." : ""}` } }));
+        setPayments((ps) => withAutoFull(ps.map((p) => (p.id === id ? { ...p, date: finalDate, amount: finalAmt } : p)), dealTotal));
+        const mismatch = userAmt > 0 && !(Math.abs(userAmt - aiAmt) < 0.005 && userDate === aiDate);
+        const fullNote = nowFull ? " Covers the order total → set to Full payment." : "";
+        if (mismatch) {
+          setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: `⚠ Slip reads ${formatCurrency(aiAmt, currency)} on ${aiDate}, but you entered ${formatCurrency(userAmt, currency)} on ${userDate}. Kept your entry — admin / accounting should confirm the correct figure.${fullNote}` } }));
+        } else {
+          setSlipStatus((s) => ({ ...s, [id]: { tone: "ok", text: `✓ Validated — ${formatCurrency(finalAmt, currency)} on ${finalDate}.${userAmt > 0 ? " Tallies with your entry." : " Filled from the slip."}${fullNote}` } }));
+        }
       } else if (res.ok) {
         const w = Array.isArray(j.warnings) && j.warnings.length ? String(j.warnings[0]) : "Not machine-validated / computer-generated — amount & date not filled.";
         setSlipStatus((s) => ({ ...s, [id]: { tone: "bad", text: `✗ ${w} Admin / accounting can verify and record it.` } }));
