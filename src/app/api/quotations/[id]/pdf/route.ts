@@ -4,6 +4,7 @@ import React from "react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
+import { readPricing } from "@/lib/quote";
 import { getUserSignature } from "@/lib/signature";
 import { convertAirflow, normalizePowerUnit, convertPower, roundPower, type PowerUnit } from "@/lib/units";
 import {
@@ -155,6 +156,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     vat: Number(quotation.vat),
     total: Number(quotation.total),
     vatRate: config.vatRate,
+    pricing: readPricing(quotation.classification, Number(quotation.discountPct ?? 0)),
+    discountPct: Number(quotation.discountPct ?? 0),
   };
 
   const element = React.createElement(QuotationPdf, { data }) as React.ReactElement<DocumentProps>;
