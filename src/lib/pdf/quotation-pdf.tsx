@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 import { COMPANY } from "@/lib/config";
+import { applyPricing, pricingForVatMode, round2, type PricingAdjust } from "@/lib/quote";
 import { AEROVENT_LOGO } from "./logo";
 
 export interface QuotationPdfLine {
@@ -44,8 +45,11 @@ export interface QuotationPdfData {
   items: QuotationPdfLine[];
   subtotal: number; // net of VAT
   vat: number;
-  total: number; // VAT-inclusive gross
+  total: number; // VAT-inclusive gross (raw line sum, before mark-up / discount)
   vatRate: number;
+  /** Header mark-up / discount; folded into prices (mark-up) and shown as a line (discount). */
+  pricing?: PricingAdjust | null;
+  discountPct?: number; // legacy fallback when no pricing block
 }
 
 function money(value: number) {
@@ -148,10 +152,35 @@ function TableHeader({ motorUnit, sizeUnit }: { motorUnit?: string; sizeUnit?: s
   );
 }
 
+function TotalLine({ label, value, leftSpan }: { label: string; value: number; leftSpan: number }) {
+  return (
+    <View style={s.totalRow}>
+      <View style={[s.totalLabel, { width: leftSpan }]}><Text>{label}</Text></View>
+      <View style={[s.totalVal, { width: W.total }]}><Text>{money(value)}</Text></View>
+    </View>
+  );
+}
+
 export function QuotationPdf({ data }: { data: QuotationPdfData }) {
   const exclusive = data.vatMode !== "INCLUSIVE";
   const f = exclusive ? 1 / (1 + data.vatRate) : 1;
   const leftSpan = W.item + W.qty + W.desc + W.cfm + W.pa + W.inch + W.hp + W.ph + W.volts + W.unit;
+
+  // Fold the hidden mark-up into displayed prices and show the discount as its
+  // own line, mirroring the Excel export so the PDF total equals what the client
+  // is billed (payableTotal).
+  const pricing: PricingAdjust = data.pricing ?? { markupMode: "percent", markupValue: 0, discountMode: "percent", discountValue: data.discountPct ?? 0 };
+  const baseNet = round2(data.total * f);
+  const adj = applyPricing(baseNet, pricingForVatMode(pricing, data.vatMode, data.vatRate));
+  const markedNet = round2(adj.afterMarkup); // net incl. hidden mark-up
+  const mFactor = baseNet > 0 ? markedNet / baseNet : 1;
+  const displayedNet = markedNet;
+  const discountAmt = round2(adj.discountAmt);
+  const finalNet = round2(adj.finalNet);
+  const vat = round2(finalNet * data.vatRate);
+  const hasDiscount = discountAmt > 0;
+  const discountLabel = pricing.discountMode === "percent" && pricing.discountValue > 0 ? `LESS ${pricing.discountValue}% DISCOUNT =>` : "LESS DISCOUNT =>";
+  const vatPct = Math.round(data.vatRate * 100);
 
   return (
     <Document>
@@ -189,32 +218,38 @@ export function QuotationPdf({ data }: { data: QuotationPdfData }) {
               <View style={[s.cell, s.cCenter, { width: W.hp }]}><Text>{dash(it.motorHp)}</Text></View>
               <View style={[s.cell, s.cCenter, { width: W.ph }]}><Text>{dash(it.motorPh)}</Text></View>
               <View style={[s.cell, s.cCenter, { width: W.volts }]}><Text>{dash(it.motorVolts)}</Text></View>
-              <View style={[s.cell, s.cRight, { width: W.unit }]}><Text>{money(it.unitPrice * f)}</Text></View>
-              <View style={[s.cell, s.cRight, { width: W.total }]}><Text>{money(it.lineTotal * f)}</Text></View>
+              <View style={[s.cell, s.cRight, { width: W.unit }]}><Text>{money(it.unitPrice * f * mFactor)}</Text></View>
+              <View style={[s.cell, s.cRight, { width: W.total }]}><Text>{money(it.lineTotal * f * mFactor)}</Text></View>
             </View>
           ))}
 
-          {/* Totals */}
+          {/* Totals — mark-up folded into prices; discount shown as its own line. */}
           {exclusive ? (
             <>
-              <View style={s.totalRow}>
-                <View style={[s.totalLabel, { width: leftSpan }]}><Text>VATable Sales =&gt;</Text></View>
-                <View style={[s.totalVal, { width: W.total }]}><Text>{money(data.subtotal)}</Text></View>
-              </View>
-              <View style={s.totalRow}>
-                <View style={[s.totalLabel, { width: leftSpan }]}><Text>VAT ({Math.round(data.vatRate * 100)}%) =&gt;</Text></View>
-                <View style={[s.totalVal, { width: W.total }]}><Text>{money(data.vat)}</Text></View>
-              </View>
-              <View style={s.totalRow}>
-                <View style={[s.totalLabel, { width: leftSpan }]}><Text>TOTAL AMOUNT DUE (VAT inclusive) =&gt;</Text></View>
-                <View style={[s.totalVal, { width: W.total }]}><Text>{money(data.total)}</Text></View>
-              </View>
+              <TotalLine leftSpan={leftSpan} label="NET AMOUNT (VAT exclusive price) =>" value={displayedNet} />
+              {hasDiscount && (
+                <>
+                  <TotalLine leftSpan={leftSpan} label={discountLabel} value={discountAmt} />
+                  <TotalLine leftSpan={leftSpan} label="NET AMOUNT =>" value={finalNet} />
+                </>
+              )}
+              {data.vatMode === "EXCLUSIVE_PLUS" && (
+                <>
+                  <TotalLine leftSpan={leftSpan} label={`ADD VAT (${vatPct}%) =>`} value={vat} />
+                  <TotalLine leftSpan={leftSpan} label="TOTAL AMOUNT DUE (VAT inclusive) =>" value={round2(finalNet + vat)} />
+                </>
+              )}
             </>
           ) : (
-            <View style={s.totalRow}>
-              <View style={[s.totalLabel, { width: leftSpan }]}><Text>NET AMOUNT (VAT inclusive price) =&gt;</Text></View>
-              <View style={[s.totalVal, { width: W.total }]}><Text>{money(data.total)}</Text></View>
-            </View>
+            <>
+              <TotalLine leftSpan={leftSpan} label="NET AMOUNT (VAT inclusive price) =>" value={displayedNet} />
+              {hasDiscount && (
+                <>
+                  <TotalLine leftSpan={leftSpan} label={discountLabel} value={discountAmt} />
+                  <TotalLine leftSpan={leftSpan} label="TOTAL AMOUNT DUE =>" value={finalNet} />
+                </>
+              )}
+            </>
           )}
         </View>
 
