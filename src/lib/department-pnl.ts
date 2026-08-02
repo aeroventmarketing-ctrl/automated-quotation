@@ -114,6 +114,17 @@ export function lineRouting(specs: Specs): { dept: DeptKey; routing: Routing } {
   return { dept: "office", routing: "office_full" };
 }
 
+/**
+ * A typed service / charge line (Mobilization / Demobilization, Delivery,
+ * Installation, …) — no product was selected from the catalogue, so its
+ * `category` is blank. These are revenue with NO cost of goods: their spend is
+ * booked later via Requisitions / Cash Vouchers, so they must never be
+ * fuzzy-matched to a catalogue product's cost.
+ */
+export function isServiceLine(specs: Specs): boolean {
+  return str(specs.category).trim() === "";
+}
+
 // --- Amounts --------------------------------------------------------------
 export type DeptSplit = Record<DeptKey, number>;
 export const zeroSplit = (): DeptSplit => ({ fans: 0, duct: 0, accessories: 0, motor: 0, office: 0 });
