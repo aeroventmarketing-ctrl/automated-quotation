@@ -44,8 +44,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const deptParam = sp.dept && PRODUCTION_DEPTS.some((d) => d.key === sp.dept) ? sp.dept : undefined;
 
   const [quotes, viewer, assignments, hideOrderProgress, docCheckGate] = await Promise.all([
+    // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
+    // revision reopens the inquiry (status leaves WON), so a WON filter would
+    // drop confirmed orders from the list. isSaleConfirmed below is the real
+    // gate, exactly as the departmental P&L does it. (Owner-approved edit.)
     prisma.quotation.findMany({
-      where: { inquiry: { status: "WON" } },
       include: { inquiry: { include: { customer: true } }, preparedBy: true },
       orderBy: { createdAt: "desc" },
     }),

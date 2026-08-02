@@ -148,8 +148,12 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // 1) Order-workflow approvals — confirmed orders whose current step needs a
   //    role the viewer holds (or a Sales-owned step they own).
   try {
+    // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
+    // revision reopens the inquiry (status leaves WON), so a WON filter would
+    // drop confirmed orders' pending tasks and MRF feed. isSaleConfirmed below
+    // is the real gate, exactly as the departmental P&L does it. (Owner-approved
+    // edit that also affects the Phase 3 Materials feed built from this query.)
     const quotes = await prisma.quotation.findMany({
-      where: { inquiry: { status: "WON" } },
       include: { inquiry: { include: { customer: true } } },
       orderBy: { createdAt: "desc" },
     });
