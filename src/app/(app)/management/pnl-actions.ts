@@ -19,6 +19,7 @@ import {
   lineNetOf,
   lineSalesSplit,
   lineRouting,
+  isServiceLine,
   saleRecognitionDate,
   fanCogsLookup,
   officeCostLookup,
@@ -231,8 +232,10 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
       if (routing === "office_full") {
         // Bought-in good: Office keeps the margin — selling net less the supplier
         // cost. The cost is netted here (not booked as a separate expense); its
-        // input VAT is still creditable.
-        const hit = officeCostOfLine(specs, haystack);
+        // input VAT is still creditable. A service / charge line (no product
+        // selected) carries no COGS — never cost-match it.
+        const service = isServiceLine(specs);
+        const hit = service ? null : officeCostOfLine(specs, haystack);
         const cost = hit ? round2(hit.unitCost * it.qty) : 0;
         sales.office = round2(sales.office + round2(net - cost));
         // Resale-COGS input VAT is credited at the point of sale. While the go-live
@@ -240,7 +243,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         // their input VAT belongs to the pre-launch period — don't credit it here;
         // only genuine post-go-live material POs generate input VAT.
         if (hit?.vatInclusive && cost && !goLiveFloor) inputVat = round2(inputVat + round2(cost * VAT_RATE));
-        if (!hit) {
+        if (!hit && !service) {
           officeCostUnmatched += 1;
           const label = productLabel(specs, it.descriptionSnapshot);
           if (label) officeUnmatched.add(label);
@@ -361,6 +364,7 @@ export interface PnlSaleLine {
   officeShare: number; // amount credited to Office
   cogs: number | null; // fan-body COGS used (fan lines)
   officeCost: number | null; // supplier cost booked to Office (bought-in), null if unmatched
+  service?: boolean; // typed service / charge line (no product) — carries no COGS by design
 }
 export interface PnlSaleDetail {
   quotationId: string;
@@ -501,12 +505,14 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       let officeCost: number | null = null;
       let deptShare = 0;
       let officeShare = 0;
+      const service = isServiceLine(specs);
       if (routing === "fan") {
         cogs = round2(Math.min(Math.max(cogsOf(specs), 0), net));
         deptShare = cogs;
         officeShare = round2(net - cogs);
       } else if (routing === "office_full") {
-        const hit = officeCostOfLine(specs, officeLineHaystack(it.descriptionSnapshot, specs));
+        // A service / charge line (no product selected) carries no COGS.
+        const hit = service ? null : officeCostOfLine(specs, officeLineHaystack(it.descriptionSnapshot, specs));
         officeCost = hit ? round2(hit.unitCost * it.qty) : null;
         officeShare = round2(net - (officeCost ?? 0)); // margin: selling less supplier cost
         // While the go-live gate is on, resold goods are pre-launch opening stock,
@@ -529,7 +535,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         orderOutputVat = round2(orderOutputVat + round2(net * VAT_RATE));
       }
       const label = productLabel(specs, it.descriptionSnapshot);
-      lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost });
+      lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost, service });
     }
     if (!lines.length) continue;
     const customer = q.inquiry?.customer?.company ?? "—";

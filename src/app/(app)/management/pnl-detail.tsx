@@ -104,6 +104,9 @@ function SaleRef({ s }: { s: PnlSaleDetail }) {
 }
 
 function CostNote({ l }: { l: PnlSaleLine }) {
+  // A service / charge line legitimately has no cost — show "service", not the
+  // amber "no COGS" warning used for a bought-in product with a missing cost.
+  if (l.service) return <span className="text-muted-foreground">service</span>;
   if (l.routing === "fan") return l.cogs && l.cogs > 0 ? <>{formatCurrency(l.cogs)}</> : <span className="text-amber-600">no COGS</span>;
   if (l.routing === "office_full") return l.officeCost != null ? <span className="text-muted-foreground">−{formatCurrency(l.officeCost)}</span> : <span className="text-amber-600">no COGS</span>;
   return <span className="text-muted-foreground">—</span>;
