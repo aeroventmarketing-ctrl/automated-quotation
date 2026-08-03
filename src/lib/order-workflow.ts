@@ -550,18 +550,19 @@ export interface PendingStep {
 }
 
 export function pendingStep(wf: OrderWorkflow): PendingStep | null {
+  // A fully bought-in order has no job-order content — it skips production and its
+  // Office-side roles (Logistics / Payment Approver / Sales / Engineer) handle the
+  // Phase 5 quality steps instead of the production QC departments.
+  const hasJoContent = [wf.fansJobOrders, wf.ductJobOrders, wf.accessoriesJobOrders, wf.motorJobOrders]
+    .some((a) => (a?.length ?? 0) > 0);
+  const boughtIn = !hasJoContent;
   switch (wf.stage) {
     case "payment_review":
       return { action: "Check order documents", roles: ["accounting"] };
     case "docs_checked":
       return { action: "Payment Cleared", roles: ["payment_approver"] };
     case "released": {
-      // A fully bought-in order has no job-order content — it follows the PO flow
-      // (Purchaser prepares & processes the PO → Sales notifies the client) rather
-      // than issuing job orders.
-      const hasJoContent = [wf.fansJobOrders, wf.ductJobOrders, wf.accessoriesJobOrders, wf.motorJobOrders]
-        .some((a) => (a?.length ?? 0) > 0);
-      if (!hasJoContent) {
+      if (boughtIn) {
         return { action: "Prepare & process the Purchase Order", roles: ["purchaser", "technical_head"] };
       }
       return { action: "Issue job orders", roles: ["technical_head"] };
@@ -588,9 +589,13 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
     case "final_pay_checked":
       return { action: "Confirm final payment", roles: ["payment_approver"] };
     case "final_pay_cleared":
-      return { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
+      return boughtIn
+        ? { action: "Quality testing", roles: ["logistics", "payment_approver"], sales: true }
+        : { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
     case "qa_tested":
-      return { action: "Plant QC & quantity check", roles: ["plant_manager"] };
+      return boughtIn
+        ? { action: "Plant QC & quantity check", roles: ["logistics", "payment_approver"], sales: true }
+        : { action: "Plant QC & quantity check", roles: ["plant_manager"] };
     case "qa_plant_checked":
       return { action: "Transfer items to office", roles: ["logistics"] };
     case "qa_transferred":
