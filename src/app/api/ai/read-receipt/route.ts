@@ -25,6 +25,7 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp
 const SYSTEM = `You read purchase receipts / official receipts for a Philippine manufacturer and reconcile them against a Purchase Order (PO).
 You are given the PO's line items (with their expected peso amounts) and one or more receipt images.
 Extract what was actually paid and map it to the PO lines. Amounts are Philippine pesos; ignore the "₱"/"PHP" symbol and thousands separators.
+CONVENIENCE / SERVICE / PROCESSING FEE: when a payment proof shows a base "Amount" PLUS a separate fee line (Convenience Fee / Service Fee / Processing Fee) that add up to a "Total" — common on GCash and other e-wallet bill-payment / buy-load receipts — use the base "Amount" (the payment itself) and IGNORE the fee. Do NOT use the Total, and do not add the fee as an extra item.
 Return STRICT JSON only.`;
 
 function userPrompt(lines: { description: string; qty: string; poAmount: number }[]): string {
