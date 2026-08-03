@@ -12,6 +12,7 @@ import {
   formatSegmentDimensions,
   isReducingDuctType,
   DUCT_TYPES,
+  DUCT_DAMPER_TYPES,
   DUCT_MATERIALS,
   DUCT_GAUGES,
   DUCT_UOMS,
@@ -217,6 +218,9 @@ function DuctJobOrderForm({
                 onChange={(e) => setSeg(i, { type: e.target.value })}
               >
                 {DUCT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                <optgroup label="Dampers">
+                  {DUCT_DAMPER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </optgroup>
               </select>
               <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
                 Qty
@@ -271,6 +275,9 @@ function DuctJobOrderForm({
           >
             <option value="">Type…</option>
             {DUCT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            <optgroup label="Dampers">
+              {DUCT_DAMPER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </optgroup>
           </select>
         </div>
       </div>

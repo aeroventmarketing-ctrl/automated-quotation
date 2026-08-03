@@ -28,6 +28,30 @@ export const DUCT_TYPES = [
 ] as const;
 export type DuctType = (typeof DUCT_TYPES)[number];
 
+/**
+ * Dampers (the taxonomy "Dampers" group) are fabricated by the DUCT department,
+ * so they are valid Duct JO segment types too — a damper line auto-generates a
+ * Duct job order, and the engineer can add one from the Duct panel's type list.
+ */
+export const DUCT_DAMPER_TYPES = [
+  "Volume Damper",
+  "Motorized Volume Damper",
+  "Backdraft Damper",
+  "Fire Damper",
+  "Motorized Fire Damper",
+  "Smoke Damper",
+  "Motorized Smoke Damper",
+  "Pressure Relief Damper",
+  "Motorized Relief Damper",
+  "Gravity Shutter",
+  "OBVD",
+] as const;
+/** True when a segment/quotation type is a damper (matched by name as a catch-all). */
+export function isDamperType(type: string): boolean {
+  const t = (type ?? "").trim();
+  return (DUCT_DAMPER_TYPES as readonly string[]).includes(t) || /damper/i.test(t);
+}
+
 /** Types that transition between two cross-sections — they show "to" dimensions. */
 const REDUCING_DUCT_TYPES = new Set<string>(["Duct Reducer", "Square to Round Duct"]);
 export function isReducingDuctType(type: string): boolean {

@@ -11,7 +11,7 @@
  */
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine, type AccessoryDimension } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
-import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
+import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, isDamperType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
 import { findFanMotorHp } from "@/lib/fan-motor-table";
 
@@ -22,6 +22,10 @@ const AIR_DUCT_TYPES = new Set([
 ]);
 const isAirDuct = (s: Record<string, unknown>) =>
   s.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(str(s.type));
+// Dampers are a Ventilation Accessory group but are fabricated by the DUCT
+// department, not Accessories — they generate a Duct job order.
+const isDamper = (s: Record<string, unknown>) =>
+  s.category === "Ventilation Accessories" && isDamperType(str(s.type));
 
 /** Map a quotation Air Duct material to a Duct JO material. */
 function ductMaterial(s: Record<string, unknown>): string {
@@ -67,10 +71,11 @@ function specsOf(it: QuoteItemLike): Record<string, unknown> {
 
 const isMotorController = (s: Record<string, unknown>) => s.type === "Motor Controller";
 const isIsolator = (s: Record<string, unknown>) => s.type === "Spring Vibration Isolator";
-// Accessories = ventilation accessories EXCEPT the Air Duct group (those go to the
-// Duct JO) and EXCEPT spring vibration isolators (not a job-order product).
+// Accessories = ventilation accessories EXCEPT the Air Duct group and dampers
+// (both go to the Duct JO) and EXCEPT spring vibration isolators (not a job-order
+// product).
 const isAccessory = (s: Record<string, unknown>) =>
-  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isIsolator(s);
+  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isIsolator(s);
 
 /**
  * The two labelled dimensions for an accessory line, carried across from the
@@ -136,7 +141,7 @@ export function quotationJobOrderDepts(items: QuoteItemLike[]): Record<JobOrderD
   const depts: Record<JobOrderDept, boolean> = { fans: false, duct: false, accessories: false, motor: false };
   for (const it of items) {
     const s = specsOf(it);
-    if (isAirDuct(s)) { depts.duct = true; continue; }
+    if (isAirDuct(s) || isDamper(s)) { depts.duct = true; continue; }
     if (isFan(s)) { depts.fans = true; continue; }
     if (isMotorController(s)) {
       if (!/variable frequency|vfd/i.test(str(s.bladeType))) depts.motor = true;
@@ -175,6 +180,22 @@ export function buildAutoJobOrders(
   for (const it of items) {
     const s = specsOf(it);
     const qty = it.qty > 0 ? String(it.qty) : "1";
+    if (isDamper(s)) {
+      // A damper is produced by the Duct department — one Duct segment per line,
+      // carrying its type and sized dimensions (dampers have no run length).
+      ductSegments.push({
+        ...EMPTY_DUCT_SEGMENT,
+        type: str(s.type) || "Volume Damper",
+        quantity: qty,
+        uom: "pc",
+        horizontal: str(s.sizeL),
+        vertical: str(s.sizeW),
+        length: "",
+        material: ductMaterial(s),
+        gauge: ductGaugeLabel(s),
+      });
+      continue;
+    }
     if (isAirDuct(s)) {
       // One duct segment per quotation Air Duct line. The quotation calculator
       // stores the cross-section as Width "A" = ductCalcWidth and Height "B" =

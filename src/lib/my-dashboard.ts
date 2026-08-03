@@ -39,6 +39,8 @@ export interface MyTask {
   href: string;
   deliveryMode?: "single" | "multi"; // for order tasks: how the order ships
   since?: string; // ISO — when it became pending (for the notification backlog reset)
+  createdAt?: string; // ISO — when the underlying order was created (go-live gate: a
+  // pre-launch order stays quiet even after a post-launch stage stamp bumps `since`)
 }
 
 /** A cross-role MRF status note shown to the requestor and materials roles. */
@@ -161,6 +163,10 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const sale = saleFromClassification(q.classification);
       if (!sale || !isSaleConfirmed(sale)) continue;
       const wf = readOrderWorkflow(q.classification);
+      // The order's creation instant — a go-live gate applied to every pending
+      // action below, so an order created before launch never demands action even
+      // if a later stage stamp (during testing) made its `since` post-launch.
+      const orderCreatedAt = q.createdAt.toISOString();
       // Material Request Forms (MRF) awaiting the Warehouse to triage — status
       // "requested" (issue from stock / send to purchasing). Warehouse only.
       for (const m of wf.materialRequests) {
@@ -172,6 +178,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`,
             since: m.raisedAt || undefined,
+            createdAt: orderCreatedAt,
           });
         }
         // The requesting department confirms receipt of the released materials.
@@ -182,6 +189,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`,
             since: m.releasedAt || m.handledAt || m.raisedAt || undefined,
+            createdAt: orderCreatedAt,
           });
         }
         // Materials feed: the current status of every active MRF, so the
@@ -227,6 +235,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
             href: `/orders/${q.id}`, deliveryMode: "multi",
             since: batchSince,
+            createdAt: orderCreatedAt,
           });
         }
       }
@@ -246,6 +255,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         href: `/orders/${q.id}`,
         deliveryMode: wf.deliveryMode === "multi" ? "multi" : "single",
         since: orderSince,
+        createdAt: orderCreatedAt,
       });
     }
   } catch { /* ignore */ }
@@ -272,6 +282,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
           href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
           since: pr.createdAt.toISOString(),
+          createdAt: pr.quotation?.createdAt.toISOString(),
         });
       }
       // The Purchaser must raise the PO for an approved requisition that has none
@@ -471,7 +482,10 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // launch only items newer than the go-live moment do.
   const [baseline, golive] = await Promise.all([getNotificationBaseline(), getAlertGoLive()]);
   const shows = (when: string | null | undefined) => passesNotificationBaseline(when, baseline) && alertPasses(when, golive);
-  const visibleTasks = tasks.filter((t) => shows(t.since));
+  // A pending action is hidden when its own "became pending" time is pre-launch,
+  // AND (for order-derived tasks) when the underlying order was created before the
+  // launch moment — so a legacy order advanced during testing stays quiet.
+  const visibleTasks = tasks.filter((t) => shows(t.since) && alertPasses(t.createdAt, golive));
   const visibleFeed = materialsFeed.filter((m) => shows(m.when || undefined));
 
   const byArea = (Object.keys(AREA_LABEL) as TaskArea[])
