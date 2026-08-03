@@ -99,20 +99,18 @@ function CashRow({ r }: { r: CashRequestRow }) {
       )}
       {r.note && <p className="mt-1 text-xs text-muted-foreground">Note: {r.note}</p>}
 
-      {/* Chain actions available at the current status. */}
+      {/* Chain actions available at the current status. Always name who must act
+          (position + name) alongside the button, so everyone can see who will
+          press it — not only when the viewer can't act. */}
       {r.actions.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {r.actions.map((a) =>
-            a.canAct ? (
-              <Button key={a.key} size="sm" variant={a.key === "reject" ? "outline" : "default"} className="h-7 text-xs"
-                disabled={busy !== null} onClick={() => advance(a.key, a.key === "voucher" || a.key === "reject" || a.key === "release")}>
-                {busy === a.key ? "…" : a.label}
-              </Button>
-            ) : (
-              <ApproverHighlight key={a.key} role={a.actorLabel} />
-
-            ),
-          )}
+          {r.actions[0] && <ApproverHighlight role={r.actions[0].actorLabel} />}
+          {r.actions.filter((a) => a.canAct).map((a) => (
+            <Button key={a.key} size="sm" variant={a.key === "reject" ? "outline" : "default"} className="h-7 text-xs"
+              disabled={busy !== null} onClick={() => advance(a.key, a.key === "voucher" || a.key === "reject" || a.key === "release")}>
+              {busy === a.key ? "…" : a.label}
+            </Button>
+          ))}
         </div>
       )}
 
