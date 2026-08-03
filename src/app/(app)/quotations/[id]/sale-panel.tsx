@@ -269,8 +269,13 @@ export function SalePanel({
   }
 
   // One document slot (Computation, Quotation, Sales Invoice, …) — supports
-  // multiple files per slot.
-  function DocSlot({ type }: { type: SaleDocType }) {
+  // multiple files per slot. Rendered as an inline function (NOT a nested
+  // <Component/>): a component declared inside the parent is a new type on every
+  // render, so React would remount its file <input> whenever parent state changes
+  // (e.g. `busy` toggling during an upload) — which dropped the first file pick
+  // and forced a second upload. Called as a function, its output reconciles in
+  // place and the input DOM node is preserved.
+  const renderDocSlot = (type: SaleDocType) => {
     // Files from this slot's own key plus any merged keys (e.g. the seeded
     // Inquiry Form shows inside "Computation / Inquiry Form").
     const files: { doc: SaleDoc; srcKey: string }[] = [
@@ -278,7 +283,7 @@ export function SalePanel({
       ...(type.mergeKeys ?? []).flatMap((k) => (docs[k] ?? []).map((doc) => ({ doc, srcKey: k }))),
     ];
     return (
-      <div className="space-y-1">
+      <div key={type.key} className="space-y-1">
         <Label className="text-xs">
           {type.label} <span className="text-muted-foreground">({type.required ? "required" : "optional"})</span>
         </Label>
@@ -315,7 +320,7 @@ export function SalePanel({
         </div>
       </div>
     );
-  }
+  };
 
   return (
     <Card>
@@ -389,7 +394,7 @@ export function SalePanel({
         </div>
 
         {/* 2–6. Computation, Quotation, Drawing/Pictures, Billing DP, Billing FP */}
-        {SALE_DOCS_BEFORE_PAYMENTS.map((t) => <DocSlot key={t.key} type={t} />)}
+        {SALE_DOCS_BEFORE_PAYMENTS.map((t) => renderDocSlot(t))}
 
         {/* 7. Payments collected (required) */}
         <div className="space-y-2">
@@ -464,11 +469,11 @@ export function SalePanel({
 
         {/* Proof of the final payment — reviewed by the approver on the order,
             reflected here once attached. */}
-        <DocSlot type={{ key: "final_payment", label: "Final payment proof", required: false }} />
+        {renderDocSlot({ key: "final_payment", label: "Final payment proof", required: false })}
 
         {/* 8–11. Sales Invoice, OR/CR/AF, Delivery Receipt, BIR 2307
             (Sales Invoice + BIR 2307 hidden for VAT-exclusive deals). */}
-        {afterPaymentDocTypes(vatInclusive).map((t) => <DocSlot key={t.key} type={t} />)}
+        {afterPaymentDocTypes(vatInclusive).map((t) => renderDocSlot(t))}
 
         {/* Client note — additional information given by the client. */}
         <div className="space-y-1">
