@@ -6,6 +6,7 @@
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
 import { formatAccessoryDimensions, accessoriesJobRemarks, formatMaterialText, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
+import { noteRowCount } from "@/lib/excel/xlsx-note";
 
 const RED = "FFED1C24";
 const GREY = "FFF2F2F2";
@@ -132,13 +133,17 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
   ws.getCell(`A${r}`).value = "Note / Remarks:";
   ws.getCell(`A${r}`).font = { bold: true, size: 10 };
   r++;
-  ws.mergeCells(`A${r}:${LAST}${r + 2}`);
+  // Grow the note box to fit the text — more rows when the remarks need them.
+  const noteText = accessoriesJobRemarks(jo);
+  const noteRows = noteRowCount(noteText, 92);
+  ws.mergeCells(`A${r}:${LAST}${r + noteRows - 1}`);
   const note = ws.getCell(`A${r}`);
-  note.value = accessoriesJobRemarks(jo);
+  note.value = noteText;
   note.font = { size: 10 };
   note.alignment = { horizontal: "left", vertical: "top", wrapText: true };
   note.border = allBorders;
-  r += 3;
+  for (let k = 0; k < noteRows; k++) ws.getRow(r + k).height = 15;
+  r += noteRows;
 
   r += 2;
   // --- Signatures ---------------------------------------------------------
