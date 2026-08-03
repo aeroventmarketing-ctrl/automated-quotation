@@ -1204,12 +1204,13 @@ export async function notifyClientBoughtInOrder(quotationId: string): Promise<vo
   const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
   if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
   if (wf.stage !== "released") throw new Error("The order isn't awaiting client notification.");
-  // The full purchasing chain must have received the goods.
-  const received: PRStatus[] = ["RECEIVED", "PLANT_APPROVED", "COMPLETED"];
-  const inHand = await prisma.purchaseRequest.count({
-    where: { quotationId, kind: "department", status: { in: received } },
+  // The Purchaser must have bought the goods (bought items go straight to the
+  // client — they don't pass warehouse receiving into stock).
+  const purchased: PRStatus[] = ["PURCHASED", "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED", "COMPLETED"];
+  const bought = await prisma.purchaseRequest.count({
+    where: { quotationId, kind: "department", status: { in: purchased } },
   });
-  if (inHand === 0) throw new Error("The supplier goods must be received (purchasing complete) before notifying the client.");
+  if (bought === 0) throw new Error("The Purchaser must buy the goods before notifying the client.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_review", approvals: stamp(wf, "client_notified", user) });
   await logActivity(user, {
     action: "order.boughtin.notify",
