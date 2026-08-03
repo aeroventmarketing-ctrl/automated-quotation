@@ -103,7 +103,7 @@ export async function createCashRequest(input: {
         dept,
         amount: new Prisma.Decimal(amount.toFixed(2)),
         lines: lines as unknown as Prisma.InputJsonValue,
-        status: "SUBMITTED",
+        status: "PENDING_APPROVAL", // Accounting approves/rejects the request first
         requestedById: user.id,
         requestedByName: user.name,
         note: input.note?.trim() || null,
@@ -154,6 +154,12 @@ export async function advanceCashRequest(id: string, stepKey: string, note?: str
   const now = new Date();
   const data: Prisma.CashRequestUpdateInput = { status: step.to };
   switch (stepKey) {
+    case "approve":
+    case "reject_request":
+      data.decidedByName = user.name;
+      data.decidedAt = now;
+      if (note) data.decisionNote = note;
+      break;
     case "voucher":
       data.voucherByName = user.name;
       data.voucherAt = now;
@@ -199,7 +205,7 @@ export async function cancelCashRequest(id: string): Promise<void> {
   const admin = isAdmin(user);
   const pr = await loadOr404(id);
   if (!isCashCancellable(pr.status as CashRequestStatus)) throw new Error("This cash request can no longer be cancelled.");
-  if (!(admin || (pr.requestedById === user.id && pr.status === "SUBMITTED"))) {
+  if (!(admin || (pr.requestedById === user.id && (pr.status === "PENDING_APPROVAL" || pr.status === "SUBMITTED")))) {
     throw new Error("Only the requestor (before the voucher is prepared) or an admin can cancel this.");
   }
   await prisma.cashRequest.update({ where: { id }, data: { status: "CANCELLED" } });

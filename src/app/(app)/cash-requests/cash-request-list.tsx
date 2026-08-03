@@ -24,7 +24,7 @@ function CashRow({ r }: { r: CashRequestRow }) {
   async function advance(stepKey: string, needsNote: boolean) {
     let note: string | undefined;
     if (needsNote) {
-      note = window.prompt(stepKey === "voucher" ? "Voucher no. / reference (optional):" : stepKey === "reject" ? "Reason for rejection (optional):" : "Note (optional):", "") ?? undefined;
+      note = window.prompt(stepKey === "voucher" ? "Voucher no. / reference (optional):" : (stepKey === "reject" || stepKey === "reject_request") ? "Reason for rejection (optional):" : "Note (optional):", "") ?? undefined;
     }
     setBusy(stepKey); setErr(null);
     try { await advanceCashRequest(r.id, stepKey, note); router.refresh(); }
@@ -106,8 +106,8 @@ function CashRow({ r }: { r: CashRequestRow }) {
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {r.actions[0] && <ApproverHighlight role={r.actions[0].actorLabel} />}
           {r.actions.filter((a) => a.canAct).map((a) => (
-            <Button key={a.key} size="sm" variant={a.key === "reject" ? "outline" : "default"} className="h-7 text-xs"
-              disabled={busy !== null} onClick={() => advance(a.key, a.key === "voucher" || a.key === "reject" || a.key === "release")}>
+            <Button key={a.key} size="sm" variant={a.key === "reject" || a.key === "reject_request" ? "outline" : "default"} className="h-7 text-xs"
+              disabled={busy !== null} onClick={() => advance(a.key, a.key === "voucher" || a.key === "reject" || a.key === "reject_request" || a.key === "release")}>
               {busy === a.key ? "…" : a.label}
             </Button>
           ))}

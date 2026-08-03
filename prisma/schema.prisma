@@ -392,8 +392,9 @@ model PurchaseRequest {
 }
 
 enum CashRequestStatus {
-  SUBMITTED      // requestor requested money, awaiting accounting to prepare voucher
-  REJECTED       // approver rejected the voucher
+  PENDING_APPROVAL // requestor asked for cash, awaiting Accounting to approve/reject
+  SUBMITTED      // Accounting approved the request, awaiting accounting to prepare voucher
+  REJECTED       // rejected by Accounting (intake) or the approver (voucher)
   VOUCHER_READY  // accounting prepared the voucher, awaiting the approver
   CASH_RELEASED  // approver approved the voucher & released cash (held by accounting)
   DISBURSED      // accounting handed the cash to the requestor
