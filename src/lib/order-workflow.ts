@@ -557,14 +557,12 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
       return { action: "Payment Cleared", roles: ["payment_approver"] };
     case "released": {
       // A fully bought-in order has no job-order content — it follows the PO flow
-      // (Purchaser prepares the PO → Engineer verifies → Sales notifies the client)
-      // rather than issuing job orders.
+      // (Purchaser prepares & processes the PO → Sales notifies the client) rather
+      // than issuing job orders.
       const hasJoContent = [wf.fansJobOrders, wf.ductJobOrders, wf.accessoriesJobOrders, wf.motorJobOrders]
         .some((a) => (a?.length ?? 0) > 0);
       if (!hasJoContent) {
-        return wf.approvals?.po_verified
-          ? { action: "Notify client the order is ready", roles: [], sales: true }
-          : { action: "Prepare & verify the Purchase Order", roles: ["purchaser", "technical_head"] };
+        return { action: "Prepare & process the Purchase Order", roles: ["purchaser", "technical_head"] };
       }
       return { action: "Issue job orders", roles: ["technical_head"] };
     }
