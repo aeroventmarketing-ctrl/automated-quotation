@@ -123,7 +123,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         status,
         sales: q.preparedBy.name,
         stage: wf.stage,
-        stageText: boughtInOnly && wf.stage === "released" ? "For PO creation" : stageLabel(wf.stage),
+        stageText: boughtInOnly && wf.stage === "released" ? "For PO creation"
+          : boughtInOnly && wf.stage === "qa_plant_checked" ? "QC & Quantity Checked"
+          : stageLabel(wf.stage),
         prodDepts,
         nextStep: next?.key ?? null,
         nextLabel: boughtInOnly && next?.key === "payment_cleared" ? "Clear payment & create PO" : (next?.label ?? null),

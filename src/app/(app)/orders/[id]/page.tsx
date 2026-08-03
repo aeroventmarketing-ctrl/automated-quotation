@@ -317,6 +317,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // production and its Office-side roles handle the Phase 5 quality steps.
   const boughtInProductLines = orderBoughtInLines(quote.items);
   const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
+  // Bought-in orders relabel a couple of stages (no JO creation / no Plant QC).
+  const displayStageLabel = (key: OrderStage): string => {
+    if (boughtInOnly && key === "released") return "For PO creation";
+    if (boughtInOnly && key === "qa_plant_checked") return "QC & Quantity Checked";
+    return stageLabel(key);
+  };
 
   const jobs = PRODUCTION_DEPTS.filter((d) => wf.jobOrders[d.key] && canSeeDeptJO(d.key)).map((d) => {
     const jo = wf.jobOrders[d.key]!;
@@ -702,7 +708,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             )}
           </p>
         </div>
-        <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{boughtInOnly && wf.stage === "released" ? "For PO creation" : stageLabel(wf.stage)}</Badge>
+        <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{displayStageLabel(wf.stage)}</Badge>
       </div>
 
       {/* Stage progress */}
@@ -716,7 +722,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               key={s.key}
               className={`rounded-full px-2.5 py-1 text-xs ${cur ? "bg-primary text-primary-foreground" : done ? "bg-emerald-600/15 text-emerald-700" : "bg-muted text-muted-foreground"}`}
             >
-              {s.label}
+              {displayStageLabel(s.key)}
             </span>
           );
         })}

@@ -594,7 +594,7 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
         : { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
     case "qa_tested":
       return boughtIn
-        ? { action: "Plant QC & quantity check", roles: ["logistics", "payment_approver"], sales: true }
+        ? { action: "QC & Quantity Checked", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Plant QC & quantity check", roles: ["plant_manager"] };
     case "qa_plant_checked":
       return { action: "Transfer items to office", roles: ["logistics"] };
