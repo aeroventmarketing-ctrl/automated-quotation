@@ -1193,43 +1193,9 @@ async function autoRaiseBoughtInRequisition(
 }
 
 /**
- * Engineer verifies a bought-in order's Purchase Order (step 10): the PO the
- * Purchaser prepared is confirmed and issued to the supplier. Records the
- * verification stamp; the full purchasing chain (approval → voucher → cash →
- * receiving) then runs before Sales notifies the client.
- */
-export async function verifyBoughtInPo(quotationId: string): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
-  const roles = await getWorkflowRoles();
-  if (!(isAdmin(user) || user.role === "ENGINEER" || userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey))) {
-    throw new Error("Only the Engineer, Technical Head or an admin can verify the Purchase Order.");
-  }
-  const quote = await prisma.quotation.findUnique({
-    where: { id: quotationId },
-    select: { id: true, classification: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
-  });
-  if (!quote) throw new Error("Order not found.");
-  const wf = readOrderWorkflow(quote.classification);
-  const cls = (quote.classification as Record<string, unknown>) ?? {};
-  if (wf.stage !== "released") throw new Error("The order isn't awaiting PO creation.");
-  if (!isBoughtInOnlyOrder(quote.items)) throw new Error("Only a fully bought-in order uses the PO flow.");
-  await saveWorkflow(quotationId, cls, { ...wf, approvals: stamp(wf, "po_verified", user) });
-  await logActivity(user, {
-    action: "order.boughtin.verify",
-    category: "order",
-    summary: `Verified & issued the Purchase Order — ${await orderRefLabel(quotationId)}`,
-    entity: "order",
-    entityId: quotationId,
-    href: `/orders/${quotationId}`,
-  });
-}
-
-/**
- * Sales notifies the client a bought-in order is ready (step 11) → the order
- * enters Phase 5 (billing / final payment). Available once the Engineer has
- * verified the PO AND the supplier goods have been received (the full purchasing
- * chain is complete).
+ * Sales notifies the client a bought-in order is ready → the order enters Phase 5
+ * (billing / final payment). Available once the supplier goods have been received
+ * (the full purchasing chain is complete).
  */
 export async function notifyClientBoughtInOrder(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
@@ -1238,7 +1204,6 @@ export async function notifyClientBoughtInOrder(quotationId: string): Promise<vo
   const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
   if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
   if (wf.stage !== "released") throw new Error("The order isn't awaiting client notification.");
-  if (!wf.approvals?.po_verified) throw new Error("The Engineer must verify the Purchase Order first.");
   // The full purchasing chain must have received the goods.
   const received: PRStatus[] = ["RECEIVED", "PLANT_APPROVED", "COMPLETED"];
   const inHand = await prisma.purchaseRequest.count({
