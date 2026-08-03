@@ -1966,6 +1966,15 @@ export async function advancePurchaseRequest(
     case "check":
       data.checkedByName = user.name;
       data.checkedAt = now;
+      // A bought-in order requisition (Office requisition linked to an order) goes
+      // straight to the client — it never passes warehouse receiving into stock.
+      // Checking the purchased item therefore completes it: skip Deliver to
+      // Warehouseman → Warehouseman Received → Plant Manager → Receive & Add Stock.
+      if (pr.kind === "department" && pr.dept === OFFICE_DEPT_KEY && pr.quotationId) {
+        data.status = "COMPLETED";
+        data.receivedByName = user.name;
+        data.receivedAt = now;
+      }
       break;
     case "receive":
       data.receivedByName = user.name;
