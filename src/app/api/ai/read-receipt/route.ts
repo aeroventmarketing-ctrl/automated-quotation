@@ -26,6 +26,7 @@ const SYSTEM = `You read purchase receipts / official receipts for a Philippine 
 You are given the PO's line items (with their expected peso amounts) and one or more receipt images.
 Extract what was actually paid and map it to the PO lines. Amounts are Philippine pesos; ignore the "₱"/"PHP" symbol and thousands separators.
 CONVENIENCE / SERVICE / PROCESSING FEE: when a payment proof shows a base "Amount" PLUS a separate fee line (Convenience Fee / Service Fee / Processing Fee) that add up to a "Total" — common on GCash and other e-wallet bill-payment / buy-load receipts — use the base "Amount" (the payment itself) and IGNORE the fee. Do NOT use the Total, and do not add the fee as an extra item.
+BDO CASH TRANSACTION SLIP / CASH DEPOSIT SLIP (machine-validated): use the "Cash Deposit" figure as the amount. DISREGARD "Cash In" (the cash fed into the machine) and "Cash Out"/"Total Cash Out" (the change returned) — "Cash In" minus "Cash Out" equals the "Cash Deposit". Always read the "Cash Deposit" amount, never "Cash In".
 Return STRICT JSON only.`;
 
 function userPrompt(lines: { description: string; qty: string; poAmount: number }[]): string {
