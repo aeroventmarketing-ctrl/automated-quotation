@@ -119,11 +119,15 @@ function renderSheet(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet): string {
       const text = resolveCellText(wb, ws, cell);
       const align = cell.alignment?.horizontal;
       const bold = cell.font?.bold ? " b" : "";
+      // Cells set to wrap in the workbook (e.g. Note / Remarks) must wrap in the
+      // preview too — otherwise a long note runs off to the right on one line.
+      const wrap = cell.alignment?.wrapText ? " wrap" : "";
       const sp = span.get(key);
+      const cls = `${align ? `a-${esc(align)}` : ""}${bold}${wrap}`.trim();
       const attrs = [
         sp && sp.colspan > 1 ? `colspan="${sp.colspan}"` : "",
         sp && sp.rowspan > 1 ? `rowspan="${sp.rowspan}"` : "",
-        align ? `class="a-${esc(align)}${bold}"` : (bold ? `class="b"` : ""),
+        cls ? `class="${cls}"` : "",
       ].filter(Boolean).join(" ");
       tds.push(`<td ${attrs}>${esc(text)}</td>`);
     }
@@ -157,6 +161,7 @@ export function renderXlsxAsHtml(wb: ExcelJS.Workbook, title: string): string {
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #6b7280; margin: 0 0 10px; }
   table { border-collapse: collapse; font-size: 13px; }
   td { border: 1px solid #d1d5db; padding: 4px 8px; vertical-align: middle; white-space: nowrap; }
+  td.wrap { white-space: pre-wrap; word-break: break-word; vertical-align: top; }
   td.b, td.a-center.b, td.a-right.b, td.a-left.b { font-weight: 700; }
   td.a-center { text-align: center; }
   td.a-right { text-align: right; }

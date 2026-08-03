@@ -15,6 +15,7 @@ import {
   isReducingDuctType,
   type DuctJobOrder,
 } from "@/lib/duct-job-order";
+import { noteRowCount } from "@/lib/excel/xlsx-note";
 
 const RED = "FFED1C24";
 const GREY = "FFF2F2F2";
@@ -157,13 +158,17 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
   ws.getCell(`A${r}`).value = "Note / Remarks:";
   ws.getCell(`A${r}`).font = { bold: true, size: 10 };
   r++;
-  ws.mergeCells(`A${r}:${LAST}${r + 2}`);
+  // Grow the note box to fit the text — more rows when the remarks need them.
+  const noteText = jo.note || "";
+  const noteRows = noteRowCount(noteText, 98);
+  ws.mergeCells(`A${r}:${LAST}${r + noteRows - 1}`);
   const note = ws.getCell(`A${r}`);
-  note.value = jo.note || "";
+  note.value = noteText;
   note.font = { size: 10 };
   note.alignment = { horizontal: "left", vertical: "top", wrapText: true };
   note.border = allBorders;
-  r += 3;
+  for (let k = 0; k < noteRows; k++) ws.getRow(r + k).height = 15;
+  r += noteRows;
 
   r += 2;
   // --- Signatures ---------------------------------------------------------
