@@ -3448,15 +3448,40 @@ export async function confirmFinalPayment(quotationId: string): Promise<void> {
  *   qa_plant_checked  → [Logistics: transfer items to office] → qa_transferred
  *   qa_transferred    → [Sales: 2nd quality & quantity check] → qa_sales_checked
  */
+/**
+ * The Office-side actors for a bought-in order's Phase 5 quality steps (admin is
+ * checked separately by the caller). Bought-in orders skip the production QC
+ * departments, so Logistics / Engineer / Sales / Payment Approver handle them.
+ */
+function boughtInQaActor(user: { id: string; role: string }, roles: Awaited<ReturnType<typeof getWorkflowRoles>>, preparedById: string): boolean {
+  return user.role === "ENGINEER"
+    || user.role === "SALES"
+    || user.id === preparedById
+    || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey)
+    || userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey);
+}
+
+async function isBoughtInOnly(quotationId: string): Promise<boolean> {
+  const items = await prisma.quotationItem.findMany({
+    where: { quotationId },
+    select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
+  });
+  return isBoughtInOnlyOrder(items);
+}
+
+const BOUGHT_IN_QA_ERR = "Only Logistics, the Engineer, Sales, the Payment Approver or an admin can do this.";
+
 export async function qaTest(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
-  const ok = isAdmin(user)
-    || userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
-    || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey);
-  if (!ok) throw new Error("Only the Technical Head, a Quality Inspector or an admin can do this.");
-  const { cls, wf } = await loadWorkflow(quotationId);
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const boughtIn = await isBoughtInOnly(quotationId);
+  const ok = isAdmin(user) || (boughtIn
+    ? boughtInQaActor(user, roles, quote.preparedById ?? "")
+    : userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
+      || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey));
+  if (!ok) throw new Error(boughtIn ? BOUGHT_IN_QA_ERR : "Only the Technical Head, a Quality Inspector or an admin can do this.");
   if (wf.stage !== "final_pay_cleared") throw new Error("The order isn't ready for quality testing.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_tested", approvals: stamp(wf, "qa_tested", user) });
 }
@@ -3464,9 +3489,13 @@ export async function qaTest(quotationId: string): Promise<void> {
 export async function qaPlantCheck(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "plant_manager" as WorkflowRoleKey)))
-    throw new Error("Only the Plant Manager or an admin can do this.");
-  const { cls, wf } = await loadWorkflow(quotationId);
+  const roles = await getWorkflowRoles();
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const boughtIn = await isBoughtInOnly(quotationId);
+  const ok = isAdmin(user) || (boughtIn
+    ? boughtInQaActor(user, roles, quote.preparedById ?? "")
+    : userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey));
+  if (!ok) throw new Error(boughtIn ? BOUGHT_IN_QA_ERR : "Only the Plant Manager or an admin can do this.");
   if (wf.stage !== "qa_tested") throw new Error("The order hasn't passed quality testing yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_plant_checked", approvals: stamp(wf, "qa_plant_checked", user) });
 }

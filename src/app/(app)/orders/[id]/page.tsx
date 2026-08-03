@@ -313,6 +313,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canSeeDeptJO = (deptKey: ProductionDeptKey): boolean =>
     canRoleSeeDeptJO(deptKey) && deptHasContent(deptKey);
 
+  // A fully bought-in order (bought-in products, nothing fabricated) skips
+  // production and its Office-side roles handle the Phase 5 quality steps.
+  const boughtInProductLines = orderBoughtInLines(quote.items);
+  const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
+
   const jobs = PRODUCTION_DEPTS.filter((d) => wf.jobOrders[d.key] && canSeeDeptJO(d.key)).map((d) => {
     const jo = wf.jobOrders[d.key]!;
     const nextTo: "in_production" | "finished" | null =
@@ -351,12 +356,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role));
   const isSalesViewer =
     adminViewer || (viewer != null && (viewer.id === quote.preparedById || viewer.role === "SALES" || viewer.role === "ENGINEER"));
+  // A bought-in order skips the production QC roles — Logistics / Engineer /
+  // Sales / Payment Approver / admin handle its quality steps instead.
+  const boughtInQa = boughtInOnly && (isSalesViewer || hasRole("logistics") || hasRole("payment_approver"));
   const perms = {
     canNotify: isSalesViewer,
     canCheckPay: hasRole("accounting"),
     canConfirmPay: hasRole("payment_approver"),
-    canQaTest: hasRole("technical_head") || hasRole("quality_inspector"),
-    canQaPlant: hasRole("plant_manager"),
+    canQaTest: hasRole("technical_head") || hasRole("quality_inspector") || boughtInQa,
+    canQaPlant: hasRole("plant_manager") || boughtInQa,
     canQaTransfer: hasRole("logistics"),
     canQaSales: isSalesViewer || hasRole("quality_inspector_2" as WorkflowRoleKey),
     canPrepDocs: hasRole("accounting"),
@@ -661,10 +669,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   // A fully bought-in order (goods bought from a supplier, nothing fabricated)
   // skips production and follows the PO flow: clearing payment files the supplier
-  // requisition, the Purchaser prepares the PO, the Engineer verifies & issues it,
-  // the goods are received, and Sales then notifies the client (→ Phase 5).
-  const boughtInProductLines = orderBoughtInLines(quote.items);
-  const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
+  // requisition, the Purchaser prepares the PO, the goods are bought, and Sales
+  // then notifies the client (→ Phase 5). (`boughtInOnly` is computed above.)
   const supplierReqRaised = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED");
   const supplierPoPrepared = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED" && !!r.po);
   const supplierPurchased = purchaseRows.some((r) => r.isDept && prMainIndex(r.status as PRStatus) >= prMainIndex("PURCHASED"));
