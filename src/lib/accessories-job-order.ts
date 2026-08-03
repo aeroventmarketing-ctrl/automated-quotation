@@ -27,7 +27,9 @@ const EXCLUDED_ACCESSORY_TYPES = new Set([
 export const ACCESSORY_TYPE_SUGGESTIONS: string[] = Array.from(
   new Set(
     PRODUCT_TAXONOMY.filter(
-      (e) => e.category === "Ventilation Accessories" && e.group !== "Air Duct" && !EXCLUDED_ACCESSORY_TYPES.has(e.type),
+      // Dampers moved to the Duct department, so they're offered on the Duct panel
+      // (DUCT_DAMPER_TYPES), not here.
+      (e) => e.category === "Ventilation Accessories" && e.group !== "Air Duct" && e.group !== "Dampers" && !EXCLUDED_ACCESSORY_TYPES.has(e.type),
     ).map((e) => e.type),
   ),
 );

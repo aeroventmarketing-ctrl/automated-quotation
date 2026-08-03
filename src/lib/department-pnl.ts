@@ -24,6 +24,7 @@ import { config } from "@/lib/config";
 import { PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { isSaleConfirmed, type SaleRecord } from "@/lib/sale";
 import { fanTagOf, fanBodyFactored } from "@/lib/fan-body-factors";
+import { isDamperType } from "@/lib/duct-job-order";
 
 export type DeptKey = "fans" | "duct" | "accessories" | "motor" | "office";
 
@@ -71,10 +72,13 @@ const AIR_DUCT_TYPES = new Set([
 ]);
 type Specs = Record<string, unknown>;
 const isAirDuct = (s: Specs) => s.category === "Ventilation Accessories" && AIR_DUCT_TYPES.has(str(s.type));
+// Dampers are produced by the Duct department (not Accessories), so they route
+// to Duct for the departmental margin split too — mirrors job-order-autogen.ts.
+const isDamper = (s: Specs) => s.category === "Ventilation Accessories" && isDamperType(str(s.type));
 const isMotorController = (s: Specs) => s.type === "Motor Controller";
 const isIsolator = (s: Specs) => s.type === "Spring Vibration Isolator";
 const isAccessory = (s: Specs) =>
-  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isIsolator(s);
+  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isIsolator(s);
 // Bought-in / resale goods sit under the "Other Products" category (KDK,
 // AlphaAir, MAXAIR, induction motors, dust collectors, VAV, inline/jet fans …).
 const isOtherProducts = (s: Specs) => str(s.category) === "Other Products";
@@ -102,8 +106,9 @@ export function lineRouting(specs: Specs): { dept: DeptKey; routing: Routing } {
   // Motor Controller: fabricated Starter → Motor dept; VFD (bought-in) → Office.
   if (isMotorController(specs))
     return isVfd(specs) ? { dept: "office", routing: "office_full" } : { dept: "motor", routing: "production_markup" };
-  // Fabricated ventilation accessories & air ducts.
-  if (isAirDuct(specs)) return { dept: "duct", routing: "production_markup" };
+  // Fabricated ventilation accessories & air ducts. Dampers are duct-department
+  // products, so they take the Duct markup too.
+  if (isAirDuct(specs) || isDamper(specs)) return { dept: "duct", routing: "production_markup" };
   if (isAccessory(specs)) return { dept: "accessories", routing: "production_markup" };
   // Bought-in / resale goods (KDK, AlphaAir, Aerovent "Other Products") — Office
   // keeps the margin: selling net less the supplier cost. Must precede the
