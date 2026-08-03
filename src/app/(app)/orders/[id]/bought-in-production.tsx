@@ -72,13 +72,10 @@ export function BoughtInProduction({
 
       <div className="flex flex-wrap items-center gap-2">
         {canVerify && !poVerified && (
-          <Button size="sm" className="h-8 text-xs" disabled={busy !== null || !poPrepared}
+          <Button size="sm" className="h-8 text-xs" disabled={busy !== null}
             onClick={() => run("verify", () => verifyBoughtInPo(orderId))}>
             <ShieldCheck className="mr-1 h-3.5 w-3.5" /> {busy === "verify" ? "Verifying…" : "Verified"}
           </Button>
-        )}
-        {canVerify && !poVerified && !poPrepared && (
-          <span className="text-xs text-muted-foreground">Available once the Purchaser prepares the PO.</span>
         )}
         {canNotify && poVerified && (
           <Button size="sm" className="h-8 text-xs" disabled={busy !== null || !received}
