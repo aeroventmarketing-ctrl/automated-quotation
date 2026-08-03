@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, type PurchaseOrder } from "@/lib/purchase-order";
 import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
@@ -2670,6 +2670,89 @@ export async function savePurchaseOrder(
   // Remember the supplier for next time (searchable in the PO form).
   await rememberSupplier(po.supplier);
   revalidatePath(`/orders/${pr.quotationId}`);
+}
+
+/**
+ * Split a requisition whose items span more than one supplier: move the selected
+ * lines into a NEW sibling requisition (same order, department, note & approval
+ * state) so it gets its own Purchase Order from the other supplier. The original
+ * keeps the remaining lines (and its existing PO, if any). Each requisition then
+ * runs the normal one-PO chain independently. Purchaser/admin only.
+ */
+export async function splitPurchaseRequest(purchaseRequestId: string, moveItems: string[]): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey))) {
+    throw new Error("Only the Purchaser or an admin can split a requisition.");
+  }
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  // Only while still in approval / PO preparation — once the voucher / cash /
+  // purchase steps have run, the chain is committed and can't be re-split.
+  if (pr.status !== "PENDING_APPROVAL" && pr.status !== "APPROVED") {
+    throw new Error("This requisition has progressed past PO preparation — it can no longer be split.");
+  }
+  if (poBatchId(pr.po)) throw new Error("This requisition is part of a combined PO and can't be split.");
+
+  const items = Array.isArray(pr.items) ? (pr.items as string[]) : [];
+  const move = moveItems.map((s) => s.trim()).filter(Boolean);
+  if (move.length === 0) throw new Error("Select at least one line to split off.");
+
+  // Remove each moved line from the original by first match (so duplicate lines
+  // split one at a time), verifying every selected line still exists.
+  const remaining = [...items];
+  for (const m of move) {
+    const idx = remaining.findIndex((it) => it === m);
+    if (idx < 0) throw new Error("A selected line isn't on this requisition anymore — refresh and try again.");
+    remaining.splice(idx, 1);
+  }
+  if (remaining.length === 0) {
+    throw new Error("Keep at least one line on the original requisition — to change every line's supplier, edit the PO instead.");
+  }
+
+  // Never move a line that's already on the original's Purchase Order — that would
+  // orphan the PO. Those lines must stay; split only the other-supplier lines.
+  const existingPo = coercePurchaseOrder(pr.po);
+  if (existingPo) {
+    const norm = (s: string) => s.trim().toLowerCase();
+    const poDescs = new Set(existingPo.lines.map((l) => norm(l.description)));
+    if (move.some((m) => poDescs.has(norm(poLineFromPRItem(m).description)))) {
+      throw new Error("A selected line is already on this requisition's Purchase Order — split only the lines meant for the other supplier.");
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.purchaseRequest.create({
+      data: {
+        kind: pr.kind,
+        dept: pr.dept,
+        quotationId: pr.quotationId,
+        mrfId: pr.mrfId,
+        stockItemId: pr.stockItemId,
+        items: move as Prisma.InputJsonValue,
+        note: pr.note ? `${pr.note} (split)` : "Split from a multi-supplier requisition",
+        createdById: pr.createdById,
+        createdByName: pr.createdByName,
+        status: pr.status, // same approval level; starts with no PO of its own
+      },
+    });
+    await tx.purchaseRequest.update({
+      where: { id: purchaseRequestId },
+      data: { items: remaining as Prisma.InputJsonValue },
+    });
+  });
+
+  await logActivity(user, {
+    action: "purchase.split",
+    category: "purchase",
+    summary: `Split requisition — moved ${move.length} line${move.length > 1 ? "s" : ""} to a new supplier PO`,
+    entity: "purchase",
+    entityId: purchaseRequestId,
+    href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+  });
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
 }
 
 // --- Combined Purchase Order (one PO covering several requests) -------------

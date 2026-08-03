@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2, Plus, X } from "lucide-react";
+import { Pencil, Trash2, Plus, X, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { adminEditPurchaseRequestItems, adminCreateReplenishment, createDepartmentRequisition, deletePurchaseRequest } from "../orders/actions";
+import { adminEditPurchaseRequestItems, adminCreateReplenishment, createDepartmentRequisition, deletePurchaseRequest, splitPurchaseRequest } from "../orders/actions";
 
 /**
  * Admin-only manage controls for purchasing requests. Edit a request's item
@@ -73,6 +73,82 @@ export function AdminPrEditDelete({ prId, items, showDelete = true }: { prId: st
         </button>
       )}
       {err && <span className="text-[11px] text-destructive">{err}</span>}
+    </div>
+  );
+}
+
+/**
+ * Split a multi-supplier requisition: tick the lines meant for the OTHER supplier
+ * and move them into a new sibling requisition that gets its own Purchase Order.
+ * Lines already on this requisition's PO are locked (they must stay). Purchaser /
+ * admin, shown only while the requisition is still in approval / PO preparation.
+ */
+export function SplitRequisition({ prId, items, poLineDescs = [] }: { prId: string; items: string[]; poLineDescs?: string[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const norm = (s: string) => s.trim().toLowerCase();
+  const onPo = new Set(poLineDescs.map(norm));
+  // A line is locked (must stay on the original) when its description is on the PO.
+  const locked = (it: string) => {
+    const desc = norm(it.replace(/^\s*\d+(?:\.\d+)?\s*\S*\s*·\s*/, "")); // drop "qty unit · "
+    return onPo.has(desc) || [...onPo].some((d) => desc.includes(d) || d.includes(desc));
+  };
+
+  function toggle(i: number) {
+    setPicked((p) => { const n = new Set(p); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  }
+
+  async function submit() {
+    const move = [...picked].map((i) => items[i]);
+    if (move.length === 0) { setErr("Tick the lines to move to the other supplier."); return; }
+    setBusy(true); setErr(null);
+    try {
+      await splitPurchaseRequest(prId, move);
+      setOpen(false); setPicked(new Set());
+      router.refresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed to split"); }
+    finally { setBusy(false); }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-medium hover:bg-accent">
+        <Scissors className="h-3.5 w-3.5" /> Split (multi-supplier)
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-1.5 rounded-md border bg-background p-2">
+      <div className="text-[11px] font-medium text-muted-foreground">
+        Tick the lines for the OTHER supplier — they move to a new requisition with its own PO.
+      </div>
+      <ul className="space-y-0.5">
+        {items.map((it, i) => {
+          const lock = locked(it);
+          return (
+            <li key={i} className="flex items-start gap-2 text-xs">
+              <input type="checkbox" className="mt-0.5 h-3.5 w-3.5 accent-[#ED1C24] disabled:opacity-40"
+                checked={picked.has(i)} disabled={lock || busy} onChange={() => toggle(i)} />
+              <span className={lock ? "text-muted-foreground" : ""}>
+                {it}{lock && <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px]">on current PO — stays</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="flex items-center gap-2">
+        <Button size="sm" className="h-7 text-xs" disabled={busy || picked.size === 0} onClick={submit}>
+          {busy ? "Splitting…" : `Split off ${picked.size || ""} line${picked.size === 1 ? "" : "s"}`.trim()}
+        </Button>
+        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => { setOpen(false); setPicked(new Set()); setErr(null); }}>Cancel</Button>
+        {err && <span className="text-[11px] text-destructive">{err}</span>}
+      </div>
     </div>
   );
 }
