@@ -44,8 +44,12 @@ function parseCogsGrid(text: string): FanCogsBulkRow[] {
   return out;
 }
 
+/** Collapsed preview size — the table shows this many rows until expanded. */
+const COLLAPSED_ROWS = 3;
+
 export function FanCogsEditor({ initial }: { initial: FanCogsRowView[] }) {
   const [rows, setRows] = useState<FanCogsRowView[]>(initial);
+  const [expanded, setExpanded] = useState(false);
   const [modelCode, setModelCode] = useState("");
   const [size, setSize] = useState("");
   const [material, setMaterial] = useState("");
@@ -84,23 +88,34 @@ export function FanCogsEditor({ initial }: { initial: FanCogsRowView[] }) {
   return (
     <div className="space-y-3">
       {rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[30rem] text-sm">
-            <thead>
-              <tr className="border-b text-xs text-muted-foreground">
-                <th className="py-1.5 text-left font-medium">Model code</th>
-                <th className="py-1.5 text-left font-medium">Size (in)</th>
-                <th className="py-1.5 text-left font-medium">Material</th>
-                <th className="py-1.5 text-right font-medium">COGS</th>
-                <th className="py-1.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <FanCogsLine key={r.id} row={r} pending={pending} onSave={(c) => refresh(() => updateFanCogs(r.id, c))} onDelete={() => refresh(() => deleteFanCogs(r.id))} />
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-2">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[30rem] text-sm">
+              <thead>
+                <tr className="border-b text-xs text-muted-foreground">
+                  <th className="py-1.5 text-left font-medium">Model code</th>
+                  <th className="py-1.5 text-left font-medium">Size (in)</th>
+                  <th className="py-1.5 text-left font-medium">Material</th>
+                  <th className="py-1.5 text-right font-medium">COGS</th>
+                  <th className="py-1.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {(expanded ? rows : rows.slice(0, COLLAPSED_ROWS)).map((r) => (
+                  <FanCogsLine key={r.id} row={r} pending={pending} onSave={(c) => refresh(() => updateFanCogs(r.id, c))} onDelete={() => refresh(() => deleteFanCogs(r.id))} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length > COLLAPSED_ROWS && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {expanded ? "Show fewer" : `Show all ${rows.length} rows`}
+            </button>
+          )}
         </div>
       )}
 
