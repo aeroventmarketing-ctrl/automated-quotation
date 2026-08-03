@@ -1214,14 +1214,6 @@ export async function verifyBoughtInPo(quotationId: string): Promise<void> {
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   if (wf.stage !== "released") throw new Error("The order isn't awaiting PO creation.");
   if (!isBoughtInOnlyOrder(quote.items)) throw new Error("Only a fully bought-in order uses the PO flow.");
-  // The Purchaser must have prepared the PO on the order's requisition first.
-  const prs = await prisma.purchaseRequest.findMany({
-    where: { quotationId, kind: "department", status: { notIn: ["REJECTED", "CANCELLED"] } },
-    select: { po: true },
-  });
-  if (!prs.some((pr) => coercePurchaseOrder(pr.po))) {
-    throw new Error("The Purchaser must prepare the Purchase Order before it can be verified.");
-  }
   await saveWorkflow(quotationId, cls, { ...wf, approvals: stamp(wf, "po_verified", user) });
   await logActivity(user, {
     action: "order.boughtin.verify",
