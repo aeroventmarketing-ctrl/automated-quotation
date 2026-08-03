@@ -15,7 +15,7 @@ import {
   isReducingDuctType,
   type DuctJobOrder,
 } from "@/lib/duct-job-order";
-import { noteRowCount } from "@/lib/excel/xlsx-note";
+import { wrapNote } from "@/lib/excel/xlsx-note";
 
 const RED = "FFED1C24";
 const GREY = "FFF2F2F2";
@@ -158,12 +158,13 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
   ws.getCell(`A${r}`).value = "Note / Remarks:";
   ws.getCell(`A${r}`).font = { bold: true, size: 10 };
   r++;
-  // Grow the note box to fit the text — more rows when the remarks need them.
-  const noteText = jo.note || "";
-  const noteRows = noteRowCount(noteText, 98);
+  // Grow the note box to fit the text — one row per wrapped line so a long note
+  // is never clipped by the box (Excel won't auto-fit a merged cell's height).
+  const noteLines = wrapNote(jo.note || "", 94);
+  const noteRows = Math.max(3, noteLines.length);
   ws.mergeCells(`A${r}:${LAST}${r + noteRows - 1}`);
   const note = ws.getCell(`A${r}`);
-  note.value = noteText;
+  note.value = noteLines.join("\n");
   note.font = { size: 10 };
   note.alignment = { horizontal: "left", vertical: "top", wrapText: true };
   note.border = allBorders;
