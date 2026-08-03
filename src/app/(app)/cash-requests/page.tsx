@@ -67,7 +67,7 @@ export default async function CashRequestsPage() {
       <div>
         <h1 className="text-2xl font-bold">Cash requests</h1>
         <p className="text-sm text-muted-foreground">
-          Request cash from Accounting. Accounting prepares the voucher, the Approver approves &amp; releases the cash, Accounting hands it to you, then you liquidate it with receipts.
+          Request cash from Accounting. Accounting approves (or rejects) the request, prepares the voucher, the Approver approves &amp; releases the cash, Accounting hands it to you, then you liquidate it with receipts.
         </p>
       </div>
 

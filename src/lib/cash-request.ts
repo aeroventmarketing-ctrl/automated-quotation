@@ -21,6 +21,7 @@ import { computeVariance, balanceTolerance, type ReconcileStatus } from "@/lib/p
 import { round2 } from "@/lib/quote";
 
 export type CashRequestStatus =
+  | "PENDING_APPROVAL"
   | "SUBMITTED"
   | "REJECTED"
   | "VOUCHER_READY"
@@ -32,7 +33,8 @@ export type CashRequestStatus =
   | "CANCELLED";
 
 export const CASH_STATUS_LABEL: Record<CashRequestStatus, string> = {
-  SUBMITTED: "Requested — awaiting voucher",
+  PENDING_APPROVAL: "Requested — awaiting Accounting approval",
+  SUBMITTED: "Approved — awaiting voucher",
   REJECTED: "Rejected",
   VOUCHER_READY: "Voucher ready — awaiting approver",
   CASH_RELEASED: "Cash released — awaiting hand-off to requestor",
@@ -54,8 +56,11 @@ export interface CashStepDef {
   label: string;
 }
 
-/** The cash-request chain, in order. VOUCHER_READY offers approve or reject. */
+/** The cash-request chain, in order. Accounting first approves/rejects the
+ *  incoming request; VOUCHER_READY then offers the approver approve or reject. */
 export const CASH_STEPS: CashStepDef[] = [
+  { key: "approve", from: "PENDING_APPROVAL", to: "SUBMITTED", by: "accounting", label: "Approve request" },
+  { key: "reject_request", from: "PENDING_APPROVAL", to: "REJECTED", by: "accounting", label: "Reject" },
   { key: "voucher", from: "SUBMITTED", to: "VOUCHER_READY", by: "accounting", label: "Prepare voucher" },
   { key: "release", from: "VOUCHER_READY", to: "CASH_RELEASED", by: "payment_approver", label: "Approve voucher & release cash" },
   { key: "reject", from: "VOUCHER_READY", to: "REJECTED", by: "payment_approver", label: "Reject" },
@@ -65,14 +70,14 @@ export const CASH_STEPS: CashStepDef[] = [
 
 /** The linear main chain, in order (excludes REJECTED / CANCELLED branches). */
 export const CASH_MAIN_ORDER: CashRequestStatus[] = [
-  "SUBMITTED", "VOUCHER_READY", "CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED",
+  "PENDING_APPROVAL", "SUBMITTED", "VOUCHER_READY", "CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED",
 ];
 export function cashMainIndex(status: CashRequestStatus): number {
   return CASH_MAIN_ORDER.indexOf(status);
 }
 /** Earlier statuses an admin may roll a request back to (a rejected/cancelled one reopens to the start). */
 export function priorCashStatuses(status: CashRequestStatus): CashRequestStatus[] {
-  if (status === "REJECTED" || status === "CANCELLED") return ["SUBMITTED"];
+  if (status === "REJECTED" || status === "CANCELLED") return ["PENDING_APPROVAL"];
   const idx = cashMainIndex(status);
   return idx <= 0 ? [] : CASH_MAIN_ORDER.slice(0, idx);
 }

@@ -130,7 +130,7 @@ function stampLabel(s: { byName: string; role: string; at: string; note?: string
 }
 
 function variant(s: CashRequestStatus): CashRequestRow["variant"] {
-  if (s === "SUBMITTED") return "secondary";
+  if (s === "PENDING_APPROVAL" || s === "SUBMITTED") return "secondary";
   if (s === "REJECTED" || s === "CANCELLED") return "destructive";
   if (s === "SETTLED") return "success";
   return "warning";
@@ -236,7 +236,7 @@ export function buildCashRequestRow(
     trail: buildTrail(pr),
     actions,
     isRequestor,
-    canCancel: (ctx.admin || (isRequestor && status === "SUBMITTED")) && isCashCancellable(status),
+    canCancel: (ctx.admin || (isRequestor && (status === "PENDING_APPROVAL" || status === "SUBMITTED"))) && isCashCancellable(status),
     admin: ctx.admin,
     liquidation,
     canRecordLiquidation: canLiquidateAt(status) && (isRequestor || ctx.admin),
