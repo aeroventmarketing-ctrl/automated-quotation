@@ -27,7 +27,8 @@ The proof is a bank deposit slip, a bank/e-wallet transfer confirmation (e.g. In
 CRITICAL RULES:
 - Only trust the bank's MACHINE-VALIDATION imprint (the teller machine's printed stamp of date, amount and reference) or fully COMPUTER-GENERATED text (a bank-app / online-transfer / e-wallet confirmation, or a computer-printed receipt).
 - IGNORE anything HANDWRITTEN, and IGNORE any text/label/annotation drawn or overlaid ON TOP of a screenshot by a person. Read ONLY the bank/app's own printed fields. If the amount and date are only handwritten, set handwrittenOnly=true and leave date/amount null.
-- For a transfer confirmation, the AMOUNT is the "Total Amount" (or "Principal Amount" / "Amount") field, and the DATE is the "Transaction Date" (or "Date"). Read the exact digits of that field — do not confuse it with a reference number, account number, trace number or fee.
+- For a transfer confirmation, the DATE is the "Transaction Date" (or "Date"). The AMOUNT is the payment amount — read its exact digits, and do not confuse it with a reference number, account number, trace number or fee.
+- CONVENIENCE / SERVICE / PROCESSING FEE: when the proof shows a base "Amount" PLUS a separate fee line (Convenience Fee / Service Fee / Processing Fee) that add up to a "Total" — common on GCash and other e-wallet bill-payment / buy-load receipts — read the base "Amount" (the payment itself) and IGNORE the fee. Do NOT return the Total. When there is no separate fee line, use the single Amount / Total Amount shown.
 - ACCURACY OVER COMPLETENESS. If the image is blurry, has glare/reflection, is cropped, low-resolution, or you are not highly sure of the EXACT digits, set a LOW confidence, leave the unreadable field null, and add a warning. NEVER guess, approximate, or invent an amount or date.
 - Amounts are Philippine pesos; ignore the "₱"/"PHP" symbol and thousands separators. Return the date as YYYY-MM-DD.
 Return STRICT JSON only.`;
@@ -39,7 +40,7 @@ const USER_PROMPT = `From the attached proof of payment, return JSON with this e
   "computerGenerated": boolean,     // true if the proof is fully computer-generated (app / e-transfer / printed receipt)
   "handwrittenOnly": boolean,       // true if the date/amount are ONLY handwritten
   "date": string|null,              // YYYY-MM-DD from the Transaction Date / Date (null if unsure)
-  "amount": number|null,            // peso Total Amount / Principal Amount (null if unsure)
+  "amount": number|null,            // peso payment Amount, EXCLUDING any convenience/service fee (null if unsure)
   "reference": string|null,         // reference / transaction / trace / OR number if shown
   "bank": string|null,              // bank / e-wallet name if shown
   "confidence": number,             // 0..1 — how sure you are of the EXACT amount + date digits (low if blurry/glare/cropped)

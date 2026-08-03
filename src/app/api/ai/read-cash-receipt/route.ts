@@ -25,6 +25,7 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp
 const SYSTEM = `You read expense receipts / official receipts for a Philippine company to liquidate a cash advance.
 You are given the planned budget lines (what the cash was for, with planned peso amounts) and one or more receipt images/PDFs.
 Extract what was actually spent and map it to the budget lines. Amounts are Philippine pesos; ignore the "₱"/"PHP" symbol and thousands separators.
+CONVENIENCE / SERVICE / PROCESSING FEE: when a payment proof shows a base "Amount" PLUS a separate fee line (Convenience Fee / Service Fee / Processing Fee) that add up to a "Total" — common on GCash and other e-wallet bill-payment / buy-load receipts — use the base "Amount" (the payment itself) and IGNORE the fee. Do NOT use the Total, and do not add the fee as an extra item.
 Return STRICT JSON only.`;
 
 function userPrompt(lines: { description: string; budgetAmount: number }[]): string {
