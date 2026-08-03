@@ -667,7 +667,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
   const supplierReqRaised = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED");
   const supplierPoPrepared = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED" && !!r.po);
-  const supplierReqReceived = purchaseRows.some((r) => r.isDept && prMainIndex(r.status as PRStatus) >= prMainIndex("RECEIVED"));
+  const supplierPurchased = purchaseRows.some((r) => r.isDept && prMainIndex(r.status as PRStatus) >= prMainIndex("PURCHASED"));
   const canNotifyBoughtIn = !restricted && (adminViewer || viewer?.role === "SALES" || viewer?.role === "ENGINEER" || quote.preparedById === viewer?.id);
 
   return (
@@ -765,7 +765,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               orderId={quote.id}
               reqRaised={supplierReqRaised}
               poPrepared={supplierPoPrepared}
-              received={supplierReqReceived}
+              purchased={supplierPurchased}
               canNotify={canNotifyBoughtIn}
             />
           ) : (

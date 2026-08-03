@@ -18,13 +18,13 @@ export function BoughtInProduction({
   orderId,
   reqRaised,
   poPrepared,
-  received,
+  purchased,
   canNotify,
 }: {
   orderId: string;
   reqRaised: boolean;
   poPrepared: boolean;
-  received: boolean;
+  purchased: boolean;
   canNotify: boolean;
 }) {
   const router = useRouter();
@@ -50,13 +50,13 @@ export function BoughtInProduction({
       <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm dark:border-sky-900/50 dark:bg-sky-950/30">
         <p className="font-medium text-sky-800 dark:text-sky-300">Bought-in order — no fabrication (PO flow)</p>
         <p className="mt-0.5 text-xs text-sky-700/80 dark:text-sky-300/70">
-          This order carries only goods bought from a supplier, so it skips production. The Purchaser prepares the PO, the goods are received, then Sales notifies the client.
+          This order carries only goods bought from a supplier, so it skips production and warehouse stock. The Purchaser prepares the PO and buys the goods, then Sales notifies the client.
         </p>
       </div>
       <div className="space-y-1 text-sm">
         {step(reqRaised, "Payment cleared — supplier requisition filed")}
         {step(poPrepared, "Purchaser prepared the Purchase Order")}
-        {step(received, "Goods received (purchasing complete)")}
+        {step(purchased, "Purchaser bought the goods")}
       </div>
 
       {(reqRaised || poPrepared) && (
@@ -67,10 +67,10 @@ export function BoughtInProduction({
 
       {canNotify && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" className="h-8 text-xs" disabled={busy || !received} onClick={notify}>
+          <Button size="sm" className="h-8 text-xs" disabled={busy || !purchased} onClick={notify}>
             <PackageCheck className="mr-1 h-3.5 w-3.5" /> {busy ? "Notifying…" : "Notify client – order ready"}
           </Button>
-          {!received && <span className="text-xs text-muted-foreground">Available once the goods are received.</span>}
+          {!purchased && <span className="text-xs text-muted-foreground">Available once the Purchaser has bought the goods.</span>}
           {err && <span className="text-xs text-destructive">{err}</span>}
         </div>
       )}
