@@ -76,10 +76,13 @@ const isAirDuct = (s: Specs) => s.category === "Ventilation Accessories" && AIR_
 // Dampers are produced by the Duct department (not Accessories), so they route
 // to Duct for the departmental margin split too — mirrors job-order-autogen.ts.
 const isDamper = (s: Specs) => s.category === "Ventilation Accessories" && isDamperType(str(s.type));
+// Duct Angle corner is fabricated by the Fans & Blowers department (not
+// Accessories) — mirrors job-order-autogen.ts.
+const isDuctAngleCorner = (s: Specs) => s.category === "Ventilation Accessories" && /^duct angle corner$/i.test(str(s.type));
 const isMotorController = (s: Specs) => s.type === "Motor Controller";
 const isIsolator = (s: Specs) => s.type === "Spring Vibration Isolator";
 const isAccessory = (s: Specs) =>
-  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isIsolator(s);
+  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isDuctAngleCorner(s) && !isIsolator(s);
 // Bought-in / resale goods sit under the "Other Products" category (KDK,
 // AlphaAir, MAXAIR, induction motors, dust collectors, VAV, inline/jet fans …).
 const isOtherProducts = (s: Specs) => str(s.category) === "Other Products";
@@ -110,6 +113,8 @@ export function lineRouting(specs: Specs): { dept: DeptKey; routing: Routing } {
   // Fabricated ventilation accessories & air ducts. Dampers are duct-department
   // products, so they take the Duct markup too.
   if (isAirDuct(specs) || isDamper(specs)) return { dept: "duct", routing: "production_markup" };
+  // Duct Angle corner is fabricated by the Fans & Blowers department.
+  if (isDuctAngleCorner(specs)) return { dept: "fans", routing: "production_markup" };
   if (isAccessory(specs)) return { dept: "accessories", routing: "production_markup" };
   // Bought-in / resale goods (KDK, AlphaAir, Aerovent "Other Products") — Office
   // keeps the margin: selling net less the supplier cost. Must precede the
