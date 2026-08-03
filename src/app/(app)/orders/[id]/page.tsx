@@ -61,7 +61,6 @@ import { ConversationLog } from "./conversation-log";
 import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
-import { RaiseOrderRequisition } from "./raise-order-requisition";
 import { BoughtInProduction } from "./bought-in-production";
 import { orderBoughtInLines } from "@/lib/department-pnl";
 import { FulfillmentActions } from "./fulfillment-actions";
@@ -660,21 +659,18 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     };
   });
 
-  // Bought-in products on this order → a supplier requisition (→ PO). Excludes
-  // fabricated items and service charges. Shown to Sales / Purchaser / Logistics
-  // / admin, with a one-click raise that files an order-linked Office requisition.
+  // A fully bought-in order (goods bought from a supplier, nothing fabricated)
+  // skips production and follows the PO flow: clearing payment files the supplier
+  // requisition, the Purchaser prepares the PO, the Engineer verifies & issues it,
+  // the goods are received, and Sales then notifies the client (→ Phase 5).
   const boughtInProductLines = orderBoughtInLines(quote.items);
-  const canRaiseReq = !restricted && (
-    adminViewer || viewer?.role === "SALES" || viewer?.role === "ENGINEER" ||
-    (viewer != null && (userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey) || userHasWorkflowRole(assignments, viewer.id, "logistics" as WorkflowRoleKey)))
-  );
-  const supplierReqRaised = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED");
-  // A bought-in-only order (goods bought from a supplier, nothing fabricated)
-  // skips production: it has bought-in products but no department produces
-  // anything. It's released to Phase 5 once the Purchaser has bought the goods.
   const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
+  const supplierReqRaised = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED");
+  const supplierPoPrepared = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED" && !!r.po);
   const supplierReqReceived = purchaseRows.some((r) => r.isDept && prMainIndex(r.status as PRStatus) >= prMainIndex("RECEIVED"));
-  const canReleaseBoughtIn = adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey));
+  const boughtInPoVerified = !!wf.approvals?.po_verified;
+  const canVerifyBoughtIn = adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey));
+  const canNotifyBoughtIn = !restricted && (adminViewer || viewer?.role === "SALES" || viewer?.role === "ENGINEER" || quote.preparedById === viewer?.id);
 
   return (
     <div className="space-y-5">
@@ -702,7 +698,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             )}
           </p>
         </div>
-        <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{stageLabel(wf.stage)}</Badge>
+        <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{boughtInOnly && wf.stage === "released" ? "For PO creation" : stageLabel(wf.stage)}</Badge>
       </div>
 
       {/* Stage progress */}
@@ -752,7 +748,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </div>
           <div className="flex items-center gap-2">
             {payCleared ? <span className="text-emerald-600">✓</span> : <span className="text-muted-foreground">○</span>}
-            <span>Payment cleared &amp; job orders released{payCleared ? ` — ${withDesig(payCleared.byName, designationOf("payment_cleared"))}, ${fmtWhen(payCleared.at)}` : ""}</span>
+            <span>{boughtInOnly ? "Payment cleared & PO creation" : "Payment cleared & job orders released"}{payCleared ? ` — ${withDesig(payCleared.byName, designationOf("payment_cleared"))}, ${fmtWhen(payCleared.at)}` : ""}</span>
           </div>
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="pt-1 text-xs text-muted-foreground">Complete these sign-offs from the Orders list.</p>
@@ -770,8 +766,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <BoughtInProduction
               orderId={quote.id}
               reqRaised={supplierReqRaised}
-              reqReceived={supplierReqReceived}
-              canRelease={canReleaseBoughtIn}
+              poPrepared={supplierPoPrepared}
+              poVerified={boughtInPoVerified}
+              received={supplierReqReceived}
+              canVerify={canVerifyBoughtIn}
+              canNotify={canNotifyBoughtIn}
             />
           ) : (
             <div className="space-y-4">
@@ -871,17 +870,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
             <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} showMrfDoc={!hideMrfDoc} admin={adminViewer} canCheckStock={canReleaseMaterials} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Bought-in products → supplier requisition (→ PO). Only for orders that
-          carry resale goods; fabricated items and service charges are excluded. */}
-      {canRaiseReq && boughtInProductLines.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Bought-in products · supplier requisition</CardTitle></CardHeader>
-          <CardContent>
-            <RaiseOrderRequisition orderId={quote.id} items={boughtInProductLines} alreadyRaised={supplierReqRaised} paymentCleared={stageIndex(wf.stage) >= stageIndex("released")} />
           </CardContent>
         </Card>
       )}

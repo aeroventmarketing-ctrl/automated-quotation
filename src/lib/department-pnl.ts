@@ -25,6 +25,7 @@ import { PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { isSaleConfirmed, type SaleRecord } from "@/lib/sale";
 import { fanTagOf, fanBodyFactored } from "@/lib/fan-body-factors";
 import { isDamperType } from "@/lib/duct-job-order";
+import { quotationJobOrderDepts, type QuoteItemLike } from "@/lib/job-order-autogen";
 
 export type DeptKey = "fans" | "duct" | "accessories" | "motor" | "office";
 
@@ -184,6 +185,20 @@ export function orderBoughtInLines(
     else combined.set(key, { ...l });
   }
   return [...combined.values()];
+}
+
+/**
+ * A fully bought-in order: it has bought-in products AND no department fabricates
+ * anything (no fans / ducts / accessories / motor job orders). These skip
+ * production and follow the PO flow (clear payment & create PO → Purchaser makes
+ * PO → Engineer verifies → notify client) instead of the job-order flow.
+ */
+export function isBoughtInOnlyOrder(
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+): boolean {
+  if (orderBoughtInLines(items).length === 0) return false;
+  const depts = quotationJobOrderDepts(items as QuoteItemLike[]);
+  return !Object.values(depts).some(Boolean);
 }
 
 // --- Amounts --------------------------------------------------------------

@@ -43,14 +43,14 @@ import {
   type MRFLineDisposition,
   type OrderConversation,
 } from "@/lib/order-workflow";
-import { buildAutoJobOrders, quotationJobOrderDepts } from "@/lib/job-order-autogen";
+import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
-import { orderBoughtInLines } from "@/lib/department-pnl";
+import { orderBoughtInLines, isBoughtInOnlyOrder } from "@/lib/department-pnl";
 import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
@@ -176,7 +176,10 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
 
   // When payment is cleared (order → "For JO creation"), auto-generate the job
   // orders from the quotation lines so the engineer only reviews/edits/approves.
-  if (step === "payment_cleared") {
+  // A fully bought-in order has none — instead it files the supplier requisition
+  // ("Clear payment & create PO") so the Purchaser can prepare the PO.
+  const boughtInOnly = isBoughtInOnlyOrder(quote.items);
+  if (step === "payment_cleared" && !boughtInOnly) {
     workflow = await mergeAutoJobOrders(workflow, wf, quote);
   }
 
@@ -184,6 +187,9 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
     where: { id: quotationId },
     data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },
   });
+  if (step === "payment_cleared" && boughtInOnly) {
+    await autoRaiseBoughtInRequisition(quotationId, quote.quoteNumber, quote.items, user);
+  }
   await logActivity(user, {
     action: "order.stage.advance",
     category: "order",
@@ -1145,53 +1151,37 @@ export async function createDepartmentRequisition(
  * excluded), links the requisition to the order, and files it as an Office
  * requisition (APPROVED) so the Purchaser can prepare the PO directly.
  */
-export async function raiseOrderRequisition(quotationId: string): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
-  const roles = await getWorkflowRoles();
-  const allowed = isAdmin(user)
-    || user.role === "SALES"
-    || user.role === "ENGINEER"
-    || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)
-    || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
-  if (!allowed) throw new Error("Only Sales, the Engineer, the Purchaser, Logistics or an admin can raise a supplier requisition.");
-
-  const quote = await prisma.quotation.findUnique({
-    where: { id: quotationId },
-    select: { id: true, quoteNumber: true, classification: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
-  });
-  if (!quote) throw new Error("Order not found.");
-  // Payment must be cleared first — the order has to be released (Phase 1 done)
-  // before goods can be purchased for it.
-  const wf = readOrderWorkflow(quote.classification);
-  if (stageIndex(wf.stage) < stageIndex("released")) {
-    throw new Error("Payment must be cleared before a supplier requisition can be raised for this order.");
-  }
-  const boughtIn = orderBoughtInLines(quote.items);
-  if (boughtIn.length === 0) throw new Error("This order has no bought-in products to purchase — fabricated items and service charges aren't included in a PO.");
-
-  // Encode the supplier grid price (when known) so the PO auto-fills unit price.
-  const items = boughtIn.map((b) => {
+/**
+ * Auto-file the supplier requisition for a bought-in order's products when its
+ * payment is cleared ("Clear payment & create PO"). Encodes the supplier grid
+ * price so the Purchaser's PO auto-fills the unit price. Deduped + serialized per
+ * order (advisory lock) so a re-clear can't file a second requisition.
+ */
+async function autoRaiseBoughtInRequisition(
+  quotationId: string,
+  quoteNumber: string,
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+  user: { id: string; name: string },
+): Promise<void> {
+  const boughtIn = orderBoughtInLines(items);
+  if (boughtIn.length === 0) return;
+  const lines = boughtIn.map((b) => {
     const line = mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit" });
     return b.unitPrice != null ? `${line} · @${b.unitPrice}` : line;
   });
-
-  // Check-then-create inside a transaction, serialized per order with a Postgres
-  // advisory lock so two concurrent raises (double-click / two tabs) can't both
-  // pass the "already exists?" check and file duplicate requisitions.
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${quotationId}))`;
     const existing = await tx.purchaseRequest.count({
       where: { quotationId, kind: "department", status: { notIn: ["REJECTED", "COMPLETED"] } },
     });
-    if (existing > 0) throw new Error("A supplier requisition for this order's items already exists — process it in Purchasing.");
+    if (existing > 0) return; // already raised — don't duplicate on a re-clear
     await tx.purchaseRequest.create({
       data: {
         kind: "department",
         dept: OFFICE_DEPT_KEY,
         quotationId,
-        items: items as Prisma.InputJsonValue,
-        note: `Bought-in items for order ${quote.quoteNumber}`,
+        items: lines as Prisma.InputJsonValue,
+        note: `Bought-in items for order ${quoteNumber}`,
         createdById: user.id,
         createdByName: user.name,
         status: "APPROVED", // Office requisition → straight to the Purchaser for the PO
@@ -1200,56 +1190,74 @@ export async function raiseOrderRequisition(quotationId: string): Promise<void> 
   });
   revalidatePath("/requisitions");
   revalidatePath("/purchasing");
-  revalidatePath(`/orders/${quotationId}`);
 }
 
 /**
- * Release a bought-in-only order past production. Some orders carry only goods
- * bought from a supplier (no department fabricates anything) — Aerovent never
- * produces them, so they skip Phase 2 production entirely. The Engineer (or an
- * admin) raises the supplier requisition, the Purchaser buys the goods, and once
- * the purchase has happened this advances the order straight to "production
- * finished" so the normal Phase 5 flow (final payment → delivery) resumes.
+ * Engineer verifies a bought-in order's Purchase Order (step 10): the PO the
+ * Purchaser prepared is confirmed and issued to the supplier. Records the
+ * verification stamp; the full purchasing chain (approval → voucher → cash →
+ * receiving) then runs before Sales notifies the client.
  */
-export async function releaseBoughtInOrder(quotationId: string): Promise<void> {
+export async function verifyBoughtInPo(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   if (!(isAdmin(user) || user.role === "ENGINEER" || userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey))) {
-    throw new Error("Only the Engineer, Technical Head or an admin can release a bought-in order.");
+    throw new Error("Only the Engineer, Technical Head or an admin can verify the Purchase Order.");
   }
-
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, quoteNumber: true, classification: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
+    select: { id: true, classification: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
   });
   if (!quote) throw new Error("Order not found.");
   const wf = readOrderWorkflow(quote.classification);
   const cls = (quote.classification as Record<string, unknown>) ?? {};
-  if (wf.stage !== "released") throw new Error("Only an order awaiting production release can be released this way.");
-
-  // Bought-in-only: no department fabricates anything, and there ARE bought-in
-  // products to buy. A fabricated order must go through production instead.
-  const boughtIn = orderBoughtInLines(quote.items);
-  if (boughtIn.length === 0) throw new Error("This order has no bought-in products.");
-  const joDepts = quotationJobOrderDepts(quote.items);
-  if (Object.values(joDepts).some(Boolean) || Object.keys(wf.jobOrders).length > 0) {
-    throw new Error("This order has fabricated items — it must go through production.");
+  if (wf.stage !== "released") throw new Error("The order isn't awaiting PO creation.");
+  if (!isBoughtInOnlyOrder(quote.items)) throw new Error("Only a fully bought-in order uses the PO flow.");
+  // The Purchaser must have prepared the PO on the order's requisition first.
+  const prs = await prisma.purchaseRequest.findMany({
+    where: { quotationId, kind: "department", status: { notIn: ["REJECTED", "CANCELLED"] } },
+    select: { po: true },
+  });
+  if (!prs.some((pr) => coercePurchaseOrder(pr.po))) {
+    throw new Error("The Purchaser must prepare the Purchase Order before it can be verified.");
   }
+  await saveWorkflow(quotationId, cls, { ...wf, approvals: stamp(wf, "po_verified", user) });
+  await logActivity(user, {
+    action: "order.boughtin.verify",
+    category: "order",
+    summary: `Verified & issued the Purchase Order — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
+}
 
-  // The goods must be physically received first — the supplier requisition has to
-  // have reached the warehouse-received (or a later) stage before delivery.
+/**
+ * Sales notifies the client a bought-in order is ready (step 11) → the order
+ * enters Phase 5 (billing / final payment). Available once the Engineer has
+ * verified the PO AND the supplier goods have been received (the full purchasing
+ * chain is complete).
+ */
+export async function notifyClientBoughtInOrder(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
+  if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
+  if (wf.stage !== "released") throw new Error("The order isn't awaiting client notification.");
+  if (!wf.approvals?.po_verified) throw new Error("The Engineer must verify the Purchase Order first.");
+  // The full purchasing chain must have received the goods.
   const received: PRStatus[] = ["RECEIVED", "PLANT_APPROVED", "COMPLETED"];
   const inHand = await prisma.purchaseRequest.count({
     where: { quotationId, kind: "department", status: { in: received } },
   });
-  if (inHand === 0) throw new Error("The supplier goods must be physically received (Warehouseman approved) before this order can be released.");
-
-  await saveWorkflow(quotationId, cls, { ...wf, stage: "production_finished", approvals: stamp(wf, "boughtin_released", user) });
+  if (inHand === 0) throw new Error("The supplier goods must be received (purchasing complete) before notifying the client.");
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_review", approvals: stamp(wf, "client_notified", user) });
   await logActivity(user, {
-    action: "order.boughtin.release",
+    action: "order.boughtin.notify",
     category: "order",
-    summary: `Released bought-in order (skips production) — ${await orderRefLabel(quotationId)}`,
+    summary: `Notified client — bought-in order ready — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
     href: `/orders/${quotationId}`,
