@@ -46,6 +46,12 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
     const wf = readOrderWorkflow(q.classification);
     const pend = pendingStep(wf);
     if (!pend) continue;
+    // Production underway ("Complete production") is ongoing work, not an approval
+    // awaiting a decision — don't ring the alarm for it once production has
+    // started. It still appears as a task on My Dashboard; this only silences the
+    // siren so the production heads aren't alarmed on every page load while they
+    // build.
+    if (wf.stage === "producing") continue;
 
     const owesByRole = pend.roles.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
     const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);

@@ -4,6 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { payableTotal, round2 } from "@/lib/quote";
+import { isBoughtInOnlyOrder } from "@/lib/department-pnl";
 import {
   saleFromClassification,
   isSaleConfirmed,
@@ -49,7 +50,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     // drop confirmed orders from the list. isSaleConfirmed below is the real
     // gate, exactly as the departmental P&L does it. (Owner-approved edit.)
     prisma.quotation.findMany({
-      include: { inquiry: { include: { customer: true } }, preparedBy: true },
+      include: {
+        inquiry: { include: { customer: true } },
+        preparedBy: true,
+        items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     getCurrentUser(),
@@ -73,6 +78,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
       const wf = readOrderWorkflow(q.classification);
       const next = nextOrderStep(wf.stage);
+      // A fully bought-in order skips production: it uses the PO flow, so its
+      // Phase 1 clear-payment button and its "released" stage read differently.
+      const boughtInOnly = isBoughtInOnlyOrder(q.items);
       const canAct = next != null && (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, next.requiredRole)));
       // "Mark documents checked" is blocked until the required docs are attached.
       const docMissing = docCheckGate && next?.key === "doc_check" ? docCheckMissing(sale) : [];
@@ -115,10 +123,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         status,
         sales: q.preparedBy.name,
         stage: wf.stage,
-        stageText: stageLabel(wf.stage),
+        stageText: boughtInOnly && wf.stage === "released" ? "For PO creation" : stageLabel(wf.stage),
         prodDepts,
         nextStep: next?.key ?? null,
-        nextLabel: next?.label ?? null,
+        nextLabel: boughtInOnly && next?.key === "payment_cleared" ? "Clear payment & create PO" : (next?.label ?? null),
         canAct,
         blockedReason,
         awaiting: awaitingAll,
