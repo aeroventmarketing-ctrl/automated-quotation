@@ -54,6 +54,7 @@ function TaskRow({ t }: { t: MyTask }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-medium">{t.title}</span>
+          {t.ref && <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{t.ref}</span>}
           <Badge variant="warning" className="font-normal">{t.action}</Badge>
           {t.deliveryMode && (
             <Badge variant={t.deliveryMode === "multi" ? "success" : "secondary"} className="font-normal">
