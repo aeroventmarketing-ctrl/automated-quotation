@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { formatJoNumber, EMPTY_FANS_JO, JO_TYPES, joTypeLabel, joTypeReady, type FansJobOrder } from "@/lib/job-order";
 import { saveFansJobOrder, deleteFansJobOrder } from "../actions";
 import { JobOrderApproval } from "./jo-approval";
+import { JoNumberEditor } from "./jo-number-editor";
 
 // Option lists taken straight from the template's lookup tables so selections
 // always match its VLOOKUPs.
@@ -220,6 +221,7 @@ export function FansJobOrderPanel({
   baseYear,
   canManage,
   canAdd = canManage,
+  admin = false,
 }: {
   orderId: string;
   jobOrders: FansJobOrder[];
@@ -228,6 +230,8 @@ export function FansJobOrderPanel({
   canManage: boolean;
   /** Whether new job orders can still be added (hidden once in production). */
   canAdd?: boolean;
+  /** Admins can edit the JO numbering (base sequence + year). */
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [editIndex, setEditIndex] = useState<number | null>(null); // null = list view; -1 = new
@@ -282,6 +286,7 @@ export function FansJobOrderPanel({
           {jobOrders.map((jo, i) => (
             <li key={i} className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-2 text-xs">
               <span className="font-mono font-semibold">{numberFor(i)}</span>
+              {admin && i === 0 && <JoNumberEditor orderId={orderId} dept="fans" baseNo={baseNo} baseYear={baseYear} />}
               <span className="rounded-full bg-[#ED1C24]/10 px-2 py-0.5 font-medium text-[#ED1C24]">{joTypeLabel(jo.type)}</span>
               <span className="text-muted-foreground">
                 {[jo.bladeDiameter && `${jo.bladeDiameter}"Ø`, jo.project, jo.quantity && `${jo.quantity} ${jo.uom}`, jo.targetDate && `due ${jo.targetDate}`].filter(Boolean).join(" · ")}

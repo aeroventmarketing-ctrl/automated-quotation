@@ -623,6 +623,41 @@ export async function deleteFansJobOrder(quotationId: string, index: number): Pr
   await saveWorkflow(quotationId, cls, { ...wf, fansJobOrders: list });
 }
 
+// Which workflow base fields hold each department's JO numbering.
+const JO_BASE_FIELDS = {
+  fans: ["joBaseNo", "joBaseYear"],
+  duct: ["ductJoBaseNo", "ductJoBaseYear"],
+  accessories: ["accJoBaseNo", "accJoBaseYear"],
+  motor: ["mcJoBaseNo", "mcJoBaseYear"],
+} as const;
+
+/**
+ * Admin-only: edit a department's Job Order number. The printed JO number is
+ * derived from a per-department base sequence + year (AFBM-JO<YY><5-digit seq>),
+ * so overriding those two values renumbers every JO in that department. Admins
+ * use this to correct a JO number after the fact.
+ */
+export async function setJobOrderNumbering(
+  quotationId: string,
+  dept: keyof typeof JO_BASE_FIELDS,
+  baseNo: number,
+  baseYear: number,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can edit job order numbers.");
+  const fields = JO_BASE_FIELDS[dept];
+  if (!fields) throw new Error("Unknown department.");
+  if (!Number.isInteger(baseNo) || baseNo < 1 || baseNo > 99999) {
+    throw new Error("The job order sequence must be a whole number between 1 and 99999.");
+  }
+  if (!Number.isInteger(baseYear) || baseYear < 2000 || baseYear > 2999) {
+    throw new Error("The year must be a valid four-digit year.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const [noField, yearField] = fields;
+  await saveWorkflow(quotationId, cls, { ...wf, [noField]: baseNo, [yearField]: baseYear });
+}
+
 // --- Duct Job Orders (Engineer) -------------------------------------------
 
 /** Next running Duct JO base sequence (claimed once per order). */
