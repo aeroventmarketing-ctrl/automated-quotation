@@ -17,9 +17,9 @@ import { readOrderWorkflow, pendingStep, requisitionDeptLabel, deptRole } from "
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
-import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
-import { coercePurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
@@ -71,6 +71,19 @@ export interface ReturnNote {
   href: string;
 }
 
+/** One line of the Purchase Order summary — every issued PO, by number. */
+export interface PoSummaryRow {
+  key: string;
+  poNumber: string;
+  supplier: string | null;
+  orderRef: string; // the order (quote number) or department requisition it covers
+  statusLabel: string;
+  variant: "secondary" | "warning" | "success" | "destructive";
+  net: number; // PO net amount
+  currency: string;
+  href: string;
+}
+
 export interface MyDashboard {
   hasRole: boolean; // holds ≥1 workflow role (or admin) — i.e. this page applies
   roleLabels: string[]; // the viewer's workflow-role labels (for the header)
@@ -83,6 +96,9 @@ export interface MyDashboard {
   // Supplier-return lifecycle — shown to Admin, Purchaser, Warehouse, Plant
   // Manager and Logistics.
   returnsFeed: ReturnNote[];
+  // Purchase Order summary (all POs, by number) — Admin / Payment Approver /
+  // Accounting / Purchaser only.
+  poSummary: PoSummaryRow[];
 }
 
 /** The workflow-role labels a user holds. */
@@ -497,6 +513,38 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
 
   const activity = await listActivityForActor(user.id, 30);
 
+  // Purchase Order summary — every issued PO, arranged by number. Finance /
+  // purchasing roles only. Combined POs (shared number) are listed once.
+  let poSummary: PoSummaryRow[] = [];
+  if (isAdmin(user) || has("payment_approver") || has("accounting") || has("purchaser")) {
+    try {
+      const withPo = await prisma.purchaseRequest.findMany({
+        where: { status: { notIn: ["PENDING_APPROVAL"] } },
+        include: { quotation: { select: { quoteNumber: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 500,
+      });
+      const byNumber = new Map<string, PoSummaryRow>();
+      for (const pr of withPo) {
+        const po = coercePurchaseOrder(pr.po);
+        if (!po?.poNumber || byNumber.has(po.poNumber)) continue;
+        const st = pr.status as PRStatus;
+        byNumber.set(po.poNumber, {
+          key: `po:${po.poNumber}`,
+          poNumber: po.poNumber,
+          supplier: po.supplier?.company || null,
+          orderRef: pr.quotationId ? (pr.quotation?.quoteNumber ?? "Order") : `Requisition · ${requisitionDeptLabel(pr.dept)}`,
+          statusLabel: PR_STATUS_LABEL[st] ?? st,
+          variant: st === "COMPLETED" ? "success" : st === "REJECTED" || st === "CANCELLED" ? "destructive" : "warning",
+          net: poTotals(po).net,
+          currency: "PHP",
+          href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+        });
+      }
+      poSummary = [...byNumber.values()].sort((a, b) => a.poNumber.localeCompare(b.poNumber));
+    } catch { /* ignore */ }
+  }
+
   visibleFeed.sort((a, b) => b.when.localeCompare(a.when));
   const visibleReturns = returnsFeed.filter((r) => shows(r.when || undefined));
   // Open returns first (your step, then other awaiting), completed last; newest within each.
@@ -516,5 +564,6 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     byArea,
     materialsFeed: visibleFeed.slice(0, 15),
     returnsFeed: visibleReturns.slice(0, 15),
+    poSummary,
   };
 }
