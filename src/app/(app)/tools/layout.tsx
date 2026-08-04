@@ -10,6 +10,7 @@ const TABS = [
   { href: "/tools/duct-sheets", label: "Duct Material" },
   { href: "/tools/pulley", label: "Pulley" },
   { href: "/tools/fan-law", label: "Fan Law" },
+  { href: "/tools/job-order", label: "Job Order" },
 ];
 
 export default function ToolsLayout({ children }: { children: React.ReactNode }) {
