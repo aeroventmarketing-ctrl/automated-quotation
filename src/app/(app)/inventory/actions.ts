@@ -109,8 +109,17 @@ async function parseXlsx(buf: Buffer): Promise<string[][]> {
   const ws = wb.worksheets[0];
   const rows: string[][] = [];
   ws?.eachRow({ includeEmpty: false }, (r) => {
+    // Place each cell at its TRUE column index (colNumber). Pushing in iteration
+    // order instead would let an empty/merged leading cell shift every later
+    // value one column left — e.g. dropping an adjacent value into the "unit"
+    // column for just that row. Fill any gaps with "".
     const vals: string[] = [];
-    r.eachCell({ includeEmpty: true }, (cell) => vals.push(cell.text == null ? "" : String(cell.text)));
+    let maxCol = 0;
+    r.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      vals[colNumber - 1] = cell.text == null ? "" : String(cell.text);
+      if (colNumber > maxCol) maxCol = colNumber;
+    });
+    for (let i = 0; i < maxCol; i++) if (vals[i] === undefined) vals[i] = "";
     rows.push(vals);
   });
   return rows;
