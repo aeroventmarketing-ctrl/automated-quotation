@@ -801,6 +801,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   baseYear={wf.joBaseYear}
                   canManage={canManageJO}
                   canAdd={canManageJO && !inProductionOrLater}
+                  admin={adminViewer}
                 />
               </div>
               )}
@@ -815,6 +816,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   baseYear={wf.ductJoBaseYear}
                   canManage={canManageJO}
                   canAdd={canManageJO && !inProductionOrLater}
+                  admin={adminViewer}
                 />
               </div>
               )}
@@ -829,6 +831,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   baseYear={wf.accJoBaseYear}
                   canManage={canManageJO}
                   canAdd={canManageJO && !inProductionOrLater}
+                  admin={adminViewer}
                 />
               </div>
               )}
@@ -843,6 +846,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   baseYear={wf.mcJoBaseYear}
                   canManage={canManageJO}
                   canAdd={canManageJO && !inProductionOrLater}
+                  admin={adminViewer}
                 />
               </div>
               )}

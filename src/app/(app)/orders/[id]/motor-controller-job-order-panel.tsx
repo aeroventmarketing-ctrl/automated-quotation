@@ -18,6 +18,7 @@ import {
 } from "@/lib/motor-controller-job-order";
 import { saveMotorControllerJobOrder, deleteMotorControllerJobOrder } from "../actions";
 import { JobOrderApproval } from "./jo-approval";
+import { JoNumberEditor } from "./jo-number-editor";
 
 function todayISO(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -30,6 +31,7 @@ export function MotorControllerJobOrderPanel({
   baseYear,
   canManage,
   canAdd = canManage,
+  admin = false,
 }: {
   orderId: string;
   jobOrders: MotorControllerJobOrder[];
@@ -37,6 +39,8 @@ export function MotorControllerJobOrderPanel({
   baseYear?: number;
   canManage: boolean;
   canAdd?: boolean;
+  /** Admins can edit the JO numbering (base sequence + year). */
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -85,6 +89,7 @@ export function MotorControllerJobOrderPanel({
             <li key={i} className="space-y-1 rounded-md border bg-muted/20 p-2 text-xs">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono font-semibold">{numberFor(i)}</span>
+                {admin && i === 0 && <JoNumberEditor orderId={orderId} dept="motor" baseNo={baseNo} baseYear={baseYear} />}
                 <span className="rounded-full bg-[#ED1C24]/10 px-2 py-0.5 font-medium text-[#ED1C24]">Motor Controller</span>
                 <span className="text-muted-foreground">
                   {[jo.project, jo.lines.length ? `${jo.lines.length} unit${jo.lines.length > 1 ? "s" : ""}` : null, jo.dueDate && `due ${jo.dueDate}`].filter(Boolean).join(" · ")}

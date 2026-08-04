@@ -21,6 +21,7 @@ import {
 } from "@/lib/duct-job-order";
 import { saveDuctJobOrder, deleteDuctJobOrder } from "../actions";
 import { JobOrderApproval } from "./jo-approval";
+import { JoNumberEditor } from "./jo-number-editor";
 
 function todayISO(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -33,6 +34,7 @@ export function DuctJobOrderPanel({
   baseYear,
   canManage,
   canAdd = canManage,
+  admin = false,
 }: {
   orderId: string;
   jobOrders: DuctJobOrder[];
@@ -41,6 +43,8 @@ export function DuctJobOrderPanel({
   canManage: boolean;
   /** Whether new job orders can still be added (hidden once in production). */
   canAdd?: boolean;
+  /** Admins can edit the JO numbering (base sequence + year). */
+  admin?: boolean;
 }) {
   const router = useRouter();
   const [editIndex, setEditIndex] = useState<number | null>(null); // null = list; -1 = new
@@ -89,6 +93,7 @@ export function DuctJobOrderPanel({
             <li key={i} className="space-y-1 rounded-md border bg-muted/20 p-2 text-xs">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono font-semibold">{numberFor(i)}</span>
+                {admin && i === 0 && <JoNumberEditor orderId={orderId} dept="duct" baseNo={baseNo} baseYear={baseYear} />}
                 <span className="rounded-full bg-[#ED1C24]/10 px-2 py-0.5 font-medium text-[#ED1C24]">Duct</span>
                 <span className="text-muted-foreground">
                   {[jo.project, jo.segments.length ? `${jo.segments.length} segment${jo.segments.length > 1 ? "s" : ""}` : null, jo.dueDate && `due ${jo.dueDate}`].filter(Boolean).join(" · ")}
