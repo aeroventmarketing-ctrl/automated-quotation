@@ -7,6 +7,7 @@ import { formatDate } from "@/lib/utils";
 import { coerceCashLines } from "@/lib/cash-request";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { resolveSignatureByName } from "@/lib/signature";
+import { getSignatory } from "@/lib/signatory";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -29,9 +30,20 @@ export default async function CashVoucherPrintPage({ params }: { params: Promise
   while (rows.length < 8) rows.push({ description: "", amount: 0 });
   const dateStr = formatDate(cr.voucherAt ?? cr.createdAt);
   // Prepared by = Accounting (who generated the voucher); show their uploaded
-  // signature above the printed name. Approved / received names carry no
+  // signature above the printed name. Primary source is the per-user signature
+  // (Admin → Users). If that's empty, fall back to the BIR-2307 payor signatory
+  // (Admin → Signatory) ONLY when it is the same person (names match), so a
+  // signature uploaded there still appears. Approved / received names carry no
   // signature block on this pad.
   const prepared = await resolveSignatureByName(cr.voucherByName);
+  if (!prepared.signature) {
+    const signatory = await getSignatory();
+    const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (signatory.signature && signatory.name && canon(signatory.name) === canon(cr.voucherByName ?? "")) {
+      prepared.signature = signatory.signature;
+      if (!prepared.name) prepared.name = signatory.name;
+    }
+  }
   const approvedBy = cr.releasedByName ?? cr.decidedByName ?? "";
 
   return (
