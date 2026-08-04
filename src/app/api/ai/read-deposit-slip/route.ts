@@ -17,6 +17,7 @@ export const maxDuration = 60;
 const bodySchema = z.object({
   quotationId: z.string(),
   path: z.string(),
+  uploadedAt: z.string().optional(), // the proof's upload timestamp (used as the payment date for a BIR 2307)
 });
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
@@ -31,6 +32,7 @@ CRITICAL RULES:
 - CONVENIENCE / SERVICE / PROCESSING FEE: when the proof shows a base "Amount" PLUS a separate fee line (Convenience Fee / Service Fee / Processing Fee) that add up to a "Total" — common on GCash and other e-wallet bill-payment / buy-load receipts — read the base "Amount" (the payment itself) and IGNORE the fee. Do NOT return the Total. When there is no separate fee line, use the single Amount / Total Amount shown.
 - BDO CASH TRANSACTION SLIP / CASH DEPOSIT SLIP (machine-validated): the AMOUNT is the "Cash Deposit" figure. DISREGARD "Cash In" (the cash fed into the machine) and "Cash Out"/"Total Cash Out" (the change returned) — "Cash In" minus "Cash Out" equals the "Cash Deposit". Always read the "Cash Deposit" amount, never "Cash In".
 - UNIONBANK ONLINE PAYMENT (UBPP): a UnionBank online transfer is identifiable by a reference starting with "UBPP" followed by digits (e.g. "UBPP20261590") in the heading. The AMOUNT is the "Amount" field — DISREGARD the "Service Fee" (e.g. "+ PHP 25.00"): do not add it and do not use any fee-inclusive total. The DATE is the creation date in the "Created by <name> on <date>" line at the top (the date of creation IS the payment date) — do NOT use the "Transaction Date" field here, which only says "Immediately".
+- BIR FORM 2307 (Certificate of Creditable Tax Withheld at Source): identify it by the form number "2307" printed at the UPPER-LEFT of the form. It is a computer-generated document — set computerGenerated=true and documentType to "BIR Form 2307". The AMOUNT is the figure in the "Total" row under the "Tax Withheld for the Quarter" column (the creditable tax withheld). Do NOT read a payment date from the form — leave date null; the system fills the payment date from the file's upload date.
 - ACCURACY OVER COMPLETENESS. If the image is blurry, has glare/reflection, is cropped, low-resolution, or you are not highly sure of the EXACT digits, set a LOW confidence, leave the unreadable field null, and add a warning. NEVER guess, approximate, or invent an amount or date.
 - Amounts are Philippine pesos; ignore the "₱"/"PHP" symbol and thousands separators. Return the date as YYYY-MM-DD.
 Return STRICT JSON only.`;
@@ -124,8 +126,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const r = await callClaudeJson({ system: SYSTEM, content, schema: depositSlipReadSchema, maxTokens: 1000 });
-    const date = r.date ?? null;
+    let date = r.date ?? null;
     const amount = r.amount ?? null;
+    // BIR Form 2307 carries no single payment date — use the proof's upload date
+    // (falling back to now if the client didn't send it).
+    const isBir2307 = /2307/.test(r.documentType ?? "");
+    if (isBir2307 && !date) {
+      const uploaded = body.uploadedAt ? new Date(body.uploadedAt) : new Date();
+      const src = Number.isNaN(uploaded.getTime()) ? new Date() : uploaded;
+      date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(src);
+    }
     // Require decent confidence so a blurry / glare photo is refused rather than
     // guessed. If the model didn't return a number, treat it as unsure.
     const CONFIDENCE_MIN = 0.7;
