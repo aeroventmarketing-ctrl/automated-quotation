@@ -19,6 +19,7 @@ import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
+import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
@@ -38,6 +39,7 @@ export interface MyTask {
   currency: string;
   href: string;
   deliveryMode?: "single" | "multi"; // for order tasks: how the order ships
+  ref?: string; // a reference code shown for quick lookup (e.g. a purchase order's PO number)
   since?: string; // ISO — when it became pending (for the notification backlog reset)
   createdAt?: string; // ISO — when the underlying order was created (go-live gate: a
   // pre-launch order stays quiet even after a post-launch stage stamp bumps `since`)
@@ -306,6 +308,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         title: label, action: steps[0]?.label ?? "Process purchase",
         client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
         href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+        ref: coercePurchaseOrder(pr.po)?.poNumber || undefined, // PO number for easy reference
         since: pr.createdAt.toISOString(),
       });
     }
