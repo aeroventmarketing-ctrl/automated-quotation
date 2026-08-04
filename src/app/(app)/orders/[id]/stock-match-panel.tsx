@@ -50,9 +50,16 @@ export function StockMatchPanel({
   // Compare on alphanumerics only, so punctuation/spacing differences don't block
   // a match — e.g. "G.I BOLT 5/16 X 1" matches "GI BOLT 5/16 X 1".
   const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  // Word/code tokens for a fuzzy fallback. A "code" token carries a digit (a
+  // part number or size, e.g. "50s", "450m", "25") — these disambiguate
+  // otherwise-similar items, so a fuzzy match must agree on all of them.
+  const tokenize = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 2);
+  const hasDigit = (t: string) => /\d/.test(t);
   const autoMatchId = (desc: string): string => {
     const dc = canon(desc);
     if (!dc) return "";
+    const dToks = tokenize(desc);
+    const dCodes = dToks.filter(hasDigit);
     let best = "";
     let score = 0;
     for (const s of stockItems) {
@@ -62,6 +69,21 @@ export function StockMatchPanel({
       if (nc === dc) sc = 1000;
       else if (dc.includes(nc)) sc = 500 + nc.length;
       else if (nc.includes(dc)) sc = 300 + dc.length;
+      else {
+        // Fuzzy fallback for word-order / extra-word differences (e.g. a stock
+        // item named "PTH-S-50S VIBRATION ISOLATOR" vs a line "VIBRATION
+        // ISOLATOR - PTH-S-50S"). Only accept it when every part-code token
+        // agrees, so two isolators with different codes never cross-match.
+        const nToks = new Set(tokenize(s.name));
+        const shared = dToks.filter((t) => nToks.has(t));
+        const sharedCodes = dCodes.filter((c) => nToks.has(c));
+        if (dCodes.length > 0 && sharedCodes.length === dCodes.length && shared.length >= 2) {
+          sc = 100 + shared.length * 10 + sharedCodes.length * 30;
+        } else if (dCodes.length === 0 && dToks.length >= 2 && shared.length === dToks.length) {
+          // No code to key on (e.g. "ANGLE BAR"): require every word present.
+          sc = 80 + shared.length * 10;
+        }
+      }
       if (sc > score) { score = sc; best = s.id; }
     }
     return best;
