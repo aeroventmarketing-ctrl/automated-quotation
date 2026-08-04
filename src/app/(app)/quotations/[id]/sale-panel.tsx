@@ -166,7 +166,7 @@ export function SalePanel({
       const doc = await upload(file);
       if (!doc) return;
       setPayments((ps) => ps.map((p) => (p.id === id ? { ...p, proof: doc } : p)));
-      await readSlip(id, doc.path);
+      await readSlip(id, doc.path, doc.uploadedAt);
     } finally { setBusy(false); }
   }
   // AI-read a payment's deposit slip / proof of payment. A validated (machine-
@@ -174,14 +174,14 @@ export function SalePanel({
   // figures are authoritative; handwritten-only proofs aren't accepted. Works on
   // a freshly uploaded proof or on an already-attached one (the "Read slip"
   // button), with the result shown inline next to that payment.
-  async function readSlip(id: string, path: string) {
+  async function readSlip(id: string, path: string, uploadedAt?: string) {
     setReadingId(id);
     setSlipStatus((s) => ({ ...s, [id]: { tone: "muted", text: "Reading slip…" } }));
     try {
       const res = await fetch("/api/ai/read-deposit-slip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quotationId, path }),
+        body: JSON.stringify({ quotationId, path, uploadedAt }),
       });
       const j = await res.json();
       if (res.ok && j.validated) {
@@ -428,7 +428,7 @@ export function SalePanel({
                       <Download className="h-3.5 w-3.5" />
                     </a>
                     {canEdit && p.kind !== "ewt" && (
-                      <button type="button" title="Read slip with AI" aria-label="Read slip with AI" disabled={reading || busy} onClick={() => p.proof && readSlip(p.id, p.proof.path)} className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary disabled:opacity-50">
+                      <button type="button" title="Read slip with AI" aria-label="Read slip with AI" disabled={reading || busy} onClick={() => p.proof && readSlip(p.id, p.proof.path, p.proof.uploadedAt)} className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary disabled:opacity-50">
                         <ScanLine className="h-3.5 w-3.5" /> <span className="text-[11px]">{reading ? "reading…" : "read slip"}</span>
                       </button>
                     )}

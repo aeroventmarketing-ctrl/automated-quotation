@@ -66,9 +66,10 @@ export function CashLiquidationPanel({
   const [aiInfo, setAiInfo] = useState<string | null>(null);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   // AI reads are capped per liquidation — after the limit, figures go in by hand.
+  // Admins are exempt: no cap, so the button never locks for them.
   const [reads, setReads] = useState(liquidation.aiReads);
   const readsLeft = Math.max(0, AI_RECEIPT_READ_LIMIT - reads);
-  const limitReached = readsLeft <= 0;
+  const limitReached = !admin && readsLeft <= 0;
   // The receipt must be AI-read before a manual record is allowed — unless the AI
   // read limit is reached, or an approver/admin (who can always record/correct).
   const [hasAiRead, setHasAiRead] = useState(false);
@@ -490,7 +491,7 @@ export function CashLiquidationPanel({
             {receipts.length > 0 && (
               <button type="button" onClick={autoRead} disabled={busy === "read" || limitReached}
                 className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/5 px-2.5 py-1 font-semibold text-primary hover:bg-primary/10 disabled:opacity-60">
-                <Sparkles className="h-3.5 w-3.5" /> {busy === "read" ? "Reading…" : limitReached ? "AI limit reached" : `Auto-read receipt${reads > 0 ? ` (${readsLeft} left)` : ""}`}
+                <Sparkles className="h-3.5 w-3.5" /> {busy === "read" ? "Reading…" : limitReached ? "AI limit reached" : `Auto-read receipt${!admin && reads > 0 ? ` (${readsLeft} left)` : ""}`}
               </button>
             )}
           </div>
@@ -502,6 +503,8 @@ export function CashLiquidationPanel({
           )}
           {limitReached ? (
             <p className="text-xs font-medium text-destructive">AI read limit reached — check the receipt and enter the figures manually (see the notice above), or ask the admin/approver to allow more reads.</p>
+          ) : admin ? (
+            <p className="text-xs text-muted-foreground">Admin — no AI read limit.</p>
           ) : reads > 0 ? (
             <p className="text-xs text-muted-foreground">AI reads left: {readsLeft} of {AI_RECEIPT_READ_LIMIT}.</p>
           ) : null}

@@ -28,6 +28,7 @@ Extract what was actually spent and map it to the budget lines. Amounts are Phil
 CONVENIENCE / SERVICE / PROCESSING FEE: when a payment proof shows a base "Amount" PLUS a separate fee line (Convenience Fee / Service Fee / Processing Fee) that add up to a "Total" — common on GCash and other e-wallet bill-payment / buy-load receipts — use the base "Amount" (the payment itself) and IGNORE the fee. Do NOT use the Total, and do not add the fee as an extra item.
 BDO CASH TRANSACTION SLIP / CASH DEPOSIT SLIP (machine-validated): use the "Cash Deposit" figure as the amount. DISREGARD "Cash In" (the cash fed into the machine) and "Cash Out"/"Total Cash Out" (the change returned) — "Cash In" minus "Cash Out" equals the "Cash Deposit". Always read the "Cash Deposit" amount, never "Cash In".
 UNIONBANK ONLINE PAYMENT (UBPP): a UnionBank online transfer is identifiable by a reference starting with "UBPP" followed by digits (e.g. "UBPP20261590") in the heading. Use the "Amount" field as the amount and DISREGARD the "Service Fee" (e.g. "+ PHP 25.00") — do not add it and do not use any fee-inclusive total. Its date is the creation date in the "Created by <name> on <date>" line at the top (the date of creation IS the payment date); do NOT rely on the "Transaction Date" field when it only says "Immediately".
+BIR FORM 2307 (Certificate of Creditable Tax Withheld at Source): identify it by the form number "2307" printed at the UPPER-LEFT of the form. The AMOUNT is the figure in the "Total" row under the "Tax Withheld for the Quarter" column (the creditable tax withheld) — use that as the amount. The form carries no single payment date, so leave "date" null; the payment date is taken from the document's upload date by the system.
 Return STRICT JSON only.`;
 
 function userPrompt(lines: { description: string; budgetAmount: number }[]): string {
@@ -68,16 +69,18 @@ export async function POST(req: NextRequest) {
   const cr = await prisma.cashRequest.findUnique({ where: { id: body.cashRequestId } });
   if (!cr) return NextResponse.json({ error: "Cash request not found" }, { status: 404 });
   // The requestor, accounting or an admin may read the receipts.
-  if (!isAdmin(user) && cr.requestedById !== user.id) {
+  const admin = isAdmin(user);
+  if (!admin && cr.requestedById !== user.id) {
     const ok = userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting");
     if (!ok) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
 
   // Cap the number of AI reads per liquidation so the document is verified by
-  // hand instead of relying on repeated AI reads. The count is persisted.
+  // hand instead of relying on repeated AI reads. The count is persisted. Admins
+  // are exempt (no limit, and their reads don't consume the shared budget).
   const cur = coerceLiquidation(cr.liquidation);
   const reads = cur.aiReadCount ?? 0;
-  if (reads >= AI_RECEIPT_READ_LIMIT) {
+  if (!admin && reads >= AI_RECEIPT_READ_LIMIT) {
     return NextResponse.json({
       error: `AI read limit reached (${AI_RECEIPT_READ_LIMIT} of ${AI_RECEIPT_READ_LIMIT} used). Please check the receipt and enter the figures manually.`,
       limitReached: true,
@@ -135,8 +138,8 @@ export async function POST(req: NextRequest) {
     });
     const warnings = [...(result.warnings ?? [])];
     if (skipped.length) warnings.push(`Couldn't read: ${skipped.join(", ")} (not an image/PDF).`);
-    // A read completed — burn one of the allotted tries.
-    const usedReads = reads + 1;
+    // A read completed — burn one of the allotted tries (admins are exempt).
+    const usedReads = admin ? reads : reads + 1;
     await prisma.cashRequest.update({
       where: { id: body.cashRequestId },
       data: { liquidation: { ...cur, aiReadCount: usedReads } as unknown as Prisma.InputJsonValue },
@@ -149,8 +152,8 @@ export async function POST(req: NextRequest) {
       extraItems: result.extraItems ?? [],
       warnings,
       reads: usedReads,
-      limit: AI_RECEIPT_READ_LIMIT,
-      remaining: Math.max(0, AI_RECEIPT_READ_LIMIT - usedReads),
+      limit: admin ? null : AI_RECEIPT_READ_LIMIT,
+      remaining: admin ? null : Math.max(0, AI_RECEIPT_READ_LIMIT - usedReads),
     });
   } catch (err) {
     console.error("read-cash-receipt error", err);
