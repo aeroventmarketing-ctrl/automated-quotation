@@ -1,0 +1,451 @@
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { JO_TYPES, joTypeLabel, joTypeReady, type FansJobOrder } from "@/lib/job-order";
+
+// The Fans & Blowers job-order form + type chooser. Shared by the order's
+// Phase-2 job-order panel and the standalone HVAC Tools "Job Order" tab so both
+// offer the exact same creation experience — the only difference is where the
+// finished job order is persisted, injected via the `onSave` callback.
+
+// Option lists taken straight from the template's lookup tables so selections
+// always match its VLOOKUPs.
+const BLADE_DIAMETERS = ["9", "10.5", "12.25", "13.5", "15", "16.5", "18.25", "20", "22.25", "24.5", "27", "30", "33", "36.5", "40.25", "44.5", "49", "54.5", "60", "66", "73", "83"];
+const ROTATIONS = ["Clockwise", "Counterclockwise", "Clockwise & Counterclockwise"];
+const MOTOR_HP = ["1/4 HP, 1PH, TECO", "1/2 HP, 1PH, TECO", "3 /4 HP, 1PH, TECO", "1 HP, 1PH, TECO", "1.5 HP, 1PH, TECO", "2 HP, 1PH, TECO", "3 HP, 1PH, TECO", "5 HP, 1PH, TECO", "1/2 HP, 3PH, TECO", "1 HP, 3PH, TECO", "1 1/2 HP, 3PH, TECO", "2 HP, 3PH, TECO", "3 HP, 3PH, TECO", "5 HP, 3PH, TECO", "7 1/2 HP, 3PH, TECO", "10 HP, 3PH, TECO", "15 HP, 3PH, TECO", "20 HP, 3PH, TECO", "25 HP, 3PH, TECO", "30 HP, 3PH, TECO", "40 HP, 3PH, TECO", "50 HP, 3PH, TECO", "60 HP, 3PH, TECO", "75 HP, 3PH, TECO", "100 HP, 3PH, TECO", "125 HP, 3PH, TECO", "150 HP, 3PH, TECO", "175 HP, 3PH, TECO", "200 HP, 3PH, TECO", "250 HP, 3PH, TECO", "300 HP, 3PH, TECO", "1/2 HP, 3PH, Hyundai", "1 HP, 3PH, Hyundai", "1 1/2 HP, 3PH, Hyundai", "2 HP, 3PH, Hyundai", "3 HP, 3PH, Hyundai", "5.5 HP, 3PH, Hyundai", "7 1/2 HP, 3PH, Hyundai", "10 HP, 3PH, Hyundai", "15 HP, 3PH, Hyundai", "20 HP, 3PH, Hyundai", "25 HP, 3PH, Hyundai", "30 HP, 3PH, Hyundai", "40 HP, 3PH, Hyundai", "50 HP, 3PH, Hyundai", "60 HP, 3PH, Hyundai", "75 HP, 3PH, Hyundai", "100 HP, 3PH, Hyundai", "125 HP, 3PH, Hyundai", "150 HP, 3PH, Hyundai", "180 HP, 3PH, Hyundai", "200 HP, 3PH, Hyundai", "270 HP, 3PH, Hyundai", "340 HP, 3PH, Hyundai"];
+const ORIENTATIONS = ["Top Horizontal", "Bottom Horizontal", "Upblast", "Downblast", "Top Angular Up", "Top Angular Down", "Bottom Angular Up", "Bottom Angular Down", "Flange Mounted"];
+const BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Forward Curved", "Airfoil", "Radial"];
+const DRIVE_TYPES = ["Belt", "Direct"];
+const MOUNTINGS = ["Foot Mounted", "Flange Mounted"];
+const ENCLOSURES = ["TEFC", "Explosion Proof"];
+const VOLTAGES = ["220", "380", "440"];
+const FREQUENCIES = ["60", "50"];
+const PROJECTS = ["CEB", "CFAB", "CAB", "CEBCAB", "CFABCAB", "CABSISW"];
+const MAKES = ["Standard", "Customized", "Client Design"];
+const MOTOR_BRANDS = ["TECO", "Hyundai"];
+
+// Centrifugal Inline option lists (from the Inline template's data validations).
+const INLINE_PROJECTS = ["CIEB"];
+const INLINE_ORIENTATIONS = ["Foot Mounted", "Ceiling Hung", "Dual Mounted", "Flange Mounted", "With Stand"];
+const MOTOR_LOCATIONS = ["12 o'clock facing discharge", "9 o'clock facing discharge", "6 o'clock facing discharge", "3 o'clock facing discharge"];
+const INLINE_BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Airfoil"];
+const INLINE_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
+const INLINE_ENCLOSURES = ["TEFC", "Exproof"];
+
+// Panel Fan option lists (from the Panel Fan template's data validations).
+const PANEL_PROJECTS = ["EWF", "FAWF"];
+const PANEL_BLADE_DIAMETERS = ["10", "12", "14", "16", "18", "20", "24", "30", "36", "42", "48", "54", "60"];
+const PANEL_ORIENTATIONS = ["Exhaust 1", "Exhaust 2", "Supply 1", "Supply 2", "Exhaust 1 & Supply 1", "Exhaust 2 & Supply 2"];
+const PANEL_MOUNTINGS = ["Wall Mounted", "Ceiling Mounted", "With Stand", "Ceiling Hang"];
+const PANEL_BLADE_TYPES = ["Kidney Type", "Paddle Type", "Airfoil"];
+const PANEL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
+
+// Power Roof option lists (from the Power Roof template's data validations).
+const POWERROOF_PROJECTS = ["PRV"];
+const POWERROOF_BLADE_DIAMETERS = ["12", "16", "18", "20", "22", "24", "30", "36", "40", "42", "48", "50", "54", "58", "60"];
+const POWERROOF_ORIENTATIONS = ["Exhaust", "Fresh Air"];
+const POWERROOF_MOUNTINGS = ["Roof Mounted", "Wall Mounted"];
+
+// Tubeaxial / Vaneaxial option lists (from its template's data validations).
+const AXIAL_PROJECTS = ["TAF", "VAF", "TAFDD", "VAFDD"];
+const AXIAL_BLADE_DIAMETERS = ["10", "12", "14", "16", "18", "20", "24", "30", "36", "42", "48", "54", "60"];
+const AXIAL_ORIENTATIONS = ["Foot Mounted", "Ceiling Hung", "Dual Mounted", "Flange Mounted", "With Stand"];
+const AXIAL_MOTOR_LOCATIONS = ["12 o'clock facing discharge", "9 o'clock facing discharge", "6 o'clock facing discharge", "3 o'clock facing discharge", "N/A"];
+const AXIAL_BLADE_TYPES = ["Axial", "Airfoil", "Semi-airfoil"];
+const AXIAL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
+
+// Centrifugal Blower DIDW option lists (same family as the Centrifugal Blower).
+const DIDW_PROJECTS = ["DIDWCEB", "DIDWCFAB", "CEBCAB", "CFABCAB"];
+const DIDW_BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Forward Curved"];
+
+// A belt-drive JO form is driven by a per-type config so the Centrifugal Blower
+// can serve as the reference for every belt-drive type. `fieldC` is the Source
+// B79 field — the Centrifugal Blower labels it "Rotation", the Inline labels it
+// "Motor Location"; both store into the `rotation` field. Everything shared
+// (motor cascade, computed Fan RPM, header) stays common.
+type BeltDriveConfig = {
+  projects: string[];
+  makes: string[];
+  uoms: string[];
+  bladeDiameters: string[];
+  orientations: string[];
+  fieldC: { label: string; options: string[] };
+  bladeTypes: string[];
+  driveTypes: string[];
+  voltages: string[];
+  frequencies: string[];
+  mountings: string[];
+  enclosures: string[];
+  directCheckbox: boolean;
+};
+
+const BELT_DRIVE_CONFIGS: Record<string, BeltDriveConfig> = {
+  centrifugal_blower: {
+    projects: PROJECTS,
+    makes: MAKES,
+    uoms: ["pc", "pcs", "set"],
+    bladeDiameters: BLADE_DIAMETERS,
+    orientations: ORIENTATIONS,
+    fieldC: { label: "Rotation", options: ROTATIONS },
+    bladeTypes: BLADE_TYPES,
+    driveTypes: DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: ENCLOSURES,
+    directCheckbox: true,
+  },
+  centrifugal_inline_blower: {
+    projects: INLINE_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: BLADE_DIAMETERS,
+    orientations: INLINE_ORIENTATIONS,
+    fieldC: { label: "Motor Location", options: MOTOR_LOCATIONS },
+    bladeTypes: INLINE_BLADE_TYPES,
+    driveTypes: INLINE_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    directCheckbox: true,
+  },
+  panel_fan: {
+    projects: PANEL_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: PANEL_BLADE_DIAMETERS,
+    orientations: PANEL_ORIENTATIONS,
+    fieldC: { label: "Mounting", options: PANEL_MOUNTINGS },
+    bladeTypes: PANEL_BLADE_TYPES,
+    driveTypes: PANEL_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    directCheckbox: true,
+  },
+  power_roof: {
+    projects: POWERROOF_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: POWERROOF_BLADE_DIAMETERS,
+    orientations: POWERROOF_ORIENTATIONS,
+    fieldC: { label: "Mounting", options: POWERROOF_MOUNTINGS },
+    bladeTypes: PANEL_BLADE_TYPES,
+    driveTypes: PANEL_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    directCheckbox: true,
+  },
+  tubeaxial_vaneaxial: {
+    projects: AXIAL_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: AXIAL_BLADE_DIAMETERS,
+    orientations: AXIAL_ORIENTATIONS,
+    fieldC: { label: "Motor Location", options: AXIAL_MOTOR_LOCATIONS },
+    bladeTypes: AXIAL_BLADE_TYPES,
+    driveTypes: AXIAL_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    // DD variants are already in the project list (TAFDD/VAFDD) — no extra checkbox.
+    directCheckbox: false,
+  },
+  centrifugal_blower_didw: {
+    projects: DIDW_PROJECTS,
+    makes: MAKES,
+    uoms: ["pc.", "pcs.", "set"],
+    bladeDiameters: BLADE_DIAMETERS,
+    orientations: ORIENTATIONS,
+    fieldC: { label: "Rotation", options: ROTATIONS },
+    bladeTypes: DIDW_BLADE_TYPES,
+    driveTypes: AXIAL_DRIVE_TYPES,
+    voltages: VOLTAGES,
+    frequencies: FREQUENCIES,
+    mountings: MOUNTINGS,
+    enclosures: INLINE_ENCLOSURES,
+    directCheckbox: true,
+  },
+};
+const DEFAULT_BELT_CONFIG = BELT_DRIVE_CONFIGS.centrifugal_blower;
+
+// Motor selection is cascading: Brand → Phase → HP. Each MOTOR_HP entry is
+// "<hp>, <1PH|3PH>, <brand>"; the HP dropdown shows just the HP but stores the
+// full key (the template's VLOOKUP needs it).
+const MOTOR_ENTRIES = MOTOR_HP.map((full) => {
+  const [hp, phase, brand] = full.split(",").map((s) => s.trim());
+  return { full, hp, phase, brand };
+});
+// Motor RPM per selection (from the template's motor table) — used to preview
+// the computed Fan RPM = roundup(motorRpm × motorPulley ÷ fanPulley).
+const MOTOR_RPM: Record<string, number> = {
+  "1/4 HP, 1PH, TECO": 1715, "1/2 HP, 1PH, TECO": 1750, "3 /4 HP, 1PH, TECO": 1750, "1 HP, 1PH, TECO": 1750, "1.5 HP, 1PH, TECO": 1750, "2 HP, 1PH, TECO": 1750, "3 HP, 1PH, TECO": 1750, "5 HP, 1PH, TECO": 1750, "1/2 HP, 3PH, TECO": 1680, "1 HP, 3PH, TECO": 1710, "1 1/2 HP, 3PH, TECO": 1720, "2 HP, 3PH, TECO": 1715, "3 HP, 3PH, TECO": 1735, "5 HP, 3PH, TECO": 1745, "7 1/2 HP, 3PH, TECO": 1750, "10 HP, 3PH, TECO": 1750, "15 HP, 3PH, TECO": 1760, "20 HP, 3PH, TECO": 1760, "25 HP, 3PH, TECO": 1760, "30 HP, 3PH, TECO": 1765, "40 HP, 3PH, TECO": 1760, "50 HP, 3PH, TECO": 1770, "60 HP, 3PH, TECO": 1765, "75 HP, 3PH, TECO": 1775, "100 HP, 3PH, TECO": 1775, "125 HP, 3PH, TECO": 1770, "150 HP, 3PH, TECO": 1770, "175 HP, 3PH, TECO": 1770, "200 HP, 3PH, TECO": 1775, "250 HP, 3PH, TECO": 1775, "300 HP, 3PH, TECO": 1775,
+  "1/2 HP, 3PH, Hyundai": 1660, "1 HP, 3PH, Hyundai": 1668, "1 1/2 HP, 3PH, Hyundai": 1680, "2 HP, 3PH, Hyundai": 1680, "3 HP, 3PH, Hyundai": 1716, "5.5 HP, 3PH, Hyundai": 1728, "7 1/2 HP, 3PH, Hyundai": 1728, "10 HP, 3PH, Hyundai": 1728, "15 HP, 3PH, Hyundai": 1728, "20 HP, 3PH, Hyundai": 1752, "25 HP, 3PH, Hyundai": 1752, "30 HP, 3PH, Hyundai": 1764, "40 HP, 3PH, Hyundai": 1764, "50 HP, 3PH, Hyundai": 1764, "60 HP, 3PH, Hyundai": 1770, "75 HP, 3PH, Hyundai": 1770, "100 HP, 3PH, Hyundai": 1776, "125 HP, 3PH, Hyundai": 1776, "150 HP, 3PH, Hyundai": 1776, "180 HP, 3PH, Hyundai": 1776, "200 HP, 3PH, Hyundai": 1776, "270 HP, 3PH, Hyundai": 1776, "340 HP, 3PH, Hyundai": 1788,
+};
+const phaseLabel = (tok: string) => (tok === "1PH" ? "Single Phase" : "Three Phase");
+const phaseToken = (label: string) => (label === "Single Phase" ? "1PH" : "3PH");
+function phasesForBrand(brand: string): string[] {
+  const toks = new Set(MOTOR_ENTRIES.filter((e) => e.brand === brand).map((e) => e.phase));
+  return ["1PH", "3PH"].filter((t) => toks.has(t)).map(phaseLabel);
+}
+function hpForBrandPhase(brand: string, phaseLbl: string) {
+  const tok = phaseToken(phaseLbl);
+  return MOTOR_ENTRIES.filter((e) => e.brand === brand && e.phase === tok);
+}
+const SELECT_CLS = "h-8 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-50";
+
+/** Derive the template's motor brand + phase alias from a "HP, PH, Brand" string. */
+function deriveMotor(hp: string): { brand: string; alias: string } {
+  const parts = hp.split(",").map((p) => p.trim());
+  const brand = parts[2] ?? "";
+  const ph = (parts[1] ?? "").toUpperCase();
+  const phase = ph.startsWith("1") ? "1Phase" : "3Phase";
+  return { brand, alias: brand ? `${brand}_${phase}` : "" };
+}
+
+/** Today in Manila as an ISO date (YYYY-MM-DD) — the JO's default date. */
+export function joToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+/** Step 1 of creating a JO: pick which of the six Fans & Blowers types it is. */
+export function JoTypeChooser({ onPick, onCancel }: { onPick: (key: string) => void; onCancel: () => void }) {
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+      <div className="text-sm font-medium">Select the job order type</div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {JO_TYPES.map((t) => {
+          const ready = joTypeReady(t.key);
+          return (
+            <button
+              key={t.key}
+              type="button"
+              disabled={!ready}
+              onClick={() => ready && onPick(t.key)}
+              className={
+                ready
+                  ? "flex items-center justify-between gap-2 rounded-md border border-[#ED1C24] px-3 py-2 text-left text-sm font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10"
+                  : "flex items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-left text-sm text-muted-foreground opacity-70"
+              }
+            >
+              <span>{t.label}</span>
+              {!ready && <span className="text-[10px] uppercase tracking-wide">Awaiting template</span>}
+            </button>
+          );
+        })}
+      </div>
+      <Button size="sm" variant="outline" className="h-8" onClick={onCancel}>Cancel</Button>
+    </div>
+  );
+}
+
+/** One labelled field. Hoisted to module scope so typing never drops focus. */
+function Field({
+  label,
+  k,
+  value,
+  onSet,
+  type = "text",
+  list,
+  placeholder,
+}: {
+  label: string;
+  k: keyof FansJobOrder;
+  value: string;
+  onSet: (k: keyof FansJobOrder, v: string) => void;
+  type?: string;
+  list?: string[];
+  placeholder?: string;
+}) {
+  return (
+    <label className="space-y-1">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      {list ? (
+        <select
+          className="h-8 w-full rounded-md border bg-background px-2 text-sm"
+          value={value}
+          onChange={(e) => onSet(k, e.target.value)}
+        >
+          <option value="">— select —</option>
+          {list.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <Input className="h-8" type={type} value={value} placeholder={placeholder} onChange={(e) => onSet(k, e.target.value)} />
+      )}
+    </label>
+  );
+}
+
+/**
+ * The Fans & Blowers job-order form. `onSave` persists the finished job order
+ * (to the order's workflow, or to the tool's local list) and `onDone` runs once
+ * the save resolves. `isEdit` only changes the header + button labels.
+ */
+export function JobOrderForm({
+  isEdit,
+  initial,
+  onSave,
+  onDone,
+  onCancel,
+}: {
+  isEdit: boolean;
+  initial: FansJobOrder;
+  onSave: (jo: FansJobOrder) => Promise<void> | void;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [f, setF] = useState<FansJobOrder>(initial);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const set = (k: keyof FansJobOrder, v: string) => setF((p) => ({ ...p, [k]: v }));
+  const fld = (label: string, k: keyof FansJobOrder, opts?: { type?: string; list?: string[]; placeholder?: string }) => (
+    <Field label={label} k={k} value={String(f[k] ?? "")} onSet={set} type={opts?.type} list={opts?.list} placeholder={opts?.placeholder} />
+  );
+
+  const cfg = BELT_DRIVE_CONFIGS[f.type] ?? DEFAULT_BELT_CONFIG;
+
+  // Direct drive: fan on the motor shaft — no belt, no pulleys, runs at motor
+  // speed. Signalled by the Direct checkbox, a "…DD" project, or a Direct/
+  // Directly-Coupled drive type (mirrors the generator).
+  const dt = (f.driveType || "").trim().toLowerCase();
+  const isDirect = f.directDrive || /DD$/i.test((f.project || "").trim()) || dt === "direct" || dt.startsWith("directly");
+
+  // Direct-drive units carry a "DD" suffix on their project/unit code.
+  const projectOptions = f.directDrive ? cfg.projects.map((p) => `${p}DD`) : cfg.projects;
+  // Belt is not an option once the unit is direct drive.
+  const driveOptions = isDirect ? cfg.driveTypes.filter((d) => d.toLowerCase() !== "belt") : cfg.driveTypes;
+  function toggleDirect(checked: boolean) {
+    setF((p) => {
+      let project = p.project;
+      if (checked && project && !project.endsWith("DD")) project = `${project}DD`;
+      else if (!checked && project.endsWith("DD")) project = project.slice(0, -2);
+      return { ...p, directDrive: checked, project };
+    });
+  }
+
+  // Live-computed Fan RPM = roundup(motorRpm × motorPulley ÷ fanPulley); for
+  // direct drive the fan runs at motor speed.
+  const motorRpm = MOTOR_RPM[f.motorHp];
+  const mP = Number(String(f.motorPulley).replace(/,/g, ""));
+  const fP = Number(String(f.fanPulley).replace(/,/g, ""));
+  const fanRpm = isDirect ? (motorRpm ?? null) : motorRpm && mP > 0 && fP > 0 ? Math.ceil((motorRpm * mP) / fP) : null;
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      // Fall back to the motor HP's brand only when Motor Brand was left blank;
+      // the engineer's explicit Brand / PH selections win.
+      const { brand } = deriveMotor(f.motorHp);
+      await onSave({ ...f, motorBrand: f.motorBrand || brand });
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+      <div className="text-sm font-medium">
+        {isEdit ? "Edit" : "New"} {joTypeLabel(f.type)} Job Order
+      </div>
+
+      <div className="text-xs font-semibold text-muted-foreground">Header</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {fld("Project", "project", { list: projectOptions })}
+        {cfg.directCheckbox && (
+          <div className="space-y-1">
+            <span className="text-[11px] text-muted-foreground">Drive type</span>
+            <label className="flex h-8 items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[#ED1C24]"
+                checked={f.directDrive}
+                onChange={(e) => toggleDirect(e.target.checked)}
+              />
+              <span className="text-sm font-medium">Direct</span>
+            </label>
+          </div>
+        )}
+        {fld("Make", "make", { list: cfg.makes })}
+        {fld("Date", "date", { type: "date" })}
+        {fld("Target date", "targetDate", { type: "date" })}
+        {fld("Quantity", "quantity")}
+        {fld("UOM", "uom", { list: cfg.uoms })}
+        {fld("Body lead time (days)", "bodyLeadTime")}
+        {fld("Blade lead time (days)", "bladeLeadTime")}
+      </div>
+
+      <div className="text-xs font-semibold text-muted-foreground">Fan / Blower details</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {fld("Blade diameter (Ø)", "bladeDiameter", { list: cfg.bladeDiameters })}
+        {fld("Orientation", "orientation", { list: cfg.orientations })}
+        {fld(cfg.fieldC.label, "rotation", { list: cfg.fieldC.options })}
+        {fld("Impeller / blade type", "bladeType", { list: cfg.bladeTypes })}
+        {fld("Drive", "driveType", { list: driveOptions })}
+        {fld("Capacity (@ w.g.)", "capacity", { placeholder: '21,338 cfm @ 2" w.g.' })}
+        {fld('Test @ 0" w.g.', "capacityAt0", { placeholder: '29,087 cfm @ 0" w.g.' })}
+        {fld("RPM (catalogue)", "rpmCatalogue")}
+      </div>
+
+      <div className="text-xs font-semibold text-muted-foreground">Motor details</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">Motor Brand</span>
+          <select className={SELECT_CLS} value={f.motorBrand} onChange={(e) => setF((p) => ({ ...p, motorBrand: e.target.value, motorPhAlias: "", motorHp: "" }))}>
+            <option value="">— select —</option>
+            {MOTOR_BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">Motor PH</span>
+          <select className={SELECT_CLS} value={f.motorPhAlias} disabled={!f.motorBrand} onChange={(e) => setF((p) => ({ ...p, motorPhAlias: e.target.value, motorHp: "" }))}>
+            <option value="">— select —</option>
+            {phasesForBrand(f.motorBrand).map((ph) => <option key={ph} value={ph}>{ph}</option>)}
+          </select>
+        </label>
+        <label className="space-y-1 sm:col-span-2">
+          <span className="text-[11px] text-muted-foreground">Motor HP</span>
+          <select className={SELECT_CLS} value={f.motorHp} disabled={!f.motorBrand || !f.motorPhAlias} onChange={(e) => setF((p) => ({ ...p, motorHp: e.target.value }))}>
+            <option value="">— select —</option>
+            {hpForBrandPhase(f.motorBrand, f.motorPhAlias).map((e) => <option key={e.full} value={e.full}>{e.hp}</option>)}
+          </select>
+        </label>
+        {fld("Voltage", "voltage", { list: cfg.voltages })}
+        {fld("Frequency (Hz)", "frequency", { list: cfg.frequencies })}
+        {fld("Mounting", "mounting", { list: cfg.mountings })}
+        {fld("Enclosure", "enclosure", { list: cfg.enclosures })}
+        {/* Direct drive has no pulleys — hide both fields. */}
+        {!isDirect && fld("Motor pulley (Ø)", "motorPulley")}
+        {!isDirect && fld("Fan pulley (Ø)", "fanPulley")}
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">RPM (auto)</span>
+          <Input className="h-8 bg-muted/50 font-medium" readOnly value={fanRpm != null ? String(fanRpm) : ""} placeholder="—" title={isDirect ? "Direct drive — fan runs at motor speed" : "Computed Fan RPM = roundup(Motor RPM × Motor Pulley ÷ Fan Pulley)"} />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] text-muted-foreground">Motor RPM</span>
+          <Input className="h-8 bg-muted/50 font-medium" readOnly value={motorRpm != null ? String(motorRpm) : ""} placeholder="—" title="Motor speed for the selected Motor HP" />
+        </label>
+      </div>
+
+      <div className="text-xs font-semibold text-muted-foreground">Assignment</div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {fld("Assigned personnel (not printed on the JO)", "assignedPersonnel")}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" className="h-8" disabled={busy} onClick={save}>{busy ? "Saving…" : isEdit ? "Save changes" : "Create job order"}</Button>
+        <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={onCancel}>Cancel</Button>
+        {err && <span className="text-xs text-destructive">{err}</span>}
+      </div>
+    </div>
+  );
+}
