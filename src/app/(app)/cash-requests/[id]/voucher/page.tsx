@@ -6,6 +6,7 @@ import { COMPANY } from "@/lib/config";
 import { formatDate } from "@/lib/utils";
 import { coerceCashLines } from "@/lib/cash-request";
 import { pesoAmountInWords } from "@/lib/amount-words";
+import { resolveSignatureByName } from "@/lib/signature";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,10 @@ export default async function CashVoucherPrintPage({ params }: { params: Promise
   const rows = [...lines];
   while (rows.length < 8) rows.push({ description: "", amount: 0 });
   const dateStr = formatDate(cr.voucherAt ?? cr.createdAt);
-  const preparedBy = cr.voucherByName ?? "";
+  // Prepared by = Accounting (who generated the voucher); show their uploaded
+  // signature above the printed name. Approved / received names carry no
+  // signature block on this pad.
+  const prepared = await resolveSignatureByName(cr.voucherByName);
   const approvedBy = cr.releasedByName ?? cr.decidedByName ?? "";
 
   return (
@@ -111,13 +115,22 @@ export default async function CashVoucherPrintPage({ params }: { params: Promise
           <table className="border-collapse text-sm">
             <tbody>
               <tr>
-                <td className="border border-black px-3 pb-6 pt-1 align-top">
+                <td className="border border-black px-3 pt-1 align-top">
                   <div>Prepared by:</div>
-                  <div className="mt-4 text-center font-medium">{preparedBy}</div>
+                  <div className="flex h-12 items-end justify-center">
+                    {prepared.signature && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={prepared.signature} alt="" className="max-h-12 object-contain" />
+                    )}
+                  </div>
+                  <div className="min-w-[11rem] border-t border-black pt-0.5 text-center font-medium">{prepared.name || " "}</div>
+                  <div className="text-center text-[11px] text-neutral-500">Accounting</div>
                 </td>
-                <td className="border border-black px-3 pb-6 pt-1 align-top">
+                <td className="border border-black px-3 pt-1 align-top">
                   <div>Approved by:</div>
-                  <div className="mt-4 text-center font-medium">{approvedBy}</div>
+                  <div className="flex h-12 items-end justify-center" />
+                  <div className="min-w-[11rem] border-t border-black pt-0.5 text-center font-medium">{approvedBy || " "}</div>
+                  <div className="text-center text-[11px] text-neutral-500">&nbsp;</div>
                 </td>
               </tr>
             </tbody>
