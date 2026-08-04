@@ -81,9 +81,10 @@ export async function POST(req: NextRequest) {
 
   // Cap the number of AI reads per voucher so Accounting verifies the document
   // by hand instead of relying on repeated AI reads. The count is persisted.
+  // Admins are exempt (no limit, and their reads don't consume the shared budget).
   const cur = coerceReconciliation(pr.reconciliation);
   const reads = cur.aiReadCount ?? 0;
-  if (reads >= AI_RECEIPT_READ_LIMIT) {
+  if (!admin && reads >= AI_RECEIPT_READ_LIMIT) {
     return NextResponse.json({
       error: `AI read limit reached (${AI_RECEIPT_READ_LIMIT} of ${AI_RECEIPT_READ_LIMIT} used). Please check the receipt and enter the figures manually.`,
       limitReached: true,
@@ -144,8 +145,8 @@ export async function POST(req: NextRequest) {
     });
     const warnings = [...(result.warnings ?? [])];
     if (skipped.length) warnings.push(`Couldn't read: ${skipped.join(", ")} (not an image).`);
-    // A read completed — burn one of the allotted tries.
-    const usedReads = reads + 1;
+    // A read completed — burn one of the allotted tries (admins are exempt).
+    const usedReads = admin ? reads : reads + 1;
     await prisma.purchaseRequest.update({
       where: { id: body.purchaseRequestId },
       data: { reconciliation: { ...cur, aiReadCount: usedReads } as unknown as Prisma.InputJsonValue },
@@ -159,8 +160,8 @@ export async function POST(req: NextRequest) {
       extraItems: result.extraItems ?? [],
       warnings,
       reads: usedReads,
-      limit: AI_RECEIPT_READ_LIMIT,
-      remaining: Math.max(0, AI_RECEIPT_READ_LIMIT - usedReads),
+      limit: admin ? null : AI_RECEIPT_READ_LIMIT,
+      remaining: admin ? null : Math.max(0, AI_RECEIPT_READ_LIMIT - usedReads),
     });
   } catch (err) {
     console.error("read-receipt error", err);

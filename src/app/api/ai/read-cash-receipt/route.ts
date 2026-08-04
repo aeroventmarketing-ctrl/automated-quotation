@@ -68,16 +68,18 @@ export async function POST(req: NextRequest) {
   const cr = await prisma.cashRequest.findUnique({ where: { id: body.cashRequestId } });
   if (!cr) return NextResponse.json({ error: "Cash request not found" }, { status: 404 });
   // The requestor, accounting or an admin may read the receipts.
-  if (!isAdmin(user) && cr.requestedById !== user.id) {
+  const admin = isAdmin(user);
+  if (!admin && cr.requestedById !== user.id) {
     const ok = userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting");
     if (!ok) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
 
   // Cap the number of AI reads per liquidation so the document is verified by
-  // hand instead of relying on repeated AI reads. The count is persisted.
+  // hand instead of relying on repeated AI reads. The count is persisted. Admins
+  // are exempt (no limit, and their reads don't consume the shared budget).
   const cur = coerceLiquidation(cr.liquidation);
   const reads = cur.aiReadCount ?? 0;
-  if (reads >= AI_RECEIPT_READ_LIMIT) {
+  if (!admin && reads >= AI_RECEIPT_READ_LIMIT) {
     return NextResponse.json({
       error: `AI read limit reached (${AI_RECEIPT_READ_LIMIT} of ${AI_RECEIPT_READ_LIMIT} used). Please check the receipt and enter the figures manually.`,
       limitReached: true,
@@ -135,8 +137,8 @@ export async function POST(req: NextRequest) {
     });
     const warnings = [...(result.warnings ?? [])];
     if (skipped.length) warnings.push(`Couldn't read: ${skipped.join(", ")} (not an image/PDF).`);
-    // A read completed — burn one of the allotted tries.
-    const usedReads = reads + 1;
+    // A read completed — burn one of the allotted tries (admins are exempt).
+    const usedReads = admin ? reads : reads + 1;
     await prisma.cashRequest.update({
       where: { id: body.cashRequestId },
       data: { liquidation: { ...cur, aiReadCount: usedReads } as unknown as Prisma.InputJsonValue },
@@ -149,8 +151,8 @@ export async function POST(req: NextRequest) {
       extraItems: result.extraItems ?? [],
       warnings,
       reads: usedReads,
-      limit: AI_RECEIPT_READ_LIMIT,
-      remaining: Math.max(0, AI_RECEIPT_READ_LIMIT - usedReads),
+      limit: admin ? null : AI_RECEIPT_READ_LIMIT,
+      remaining: admin ? null : Math.max(0, AI_RECEIPT_READ_LIMIT - usedReads),
     });
   } catch (err) {
     console.error("read-cash-receipt error", err);
