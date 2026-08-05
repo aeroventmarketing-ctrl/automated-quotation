@@ -795,6 +795,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               lines={stockLines}
               stockItems={stockItems}
               canRelease={canReleaseStock}
+              approved={!!wf.approvals.stock_release_approved}
+              approvedByName={wf.approvals.stock_release_approved?.byName}
+              canApprove={adminViewer || hasRole("plant_manager")}
             />
           ) : (
             <div className="space-y-4">
