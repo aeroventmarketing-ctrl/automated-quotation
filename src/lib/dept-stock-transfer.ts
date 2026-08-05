@@ -23,10 +23,14 @@ export function isDuctHardwareStockName(name: string): boolean {
   return DUCT_HARDWARE_NAME_RE.test(name || "");
 }
 
-/** Departments that can BUY the hardware (Fans is the seller, so it's excluded).
- *  A blank/unknown dept must never book a transfer — that would credit Fans a
- *  sale with no matching expense and unbalance the company P&L. */
-const VALID_TO_DEPTS = new Set(["duct", "accessories", "motor", "office"]);
+/** Production departments that CONSUME duct hardware as fabrication parts — the
+ *  internal transfer credits Fans a sale and the dept a purchase, at cost. Fans is
+ *  the seller (excluded). OFFICE is excluded too: Office doesn't consume the
+ *  hardware, it RE-SELLS it, so Fans is credited once at that resale (via the sale
+ *  split), NOT at the physical Fans→Office stock move — booking both would credit
+ *  Fans twice. A blank/unknown dept never books a transfer either (it would credit
+ *  Fans a sale with no matching expense and unbalance the P&L). */
+const VALID_TO_DEPTS = new Set(["duct", "accessories", "motor"]);
 
 /**
  * Record a Fans → <toDept> transfer when in-house duct hardware is issued from
