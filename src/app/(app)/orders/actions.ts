@@ -65,7 +65,7 @@ import {
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
-import { recordDeptStockTransfer } from "@/lib/dept-stock-transfer";
+import { recordDeptStockTransfer, isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, isReducingDuctType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine } from "@/lib/accessories-job-order";
@@ -1161,10 +1161,14 @@ export async function createDepartmentRequisition(
     .filter((it) => it.description !== "");
   if (cleanItems.length === 0) throw new Error("List at least one item.");
 
-  // Office requisitions need no Plant Manager approval — they start APPROVED so
-  // the Purchaser can prepare the PO directly. The rest of the chain (Approver
-  // PO approval, Accounting voucher, cash, receiving) is unchanged. Production
-  // requisitions still start PENDING_APPROVAL for the Plant Manager.
+  // Office requisitions normally need no Plant Manager approval — they start
+  // APPROVED so the Purchaser can prepare the PO directly. EXCEPTION: an Office
+  // requisition that includes in-house duct hardware (Duct Angle corner / TDC
+  // Cleat / S-clip / C-clip) is Fans-produced stock the warehouse would release,
+  // so the Plant Manager must approve it first — those start PENDING_APPROVAL like
+  // a production requisition. Production requisitions always start pending.
+  const hasDuctHardware = cleanItems.some((it) => isDuctHardwareStockName(it.description));
+  const status = isOffice && !hasDuctHardware ? "APPROVED" : "PENDING_APPROVAL";
   await prisma.purchaseRequest.create({
     data: {
       kind: "department",
@@ -1173,7 +1177,7 @@ export async function createDepartmentRequisition(
       note: note.trim() || null,
       createdById: user.id,
       createdByName: user.name,
-      status: isOffice ? "APPROVED" : "PENDING_APPROVAL",
+      status,
     },
   });
 
