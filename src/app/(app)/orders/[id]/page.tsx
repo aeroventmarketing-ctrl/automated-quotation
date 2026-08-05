@@ -62,7 +62,8 @@ import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { BoughtInProduction } from "./bought-in-production";
-import { orderBoughtInLines } from "@/lib/department-pnl";
+import { orderBoughtInLines, isStockOnlyOrder, orderStockLines } from "@/lib/department-pnl";
+import { StockRelease } from "./stock-release";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
 import { SaleDocumentList } from "./sale-document-list";
@@ -317,10 +318,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // production and its Office-side roles handle the Phase 5 quality steps.
   const boughtInProductLines = orderBoughtInLines(quote.items);
   const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
-  // Bought-in orders relabel a couple of stages (no JO creation / no Plant QC).
+  // A from-stock order (in-house duct hardware — nothing fabricated or bought from
+  // a supplier) is released from Fans & Blowers stock in Phase 2 instead of job
+  // orders or a PO. Like bought-in, it skips production and Office-side roles run QA.
+  const stockOnly = isStockOnlyOrder(quote.items) && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
+  const stockLines = stockOnly ? orderStockLines(quote.items) : [];
+  // Bought-in / from-stock orders relabel a couple of stages (no JO creation / no Plant QC).
   const displayStageLabel = (key: OrderStage): string => {
     if (boughtInOnly && key === "released") return "For PO creation";
-    if (boughtInOnly && key === "qa_plant_checked") return "QC & Quantity Checked";
+    if (stockOnly && key === "released") return "For stock release";
+    if ((boughtInOnly || stockOnly) && key === "qa_plant_checked") return "QC & Quantity Checked";
     return stageLabel(key);
   };
 
@@ -362,15 +369,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role));
   const isSalesViewer =
     adminViewer || (viewer != null && (viewer.id === quote.preparedById || viewer.role === "SALES" || viewer.role === "ENGINEER"));
-  // A bought-in order skips the production QC roles — Logistics / Engineer /
-  // Sales / Payment Approver / admin handle its quality steps instead.
-  const boughtInQa = boughtInOnly && (isSalesViewer || hasRole("logistics") || hasRole("payment_approver"));
+  // A bought-in or from-stock order skips the production QC roles — Logistics /
+  // Engineer / Sales / Payment Approver / admin handle its quality steps instead.
+  const noProdQa = (boughtInOnly || stockOnly) && (isSalesViewer || hasRole("logistics") || hasRole("payment_approver"));
+  // Who may release a from-stock order's goods from inventory (Phase 2).
+  const canReleaseStock = adminViewer || hasRole("warehouse") || hasRole("prod_head_fans" as WorkflowRoleKey);
   const perms = {
     canNotify: isSalesViewer,
     canCheckPay: hasRole("accounting"),
     canConfirmPay: hasRole("payment_approver"),
-    canQaTest: hasRole("technical_head") || hasRole("quality_inspector") || boughtInQa,
-    canQaPlant: hasRole("plant_manager") || boughtInQa,
+    canQaTest: hasRole("technical_head") || hasRole("quality_inspector") || noProdQa,
+    canQaPlant: hasRole("plant_manager") || noProdQa,
     canQaTransfer: hasRole("logistics"),
     canQaSales: isSalesViewer || hasRole("quality_inspector_2" as WorkflowRoleKey),
     canPrepDocs: hasRole("accounting"),
@@ -758,7 +767,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </div>
           <div className="flex items-center gap-2">
             {payCleared ? <span className="text-emerald-600">✓</span> : <span className="text-muted-foreground">○</span>}
-            <span>{boughtInOnly ? "Payment cleared & PO creation" : "Payment cleared & job orders released"}{payCleared ? ` — ${withDesig(payCleared.byName, designationOf("payment_cleared"))}, ${fmtWhen(payCleared.at)}` : ""}</span>
+            <span>{boughtInOnly ? "Payment cleared & PO creation" : stockOnly ? "Payment cleared & stock release" : "Payment cleared & job orders released"}{payCleared ? ` — ${withDesig(payCleared.byName, designationOf("payment_cleared"))}, ${fmtWhen(payCleared.at)}` : ""}</span>
           </div>
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="pt-1 text-xs text-muted-foreground">Complete these sign-offs from the Orders list.</p>
@@ -779,6 +788,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               poPrepared={supplierPoPrepared}
               purchased={supplierPurchased}
               canNotify={canNotifyBoughtIn}
+            />
+          ) : stockOnly && wf.stage === "released" ? (
+            <StockRelease
+              orderId={quote.id}
+              lines={stockLines}
+              stockItems={stockItems}
+              canRelease={canReleaseStock}
             />
           ) : (
             <div className="space-y-4">

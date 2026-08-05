@@ -50,7 +50,7 @@ import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDe
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
-import { orderBoughtInLines, isBoughtInOnlyOrder } from "@/lib/department-pnl";
+import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
 import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
@@ -65,6 +65,7 @@ import {
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
+import { recordDeptStockTransfer } from "@/lib/dept-stock-transfer";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, isReducingDuctType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine } from "@/lib/accessories-job-order";
@@ -179,7 +180,10 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
   // A fully bought-in order has none — instead it files the supplier requisition
   // ("Clear payment & create PO") so the Purchaser can prepare the PO.
   const boughtInOnly = isBoughtInOnlyOrder(quote.items);
-  if (step === "payment_cleared" && !boughtInOnly) {
+  // A from-stock order (in-house duct hardware, nothing fabricated / bought-in)
+  // generates no job orders either — it's released from stock in Phase 2 instead.
+  const stockOnly = isStockOnlyOrder(quote.items);
+  if (step === "payment_cleared" && !boughtInOnly && !stockOnly) {
     workflow = await mergeAutoJobOrders(workflow, wf, quote);
   }
 
@@ -1257,6 +1261,67 @@ export async function notifyClientBoughtInOrder(quotationId: string): Promise<vo
   });
 }
 
+/** Who may release a from-stock order — the Warehouse or the Fans & Blowers head. */
+const STOCK_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse", "prod_head_fans"];
+
+/**
+ * A from-stock order (in-house duct hardware, nothing fabricated, nothing bought
+ * from a supplier) is fulfilled by issuing the goods from Fans & Blowers on-hand
+ * stock. The Warehouse or Fans head matches each line to a stock item and releases
+ * it here: inventory is deducted (an ISSUE movement is the stock record) and the
+ * order jumps straight to Phase 5 (final payment → deliver / client pickup),
+ * skipping production and the supplier PO — mirrors notifyClientBoughtInOrder.
+ */
+export async function releaseOrderFromStock(quotationId: string, matches: StockMatch[] = []): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || STOCK_RELEASE_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r)))) {
+    throw new Error("Only the Warehouse, Fans & Blowers head or an admin can release from stock.");
+  }
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
+  const items = await prisma.quotationItem.findMany({
+    where: { quotationId },
+    select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
+  });
+  if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
+  // Deduct the released quantities from inventory. Unmatched lines are skipped
+  // (nothing deducted) — the warehouse reconciles in Inventory if stock went short,
+  // exactly like the MRF release. Then advance straight to Phase 5.
+  const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
+  const workflow = { ...wf, stage: "final_pay_review", approvals: stamp(wf, "client_notified", user) };
+  await prisma.$transaction(async (tx) => {
+    for (const m of clean) {
+      const item = await tx.stockItem.findUnique({ where: { id: m.stockItemId } });
+      if (!item) continue; // stock item gone (e.g. merged) — skip its deduction
+      const deduct = Math.min(Number(m.qty), Math.max(0, Number(item.quantity)));
+      if (deduct > 0) {
+        await applyStockChange(
+          tx,
+          { stockItemId: m.stockItemId, kind: "ISSUE", qty: deduct, reason: `Order ${quote.quoteNumber} released from stock` },
+          user.name,
+        );
+      }
+    }
+    await tx.quotation.update({
+      where: { id: quotationId },
+      data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },
+    });
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/inventory");
+  await logActivity(user, {
+    action: "order.stock.release",
+    category: "order",
+    summary: `Released order from stock — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
+}
+
 /**
  * The requesting department head (or an admin) withdraws a material request
  * before the warehouse handles it. Only possible while it's still "requested".
@@ -1638,6 +1703,9 @@ export async function processMaterialRequest(
   await prisma.$transaction(async (tx) => {
     for (const m of issueMatches) {
       await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "ISSUE", qty: m.qty, reason: `MRF #${mrf.formNo}` }, user.name);
+      // In-house duct hardware pulled from Fans stock → book the Fans-sale/dept-purchase transfer.
+      const si = await tx.stockItem.findUnique({ where: { id: m.stockItemId }, select: { name: true, unitCost: true } });
+      if (si) await recordDeptStockTransfer(tx, { quotationId, toDept: mrf.dept, stockItemId: m.stockItemId, name: si.name, unitCost: Number(si.unitCost), qty: m.qty, byName: user.name });
     }
     // Reserve lines: soft-hold against the order (available = on-hand − reserved).
     for (const m of reserveMatches) {
@@ -1773,7 +1841,7 @@ export async function issueMrfLineFromStock(
   const req = Number(target.qty || 0);
 
   const result = await prisma.$transaction(async (tx) => {
-    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { id: true, quantity: true } });
+    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { id: true, quantity: true, name: true, unitCost: true } });
     if (!item) throw new Error("Stock item not found.");
     const agg = await tx.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
     const avail = Math.max(0, Number(item.quantity) - Number(agg._sum.qty ?? 0));
@@ -1781,6 +1849,8 @@ export async function issueMrfLineFromStock(
     const issued = Math.max(0, Math.min(want, avail));
     if (issued > 0) {
       await applyStockChange(tx, { stockItemId, kind: "ISSUE", qty: issued, reason: `MRF #${mrf.formNo}` }, user.name);
+      // In-house duct hardware pulled from Fans stock → book the Fans-sale/dept-purchase transfer.
+      await recordDeptStockTransfer(tx, { quotationId, toDept: mrf.dept, stockItemId, name: item.name, unitCost: Number(item.unitCost), qty: issued, byName: user.name });
     }
     const shortfall = req > 0 ? Math.max(0, req - issued) : 0;
     const replacement: MRFItem[] = [];
@@ -3484,8 +3554,8 @@ export async function confirmFinalPayment(quotationId: string): Promise<void> {
  *   qa_transferred    → [Sales: 2nd quality & quantity check] → qa_sales_checked
  */
 /**
- * The Office-side actors for a bought-in order's Phase 5 quality steps (admin is
- * checked separately by the caller). Bought-in orders skip the production QC
+ * The Office-side actors for a bought-in / from-stock order's Phase 5 quality steps
+ * (admin is checked separately by the caller). These orders skip the production QC
  * departments, so Logistics / Engineer / Sales / Payment Approver handle them.
  */
 function boughtInQaActor(user: { id: string; role: string }, roles: Awaited<ReturnType<typeof getWorkflowRoles>>, preparedById: string): boolean {
@@ -3496,12 +3566,14 @@ function boughtInQaActor(user: { id: string; role: string }, roles: Awaited<Retu
     || userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey);
 }
 
-async function isBoughtInOnly(quotationId: string): Promise<boolean> {
+// A bought-in or from-stock order skips production, so its Phase 5 quality steps
+// are run by the Office-side actors above rather than the production QC roles.
+async function isNoProductionOrder(quotationId: string): Promise<boolean> {
   const items = await prisma.quotationItem.findMany({
     where: { quotationId },
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
   });
-  return isBoughtInOnlyOrder(items);
+  return isBoughtInOnlyOrder(items) || isStockOnlyOrder(items);
 }
 
 const BOUGHT_IN_QA_ERR = "Only Logistics, the Engineer, Sales, the Payment Approver or an admin can do this.";
@@ -3511,12 +3583,12 @@ export async function qaTest(quotationId: string): Promise<void> {
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const boughtIn = await isBoughtInOnly(quotationId);
-  const ok = isAdmin(user) || (boughtIn
+  const noProd = await isNoProductionOrder(quotationId);
+  const ok = isAdmin(user) || (noProd
     ? boughtInQaActor(user, roles, quote.preparedById ?? "")
     : userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
       || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey));
-  if (!ok) throw new Error(boughtIn ? BOUGHT_IN_QA_ERR : "Only the Technical Head, a Quality Inspector or an admin can do this.");
+  if (!ok) throw new Error(noProd ? BOUGHT_IN_QA_ERR : "Only the Technical Head, a Quality Inspector or an admin can do this.");
   if (wf.stage !== "final_pay_cleared") throw new Error("The order isn't ready for quality testing.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_tested", approvals: stamp(wf, "qa_tested", user) });
 }
@@ -3526,11 +3598,11 @@ export async function qaPlantCheck(quotationId: string): Promise<void> {
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const boughtIn = await isBoughtInOnly(quotationId);
-  const ok = isAdmin(user) || (boughtIn
+  const noProd = await isNoProductionOrder(quotationId);
+  const ok = isAdmin(user) || (noProd
     ? boughtInQaActor(user, roles, quote.preparedById ?? "")
     : userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey));
-  if (!ok) throw new Error(boughtIn ? BOUGHT_IN_QA_ERR : "Only the Plant Manager or an admin can do this.");
+  if (!ok) throw new Error(noProd ? BOUGHT_IN_QA_ERR : "Only the Plant Manager or an admin can do this.");
   if (wf.stage !== "qa_tested") throw new Error("The order hasn't passed quality testing yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_plant_checked", approvals: stamp(wf, "qa_plant_checked", user) });
 }

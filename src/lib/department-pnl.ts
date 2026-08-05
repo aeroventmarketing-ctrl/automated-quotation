@@ -76,13 +76,20 @@ const isAirDuct = (s: Specs) => s.category === "Ventilation Accessories" && AIR_
 // Dampers are produced by the Duct department (not Accessories), so they route
 // to Duct for the departmental margin split too — mirrors job-order-autogen.ts.
 const isDamper = (s: Specs) => s.category === "Ventilation Accessories" && isDamperType(str(s.type));
-// Duct Angle corner is fabricated by the Fans & Blowers department (not
-// Accessories) — mirrors job-order-autogen.ts.
-const isDuctAngleCorner = (s: Specs) => s.category === "Ventilation Accessories" && /^duct angle corner$/i.test(str(s.type));
+// Duct hardware — Duct Angle corner, TDC Cleat, S-clip and C-clip — is produced
+// in-house by Fans & Blowers straight to stock (always on hand, no job order) and
+// is never bought from a supplier. Its sale credits Fans with the production cost
+// and the Office with the margin: the production-markup split. Mirrors
+// job-order-autogen.ts.
+const isDuctHardware = (s: Specs) =>
+  s.category === "Ventilation Accessories" && /^(duct angle corner|tdc cleat|s-clip|c-clip)$/i.test(str(s.type));
+// Vent Cap is bought-in (purchased from a supplier), not fabricated — the Office
+// keeps the whole margin, like other resale goods. Mirrors job-order-autogen.ts.
+const isVentCap = (s: Specs) => s.category === "Ventilation Accessories" && /^vent cap$/i.test(str(s.type));
 const isMotorController = (s: Specs) => s.type === "Motor Controller";
 const isIsolator = (s: Specs) => s.type === "Spring Vibration Isolator";
 const isAccessory = (s: Specs) =>
-  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isDuctAngleCorner(s) && !isIsolator(s);
+  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isDuctHardware(s) && !isVentCap(s) && !isIsolator(s);
 // Bought-in / resale goods sit under the "Other Products" category (KDK,
 // AlphaAir, MAXAIR, induction motors, dust collectors, VAV, inline/jet fans …).
 const isOtherProducts = (s: Specs) => str(s.category) === "Other Products";
@@ -110,11 +117,16 @@ export function lineRouting(specs: Specs): { dept: DeptKey; routing: Routing } {
   // Motor Controller: fabricated Starter → Motor dept; VFD (bought-in) → Office.
   if (isMotorController(specs))
     return isVfd(specs) ? { dept: "office", routing: "office_full" } : { dept: "motor", routing: "production_markup" };
+  // Vent Cap is bought-in — Office keeps the whole margin (net less supplier cost).
+  if (isVentCap(specs)) return { dept: "office", routing: "office_full" };
+  // Duct hardware (angle corner, TDC cleat, S-clip, C-clip) is produced in-house
+  // by Fans & Blowers to stock. Fans records the production cost, the Office the
+  // margin — the production-markup split (net ÷ 1.3 to Fans, the remainder to
+  // Office), the same split every other fabricating department uses.
+  if (isDuctHardware(specs)) return { dept: "fans", routing: "production_markup" };
   // Fabricated ventilation accessories & air ducts. Dampers are duct-department
   // products, so they take the Duct markup too.
   if (isAirDuct(specs) || isDamper(specs)) return { dept: "duct", routing: "production_markup" };
-  // Duct Angle corner is fabricated by the Fans & Blowers department.
-  if (isDuctAngleCorner(specs)) return { dept: "fans", routing: "production_markup" };
   if (isAccessory(specs)) return { dept: "accessories", routing: "production_markup" };
   // Bought-in / resale goods (KDK, AlphaAir, Aerovent "Other Products") — Office
   // keeps the margin: selling net less the supplier cost. Must precede the
@@ -139,8 +151,9 @@ export function isServiceLine(specs: Specs): boolean {
 /**
  * The BOUGHT-IN products on an order's lines — what a supplier requisition / PO
  * would cover. Excludes Aerovent-fabricated items (fans / ducts / accessories /
- * motor starters) and typed service / charge lines (Mobilization, Delivery,
- * Installation), keeping only the resale goods (KDK, WDRV, VFD, …).
+ * motor starters, and the in-house duct hardware produced to stock) and typed
+ * service / charge lines (Mobilization, Delivery, Installation), keeping only the
+ * resale goods (KDK, WDRV, VFD, Vent Cap …).
  */
 export function orderBoughtInLines(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
@@ -202,6 +215,48 @@ export function isBoughtInOnlyOrder(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
 ): boolean {
   if (orderBoughtInLines(items).length === 0) return false;
+  const depts = quotationJobOrderDepts(items as QuoteItemLike[]);
+  return !Object.values(depts).some(Boolean);
+}
+
+/**
+ * The FROM-STOCK products on an order's lines — the in-house duct hardware (angle
+ * corner, TDC cleat, S-clip, C-clip) that Fans & Blowers produces to stock. These
+ * are fulfilled by issuing from inventory, so the warehouse matches each to a
+ * stock item (by name + gauge) and deducts it. Identical lines are combined.
+ */
+export function orderStockLines(
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+): { name: string; qty: number }[] {
+  const lines = items
+    .filter((it) => isDuctHardware((it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs))
+    .map((it) => {
+      const specs = (it.specsSnapshot ?? {}) as Specs;
+      const type = str(specs.type) || productLabel(specs, it.descriptionSnapshot) || "Item";
+      const gauge = str(specs.gauge).replace(/[^0-9]/g, "");
+      return { name: gauge ? `${type} GA${gauge}` : type, qty: Number(it.qty) || 1 };
+    });
+  const combined = new Map<string, { name: string; qty: number }>();
+  for (const l of lines) {
+    const existing = combined.get(l.name);
+    if (existing) existing.qty += l.qty;
+    else combined.set(l.name, { ...l });
+  }
+  return [...combined.values()];
+}
+
+/**
+ * A fully from-stock order: it has in-house duct-hardware lines, NO department
+ * fabricates anything, and NO bought-in supplier goods. These skip production and
+ * the supplier PO — they follow the "release from stock" flow (clear payment →
+ * Warehouse / Fans release the stock & notify client → Phase 5), the stock being
+ * issued from Fans & Blowers on-hand inventory.
+ */
+export function isStockOnlyOrder(
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+): boolean {
+  if (orderStockLines(items).length === 0) return false;
+  if (orderBoughtInLines(items).length > 0) return false;
   const depts = quotationJobOrderDepts(items as QuoteItemLike[]);
   return !Object.values(depts).some(Boolean);
 }
