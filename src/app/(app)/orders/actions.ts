@@ -65,6 +65,7 @@ import {
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
+import { recordDeptStockTransfer } from "@/lib/dept-stock-transfer";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, isReducingDuctType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine } from "@/lib/accessories-job-order";
@@ -1702,6 +1703,9 @@ export async function processMaterialRequest(
   await prisma.$transaction(async (tx) => {
     for (const m of issueMatches) {
       await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "ISSUE", qty: m.qty, reason: `MRF #${mrf.formNo}` }, user.name);
+      // In-house duct hardware pulled from Fans stock → book the Fans-sale/dept-purchase transfer.
+      const si = await tx.stockItem.findUnique({ where: { id: m.stockItemId }, select: { name: true, unitCost: true } });
+      if (si) await recordDeptStockTransfer(tx, { quotationId, toDept: mrf.dept, stockItemId: m.stockItemId, name: si.name, unitCost: Number(si.unitCost), qty: m.qty, byName: user.name });
     }
     // Reserve lines: soft-hold against the order (available = on-hand − reserved).
     for (const m of reserveMatches) {
@@ -1837,7 +1841,7 @@ export async function issueMrfLineFromStock(
   const req = Number(target.qty || 0);
 
   const result = await prisma.$transaction(async (tx) => {
-    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { id: true, quantity: true } });
+    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { id: true, quantity: true, name: true, unitCost: true } });
     if (!item) throw new Error("Stock item not found.");
     const agg = await tx.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
     const avail = Math.max(0, Number(item.quantity) - Number(agg._sum.qty ?? 0));
@@ -1845,6 +1849,8 @@ export async function issueMrfLineFromStock(
     const issued = Math.max(0, Math.min(want, avail));
     if (issued > 0) {
       await applyStockChange(tx, { stockItemId, kind: "ISSUE", qty: issued, reason: `MRF #${mrf.formNo}` }, user.name);
+      // In-house duct hardware pulled from Fans stock → book the Fans-sale/dept-purchase transfer.
+      await recordDeptStockTransfer(tx, { quotationId, toDept: mrf.dept, stockItemId, name: item.name, unitCost: Number(item.unitCost), qty: issued, byName: user.name });
     }
     const shortfall = req > 0 ? Math.max(0, req - issued) : 0;
     const replacement: MRFItem[] = [];

@@ -15,6 +15,7 @@ import { getAlertGoLive } from "@/lib/alert-golive";
 import { payrollExpenseForRange } from "./payroll-actions";
 import {
   PNL_DEPARTMENTS,
+  DEPT_LABEL,
   zeroSplit,
   lineNetOf,
   lineSalesSplit,
@@ -330,6 +331,24 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   const payroll = await payrollExpenseForRange(lo.slice(0, 7), hi.slice(0, 7));
   for (const k of Object.keys(expenses) as DeptKey[]) expenses[k] = round2(expenses[k] + payroll[k]);
 
+  // --- Inter-department stock transfers (in-house duct hardware, Fans → dept) --
+  // When a department pulls Fans-produced duct hardware from stock via the MRF it
+  // is booked at the stock item's production cost: a SALE for Fans & Blowers and a
+  // PURCHASE (expense) for the requesting department. Internal move — no VAT, and
+  // not counted as a customer sale.
+  const transfers = await prisma.deptStockTransfer.findMany({
+    where: cutoff ? { createdAt: cutoff } : undefined,
+    select: { at: true, fromDept: true, toDept: true, value: true },
+  });
+  for (const t of transfers) {
+    if (!ymdInRange(manilaYMD(t.at.toISOString()), lo, hi)) continue;
+    const from = t.fromDept as DeptKey;
+    const to = t.toDept as DeptKey;
+    const val = Number(t.value) || 0;
+    if (from in sales) sales[from] = round2(sales[from] + val);
+    if (to in expenses) expenses[to] = round2(expenses[to] + val);
+  }
+
   const rows: PnlRow[] = PNL_DEPARTMENTS.map((d) => ({
     key: d.key,
     label: d.label,
@@ -373,13 +392,13 @@ export interface PnlSaleDetail {
   customerId: string | null;
   customer: string;
   recognizedAt: string; // Manila YYYY-MM-DD
-  basis: "PO date" | "Payment date";
+  basis: "PO date" | "Payment date" | "Transfer";
   net: number;
   lines: PnlSaleLine[];
 }
 export interface PnlExpenseItem {
   dept: DeptKey;
-  source: "Purchase order" | "Cash voucher" | "Payroll";
+  source: "Purchase order" | "Cash voucher" | "Payroll" | "Stock transfer";
   ref: string;
   date: string; // Manila YYYY-MM-DD (or YYYY-MM for payroll)
   amount: number;
@@ -652,6 +671,39 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   } catch {
     // payroll table not migrated — skip
   }
+  // --- Inter-department stock transfers (in-house duct hardware, Fans → dept) --
+  // Booked at the stock item's production cost: a SALE for the producing dept
+  // (Fans) and a PURCHASE (expense) for the requesting dept. Internal move — no
+  // VAT, no customer — so it's appended after the VAT-bearing sales are tallied.
+  const transfers = await prisma.deptStockTransfer.findMany({
+    where: cutoff ? { createdAt: cutoff } : undefined,
+    select: { id: true, at: true, quotationId: true, fromDept: true, toDept: true, description: true, qty: true, value: true },
+  });
+  let xferSeq = 0;
+  for (const t of transfers) {
+    const ymd = manilaYMD(t.at.toISOString());
+    if (!ymdInRange(ymd, lo, hi)) continue;
+    const from = t.fromDept as DeptKey;
+    const to = t.toDept as DeptKey;
+    const value = Number(t.value) || 0;
+    if (value <= 0 || !(from in DEPT_LABEL) || !(to in DEPT_LABEL)) continue;
+    xferSeq += 1;
+    // Producing-dept side — a sale credited to Fans (no Office share, no VAT).
+    sales.push({
+      quotationId: t.quotationId ?? `xfer-${t.id}`,
+      href: t.quotationId ? `/orders/${t.quotationId}` : "/inventory",
+      quoteNumber: `Transfer #${xferSeq}`,
+      customerId: null,
+      customer: `${DEPT_LABEL[from]} → ${DEPT_LABEL[to]}`,
+      recognizedAt: ymd,
+      basis: "Transfer",
+      net: value,
+      lines: [{ label: t.description, qty: Number(t.qty) || 0, net: value, routing: "production_markup", dept: from, deptShare: value, officeShare: 0, cogs: null, officeCost: null }],
+    });
+    // Requesting-dept side — a purchase/expense.
+    expenses.push({ dept: to, source: "Stock transfer", ref: t.description, date: ymd, amount: value });
+  }
+  sales.sort((a, b) => a.recognizedAt.localeCompare(b.recognizedAt) || a.quoteNumber.localeCompare(b.quoteNumber));
   expenses.sort((a, b) => a.date.localeCompare(b.date) || a.dept.localeCompare(b.dept));
 
   const vatByDept = Object.fromEntries(

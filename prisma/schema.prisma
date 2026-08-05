@@ -581,6 +581,33 @@ model StockMovement {
 }
 
 /**
+ * Inter-department stock transfer for the departmental P&L. When a production
+ * department pulls in-house duct hardware (angle corner / TDC cleat / S-clip /
+ * C-clip) from Fans & Blowers stock via the MRF, it books as a SALE for Fans and
+ * a PURCHASE (expense) for the requesting department, valued at the stock item's
+ * unit (production) cost. No payment moves — a transfer-pricing ledger the
+ * management P&L reads (getDepartmentPnl / getPnlDetail). Kept relation-free so a
+ * later stock-item / order deletion never erases booked P&L history.
+ */
+model DeptStockTransfer {
+  id          String   @id @default(cuid())
+  at          DateTime @default(now()) // recognition date (when issued from stock)
+  quotationId String? // the order whose MRF triggered it (reference only)
+  fromDept    String   @default("fans") // selling department (the producer)
+  toDept      String // requesting department (the buyer)
+  stockItemId String? // the stock item issued (reference only)
+  description String // stock item name at issue time
+  qty         Decimal  @db.Decimal(14, 3)
+  unitCost    Decimal  @db.Decimal(14, 2) // production cost per unit
+  value       Decimal  @db.Decimal(14, 2) // qty * unitCost
+  byName      String? // who released it
+  createdAt   DateTime @default(now())
+
+  @@index([at])
+  @@index([quotationId])
+}
+
+/**
  * Stock transfer between locations with a double-handshake receipt. On send the
  * quantity is issued from the source (in transit); it is received into the
  * destination only once BOTH the production head and the purchaser confirm the
