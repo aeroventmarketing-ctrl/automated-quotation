@@ -13,6 +13,7 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { getAlertGoLive } from "@/lib/alert-golive";
 import { payrollExpenseForRange } from "./payroll-actions";
+import { isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
 import {
   PNL_DEPARTMENTS,
   DEPT_LABEL,
@@ -150,18 +151,34 @@ async function buildCostResolvers() {
   return { cogsOf, officeCostOf, officeCostOfLine, supplierVatInclusive, isOfficeResale };
 }
 
-/** Stock unit-cost lookup for the items sold across a set of counter sales. */
-async function counterSaleCostMap(sales: { items: { stockItemId: string | null }[] }[]): Promise<Map<string, number>> {
+/** Stock unit-cost + name lookup for the items sold across a set of counter sales.
+ *  The name lets the P&L recognise in-house duct hardware (angle corner / cleats /
+ *  clips) so Fans is credited its production cost on those counter-sale lines. */
+async function counterSaleCostMap(
+  sales: { items: { stockItemId: string | null }[] }[],
+): Promise<Map<string, { cost: number; name: string }>> {
   const ids = [...new Set(sales.flatMap((s) => s.items.map((i) => i.stockItemId).filter((x): x is string => !!x)))];
-  const map = new Map<string, number>();
+  const map = new Map<string, { cost: number; name: string }>();
   if (!ids.length) return map;
   try {
-    const items = await prisma.stockItem.findMany({ where: { id: { in: ids } }, select: { id: true, unitCost: true } });
-    for (const it of items) map.set(it.id, Number(it.unitCost) || 0);
+    const items = await prisma.stockItem.findMany({ where: { id: { in: ids } }, select: { id: true, unitCost: true, name: true } });
+    for (const it of items) map.set(it.id, { cost: Number(it.unitCost) || 0, name: it.name });
   } catch {
     /* stock table issue — treat as no COGS */
   }
   return map;
+}
+
+/** Fans's share of a counter sale — the production cost of any in-house duct
+ *  hardware lines (stock unit cost × qty). Office keeps the rest as margin. */
+function counterSaleFansCogs(
+  items: { qty: unknown; stockItemId: string | null }[],
+  costMap: Map<string, { cost: number; name: string }>,
+): number {
+  return round2(items.reduce((a, i) => {
+    const hit = i.stockItemId ? costMap.get(i.stockItemId) : null;
+    return hit && isDuctHardwareStockName(hit.name) ? a + hit.cost * Number(i.qty) : a;
+  }, 0));
 }
 
 /**
@@ -285,7 +302,11 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     salesCount += 1;
     const net = Number(cs.subtotal) || 0; // INCLUSIVE backs VAT out; EXCLUSIVE = total
     if (cs.vatMode !== "EXCLUSIVE") outputVat = round2(outputVat + round2(net * VAT_RATE));
-    const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCostById.get(i.stockItemId) ?? 0) * Number(i.qty) : 0), 0));
+    const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCostById.get(i.stockItemId)?.cost ?? 0) * Number(i.qty) : 0), 0));
+    // In-house duct hardware sold over the counter: Fans is credited its production
+    // cost (stock unit cost); Office keeps the margin — same split as a quotation sale.
+    const fansCogs = counterSaleFansCogs(cs.items, csCostById);
+    if (fansCogs > 0) sales.fans = round2(sales.fans + fansCogs);
     sales.office = round2(sales.office + round2(net - cogs));
   }
 
@@ -602,13 +623,20 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     const ymd = manilaYMD(cs.completedAt.toISOString());
     if (!ymdInRange(ymd, lo, hi)) continue;
     const net = Number(cs.subtotal) || 0;
-    const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCost.get(i.stockItemId) ?? 0) * Number(i.qty) : 0), 0));
+    const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCost.get(i.stockItemId)?.cost ?? 0) * Number(i.qty) : 0), 0));
+    // In-house duct hardware on a counter sale → Fans is credited its production cost.
+    const fansCogs = counterSaleFansCogs(cs.items, csCost);
     if (cs.vatMode !== "EXCLUSIVE") {
       const v = round2(net * VAT_RATE);
       outputVatByDept.office = round2(outputVatByDept.office + v);
       vatOutputByOrder.push({ quotationId: cs.id, href: `/counter-sales/${cs.id}`, quoteNumber: cs.saleNumber ?? "Counter sale", customer: cs.customer.company, output: v });
     }
     const n = cs.items.length;
+    const lines: PnlSaleLine[] = [];
+    if (fansCogs > 0) {
+      lines.push({ label: "Duct hardware — production cost", qty: 1, net: fansCogs, routing: "production_markup", dept: "fans", deptShare: fansCogs, officeShare: 0, cogs: null, officeCost: null });
+    }
+    lines.push({ label: `Counter sale · ${n} item${n === 1 ? "" : "s"}`, qty: 1, net: round2(net - fansCogs), routing: "office_full", dept: "office", deptShare: 0, officeShare: round2(net - cogs), cogs: null, officeCost: round2(cogs - fansCogs) || null });
     sales.push({
       quotationId: cs.id,
       href: `/counter-sales/${cs.id}`,
@@ -618,7 +646,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       recognizedAt: ymd,
       basis: "Payment date",
       net,
-      lines: [{ label: `Counter sale · ${n} item${n === 1 ? "" : "s"}`, qty: 1, net, routing: "office_full", dept: "office", deptShare: 0, officeShare: round2(net - cogs), cogs: null, officeCost: cogs || null }],
+      lines,
     });
   }
   sales.sort((a, b) => a.recognizedAt.localeCompare(b.recognizedAt) || a.quoteNumber.localeCompare(b.quoteNumber));
