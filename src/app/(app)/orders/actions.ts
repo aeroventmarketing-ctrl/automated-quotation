@@ -1276,6 +1276,35 @@ const STOCK_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse", "prod_head_fans"];
  * order jumps straight to Phase 5 (final payment → deliver / client pickup),
  * skipping production and the supplier PO — mirrors notifyClientBoughtInOrder.
  */
+/**
+ * The Plant Manager (or an admin) approves a from-stock order's release before the
+ * warehouse issues it — the "ask permission first" gate for stock-only sales.
+ */
+export async function approveStockRelease(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey))) {
+    throw new Error("Only the Plant Manager or an admin can approve the stock release.");
+  }
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
+  const items = await prisma.quotationItem.findMany({
+    where: { quotationId },
+    select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
+  });
+  if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
+  await saveWorkflow(quotationId, cls, { ...wf, approvals: stamp(wf, "stock_release_approved", user) });
+  await logActivity(user, {
+    action: "order.stock.release.approve",
+    category: "order",
+    summary: `Approved stock release — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
+}
+
 export async function releaseOrderFromStock(quotationId: string, matches: StockMatch[] = []): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -1285,6 +1314,10 @@ export async function releaseOrderFromStock(quotationId: string, matches: StockM
   }
   const { quote, cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
+  // The Plant Manager must approve the release before the warehouse issues the stock.
+  if (!wf.approvals.stock_release_approved) {
+    throw new Error("The Plant Manager must approve the stock release first.");
+  }
   const items = await prisma.quotationItem.findMany({
     where: { quotationId },
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
