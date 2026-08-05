@@ -1923,8 +1923,10 @@ export async function issueRequisitionLineFromStock(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Requisition not found.");
   if (pr.po) throw new Error("A purchase order already exists — this can't be fulfilled from stock.");
-  if (!(pr.status === "PENDING_APPROVAL" || pr.status === "APPROVED")) {
-    throw new Error("This requisition can no longer be fulfilled from stock.");
+  // The Plant Manager must approve the requisition before the warehouse may
+  // release any item from stock ("ask permission first").
+  if (pr.status !== "APPROVED") {
+    throw new Error("The Plant Manager must approve this requisition before it can be released from stock.");
   }
   const items = Array.isArray(pr.items) ? (pr.items as string[]).slice() : [];
   const target = items[lineIndex];
@@ -1978,8 +1980,10 @@ export async function sendRequisitionLineToPurchasing(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Requisition not found.");
   if (pr.po) throw new Error("A purchase order already exists.");
-  if (!(pr.status === "PENDING_APPROVAL" || pr.status === "APPROVED")) {
-    throw new Error("This requisition can no longer be handled.");
+  // Warehouse triage (issue-from-stock or send-to-purchasing) only after the
+  // Plant Manager has approved the requisition.
+  if (pr.status !== "APPROVED") {
+    throw new Error("The Plant Manager must approve this requisition first.");
   }
   const items = Array.isArray(pr.items) ? (pr.items as string[]).slice() : [];
   const target = items[lineIndex];
