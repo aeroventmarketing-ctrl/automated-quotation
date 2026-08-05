@@ -336,7 +336,9 @@ export function PurchasingChain({
                 warehouse/admin on a requisition that hasn't been PO'd yet (issuing
                 removes the line so the Purchaser only buys what's left). */}
             {showStockCheck && (
-              canIssueStock && !r.po && (r.status === "PENDING_APPROVAL" || r.status === "APPROVED")
+              // The warehouse can release from stock only once the Plant Manager has
+              // approved the requisition; before that it's a read-only stock lookup.
+              canIssueStock && !r.po && r.status === "APPROVED"
                 ? <RequisitionStockCheck prId={r.id} items={r.items} stockItems={stockItems} canIssue />
                 : <StockAvailabilityLookup terms={r.items} />
             )}
