@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
+import { isOfficeTransfer } from "@/lib/stock-transfer";
 import {
   coerceStockDoc,
   type AdjustPayload,
@@ -101,6 +102,9 @@ export async function proposeStockAction(kind: StockActionKind, stockItemId: str
     const d = payloadRaw as TransferPayload;
     if (!(Number(d.qty) > 0)) throw new Error("Enter a quantity.");
     if (!(d.toLocation ?? "").trim()) throw new Error("Choose a destination location.");
+    // Transfers to the Office use the 5-step Office chain (Purchaser requests it in
+    // Stock Transfers), not the direct 2-party move.
+    if (isOfficeTransfer(d.toLocation)) throw new Error("Use “Request transfer to Office” in Stock Transfers for Office transfers.");
     const proof = coerceStockDoc(d.proof);
     if (!proof) throw new Error("Upload the stock transfer form first.");
     payload = { qty: Number(d.qty), toLocation: d.toLocation.trim(), note: (d.note ?? "").trim() || null, proof } satisfies TransferPayload;

@@ -10,7 +10,7 @@ import { InventoryManager } from "./inventory-manager";
 import { DuplicateItemsPanel } from "./duplicate-items-panel";
 import { STOCK_ACTION_LABEL, type StockActionView } from "@/lib/stock-action";
 import { StockTransfers } from "./stock-transfers";
-import { isProductionHead, isPurchaserRole, coerceStockDoc, type StockTransferView } from "@/lib/stock-transfer";
+import { isProductionHead, isPurchaserRole, coerceStockDoc, isOfficeTransfer, type StockTransferView } from "@/lib/stock-transfer";
 import { ArrowLeftRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +104,11 @@ export default async function InventoryPage() {
   // Stock transfers — viewer capabilities per row.
   const viewerIsProdHead = admin || (viewer != null && isProductionHead(assignments, viewer.id));
   const viewerIsPurchaser = admin || has("purchaser");
+  // Office-chain roles.
+  const viewerIsPlant = admin || has("plant_manager");
+  const viewerIsWarehouse = admin || has("warehouse");
+  const viewerIsLogistics = admin || has("logistics");
+  const viewerIsSales = admin || viewer?.role === "SALES";
   let transfers: StockTransferView[] = [];
   let transfersMissing = false;
   try {
@@ -127,9 +132,21 @@ export default async function InventoryPage() {
       receivedAt: t.receivedAt?.toISOString() ?? null,
       cancelledByName: t.cancelledByName,
       cancelledAt: t.cancelledAt?.toISOString() ?? null,
+      isOffice: isOfficeTransfer(t.toLocation),
+      approvedByName: t.approvedByName,
+      approvedAt: t.approvedAt?.toISOString() ?? null,
+      releasedByName: t.releasedByName,
+      releasedAt: t.releasedAt?.toISOString() ?? null,
+      deliveredByName: t.deliveredByName,
+      deliveredAt: t.deliveredAt?.toISOString() ?? null,
+      receivedByName: t.receivedByName,
       canConfirmProdHead: viewerIsProdHead,
       canConfirmPurchaser: viewerIsPurchaser,
-      canUpload: canManage || viewerIsProdHead || viewerIsPurchaser,
+      canApprove: viewerIsPlant,
+      canRelease: viewerIsWarehouse,
+      canDeliver: viewerIsLogistics,
+      canReceive: viewerIsSales,
+      canUpload: canManage || viewerIsProdHead || viewerIsPurchaser || viewerIsLogistics,
       canCancel: canManage,
     }));
   } catch {
@@ -218,7 +235,15 @@ export default async function InventoryPage() {
               <CardTitle className="flex items-center gap-2 text-sm"><ArrowLeftRight className="h-4 w-4 text-muted-foreground" /> Stock transfers</CardTitle>
             </CardHeader>
             <CardContent>
-              <StockTransfers transfers={transfers} missing={transfersMissing} admin={admin} />
+              <StockTransfers
+                transfers={transfers}
+                missing={transfersMissing}
+                admin={admin}
+                canRequest={viewerIsPurchaser}
+                stockOptions={items
+                  .filter((i) => (i.location ?? "").trim().toLowerCase() !== "office")
+                  .map((i) => ({ id: i.id, name: i.name, location: i.location ?? "", unit: i.unit, available: i.available }))}
+              />
             </CardContent>
           </Card>
         </>
