@@ -4,7 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { payableTotal, round2 } from "@/lib/quote";
-import { isBoughtInOnlyOrder } from "@/lib/department-pnl";
+import { isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
 import {
   saleFromClassification,
   isSaleConfirmed,
@@ -81,6 +81,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       // A fully bought-in order skips production: it uses the PO flow, so its
       // Phase 1 clear-payment button and its "released" stage read differently.
       const boughtInOnly = isBoughtInOnlyOrder(q.items);
+      const stockOnly = isStockOnlyOrder(q.items);
       const canAct = next != null && (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, next.requiredRole)));
       // "Mark documents checked" is blocked until the required docs are attached.
       const docMissing = docCheckGate && next?.key === "doc_check" ? docCheckMissing(sale) : [];
@@ -124,11 +125,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         sales: q.preparedBy.name,
         stage: wf.stage,
         stageText: boughtInOnly && wf.stage === "released" ? "For PO creation"
-          : boughtInOnly && wf.stage === "qa_plant_checked" ? "QC & Quantity Checked"
+          : stockOnly && wf.stage === "released" ? "For stock release"
+          : (boughtInOnly || stockOnly) && wf.stage === "qa_plant_checked" ? "QC & Quantity Checked"
           : stageLabel(wf.stage),
         prodDepts,
         nextStep: next?.key ?? null,
-        nextLabel: boughtInOnly && next?.key === "payment_cleared" ? "Clear payment & create PO" : (next?.label ?? null),
+        nextLabel: boughtInOnly && next?.key === "payment_cleared" ? "Clear payment & create PO"
+          : stockOnly && next?.key === "payment_cleared" ? "Clear payment & release from stock"
+          : (next?.label ?? null),
         canAct,
         blockedReason,
         awaiting: awaitingAll,

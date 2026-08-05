@@ -219,6 +219,48 @@ export function isBoughtInOnlyOrder(
   return !Object.values(depts).some(Boolean);
 }
 
+/**
+ * The FROM-STOCK products on an order's lines — the in-house duct hardware (angle
+ * corner, TDC cleat, S-clip, C-clip) that Fans & Blowers produces to stock. These
+ * are fulfilled by issuing from inventory, so the warehouse matches each to a
+ * stock item (by name + gauge) and deducts it. Identical lines are combined.
+ */
+export function orderStockLines(
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+): { name: string; qty: number }[] {
+  const lines = items
+    .filter((it) => isDuctHardware((it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs))
+    .map((it) => {
+      const specs = (it.specsSnapshot ?? {}) as Specs;
+      const type = str(specs.type) || productLabel(specs, it.descriptionSnapshot) || "Item";
+      const gauge = str(specs.gauge).replace(/[^0-9]/g, "");
+      return { name: gauge ? `${type} GA${gauge}` : type, qty: Number(it.qty) || 1 };
+    });
+  const combined = new Map<string, { name: string; qty: number }>();
+  for (const l of lines) {
+    const existing = combined.get(l.name);
+    if (existing) existing.qty += l.qty;
+    else combined.set(l.name, { ...l });
+  }
+  return [...combined.values()];
+}
+
+/**
+ * A fully from-stock order: it has in-house duct-hardware lines, NO department
+ * fabricates anything, and NO bought-in supplier goods. These skip production and
+ * the supplier PO — they follow the "release from stock" flow (clear payment →
+ * Warehouse / Fans release the stock & notify client → Phase 5), the stock being
+ * issued from Fans & Blowers on-hand inventory.
+ */
+export function isStockOnlyOrder(
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+): boolean {
+  if (orderStockLines(items).length === 0) return false;
+  if (orderBoughtInLines(items).length > 0) return false;
+  const depts = quotationJobOrderDepts(items as QuoteItemLike[]);
+  return !Object.values(depts).some(Boolean);
+}
+
 // --- Amounts --------------------------------------------------------------
 export type DeptSplit = Record<DeptKey, number>;
 export const zeroSplit = (): DeptSplit => ({ fans: 0, duct: 0, accessories: 0, motor: 0, office: 0 });
