@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { statusBucket, type PRBucket } from "@/lib/purchasing";
+import { type PRBucket } from "@/lib/purchasing";
 import type { PurchaseChainRow } from "@/lib/purchase-chain-row";
 import type { StockOpt } from "../orders/[id]/stock-match-panel";
 import type { Supplier } from "@/lib/suppliers";
@@ -75,15 +75,21 @@ export function RequisitionsList({
   const [sort, setSort] = useState<SortKey>("newest");
   const [group, setGroup] = useState<GroupKey>("none");
 
-  // A material/MRF requisition stays "pending" until its Purchase Order exists.
-  const bucketOf = (r: RequisitionRow) => statusBucket(r.status, { isDept: r.isDept, poApproved: r.poApproved });
+  // My Requisitions: "Approved" means Plant-Manager-approved — once the request is
+  // APPROVED it leaves Pending, even before the Purchase Order is raised. (The
+  // purchasing workspace keeps its own "pending until PO" bucketing separately.)
+  const bucketOf = (r: RequisitionRow): PRBucket =>
+    r.status === "PENDING_APPROVAL" ? "pending"
+    : r.status === "REJECTED" ? "rejected"
+    : r.status === "CANCELLED" ? "cancelled"
+    : "approved";
 
   const counts: Record<Tab, number> = { pending: 0, approved: 0, rejected: 0, cancelled: 0, all: 0 };
   for (const r of rows) counts[bucketOf(r)]++;
   counts.all = rows.length;
 
   const visible = useMemo(() => {
-    const bkt = (r: RequisitionRow) => statusBucket(r.status, { isDept: r.isDept, poApproved: r.poApproved });
+    const bkt = bucketOf;
     const q = query.trim().toLowerCase();
     let list = rows.filter((r) => tab === "all" || bkt(r) === tab);
     if (q) {
