@@ -14,8 +14,10 @@
  */
 import type { Prisma } from "@prisma/client";
 
-/** In-house duct hardware, recognised by the stock item's name. */
-const DUCT_HARDWARE_NAME_RE = /duct\s*angle\s*corner|tdc\s*cleat|s\s*-?\s*clip|c\s*-?\s*clip/i;
+/** In-house duct hardware, recognised by the stock item's / requisition line's
+ *  name. Word-boundary anchored so unrelated text (e.g. "plastic clip") doesn't
+ *  match — only Duct Angle corner / TDC Cleat / S-clip / C-clip. */
+const DUCT_HARDWARE_NAME_RE = /\bduct\s*angle\s*corner\b|\btdc\s*cleat\b|\bs\s*-?\s*clip\b|\bc\s*-?\s*clip\b/i;
 
 export function isDuctHardwareStockName(name: string): boolean {
   return DUCT_HARDWARE_NAME_RE.test(name || "");
