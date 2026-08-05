@@ -1936,13 +1936,15 @@ export async function issueRequisitionLineFromStock(
   if (!(req > 0)) throw new Error("Couldn't read the quantity for this line.");
 
   const result = await prisma.$transaction(async (tx) => {
-    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { quantity: true } });
+    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { quantity: true, name: true, unitCost: true } });
     if (!item) throw new Error("Stock item not found.");
     const agg = await tx.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
     const avail = Math.max(0, Number(item.quantity) - Number(agg._sum.qty ?? 0));
     const issued = Math.max(0, Math.min(req, avail));
     if (issued <= 0) throw new Error("Out of stock — leave it on the requisition to be purchased.");
     await applyStockChange(tx, { stockItemId, kind: "ISSUE", qty: issued, reason: `Requisition · ${requisitionDeptLabel(pr.dept)}` }, user.name);
+    // In-house duct hardware pulled from Fans stock → book the Fans-sale/dept-purchase transfer.
+    await recordDeptStockTransfer(tx, { quotationId: pr.quotationId, toDept: pr.dept ?? "", stockItemId, name: item.name, unitCost: Number(item.unitCost), qty: issued, byName: user.name });
     const shortfall = parsed.qty > 0 ? Math.max(0, parsed.qty - issued) : 0;
     // Keep an "Issued X from stock" record line (never purchased); anything short
     // stays as its own purchase line so the Purchaser only buys the remainder.

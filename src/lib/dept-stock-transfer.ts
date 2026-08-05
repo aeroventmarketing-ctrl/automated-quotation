@@ -21,6 +21,11 @@ export function isDuctHardwareStockName(name: string): boolean {
   return DUCT_HARDWARE_NAME_RE.test(name || "");
 }
 
+/** Departments that can BUY the hardware (Fans is the seller, so it's excluded).
+ *  A blank/unknown dept must never book a transfer — that would credit Fans a
+ *  sale with no matching expense and unbalance the company P&L. */
+const VALID_TO_DEPTS = new Set(["duct", "accessories", "motor", "office"]);
+
 /**
  * Record a Fans → <toDept> transfer when in-house duct hardware is issued from
  * stock to a requesting department. No-op unless the issued stock item is duct
@@ -40,7 +45,7 @@ export async function recordDeptStockTransfer(
   },
 ): Promise<void> {
   if (!(args.qty > 0)) return;
-  if (args.toDept === "fans") return; // Fans drawing its own stock — not a transfer
+  if (!VALID_TO_DEPTS.has(args.toDept)) return; // Fans's own draw / unknown dept — not a transfer
   if (!isDuctHardwareStockName(args.name)) return;
   const unitCost = Math.max(0, Number(args.unitCost) || 0);
   const value = Math.round(unitCost * args.qty * 100) / 100;
