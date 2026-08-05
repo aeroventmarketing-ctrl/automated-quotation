@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Printer } from "lucide-react";
+import { Printer, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
@@ -29,6 +29,17 @@ const CASH_TABS: { key: CashTab; label: string }[] = [
   { key: "cancelled", label: "Cancelled" },
   { key: "all", label: "All" },
 ];
+
+/** Loose text match: substring, plus a separators-ignored match so "CV 0002"
+ *  finds "CV-00002-…". Mirrors the Purchasing workspace search. */
+function textMatch(haystack: string, query: string): boolean {
+  const q = query.trim();
+  if (!q) return true;
+  const h = haystack.toLowerCase();
+  if (h.includes(q.toLowerCase())) return true;
+  const cq = q.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return cq.length > 0 && h.replace(/[^a-z0-9]/g, "").includes(cq);
+}
 
 function cashBucket(status: CashRequestStatus): CashBucket {
   switch (status) {
@@ -204,14 +215,23 @@ function CashRow({ r }: { r: CashRequestRow }) {
   );
 }
 
+/** All the text a cash request is searchable by: number, purpose, category,
+ *  department, note and its line descriptions. */
+function rowText(r: CashRequestRow): string {
+  return [r.number, r.purpose, r.categoryLabel, r.deptLabel ?? "", r.note ?? "", ...r.lines.map((l) => l.description)].join("  ");
+}
+
 export function CashRequestList({ rows }: { rows: CashRequestRow[] }) {
   const [tab, setTab] = useState<CashTab>("pending");
+  const [query, setQuery] = useState("");
 
   const counts: Record<CashTab, number> = { pending: 0, approved: 0, budgeted: 0, rejected: 0, cancelled: 0, all: 0 };
   for (const r of rows) counts[cashBucket(r.status)]++;
   counts.all = rows.length;
 
-  const shown = tab === "all" ? rows : rows.filter((r) => cashBucket(r.status) === tab);
+  const shown = rows
+    .filter((r) => tab === "all" || cashBucket(r.status) === tab)
+    .filter((r) => textMatch(rowText(r), query));
 
   return (
     <div className="space-y-3">
@@ -231,9 +251,21 @@ export function CashRequestList({ rows }: { rows: CashRequestRow[] }) {
         ))}
       </div>
 
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search request #, purpose, category, department, item…"
+          className="h-9 w-full rounded-md border bg-background pl-8 pr-3 text-sm"
+        />
+      </div>
+
       {shown.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          No {tab === "all" ? "" : tab + " "}cash requests{rows.length === 0 ? " yet" : ""}.
+          {query.trim()
+            ? "No cash requests match."
+            : `No ${tab === "all" ? "" : tab + " "}cash requests${rows.length === 0 ? " yet" : ""}.`}
         </p>
       ) : (
         shown.map((r) => <CashRow key={r.id} r={r} />)
