@@ -199,10 +199,14 @@ export function PurchasingWorkspace({
     router.refresh();
   }
 
-  // Counts per tab (POs = combined-PO cards + individual request rows).
+  // Counts per tab — every row the workspace renders under the tabs, so the badge
+  // matches what actually shows when the tab is opened: combined-PO cards,
+  // per-order request rows, department requisitions and replenishments.
   const counts: Record<Tab, number> = { pending: 0, approved: 0, budgeted: 0, rejected: 0, cancelled: 0, all: 0 };
   for (const b of batches) counts[displayBucket(b.status)]++;
   for (const g of orderGroups) for (const r of g.rows) counts[rowBucket(r)]++;
+  for (const r of deptRows) counts[rowBucket(r)]++;
+  for (const r of replenRows) counts[displayBucket(r.status as PRStatus)]++;
   counts.all = counts.pending + counts.approved + counts.budgeted + counts.rejected + counts.cancelled;
 
   const showBuilder = tab === "pending" || tab === "all";
