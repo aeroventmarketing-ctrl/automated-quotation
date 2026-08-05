@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Search, Eye, Printer } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { statusBucket, type PRBucket, type PRStatus } from "@/lib/purchasing";
+import { statusBucket, prMainIndex, type PRBucket, type PRStatus } from "@/lib/purchasing";
 import { poTotals } from "@/lib/purchase-order";
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
@@ -28,14 +28,26 @@ export interface OrderGroup {
   rows: PurchaseChainRow[];
 }
 
-type Tab = PRBucket | "all";
+// "budgeted" is a workspace-only split of the shared "approved" bucket: once the
+// voucher & check are SIGNED (VOUCHER_SIGNED onward) the budget is committed, so
+// the request moves out of Approved into its own Budgeted tab.
+type DisplayBucket = PRBucket | "budgeted";
+type Tab = DisplayBucket | "all";
 const TABS: { key: Tab; label: string }[] = [
   { key: "pending", label: "Pending" },
   { key: "approved", label: "Approved" },
+  { key: "budgeted", label: "Budgeted" },
   { key: "rejected", label: "Rejected" },
   { key: "cancelled", label: "Cancelled" },
   { key: "all", label: "All" },
 ];
+
+/** Bucket for a request/PO, splitting "approved" into approved vs budgeted. */
+function displayBucket(status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }): DisplayBucket {
+  const b = statusBucket(status, ctx);
+  if (b === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED")) return "budgeted";
+  return b;
+}
 
 type SortKey = "default" | "customer" | "amount_desc" | "amount_asc";
 const SORTS: { key: SortKey; label: string }[] = [
@@ -51,8 +63,8 @@ const GROUPS: { key: GroupKey; label: string }[] = [
   { key: "customer", label: "Group by customer" },
   { key: "status", label: "Group by status" },
 ];
-const BUCKET_ORDER: Record<PRBucket, number> = { pending: 0, approved: 1, rejected: 2, cancelled: 3 };
-const BUCKET_LABEL: Record<PRBucket, string> = { pending: "Pending", approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" };
+const BUCKET_ORDER: Record<DisplayBucket, number> = { pending: 0, approved: 1, budgeted: 2, rejected: 3, cancelled: 4 };
+const BUCKET_LABEL: Record<DisplayBucket, string> = { pending: "Pending", approved: "Approved", budgeted: "Budgeted", rejected: "Rejected", cancelled: "Cancelled" };
 
 /** Loose text match: substring, plus a separators-ignored match so "AFBM 0002"
  *  finds "AFBM00002-…". */
@@ -120,9 +132,9 @@ export function PurchasingWorkspace({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("pending");
-  const inTab = (bucket: PRBucket) => tab === "all" || tab === bucket;
+  const inTab = (bucket: DisplayBucket) => tab === "all" || tab === bucket;
   // A material/MRF requisition stays "pending" until its Purchase Order exists.
-  const rowBucket = (r: PurchaseChainRow) => statusBucket(r.status, { isDept: r.isDept, poApproved: r.poApproved });
+  const rowBucket = (r: PurchaseChainRow) => displayBucket(r.status, { isDept: r.isDept, poApproved: r.poApproved });
 
   // Cross-order selection: tick material requests across every order to total
   // their PO amounts and approve them together.
@@ -188,10 +200,10 @@ export function PurchasingWorkspace({
   }
 
   // Counts per tab (POs = combined-PO cards + individual request rows).
-  const counts: Record<Tab, number> = { pending: 0, approved: 0, rejected: 0, cancelled: 0, all: 0 };
-  for (const b of batches) counts[statusBucket(b.status)]++;
+  const counts: Record<Tab, number> = { pending: 0, approved: 0, budgeted: 0, rejected: 0, cancelled: 0, all: 0 };
+  for (const b of batches) counts[displayBucket(b.status)]++;
   for (const g of orderGroups) for (const r of g.rows) counts[rowBucket(r)]++;
-  counts.all = counts.pending + counts.approved + counts.rejected + counts.cancelled;
+  counts.all = counts.pending + counts.approved + counts.budgeted + counts.rejected + counts.cancelled;
 
   const showBuilder = tab === "pending" || tab === "all";
 
@@ -206,13 +218,13 @@ export function PurchasingWorkspace({
   const groupText = (g: OrderGroup) =>
     [g.title, g.subtitle, ...g.rows.flatMap((r) => [r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""])].join("  ");
   const groupAmount = (g: OrderGroup) => g.rows.reduce((s, r) => s + (r.po ? poTotals(r.po).total : 0), 0);
-  const groupBucket = (g: OrderGroup): PRBucket =>
-    (["pending", "approved", "rejected", "cancelled"] as PRBucket[])[
-      g.rows.reduce((min, r) => Math.min(min, BUCKET_ORDER[rowBucket(r)]), 3)
+  const groupBucket = (g: OrderGroup): DisplayBucket =>
+    (["pending", "approved", "budgeted", "rejected", "cancelled"] as DisplayBucket[])[
+      g.rows.reduce((min, r) => Math.min(min, BUCKET_ORDER[rowBucket(r)]), 4)
     ];
 
   const filteredBatches = batches
-    .filter((b) => inTab(statusBucket(b.status)))
+    .filter((b) => inTab(displayBucket(b.status)))
     .filter((b) => textMatch(batchText(b), query));
 
   let filteredGroups = orderGroups
@@ -404,7 +416,7 @@ export function PurchasingWorkspace({
           cancelled), never across all tabs. */}
       {(replenRows.length > 0 || admin) && (() => {
         const shown = replenRows
-          .filter((r) => inTab(statusBucket(r.status as PRStatus)))
+          .filter((r) => inTab(displayBucket(r.status as PRStatus)))
           .filter((r) => textMatch([...r.items, r.note ?? "", r.sku ?? ""].join("  "), query));
         return (
           <section className="space-y-3">
