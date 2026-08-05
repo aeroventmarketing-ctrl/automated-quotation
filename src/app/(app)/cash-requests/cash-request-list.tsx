@@ -8,12 +8,44 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import type { CashRequestRow } from "@/lib/cash-request-row";
+import type { CashRequestStatus } from "@/lib/cash-request";
 import { Input } from "@/components/ui/input";
 import { advanceCashRequest, cancelCashRequest, adminEditCashRequest, adminDeleteCashRequest } from "./actions";
 import { CashLiquidationPanel } from "./cash-liquidation-panel";
 import { AdminCashOverride } from "./admin-cash-override";
 
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+
+// Cash-request tabs, mirroring the Purchasing workspace. "Budgeted" is the
+// committed-spend bucket: once "Approve voucher & release cash" is pressed
+// (CASH_RELEASED onward) the request leaves Approved and lands here.
+type CashBucket = "pending" | "approved" | "budgeted" | "rejected" | "cancelled";
+type CashTab = CashBucket | "all";
+const CASH_TABS: { key: CashTab; label: string }[] = [
+  { key: "pending", label: "Pending" },
+  { key: "approved", label: "Approved" },
+  { key: "budgeted", label: "Budgeted" },
+  { key: "rejected", label: "Rejected" },
+  { key: "cancelled", label: "Cancelled" },
+  { key: "all", label: "All" },
+];
+
+function cashBucket(status: CashRequestStatus): CashBucket {
+  switch (status) {
+    case "PENDING_APPROVAL":
+      return "pending";
+    case "SUBMITTED":
+    case "VOUCHER_READY":
+      return "approved";
+    case "REJECTED":
+      return "rejected";
+    case "CANCELLED":
+      return "cancelled";
+    default:
+      // CASH_RELEASED, DISBURSED, RECEIVED, LIQUIDATED, SETTLED
+      return "budgeted";
+  }
+}
 
 /** One cash request: header, breakdown, chain actions, trail and liquidation. */
 function CashRow({ r }: { r: CashRequestRow }) {
@@ -173,12 +205,39 @@ function CashRow({ r }: { r: CashRequestRow }) {
 }
 
 export function CashRequestList({ rows }: { rows: CashRequestRow[] }) {
-  if (rows.length === 0) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">No cash requests yet.</p>;
-  }
+  const [tab, setTab] = useState<CashTab>("pending");
+
+  const counts: Record<CashTab, number> = { pending: 0, approved: 0, budgeted: 0, rejected: 0, cancelled: 0, all: 0 };
+  for (const r of rows) counts[cashBucket(r.status)]++;
+  counts.all = rows.length;
+
+  const shown = tab === "all" ? rows : rows.filter((r) => cashBucket(r.status) === tab);
+
   return (
     <div className="space-y-3">
-      {rows.map((r) => <CashRow key={r.id} r={r} />)}
+      <div className="flex flex-wrap gap-1.5">
+        {CASH_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              tab === t.key ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"
+            }`}
+          >
+            {t.label}
+            <span className={`ml-1.5 text-xs ${tab === t.key ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{counts[t.key]}</span>
+          </button>
+        ))}
+      </div>
+
+      {shown.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No {tab === "all" ? "" : tab + " "}cash requests{rows.length === 0 ? " yet" : ""}.
+        </p>
+      ) : (
+        shown.map((r) => <CashRow key={r.id} r={r} />)
+      )}
     </div>
   );
 }
