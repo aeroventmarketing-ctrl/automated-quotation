@@ -26,9 +26,13 @@ const isAirDuct = (s: Record<string, unknown>) =>
 // department, not Accessories — they generate a Duct job order.
 const isDamper = (s: Record<string, unknown>) =>
   s.category === "Ventilation Accessories" && isDamperType(str(s.type));
-// Duct Angle corner is fabricated by the Fans & Blowers department, not Accessories.
+// Vent Cap and Duct Angle corner are bought-in (purchased from a supplier), not
+// fabricated — they follow the supplier PO flow and never generate a job order.
 const isDuctAngleCorner = (s: Record<string, unknown>) =>
   s.category === "Ventilation Accessories" && /^duct angle corner$/i.test(str(s.type));
+const isVentCap = (s: Record<string, unknown>) =>
+  s.category === "Ventilation Accessories" && /^vent cap$/i.test(str(s.type));
+const isBoughtInVentAccessory = (s: Record<string, unknown>) => isVentCap(s) || isDuctAngleCorner(s);
 
 /** Map a quotation Air Duct material to a Duct JO material. */
 function ductMaterial(s: Record<string, unknown>): string {
@@ -78,7 +82,7 @@ const isIsolator = (s: Record<string, unknown>) => s.type === "Spring Vibration 
 // (both go to the Duct JO) and EXCEPT spring vibration isolators (not a job-order
 // product).
 const isAccessory = (s: Record<string, unknown>) =>
-  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isDuctAngleCorner(s) && !isIsolator(s);
+  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isBoughtInVentAccessory(s) && !isIsolator(s);
 
 /**
  * The two labelled dimensions for an accessory line, carried across from the
@@ -145,9 +149,10 @@ export function quotationJobOrderDepts(items: QuoteItemLike[]): Record<JobOrderD
   for (const it of items) {
     const s = specsOf(it);
     if (isAirDuct(s) || isDamper(s)) { depts.duct = true; continue; }
-    // Duct Angle corner is produced by the Fans & Blowers department (it has no
-    // fan-JO template, so the fans head adds the line by hand).
-    if (isFan(s) || isDuctAngleCorner(s)) { depts.fans = true; continue; }
+    // Vent Cap and Duct Angle corner are bought-in — no department fabricates
+    // them, so they never mark a job-order department.
+    if (isBoughtInVentAccessory(s)) continue;
+    if (isFan(s)) { depts.fans = true; continue; }
     if (isMotorController(s)) {
       if (!/variable frequency|vfd/i.test(str(s.bladeType))) depts.motor = true;
     } else if (isAccessory(s)) {
