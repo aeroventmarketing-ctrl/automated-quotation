@@ -5,15 +5,21 @@ import { useRouter } from "next/navigation";
 import { Upload, Eye, Download, Trash2, Check, ArrowRight, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { confirmTransferReceipt, cancelTransfer, attachTransferProof, removeTransferProof } from "./transfer-actions";
-import { type StockTransferView, type StockDoc } from "@/lib/stock-transfer";
+import { Input } from "@/components/ui/input";
+import {
+  confirmTransferReceipt, cancelTransfer, attachTransferProof, removeTransferProof,
+  requestOfficeTransfer, approveOfficeTransfer, releaseOfficeTransfer, deliverOfficeTransfer, receiveOfficeTransfer,
+} from "./transfer-actions";
+import { STOCK_TRANSFER_STATUS_LABEL, type StockTransferView, type StockDoc } from "@/lib/stock-transfer";
 
 const fmtQty = (n: number) => n.toLocaleString("en-PH", { maximumFractionDigits: 3 });
 const fmtDT = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" }) : "");
 const viewUrl = (d: StockDoc) => `/api/transfer-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
 const dlUrl = (d: StockDoc) => `/api/transfer-uploads?path=${encodeURIComponent(d.path)}&download=1&name=${encodeURIComponent(d.name)}`;
 
-function Handshake({ label, byName, at }: { label: string; byName: string | null; at: string | null }) {
+interface StockOption { id: string; name: string; location: string; unit: string; available: number }
+
+function Step({ label, byName, at }: { label: string; byName: string | null; at: string | null }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${byName ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300" : "text-muted-foreground"}`}>
       {byName ? <Check className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
@@ -22,17 +28,82 @@ function Handshake({ label, byName, at }: { label: string; byName: string | null
   );
 }
 
-function TransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
-  const router = useRouter();
+function statusBadge(t: StockTransferView) {
+  if (t.status === "RECEIVED") return <Badge variant="success">Received</Badge>;
+  if (t.status === "CANCELLED") return <Badge variant="destructive">Cancelled</Badge>;
+  return <Badge variant="warning">{STOCK_TRANSFER_STATUS_LABEL[t.status]}</Badge>;
+}
+
+function useRowActions(refresh: () => void) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
   async function run(fn: () => Promise<void>) {
     setBusy(true); setErr(null);
-    try { await fn(); router.refresh(); }
+    try { await fn(); refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(false); }
   }
+  return { busy, err, run, setBusy, setErr };
+}
+
+/** The Office chain (Fans → Office): request → approve → release → deliver → receive. */
+function OfficeTransferRow({ t }: { t: StockTransferView }) {
+  const router = useRouter();
+  const { busy, err, run } = useRowActions(() => router.refresh());
+  const active = t.status !== "RECEIVED" && t.status !== "CANCELLED";
+
+  return (
+    <div className="rounded-md border p-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="font-medium">{t.itemName}</span>
+        <span className="tabular-nums text-sm text-muted-foreground">{fmtQty(t.qty)} {t.unit}</span>
+        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">{t.fromLocation} <ArrowRight className="h-3.5 w-3.5" /> {t.toLocation}</span>
+        {statusBadge(t)}
+        <span className="ml-auto text-xs text-muted-foreground">Requested by {t.initiatedByName} · {fmtDT(t.initiatedAt)}</span>
+      </div>
+      {t.note && <p className="mt-1 text-xs text-muted-foreground">Note: {t.note}</p>}
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <Step label="Requested" byName={t.initiatedByName} at={t.initiatedAt} />
+        <Step label="Plant Manager" byName={t.approvedByName} at={t.approvedAt} />
+        <Step label="Released" byName={t.releasedByName} at={t.releasedAt} />
+        <Step label="Delivered" byName={t.deliveredByName} at={t.deliveredAt} />
+        <Step label="Office received" byName={t.receivedByName} at={t.receivedAt} />
+        {t.status === "CANCELLED" && t.cancelledByName && <span className="text-[11px] text-muted-foreground">Cancelled by {t.cancelledByName}</span>}
+      </div>
+
+      {active && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {t.status === "REQUESTED" && t.canApprove && (
+            <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => approveOfficeTransfer(t.id))}>Approve (Plant Manager)</Button>
+          )}
+          {t.status === "APPROVED" && t.canRelease && (
+            <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => releaseOfficeTransfer(t.id))}>Release from stock (Warehouse)</Button>
+          )}
+          {t.status === "RELEASED" && t.canDeliver && (
+            <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => deliverOfficeTransfer(t.id))}>Delivered to Office (Logistics)</Button>
+          )}
+          {t.status === "DELIVERING" && t.canReceive && (
+            <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => receiveOfficeTransfer(t.id))}>Office received</Button>
+          )}
+          {t.canCancel && (
+            <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={() => run(() => cancelTransfer(t.id))}>Cancel</Button>
+          )}
+          {!t.canApprove && t.status === "REQUESTED" && <span className="text-[11px] text-muted-foreground">Awaiting Plant Manager approval.</span>}
+          {!t.canRelease && t.status === "APPROVED" && <span className="text-[11px] text-muted-foreground">Awaiting Warehouse release.</span>}
+          {!t.canDeliver && t.status === "RELEASED" && <span className="text-[11px] text-muted-foreground">Awaiting Logistics delivery.</span>}
+          {!t.canReceive && t.status === "DELIVERING" && <span className="text-[11px] text-muted-foreground">Awaiting Office (Sales) receipt.</span>}
+        </div>
+      )}
+      {err && <p className="mt-1 text-xs text-destructive">{err}</p>}
+    </div>
+  );
+}
+
+/** The existing 2-party handshake (any non-Office location move). */
+function TransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
+  const router = useRouter();
+  const { busy, err, run, setBusy, setErr } = useRowActions(() => router.refresh());
   async function upload(file: File) {
     setBusy(true); setErr(null);
     try {
@@ -49,30 +120,24 @@ function TransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
     } finally { setBusy(false); }
   }
 
-  const badge = t.status === "RECEIVED" ? <Badge variant="success">Received</Badge>
-    : t.status === "CANCELLED" ? <Badge variant="destructive">Cancelled</Badge>
-    : <Badge variant="warning">In transit</Badge>;
-
   return (
     <div className="rounded-md border p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="font-medium">{t.itemName}</span>
         <span className="tabular-nums text-sm text-muted-foreground">{fmtQty(t.qty)} {t.unit}</span>
         <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">{t.fromLocation} <ArrowRight className="h-3.5 w-3.5" /> {t.toLocation}</span>
-        {badge}
+        {statusBadge(t)}
         <span className="ml-auto text-xs text-muted-foreground">Sent by {t.initiatedByName} · {fmtDT(t.initiatedAt)}</span>
       </div>
       {t.note && <p className="mt-1 text-xs text-muted-foreground">Note: {t.note}</p>}
 
-      {/* Double handshake */}
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Handshake label="Production head" byName={t.prodHeadByName} at={t.prodHeadAt} />
-        <Handshake label="Purchaser" byName={t.purchaserByName} at={t.purchaserAt} />
+        <Step label="Production head" byName={t.prodHeadByName} at={t.prodHeadAt} />
+        <Step label="Purchaser" byName={t.purchaserByName} at={t.purchaserAt} />
         {t.status === "RECEIVED" && <span className="text-[11px] text-emerald-700 dark:text-emerald-400">Received {fmtDT(t.receivedAt)}</span>}
         {t.status === "CANCELLED" && t.cancelledByName && <span className="text-[11px] text-muted-foreground">Cancelled by {t.cancelledByName}</span>}
       </div>
 
-      {/* Proof + actions */}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {t.proof ? (
           <span className="inline-flex items-center gap-1.5 text-sm">
@@ -109,33 +174,93 @@ function TransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
   );
 }
 
-export function StockTransfers({ transfers, missing, admin = false }: { transfers: StockTransferView[]; missing?: boolean; admin?: boolean }) {
+/** Purchaser: request a transfer of an item into the Office (starts the 5-step chain). */
+function RequestOfficeForm({ stockOptions }: { stockOptions: StockOption[] }) {
+  const router = useRouter();
+  const [itemId, setItemId] = useState("");
+  const [qty, setQty] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const picked = stockOptions.find((s) => s.id === itemId);
+
+  async function submit() {
+    const n = Number(qty);
+    if (!itemId) { setErr("Pick an item."); return; }
+    if (!(n > 0)) { setErr("Enter a quantity."); return; }
+    setBusy(true); setErr(null); setMsg(null);
+    try {
+      await requestOfficeTransfer({ stockItemId: itemId, qty: n, note: note.trim() || undefined });
+      setItemId(""); setQty(""); setNote(""); setMsg("Office transfer requested — awaiting Plant Manager approval.");
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to request");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="rounded-md border border-dashed p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Request transfer to Office</div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-muted-foreground">
+          Item
+          <select className="mt-0.5 block h-8 min-w-[16rem] rounded-md border bg-background px-2 text-sm" value={itemId} onChange={(e) => setItemId(e.target.value)}>
+            <option value="">— pick an item —</option>
+            {stockOptions.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}{s.location ? ` · ${s.location}` : ""} (avail {fmtQty(s.available)} {s.unit})</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-muted-foreground">Qty<Input className="mt-0.5 h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} /></label>
+        <label className="text-xs text-muted-foreground">Note<Input className="mt-0.5 h-8 w-40" placeholder="Optional" value={note} onChange={(e) => setNote(e.target.value)} /></label>
+        <Button size="sm" className="h-8 text-xs" disabled={busy} onClick={submit}>{busy ? "Requesting…" : "Request"}</Button>
+      </div>
+      {picked && <p className="mt-1 text-[11px] text-muted-foreground">From {picked.location || "—"} → Office. Stock is deducted only when the Warehouse releases it.</p>}
+      {err && <p className="mt-1 text-xs text-destructive">{err}</p>}
+      {msg && <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">{msg}</p>}
+    </div>
+  );
+}
+
+export function StockTransfers({
+  transfers, missing, admin = false, canRequest = false, stockOptions = [],
+}: {
+  transfers: StockTransferView[];
+  missing?: boolean;
+  admin?: boolean;
+  canRequest?: boolean;
+  stockOptions?: StockOption[];
+}) {
   if (missing) {
     return <p className="py-4 text-center text-sm text-muted-foreground">Stock transfers aren&rsquo;t set up yet — apply the <code className="rounded bg-muted px-1">0028_stock_transfer</code> migration to enable them.</p>;
   }
-  const active = transfers.filter((t) => t.status === "IN_TRANSIT");
-  const past = transfers.filter((t) => t.status !== "IN_TRANSIT");
+  const done = (t: StockTransferView) => t.status === "RECEIVED" || t.status === "CANCELLED";
+  const active = transfers.filter((t) => !done(t));
+  const past = transfers.filter(done);
+  const renderRow = (t: StockTransferView) => (t.isOffice ? <OfficeTransferRow key={t.id} t={t} /> : <TransferRow key={t.id} t={t} admin={admin} />);
   return (
     <div className="space-y-3">
+      {canRequest && <RequestOfficeForm stockOptions={stockOptions} />}
       {transfers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No stock transfers yet. Use an item&rsquo;s <span className="font-medium">Transfer</span> button to send stock to another location.</p>
+        <p className="text-sm text-muted-foreground">No stock transfers yet. Use an item&rsquo;s <span className="font-medium">Transfer</span> button to send stock to another location{canRequest ? ", or request a transfer to the Office above" : ""}.</p>
       ) : (
         <>
           {active.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Awaiting receipt ({active.length})</div>
-              {active.map((t) => <TransferRow key={t.id} t={t} admin={admin} />)}
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">In progress ({active.length})</div>
+              {active.map(renderRow)}
             </div>
           )}
           {past.length > 0 && (
             <details className="space-y-2">
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">Completed &amp; cancelled ({past.length})</summary>
-              <div className="mt-2 space-y-2">{past.map((t) => <TransferRow key={t.id} t={t} admin={admin} />)}</div>
+              <div className="mt-2 space-y-2">{past.map(renderRow)}</div>
             </details>
           )}
         </>
       )}
-      <p className="text-[11px] text-muted-foreground">Sent stock is held in transit until <b>both</b> a production head and the purchaser confirm the destination received it — then it lands in the destination location.</p>
+      <p className="text-[11px] text-muted-foreground">Office transfers run a 5-step chain: Purchaser requests → Plant Manager approves → Warehouse releases (stock deducted) → Logistics delivers → Sales confirms Office receipt (stock credited). Other location moves use the two-party (production head + purchaser) receipt.</p>
     </div>
   );
 }

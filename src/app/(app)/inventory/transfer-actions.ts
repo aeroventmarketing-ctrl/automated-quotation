@@ -7,7 +7,7 @@ import type { User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { isProductionHead, isPurchaserRole, coerceStockDoc, type StockDoc } from "@/lib/stock-transfer";
+import { isProductionHead, isPurchaserRole, coerceStockDoc, isOfficeTransfer, type StockDoc } from "@/lib/stock-transfer";
 import { logActivity } from "@/lib/activity-log";
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -70,6 +70,7 @@ export async function initiateTransfer(input: z.infer<typeof initiateSchema>): P
     const fromLocation = item.location?.trim() || "—";
     const toLocation = d.toLocation.trim();
     if (toLocation.toLowerCase() === fromLocation.toLowerCase()) throw new Error("Choose a different destination location.");
+    if (isOfficeTransfer(toLocation)) throw new Error("Use the Office transfer request flow (Purchaser) for Office transfers.");
 
     const onHand = Number(item.quantity);
     const agg = await tx.stockReservation.aggregate({ where: { stockItemId: item.id, active: true }, _sum: { qty: true } });
@@ -175,9 +176,14 @@ export async function cancelTransfer(transferId: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const t = await tx.stockTransfer.findUnique({ where: { id: transferId } });
     if (!t) throw new Error("Transfer not found");
-    if (t.status !== "IN_TRANSIT") throw new Error("Only an in-transit transfer can be cancelled.");
+    // Stock has left the source once IN_TRANSIT (2-party) or RELEASED/DELIVERING
+    // (Office chain) — cancelling returns it. REQUESTED/APPROVED hold no stock yet.
+    const returnsStock = t.status === "IN_TRANSIT" || t.status === "RELEASED" || t.status === "DELIVERING";
+    if (!(returnsStock || t.status === "REQUESTED" || t.status === "APPROVED")) {
+      throw new Error("Only a pending or in-transit transfer can be cancelled.");
+    }
     cancelName = t.itemName;
-    if (t.stockItemId) {
+    if (returnsStock && t.stockItemId) {
       const src = await tx.stockItem.findUnique({ where: { id: t.stockItemId } });
       if (src) {
         const bal = round3(Number(src.quantity) + Number(t.qty));
@@ -194,6 +200,147 @@ export async function cancelTransfer(transferId: string): Promise<void> {
     entity: "inventory",
     href: "/inventory",
   });
+  revalidatePath("/inventory");
+}
+
+// ───────────────────────── Office chain (Fans → Office) ─────────────────────────
+// A 5-step approval flow for stock the Office resells: purchaser requests → Plant
+// Manager approves → Warehouse releases (deducts source) → Logistics delivers →
+// Sales confirms Office receipt (credits the Office stock item). No P&L on the
+// move — Fans is credited its production cost at the eventual resale.
+
+const requestOfficeSchema = z.object({
+  stockItemId: z.string().min(1),
+  qty: z.number().positive(),
+  note: z.string().trim().max(200).optional(),
+});
+
+/** Purchaser requests a transfer of an item to the Office (no stock moves yet). */
+export async function requestOfficeTransfer(input: z.infer<typeof requestOfficeSchema>): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || isPurchaserRole(roles, user.id))) {
+    throw new Error("Only the Purchaser or an admin can request a transfer to the Office.");
+  }
+  const d = requestOfficeSchema.parse(input);
+  const item = await prisma.stockItem.findUnique({ where: { id: d.stockItemId } });
+  if (!item) throw new Error("Stock item not found");
+  const fromLocation = item.location?.trim() || "—";
+  if (fromLocation.toLowerCase() === "office") throw new Error("This item is already at the Office.");
+  await prisma.stockTransfer.create({
+    data: {
+      stockItemId: item.id, itemName: item.name, unit: item.unit, qty: d.qty,
+      fromLocation, toLocation: "Office", status: "REQUESTED",
+      note: d.note || null, initiatedById: user.id, initiatedByName: user.name,
+    },
+  });
+  await logActivity(user, {
+    action: "inventory.transfer.request", category: "inventory",
+    summary: `Office transfer requested: ${d.qty} ${item.unit} ${item.name} (${fromLocation} → Office)`,
+    entity: "inventory", href: "/inventory",
+  });
+  revalidatePath("/inventory");
+}
+
+/** Plant Manager approves the requested Office transfer. */
+export async function approveOfficeTransfer(transferId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey))) {
+    throw new Error("Only the Plant Manager or an admin can approve the transfer.");
+  }
+  const t = await prisma.stockTransfer.findUnique({ where: { id: transferId } });
+  if (!t) throw new Error("Transfer not found");
+  if (t.status !== "REQUESTED") throw new Error("This transfer isn't awaiting approval.");
+  await prisma.stockTransfer.update({ where: { id: transferId }, data: { status: "APPROVED", approvedById: user.id, approvedByName: user.name, approvedAt: new Date() } });
+  await logActivity(user, { action: "inventory.transfer.approve", category: "inventory", summary: `Office transfer approved: ${t.itemName}`, entity: "inventory", href: "/inventory" });
+  revalidatePath("/inventory");
+}
+
+/** Warehouse releases the approved transfer — the source stock is deducted (in transit). */
+export async function releaseOfficeTransfer(transferId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can release the stock.");
+  }
+  let name = "";
+  await prisma.$transaction(async (tx) => {
+    const t = await tx.stockTransfer.findUnique({ where: { id: transferId } });
+    if (!t) throw new Error("Transfer not found");
+    if (t.status !== "APPROVED") throw new Error("This transfer isn't approved for release.");
+    if (!t.stockItemId) throw new Error("The source stock item is missing.");
+    const item = await tx.stockItem.findUnique({ where: { id: t.stockItemId } });
+    if (!item) throw new Error("Source stock item not found.");
+    const onHand = Number(item.quantity);
+    const agg = await tx.stockReservation.aggregate({ where: { stockItemId: item.id, active: true }, _sum: { qty: true } });
+    const available = onHand - Number(agg._sum.qty ?? 0);
+    const qty = Number(t.qty);
+    if (qty > available) throw new Error(`Only ${available} ${item.unit} available to release.`);
+    const bal = round3(onHand - qty);
+    await tx.stockItem.update({ where: { id: item.id }, data: { quantity: bal } });
+    await tx.stockMovement.create({ data: { stockItemId: item.id, kind: "ISSUE", delta: -qty, balanceAfter: bal, reason: `Office transfer released (in transit)`, byName: user.name } });
+    await tx.stockTransfer.update({ where: { id: transferId }, data: { status: "RELEASED", releasedById: user.id, releasedByName: user.name, releasedAt: new Date() } });
+    name = t.itemName;
+  });
+  await logActivity(user, { action: "inventory.transfer.release", category: "inventory", summary: `Office transfer released from stock: ${name}`, entity: "inventory", href: "/inventory" });
+  revalidatePath("/inventory");
+}
+
+/** Logistics marks the released transfer out for delivery to the Office. */
+export async function deliverOfficeTransfer(transferId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
+    throw new Error("Only Logistics or an admin can deliver the transfer.");
+  }
+  const t = await prisma.stockTransfer.findUnique({ where: { id: transferId } });
+  if (!t) throw new Error("Transfer not found");
+  if (t.status !== "RELEASED") throw new Error("This transfer hasn't been released yet.");
+  await prisma.stockTransfer.update({ where: { id: transferId }, data: { status: "DELIVERING", deliveredById: user.id, deliveredByName: user.name, deliveredAt: new Date() } });
+  await logActivity(user, { action: "inventory.transfer.deliver", category: "inventory", summary: `Office transfer out for delivery: ${t.itemName}`, entity: "inventory", href: "/inventory" });
+  revalidatePath("/inventory");
+}
+
+/** Sales confirms the Office received the stock — credits the Office stock item. */
+export async function receiveOfficeTransfer(transferId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || user.role === "SALES")) {
+    throw new Error("Only Sales or an admin can confirm the Office received the stock.");
+  }
+  let name = "";
+  await prisma.$transaction(async (tx) => {
+    const t = await tx.stockTransfer.findUnique({ where: { id: transferId } });
+    if (!t) throw new Error("Transfer not found");
+    if (t.status !== "DELIVERING") throw new Error("This transfer isn't out for delivery.");
+    const qty = Number(t.qty);
+    const dest = await tx.stockItem.findFirst({
+      where: { active: true, name: { equals: t.itemName, mode: "insensitive" }, location: { equals: t.toLocation, mode: "insensitive" } },
+    });
+    let destId: string;
+    if (dest) {
+      const bal = round3(Number(dest.quantity) + qty);
+      await tx.stockItem.update({ where: { id: dest.id }, data: { quantity: bal } });
+      await tx.stockMovement.create({ data: { stockItemId: dest.id, kind: "RECEIPT", delta: qty, balanceAfter: bal, reason: `Office transfer received from ${t.fromLocation}`, byName: user.name } });
+      destId = dest.id;
+    } else {
+      const src = t.stockItemId ? await tx.stockItem.findUnique({ where: { id: t.stockItemId } }) : null;
+      const sku = await nextSku(tx);
+      const created = await tx.stockItem.create({
+        data: { sku, name: t.itemName, unit: t.unit, category: src?.category ?? null, location: t.toLocation, quantity: qty, reorderLevel: src?.reorderLevel ?? 0, unitCost: src?.unitCost ?? 0 },
+      });
+      await tx.stockMovement.create({ data: { stockItemId: created.id, kind: "RECEIPT", delta: qty, balanceAfter: qty, reason: `Office transfer received from ${t.fromLocation}`, byName: user.name } });
+      destId = created.id;
+    }
+    await tx.stockTransfer.update({ where: { id: transferId }, data: { status: "RECEIVED", destStockItemId: destId, receivedById: user.id, receivedByName: user.name, receivedAt: new Date() } });
+    name = t.itemName;
+  });
+  await logActivity(user, { action: "inventory.transfer.received", category: "inventory", summary: `Office transfer received into Office stock: ${name}`, entity: "inventory", href: "/inventory" });
   revalidatePath("/inventory");
 }
 

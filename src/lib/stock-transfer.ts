@@ -7,13 +7,27 @@
 import { PRODUCTION_DEPTS } from "@/lib/order-workflow";
 import { userHasWorkflowRole, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 
-export type StockTransferStatus = "IN_TRANSIT" | "RECEIVED" | "CANCELLED";
+export type StockTransferStatus =
+  | "REQUESTED" | "APPROVED" | "RELEASED" | "DELIVERING" // Office chain (Fans → Office)
+  | "IN_TRANSIT" | "RECEIVED" | "CANCELLED";
 
 export const STOCK_TRANSFER_STATUS_LABEL: Record<StockTransferStatus, string> = {
+  REQUESTED: "Requested",
+  APPROVED: "Approved",
+  RELEASED: "Released",
+  DELIVERING: "Delivering",
   IN_TRANSIT: "In transit",
   RECEIVED: "Received",
   CANCELLED: "Cancelled",
 };
+
+/** The 5-step Office chain runs when a transfer's destination is the Office. */
+export function isOfficeTransfer(toLocation: string): boolean {
+  return (toLocation ?? "").trim().toLowerCase() === "office";
+}
+
+/** Office-chain statuses that still hold stock in transit (source already deducted). */
+export const OFFICE_IN_FLIGHT: StockTransferStatus[] = ["RELEASED", "DELIVERING"];
 
 /** An uploaded proof document (delivery note / photo). */
 export interface StockDoc {
@@ -54,9 +68,22 @@ export interface StockTransferView {
   receivedAt: string | null;
   cancelledByName: string | null;
   cancelledAt: string | null;
+  // Office chain (Fans → Office) — step stamps.
+  isOffice: boolean; // true → renders the 5-step Office chain instead of the handshake
+  approvedByName: string | null;
+  approvedAt: string | null;
+  releasedByName: string | null;
+  releasedAt: string | null;
+  deliveredByName: string | null;
+  deliveredAt: string | null;
+  receivedByName: string | null;
   // Viewer capabilities on this row.
   canConfirmProdHead: boolean;
   canConfirmPurchaser: boolean;
+  canApprove: boolean; // Office chain: Plant Manager approves the request
+  canRelease: boolean; // Office chain: Warehouse releases (deducts source)
+  canDeliver: boolean; // Office chain: Logistics delivers to Office
+  canReceive: boolean; // Office chain: Sales/Office confirms receipt (credits Office)
   canUpload: boolean; // attach / remove proof
   canCancel: boolean; // recall an in-transit transfer
 }

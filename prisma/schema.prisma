@@ -615,8 +615,14 @@ model DeptStockTransfer {
  * attached and viewable.
  */
 enum StockTransferStatus {
+  // Office chain (Fans → Office resale stock): a 5-step approval flow.
+  REQUESTED  // purchaser requested, awaiting Plant Manager approval
+  APPROVED   // Plant Manager approved, awaiting Warehouse release
+  RELEASED   // Warehouse released (source deducted), awaiting Logistics
+  DELIVERING // Logistics delivering to Office, awaiting Office receipt
+  // 2-party chain (any other location move).
   IN_TRANSIT // issued from source, awaiting both receipt confirmations
-  RECEIVED   // both confirmed, received into destination
+  RECEIVED   // received into destination
   CANCELLED  // recalled before receipt — quantity returned to source
 }
 
@@ -643,6 +649,18 @@ model StockTransfer {
   purchaserById   String?
   purchaserByName String?
   purchaserAt     DateTime?
+  // Office chain stamps (Fans → Office): approve → release → deliver → receive.
+  approvedById    String?
+  approvedByName  String?
+  approvedAt      DateTime?
+  releasedById    String?
+  releasedByName  String?
+  releasedAt      DateTime?
+  deliveredById   String?
+  deliveredByName String?
+  deliveredAt     DateTime?
+  receivedById    String?
+  receivedByName  String?
   receivedAt      DateTime?
   cancelledByName String?
   cancelledAt     DateTime?
