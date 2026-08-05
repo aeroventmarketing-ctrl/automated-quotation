@@ -113,10 +113,13 @@ export function lineRouting(specs: Specs): { dept: DeptKey; routing: Routing } {
   // Motor Controller: fabricated Starter → Motor dept; VFD (bought-in) → Office.
   if (isMotorController(specs))
     return isVfd(specs) ? { dept: "office", routing: "office_full" } : { dept: "motor", routing: "production_markup" };
-  // Vent Cap and Duct Angle corner are bought-in — Office keeps the margin (net
-  // less supplier cost), like other resale goods. Must precede the accessory /
-  // fan checks so neither claims them for a fabricating department.
-  if (isBoughtInVentAccessory(specs)) return { dept: "office", routing: "office_full" };
+  // Vent Cap is bought-in — Office keeps the whole margin (net less supplier cost).
+  if (isVentCap(specs)) return { dept: "office", routing: "office_full" };
+  // Duct Angle corner is bought-in too (it rides the supplier PO — see
+  // isSupplierBoughtIn), but its SALE is credited 70% to Fans & Blowers / 30% to
+  // Office — the production-markup split (net ÷ 1.3 to Fans, the remainder to
+  // Office). So it routes like a Fans production line for the P&L, not 100% Office.
+  if (isDuctAngleCorner(specs)) return { dept: "fans", routing: "production_markup" };
   // Fabricated ventilation accessories & air ducts. Dampers are duct-department
   // products, so they take the Duct markup too.
   if (isAirDuct(specs) || isDamper(specs)) return { dept: "duct", routing: "production_markup" };
@@ -142,10 +145,20 @@ export function isServiceLine(specs: Specs): boolean {
 }
 
 /**
+ * Whether a line is physically purchased from a supplier — i.e. it belongs on the
+ * supplier requisition / PO and is never fabricated in-house. That's every
+ * 100%-Office resale line (KDK, WDRV, VFD, …) PLUS the Duct Angle corner, which is
+ * bought-in even though its P&L credit is split with Fans & Blowers (so its
+ * routing is "production_markup", not "office_full").
+ */
+const isSupplierBoughtIn = (specs: Specs): boolean =>
+  lineRouting(specs).routing === "office_full" || isDuctAngleCorner(specs);
+
+/**
  * The BOUGHT-IN products on an order's lines — what a supplier requisition / PO
  * would cover. Excludes Aerovent-fabricated items (fans / ducts / accessories /
  * motor starters) and typed service / charge lines (Mobilization, Delivery,
- * Installation), keeping only the resale goods (KDK, WDRV, VFD, …).
+ * Installation), keeping only the resale goods (KDK, WDRV, VFD, Duct Angle corner …).
  */
 export function orderBoughtInLines(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
@@ -158,7 +171,7 @@ export function orderBoughtInLines(
       // service / charge (Mobilization, Delivery, Installation) has only a brand /
       // free-text description and NO type, even when filed under "Other Products",
       // so it slips past the blank-category service check — exclude those too.
-      return lineRouting(specs).routing === "office_full" && !isServiceLine(specs) && str(specs.type) !== "";
+      return isSupplierBoughtIn(specs) && !isServiceLine(specs) && str(specs.type) !== "";
     })
     .map((it) => {
       const specs = (it.specsSnapshot ?? {}) as Specs;
