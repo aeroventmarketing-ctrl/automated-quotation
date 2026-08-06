@@ -146,15 +146,26 @@ export function lineRouting(specs: Specs): { dept: DeptKey; routing: Routing } {
   return { dept: "office", routing: "office_full" };
 }
 
+// A charge / labour line names its nature in the description — "Installation
+// Charges", "Delivery Charge", "Labor Charge", "Mobilization", … — even when it
+// was built off a product template (e.g. an installation charge for a Wind Driven
+// Roof Ventilator) and so carries that product's category and type. It is revenue
+// with NO cost of goods, so it must be recognised as a service line regardless of
+// category.
+const CHARGE_DESC_RE =
+  /\b(?:installation|labou?r|delivery|hauling|freight|service|handling)\s+charges?\b|\b(?:de)?mobili[sz]ation\b/i;
+
 /**
- * A typed service / charge line (Mobilization / Demobilization, Delivery,
- * Installation, …) — no product was selected from the catalogue, so its
- * `category` is blank. These are revenue with NO cost of goods: their spend is
- * booked later via Requisitions / Cash Vouchers, so they must never be
- * fuzzy-matched to a catalogue product's cost.
+ * A service / charge line (Mobilization / Demobilization, Delivery, Installation,
+ * …) — revenue with NO cost of goods: its spend is booked later via Requisitions
+ * / Cash Vouchers, so it must never be fuzzy-matched to a catalogue product's
+ * cost or pulled into a supplier PO. Detected two ways: a purely manual line has
+ * a blank `category` (no catalogue product selected); a charge line built off a
+ * product template is recognised by its description naming the charge.
  */
-export function isServiceLine(specs: Specs): boolean {
-  return str(specs.category).trim() === "";
+export function isServiceLine(specs: Specs, description = ""): boolean {
+  if (str(specs.category).trim() === "") return true;
+  return CHARGE_DESC_RE.test(str(description));
 }
 
 /**
@@ -177,7 +188,7 @@ export function orderBoughtInLines(
       // so it slips past the blank-category service check — exclude those too.
       // Office-supplied goods (AlphaAir / Vent Cap) are issued from Office stock,
       // never ordered per sale — keep them off the supplier PO as well.
-      return lineRouting(specs).routing === "office_full" && !isOfficeSupplied(specs) && !isServiceLine(specs) && str(specs.type) !== "";
+      return lineRouting(specs).routing === "office_full" && !isOfficeSupplied(specs) && !isServiceLine(specs, it.descriptionSnapshot) && str(specs.type) !== "";
     })
     .map((it) => {
       const specs = (it.specsSnapshot ?? {}) as Specs;
