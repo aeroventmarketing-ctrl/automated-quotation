@@ -86,6 +86,15 @@ const isDuctHardware = (s: Specs) =>
 // Vent Cap is bought-in (purchased from a supplier), not fabricated — the Office
 // keeps the whole margin, like other resale goods. Mirrors job-order-autogen.ts.
 const isVentCap = (s: Specs) => s.category === "Ventilation Accessories" && /^vent cap$/i.test(str(s.type));
+// "Supplied by Office" — bought-in resale goods the Office stocks and sells
+// itself: the AlphaAir brand, plus the Vent Cap. Unlike the other bought-in
+// goods (KDK, induction motors, Wind Driven Roof Ventilator …), these are NOT
+// ordered from a supplier per sale — the Office already holds them in stock — so
+// they're kept off the supplier PO and issued from stock instead. Still a 100%
+// Office sale in the P&L.
+const OFFICE_SUPPLIED_BRANDS = new Set(["alphaair"]);
+const isOfficeSupplied = (s: Specs) =>
+  isVentCap(s) || OFFICE_SUPPLIED_BRANDS.has(str(s.brand).toLowerCase().replace(/\s+/g, ""));
 const isMotorController = (s: Specs) => s.type === "Motor Controller";
 const isIsolator = (s: Specs) => s.type === "Spring Vibration Isolator";
 const isAccessory = (s: Specs) =>
@@ -166,7 +175,9 @@ export function orderBoughtInLines(
       // service / charge (Mobilization, Delivery, Installation) has only a brand /
       // free-text description and NO type, even when filed under "Other Products",
       // so it slips past the blank-category service check — exclude those too.
-      return lineRouting(specs).routing === "office_full" && !isServiceLine(specs) && str(specs.type) !== "";
+      // Office-supplied goods (AlphaAir / Vent Cap) are issued from Office stock,
+      // never ordered per sale — keep them off the supplier PO as well.
+      return lineRouting(specs).routing === "office_full" && !isOfficeSupplied(specs) && !isServiceLine(specs) && str(specs.type) !== "";
     })
     .map((it) => {
       const specs = (it.specsSnapshot ?? {}) as Specs;
@@ -220,21 +231,35 @@ export function isBoughtInOnlyOrder(
 }
 
 /**
- * The FROM-STOCK products on an order's lines — the in-house duct hardware (angle
- * corner, TDC cleat, S-clip, C-clip) that Fans & Blowers produces to stock. These
- * are fulfilled by issuing from inventory, so the warehouse matches each to a
- * stock item (by name + gauge) and deducts it. Identical lines are combined.
+ * The FROM-STOCK products on an order's lines — items fulfilled by issuing from
+ * inventory rather than fabricating or buying per sale:
+ *   • in-house duct hardware (angle corner, TDC cleat, S-clip, C-clip) that Fans
+ *     & Blowers produces to stock; and
+ *   • Office-supplied resale goods (AlphaAir, Vent Cap) the Office holds in stock.
+ * The warehouse matches each to a stock item (by name) and deducts it — duct
+ * hardware from Fans stock, the resale goods from Office stock. Identical lines
+ * are combined.
  */
 export function orderStockLines(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
 ): { name: string; qty: number }[] {
   const lines = items
-    .filter((it) => isDuctHardware((it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs))
+    .filter((it) => {
+      const s = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
+      return isDuctHardware(s) || isOfficeSupplied(s);
+    })
     .map((it) => {
       const specs = (it.specsSnapshot ?? {}) as Specs;
-      const type = str(specs.type) || productLabel(specs, it.descriptionSnapshot) || "Item";
-      const gauge = str(specs.gauge).replace(/[^0-9]/g, "");
-      return { name: gauge ? `${type} GA${gauge}` : type, qty: Number(it.qty) || 1 };
+      // Duct hardware is named by type + gauge (matches its Fans stock item); an
+      // Office-supplied product uses its brand + type + model label so it matches
+      // the Office stock item.
+      if (isDuctHardware(specs)) {
+        const type = str(specs.type) || productLabel(specs, it.descriptionSnapshot) || "Item";
+        const gauge = str(specs.gauge).replace(/[^0-9]/g, "");
+        return { name: gauge ? `${type} GA${gauge}` : type, qty: Number(it.qty) || 1 };
+      }
+      const name = productLabel(specs, it.descriptionSnapshot) || str(specs.type) || "Item";
+      return { name, qty: Number(it.qty) || 1 };
     });
   const combined = new Map<string, { name: string; qty: number }>();
   for (const l of lines) {
@@ -246,11 +271,13 @@ export function orderStockLines(
 }
 
 /**
- * A fully from-stock order: it has in-house duct-hardware lines, NO department
- * fabricates anything, and NO bought-in supplier goods. These skip production and
- * the supplier PO — they follow the "release from stock" flow (clear payment →
- * Warehouse / Fans release the stock & notify client → Phase 5), the stock being
- * issued from Fans & Blowers on-hand inventory.
+ * A fully from-stock order: every line is issued from stock — in-house duct
+ * hardware and/or Office-supplied resale goods (AlphaAir / Vent Cap) — with NO
+ * department fabricating anything and NO bought-in supplier goods (KDK etc.).
+ * These skip production and the supplier PO — they follow the "release from
+ * stock" flow (clear payment → Warehouse releases the stock & notifies client →
+ * Phase 5), issued from on-hand inventory (Fans stock for duct hardware, Office
+ * stock for the resale goods).
  */
 export function isStockOnlyOrder(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
