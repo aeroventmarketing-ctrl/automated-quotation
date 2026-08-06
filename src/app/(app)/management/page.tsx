@@ -20,7 +20,8 @@ import { scheduleApproverNames } from "@/lib/approver-directory";
 import { buildScheduleView, expandOccurrences, type ScheduleView } from "@/lib/schedule";
 import { getCalendars } from "@/lib/calendars";
 import { DepartmentPnl } from "./department-pnl";
-import { getDepartmentPnl, type PnlReport } from "./pnl-actions";
+import { getDepartmentPnl, getExpensesReport, type PnlReport, type ExpensesReport as ExpensesReportData } from "./pnl-actions";
+import { ExpensesReport } from "../my-dashboard/expenses-report";
 import { PayrollEditor } from "./payroll-editor";
 import { canManagePayroll, getPayrollMonth } from "./payroll-actions";
 import type { DeptSplit } from "@/lib/department-pnl";
@@ -281,6 +282,14 @@ export default async function ManagementPage() {
     initialPnl = await getDepartmentPnl(`${pnlYm}-01`, pnlTo);
   } catch {
     initialPnl = null;
+  }
+  // Expenses records report — moved here from the admin Production Dashboard.
+  // Auth-gated inside getExpensesReport (Accounting / admin); null for others.
+  let initialExpenses: ExpensesReportData | null = null;
+  try {
+    initialExpenses = await getExpensesReport(`${pnlYm}-01`, phToday);
+  } catch {
+    initialExpenses = null;
   }
   // Payroll editor — Admin / Approver only. Null payroll = table not migrated.
   let canEditPayroll = false;
@@ -673,6 +682,11 @@ export default async function ManagementPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Expenses records — searchable / groupable list of every recognised
+          expense (POs, cash vouchers, payroll, stock transfers), with Excel /
+          PDF / eye-view. Moved here from the admin Production Dashboard. */}
+      {initialExpenses && <ExpensesReport initial={initialExpenses} />}
 
       {/* Departmental payroll — manual monthly entry (Admin / Approver), feeds
           the P&L expenses above. */}
