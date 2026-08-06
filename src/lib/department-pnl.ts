@@ -240,6 +240,31 @@ export function isBoughtInOnlyOrder(
  * hardware from Fans stock, the resale goods from Office stock. Identical lines
  * are combined.
  */
+// mm per one entered size-unit — the quotation's trade ratio (inches → 25 mm,
+// not 25.4), matching the accessory calculator.
+const ACC_MM_PER_UNIT: Record<string, number> = { mm: 1, cm: 10, inches: 25 };
+
+/**
+ * The stock-item name for a Vent Cap line — "Vent Cap {diameter}mmØ {material}"
+ * (e.g. "Vent Cap 100mmØ SS201") — built from the quotation's diameter (`sizeL`,
+ * in the entered unit → mm at 25 mm/inch) and material ("Stainless 201" →
+ * "SS201"). This mirrors how the warehouse names the on-hand Vent Cap stock item
+ * so the from-stock release auto-matches it. Falls back to the product label when
+ * the size/material can't be read.
+ */
+function ventCapStockName(s: Specs, description = ""): string {
+  const type = str(s.type) || "Vent Cap";
+  const dia = Number(str(s.sizeL));
+  const per = ACC_MM_PER_UNIT[str(s.sizeUnit) || "inches"] ?? 25;
+  const mm = Number.isFinite(dia) && dia > 0 ? Math.round(dia * per) : 0;
+  // "Stainless 201" → "SS201", "Stainless 304" → "SS304"; otherwise keep as-is.
+  const mat = str(s.material);
+  const m = /stainless\s*(\d+)/i.exec(mat);
+  const matCode = m ? `SS${m[1]}` : mat;
+  const name = [type, mm > 0 ? `${mm}mmØ` : "", matCode].filter(Boolean).join(" ");
+  return name || productLabel(s, description) || "Vent Cap";
+}
+
 export function orderStockLines(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
 ): { name: string; qty: number }[] {
@@ -250,14 +275,18 @@ export function orderStockLines(
     })
     .map((it) => {
       const specs = (it.specsSnapshot ?? {}) as Specs;
-      // Duct hardware is named by type + gauge (matches its Fans stock item); an
-      // Office-supplied product uses its brand + type + model label so it matches
-      // the Office stock item.
+      // Duct hardware is named by type + gauge (matches its Fans stock item).
       if (isDuctHardware(specs)) {
         const type = str(specs.type) || productLabel(specs, it.descriptionSnapshot) || "Item";
         const gauge = str(specs.gauge).replace(/[^0-9]/g, "");
         return { name: gauge ? `${type} GA${gauge}` : type, qty: Number(it.qty) || 1 };
       }
+      // A Vent Cap carries its diameter + material, so name it to match the
+      // warehouse's stock item — e.g. "Vent Cap 100mmØ SS201".
+      if (isVentCap(specs)) {
+        return { name: ventCapStockName(specs, it.descriptionSnapshot), qty: Number(it.qty) || 1 };
+      }
+      // Other Office-supplied products (AlphaAir) match by brand + type + model.
       const name = productLabel(specs, it.descriptionSnapshot) || str(specs.type) || "Item";
       return { name, qty: Number(it.qty) || 1 };
     });
