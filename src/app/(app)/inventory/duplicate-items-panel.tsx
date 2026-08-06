@@ -46,7 +46,7 @@ export function DuplicateItemsPanel({ groups }: { groups: DupeItem[][] }) {
   return (
     <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/20">
       {/* Pure-CSS collapse (uncontrolled checkbox + peer) — same as the item list. */}
-      <input type="checkbox" id="dupe-panel-toggle" defaultChecked className="peer hidden" />
+      <input type="checkbox" id="dupe-panel-toggle" className="peer hidden" />
       <label htmlFor="dupe-panel-toggle" className="flex cursor-pointer select-none items-center gap-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300 peer-checked:[&_svg]:rotate-90">
         <ChevronRight className="h-3.5 w-3.5 transition-transform" />
         Possible duplicate items <span className="font-normal text-muted-foreground">({groups.length} group{groups.length === 1 ? "" : "s"})</span>
