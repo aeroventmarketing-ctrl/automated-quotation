@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, Eye, Download, Trash2, Check, ArrowRight, Clock } from "lucide-react";
+import { Upload, Eye, Download, Trash2, Check, ArrowRight, Clock, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  confirmTransferReceipt, cancelTransfer, attachTransferProof, removeTransferProof,
+  confirmTransferReceipt, cancelTransfer, attachTransferProof, removeTransferProof, deleteTransfer,
   requestOfficeTransfer, approveOfficeTransfer, releaseOfficeTransfer, deliverOfficeTransfer, receiveOfficeTransfer,
 } from "./transfer-actions";
 import { STOCK_TRANSFER_STATUS_LABEL, type StockTransferView, type StockDoc } from "@/lib/stock-transfer";
@@ -47,7 +47,7 @@ function useRowActions(refresh: () => void) {
 }
 
 /** The Office chain (Fans → Office): request → approve → release → deliver → receive. */
-function OfficeTransferRow({ t }: { t: StockTransferView }) {
+function OfficeTransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
   const router = useRouter();
   const { busy, err, run } = useRowActions(() => router.refresh());
   const active = t.status !== "RECEIVED" && t.status !== "CANCELLED";
@@ -70,6 +70,9 @@ function OfficeTransferRow({ t }: { t: StockTransferView }) {
         <Step label="Delivered" byName={t.deliveredByName} at={t.deliveredAt} />
         <Step label="Office received" byName={t.receivedByName} at={t.receivedAt} />
         {t.status === "CANCELLED" && t.cancelledByName && <span className="text-[11px] text-muted-foreground">Cancelled by {t.cancelledByName}</span>}
+        {t.status === "CANCELLED" && admin && (
+          <Button size="sm" variant="ghost" className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground hover:text-destructive" disabled={busy} onClick={() => run(() => deleteTransfer(t.id))}><Trash2 className="h-3.5 w-3.5" /> Delete</Button>
+        )}
       </div>
 
       {active && (
@@ -136,6 +139,9 @@ function TransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
         <Step label="Purchaser" byName={t.purchaserByName} at={t.purchaserAt} />
         {t.status === "RECEIVED" && <span className="text-[11px] text-emerald-700 dark:text-emerald-400">Received {fmtDT(t.receivedAt)}</span>}
         {t.status === "CANCELLED" && t.cancelledByName && <span className="text-[11px] text-muted-foreground">Cancelled by {t.cancelledByName}</span>}
+        {t.status === "CANCELLED" && admin && (
+          <Button size="sm" variant="ghost" className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground hover:text-destructive" disabled={busy} onClick={() => run(() => deleteTransfer(t.id))}><Trash2 className="h-3.5 w-3.5" /> Delete</Button>
+        )}
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -174,25 +180,28 @@ function TransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
   );
 }
 
-/** Purchaser: request a transfer of an item into the Office (starts the 5-step chain). */
+/** Purchaser: request a transfer of one or more items into the Office. */
 function RequestOfficeForm({ stockOptions }: { stockOptions: StockOption[] }) {
   const router = useRouter();
-  const [itemId, setItemId] = useState("");
-  const [qty, setQty] = useState("");
+  const [rows, setRows] = useState<{ itemId: string; qty: string }[]>([{ itemId: "", qty: "" }]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const picked = stockOptions.find((s) => s.id === itemId);
+
+  const setRow = (i: number, patch: Partial<{ itemId: string; qty: string }>) =>
+    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((rs) => [...rs, { itemId: "", qty: "" }]);
+  const removeRow = (i: number) => setRows((rs) => (rs.length > 1 ? rs.filter((_, j) => j !== i) : rs));
 
   async function submit() {
-    const n = Number(qty);
-    if (!itemId) { setErr("Pick an item."); return; }
-    if (!(n > 0)) { setErr("Enter a quantity."); return; }
+    const items = rows.map((r) => ({ stockItemId: r.itemId, qty: Number(r.qty) })).filter((r) => r.stockItemId && r.qty > 0);
+    if (items.length === 0) { setErr("Add at least one item with a quantity."); return; }
     setBusy(true); setErr(null); setMsg(null);
     try {
-      await requestOfficeTransfer({ stockItemId: itemId, qty: n, note: note.trim() || undefined });
-      setItemId(""); setQty(""); setNote(""); setMsg("Office transfer requested — awaiting Plant Manager approval.");
+      await requestOfficeTransfer({ items, note: note.trim() || undefined });
+      setRows([{ itemId: "", qty: "" }]); setNote("");
+      setMsg(`Requested ${items.length} item${items.length === 1 ? "" : "s"} to Office — awaiting Plant Manager approval.`);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to request");
@@ -202,21 +211,35 @@ function RequestOfficeForm({ stockOptions }: { stockOptions: StockOption[] }) {
   return (
     <div className="rounded-md border border-dashed p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Request transfer to Office</div>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-muted-foreground">
-          Item
-          <select className="mt-0.5 block h-8 min-w-[16rem] rounded-md border bg-background px-2 text-sm" value={itemId} onChange={(e) => setItemId(e.target.value)}>
-            <option value="">— pick an item —</option>
-            {stockOptions.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}{s.location ? ` · ${s.location}` : ""} (avail {fmtQty(s.available)} {s.unit})</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-xs text-muted-foreground">Qty<Input className="mt-0.5 h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} /></label>
+      <div className="space-y-2">
+        {rows.map((r, i) => {
+          const picked = stockOptions.find((s) => s.id === r.itemId);
+          return (
+            <div key={i} className="flex flex-wrap items-end gap-2">
+              <label className="text-xs text-muted-foreground">
+                {i === 0 ? "Item" : <span className="invisible">Item</span>}
+                <select className="mt-0.5 block h-8 min-w-[16rem] rounded-md border bg-background px-2 text-sm" value={r.itemId} onChange={(e) => setRow(i, { itemId: e.target.value })}>
+                  <option value="">— pick an item —</option>
+                  {stockOptions.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}{s.location ? ` · ${s.location}` : ""} (avail {fmtQty(s.available)} {s.unit})</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-muted-foreground">{i === 0 ? "Qty" : <span className="invisible">Qty</span>}<Input className="mt-0.5 h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={r.qty} onChange={(e) => setRow(i, { qty: e.target.value })} /></label>
+              {picked && <span className="pb-1.5 text-[11px] text-muted-foreground">{picked.location || "—"} → Office</span>}
+              {rows.length > 1 && (
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" title="Remove row" disabled={busy} onClick={() => removeRow(i)}><X className="h-4 w-4" /></Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={addRow}>+ Add item</Button>
         <label className="text-xs text-muted-foreground">Note<Input className="mt-0.5 h-8 w-40" placeholder="Optional" value={note} onChange={(e) => setNote(e.target.value)} /></label>
         <Button size="sm" className="h-8 text-xs" disabled={busy} onClick={submit}>{busy ? "Requesting…" : "Request"}</Button>
       </div>
-      {picked && <p className="mt-1 text-[11px] text-muted-foreground">From {picked.location || "—"} → Office. Stock is deducted only when the Warehouse releases it.</p>}
+      <p className="mt-1 text-[11px] text-muted-foreground">From each item’s location → Office. Stock is deducted only when the Warehouse releases it. Each item becomes its own request.</p>
       {err && <p className="mt-1 text-xs text-destructive">{err}</p>}
       {msg && <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">{msg}</p>}
     </div>
@@ -238,7 +261,7 @@ export function StockTransfers({
   const done = (t: StockTransferView) => t.status === "RECEIVED" || t.status === "CANCELLED";
   const active = transfers.filter((t) => !done(t));
   const past = transfers.filter(done);
-  const renderRow = (t: StockTransferView) => (t.isOffice ? <OfficeTransferRow key={t.id} t={t} /> : <TransferRow key={t.id} t={t} admin={admin} />);
+  const renderRow = (t: StockTransferView) => (t.isOffice ? <OfficeTransferRow key={t.id} t={t} admin={admin} /> : <TransferRow key={t.id} t={t} admin={admin} />);
   return (
     <div className="space-y-3">
       {canRequest && <RequestOfficeForm stockOptions={stockOptions} />}
