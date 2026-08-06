@@ -5,6 +5,7 @@
 import type { User } from "@prisma/client";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import { counterSaleRoleAllowed } from "@/lib/counter-sale";
 
 /** The signed-in user + whether they may use Counter Sales. */
@@ -13,6 +14,7 @@ export async function getCounterSaleViewer(): Promise<{ user: User | null; allow
   if (!user) return { user: null, allowed: false };
   const assignments = await getWorkflowRoles();
   const workflowRoles = WORKFLOW_ROLE_KEYS.filter((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey));
-  const allowed = counterSaleRoleAllowed({ admin: isAdmin(user), baseRole: user.role, workflowRoles: [...workflowRoles] });
+  const salesPersonnel = (await getSalesPersonnelIds()).includes(user.id);
+  const allowed = counterSaleRoleAllowed({ admin: isAdmin(user), baseRole: user.role, workflowRoles: [...workflowRoles], salesPersonnel });
   return { user, allowed };
 }

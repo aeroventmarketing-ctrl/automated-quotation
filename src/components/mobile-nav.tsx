@@ -9,10 +9,10 @@ import { visibleNav } from "./app-nav";
 import type { Role } from "@prisma/client";
 
 /** Hamburger menu for the mobile top bar (the sidebar is hidden below md). */
-export function MobileNav({ role, name, workflowRoles = [], dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; dashboardAlerts?: Record<string, boolean> }) {
+export function MobileNav({ role, name, workflowRoles = [], salesPersonnel = false, dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; salesPersonnel?: boolean; dashboardAlerts?: Record<string, boolean> }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const items = visibleNav(role, workflowRoles);
+  const items = visibleNav(role, workflowRoles, salesPersonnel);
 
   return (
     <div className="relative">

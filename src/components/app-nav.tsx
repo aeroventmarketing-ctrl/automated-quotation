@@ -83,7 +83,7 @@ export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }>
 };
 
 /** The nav items visible to a user given their base role + workflow roles. */
-export function visibleNav(role: Role, workflowRoles: string[]) {
+export function visibleNav(role: Role, workflowRoles: string[], salesPersonnel = false) {
   const hide = new Set<string>();
   const show = new Set<string>();
   for (const r of workflowRoles) {
@@ -95,6 +95,9 @@ export function visibleNav(role: Role, workflowRoles: string[]) {
   // Approver too (they record / hand over / clear walk-in sales), on top of the
   // Sales + Admin base roles.
   if (workflowRoles.some((r) => r === "accounting" || r === "warehouse" || r === "payment_approver")) show.add("/counter-sales");
+  // An Engineer marked "Credit as salesperson" (sales personnel) also sells, so
+  // give them the Counter Sales tab — only while that flag is ticked.
+  if (role === "ENGINEER" && salesPersonnel) show.add("/counter-sales");
   // Admins keep the standalone Sales Dashboard even when they also hold a
   // dashboard-consolidated workflow role (e.g. Accounting / Plant Manager).
   if (role === "ADMIN") hide.delete("/dashboard");
@@ -110,9 +113,9 @@ export function visibleNav(role: Role, workflowRoles: string[]) {
   return workflowRoles.length > 0 || role === "ADMIN" || role === "SALES" || role === "ENGINEER" ? [dash, ...items] : items;
 }
 
-export function AppNav({ role, name, workflowRoles = [], dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; dashboardAlerts?: Record<string, boolean> }) {
+export function AppNav({ role, name, workflowRoles = [], salesPersonnel = false, dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; salesPersonnel?: boolean; dashboardAlerts?: Record<string, boolean> }) {
   const pathname = usePathname();
-  const items = visibleNav(role, workflowRoles);
+  const items = visibleNav(role, workflowRoles, salesPersonnel);
 
   return (
     <div className="flex h-full flex-col">
