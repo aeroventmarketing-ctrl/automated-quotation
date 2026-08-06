@@ -234,7 +234,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
                     <Bookmark className="h-3.5 w-3.5" />
                     {item.reservations.length > 0 && <span className="absolute -right-1 -top-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-bold leading-none text-primary-foreground">{item.reservations.length}</span>}
                   </Button>
-                  <Button size="sm" variant={panel === "transfer" ? "default" : "outline"} className="h-7 w-7 p-0" title="Transfer to another location" aria-label="Transfer" onClick={() => setPanel((p) => (p === "transfer" ? "none" : "transfer"))}><ArrowLeftRight className="h-3.5 w-3.5" /></Button>
+                  <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled title="Transfers now go through Stock transfers → Request transfer to Office" aria-label="Transfer (moved to Stock transfers)"><ArrowLeftRight className="h-3.5 w-3.5" /></Button>
                   <Button size="sm" variant={panel === "edit" ? "default" : "outline"} className="h-7 w-7 p-0" title="Edit item details" aria-label="Edit" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}><Pencil className="h-3.5 w-3.5" /></Button>
                   <Button size="sm" variant={panel === "adjust" ? "default" : "outline"} className="h-7 w-7 p-0" title="Adjust — receive / issue / set quantity" aria-label="Adjust" onClick={() => setPanel((p) => (p === "adjust" ? "none" : "adjust"))}><SlidersHorizontal className="h-3.5 w-3.5" /></Button>
                 </>

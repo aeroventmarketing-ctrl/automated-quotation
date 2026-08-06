@@ -210,12 +210,13 @@ export async function cancelTransfer(transferId: string): Promise<void> {
 // move — Fans is credited its production cost at the eventual resale.
 
 const requestOfficeSchema = z.object({
-  stockItemId: z.string().min(1),
-  qty: z.number().positive(),
+  items: z.array(z.object({ stockItemId: z.string().min(1), qty: z.number().positive() })).min(1),
   note: z.string().trim().max(200).optional(),
 });
 
-/** Purchaser requests a transfer of an item to the Office (no stock moves yet). */
+/** Purchaser requests a transfer of one or more items to the Office — each item
+ *  becomes its own request row that runs the chain independently. No stock moves
+ *  until the Warehouse releases each. */
 export async function requestOfficeTransfer(input: z.infer<typeof requestOfficeSchema>): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -224,22 +225,38 @@ export async function requestOfficeTransfer(input: z.infer<typeof requestOfficeS
     throw new Error("Only the Purchaser or an admin can request a transfer to the Office.");
   }
   const d = requestOfficeSchema.parse(input);
-  const item = await prisma.stockItem.findUnique({ where: { id: d.stockItemId } });
-  if (!item) throw new Error("Stock item not found");
-  const fromLocation = item.location?.trim() || "—";
-  if (fromLocation.toLowerCase() === "office") throw new Error("This item is already at the Office.");
-  await prisma.stockTransfer.create({
-    data: {
-      stockItemId: item.id, itemName: item.name, unit: item.unit, qty: d.qty,
-      fromLocation, toLocation: "Office", status: "REQUESTED",
-      note: d.note || null, initiatedById: user.id, initiatedByName: user.name,
-    },
+  await prisma.$transaction(async (tx) => {
+    for (const line of d.items) {
+      const item = await tx.stockItem.findUnique({ where: { id: line.stockItemId } });
+      if (!item) throw new Error("Stock item not found");
+      const fromLocation = item.location?.trim() || "—";
+      if (fromLocation.toLowerCase() === "office") throw new Error(`${item.name} is already at the Office.`);
+      await tx.stockTransfer.create({
+        data: {
+          stockItemId: item.id, itemName: item.name, unit: item.unit, qty: line.qty,
+          fromLocation, toLocation: "Office", status: "REQUESTED",
+          note: d.note || null, initiatedById: user.id, initiatedByName: user.name,
+        },
+      });
+    }
   });
   await logActivity(user, {
     action: "inventory.transfer.request", category: "inventory",
-    summary: `Office transfer requested: ${d.qty} ${item.unit} ${item.name} (${fromLocation} → Office)`,
+    summary: `Office transfer requested: ${d.items.length} item${d.items.length === 1 ? "" : "s"} → Office`,
     entity: "inventory", href: "/inventory",
   });
+  revalidatePath("/inventory");
+}
+
+/** Admin: permanently delete a CANCELLED transfer record (clean-up only). */
+export async function deleteTransfer(transferId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can delete a transfer record.");
+  const t = await prisma.stockTransfer.findUnique({ where: { id: transferId } });
+  if (!t) return;
+  if (t.status !== "CANCELLED") throw new Error("Only a cancelled transfer can be deleted.");
+  await prisma.stockTransfer.delete({ where: { id: transferId } });
+  await logActivity(user, { action: "inventory.transfer.delete", category: "inventory", summary: `Deleted cancelled transfer: ${t.itemName}`, entity: "inventory", href: "/inventory" });
   revalidatePath("/inventory");
 }
 
