@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, Pencil, SlidersHorizontal, ChevronDown, ChevronRight } from "lucide-react";
+import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, Pencil, SlidersHorizontal, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -395,7 +395,6 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
   const toggleOne = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const searchParams = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
-  const [listCollapsed, setListCollapsed] = useState(false);
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("pcs");
   const [category, setCategory] = useState("");
@@ -772,22 +771,19 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
         )}
       </div>
 
-      {items.length > 0 && (
-        <button type="button" onClick={() => setListCollapsed((c) => !c)}
-          className="flex w-full items-center gap-1.5 border-t py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-          aria-expanded={!listCollapsed}>
-          {listCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {listCollapsed ? "Show" : "Hide"} item list ({filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ""})
-        </button>
-      )}
-
-      {listCollapsed ? null : items.length === 0 ? (
+      {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No stock items yet.</p>
-      ) : filtered.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {statusFilter ? `No ${statusFilter === "out" ? "out-of-stock" : "low-stock"} items.` : needsPrice && q === "" ? "Every item has a selling price set. 🎉" : `No items match “${query}”.`}
-        </p>
       ) : (
+        <details open className="group">
+          <summary className="flex w-full cursor-pointer list-none items-center gap-1.5 border-t py-2 text-xs font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+            <span className="group-open:hidden">Show</span><span className="hidden group-open:inline">Hide</span> item list ({filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ""})
+          </summary>
+          {filtered.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {statusFilter ? `No ${statusFilter === "out" ? "out-of-stock" : "low-stock"} items.` : needsPrice && q === "" ? "Every item has a selling price set. 🎉" : `No items match “${query}”.`}
+            </p>
+          ) : (
         <div className="overflow-x-auto">
           {q !== "" && <p className="mb-1 text-xs text-muted-foreground">{filtered.length} of {items.length} items</p>}
           {/* Compact density (tight cell padding + icon actions) so all columns
@@ -832,6 +828,8 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
             </TableBody>
           </Table>
         </div>
+          )}
+        </details>
       )}
     </div>
   );
