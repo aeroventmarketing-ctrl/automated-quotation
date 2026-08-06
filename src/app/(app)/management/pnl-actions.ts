@@ -255,7 +255,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         // cost. The cost is netted here (not booked as a separate expense); its
         // input VAT is still creditable. A service / charge line (no product
         // selected) carries no COGS — never cost-match it.
-        const service = isServiceLine(specs);
+        const service = isServiceLine(specs, it.descriptionSnapshot);
         const hit = service ? null : officeCostOfLine(specs, haystack);
         const cost = hit ? round2(hit.unitCost * it.qty) : 0;
         sales.office = round2(sales.office + round2(net - cost));
@@ -614,7 +614,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       let officeCost: number | null = null;
       let deptShare = 0;
       let officeShare = 0;
-      const service = isServiceLine(specs);
+      const service = isServiceLine(specs, it.descriptionSnapshot);
       if (routing === "fan") {
         cogs = round2(Math.min(Math.max(cogsOf(specs), 0), net));
         deptShare = cogs;
