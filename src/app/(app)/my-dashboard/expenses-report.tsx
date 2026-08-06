@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Search, ArrowUp, ArrowDown, FileSpreadsheet, FileText } from "lucide-react";
+import { Search, ArrowUp, ArrowDown, FileSpreadsheet, FileText, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
@@ -83,6 +83,14 @@ export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
             <input type="date" value={to} min={from} onChange={(e) => reload(from, e.target.value)} className="h-9 rounded-md border bg-background px-2 text-sm text-foreground" />
           </label>
           <div className="ml-auto flex items-center gap-2">
+            <a
+              href={`/my-dashboard/expenses/pdf?${exportQs}&view=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex h-9 items-center gap-1.5 rounded-md border bg-background px-3 text-xs font-medium hover:bg-accent ${view.count === 0 ? "pointer-events-none opacity-50" : ""}`}
+            >
+              <Eye className="h-3.5 w-3.5" /> View
+            </a>
             <a
               href={`/my-dashboard/expenses/xlsx?${exportQs}`}
               className={`inline-flex h-9 items-center gap-1.5 rounded-md border bg-background px-3 text-xs font-medium hover:bg-accent ${view.count === 0 ? "pointer-events-none opacity-50" : ""}`}
