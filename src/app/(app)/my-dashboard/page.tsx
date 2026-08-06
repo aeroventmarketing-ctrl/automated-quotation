@@ -18,6 +18,8 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
+import { getExpensesReport } from "../management/pnl-actions";
+import { ExpensesReport } from "./expenses-report";
 
 export const dynamic = "force-dynamic";
 
@@ -303,6 +305,17 @@ export default async function MyDashboardPage() {
     </Card>
   ) : null;
 
+  // Expenses records report — Accounting & admin only. Defaults to the current
+  // month (Manila); the component re-fetches when the range changes.
+  const expensesReportCard = (admin || isAccounting)
+    ? await (async () => {
+        const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const monthStart = `${phToday.slice(0, 7)}-01`;
+        const initial = await getExpensesReport(monthStart, phToday).catch(() => null);
+        return initial ? <ExpensesReport initial={initial} /> : null;
+      })()
+    : null;
+
   const productionCard = <ProductionStatusCard status={production} maskClient={maskProdClient} />;
 
   // Your recent activity — progress / things you've done.
@@ -357,6 +370,7 @@ export default async function MyDashboardPage() {
         <CashVouchersCard data={finance} />
         <FinanceStatsRow data={finance} />
         {poSummaryCard}
+        {expensesReportCard}
         {productionCard}
         {inventoryCard}
         {materialsCard}
@@ -379,6 +393,7 @@ export default async function MyDashboardPage() {
       {ordersGrid}
       {pendingCard}
       {poSummaryCard}
+      {expensesReportCard}
       {materialsCard}
       {returnsCard}
       {activityCard}
