@@ -1,7 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { round2, readPricing, applyPricing, pricingForVatMode, type PricingAdjust } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { saleFromClassification } from "@/lib/sale";
@@ -750,4 +751,131 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
 
   pricingAudit.sort((a, b) => a.quoteNumber.localeCompare(b.quoteNumber));
   return { from: lo, to: hi, sales, expenses, vatByDept, vatOutputByOrder, vatInputBySupplier, markupIncome, clientDiscounts, markupByOrder, discountByOrder, pricingAudit };
+}
+
+// ── Expenses records report ─────────────────────────────────────────────────
+// A flat, filterable list of every expense record recognised in a date range —
+// material Purchase Orders, Cash Vouchers, Payroll, and inter-department Stock
+// transfers — for the Accounting My Dashboard and the admin Production Dashboard.
+
+export interface ExpenseRecord {
+  id: string;
+  date: string; // Manila YYYY-MM-DD (payroll: YYYY-MM)
+  source: "Purchase order" | "Cash voucher" | "Payroll" | "Stock transfer";
+  ref: string;
+  dept: DeptKey;
+  deptLabel: string;
+  who: string; // who released / created it
+  detail: string; // supplier / purpose / route — extra context (searchable)
+  amount: number; // net of VAT (POs); face value otherwise
+  href: string | null;
+}
+
+export interface ExpensesReport {
+  from: string;
+  to: string;
+  records: ExpenseRecord[];
+  total: number;
+}
+
+export async function getExpensesReport(from: string, to: string): Promise<ExpensesReport> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey))) {
+    throw new Error("Only Accounting or an admin can view the expenses report.");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error("Invalid date range.");
+  const [lo0, hi] = from <= to ? [from, to] : [to, from];
+  const goLiveFloor = await goLiveFloorYMD();
+  const lo = goLiveFloor && goLiveFloor > lo0 ? goLiveFloor : lo0;
+  const { supplierVatInclusive } = await buildCostResolvers();
+  const cutoff = testModeCreatedAtFilter(await getTestMode());
+  const deptLabelOf = (d: string) => (d in DEPT_LABEL ? DEPT_LABEL[d as DeptKey] : d);
+
+  const records: ExpenseRecord[] = [];
+
+  // 1. Material Purchase Orders — net of VAT, recognised on the cash-released date.
+  const prs = await prisma.purchaseRequest.findMany({
+    where: { dept: { not: null }, status: { not: "CANCELLED" }, ...(cutoff ? { createdAt: cutoff } : {}) },
+    select: { id: true, dept: true, po: true, chainLog: true, quotationId: true, createdByName: true },
+  });
+  for (const pr of prs) {
+    const log = coerceChainLog(pr.chainLog);
+    const releasedAt = log.release_cash?.at;
+    if (!releasedAt || !ymdInRange(manilaYMD(releasedAt), lo, hi)) continue;
+    const dept = pr.dept as DeptKey;
+    if (!PROD_DEPT_KEYS.has(dept)) continue;
+    const po = coercePurchaseOrder(pr.po);
+    if (!po) continue;
+    const incl = supplierVatInclusive(po.supplier.company);
+    const gross = poTotals(po).total;
+    const net = incl ? round2(gross / (1 + VAT_RATE)) : round2(gross);
+    records.push({
+      id: `po-${pr.id}`, date: manilaYMD(releasedAt), source: "Purchase order", ref: po.poNumber || "—",
+      dept, deptLabel: DEPT_LABEL[dept], who: log.release_cash?.byName || pr.createdByName || "—",
+      detail: po.supplier.company || "", amount: net,
+      href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+    });
+  }
+
+  // 2. Cash Vouchers — released cash; dept or Office when unassigned.
+  const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
+  const crs = await prisma.cashRequest.findMany({
+    where: { releasedAt: { not: null }, ...(cutoff ? { createdAt: cutoff } : {}) },
+    select: { id: true, number: true, dept: true, amount: true, releasedAt: true, status: true, purpose: true, category: true, releasedByName: true, requestedByName: true },
+  });
+  for (const cr of crs) {
+    if (!RELEASED.has(cr.status) || !cr.releasedAt) continue;
+    const ymd = manilaYMD(cr.releasedAt.toISOString());
+    if (!ymdInRange(ymd, lo, hi)) continue;
+    const dept: DeptKey = cr.dept && PROD_DEPT_KEYS.has(cr.dept as DeptKey) ? (cr.dept as DeptKey) : "office";
+    records.push({
+      id: `cash-${cr.id}`, date: ymd, source: "Cash voucher", ref: cr.number || "—",
+      dept, deptLabel: DEPT_LABEL[dept], who: cr.releasedByName || cr.requestedByName || "—",
+      detail: cr.purpose || cr.category || "", amount: round2(Number(cr.amount) || 0), href: "/cash-requests",
+    });
+  }
+
+  // 3. Payroll — months overlapping the range.
+  try {
+    const months: string[] = [];
+    for (let d = new Date(`${lo.slice(0, 7)}-01T00:00:00Z`); d <= new Date(`${hi.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 1)) {
+      months.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+    }
+    const rows = await prisma.payroll.findMany({ where: { month: { in: months } } });
+    for (const p of rows) {
+      const amt = Number(p.amount) || 0;
+      if (amt <= 0) continue;
+      records.push({
+        id: `pay-${p.id}`, date: p.month, source: "Payroll", ref: p.month,
+        dept: p.dept as DeptKey, deptLabel: deptLabelOf(p.dept), who: p.createdByName || "—",
+        detail: p.note || "Departmental payroll", amount: round2(amt), href: null,
+      });
+    }
+  } catch {
+    // payroll table not migrated — skip
+  }
+
+  // 4. Inter-department stock transfers — the requesting department's purchase side.
+  const transfers = await prisma.deptStockTransfer.findMany({
+    where: cutoff ? { createdAt: cutoff } : undefined,
+    select: { id: true, at: true, quotationId: true, fromDept: true, toDept: true, description: true, value: true, byName: true },
+  });
+  for (const t of transfers) {
+    const ymd = manilaYMD(t.at.toISOString());
+    if (!ymdInRange(ymd, lo, hi)) continue;
+    const to2 = t.toDept as DeptKey;
+    const value = Number(t.value) || 0;
+    if (value <= 0 || !(t.fromDept in DEPT_LABEL) || !(t.toDept in DEPT_LABEL)) continue;
+    records.push({
+      id: `xfer-${t.id}`, date: ymd, source: "Stock transfer", ref: t.description || "—",
+      dept: to2, deptLabel: DEPT_LABEL[to2], who: t.byName || "—",
+      detail: `${deptLabelOf(t.fromDept)} → ${deptLabelOf(t.toDept)}`, amount: value,
+      href: t.quotationId ? `/orders/${t.quotationId}` : "/inventory",
+    });
+  }
+
+  records.sort((a, b) => b.date.localeCompare(a.date) || a.dept.localeCompare(b.dept));
+  const total = round2(records.reduce((s, r) => s + r.amount, 0));
+  return { from: lo, to: hi, records, total };
 }
