@@ -12,9 +12,16 @@ import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
 import { BulkImport } from "./bulk-import";
 import { createStockItem, adjustStock, updateStockItemPrices, releaseReservation, assignMissingSkus, mergeDuplicateStockItems, removeStockItems, clearAllStockItems } from "./actions";
-import { proposeStockAction } from "./stock-action-actions";
+import { proposeStockAction, type StockActionResult } from "./stock-action-actions";
 import { PendingChip, PendingStockActions } from "./pending-stock-actions";
 import type { StockActionView, StockDoc } from "@/lib/stock-action";
+
+/** Re-throw a proposal's real reason so the caller's catch shows it (Server
+ *  Actions strip thrown messages in production, so they're returned instead). */
+async function unwrap(p: Promise<StockActionResult>): Promise<void> {
+  const r = await p;
+  if (!r.ok) throw new Error(r.error);
+}
 
 interface Reservation {
   id: string;
@@ -149,10 +156,10 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   function apply() {
     const n = Number(qty);
     if (!Number.isFinite(n) || n < 0) { setErr("Enter a quantity."); return; }
-    run(() => proposeStockAction("ADJUST", item.id, { kind, qty: n, reason }).then(() => { setQty(""); setReason(""); }));
+    run(() => unwrap(proposeStockAction("ADJUST", item.id, { kind, qty: n, reason })).then(() => { setQty(""); setReason(""); }));
   }
   function saveMeta() {
-    run(() => proposeStockAction("EDIT", item.id, { category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
+    run(() => unwrap(proposeStockAction("EDIT", item.id, { category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 })));
   }
   function savePrices() {
     run(() => updateStockItemPrices({ stockItemId: item.id, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
@@ -161,7 +168,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
     const n = Number(resvQty);
     if (!(n > 0)) { setErr("Enter a quantity."); return; }
     if (resvRef.trim() === "") { setErr("Enter what it's reserved for."); return; }
-    run(() => proposeStockAction("RESERVE", item.id, { qty: n, forRef: resvRef, note: resvNote || undefined, validUntil: resvValid || undefined }).then(() => { setResvQty(""); setResvRef(""); setResvNote(""); setResvValid(""); }));
+    run(() => unwrap(proposeStockAction("RESERVE", item.id, { qty: n, forRef: resvRef, note: resvNote || undefined, validUntil: resvValid || undefined })).then(() => { setResvQty(""); setResvRef(""); setResvNote(""); setResvValid(""); }));
   }
   async function uploadProof(file: File) {
     setBusy(true); setErr(null);
@@ -182,7 +189,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
     if (!(n > 0)) { setErr("Enter a quantity."); return; }
     if (xferTo.trim() === "") { setErr("Choose a destination location."); return; }
     if (!xferProof) { setErr("Upload the stock transfer form first."); return; }
-    run(() => proposeStockAction("TRANSFER", item.id, { qty: n, toLocation: xferTo.trim(), note: xferNote || undefined, proof: xferProof }).then(() => { setXferQty(""); setXferTo(""); setXferNote(""); setXferProof(null); }));
+    run(() => unwrap(proposeStockAction("TRANSFER", item.id, { qty: n, toLocation: xferTo.trim(), note: xferNote || undefined, proof: xferProof })).then(() => { setXferQty(""); setXferTo(""); setXferNote(""); setXferProof(null); }));
   }
 
   return (

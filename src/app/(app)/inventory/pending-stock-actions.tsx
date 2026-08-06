@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 import { BellRing, Eye, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { StockActionView } from "@/lib/stock-action";
-import { approveStockAction, rejectStockAction } from "./stock-action-actions";
+import { approveStockAction, rejectStockAction, type StockActionResult } from "./stock-action-actions";
+
+/** Re-throw a failed action's real reason so the caller's catch can display it.
+ *  (Server Actions strip thrown messages in production, so we return them.) */
+async function unwrap(p: Promise<StockActionResult>): Promise<void> {
+  const r = await p;
+  if (!r.ok) throw new Error(r.error);
+}
 
 const viewUrl = (path: string, name: string) => `/api/transfer-uploads/view?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}`;
 
@@ -72,11 +79,11 @@ export function PendingStockActions({ pending }: { pending: StockActionView[] })
             </div>
             {(a.canApproveWarehouse || a.canApprovePurchaser) && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Button size="sm" className="h-7 text-xs" disabled={busy === a.id + "ok"} onClick={() => run(a.id + "ok", () => approveStockAction(a.id))}>
+                <Button size="sm" className="h-7 text-xs" disabled={busy === a.id + "ok"} onClick={() => run(a.id + "ok", () => unwrap(approveStockAction(a.id)))}>
                   <Check className="mr-1 h-3.5 w-3.5" /> {busy === a.id + "ok" ? "…" : "Approve"}
                 </Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy === a.id + "no"}
-                  onClick={() => { const r = window.prompt("Reason for rejection (optional):", "") ?? undefined; run(a.id + "no", () => rejectStockAction(a.id, r)); }}>
+                  onClick={() => { const r = window.prompt("Reason for rejection (optional):", "") ?? undefined; run(a.id + "no", () => unwrap(rejectStockAction(a.id, r))); }}>
                   <X className="mr-1 h-3.5 w-3.5" /> Reject
                 </Button>
               </div>
