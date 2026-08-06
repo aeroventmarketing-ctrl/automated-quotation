@@ -676,7 +676,7 @@ export default async function ManagementPage() {
         </CardHeader>
         <CardContent>
           {initialPnl ? (
-            <DepartmentPnl initial={initialPnl} />
+            <DepartmentPnl initial={initialPnl} admin={isAdmin(viewer)} />
           ) : (
             <p className="py-6 text-center text-sm text-muted-foreground">The departmental P&amp;L couldn&rsquo;t be loaded.</p>
           )}

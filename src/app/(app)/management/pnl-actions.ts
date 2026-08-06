@@ -1,7 +1,9 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { poMemberIds } from "@/lib/purchase-batch";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { round2, readPricing, applyPricing, pricingForVatMode, type PricingAdjust } from "@/lib/quote";
 import { config } from "@/lib/config";
@@ -407,6 +409,12 @@ export interface PnlSaleLine {
   officeCost: number | null; // supplier cost booked to Office (bought-in), null if unmatched
   service?: boolean; // typed service / charge line (no product) — carries no COGS by design
 }
+/** The underlying record a P&L row deletes (admin "delete test row" tool). */
+export type PnlDeleteKind = "quotation" | "countersale" | "transfer" | "po" | "voucher" | "payroll";
+export interface PnlDeleteRef {
+  kind: PnlDeleteKind;
+  id: string;
+}
 export interface PnlSaleDetail {
   quotationId: string;
   href?: string; // link target (defaults to the quotation; set for counter sales)
@@ -417,6 +425,7 @@ export interface PnlSaleDetail {
   basis: "PO date" | "Payment date" | "Transfer";
   net: number;
   lines: PnlSaleLine[];
+  del?: PnlDeleteRef; // the record this sale row deletes (admin only)
 }
 export interface PnlExpenseItem {
   dept: DeptKey;
@@ -424,6 +433,7 @@ export interface PnlExpenseItem {
   ref: string;
   date: string; // Manila YYYY-MM-DD (or YYYY-MM for payroll)
   amount: number;
+  del?: PnlDeleteRef; // the record this expense row deletes (admin only)
 }
 export type PnlVatByDept = Record<DeptKey, { output: number; input: number; payable: number }>;
 /** Output VAT contributed by one order (quotation / counter sale). */
@@ -476,6 +486,64 @@ export interface PnlDetail {
   markupByOrder: PnlOrderAmount[]; // mark-up income per order (clickable)
   discountByOrder: PnlOrderAmount[]; // client discount per order (clickable)
   pricingAudit: PnlPricingAudit[]; // per-order mark-up/discount inputs → net (self-check)
+}
+
+/**
+ * Permanently delete a record that feeds a P&L row — for clearing out test data.
+ * Admin only, irreversible. Each kind maps to its own table; a quotation / counter
+ * sale / combined-PO cascades to its own children (items, commission, PO members).
+ * A stock-transfer delete removes both its sale (producing dept) and expense
+ * (requesting dept) sides at once. Returns the reason on failure rather than
+ * throwing, so the manager sees it (a thrown Server Action error is masked in
+ * production).
+ */
+export async function deletePnlRecord(
+  kind: PnlDeleteKind,
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!isAdmin(user)) throw new Error("Only an admin can delete P&L records.");
+    if (!id) throw new Error("Missing record id.");
+    switch (kind) {
+      case "quotation":
+        await prisma.quotation.delete({ where: { id } });
+        revalidatePath("/orders");
+        revalidatePath("/quotations");
+        revalidatePath("/dashboard");
+        break;
+      case "countersale":
+        await prisma.counterSale.delete({ where: { id } });
+        revalidatePath("/counter-sales");
+        break;
+      case "transfer":
+        await prisma.deptStockTransfer.delete({ where: { id } });
+        revalidatePath("/inventory");
+        break;
+      case "voucher":
+        await prisma.cashRequest.delete({ where: { id } });
+        revalidatePath("/cash-requests");
+        break;
+      case "payroll":
+        await prisma.payroll.delete({ where: { id } });
+        break;
+      case "po": {
+        // Delete the whole PO — every purchase-request member of a combined PO.
+        const pr = await prisma.purchaseRequest.findUnique({ where: { id } });
+        if (!pr) throw new Error("Purchase request not found.");
+        const ids = poMemberIds(pr.po);
+        await prisma.purchaseRequest.deleteMany({ where: { id: { in: ids.length ? ids : [pr.id] } } });
+        revalidatePath("/purchasing");
+        break;
+      }
+      default:
+        throw new Error("Unknown record type.");
+    }
+    revalidatePath("/management");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete." };
+  }
 }
 
 /**
@@ -610,6 +678,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       basis: sale!.arrangement === "terms" ? "PO date" : "Payment date",
       net: round2(lines.reduce((a, l) => a + l.net, 0)),
       lines,
+      del: { kind: "quotation", id: q.id },
     });
     if (orderOutputVat > 0) vatOutputByOrder.push({ quotationId: q.id, quoteNumber: q.quoteNumber, customer, output: orderOutputVat });
   }
@@ -648,6 +717,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       basis: "Payment date",
       net,
       lines,
+      del: { kind: "countersale", id: cs.id },
     });
   }
   sales.sort((a, b) => a.recognizedAt.localeCompare(b.recognizedAt) || a.quoteNumber.localeCompare(b.quoteNumber));
@@ -656,7 +726,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const expenses: PnlExpenseItem[] = [];
   const prs = await prisma.purchaseRequest.findMany({
     where: { dept: { not: null }, status: { not: "CANCELLED" }, ...(cutoff ? { createdAt: cutoff } : {}) },
-    select: { dept: true, po: true, chainLog: true },
+    select: { id: true, dept: true, po: true, chainLog: true },
   });
   for (const pr of prs) {
     const releasedAt = coerceChainLog(pr.chainLog).release_cash?.at;
@@ -668,7 +738,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     const incl = supplierVatInclusive(po.supplier.company);
     const gross = poTotals(po).total;
     const net = incl ? round2(gross / (1 + VAT_RATE)) : round2(gross);
-    expenses.push({ dept, source: "Purchase order", ref: po.poNumber, date: manilaYMD(releasedAt), amount: net });
+    expenses.push({ dept, source: "Purchase order", ref: po.poNumber, date: manilaYMD(releasedAt), amount: net, del: { kind: "po", id: pr.id } });
     if (incl) {
       const v = round2(net * VAT_RATE);
       inputVatByDept[dept] = round2(inputVatByDept[dept] + v);
@@ -678,13 +748,13 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const crs = await prisma.cashRequest.findMany({
     where: { releasedAt: { not: null }, ...(cutoff ? { createdAt: cutoff } : {}) },
-    select: { number: true, dept: true, amount: true, releasedAt: true, status: true },
+    select: { id: true, number: true, dept: true, amount: true, releasedAt: true, status: true },
   });
   for (const cr of crs) {
     if (!RELEASED.has(cr.status) || !cr.releasedAt) continue;
     if (!ymdInRange(manilaYMD(cr.releasedAt.toISOString()), lo, hi)) continue;
     const dept: DeptKey = cr.dept && PROD_DEPT_KEYS.has(cr.dept as DeptKey) ? (cr.dept as DeptKey) : "office";
-    expenses.push({ dept, source: "Cash voucher", ref: cr.number, date: manilaYMD(cr.releasedAt.toISOString()), amount: round2(Number(cr.amount) || 0) });
+    expenses.push({ dept, source: "Cash voucher", ref: cr.number, date: manilaYMD(cr.releasedAt.toISOString()), amount: round2(Number(cr.amount) || 0), del: { kind: "voucher", id: cr.id } });
   }
   try {
     const months: string[] = [];
@@ -695,7 +765,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     for (const p of rows) {
       const amt = Number(p.amount) || 0;
       if (amt <= 0) continue;
-      expenses.push({ dept: p.dept as DeptKey, source: "Payroll", ref: p.month, date: p.month, amount: round2(amt) });
+      expenses.push({ dept: p.dept as DeptKey, source: "Payroll", ref: p.month, date: p.month, amount: round2(amt), del: { kind: "payroll", id: p.id } });
     }
   } catch {
     // payroll table not migrated — skip
@@ -728,9 +798,10 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       basis: "Transfer",
       net: value,
       lines: [{ label: t.description, qty: Number(t.qty) || 0, net: value, routing: "production_markup", dept: from, deptShare: value, officeShare: 0, cogs: null, officeCost: null }],
+      del: { kind: "transfer", id: t.id },
     });
     // Requesting-dept side — a purchase/expense.
-    expenses.push({ dept: to, source: "Stock transfer", ref: t.description, date: ymd, amount: value });
+    expenses.push({ dept: to, source: "Stock transfer", ref: t.description, date: ymd, amount: value, del: { kind: "transfer", id: t.id } });
   }
   sales.sort((a, b) => a.recognizedAt.localeCompare(b.recognizedAt) || a.quoteNumber.localeCompare(b.quoteNumber));
   expenses.sort((a, b) => a.date.localeCompare(b.date) || a.dept.localeCompare(b.dept));

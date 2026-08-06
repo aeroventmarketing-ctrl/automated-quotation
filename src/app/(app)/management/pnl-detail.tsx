@@ -1,10 +1,40 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
-import { getPnlDetail, type PnlDetail, type PnlSaleDetail, type PnlSaleLine, type PnlOrderAmount, type PnlPricingAudit } from "./pnl-actions";
+import { Trash2 } from "lucide-react";
+import { getPnlDetail, deletePnlRecord, type PnlDetail, type PnlSaleDetail, type PnlSaleLine, type PnlOrderAmount, type PnlPricingAudit, type PnlDeleteRef } from "./pnl-actions";
 import { DEPT_LABEL, type DeptKey } from "@/lib/department-pnl";
 import { formatCurrency, cn } from "@/lib/utils";
+
+/**
+ * Admin-only "delete test row" control. Permanently removes the underlying
+ * record (order / counter sale / PO / voucher / payroll / transfer) and, on
+ * success, asks the parent to re-pull the P&L. Shows the reason inline on
+ * failure (the action returns it, since a thrown Server Action error is masked
+ * in production).
+ */
+function DeleteButton({ del, label, onChanged }: { del: PnlDeleteRef; label: string; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function run() {
+    if (!window.confirm(`Permanently delete ${label}?\n\nThis removes the underlying record from the database and cannot be undone.`)) return;
+    setBusy(true);
+    setErr(null);
+    const r = await deletePnlRecord(del.kind, del.id);
+    if (r.ok) { onChanged(); return; } // parent re-renders with fresh data
+    setErr(r.error);
+    setBusy(false);
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <button type="button" disabled={busy} onClick={run} title={`Delete ${label}`} className="text-muted-foreground hover:text-destructive disabled:opacity-50">
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+      {err && <span className="text-[10px] text-destructive">{err}</span>}
+    </span>
+  );
+}
 
 const VAT_MODE_LABEL: Record<string, string> = { INCLUSIVE: "Inclusive", EXCLUSIVE: "Excl. ÷1.12", EXCLUSIVE_PLUS: "Excl. +12%" };
 const r2 = (n: number) => Math.round((n + 1e-9) * 100) / 100;
@@ -113,7 +143,7 @@ function CostNote({ l }: { l: PnlSaleLine }) {
 }
 
 /** The full audit view — every sale and every expense (the Company drill-down). */
-export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
+export function PnlFullDetail({ detail, admin = false, onChanged = () => {} }: { detail: PnlDetail; admin?: boolean; onChanged?: () => void }) {
   const markupMap = new Map(detail.markupByOrder.map((o) => [o.quotationId, o.amount]));
   return (
     <div className="space-y-5">
@@ -142,7 +172,14 @@ export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
                     <Fragment key={s.quoteNumber}>
                       {s.lines.map((l, i) => (
                         <tr key={i} className={i === 0 ? "border-t" : ""}>
-                          <td className="py-1 pr-2 align-top">{i === 0 && <SaleRef s={s} />}</td>
+                          <td className="py-1 pr-2 align-top">
+                            {i === 0 && (
+                              <div className="flex items-start gap-1.5">
+                                <SaleRef s={s} />
+                                {admin && s.del && <DeleteButton del={s.del} label={`sale ${s.quoteNumber}`} onChanged={onChanged} />}
+                              </div>
+                            )}
+                          </td>
                           <td className="py-1 px-2 align-top">{l.label}{l.qty > 1 ? ` ×${l.qty}` : ""}</td>
                           <td className="py-1 px-2 align-top text-muted-foreground">{ROUTING_LABEL[l.routing] ?? l.routing}</td>
                           <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(l.net)}</td>
@@ -172,13 +209,13 @@ export function PnlFullDetail({ detail }: { detail: PnlDetail }) {
           </div>
         )}
       </div>
-      <ExpenseTable items={detail.expenses} extra={{ label: "Client Discount", rows: detail.discountByOrder }} />
+      <ExpenseTable items={detail.expenses} extra={{ label: "Client Discount", rows: detail.discountByOrder }} admin={admin} onChanged={onChanged} />
       {detail.pricingAudit.length > 0 && <PricingAudit rows={detail.pricingAudit} />}
     </div>
   );
 }
 
-function ExpenseTable({ items, extra }: { items: PnlDetail["expenses"]; extra?: { label: string; rows: PnlOrderAmount[] } | null }) {
+function ExpenseTable({ items, extra, admin = false, onChanged = () => {} }: { items: PnlDetail["expenses"]; extra?: { label: string; rows: PnlOrderAmount[] } | null; admin?: boolean; onChanged?: () => void }) {
   const extraRows = extra?.rows ?? [];
   const count = items.length + extraRows.length;
   return (
@@ -196,6 +233,7 @@ function ExpenseTable({ items, extra }: { items: PnlDetail["expenses"]; extra?: 
                 <th className="py-1.5 px-2 text-left font-medium">Ref</th>
                 <th className="py-1.5 px-2 text-left font-medium">Department</th>
                 <th className="py-1.5 pl-2 text-right font-medium">Amount</th>
+                {admin && <th className="py-1.5 pl-2 w-6" />}
               </tr>
             </thead>
             <tbody>
@@ -206,6 +244,7 @@ function ExpenseTable({ items, extra }: { items: PnlDetail["expenses"]; extra?: 
                   <td className="py-1 px-2 font-mono text-[11px]">{e.ref}</td>
                   <td className="py-1 px-2">{DEPT_LABEL[e.dept]}</td>
                   <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(e.amount)}</td>
+                  {admin && <td className="py-1 pl-2 text-right">{e.del && <DeleteButton del={e.del} label={`${e.source} ${e.ref}`} onChanged={onChanged} />}</td>}
                 </tr>
               ))}
               {extraRows.map((r) => (
@@ -218,6 +257,7 @@ function ExpenseTable({ items, extra }: { items: PnlDetail["expenses"]; extra?: 
                   </td>
                   <td className="py-1 px-2">{DEPT_LABEL.office}</td>
                   <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(r.amount)}</td>
+                  {admin && <td className="py-1 pl-2" />}
                 </tr>
               ))}
             </tbody>
@@ -248,7 +288,7 @@ function VatTiles({ output, input, payable }: { output: number; input: number; p
 }
 
 /** One department's drill-down: its VAT, its sales lines, and its expenses. */
-export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: DeptKey }) {
+export function DeptDrill({ detail, deptKey, admin = false, onChanged = () => {} }: { detail: PnlDetail; deptKey: DeptKey; admin?: boolean; onChanged?: () => void }) {
   const isOffice = deptKey === "office";
   const lineCogs = (l: PnlSaleLine) => (l.routing === "office_full" && l.officeCost != null ? l.officeCost : 0);
   // Group the department's sale lines per order (quote number) so each order gets
@@ -302,7 +342,14 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
                     <Fragment key={`${g.s.quoteNumber}-${gi}`}>
                       {g.lines.map((r, i) => (
                         <tr key={i} className={cn("align-top", i === 0 && "border-t")}>
-                          <td className="py-1 pr-2">{i === 0 && <SaleRef s={g.s} />}</td>
+                          <td className="py-1 pr-2">
+                            {i === 0 && (
+                              <div className="flex items-start gap-1.5">
+                                <SaleRef s={g.s} />
+                                {admin && g.s.del && <DeleteButton del={g.s.del} label={`sale ${g.s.quoteNumber}`} onChanged={onChanged} />}
+                              </div>
+                            )}
+                          </td>
                           <td className="py-1 px-2">{r.l.label}{r.l.qty > 1 ? ` ×${r.l.qty}` : ""}<span className="ml-1 text-[10px] text-muted-foreground">{ROUTING_LABEL[r.l.routing] ?? ""}</span></td>
                           <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(r.l.net)}</td>
                           {isOffice && (
@@ -345,7 +392,7 @@ export function DeptDrill({ detail, deptKey }: { detail: PnlDetail; deptKey: Dep
         )}
       </div>
 
-      <ExpenseTable items={exp} extra={isOffice ? { label: "Client Discount", rows: detail.discountByOrder } : null} />
+      <ExpenseTable items={exp} extra={isOffice ? { label: "Client Discount", rows: detail.discountByOrder } : null} admin={admin} onChanged={onChanged} />
     </div>
   );
 }
