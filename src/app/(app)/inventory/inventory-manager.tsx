@@ -774,11 +774,16 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No stock items yet.</p>
       ) : (
-        <details open className="group">
-          <summary className="flex w-full cursor-pointer list-none items-center gap-1.5 border-t py-2 text-xs font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
-            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
-            <span className="group-open:hidden">Show</span><span className="hidden group-open:inline">Hide</span> item list ({filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ""})
-          </summary>
+        <div>
+          {/* Pure-CSS collapse: an uncontrolled checkbox toggled by the label, so
+              React never manages open/closed state (a statically-open <details>
+              re-expands on re-render; this can't). Starts open (defaultChecked). */}
+          <input type="checkbox" id="inv-list-toggle" defaultChecked className="peer hidden" />
+          <label htmlFor="inv-list-toggle" className="flex w-full cursor-pointer select-none items-center gap-1.5 border-t py-2 text-xs font-medium text-muted-foreground hover:text-foreground peer-checked:[&_svg]:rotate-90">
+            <ChevronRight className="h-3.5 w-3.5 transition-transform" />
+            Item list ({filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ""}) — click to show / hide
+          </label>
+          <div className="hidden peer-checked:block">
           {filtered.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               {statusFilter ? `No ${statusFilter === "out" ? "out-of-stock" : "low-stock"} items.` : needsPrice && q === "" ? "Every item has a selling price set. 🎉" : `No items match “${query}”.`}
@@ -829,7 +834,8 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
           </Table>
         </div>
           )}
-        </details>
+          </div>
+        </div>
       )}
     </div>
   );
