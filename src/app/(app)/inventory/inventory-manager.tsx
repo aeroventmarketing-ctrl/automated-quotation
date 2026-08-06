@@ -778,7 +778,7 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
           {/* Pure-CSS collapse: an uncontrolled checkbox toggled by the label, so
               React never manages open/closed state (a statically-open <details>
               re-expands on re-render; this can't). Starts open (defaultChecked). */}
-          <input type="checkbox" id="inv-list-toggle" defaultChecked className="peer hidden" />
+          <input type="checkbox" id="inv-list-toggle" className="peer hidden" />
           <label htmlFor="inv-list-toggle" className="flex w-full cursor-pointer select-none items-center gap-1.5 border-t py-2 text-xs font-medium text-muted-foreground hover:text-foreground peer-checked:[&_svg]:rotate-90">
             <ChevronRight className="h-3.5 w-3.5 transition-transform" />
             Item list ({filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ""}) — click to show / hide
