@@ -16,6 +16,24 @@ import {
   type TransferPayload,
 } from "@/lib/stock-action";
 
+/**
+ * Result of a stock-action server action. We RETURN the reason on failure rather
+ * than throw it: a thrown Server Action error has its message stripped in a
+ * production build ("An error occurred in the Server Components render…"), so the
+ * warehouse would never see why it failed (e.g. "Not enough stock"). A returned
+ * value is serialized intact, so the caller re-throws it client-side to display.
+ */
+export type StockActionResult = { ok: true } | { ok: false; error: string };
+
+const asResult = async (fn: () => Promise<void>): Promise<StockActionResult> => {
+  try {
+    await fn();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Something went wrong." };
+  }
+};
+
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
@@ -69,7 +87,10 @@ function summaryFor(kind: StockActionKind, item: { name: string; unit: string; q
 }
 
 /** Propose a stock action — held pending until a Warehouseman AND a Purchaser approve. */
-export async function proposeStockAction(kind: StockActionKind, stockItemId: string, payloadRaw: unknown): Promise<void> {
+export async function proposeStockAction(kind: StockActionKind, stockItemId: string, payloadRaw: unknown): Promise<StockActionResult> {
+  return asResult(() => doProposeStockAction(kind, stockItemId, payloadRaw));
+}
+async function doProposeStockAction(kind: StockActionKind, stockItemId: string, payloadRaw: unknown): Promise<void> {
   const { user, p } = await viewerParties();
   if (!(p.admin || p.warehouse || p.purchaser)) {
     throw new Error("Only the Warehouseman, Purchaser or an admin can propose a stock action.");
@@ -150,7 +171,10 @@ export async function proposeStockAction(kind: StockActionKind, stockItemId: str
 }
 
 /** Fill the viewer's handshake slot; when both are filled, apply the change. */
-export async function approveStockAction(id: string): Promise<void> {
+export async function approveStockAction(id: string): Promise<StockActionResult> {
+  return asResult(() => doApproveStockAction(id));
+}
+async function doApproveStockAction(id: string): Promise<void> {
   const { user, p } = await viewerParties();
   let appliedSummary: string | null = null;
   await prisma.$transaction(async (tx) => {
@@ -198,7 +222,10 @@ export async function approveStockAction(id: string): Promise<void> {
 }
 
 /** Reject a pending action (either party or an admin). */
-export async function rejectStockAction(id: string, reason?: string): Promise<void> {
+export async function rejectStockAction(id: string, reason?: string): Promise<StockActionResult> {
+  return asResult(() => doRejectStockAction(id, reason));
+}
+async function doRejectStockAction(id: string, reason?: string): Promise<void> {
   const { user, p } = await viewerParties();
   if (!(p.admin || p.warehouse || p.purchaser)) throw new Error("You can't reject this action.");
   await prisma.stockAction.update({
