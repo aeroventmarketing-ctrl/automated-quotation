@@ -305,9 +305,10 @@ export default async function MyDashboardPage() {
     </Card>
   ) : null;
 
-  // Expenses records report — Accounting & admin only. Defaults to the current
-  // month (Manila); the component re-fetches when the range changes.
-  const expensesReportCard = (admin || isAccounting)
+  // Expenses records report — Accounting only here. (Admins see it on the
+  // Management Dashboard instead.) Defaults to the current month (Manila); the
+  // component re-fetches when the range changes.
+  const expensesReportCard = isAccounting
     ? await (async () => {
         const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
         const monthStart = `${phToday.slice(0, 7)}-01`;
@@ -393,7 +394,6 @@ export default async function MyDashboardPage() {
       {ordersGrid}
       {pendingCard}
       {poSummaryCard}
-      {expensesReportCard}
       {materialsCard}
       {returnsCard}
       {activityCard}
