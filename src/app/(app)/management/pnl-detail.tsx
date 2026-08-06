@@ -171,7 +171,8 @@ export function PnlFullDetail({ detail, admin = false, onChanged = () => {} }: {
                   return (
                     <Fragment key={s.quoteNumber}>
                       {s.lines.map((l, i) => (
-                        <tr key={i} className={i === 0 ? "border-t" : ""}>
+                        // Red row when Office books a negative margin (COGS &gt; selling net).
+                        <tr key={i} className={cn(i === 0 && "border-t", l.officeShare < 0 && "bg-red-50 dark:bg-red-950/20")}>
                           <td className="py-1 pr-2 align-top">
                             {i === 0 && (
                               <div className="flex items-start gap-1.5">
@@ -186,7 +187,7 @@ export function PnlFullDetail({ detail, admin = false, onChanged = () => {} }: {
                           <td className="py-1 px-2 text-right align-top tabular-nums">
                             {l.deptShare > 0 ? <span>{formatCurrency(l.deptShare)}<span className="ml-1 text-[10px] text-muted-foreground">{DEPT_LABEL[l.dept]}</span></span> : <span className="text-muted-foreground">—</span>}
                           </td>
-                          <td className="py-1 px-2 text-right align-top tabular-nums">{formatCurrency(l.officeShare)}</td>
+                          <td className={cn("py-1 px-2 text-right align-top tabular-nums", l.officeShare < 0 && "font-medium text-red-600 dark:text-red-400")}>{formatCurrency(l.officeShare)}</td>
                           <td className="py-1 pl-2 text-right align-top tabular-nums"><CostNote l={l} /></td>
                         </tr>
                       ))}
@@ -318,6 +319,11 @@ export function DeptDrill({ detail, deptKey, admin = false, onChanged = () => {}
 
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{DEPT_LABEL[deptKey]} sales ({rowCount})</div>
+        {isOffice && groups.some((g) => g.lines.reduce((a, r) => a + r.amt, 0) + (markupMap.get(g.s.quotationId) ?? 0) < 0) && (
+          <p className="text-[11px] text-red-600 dark:text-red-400">
+            Rows in red book a <strong>negative margin</strong> — the line&rsquo;s recorded COGS exceeds its selling price, which is what pulls Office sales below zero. Check the item&rsquo;s cost / price (or delete the row if it&rsquo;s test data).
+          </p>
+        )}
         {rowCount === 0 && markup === 0 ? (
           <p className="text-xs text-muted-foreground">No sales for this department in the period.</p>
         ) : (
@@ -341,7 +347,9 @@ export function DeptDrill({ detail, deptKey, admin = false, onChanged = () => {}
                   return (
                     <Fragment key={`${g.s.quoteNumber}-${gi}`}>
                       {g.lines.map((r, i) => (
-                        <tr key={i} className={cn("align-top", i === 0 && "border-t")}>
+                        // A line sold below its recorded COGS books a NEGATIVE margin
+                        // to its dept — flag it red so a bad cost / below-cost line stands out.
+                        <tr key={i} className={cn("align-top", i === 0 && "border-t", r.amt < 0 && "bg-red-50 dark:bg-red-950/20")}>
                           <td className="py-1 pr-2">
                             {i === 0 && (
                               <div className="flex items-start gap-1.5">
@@ -353,11 +361,11 @@ export function DeptDrill({ detail, deptKey, admin = false, onChanged = () => {}
                           <td className="py-1 px-2">{r.l.label}{r.l.qty > 1 ? ` ×${r.l.qty}` : ""}<span className="ml-1 text-[10px] text-muted-foreground">{ROUTING_LABEL[r.l.routing] ?? ""}</span></td>
                           <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(r.l.net)}</td>
                           {isOffice && (
-                            <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
+                            <td className={cn("py-1 px-2 text-right tabular-nums", r.amt < 0 ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground")}>
                               {r.l.routing === "office_full" ? (r.l.officeCost != null ? `− ${formatCurrency(r.l.officeCost)}` : <span className="text-amber-600">no COGS</span>) : "—"}
                             </td>
                           )}
-                          <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(r.amt)}</td>
+                          <td className={cn("py-1 pl-2 text-right font-medium tabular-nums", r.amt < 0 && "text-red-600 dark:text-red-400")}>{formatCurrency(r.amt)}</td>
                         </tr>
                       ))}
                       {/* Mark-up income booked to this same order */}
@@ -370,12 +378,13 @@ export function DeptDrill({ detail, deptKey, admin = false, onChanged = () => {}
                           <td className="py-1 pl-2 text-right font-medium tabular-nums">{formatCurrency(gMarkup)}</td>
                         </tr>
                       )}
-                      {/* Per-order subtotal */}
-                      <tr className="bg-muted/40 text-[11px] font-medium">
+                      {/* Per-order subtotal — red when the order's margin is negative
+                          (its booked COGS exceeds its selling price). */}
+                      <tr className={cn("text-[11px] font-medium", gAmt < 0 ? "bg-red-100 dark:bg-red-950/40" : "bg-muted/40")}>
                         <td className="py-1 pr-2 text-right text-muted-foreground" colSpan={2}>Subtotal · {g.s.quoteNumber}</td>
                         <td className="py-1 px-2 text-right tabular-nums">{formatCurrency(gNet)}</td>
                         {isOffice && <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">− {formatCurrency(gCogs)}</td>}
-                        <td className="py-1 pl-2 text-right tabular-nums">{formatCurrency(gAmt)}</td>
+                        <td className={cn("py-1 pl-2 text-right tabular-nums", gAmt < 0 && "text-red-600 dark:text-red-400")}>{formatCurrency(gAmt)}</td>
                       </tr>
                     </Fragment>
                   );
