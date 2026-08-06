@@ -38,10 +38,12 @@ export async function GET(req: NextRequest) {
   const buf = await renderToBuffer(
     React.createElement(ExpensesReportPdf, { view, from: report.from, to: report.to, group }) as React.ReactElement<DocumentProps>,
   );
+  // ?view=1 opens the PDF inline in the browser (the eye view); otherwise it downloads.
+  const inline = req.nextUrl.searchParams.get("view") === "1";
   return new NextResponse(buf as unknown as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="expenses-${report.from}_to_${report.to}.pdf"`,
+      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="expenses-${report.from}_to_${report.to}.pdf"`,
       "Cache-Control": "no-store",
     },
   });
