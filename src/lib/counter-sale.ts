@@ -130,8 +130,11 @@ export function formatCounterSaleNumber(year: number, seq: number): string {
  * people who hand over stock or clear payment).
  */
 export const COUNTER_SALE_WORKFLOW_ROLES = ["accounting", "warehouse", "payment_approver"] as const;
-export function counterSaleRoleAllowed(opts: { admin: boolean; baseRole: string; workflowRoles: string[] }): boolean {
+export function counterSaleRoleAllowed(opts: { admin: boolean; baseRole: string; workflowRoles: string[]; salesPersonnel?: boolean }): boolean {
   if (opts.admin) return true;
   if (opts.baseRole === "SALES") return true;
+  // An Engineer marked "Credit as salesperson" (sales personnel) also sells, so
+  // they may record and view counter sales — only while that flag is ticked.
+  if (opts.baseRole === "ENGINEER" && opts.salesPersonnel) return true;
   return COUNTER_SALE_WORKFLOW_ROLES.some((r) => opts.workflowRoles.includes(r));
 }

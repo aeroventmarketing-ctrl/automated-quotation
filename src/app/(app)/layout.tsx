@@ -9,6 +9,7 @@ import { LiveClock } from "@/components/live-clock";
 import { getGeofence } from "@/lib/geofence";
 import { getDisabledRoles, isRoleEnabled } from "@/lib/role-access";
 import { getWorkflowRoles, userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import { getDashboardAlerts } from "@/lib/dashboard-alerts";
 import { getAlertGoLive, alertsSuppressedNow } from "@/lib/alert-golive";
 import { AlertSuppressionProvider } from "@/components/alert-golive-context";
@@ -55,6 +56,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // show/hide in the nav.
   const wfAssignments = await getWorkflowRoles();
   const workflowRoles = WORKFLOW_ROLE_KEYS.filter((k) => userHasWorkflowRole(wfAssignments, user.id, k as WorkflowRoleKey));
+  // "Credit as salesperson" (sales personnel) — gives an Engineer the Counter
+  // Sales tab. SALES-role users are salespeople implicitly.
+  const salesPersonnel = user.role === "SALES" || (await getSalesPersonnelIds()).includes(user.id);
 
   // Location access: when enabled, non-admins are confined to the geofence(s).
   const geofence = await getGeofence();
@@ -82,7 +86,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <LiveClock />
       <div className="flex flex-1">
         <aside className="hidden w-60 shrink-0 self-start border-r bg-background md:sticky md:top-11 md:block md:h-[calc(100vh-2.75rem)] md:overflow-y-auto print:!hidden">
-          <AppNav role={user.role} name={user.name} workflowRoles={workflowRoles} dashboardAlerts={dashboardAlerts} />
+          <AppNav role={user.role} name={user.name} workflowRoles={workflowRoles} salesPersonnel={salesPersonnel} dashboardAlerts={dashboardAlerts} />
         </aside>
         {/* overflow-x-clip (not -hidden) prevents horizontal overflow WITHOUT
             making <main> a scroll container — otherwise the mobile bar's sticky
@@ -97,7 +101,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               alt="Aerovent Fans and Blowers Manufacturing"
               className="h-7 w-auto"
             />
-            <MobileNav role={user.role} name={user.name} workflowRoles={workflowRoles} dashboardAlerts={dashboardAlerts} />
+            <MobileNav role={user.role} name={user.name} workflowRoles={workflowRoles} salesPersonnel={salesPersonnel} dashboardAlerts={dashboardAlerts} />
           </div>
           <div className="mx-auto max-w-6xl p-4 md:p-8 print:max-w-none print:p-0">{children}</div>
         </main>
