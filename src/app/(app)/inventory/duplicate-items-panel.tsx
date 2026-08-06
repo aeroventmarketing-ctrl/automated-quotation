@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Merge, Trash2 } from "lucide-react";
+import { Merge, Trash2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { mergeStockItemsInto, removeStockItem } from "./actions";
 
@@ -44,10 +44,14 @@ export function DuplicateItemsPanel({ groups }: { groups: DupeItem[][] }) {
   if (groups.length === 0) return null;
 
   return (
-    <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/20">
-      <div className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+    <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+      {/* Pure-CSS collapse (uncontrolled checkbox + peer) — same as the item list. */}
+      <input type="checkbox" id="dupe-panel-toggle" defaultChecked className="peer hidden" />
+      <label htmlFor="dupe-panel-toggle" className="flex cursor-pointer select-none items-center gap-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300 peer-checked:[&_svg]:rotate-90">
+        <ChevronRight className="h-3.5 w-3.5 transition-transform" />
         Possible duplicate items <span className="font-normal text-muted-foreground">({groups.length} group{groups.length === 1 ? "" : "s"})</span>
-      </div>
+      </label>
+      <div className="hidden space-y-3 pt-3 peer-checked:block">
       <p className="text-xs text-muted-foreground">
         These items&rsquo; names match except for punctuation/spacing, so they may be the same product. Pick the item to keep and merge the rest into it (their on-hand and reservations move over), or remove an item. Admin only.
       </p>
@@ -113,6 +117,7 @@ export function DuplicateItemsPanel({ groups }: { groups: DupeItem[][] }) {
         </div>
       ))}
       {err && <p className="text-xs text-destructive">{err}</p>}
+      </div>
     </div>
   );
 }
