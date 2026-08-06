@@ -2,27 +2,18 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-react";
+import { Search, ArrowUp, ArrowDown, FileSpreadsheet, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { getExpensesReport, type ExpenseRecord, type ExpensesReport as ExpensesReportData } from "@/app/(app)/management/pnl-actions";
-
-type SortKey = "date" | "amount" | "dept" | "source";
-type GroupKey = "none" | "dept" | "source" | "month";
-
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: "date", label: "Date" },
-  { key: "amount", label: "Amount" },
-  { key: "dept", label: "Department" },
-  { key: "source", label: "Source" },
-];
-const GROUPS: { key: GroupKey; label: string }[] = [
-  { key: "none", label: "None" },
-  { key: "dept", label: "Department" },
-  { key: "source", label: "Source" },
-  { key: "month", label: "Month" },
-];
+import {
+  buildExpensesView,
+  EXPENSE_SORTS,
+  EXPENSE_GROUPS,
+  type ExpSortKey,
+  type ExpGroupKey,
+} from "@/lib/expenses-view";
 
 const SOURCE_VARIANT: Record<ExpenseRecord["source"], "default" | "secondary" | "warning" | "success"> = {
   "Purchase order": "default",
@@ -31,26 +22,22 @@ const SOURCE_VARIANT: Record<ExpenseRecord["source"], "default" | "secondary" | 
   "Stock transfer": "success",
 };
 
-const csvCell = (v: string | number) => {
-  const s = String(v ?? "");
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-
 /**
  * Expenses records report — a searchable, sortable, groupable list of every
  * recognised expense (material POs, cash vouchers, payroll, inter-department
  * stock transfers) in a date range. Shown on the Accounting My Dashboard and the
  * admin Production Dashboard. Data is fetched server-side (auth-gated); the date
- * range re-fetches, everything else filters/sorts/groups on the client.
+ * range re-fetches, everything else filters/sorts/groups on the client. Excel and
+ * PDF downloads hit server routes with the same params so they mirror the view.
  */
 export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
   const [data, setData] = useState<ExpensesReportData>(initial);
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("date");
+  const [sort, setSort] = useState<ExpSortKey>("date");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
-  const [group, setGroup] = useState<GroupKey>("none");
+  const [group, setGroup] = useState<ExpGroupKey>("none");
   const [err, setErr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -67,62 +54,19 @@ export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
     });
   }
 
-  const view = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = q
-      ? data.records.filter((r) =>
-          [r.date, r.source, r.ref, r.deptLabel, r.who, r.detail].some((f) => f.toLowerCase().includes(q)),
-        )
-      : data.records;
-    const mul = dir === "asc" ? 1 : -1;
-    const sorted = [...filtered].sort((a, b) => {
-      let c = 0;
-      if (sort === "amount") c = a.amount - b.amount;
-      else if (sort === "dept") c = a.deptLabel.localeCompare(b.deptLabel);
-      else if (sort === "source") c = a.source.localeCompare(b.source);
-      else c = a.date.localeCompare(b.date);
-      return (c || a.date.localeCompare(b.date)) * mul;
-    });
-    const total = sorted.reduce((s, r) => s + r.amount, 0);
+  const view = useMemo(
+    () => buildExpensesView(data.records, { query, sort, dir, group }),
+    [data.records, query, sort, dir, group],
+  );
 
-    const keyOf = (r: ExpenseRecord): string =>
-      group === "dept" ? r.deptLabel : group === "source" ? r.source : group === "month" ? r.date.slice(0, 7) : "";
-    const buckets = new Map<string, ExpenseRecord[]>();
-    for (const r of sorted) {
-      const k = keyOf(r);
-      const arr = buckets.get(k);
-      if (arr) arr.push(r);
-      else buckets.set(k, [r]);
-    }
-    const groups = [...buckets.entries()].map(([key, rows]) => ({
-      key,
-      rows,
-      subtotal: rows.reduce((s, r) => s + r.amount, 0),
-    }));
-    return { groups, total, count: sorted.length };
-  }, [data.records, query, sort, dir, group]);
-
-  function exportCsv() {
-    const header = ["Date", "Source", "Reference", "Department", "Who", "Detail", "Amount"];
-    const lines = [header.join(",")];
-    for (const g of view.groups) for (const r of g.rows) {
-      lines.push([r.date, r.source, r.ref, r.deptLabel, r.who, r.detail, r.amount.toFixed(2)].map(csvCell).join(","));
-    }
-    lines.push(["", "", "", "", "", "Total", view.total.toFixed(2)].map(csvCell).join(","));
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `expenses-${data.from}_to_${data.to}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  // Params shared with the Excel / PDF routes so the download mirrors the view.
+  const exportQs = new URLSearchParams({ from: data.from, to: data.to, q: query, sort, dir, group }).toString();
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-          <Download className="h-4 w-4 text-muted-foreground" /> Expenses Records
+          <FileText className="h-4 w-4 text-muted-foreground" /> Expenses Records
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">{view.count}</span>
           <span className="ml-auto font-mono text-sm font-semibold text-foreground">{formatCurrency(view.total)}</span>
         </CardTitle>
@@ -138,14 +82,20 @@ export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
             To
             <input type="date" value={to} min={from} onChange={(e) => reload(from, e.target.value)} className="h-9 rounded-md border bg-background px-2 text-sm text-foreground" />
           </label>
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={view.count === 0}
-            className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-md border bg-background px-3 text-xs font-medium hover:bg-accent disabled:opacity-50"
-          >
-            <Download className="h-3.5 w-3.5" /> Export CSV
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <a
+              href={`/my-dashboard/expenses/xlsx?${exportQs}`}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-md border bg-background px-3 text-xs font-medium hover:bg-accent ${view.count === 0 ? "pointer-events-none opacity-50" : ""}`}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+            </a>
+            <a
+              href={`/my-dashboard/expenses/pdf?${exportQs}`}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-md border bg-background px-3 text-xs font-medium hover:bg-accent ${view.count === 0 ? "pointer-events-none opacity-50" : ""}`}
+            >
+              <FileText className="h-3.5 w-3.5" /> PDF
+            </a>
+          </div>
         </div>
 
         {/* Search / sort / group / direction. */}
@@ -161,8 +111,8 @@ export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
           </div>
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             Sort
-            <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-9 rounded-md border bg-background px-2 text-sm text-foreground">
-              {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            <select value={sort} onChange={(e) => setSort(e.target.value as ExpSortKey)} className="h-9 rounded-md border bg-background px-2 text-sm text-foreground">
+              {EXPENSE_SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </label>
           <button
@@ -176,8 +126,8 @@ export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
           </button>
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             Group
-            <select value={group} onChange={(e) => setGroup(e.target.value as GroupKey)} className="h-9 rounded-md border bg-background px-2 text-sm text-foreground">
-              {GROUPS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+            <select value={group} onChange={(e) => setGroup(e.target.value as ExpGroupKey)} className="h-9 rounded-md border bg-background px-2 text-sm text-foreground">
+              {EXPENSE_GROUPS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
             </select>
           </label>
         </div>
