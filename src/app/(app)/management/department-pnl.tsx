@@ -29,7 +29,7 @@ function rangeLabel(from: string, to: string): string {
   return `${f(from)} – ${f(to)}`;
 }
 
-export function DepartmentPnl({ initial }: { initial: PnlReport }) {
+export function DepartmentPnl({ initial, admin = false }: { initial: PnlReport; admin?: boolean }) {
   const [report, setReport] = useState<PnlReport>(initial);
   const [mode, setMode] = useState<"month" | "custom">("month");
   const { y, m } = useMemo(manilaNow, []);
@@ -80,6 +80,19 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
     const { from, to } = monthRange(ym);
     load(from, to);
   };
+
+  // After an admin deletes a P&L record, re-pull both the summary and the open
+  // detail for the current period so the figures update in place.
+  const refreshAfterDelete = () =>
+    startDetail(async () => {
+      const [rep, d] = await Promise.all([
+        getDepartmentPnl(report.from, report.to),
+        getPnlDetail(report.from, report.to),
+      ]);
+      setReport(rep);
+      setDetail(d);
+      setDetailFor(`${d.from}:${d.to}`);
+    });
 
   const profit = report.totals.income >= 0;
   const detailReady = detail != null && detailFor === periodKey;
@@ -179,7 +192,7 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
                   <td className="py-2 text-right tabular-nums text-muted-foreground">{formatCurrency(r.expenses)}</td>
                   <td className={`py-2 text-right font-medium tabular-nums ${r.income >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>{formatCurrency(r.income)}</td>
                 </tr>
-                {openKey === r.key && drillCell(detail && <DeptDrill detail={detail} deptKey={r.key} />)}
+                {openKey === r.key && drillCell(detail && <DeptDrill detail={detail} deptKey={r.key} admin={admin} onChanged={refreshAfterDelete} />)}
               </Fragment>
             ))}
             <tr className="cursor-pointer border-t-2 font-semibold hover:bg-muted/40" onClick={() => toggleRow("company")}>
@@ -193,7 +206,7 @@ export function DepartmentPnl({ initial }: { initial: PnlReport }) {
               <td className="py-2 text-right tabular-nums">{formatCurrency(report.totals.expenses)}</td>
               <td className={`py-2 text-right tabular-nums ${profit ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>{formatCurrency(report.totals.income)}</td>
             </tr>
-            {openKey === "company" && drillCell(detail && <PnlFullDetail detail={detail} />)}
+            {openKey === "company" && drillCell(detail && <PnlFullDetail detail={detail} admin={admin} onChanged={refreshAfterDelete} />)}
           </tbody>
         </table>
       </div>
