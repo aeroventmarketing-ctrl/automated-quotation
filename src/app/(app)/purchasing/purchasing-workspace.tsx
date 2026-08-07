@@ -304,7 +304,11 @@ export function PurchasingWorkspace({
         </label>
       </div>
 
-      {(filteredBatches.length > 0 || (showBuilder && combinable.length > 0 && !query.trim())) && (
+      {/* Keep the combine workspace mounted while the builder tab is active (no
+          search), even when `combinable` is momentarily empty — otherwise an
+          auto-refresh that empties the list would unmount an in-progress draft PO
+          and discard it. */}
+      {(filteredBatches.length > 0 || (showBuilder && !query.trim())) && (
         <CombinedPurchasing
           combinable={showBuilder && !query.trim() ? combinable : []}
           batches={filteredBatches}
