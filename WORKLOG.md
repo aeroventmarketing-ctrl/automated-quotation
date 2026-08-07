@@ -14,6 +14,28 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Approval alarm + dashboard now deep-link to the pending phase
+- **Feature (owner-requested):** Tapping the flashing "Approval needed" pop-up now
+  navigates straight to the order, scrolled to the pending phase card — instead of
+  just silencing. My Dashboard's pending order tasks link to the same phase anchor.
+- **Behaviour (per owner):** the pop-up auto-jumps to a single order (the most recent
+  of those waiting) via a "Go to order {code}" button; other waiting orders are noted
+  ("+N more — see My Dashboard"). A separate "Dismiss" button (and tapping outside /
+  any key) silences without navigating.
+- **Where:**
+  - `src/lib/order-workflow.ts` — new `phaseAnchor(stage)` → "phase-1|2|5" (order
+    stages only ever sit in Phase 1/2/5).
+  - `src/lib/pending-approvals.ts` — `PendingApproval` gained `anchor`; the API
+    (`/api/pending-approvals`) passes it through.
+  - `src/components/approver-alarm.tsx` — navigation on tap (useRouter), Escape /
+    backdrop = dismiss, card tap doesn't dismiss.
+  - `src/app/(app)/orders/[id]/page.tsx` — `id="phase-1|2|5"` + `scroll-mt-24` on the
+    Phase 1 / 2 / 5 cards (anchor targets; frozen cards, presentational only).
+  - `src/lib/my-dashboard.ts` — order task `href` now includes `#phase-N`.
+- **Notes:** hash-scroll uses the app's existing pattern (e.g. `/inventory#inv-items`).
+  Multi-batch Phase 5 orders fall back to the top of the order page (no separate anchor).
+- **Pending:** none.
+
 ## 2026-08-07 · Engineer stock-release approval limited to duct hardware (refines #241)
 - **Change (owner-approved, frozen Phase 2):** #241 let an Engineer approve ANY from-stock
   release. Per owner, restrict that: an Engineer may approve only when every from-stock line

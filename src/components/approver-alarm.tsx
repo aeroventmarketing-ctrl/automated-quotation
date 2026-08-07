@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface Pending {
   id: string;
   code: string;
   company: string;
   action: string;
+  anchor: string; // phase-card id to scroll to on the order page (e.g. "phase-2")
 }
 
 const POLL_MS = 30_000; // re-check for new approvals every 30s
@@ -78,6 +80,7 @@ function startSound(): () => void {
 }
 
 export function ApproverAlarm() {
+  const router = useRouter();
   const [ringing, setRinging] = useState<Pending[] | null>(null);
   const alarmedRef = useRef<Set<string>>(new Set());
   const stopSoundRef = useRef<(() => void) | null>(null);
@@ -163,22 +166,29 @@ export function ApproverAlarm() {
     };
   }, [ring]);
 
-  // Any tap / key / click stops the alarm while it's ringing.
+  // Silence the alarm and jump straight to the order's pending phase card.
+  const goToOrder = useCallback((o: Pending) => {
+    stop();
+    router.push(`/orders/${o.id}${o.anchor ? `#${o.anchor}` : ""}`);
+  }, [router, stop]);
+
+  // Pressing any key dismisses (silences) the alarm without navigating — the tap
+  // targets on the dialog handle navigation vs. dismiss explicitly.
   useEffect(() => {
     if (!ringing) return;
-    const onInteract = () => stop();
-    window.addEventListener("pointerdown", onInteract, { capture: true });
-    window.addEventListener("keydown", onInteract, { capture: true });
-    return () => {
-      window.removeEventListener("pointerdown", onInteract, { capture: true });
-      window.removeEventListener("keydown", onInteract, { capture: true });
-    };
+    const onKey = () => stop();
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [ringing, stop]);
 
   // Stop the sound if the component unmounts.
   useEffect(() => () => stop(), [stop]);
 
   if (!ringing) return null;
+
+  // The order the alarm opens on tap — the most recent of those waiting. Any
+  // others stay listed on My Dashboard.
+  const primary = ringing[0];
 
   return (
     <div
@@ -194,29 +204,39 @@ export function ApproverAlarm() {
           50%, 100% { background-color: rgba(20,20,20,0.92); }
         }
       `}</style>
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-2xl dark:bg-neutral-900">
+      {/* Stop the backdrop's dismiss-on-click from firing for taps on the card. */}
+      <div
+        className="w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-2xl dark:bg-neutral-900"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="text-5xl">🔔</div>
         <h2 className="mt-2 text-xl font-bold text-[#ED1C24]">Approval needed</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {ringing.length === 1 ? "An order is" : `${ringing.length} orders are`} waiting for your approval.
         </p>
-        <ul className="mt-3 max-h-48 space-y-1.5 overflow-y-auto text-left">
-          {ringing.map((o) => (
-            <li key={o.id} className="rounded-md border bg-muted/30 p-2 text-sm">
-              <span className="font-mono font-semibold">{o.code}</span>
-              <span className="text-muted-foreground"> · {o.company}</span>
-              <div className="text-xs text-muted-foreground">{o.action}</div>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 rounded-md border bg-muted/30 p-2 text-left text-sm">
+          <span className="font-mono font-semibold">{primary.code}</span>
+          <span className="text-muted-foreground"> · {primary.company}</span>
+          <div className="text-xs text-muted-foreground">{primary.action}</div>
+        </div>
+        {ringing.length > 1 && (
+          <p className="mt-1 text-[11px] text-muted-foreground">+{ringing.length - 1} more waiting — see My Dashboard.</p>
+        )}
+        <button
+          type="button"
+          onClick={() => goToOrder(primary)}
+          className="mt-4 w-full rounded-md bg-[#ED1C24] px-4 py-2.5 font-semibold text-white hover:bg-[#c2141a]"
+        >
+          Go to order {primary.code}
+        </button>
         <button
           type="button"
           onClick={stop}
-          className="mt-4 w-full rounded-md bg-[#ED1C24] px-4 py-2.5 font-semibold text-white hover:bg-[#c2141a]"
+          className="mt-2 w-full rounded-md border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
         >
-          Tap to stop
+          Dismiss
         </button>
-        <p className="mt-2 text-[11px] text-muted-foreground">Tapping anywhere or pressing any key stops the alarm.</p>
+        <p className="mt-2 text-[11px] text-muted-foreground">Tapping outside or pressing any key dismisses without opening.</p>
       </div>
     </div>
   );

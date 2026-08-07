@@ -538,6 +538,16 @@ export function stagePhase(stage: OrderStage): string {
 }
 
 /**
+ * DOM id of the order-detail phase card for a stage — e.g. "phase-2" — so a
+ * notification / alarm can deep-link straight to the card holding the pending
+ * action. Empty when the stage has no numbered phase (e.g. "Closed").
+ */
+export function phaseAnchor(stage: OrderStage): string {
+  const m = /Phase (\d+)/.exec(stagePhase(stage));
+  return m ? `phase-${m[1]}` : "";
+}
+
+/**
  * Who must act next to move the order forward, given the current stage. Used to
  * show every viewer "waiting for: <role(s)>" and the live workflow status.
  * `sales` marks the step the salesperson owns (not a workflow role). Returns null

@@ -762,7 +762,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       </Card>
 
       {/* Phase 1 — approvals */}
-      <Card>
+      <Card id="phase-1" className="scroll-mt-24">
         <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 1 · Order intake &amp; payment clearing</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex items-center gap-2">
@@ -780,7 +780,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       </Card>
 
       {/* Phase 2 — job orders & production */}
-      <Card>
+      <Card id="phase-2" className="scroll-mt-24">
         <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 2 · Job orders &amp; production</CardTitle></CardHeader>
         <CardContent>
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
@@ -948,7 +948,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       {/* Phase 5 — final payment, quality, delivery & documents (single delivery) */}
       {showFulfillment && !multiMode && (
-        <Card>
+        <Card id="phase-5" className="scroll-mt-24">
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {fTrail.length > 0 && (

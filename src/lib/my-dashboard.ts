@@ -13,7 +13,7 @@ import type { User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
-import { readOrderWorkflow, pendingStep, requisitionDeptLabel, deptRole } from "@/lib/order-workflow";
+import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole } from "@/lib/order-workflow";
 import { isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
@@ -273,7 +273,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         key: `order:${q.id}`, area: "order", areaLabel: AREA_LABEL.order,
         title: q.quoteNumber, action: pend.action,
         client: maskClient(q.inquiry.customer.company), amount: maskAmount(Number(q.total)), currency: q.currency,
-        href: `/orders/${q.id}`,
+        href: `/orders/${q.id}${phaseAnchor(wf.stage) ? `#${phaseAnchor(wf.stage)}` : ""}`,
         deliveryMode: wf.deliveryMode === "multi" ? "multi" : "single",
         since: orderSince,
         createdAt: orderCreatedAt,

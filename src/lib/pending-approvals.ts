@@ -5,7 +5,7 @@
  */
 import { prisma } from "@/lib/db";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { readOrderWorkflow, pendingStep } from "@/lib/order-workflow";
+import { readOrderWorkflow, pendingStep, phaseAnchor } from "@/lib/order-workflow";
 import { isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
@@ -16,6 +16,7 @@ export interface PendingApproval {
   code: string; // quote/order number
   company: string;
   action: string; // what the approver must do
+  anchor: string; // phase-card id to deep-link to (e.g. "phase-2"), "" if none
 }
 
 interface Viewer {
@@ -77,6 +78,7 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
       code: q.quoteNumber,
       company: q.inquiry.customer.company,
       action: pend.action,
+      anchor: phaseAnchor(wf.stage),
     });
   }
   return out;
