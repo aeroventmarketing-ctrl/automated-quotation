@@ -32,60 +32,13 @@ and we never redo something that's already done.
 - **Note on frozen areas:** the Phase 2 card is a frozen area — the owner explicitly
   approved adding this checkbox in-conversation. Only additive UI + a new flag were
   added; no existing Phase 2 job-order logic was changed.
-- **Pending — STEP 2 (office-pickup Phase-5 variant, NOT yet built):** see the dedicated
-  spec entry below ("Office pickup workflow — CONFIRMED spec + design"). Supersedes the
-  earlier stock-based draft that used to live here.
-
-## 2026-08-07 · Office pickup workflow — CONFIRMED spec + design (STEP 2, pending build)
-- **Owner-confirmed decisions:**
-  - **Architecture = "branch only where it differs."** Reuse the existing normal order
-    flow for Phases 1–2, final payment, docs-received/file and the whole commission
-    flow. Add an office-pickup variant ONLY for the Phase-5 **QA → delivery** segment,
-    gated behind `wf.officePickup`. Do **NOT** modify the normal (non-pickup) flow.
-  - **Delivery mode = single OR multi-batch pickup**, chosen by the SAME toggle as
-    normal delivery (`batchDeliveryEnabled` / `deliveryMode`). So the pickup variant
-    must apply to BOTH the single Phase-5 flow AND the per-batch multi-batch flow.
-- **Where the pickup path diverges from the normal flow (only this segment differs):**
-
-  | Step | Office pickup | Normal flow today |
-  |---|---|---|
-  | QA test | Technical Head / Quality Inspector → "Quality tested – Passed" | 2nd Quality Inspector |
-  | Plant check | Plant Manager "Quality & Quantity Approved" (ONE step; only approved qty transfers) | plant QC → transfer → Sales 2nd QC (three steps) |
-  | Delivery form | Warehouseman makes delivery form | Accounting makes delivery docs |
-  | Approve delivery | Plant Manager "Approve Delivery" | Accounting "Save Documents & Approve Delivery" |
-  | POD upload | Warehouseman uploads delivery form + proof of delivery | Logistics attaches POD / marks delivered |
-  | POD approve | Sales "Approve POD – Successful Delivery" | Sales (same) |
-  | Docs surrender | *(skipped)* | Sales surrenders signed docs → Accounting receives |
-
-- **Identical to the normal flow (reused as-is, no changes):** steps 8–21 (payment
-  cleared → JO create/issue → Plant Manager JO received → distribute → Start Production →
-  MRF → follow-up → Mark Finished → Notify Client-Order Ready → billing (skip) → final
-  pay → Final Payment Checked → Confirm Final Payment) and steps 28–37 (Confirm Documents
-  Received → File Documents-Close Order → the full commission flow: Approve Commission
-  Amount → Prepare Commission Voucher → Approve Commission Voucher → Release Commission
-  Budget → Mark Commission received → upload signed voucher → accounting-closed).
-- **Full owner-supplied spec (steps 8–37):** step 8 Clear Payment & release from stock;
-  9 Engineer makes JO; 10 Engineer "Issue job orders" → to Plant Manager; 11 Plant
-  Manager "Job Order Received" → distributes to fans/duct/accessories/motor; 12
-  Production "Start Production"; 13 depts raise MRF to warehouseman; 14 warehouseman
-  issues available materials; 15 Sales may follow up production; 16 Head of Production
-  "Mark Finished"; 17 Sales "Notify Client-Order Ready" (start of fulfillment / optional
-  multi-batch); 18 Accounting billing statement (skippable, no details yet); 19 client
-  final pay; 20 Accounting "Final Payment Checked"; 21 Approver/admin "Confirm Final
-  Payment"; 22 Technical Head / Quality Inspector "Quality tested – Passed"; 23 Plant
-  Manager "Quality & Quantity Approved"; 24 Warehouseman makes delivery form; 25 Plant
-  Manager "Approve Delivery"; 26 Warehouseman uploads delivery form + proof of delivery;
-  27 Sales "Approve POD – Successful Delivery"; 28 Accounting "Confirm Documents
-  Received"; 29 Accounting "File Documents-Close Order"; 30 order closed → commission
-  computed; 31 Admin/approver "Approve Commission Amount"; 32 Accounting "Prepare
-  Commission Voucher"; 33 Admin/approver "Approve Commission Voucher"; 34 Admin/approver
-  "Release Commission Budget"; 35 Sales receives, Accounting "Mark Commission received";
-  36 Accounting uploads voucher signed by sales exec; 37 accounting-closed once received
-  (commission issued 15 days after the sales month).
-- **Roles all already exist** in `workflow-roles.ts`: `technical_head`,
-  `quality_inspector`, `warehouse` (Warehouseman), `plant_manager`.
-- **Build plan (staged, reviewable):** (A) single-pickup Phase-5 variant first; (B) then
-  apply the same variant per batch in the multi-batch flow. All gated on `officePickup`.
+- **Pending — STEP 2 (office-pickup Phase-5 behaviour): spec STILL TO BE PROVIDED.**
+  When the flag is on, Phase 5 should follow an office-pickup path — but the owner has
+  **not yet given the correct spec**. A long "steps 8–37" workflow discussed earlier in
+  the session turned out to be a **"plant pick up" workflow pasted by mistake — NOT the
+  office pickup workflow** — so it was removed from here to avoid misleading a future
+  session. The architecture/delivery-mode answers gathered at that time were about the
+  wrong paste; treat them as **not confirmed** for office pickup. Nothing was built.
 
 ## 2026-08-07 · Approval alarm + dashboard now deep-link to the pending phase
 - **Feature (owner-requested):** Tapping the flashing "Approval needed" pop-up now
