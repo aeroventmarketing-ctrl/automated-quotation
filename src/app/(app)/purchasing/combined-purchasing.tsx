@@ -120,8 +120,25 @@ export function CombinedPurchasing({
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [building, setBuilding] = useState(false);
+  // Snapshot of the requests being combined, captured when the build starts. The
+  // draft form reads from this — NOT the live `combinable` list — so an auto-
+  // refresh that drops those requests out of `combinable` (e.g. once another user
+  // acts on them, which is exactly what fires a notification) can't empty the
+  // list, unmount the form, and wipe the Purchaser's half-typed PO.
+  const [buildItems, setBuildItems] = useState<CombinableItem[]>([]);
   const [presetCompany, setPresetCompany] = useState("");
   const [delBusy, setDelBusy] = useState<string | null>(null);
+
+  function startBuilding(items: CombinableItem[], company: string) {
+    setBuildItems(items);
+    setPresetCompany(company);
+    setBuilding(true);
+  }
+  function stopBuilding() {
+    setBuilding(false);
+    setBuildItems([]);
+    setPresetCompany("");
+  }
 
   function toggle(id: string) {
     setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -141,11 +158,8 @@ export function CombinedPurchasing({
   }
   function acceptSuggestion(s: SupplierSuggestion) {
     setSel(new Set(s.prIds));
-    setPresetCompany(s.company);
-    setBuilding(true);
+    startBuilding(combinable.filter((c) => s.prIds.includes(c.id)), s.company);
   }
-
-  const selectedItems = combinable.filter((c) => sel.has(c.id));
 
   return (
     <div className="space-y-3">
@@ -154,14 +168,15 @@ export function CombinedPurchasing({
         <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
       ))}
 
-      {/* Combine builder */}
-      {canManagePO && combinable.length > 0 && (
+      {/* Combine builder. Stays mounted while `building` even if `combinable`
+          empties on a refresh, so the in-progress draft PO isn't wiped. */}
+      {canManagePO && (building || combinable.length > 0) && (
         <div className="rounded-md border p-3">
           {!building ? (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-medium">Combine requests into one PO</div>
-                <Button size="sm" disabled={sel.size < 2} onClick={() => { setPresetCompany(""); setBuilding(true); }}>
+                <Button size="sm" disabled={sel.size < 2} onClick={() => startBuilding(combinable.filter((c) => sel.has(c.id)), "")}>
                   Combine {sel.size > 0 ? `${sel.size} ` : ""}into one PO
                 </Button>
               </div>
@@ -215,9 +230,9 @@ export function CombinedPurchasing({
             </div>
           ) : (
             <CombineForm
-              title={`New combined PO · ${selectedItems.length} requests`}
+              title={`New combined PO · ${buildItems.length} requests`}
               submitLabel="Create combined PO"
-              initialLines={selectedItems.flatMap((it) => poLinesFromPRItems(it.items))}
+              initialLines={buildItems.flatMap((it) => poLinesFromPRItems(it.items))}
               presetCompany={presetCompany}
               suppliers={suppliers}
               paymentTerms={paymentTerms}
@@ -225,9 +240,9 @@ export function CombinedPurchasing({
               catalogPrices={catalogPrices}
               catalogSuppliers={catalogSuppliers}
               scanProducts={scanProducts}
-              onSubmit={(input) => createCombinedPO(selectedItems.map((it) => it.id), input)}
-              onCancel={() => { setBuilding(false); setPresetCompany(""); }}
-              onDone={() => { setBuilding(false); setPresetCompany(""); setSel(new Set()); router.refresh(); }}
+              onSubmit={(input) => createCombinedPO(buildItems.map((it) => it.id), input)}
+              onCancel={stopBuilding}
+              onDone={() => { stopBuilding(); setSel(new Set()); router.refresh(); }}
             />
           )}
         </div>
