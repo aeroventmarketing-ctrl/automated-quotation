@@ -739,10 +739,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      {/* Stage progress */}
+      {/* Stage progress. Office pickup skips plant-QC → transfer → Sales-2nd-QC →
+          delivered, so those chips are hidden for a pickup order. */}
       <div className="flex flex-wrap gap-1.5">
-        {ORDER_STAGES.map((s, i) => {
-          const curIdx = ORDER_STAGES.findIndex((x) => x.key === wf.stage);
+        {(officePickup
+          ? ORDER_STAGES.filter((s) => !["qa_plant_checked", "qa_transferred", "qa_sales_checked", "delivered"].includes(s.key))
+          : ORDER_STAGES
+        ).map((s, i, arr) => {
+          const curIdx = arr.findIndex((x) => x.key === wf.stage);
           const done = i < curIdx;
           const cur = i === curIdx;
           return (

@@ -48,9 +48,10 @@ and we never redo something that's already done.
   - `src/app/(app)/orders/[id]/fulfillment-actions.tsx` — `officePickup` prop; pickup
     branches for the QA-test / qa_tested / delivery_docs_ready / delivery_confirmed steps.
   - `src/app/(app)/orders/[id]/pickup-pod-form.tsx` — NEW.
-- **Known cosmetic follow-up:** the top progress bar still lists the skipped stages
-  (plant-QC / transfer / Sales-2nd-QC / delivered) for a pickup order; they just never
-  light up. Functionally correct; could filter `ORDER_STAGES` for pickup later.
+- **Progress bar tidied:** the top stage-progress chips now hide the skipped stages
+  (`qa_plant_checked` / `qa_transferred` / `qa_sales_checked` / `delivered`) for a pickup
+  order (filtered `ORDER_STAGES` when `officePickup`; done/current computed against the
+  filtered list). Normal flow shows all chips as before.
 - **Scope note:** office pickup is a **single** fulfilment pass (the correct spec has no
   multi-batch; the multi-batch mention belonged to the discarded plant-pickup paste).
 
