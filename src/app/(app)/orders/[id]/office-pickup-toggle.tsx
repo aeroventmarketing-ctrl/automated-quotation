@@ -51,7 +51,7 @@ export function OfficePickupToggle({ orderId, enabled }: { orderId: string; enab
       </button>
       <div className="flex items-center gap-1.5 text-sm">
         <Store className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">{on ? "Office pick up" : "Office pick up?"}</span>
+        <span className="font-medium">On - Office pick up / Off - Delivery</span>
       </div>
       {busy && <span className="text-[11px] text-muted-foreground">Saving…</span>}
       {err && <span className="text-xs text-destructive">{err}</span>}
