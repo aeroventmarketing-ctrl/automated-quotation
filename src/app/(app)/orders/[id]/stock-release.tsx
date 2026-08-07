@@ -9,9 +9,9 @@ import { releaseOrderFromStock, approveStockRelease } from "../actions";
 /**
  * Phase 2 card for a from-stock order (in-house duct hardware — angle corner,
  * cleats, clips — nothing fabricated or bought from a supplier). The Plant Manager
- * approves the release first; then the Warehouse / Fans & Blowers head matches each
- * line to a stock item and releases it: inventory is deducted and the order jumps
- * to Phase 5. Mirrors the MRF release picker.
+ * or an Engineer approves the release first; then the Warehouse / Fans & Blowers head
+ * matches each line to a stock item and releases it: inventory is deducted and the
+ * order jumps to Phase 5. Mirrors the MRF release picker.
  */
 export function StockRelease({
   orderId,
@@ -54,8 +54,8 @@ export function StockRelease({
         <div className="mb-1 font-medium text-sky-800 dark:text-sky-300">For stock release</div>
         <p className="text-xs text-muted-foreground">
           These items are produced in-house by Fans &amp; Blowers and held in stock — no job order or
-          purchase order. The Plant Manager approves the release, then the Warehouse issues them from
-          inventory to fulfil the order; it then moves to final payment.
+          purchase order. The Plant Manager or an Engineer approves the release, then the Warehouse
+          issues them from inventory to fulfil the order; it then moves to final payment.
         </p>
         <ul className="mt-2 space-y-0.5 text-xs">
           {lines.map((l, i) => (
@@ -64,10 +64,10 @@ export function StockRelease({
         </ul>
       </div>
 
-      {/* Step 1 — Plant Manager approval gate. */}
+      {/* Step 1 — Plant Manager / Engineer approval gate. */}
       {!approved ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
-          <span className="text-amber-800 dark:text-amber-300">Awaiting Plant Manager approval to release from stock.</span>
+          <span className="text-amber-800 dark:text-amber-300">Awaiting Plant Manager or Engineer approval to release from stock.</span>
           {canApprove && (
             <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => approveStockRelease(orderId))}>
               {busy ? "Approving…" : "Approve stock release"}

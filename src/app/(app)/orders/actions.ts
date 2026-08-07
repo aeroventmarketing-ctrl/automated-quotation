@@ -1277,15 +1277,15 @@ const STOCK_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse", "prod_head_fans"];
  * skipping production and the supplier PO — mirrors notifyClientBoughtInOrder.
  */
 /**
- * The Plant Manager (or an admin) approves a from-stock order's release before the
- * warehouse issues it — the "ask permission first" gate for stock-only sales.
+ * The Plant Manager, an Engineer (or an admin) approves a from-stock order's release
+ * before the warehouse issues it — the "ask permission first" gate for stock-only sales.
  */
 export async function approveStockRelease(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
-  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey))) {
-    throw new Error("Only the Plant Manager or an admin can approve the stock release.");
+  if (!(isAdmin(user) || user.role === "ENGINEER" || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey))) {
+    throw new Error("Only the Plant Manager, an Engineer or an admin can approve the stock release.");
   }
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
