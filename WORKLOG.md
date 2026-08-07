@@ -14,6 +14,74 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Plant pick up — VAT-aware documents (delivery form vs closing docs)
+- **Owner-requested:** for plant pick up the **Warehouseman's delivery form** is a distinct
+  document. **VAT-exclusive** → the delivery form alone is enough to close. **VAT-inclusive**
+  → Accounting also makes the Sales Invoice, OR/CR/AF and Delivery Receipt.
+- **New `delivery_form` doc slot** (Warehouseman) — the "Make the delivery form" step now
+  attaches `delivery_form` (was reusing `delivery_receipt`). `plantDocTypes(vatInclusive)` /
+  `plantCloseState(...)` in `sale.ts` encode the requirement (delivery form always; SI/OR/DR
+  only for VAT-inclusive; no BIR 2307 per owner).
+- **Where:** `sale.ts` (`plantDocTypes`/`plantCloseState`); `actions.ts` (`CLOSE_DOC_KEYS` +
+  `MB_DOC_KEYS` gain `delivery_form`; `qaTransfer` requires the delivery form; `fileDocuments`
+  + the multi-batch `delivery_docs` gate use the plant/VAT requirement; `loadForCloseDoc`
+  lets the Warehouseman attach `delivery_form`); `close-documents.tsx` (plant-aware slots +
+  gate — VAT-exclusive shows no accounting slots, closes on the delivery form); `plant-doc-
+  step.tsx` (form kind → `delivery_form`); `fulfillment-actions.tsx` + `multi-batch-panel.tsx`
+  (plant/VAT doc slots). Typecheck + lint clean.
+- **Multi-batch note:** the WH attaches the batch's delivery documents at the make-form step
+  (bundled); for VAT-inclusive that includes SI/OR/DR (can split to Accounting later).
+
+## 2026-08-07 · Plant pick up — multi-batch (PR 3 of 3)
+- **Feature (owner-approved, frozen Phase 5 multi-batch):** plant pick up can be collected
+  in multiple batches; each batch repeats the plant Phase-5 sequence. Reuses the multi-batch
+  engine with a plant step variant, alongside delivery and office-pickup variants.
+- **`MULTIBATCH_PLANT_PICKUP_STEPS`** (per batch): notify client → payment checked → payment
+  confirmed → quality tested (Tech Head/QI) → Plant Manager "Quality & Quantity Approved" →
+  **Warehouseman "Make the delivery form"** (`delivery_docs`) → **Plant Manager "Approve
+  delivery"** (`delivery_approved`) → **Warehouseman "Upload proof of pick up & mark picked
+  up"** (`delivered`) → **Sales "Approve POD"** (`delivery_confirmed`) → Accounting "Confirm
+  documents received" → "File documents — batch picked up".
+- **Engine generalised:** `mbSteps`/`mbStepDef`/`mbProgress` now take a `MBMode`
+  (`delivery | office_pickup | plant_pickup`) instead of an `officePickup` boolean; all
+  callers pass `wf.fulfillmentMode`. `advanceMultiBatch` uses the mode. The Warehouseman may
+  attach the batch's delivery documents + proof of pick up (`saveMultiBatchDoc` /
+  `saveMultiBatchPod` / `removeMultiBatchPod`). `setMultiBatchPickup` now works for any
+  pick-up mode. The "Multi-batch pick up" toggle + multi-mode card + `MultiBatchPanel`
+  relabelling now cover plant pickup (`isPickupMode = office || plant`).
+- **Known simplification:** in multi-batch the "Make the delivery form" step bundles the
+  batch's delivery documents (SI/OR/DR), whereas single-batch splits DR-at-make-form from
+  SI/OR-at-close. Functional; can refine if the owner wants the split per batch.
+- Typecheck + lint clean.
+
+## 2026-08-07 · Plant pick up — single-batch Phase 5 + 3-way selector (PR 2 of 3)
+- **Feature (owner-approved, frozen Phase 2/5):** adds the **plant pick up** handover mode
+  (client collects at the plant). Per `docs/plant-pickup-design.md` + owner confirmations:
+  delivery form = the Delivery Receipt (Warehouseman attaches it), Make-form and
+  Approve-delivery are two steps, and from-stock plant pickup uses the same QA roles as
+  produced.
+- **3-way selector** replaces the old office-pickup on/off toggle on the Phase 2 card:
+  **Delivery · Office pick up · Plant pick up** (`FulfillmentModeSelector` +
+  `setFulfillmentMode`). Options gated by contents: office pick up = from-stock; plant pick
+  up = not bought-in-only. Admin can change any time; a non-admin only before the order
+  leaves Phase 2.
+- **Plant pick up Phase 5 (single-batch)** — mapped onto existing stages with plant labels/
+  roles: QA test (Tech Head/QI) `qa_tested` → Plant Manager "Quality & Quantity Approved"
+  `qa_plant_checked` → **Warehouseman "Make the delivery form"** (attach DR) `qa_transferred`
+  → **Plant Manager "Approve Delivery"** `qa_sales_checked` → **Warehouseman "Upload form +
+  proof of pick up"** `delivered` → **Sales "Approve POD – Successful Pick Up"**
+  `delivery_confirmed` → **Accounting "Confirm Documents Received"** (skips surrender)
+  `docs_received` → File. All gated on `fulfillmentMode === "plant_pickup"`.
+- **Where:** `order-workflow.ts` (`pendingStep` plant branches + `plantPickup` arg; 4 callers
+  updated), `actions.ts` (`qaTest`/`qaPlantCheck`/`qaTransfer`/`qaSalesCheck`/`markDelivered`/
+  `confirmDocsReceived` plant branches; `loadForCloseDoc` allows Warehouseman for DR/POD; new
+  `setFulfillmentMode`), `page.tsx` (plant-aware perms; the selector; header badge shows the
+  mode), `fulfillment-actions.tsx` (plant Phase-5 UI), new `plant-doc-step.tsx` +
+  `fulfillment-mode-selector.tsx`. The old `office-pickup-toggle.tsx` is now unused.
+- **Notes:** typecheck + lint clean; the build compiles (the only failure is prerendering an
+  unrelated Supabase-env page). Plant **multi-batch** is PR 3. Single-batch plant pickup on a
+  from-stock order still uses the normal two-step stock release in Phase 2 (fine).
+
 ## 2026-08-07 · Fulfilment mode — enum refactor (plant pickup PR 1 of 3)
 - **Refactor (no behaviour change), per `docs/plant-pickup-design.md`:** introduced
   `wf.fulfillmentMode: "delivery" | "office_pickup" | "plant_pickup"` as the source of

@@ -6,11 +6,12 @@ import { FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import { workflowRoleLabel } from "@/lib/workflow-roles";
-import { closeDocsState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
+import { closeDocsState, plantCloseState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
 import { DeliveredForm } from "./delivered-form";
 import { PickupPodForm } from "./pickup-pod-form";
+import { PlantDocStep } from "./plant-doc-step";
 import { FinalPaymentProof } from "./final-payment-proof";
 import { RecordPaymentBox } from "./record-payment-box";
 import {
@@ -54,6 +55,7 @@ export function FulfillmentActions({
   stage,
   perms,
   officePickup = false,
+  plantPickup = false,
   closeDocs,
   vatInclusive,
   canEditCloseDocs,
@@ -71,6 +73,8 @@ export function FulfillmentActions({
   perms: Perms;
   /** Office-pickup order — from-stock fulfilment with a pickup-flavoured Phase 5. */
   officePickup?: boolean;
+  /** Plant-pickup order — client collects at the plant; Warehouseman-driven tail. */
+  plantPickup?: boolean;
   closeDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   canEditCloseDocs: boolean;
@@ -216,7 +220,17 @@ export function FulfillmentActions({
           </div>
         ) : awaiting("to quality & quantity check", ["plant_manager"]))}
 
-      {stage === "qa_plant_checked" &&
+      {/* Plant pick up: Warehouseman makes the delivery form (attaches the DR). */}
+      {stage === "qa_plant_checked" && plantPickup &&
+        (perms.canQaTransfer ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Make the delivery form</p>
+            <p className="text-xs text-muted-foreground">The Warehouseman attaches the Delivery Receipt (the delivery form).</p>
+            <PlantDocStep orderId={orderId} kind="form" initialFiles={closeDocs["delivery_form"] ?? []} admin={admin} />
+          </div>
+        ) : awaiting("to make the delivery form", ["warehouse"]))}
+
+      {stage === "qa_plant_checked" && !plantPickup &&
         (perms.canQaTransfer ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Transfer items to office</p>
@@ -227,7 +241,19 @@ export function FulfillmentActions({
           </div>
         ) : awaiting("to transfer the items to the office", ["logistics"]))}
 
-      {stage === "qa_transferred" &&
+      {/* Plant pick up: Plant Manager approves the delivery. */}
+      {stage === "qa_transferred" && plantPickup &&
+        (perms.canQaSales ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Approve delivery</p>
+            <p className="text-xs text-muted-foreground">The Plant Manager approves the delivery form.</p>
+            <Button size="sm" disabled={busy} onClick={() => run(() => qaSalesCheck(orderId))}>
+              {busy ? "Saving…" : "Approve Delivery"}
+            </Button>
+          </div>
+        ) : awaiting("to approve the delivery", ["plant_manager"]))}
+
+      {stage === "qa_transferred" && !plantPickup &&
         (perms.canQaSales ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Sales 2nd quality &amp; quantity check</p>
@@ -238,8 +264,18 @@ export function FulfillmentActions({
           </div>
         ) : awaiting("to make the 2nd quality & quantity check", ["quality_inspector_2"], true))}
 
+      {/* Plant pick up: Warehouseman uploads the delivery form + proof of pick up. */}
+      {stage === "qa_sales_checked" && plantPickup &&
+        (perms.canDeliver ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Upload delivery form &amp; proof of pick up</p>
+            <p className="text-xs text-muted-foreground">The Warehouseman uploads the signed delivery form and the proof of pick up.</p>
+            <PlantDocStep orderId={orderId} kind="pod" initialFiles={closeDocs["pod"] ?? []} admin={admin} />
+          </div>
+        ) : awaiting("to upload the proof of pick up", ["warehouse"]))}
+
       {/* Phase 6 */}
-      {stage === "qa_sales_checked" &&
+      {stage === "qa_sales_checked" && !plantPickup &&
         (perms.canPrepDocs ? (
           <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} admin={admin} officePickup={officePickup} />
         ) : awaiting("to prepare the delivery documents", ["accounting"]))}
@@ -286,15 +322,27 @@ export function FulfillmentActions({
       {stage === "delivered" &&
         (perms.canApproveDelivery ? (
           <div className="space-y-1">
-            <p className="text-sm font-medium">Approve proof of delivery</p>
-            <p className="text-xs text-muted-foreground">Sales approves the proof of delivery and marks the delivery successful.</p>
+            <p className="text-sm font-medium">{plantPickup ? "Approve proof of pick up" : "Approve proof of delivery"}</p>
+            <p className="text-xs text-muted-foreground">{plantPickup ? "Sales approves the proof of pick up and marks the pick up successful." : "Sales approves the proof of delivery and marks the delivery successful."}</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => approveDelivery(orderId))}>
-              {busy ? "Saving…" : "Approve POD-Successful Delivery"}
+              {busy ? "Saving…" : plantPickup ? "Approve POD - Successful Pick Up" : "Approve POD-Successful Delivery"}
             </Button>
           </div>
-        ) : awaiting("to approve the proof of delivery", [], true))}
+        ) : awaiting(plantPickup ? "to approve the proof of pick up" : "to approve the proof of delivery", [], true))}
 
-      {stage === "delivery_confirmed" &&
+      {/* Plant pick up skips the surrender step — Accounting confirms receipt directly. */}
+      {stage === "delivery_confirmed" && plantPickup &&
+        (perms.canFile ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Confirm documents received</p>
+            <p className="text-xs text-muted-foreground">Accounting confirms it received the client-signed documents before the order can be filed and closed.</p>
+            <Button size="sm" disabled={busy} onClick={() => run(() => confirmDocsReceived(orderId))}>
+              {busy ? "Saving…" : "Confirm Documents Received"}
+            </Button>
+          </div>
+        ) : awaiting("to confirm it received the documents", ["accounting"]))}
+
+      {stage === "delivery_confirmed" && !plantPickup &&
         ((officePickup ? perms.canApproveDelivery : perms.canSurrender) ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Surrender signed documents</p>
@@ -326,12 +374,13 @@ export function FulfillmentActions({
           canEdit={canEditCloseDocs}
           canFile={perms.canFile}
           admin={admin}
+          plantPickup={plantPickup}
         />
       )}
 
       {/* Closed but documents still incomplete — no commission yet; show the
           amber "File documents — close order (incomplete)" affordance + slots. */}
-      {stage === "closed" && !closeDocsState(closeDocs, vatInclusive).complete && (
+      {stage === "closed" && !(plantPickup ? plantCloseState(closeDocs, vatInclusive) : closeDocsState(closeDocs, vatInclusive)).complete && (
         <CloseDocuments
           orderId={orderId}
           initialDocs={closeDocs}
@@ -339,11 +388,12 @@ export function FulfillmentActions({
           canEdit={canEditCloseDocs}
           canFile={perms.canFile}
           admin={admin}
+          plantPickup={plantPickup}
           closed
         />
       )}
 
-      {stage === "closed" && closeDocsState(closeDocs, vatInclusive).complete && (
+      {stage === "closed" && (plantPickup ? plantCloseState(closeDocs, vatInclusive) : closeDocsState(closeDocs, vatInclusive)).complete && (
         <p className="text-sm text-emerald-600">Order complete — all documents filed.</p>
       )}
 

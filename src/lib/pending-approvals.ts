@@ -47,7 +47,7 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
 
     const wf = readOrderWorkflow(q.classification);
     const stockOnly = isStockOnlyOrder(q.items);
-    const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true);
+    const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
     if (!pend) continue;
     // Production underway ("Complete production") is ongoing work, not an approval
     // awaiting a decision — don't ring the alarm for it once production has

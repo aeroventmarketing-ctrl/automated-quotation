@@ -599,6 +599,7 @@ export function pendingStep(
   stockOnly = false,
   engineerApprovesStock = false,
   officePickup = false,
+  plantPickup = false,
 ): PendingStep | null {
   // A fully bought-in order has no job-order content — it skips production and its
   // Office-side roles (Logistics / Payment Approver / Sales / Engineer) handle the
@@ -652,11 +653,16 @@ export function pendingStep(
     case "final_pay_checked":
       return { action: "Confirm final payment", roles: ["payment_approver"] };
     case "final_pay_cleared":
+      // Plant pick up: quality test by the Technical Head / QI regardless of sourcing.
+      if (plantPickup) return { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
       if (officePickup) return { action: "Quality testing", roles: ["quality_inspector_2"], sales: true };
       return boughtIn
         ? { action: "Quality testing", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
     case "qa_tested":
+      // Plant pick up: Plant Manager quality & quantity approval, then the
+      // Warehouseman handles the delivery form (no transfer to office).
+      if (plantPickup) return { action: "Quality & Quantity Approved", roles: ["plant_manager"] };
       // Office pickup skips plant-QC / transfer / Sales-2nd-QC and goes straight
       // to preparing the delivery documents.
       if (officePickup) return { action: "Prepare delivery documents", roles: ["accounting"] };
@@ -664,18 +670,23 @@ export function pendingStep(
         ? { action: "QC & Quantity Checked", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Plant QC & quantity check", roles: ["plant_manager"] };
     case "qa_plant_checked":
+      if (plantPickup) return { action: "Make the delivery form", roles: ["warehouse"] };
       return { action: "Transfer items to office", roles: ["logistics"] };
     case "qa_transferred":
+      if (plantPickup) return { action: "Approve delivery", roles: ["plant_manager"] };
       return { action: "Sales 2nd QC & quantity check", roles: ["quality_inspector_2"], sales: true };
     case "qa_sales_checked":
+      if (plantPickup) return { action: "Upload delivery form & proof of pick up", roles: ["warehouse"] };
       return { action: "Prepare delivery documents", roles: ["accounting"] };
     case "delivery_docs_ready":
       return officePickup
         ? { action: "Upload proof of pick up & approve", roles: [], sales: true }
         : { action: "Deliver the order", roles: ["logistics"] };
     case "delivered":
-      return { action: "Approve proof of delivery (successful delivery)", roles: [], sales: true };
+      return { action: plantPickup ? "Approve POD – successful pick up" : "Approve proof of delivery (successful delivery)", roles: [], sales: true };
     case "delivery_confirmed":
+      // Plant pick up skips the surrender step — straight to Accounting confirming receipt.
+      if (plantPickup) return { action: "Confirm documents received", roles: ["accounting"] };
       return officePickup
         ? { action: "Surrender signed documents to accounting", roles: [], sales: true }
         : { action: "Surrender signed documents to accounting", roles: ["logistics"] };

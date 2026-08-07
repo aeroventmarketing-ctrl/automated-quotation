@@ -87,7 +87,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       const docMissing = docCheckGate && next?.key === "doc_check" ? docCheckMissing(sale) : [];
       const blockedReason = docMissing.length ? `Attach: ${docMissing.join(", ")}` : null;
       // Who acts next across the whole order (all phases), for the "Awaiting" hint.
-      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true);
+      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
       const awaitingAll = pend
         ? pend.sales
           ? "Sales"

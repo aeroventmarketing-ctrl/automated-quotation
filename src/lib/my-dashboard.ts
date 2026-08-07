@@ -238,7 +238,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       if (wf.deliveryMode === "multi") {
         for (const b of wf.deliveryBatches) {
           if (b.cancelled || isMbFiled(b)) continue;
-          const next = mbProgress(b, wf.officePickup === true).next;
+          const next = mbProgress(b, wf.fulfillmentMode).next;
           if (!next) continue;
           const owes = next.role === "sales"
             ? (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id || isAdmin(user))
@@ -259,7 +259,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         }
       }
       const stockOnly = isStockOnlyOrder(q.items);
-      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true);
+      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
       if (!pend) continue;
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
       const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);

@@ -35,6 +35,7 @@ import {
   type OrderStage,
   type OrderStepKey,
   type OrderWorkflow,
+  type FulfillmentMode,
   type ProductionDeptKey,
   type JobOrder,
   type JobOrderProof,
@@ -48,7 +49,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
+import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
 import {
@@ -3222,6 +3223,41 @@ export async function setOfficePickup(quotationId: string, enabled: boolean): Pr
   await saveWorkflow(quotationId, cls, { ...wf, fulfillmentMode: enabled ? "office_pickup" : "delivery" });
 }
 
+/**
+ * Set the order's fulfilment/handover mode (delivery / office pick up / plant pick
+ * up) — the 3-way selector on the Phase 2 card. Availability depends on the order's
+ * contents: office pick up = from-stock only; plant pick up = goods at the plant
+ * (produced or from-stock, never bought-in-only). An admin can change it any time; a
+ * non-admin (salesperson) can only change it before the order leaves Phase 2.
+ */
+export async function setFulfillmentMode(quotationId: string, mode: FulfillmentMode): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (mode !== "delivery" && mode !== "office_pickup" && mode !== "plant_pickup") {
+    throw new Error("Unknown fulfilment mode.");
+  }
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
+    throw new Error("Only the order's salesperson or an admin can set the fulfilment mode.");
+  }
+  if (!isAdmin(user) && stageIndex(wf.stage) > stageIndex("released")) {
+    throw new Error("Only an admin can change the fulfilment mode once the order has left Phase 2.");
+  }
+  if (mode !== "delivery") {
+    const items = await prisma.quotationItem.findMany({
+      where: { quotationId },
+      select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
+    });
+    if (mode === "office_pickup" && !isStockOnlyOrder(items)) {
+      throw new Error("Office pick up is only available for from-stock orders.");
+    }
+    if (mode === "plant_pickup" && isBoughtInOnlyOrder(items)) {
+      throw new Error("Plant pick up isn't available for bought-in orders.");
+    }
+  }
+  await saveWorkflow(quotationId, cls, { ...wf, fulfillmentMode: mode });
+}
+
 export async function setMultiDelivery(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -3245,16 +3281,17 @@ export async function setMultiDelivery(quotationId: string): Promise<void> {
 }
 
 /**
- * Office pickup: turn multiple-batch PICK UP on/off in a single toggle (client
- * collects in several batches). Turning it on enables batch mode and switches the
- * order to multi. An admin can turn it on and off at any time; a non-admin (the
- * salesperson) can turn it ON but not OFF — once on, only an admin can turn it off.
+ * Pick up in multiple batches — a single toggle (client collects in several
+ * batches). Works for office pick up and plant pick up. Turning it on enables
+ * batch mode and switches the order to multi. An admin can turn it on and off any
+ * time; a non-admin (the salesperson) can turn it ON but not OFF — once on, only an
+ * admin can turn it off.
  */
 export async function setMultiBatchPickup(quotationId: string, enabled: boolean): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  if (!wf.officePickup) throw new Error("Office pick up must be on to use multi-batch pick up.");
+  if (wf.fulfillmentMode === "delivery") throw new Error("A pick-up mode must be on to use multi-batch pick up.");
   if (enabled) {
     if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
       throw new Error("Only the order's salesperson or an admin can turn on multi-batch pick up.");
@@ -3324,11 +3361,14 @@ export async function saveMultiBatchPod(quotationId: string, batchId: string, do
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  // Office pickup: Sales attaches the proof of pick up (not Logistics).
-  const pickup = wf.officePickup === true;
-  const salesPickup = pickup && (user.role === "SALES" || quote.preparedById === user.id);
-  if (!(isAdmin(user) || salesPickup || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
-    throw new Error(pickup ? "Only Sales or an admin can attach the proof of pick up." : "Only Logistics or an admin can attach the proof of delivery.");
+  // Who attaches the proof: Sales for office pickup, the Warehouseman for plant
+  // pickup, Logistics for a delivery.
+  const mode = wf.fulfillmentMode;
+  const pickup = mode !== "delivery";
+  const salesPickup = mode === "office_pickup" && (user.role === "SALES" || quote.preparedById === user.id);
+  const warehousePlant = mode === "plant_pickup" && userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
+  if (!(isAdmin(user) || salesPickup || warehousePlant || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
+    throw new Error(pickup ? "Only the pick-up handler or an admin can attach the proof of pick up." : "Only Logistics or an admin can attach the proof of delivery.");
   }
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
@@ -3347,10 +3387,12 @@ export async function removeMultiBatchPod(quotationId: string, batchId: string, 
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const pickup = wf.officePickup === true;
-  const salesPickup = pickup && (user.role === "SALES" || quote.preparedById === user.id);
+  const mode = wf.fulfillmentMode;
+  const pickup = mode !== "delivery";
+  const salesPickup = mode === "office_pickup" && (user.role === "SALES" || quote.preparedById === user.id);
+  const warehousePlant = mode === "plant_pickup" && userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
   const isLogistics = userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
-  if (!(isAdmin(user) || salesPickup || isLogistics)) throw new Error(pickup ? "Only an admin or Sales can remove the proof of pick up." : "Only an admin or Logistics can remove the proof of delivery.");
+  if (!(isAdmin(user) || salesPickup || warehousePlant || isLogistics)) throw new Error(pickup ? "Only an admin or the pick-up handler can remove the proof of pick up." : "Only an admin or Logistics can remove the proof of delivery.");
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch) throw new Error("Delivery batch not found.");
   if (batch.steps[MB_DELIVERED_STEP] && !isAdmin(user)) {
@@ -3362,7 +3404,7 @@ export async function removeMultiBatchPod(quotationId: string, batchId: string, 
 }
 
 /** Valid per-batch closing-document keys (Sales Invoice / OR-CR-AF / DR / 2307). */
-const MB_DOC_KEYS = new Set(["sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307"]);
+const MB_DOC_KEYS = new Set(["sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307", "delivery_form"]);
 
 /** Accounting (or an admin / the Sales preparer) attaches a closing document to a batch. */
 export async function saveMultiBatchDoc(quotationId: string, batchId: string, key: string, doc: SaleDoc): Promise<void> {
@@ -3371,8 +3413,11 @@ export async function saveMultiBatchDoc(quotationId: string, batchId: string, ke
   if (!MB_DOC_KEYS.has(key)) throw new Error("Unknown document.");
   const roles = await getWorkflowRoles();
   const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { preparedById: true } });
-  const ok = isAdmin(user) || quote?.preparedById === user.id || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey);
-  if (!ok) throw new Error("Only Accounting, Sales or an admin can attach delivery documents.");
+  // Plant pick up: the Warehouseman makes the batch's delivery form / documents.
+  const ok = isAdmin(user) || quote?.preparedById === user.id
+    || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey)
+    || userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only Accounting, the Warehouseman, Sales or an admin can attach delivery documents.");
   const { cls, wf } = await loadWorkflow(quotationId);
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
@@ -3413,11 +3458,11 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
 
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
-  // Office-pickup orders run each batch through the pickup step variant.
-  const pickup = wf.officePickup === true;
-  const stepDef = mbStepDef(stepKey, pickup);
+  // Each batch runs the step variant for the order's fulfilment mode (delivery /
+  // office pick up / plant pick up).
+  const stepDef = mbStepDef(stepKey, wf.fulfillmentMode);
   if (!stepDef) throw new Error("Unknown step.");
-  const { next } = mbProgress(batch, pickup);
+  const { next } = mbProgress(batch, wf.fulfillmentMode);
   if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");
 
   // Logistics must attach the proof of delivery before the batch can be delivered.
@@ -3428,7 +3473,12 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   // OR-CR-AF / Delivery Receipt / BIR 2307) before approving its delivery
   // documents. VAT-exclusive deals don't require the Sales Invoice or BIR 2307.
   if (stepKey === "delivery_docs") {
-    const required = afterPaymentDocTypes(quote.vatMode !== "EXCLUSIVE");
+    const vatInclusive = quote.vatMode !== "EXCLUSIVE";
+    // Plant pick up: the delivery form is required; the Accounting closing docs
+    // (SI / OR / DR) only for VAT-inclusive.
+    const required = wf.fulfillmentMode === "plant_pickup"
+      ? plantDocTypes(vatInclusive)
+      : afterPaymentDocTypes(vatInclusive);
     const missing = required.filter((t) => (batch.docs?.[t.key]?.length ?? 0) === 0);
     if (missing.length) throw new Error(`Attach this batch's ${missing.map((t) => t.label).join(", ")} first.`);
   }
@@ -3718,12 +3768,17 @@ export async function qaTest(quotationId: string): Promise<void> {
   const noProd = await isNoProductionOrder(quotationId);
   // Office pickup: the 2nd Quality Inspector performs the quality test.
   const pickup = wf.officePickup === true;
-  const ok = isAdmin(user) || (noProd
-    ? boughtInQaActor(user, roles, quote.preparedById ?? "")
-      || (pickup && userHasWorkflowRole(roles, user.id, "quality_inspector_2" as WorkflowRoleKey))
-    : userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
-      || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey));
-  if (!ok) throw new Error(noProd ? BOUGHT_IN_QA_ERR : "Only the Technical Head, a Quality Inspector or an admin can do this.");
+  // Plant pick up: the Technical Head / Quality Inspector tests, regardless of sourcing.
+  const plant = wf.fulfillmentMode === "plant_pickup";
+  const techOrQi = userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
+    || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey);
+  const ok = isAdmin(user) || (plant
+    ? techOrQi
+    : noProd
+      ? boughtInQaActor(user, roles, quote.preparedById ?? "")
+        || (pickup && userHasWorkflowRole(roles, user.id, "quality_inspector_2" as WorkflowRoleKey))
+      : techOrQi);
+  if (!ok) throw new Error(noProd && !plant ? BOUGHT_IN_QA_ERR : "Only the Technical Head, a Quality Inspector or an admin can do this.");
   if (wf.stage !== "final_pay_cleared") throw new Error("The order isn't ready for quality testing.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_tested", approvals: stamp(wf, "qa_tested", user) });
 }
@@ -3734,10 +3789,12 @@ export async function qaPlantCheck(quotationId: string): Promise<void> {
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
   const noProd = await isNoProductionOrder(quotationId);
-  const ok = isAdmin(user) || (noProd
+  // Plant pick up: the Plant Manager approves quality & quantity, regardless of sourcing.
+  const plant = wf.fulfillmentMode === "plant_pickup";
+  const ok = isAdmin(user) || (noProd && !plant
     ? boughtInQaActor(user, roles, quote.preparedById ?? "")
     : userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey));
-  if (!ok) throw new Error(noProd ? BOUGHT_IN_QA_ERR : "Only the Plant Manager or an admin can do this.");
+  if (!ok) throw new Error(noProd && !plant ? BOUGHT_IN_QA_ERR : "Only the Plant Manager or an admin can do this.");
   if (wf.stage !== "qa_tested") throw new Error("The order hasn't passed quality testing yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_plant_checked", approvals: stamp(wf, "qa_plant_checked", user) });
 }
@@ -3745,10 +3802,19 @@ export async function qaPlantCheck(quotationId: string): Promise<void> {
 export async function qaTransfer(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "logistics" as WorkflowRoleKey)))
-    throw new Error("Only Logistics or an admin can do this.");
+  const roles = await getWorkflowRoles();
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "qa_plant_checked") throw new Error("The order hasn't passed the Plant Manager check yet.");
+  // Plant pick up: this step is the Warehouseman "making the delivery form" — they
+  // attach the delivery form here. No transfer to office.
+  if (wf.fulfillmentMode === "plant_pickup") {
+    if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey)))
+      throw new Error("Only the Warehouseman or an admin can make the delivery form.");
+    const form = saleFromClassification(cls)?.docs?.delivery_form ?? [];
+    if (form.length === 0) throw new Error("Attach the delivery form first.");
+  } else if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
+    throw new Error("Only Logistics or an admin can do this.");
+  }
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_transferred", approvals: stamp(wf, "qa_transferred", user) });
 }
 
@@ -3756,14 +3822,20 @@ export async function qaSalesCheck(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const isSales =
-    isAdmin(user) ||
-    quote.preparedById === user.id ||
-    user.role === "SALES" ||
-    user.role === "ENGINEER" ||
-    userHasWorkflowRole(await getWorkflowRoles(), user.id, "quality_inspector_2" as WorkflowRoleKey);
-  if (!isSales) throw new Error("Only a Sales team member, a 2nd Quality Inspector or an admin can do this.");
-  if (wf.stage !== "qa_transferred") throw new Error("The items haven't been transferred to the office yet.");
+  if (wf.stage !== "qa_transferred") throw new Error("The order isn't ready for this step yet.");
+  // Plant pick up: this step is the Plant Manager approving the delivery.
+  if (wf.fulfillmentMode === "plant_pickup") {
+    if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "plant_manager" as WorkflowRoleKey)))
+      throw new Error("Only the Plant Manager or an admin can approve the delivery.");
+  } else {
+    const isSales =
+      isAdmin(user) ||
+      quote.preparedById === user.id ||
+      user.role === "SALES" ||
+      user.role === "ENGINEER" ||
+      userHasWorkflowRole(await getWorkflowRoles(), user.id, "quality_inspector_2" as WorkflowRoleKey);
+    if (!isSales) throw new Error("Only a Sales team member, a 2nd Quality Inspector or an admin can do this.");
+  }
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_sales_checked", approvals: stamp(wf, "qa_sales_checked", user) });
 }
 
@@ -3794,13 +3866,23 @@ export async function prepareDeliveryDocs(
 export async function markDelivered(quotationId: string, pod: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "logistics" as WorkflowRoleKey)))
-    throw new Error("Only Logistics or an admin can do this.");
+  const roles = await getWorkflowRoles();
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "delivery_docs_ready") throw new Error("Delivery documents aren't ready yet.");
-  // Logistics must attach the proof of delivery before marking delivered.
+  // Plant pick up: the Warehouseman uploads the delivery form + proof of pick up,
+  // straight after the Plant Manager approves the delivery (qa_sales_checked).
+  const plant = wf.fulfillmentMode === "plant_pickup";
+  if (plant) {
+    if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey)))
+      throw new Error("Only the Warehouseman or an admin can do this.");
+    if (wf.stage !== "qa_sales_checked") throw new Error("The delivery hasn't been approved yet.");
+  } else {
+    if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey)))
+      throw new Error("Only Logistics or an admin can do this.");
+    if (wf.stage !== "delivery_docs_ready") throw new Error("Delivery documents aren't ready yet.");
+  }
+  // The proof must be attached before marking delivered / picked up.
   const podDocs = saleFromClassification(cls)?.docs?.pod ?? [];
-  if (podDocs.length === 0) throw new Error("Attach the proof of delivery before marking delivered.");
+  if (podDocs.length === 0) throw new Error(plant ? "Attach the proof of pick up first." : "Attach the proof of delivery before marking delivered.");
   const documents = { ...wf.documents, pod: pod.trim() || undefined };
   await saveWorkflow(quotationId, cls, { ...wf, stage: "delivered", documents, approvals: stamp(wf, "delivered", user) });
 }
@@ -3811,6 +3893,8 @@ const CLOSE_DOC_KEYS = new Set([
   "unsigned_si", "unsigned_or_cr_af", "unsigned_dr",
   // Proof-of-delivery files uploaded by Logistics.
   "pod",
+  // Plant pick up: the delivery form made by the Warehouseman.
+  "delivery_form",
   // Proof of final payment (for the approver's review, then archived).
   "final_payment",
 ]);
@@ -3832,7 +3916,10 @@ async function loadForCloseDoc(quotationId: string, key: string) {
     // Logistics attaches/removes the proof of delivery (the "pod" slot only) —
     // they own the delivery step but aren't Accounting/Sales. For office pickup,
     // Sales uploads the proof of pick up into the same slot.
-    || (key === "pod" && (userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey) || user.role === "SALES"));
+    || (key === "pod" && (userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey) || user.role === "SALES"))
+    // Plant pick up: the Warehouseman attaches the delivery form and the proof of
+    // pick up.
+    || ((key === "pod" || key === "delivery_form") && userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey));
   if (!ok) throw new Error("Only Accounting, Sales or an admin can attach closing documents.");
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const sale = saleFromClassification(cls) ?? { arrangement: "downpayment_full" as const, payments: [] };
@@ -3922,7 +4009,11 @@ export async function confirmDocsReceived(quotationId: string): Promise<void> {
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
     throw new Error("Only Accounting or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "docs_surrendered") throw new Error("Logistics hasn't surrendered the documents yet.");
+  // Plant pick up skips the surrender step — confirm receipt straight after the
+  // POD is approved (delivery_confirmed).
+  const plant = wf.fulfillmentMode === "plant_pickup";
+  const okStage = plant ? wf.stage === "delivery_confirmed" : wf.stage === "docs_surrendered";
+  if (!okStage) throw new Error(plant ? "The proof of pick up hasn't been approved yet." : "Logistics hasn't surrendered the documents yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "docs_received", approvals: stamp(wf, "docs_received", user) });
 }
 
@@ -3941,7 +4032,12 @@ export async function fileDocuments(quotationId: string): Promise<void> {
   if (wf.stage === "docs_received") {
     const vq = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { vatMode: true } });
     const vatInclusive = vq?.vatMode !== "EXCLUSIVE";
-    const closeState = closeDocsState(saleFromClassification(cls)?.docs, vatInclusive);
+    const docs = saleFromClassification(cls)?.docs;
+    // Plant pick up: the Warehouseman's delivery form is required; the Accounting
+    // closing docs (SI / OR / DR) are required only for VAT-inclusive orders.
+    const closeState = wf.fulfillmentMode === "plant_pickup"
+      ? plantCloseState(docs, vatInclusive)
+      : closeDocsState(docs, vatInclusive);
     if (!closeState.appear) throw new Error("Upload all required closing documents before filing.");
     await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
   }

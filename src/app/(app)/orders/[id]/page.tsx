@@ -23,6 +23,7 @@ import {
   pendingStep,
   type OrderStage,
   type ProductionDeptKey,
+  type FulfillmentMode,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
@@ -46,7 +47,7 @@ import { MultiBatchPanel } from "./multi-batch-panel";
 import { MultiDeliveryEntry } from "./multi-delivery-entry";
 import { BatchDeliveryToggle } from "./batch-delivery-toggle";
 import { MultiBatchPickupToggle } from "./multi-batch-pickup-toggle";
-import { OfficePickupToggle } from "./office-pickup-toggle";
+import { FulfillmentModeSelector } from "./fulfillment-mode-selector";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { DeptProductionControls } from "./dept-production-controls";
@@ -323,7 +324,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Live "who acts next" for the whole order. `stockOnly` routes the "released"
   // stage to the stock-release path (Plant Manager / Engineer approval → Warehouse
   // release) rather than the bought-in Purchase Order step.
-  const pend = pendingStep(wf, stockOnly, engineerApprovesStock, wf.officePickup === true);
+  const pend = pendingStep(wf, stockOnly, engineerApprovesStock, wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
   const pendingApprovers: string[] = pend
     ? pend.sales
       ? [`Sales${quote.preparedBy?.name ? ` — ${quote.preparedBy.name}` : ""}`]
@@ -380,16 +381,24 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const noProdQa = (boughtInOnly || stockOnly) && (isSalesViewer || hasRole("logistics") || hasRole("payment_approver"));
   // Who may release a from-stock order's goods from inventory (Phase 2).
   const canReleaseStock = adminViewer || hasRole("warehouse") || hasRole("prod_head_fans" as WorkflowRoleKey);
+  // Plant pick up: Warehouseman-driven tail (make form / upload POD) with Plant
+  // Manager quality & approve-delivery. Its Phase-5 roles differ from delivery.
+  const plantPick = wf.fulfillmentMode === "plant_pickup";
   const perms = {
     canNotify: isSalesViewer,
     canCheckPay: hasRole("accounting"),
     canConfirmPay: hasRole("payment_approver"),
-    canQaTest: hasRole("technical_head") || hasRole("quality_inspector") || noProdQa || (wf.officePickup === true && hasRole("quality_inspector_2" as WorkflowRoleKey)),
-    canQaPlant: hasRole("plant_manager") || noProdQa,
-    canQaTransfer: hasRole("logistics"),
-    canQaSales: isSalesViewer || hasRole("quality_inspector_2" as WorkflowRoleKey),
+    canQaTest: plantPick
+      ? hasRole("technical_head") || hasRole("quality_inspector")
+      : hasRole("technical_head") || hasRole("quality_inspector") || noProdQa || (wf.officePickup === true && hasRole("quality_inspector_2" as WorkflowRoleKey)),
+    canQaPlant: plantPick ? hasRole("plant_manager") : hasRole("plant_manager") || noProdQa,
+    // qa_plant_checked step: Warehouseman "make delivery form" for plant, else Logistics transfer.
+    canQaTransfer: plantPick ? hasRole("warehouse") : hasRole("logistics"),
+    // qa_transferred step: Plant Manager "approve delivery" for plant, else Sales 2nd QC.
+    canQaSales: plantPick ? hasRole("plant_manager") : isSalesViewer || hasRole("quality_inspector_2" as WorkflowRoleKey),
     canPrepDocs: hasRole("accounting"),
-    canDeliver: hasRole("logistics"),
+    // qa_sales_checked / delivery step: Warehouseman uploads POD for plant, else Logistics delivers.
+    canDeliver: plantPick ? hasRole("warehouse") : hasRole("logistics"),
     canApproveDelivery: isSalesViewer,
     canSurrender: hasRole("logistics"),
     canFile: hasRole("accounting"),
@@ -479,12 +488,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Step 1: persisted flag + tag only (no Phase 5 change yet). Set by the order's
   // salesperson or an admin.
   const officePickup = wf.officePickup === true;
-  // Office pickup is a from-stock fulfilment — the toggle is offered only on
-  // from-stock orders. An admin can flip it back and forth at any time; a
-  // non-admin (the salesperson) may set it only while the order is still in
-  // Phase 2 (before it's released from stock), after which it locks for them.
+  // Fulfilment/handover mode (Delivery / Office pick up / Plant pick up). The
+  // selector offers the modes the order's items allow: office pick up = from-stock;
+  // plant pick up = goods at the plant (not bought-in-only). An admin can change it
+  // any time; a non-admin (the salesperson) only while the order is still in Phase 2.
   const pickupWindowOpen = stageIndex(wf.stage) <= stageIndex("released");
-  const canSetPickup = stockOnly && (adminViewer || (isPreparerViewer && pickupWindowOpen));
+  const canSetMode = adminViewer || (isPreparerViewer && pickupWindowOpen);
+  const availableModes: FulfillmentMode[] = [
+    "delivery",
+    ...(stockOnly ? (["office_pickup"] as FulfillmentMode[]) : []),
+    ...(!boughtInOnly ? (["plant_pickup"] as FulfillmentMode[]) : []),
+  ];
   // The enable toggle shows to authorized roles from when production starts up
   // until just before the order is actually delivered — so an order can still be
   // switched to batch delivery even after the single-delivery flow has begun
@@ -492,14 +506,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // toggle is on. Switching is blocked once the order is delivered/closed.
   const inDeliveryWindow =
     stageIndex(wf.stage) >= stageIndex("producing") && stageIndex(wf.stage) < stageIndex("delivered");
-  // The normal delivery batch toggle is not used for office-pickup orders — they
-  // get the dedicated single "Multi-batch pick up" toggle below.
-  const showBatchToggle = inDeliveryWindow && !multiMode && canEnableBatch && !officePickup;
+  // The normal delivery batch toggle is not used for pickup orders — office pickup
+  // gets the dedicated "Multi-batch pick up" toggle below; plant pickup multi-batch
+  // is a separate change.
+  const showBatchToggle = inDeliveryWindow && !multiMode && canEnableBatch && !officePickup && !plantPick;
   const showMultiEntry =
-    inDeliveryWindow && !multiMode && batchEnabled && (canManageMulti || canEnableBatch) && !officePickup;
-  // Office pickup: a single "Multi-batch pick up" toggle. The salesperson or an
-  // admin can turn it on; only an admin can turn it off (enforced server-side).
-  const showPickupMultiToggle = officePickup && inDeliveryWindow && !multiMode && (adminViewer || isPreparerViewer);
+    inDeliveryWindow && !multiMode && batchEnabled && (canManageMulti || canEnableBatch) && !officePickup && !plantPick;
+  // Office / plant pick up: a single "Multi-batch pick up" toggle. The salesperson
+  // or an admin can turn it on; only an admin can turn it off (enforced server-side).
+  const isPickupMode = officePickup || plantPick;
+  const showPickupMultiToggle = isPickupMode && inDeliveryWindow && !multiMode && (adminViewer || isPreparerViewer);
   const mbOrdered = new Map<string, number>();
   for (const it of quote.items) {
     const k = it.descriptionSnapshot.trim();
@@ -517,11 +533,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (role === "sales" ? isPreparerViewer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
   const mbPaymentById = new Map((saleForClose?.payments ?? []).map((p) => [p.id, p] as const));
   const mbBatchViews = wf.deliveryBatches.map((b) => {
-    const steps = mbSteps(officePickup).map((s) => {
+    const steps = mbSteps(wf.fulfillmentMode).map((s) => {
       const st = b.steps[s.key];
       return { key: s.key, label: s.done, roleLabel: s.role === "sales" ? "Sales" : workflowRoleLabel(s.role), done: !!st, byName: st?.byName, at: st?.at ? fmtWhen(st.at) : undefined };
     });
-    const { next } = mbProgress(b, officePickup);
+    const { next } = mbProgress(b, wf.fulfillmentMode);
     const nextView = next && !b.cancelled
       ? { key: next.key, label: next.label, roleLabel: next.role === "sales" ? "Sales" : workflowRoleLabel(next.role), canAct: canActMbStep(next.role), collectsPayment: !!next.collectsPayment }
       : null;
@@ -739,9 +755,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {officePickup && (
+          {wf.fulfillmentMode !== "delivery" && (
             <Badge variant="outline" className="gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
-              <Store className="h-3.5 w-3.5" /> Office pick up
+              <Store className="h-3.5 w-3.5" /> {wf.fulfillmentMode === "plant_pickup" ? "Plant pick up" : "Office pick up"}
             </Badge>
           )}
           <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{displayStageLabel(wf.stage)}</Badge>
@@ -811,18 +827,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <Card id="phase-2" className="scroll-mt-24">
         <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 2 · Job orders &amp; production</CardTitle></CardHeader>
         <CardContent>
-          {/* Office pick up — client collects at the office instead of a
-              delivery. Step 1: flag + tag only; the Phase 5 pick-up path is a
-              separate change. Set by Sales / admin; shown read-only to others. */}
-          {(canSetPickup || officePickup) && (
+          {/* Fulfilment/handover mode — Delivery / Office pick up / Plant pick up.
+              Set by the salesperson or an admin (admin can change any time; the
+              salesperson only before the order leaves Phase 2). */}
+          {(canSetMode || wf.fulfillmentMode !== "delivery") && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
-              {canSetPickup ? (
-                <OfficePickupToggle orderId={quote.id} enabled={officePickup} />
-              ) : (
-                <span className="flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300">
-                  <Store className="h-4 w-4" /> Office pick up
-                </span>
-              )}
+              <FulfillmentModeSelector orderId={quote.id} mode={wf.fulfillmentMode} available={availableModes} canSet={canSetMode} />
             </div>
           )}
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
@@ -1015,7 +1025,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
             {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode !== "EXCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>
@@ -1030,12 +1040,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       {/* Phase 5 (multiple deliveries) — each batch runs the full delivery sequence. */}
       {multiMode && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">{officePickup ? "Phase 5 · Multiple-batch pick up" : "Phase 5 · Multiple-batch delivery"}</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">{isPickupMode ? "Phase 5 · Multiple-batch pick up" : "Phase 5 · Multiple-batch delivery"}</CardTitle></CardHeader>
           <CardContent>
             {/* Turn batch mode back off (returns the order to the single flow) —
-                allowed while no batch has been opened. For office pickup only an
-                admin can turn it off; otherwise Engineer / Payment Approver / admin. */}
-            {officePickup ? (
+                allowed while no batch has been opened. For pick up only an admin can
+                turn it off; otherwise Engineer / Payment Approver / admin. */}
+            {isPickupMode ? (
               adminViewer && (
                 <div className="mb-3 rounded-md border bg-muted/20 p-2.5">
                   <MultiBatchPickupToggle orderId={quote.id} enabled admin={adminViewer} canTurnOn hasOpenBatches={mbBatchViews.some((b) => !b.cancelled)} />
@@ -1049,11 +1059,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               )
             )}
             <p className="mb-3 text-xs text-muted-foreground">
-              {officePickup
-                ? "Pick up the order in batches — open a batch of released items (any items or partial quantities) and run each through the pick-up sequence: notify client → payment → quality → save documents & approve pick up → proof of pick up → documents. Each batch collects its own partial payment (payment first). The order closes once every item is picked up and all batches are filed."
+              {isPickupMode
+                ? "Pick up the order in batches — open a batch of finished/released items (any items or partial quantities) and run each through the pick-up sequence. Each batch collects its own partial payment (payment first). The order closes once every item is picked up and all batches are filed."
                 : "Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed."}
             </p>
-            <MultiBatchPanel orderId={quote.id} officePickup={officePickup} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null, docs: {} })) : mbBatchViews} payments={restricted ? [] : mbPayments} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canManage={canManageMulti} canCollect={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
+            <MultiBatchPanel orderId={quote.id} officePickup={isPickupMode} plantPickup={plantPick} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null, docs: {} })) : mbBatchViews} payments={restricted ? [] : mbPayments} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canManage={canManageMulti} canCollect={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
           </CardContent>
         </Card>
       )}

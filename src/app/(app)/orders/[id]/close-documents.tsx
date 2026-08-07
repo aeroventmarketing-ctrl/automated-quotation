@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Upload, Trash2, FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { afterPaymentDocTypes, closeDocsState, type SaleDoc } from "@/lib/sale";
+import { afterPaymentDocTypes, closeDocsState, plantDocTypes, plantCloseState, type SaleDoc } from "@/lib/sale";
 import { uploadDocument } from "@/lib/client-upload";
 import { saveCloseDoc, removeCloseDoc, fileDocuments } from "../actions";
 
@@ -26,6 +26,7 @@ export function CloseDocuments({
   canFile,
   admin = false,
   closed = false,
+  plantPickup = false,
 }: {
   orderId: string;
   initialDocs: Record<string, SaleDoc[]>;
@@ -35,14 +36,22 @@ export function CloseDocuments({
   admin?: boolean;
   /** The order already closed but its documents are still incomplete. */
   closed?: boolean;
+  /** Plant pick up — the delivery form is made earlier by the Warehouseman; the
+   *  Accounting closing docs (SI/OR/DR) are required only for VAT-inclusive. */
+  plantPickup?: boolean;
 }) {
   const router = useRouter();
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialDocs);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const types = afterPaymentDocTypes(vatInclusive);
-  const state = closeDocsState(docs, vatInclusive);
+  // Plant pick up: the delivery form is attached at the earlier "make delivery form"
+  // step, so here Accounting only attaches SI/OR/DR (VAT-inclusive) — nothing for
+  // VAT-exclusive. Non-plant orders keep the normal closing-doc slots.
+  const types = plantPickup
+    ? plantDocTypes(vatInclusive).filter((t) => t.key !== "delivery_form")
+    : afterPaymentDocTypes(vatInclusive);
+  const state = plantPickup ? plantCloseState(docs, vatInclusive) : closeDocsState(docs, vatInclusive);
 
   async function upload(key: string, file: File) {
     setBusy(true); setErr(null);
