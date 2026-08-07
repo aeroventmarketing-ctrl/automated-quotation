@@ -14,6 +14,27 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Office pickup — one-step "Release from Stock and Notify Client"
+- **Feature (owner-requested, frozen Phase 2 stock-release):** when the **Office pick up**
+  flag is on, the from-stock Phase-2 panel collapses the normal two steps (Plant
+  Manager/Engineer **approve** → Warehouse **release**) into a **single** action:
+  **"Release from Stock and Notify Client"**, pressed by the Plant Manager / Engineer
+  (in-house duct hardware only) / admin. It picks the stock item(s), deducts inventory,
+  and advances straight to final payment (client notified) — then Accounting issues the
+  billing statement (skippable) and the client makes the final payment as before.
+- **Gated on `officePickup`** — the normal from-stock flow keeps its two steps unchanged.
+- **Where:**
+  - `src/app/(app)/orders/actions.ts` — `releaseOrderFromStock` now branches on
+    `wf.officePickup`: for pickup it gates on Plant Manager / Engineer(duct-hardware) /
+    admin and does NOT require a prior approval stamp; it stamps both
+    `stock_release_approved` and `client_notified`. Normal flow still needs the Warehouse
+    role + prior approval.
+  - `src/lib/order-workflow.ts` — `pendingStep` "released" case returns a single
+    "Release from stock & notify client" step for pickup orders.
+  - `src/app/(app)/orders/[id]/stock-release.tsx` — `officePickup` prop; single combined
+    button that opens the stock picker; shared `release()` helper.
+  - `src/app/(app)/orders/[id]/page.tsx` — passes `officePickup` to `StockRelease`.
+
 ## 2026-08-07 · Office pickup workflow — STEP 2 built (from-stock, pickup Phase 5)
 - **Feature (owner-approved, frozen Phases 1/2/5):** when the **Office pick up** flag is
   on, the order follows a from-stock pickup path. Confirmed with the owner: office pickup

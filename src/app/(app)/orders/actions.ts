@@ -1317,25 +1317,43 @@ export async function releaseOrderFromStock(quotationId: string, matches: StockM
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
-  if (!(isAdmin(user) || STOCK_RELEASE_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r)))) {
-    throw new Error("Only the Warehouse, Fans & Blowers head or an admin can release from stock.");
-  }
   const { quote, cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
-  // The Plant Manager must approve the release before the warehouse issues the stock.
-  if (!wf.approvals.stock_release_approved) {
-    throw new Error("The Plant Manager must approve the stock release first.");
-  }
   const items = await prisma.quotationItem.findMany({
     where: { quotationId },
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
   });
   if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
+  // Office pickup collapses approval + warehouse release into a single step: the
+  // Plant Manager / Engineer (in-house duct hardware only) / admin releases from
+  // stock and notifies the client in one action. The normal from-stock flow keeps
+  // its two steps (Warehouse releases only after the Plant Manager's approval).
+  const pickup = wf.officePickup === true;
+  if (pickup) {
+    const isPlantOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey);
+    const engineerMay = user.role === "ENGINEER" && isDuctHardwareStockOnly(items);
+    if (!(isPlantOrAdmin || engineerMay)) {
+      throw new Error("Only the Plant Manager, an Engineer or an admin can release an office-pickup order from stock.");
+    }
+  } else {
+    if (!(isAdmin(user) || STOCK_RELEASE_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r)))) {
+      throw new Error("Only the Warehouse, Fans & Blowers head or an admin can release from stock.");
+    }
+    // The Plant Manager must approve the release before the warehouse issues the stock.
+    if (!wf.approvals.stock_release_approved) {
+      throw new Error("The Plant Manager must approve the stock release first.");
+    }
+  }
   // Deduct the released quantities from inventory. Unmatched lines are skipped
   // (nothing deducted) — the warehouse reconciles in Inventory if stock went short,
   // exactly like the MRF release. Then advance straight to Phase 5.
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
-  const workflow = { ...wf, stage: "final_pay_review", approvals: stamp(wf, "client_notified", user) };
+  // Pickup records the release-approval stamp too (the single action both approves
+  // and releases), so the trail shows who released it.
+  const approvals = pickup
+    ? stamp({ approvals: stamp(wf, "stock_release_approved", user) }, "client_notified", user)
+    : stamp(wf, "client_notified", user);
+  const workflow = { ...wf, stage: "final_pay_review", approvals };
   await prisma.$transaction(async (tx) => {
     for (const m of clean) {
       const item = await tx.stockItem.findUnique({ where: { id: m.stockItemId } });
