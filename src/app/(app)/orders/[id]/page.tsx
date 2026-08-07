@@ -228,16 +228,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // "Name (Designation)" — or just the name when no designation maps.
   const withDesig = (name: string, designation: string) => (designation ? `${name} (${designation})` : name);
 
-  // Live "who acts next" for the whole order.
-  const pend = pendingStep(wf);
-  const pendingApprovers: string[] = pend
-    ? pend.sales
-      ? [`Sales${quote.preparedBy?.name ? ` — ${quote.preparedBy.name}` : ""}`]
-      : pend.roles.length
-        ? pend.roles.map(approverLabel)
-        : []
-    : [];
-
   const canIssue =
     ["released", "in_production", "jo_received", "producing"].includes(wf.stage) &&
     (adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "technical_head" as WorkflowRoleKey)));
@@ -323,6 +313,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // orders or a PO. Like bought-in, it skips production and Office-side roles run QA.
   const stockOnly = isStockOnlyOrder(quote.items) && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
   const stockLines = stockOnly ? orderStockLines(quote.items) : [];
+
+  // Live "who acts next" for the whole order. `stockOnly` routes the "released"
+  // stage to the stock-release path (Plant Manager / Engineer approval → Warehouse
+  // release) rather than the bought-in Purchase Order step.
+  const pend = pendingStep(wf, stockOnly);
+  const pendingApprovers: string[] = pend
+    ? pend.sales
+      ? [`Sales${quote.preparedBy?.name ? ` — ${quote.preparedBy.name}` : ""}`]
+      : [...(pend.engineer ? ["Engineer"] : []), ...pend.roles.map(approverLabel)]
+    : [];
   // Bought-in / from-stock orders relabel a couple of stages (no JO creation / no Plant QC).
   const displayStageLabel = (key: OrderStage): string => {
     if (boughtInOnly && key === "released") return "For PO creation";

@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/db";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep } from "@/lib/order-workflow";
+import { isStockOnlyOrder } from "@/lib/department-pnl";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
@@ -30,7 +31,7 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
     // drop confirmed orders that still owe this user an approval. isSaleConfirmed
     // below is the real gate, exactly as the departmental P&L does it.
     prisma.quotation.findMany({
-      include: { inquiry: { include: { customer: true } } },
+      include: { inquiry: { include: { customer: true } }, items: true },
       orderBy: { createdAt: "desc" },
     }),
     getWorkflowRoles(),
@@ -44,7 +45,7 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
     if (!sale || !isSaleConfirmed(sale)) continue;
 
     const wf = readOrderWorkflow(q.classification);
-    const pend = pendingStep(wf);
+    const pend = pendingStep(wf, isStockOnlyOrder(q.items));
     if (!pend) continue;
     // Production underway ("Complete production") is ongoing work, not an approval
     // awaiting a decision — don't ring the alarm for it once production has
@@ -55,7 +56,8 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
 
     const owesByRole = pend.roles.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
     const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
-    if (!owesByRole && !owesBySales) continue;
+    const owesByEngineer = !!pend.engineer && user.role === "ENGINEER";
+    if (!owesByRole && !owesBySales && !owesByEngineer) continue;
 
     // Notification backlog reset: hide orders that were already awaiting this
     // step before the reset (practice slate). "Pending since" = the most recent

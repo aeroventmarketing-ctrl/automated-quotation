@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep, requisitionDeptLabel, deptRole } from "@/lib/order-workflow";
+import { isStockOnlyOrder } from "@/lib/department-pnl";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
@@ -174,7 +175,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     // is the real gate, exactly as the departmental P&L does it. (Owner-approved
     // edit that also affects the Phase 3 Materials feed built from this query.)
     const quotes = await prisma.quotation.findMany({
-      include: { inquiry: { include: { customer: true } } },
+      include: { inquiry: { include: { customer: true } }, items: true },
       orderBy: { createdAt: "desc" },
     });
     for (const q of quotes) {
@@ -257,11 +258,12 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           });
         }
       }
-      const pend = pendingStep(wf);
+      const pend = pendingStep(wf, isStockOnlyOrder(q.items));
       if (!pend) continue;
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
       const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
-      if (!owesByRole && !owesBySales) continue;
+      const owesByEngineer = !!pend.engineer && (user.role === "ENGINEER" || isAdmin(user));
+      if (!owesByRole && !owesBySales && !owesByEngineer) continue;
       // "Pending since" = the most recent approval stamp (when it entered this
       // step), or the order's creation time.
       const oStamps = Object.values(wf.approvals ?? {}).map((s) => (s as { at?: string } | null)?.at).filter((t): t is string => !!t);
