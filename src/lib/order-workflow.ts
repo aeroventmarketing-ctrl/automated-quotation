@@ -298,12 +298,19 @@ export interface OrderWorkflow {
   // via a toggle; the single→multi switch itself is still a deliberate click.
   batchDeliveryEnabled?: boolean;
   deliveryBatches: MultiDeliveryBatch[];
-  // When true, the order is collected by the client at the office instead of
-  // being delivered — the "Office pick up" fulfilment path. Set on the Phase 2
-  // card (by Sales / admin). Step 1: this is just a persisted flag + tag; it does
-  // not yet alter the Phase 5 delivery steps (that wiring is a separate change).
+  // How the finished goods reach the client — the fulfilment/handover mode.
+  //  - "delivery"      Logistics delivers to the client (default).
+  //  - "office_pickup" client collects at the office (from-stock orders).
+  //  - "plant_pickup"  client collects at the plant (goods at the plant).
+  // This is the source of truth; `officePickup` below is a derived convenience.
+  fulfillmentMode: FulfillmentMode;
+  // Derived: true when fulfillmentMode === "office_pickup". Kept so existing
+  // office-pickup call sites read unchanged.
   officePickup?: boolean;
 }
+
+export type FulfillmentMode = "delivery" | "office_pickup" | "plant_pickup";
+const FULFILMENT_MODES: readonly FulfillmentMode[] = ["delivery", "office_pickup", "plant_pickup"];
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
 
@@ -518,9 +525,17 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   const deliveryMode = wf?.deliveryMode === "multi" ? "multi" as const : undefined;
   const batchDeliveryEnabled = wf?.batchDeliveryEnabled === true;
   const deliveryBatches = coerceMultiBatches(wf?.deliveryBatches);
-  const officePickup = wf?.officePickup === true;
+  // Fulfilment mode: read the stored enum, else fall back to the legacy
+  // `officePickup` boolean (so orders saved before the enum keep working).
+  const rawMode = wf?.fulfillmentMode;
+  const fulfillmentMode: FulfillmentMode = FULFILMENT_MODES.includes(rawMode as FulfillmentMode)
+    ? (rawMode as FulfillmentMode)
+    : wf?.officePickup === true
+      ? "office_pickup"
+      : "delivery";
+  const officePickup = fulfillmentMode === "office_pickup";
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, batchDeliveryEnabled, deliveryBatches, officePickup };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, batchDeliveryEnabled, deliveryBatches, fulfillmentMode, officePickup };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */
