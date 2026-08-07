@@ -20,7 +20,10 @@ and we never redo something that's already done.
   both toggle positions are self-explanatory. The header badge and the read-only tag keep
   saying "Office pick up" — they're status indicators shown only when pickup is on, where
   an on/off legend would be meaningless.
-- **Where:** `src/app/(app)/orders/[id]/office-pickup-toggle.tsx`.
+- **Also removed** the now-redundant caption "Client collects at the office instead of
+  delivery." from the Phase 2 toggle box (the toggle label already says it).
+- **Where:** `src/app/(app)/orders/[id]/office-pickup-toggle.tsx`,
+  `src/app/(app)/orders/[id]/page.tsx`.
 
 ## 2026-08-07 · Office pickup — multi-batch pick up (client collects in batches)
 - **Feature (owner-requested, frozen Phase 5 multi-batch):** an office-pickup order can be

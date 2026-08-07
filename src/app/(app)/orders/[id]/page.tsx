@@ -823,7 +823,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   <Store className="h-4 w-4" /> Office pick up
                 </span>
               )}
-              <span className="text-[11px] text-muted-foreground">Client collects at the office instead of delivery.</span>
             </div>
           )}
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
