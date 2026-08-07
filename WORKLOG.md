@@ -14,6 +14,24 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · "Waiting for" for from-stock orders now routes to Warehouse, not the PO step
+- **Bug:** On a from-stock order, the Phase 2 "WAITING FOR / APPROVERS" banner (and the
+  order-list hint, My Dashboard tasks, and approval alarms) showed "Prepare & process the
+  Purchase Order — Purchaser / Technical Head". A from-stock order has no PO; it's released
+  from stock by the Warehouse. So the wrong roles were shown and alarmed.
+- **Cause:** `pendingStep(wf)` in `src/lib/order-workflow.ts` only saw job-order content;
+  a from-stock order has none, so it was treated as bought-in (the PO path). It couldn't
+  tell stock-only from bought-in because that distinction lives in the quotation lines.
+- **Fix (owner-approved, touches frozen Phase 1/2 routing — display only, no stage/gate
+  change):** `pendingStep(wf, stockOnly)` gained an optional flag. For a stock-only order at
+  the `released` stage it now returns: not-yet-approved → "Approve stock release" (Plant
+  Manager or Engineer), approved → "Release from stock" (Warehouse / Fans & Blowers head).
+  Added an `engineer` flag to `PendingStep` (mirrors `sales`). All four callers pass the
+  flag and honour the engineer owner: `orders/[id]/page.tsx`, `orders/page.tsx`,
+  `src/lib/my-dashboard.ts`, `src/lib/pending-approvals.ts` (the last two now include
+  quotation `items` to detect stock-only).
+- **Pending:** none.
+
 ## 2026-08-07 · Phase 2 stock-release: Engineer can approve too (alongside Plant Manager)
 - **Change (owner-approved, frozen Phase 2):** The "For stock release" approval gate
   on a from-stock order now accepts the **Engineer** base role in addition to the

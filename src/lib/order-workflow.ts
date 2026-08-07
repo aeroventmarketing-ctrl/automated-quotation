@@ -547,9 +547,19 @@ export interface PendingStep {
   action: string;
   roles: WorkflowRoleKey[];
   sales?: boolean;
+  // The Engineer base role (SALES/ENGINEER/ADMIN) also owns this step, in addition
+  // to `roles` — e.g. approving a from-stock release (mirrors `sales`).
+  engineer?: boolean;
 }
 
-export function pendingStep(wf: OrderWorkflow): PendingStep | null {
+/**
+ * `stockOnly` marks a from-stock order (released from inventory, no job orders and
+ * no purchase order). Such an order has no job-order content, so without this flag
+ * it looks identical to a bought-in order and would be routed to the PO step. The
+ * caller knows it from the quotation lines (`isStockOnlyOrder`); pass it so the
+ * "released" stage routes to the stock-release path instead.
+ */
+export function pendingStep(wf: OrderWorkflow, stockOnly = false): PendingStep | null {
   // A fully bought-in order has no job-order content — it skips production and its
   // Office-side roles (Logistics / Payment Approver / Sales / Engineer) handle the
   // Phase 5 quality steps instead of the production QC departments.
@@ -562,6 +572,14 @@ export function pendingStep(wf: OrderWorkflow): PendingStep | null {
     case "docs_checked":
       return { action: "Payment Cleared", roles: ["payment_approver"] };
     case "released": {
+      // From-stock order: the Plant Manager or an Engineer approves the release,
+      // then the Warehouse (or Fans & Blowers head) issues it from inventory. No
+      // job order and no purchase order.
+      if (stockOnly) {
+        return wf.approvals.stock_release_approved
+          ? { action: "Release from stock", roles: ["warehouse", "prod_head_fans"] }
+          : { action: "Approve stock release", roles: ["plant_manager"], engineer: true };
+      }
       if (boughtIn) {
         return { action: "Prepare & process the Purchase Order", roles: ["purchaser", "technical_head"] };
       }

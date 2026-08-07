@@ -87,13 +87,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       const docMissing = docCheckGate && next?.key === "doc_check" ? docCheckMissing(sale) : [];
       const blockedReason = docMissing.length ? `Attach: ${docMissing.join(", ")}` : null;
       // Who acts next across the whole order (all phases), for the "Awaiting" hint.
-      const pend = pendingStep(wf);
+      const pend = pendingStep(wf, stockOnly);
       const awaitingAll = pend
         ? pend.sales
           ? "Sales"
-          : pend.roles.length
-            ? pend.roles.map(workflowRoleLabel).join(", ")
-            : null
+          : [...(pend.engineer ? ["Engineer"] : []), ...pend.roles.map(workflowRoleLabel)].join(", ") || null
         : null;
       // The people currently assigned to the pending role(s) — named + blinking.
       const awaitingNames = pend && !pend.sales
