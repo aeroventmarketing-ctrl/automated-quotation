@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Store } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
@@ -45,6 +45,7 @@ import {
 import { MultiBatchPanel } from "./multi-batch-panel";
 import { MultiDeliveryEntry } from "./multi-delivery-entry";
 import { BatchDeliveryToggle } from "./batch-delivery-toggle";
+import { OfficePickupToggle } from "./office-pickup-toggle";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { DeptProductionControls } from "./dept-production-controls";
@@ -321,7 +322,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Live "who acts next" for the whole order. `stockOnly` routes the "released"
   // stage to the stock-release path (Plant Manager / Engineer approval → Warehouse
   // release) rather than the bought-in Purchase Order step.
-  const pend = pendingStep(wf, stockOnly, engineerApprovesStock);
+  const pend = pendingStep(wf, stockOnly, engineerApprovesStock, wf.officePickup === true);
   const pendingApprovers: string[] = pend
     ? pend.sales
       ? [`Sales${quote.preparedBy?.name ? ` — ${quote.preparedBy.name}` : ""}`]
@@ -382,7 +383,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canNotify: isSalesViewer,
     canCheckPay: hasRole("accounting"),
     canConfirmPay: hasRole("payment_approver"),
-    canQaTest: hasRole("technical_head") || hasRole("quality_inspector") || noProdQa,
+    canQaTest: hasRole("technical_head") || hasRole("quality_inspector") || noProdQa || (wf.officePickup === true && hasRole("quality_inspector_2" as WorkflowRoleKey)),
     canQaPlant: hasRole("plant_manager") || noProdQa,
     canQaTransfer: hasRole("logistics"),
     canQaSales: isSalesViewer || hasRole("quality_inspector_2" as WorkflowRoleKey),
@@ -473,6 +474,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canEnableBatch =
     adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey));
   const batchEnabled = wf.batchDeliveryEnabled === true;
+  // "Office pick up" — client collects at the office instead of a delivery.
+  // Step 1: persisted flag + tag only (no Phase 5 change yet). Set by the order's
+  // salesperson or an admin.
+  const officePickup = wf.officePickup === true;
+  // Office pickup is a from-stock fulfilment — the toggle is offered only on
+  // from-stock orders, to the salesperson or an admin.
+  const canSetPickup = (adminViewer || isPreparerViewer) && stockOnly;
   // The enable toggle shows to authorized roles from when production starts up
   // until just before the order is actually delivered — so an order can still be
   // switched to batch delivery even after the single-delivery flow has begun
@@ -721,13 +729,24 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             )}
           </p>
         </div>
-        <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{displayStageLabel(wf.stage)}</Badge>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {officePickup && (
+            <Badge variant="outline" className="gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
+              <Store className="h-3.5 w-3.5" /> Office pick up
+            </Badge>
+          )}
+          <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{displayStageLabel(wf.stage)}</Badge>
+        </div>
       </div>
 
-      {/* Stage progress */}
+      {/* Stage progress. Office pickup skips plant-QC → transfer → Sales-2nd-QC →
+          delivered, so those chips are hidden for a pickup order. */}
       <div className="flex flex-wrap gap-1.5">
-        {ORDER_STAGES.map((s, i) => {
-          const curIdx = ORDER_STAGES.findIndex((x) => x.key === wf.stage);
+        {(officePickup
+          ? ORDER_STAGES.filter((s) => !["qa_plant_checked", "qa_transferred", "qa_sales_checked", "delivered"].includes(s.key))
+          : ORDER_STAGES
+        ).map((s, i, arr) => {
+          const curIdx = arr.findIndex((x) => x.key === wf.stage);
           const done = i < curIdx;
           const cur = i === curIdx;
           return (
@@ -783,6 +802,21 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <Card id="phase-2" className="scroll-mt-24">
         <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 2 · Job orders &amp; production</CardTitle></CardHeader>
         <CardContent>
+          {/* Office pick up — client collects at the office instead of a
+              delivery. Step 1: flag + tag only; the Phase 5 pick-up path is a
+              separate change. Set by Sales / admin; shown read-only to others. */}
+          {(canSetPickup || officePickup) && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+              {canSetPickup ? (
+                <OfficePickupToggle orderId={quote.id} enabled={officePickup} />
+              ) : (
+                <span className="flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300">
+                  <Store className="h-4 w-4" /> Office pick up
+                </span>
+              )}
+              <span className="text-[11px] text-muted-foreground">Client collects at the office instead of delivery.</span>
+            </div>
+          )}
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="text-sm text-muted-foreground">Job orders are issued once Phase 1 is complete.</p>
           ) : boughtInOnly && wf.stage === "released" ? (
@@ -956,7 +990,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
             {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode !== "EXCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>

@@ -298,6 +298,11 @@ export interface OrderWorkflow {
   // via a toggle; the single→multi switch itself is still a deliberate click.
   batchDeliveryEnabled?: boolean;
   deliveryBatches: MultiDeliveryBatch[];
+  // When true, the order is collected by the client at the office instead of
+  // being delivered — the "Office pick up" fulfilment path. Set on the Phase 2
+  // card (by Sales / admin). Step 1: this is just a persisted flag + tag; it does
+  // not yet alter the Phase 5 delivery steps (that wiring is a separate change).
+  officePickup?: boolean;
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -513,8 +518,9 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   const deliveryMode = wf?.deliveryMode === "multi" ? "multi" as const : undefined;
   const batchDeliveryEnabled = wf?.batchDeliveryEnabled === true;
   const deliveryBatches = coerceMultiBatches(wf?.deliveryBatches);
+  const officePickup = wf?.officePickup === true;
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, batchDeliveryEnabled, deliveryBatches };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, batchDeliveryEnabled, deliveryBatches, officePickup };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */
@@ -577,6 +583,7 @@ export function pendingStep(
   wf: OrderWorkflow,
   stockOnly = false,
   engineerApprovesStock = false,
+  officePickup = false,
 ): PendingStep | null {
   // A fully bought-in order has no job-order content — it skips production and its
   // Office-side roles (Logistics / Payment Approver / Sales / Engineer) handle the
@@ -625,10 +632,14 @@ export function pendingStep(
     case "final_pay_checked":
       return { action: "Confirm final payment", roles: ["payment_approver"] };
     case "final_pay_cleared":
+      if (officePickup) return { action: "Quality testing", roles: ["quality_inspector_2"], sales: true };
       return boughtIn
         ? { action: "Quality testing", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
     case "qa_tested":
+      // Office pickup skips plant-QC / transfer / Sales-2nd-QC and goes straight
+      // to preparing the delivery documents.
+      if (officePickup) return { action: "Prepare delivery documents", roles: ["accounting"] };
       return boughtIn
         ? { action: "QC & Quantity Checked", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Plant QC & quantity check", roles: ["plant_manager"] };
@@ -639,11 +650,15 @@ export function pendingStep(
     case "qa_sales_checked":
       return { action: "Prepare delivery documents", roles: ["accounting"] };
     case "delivery_docs_ready":
-      return { action: "Deliver the order", roles: ["logistics"] };
+      return officePickup
+        ? { action: "Upload proof of pick up & approve", roles: [], sales: true }
+        : { action: "Deliver the order", roles: ["logistics"] };
     case "delivered":
       return { action: "Approve proof of delivery (successful delivery)", roles: [], sales: true };
     case "delivery_confirmed":
-      return { action: "Surrender signed documents to accounting", roles: ["logistics"] };
+      return officePickup
+        ? { action: "Surrender signed documents to accounting", roles: [], sales: true }
+        : { action: "Surrender signed documents to accounting", roles: ["logistics"] };
     case "docs_surrendered":
       return { action: "Confirm documents received", roles: ["accounting"] };
     case "docs_received":

@@ -14,6 +14,67 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Office pickup workflow — STEP 2 built (from-stock, pickup Phase 5)
+- **Feature (owner-approved, frozen Phases 1/2/5):** when the **Office pick up** flag is
+  on, the order follows a from-stock pickup path. Confirmed with the owner: office pickup
+  is **from-stock only** (reuses the existing release-from-stock spine, which already
+  skips Phase 2 production and jumps to final payment), and only the **Phase-5 tail**
+  differs. The normal (non-pickup) flow is **not modified** — every change gates on
+  `wf.officePickup`.
+- **Pickup Phase-5 divergences (vs the normal from-stock flow):**
+  - QA test performed by the **2nd Quality Inspector** (`quality_inspector_2`) — added to
+    the `qaTest` gate + `canQaTest` perm + UI wording when pickup.
+  - **Skips** plant-QC → transfer → Sales-2nd-QC: `prepareDeliveryDocs` accepts stage
+    `qa_tested` when pickup (→ `delivery_docs_ready`), and the UI shows the delivery-docs
+    form straight after the quality test.
+  - **Sales** uploads the proof of pick up AND approves in one step — new action
+    `approvePickupDelivery` (delivery_docs_ready → delivery_confirmed, requires the pod
+    file) + new `PickupPodForm` component (mirrors `DeliveredForm`, Sales-facing).
+  - **Sales** surrenders the signed docs (not Logistics): `surrenderDeliveryDocs` gates
+    on Sales when pickup.
+  - `loadForCloseDoc` now also lets **Sales** attach the `pod` slot (proof of pick up).
+  - Confirm-received → file → commission are reused unchanged.
+- **Where:**
+  - `src/app/(app)/orders/actions.ts` — `setOfficePickup` now rejects non-from-stock
+    orders; `qaTest`, `prepareDeliveryDocs`, `surrenderDeliveryDocs`, `loadForCloseDoc`
+    gained `officePickup` branches; new `approvePickupDelivery`.
+  - `src/lib/order-workflow.ts` — `pendingStep` gained an `officePickup` arg and pickup
+    branches for `final_pay_cleared` / `qa_tested` / `delivery_docs_ready` /
+    `delivery_confirmed`. All 4 callers (`pending-approvals.ts`, `my-dashboard.ts`,
+    orders list `page.tsx`, order `page.tsx`) pass `wf.officePickup`.
+  - `src/app/(app)/orders/[id]/page.tsx` — `canSetPickup` now also requires `stockOnly`;
+    `canQaTest` includes `quality_inspector_2` for pickup; passes `officePickup` to
+    `FulfillmentActions`.
+  - `src/app/(app)/orders/[id]/fulfillment-actions.tsx` — `officePickup` prop; pickup
+    branches for the QA-test / qa_tested / delivery_docs_ready / delivery_confirmed steps.
+  - `src/app/(app)/orders/[id]/pickup-pod-form.tsx` — NEW.
+- **Progress bar tidied:** the top stage-progress chips now hide the skipped stages
+  (`qa_plant_checked` / `qa_transferred` / `qa_sales_checked` / `delivered`) for a pickup
+  order (filtered `ORDER_STAGES` when `officePickup`; done/current computed against the
+  filtered list). Normal flow shows all chips as before.
+- **Scope note:** office pickup is a **single** fulfilment pass (the correct spec has no
+  multi-batch; the multi-batch mention belonged to the discarded plant-pickup paste).
+
+## 2026-08-07 · "Office pick up" flag on Phase 2 (step 1 of 2 — flag + tag only)
+- **Feature (owner-requested):** an **Office pick up** toggle on the Phase 2 card marks
+  an order as collected by the client at the office instead of delivered. **Step 1
+  only** (per owner): this **persists the flag and shows a tag** — it does **NOT** yet
+  change any Phase 5 delivery logic. Non-destructive / reversible.
+- **Where:**
+  - `src/lib/order-workflow.ts` — `OrderWorkflow` gained `officePickup?: boolean`,
+    coerced from the stored `wf` blob (mirrors `batchDeliveryEnabled`).
+  - `src/app/(app)/orders/actions.ts` — new `setOfficePickup(quotationId, enabled)`
+    server action, gated on `canManageMultiDelivery` (order's salesperson or admin).
+  - `src/app/(app)/orders/[id]/office-pickup-toggle.tsx` — new client toggle
+    (mirrors `batch-delivery-toggle.tsx`, `Store` icon).
+  - `src/app/(app)/orders/[id]/page.tsx` — derives `officePickup` / `canSetPickup`;
+    renders an amber "Office pick up" badge in the order header and a toggle/tag box at
+    the top of the Phase 2 card (toggle for Sales/admin, read-only tag for others).
+- **Note on frozen areas:** the Phase 2 card is a frozen area — the owner explicitly
+  approved adding this checkbox in-conversation. Only additive UI + a new flag were
+  added; no existing Phase 2 job-order logic was changed.
+- **STEP 2 — office-pickup Phase-5 variant: DONE** (see the next entry below).
+
 ## 2026-08-07 · Approval alarm + dashboard now deep-link to the pending phase
 - **Feature (owner-requested):** Tapping the flashing "Approval needed" pop-up now
   navigates straight to the order, scrolled to the pending phase card — instead of

@@ -3179,6 +3179,33 @@ export async function setBatchDeliveryEnabled(quotationId: string, enabled: bool
   await saveWorkflow(quotationId, cls, { ...wf, batchDeliveryEnabled: true });
 }
 
+/**
+ * Mark an order as "Office pick up" (client collects at the office) instead of a
+ * delivery. Set by the order's salesperson or an admin. Step 1: this only
+ * persists the flag so it can be shown as a tag — it does not yet change the
+ * Phase 5 delivery steps (that wiring is a separate, owner-approved change).
+ */
+export async function setOfficePickup(quotationId: string, enabled: boolean): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
+    throw new Error("Only the order's salesperson or an admin can set office pick up.");
+  }
+  // Office pickup is a from-stock fulfilment (no production) — only allow it on
+  // orders whose goods are all in stock.
+  if (enabled) {
+    const items = await prisma.quotationItem.findMany({
+      where: { quotationId },
+      select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
+    });
+    if (!isStockOnlyOrder(items)) {
+      throw new Error("Office pick up is only available for from-stock orders.");
+    }
+  }
+  await saveWorkflow(quotationId, cls, { ...wf, officePickup: enabled });
+}
+
 export async function setMultiDelivery(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -3635,8 +3662,11 @@ export async function qaTest(quotationId: string): Promise<void> {
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
   const noProd = await isNoProductionOrder(quotationId);
+  // Office pickup: the 2nd Quality Inspector performs the quality test.
+  const pickup = wf.officePickup === true;
   const ok = isAdmin(user) || (noProd
     ? boughtInQaActor(user, roles, quote.preparedById ?? "")
+      || (pickup && userHasWorkflowRole(roles, user.id, "quality_inspector_2" as WorkflowRoleKey))
     : userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
       || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey));
   if (!ok) throw new Error(noProd ? BOUGHT_IN_QA_ERR : "Only the Technical Head, a Quality Inspector or an admin can do this.");
@@ -3693,7 +3723,10 @@ export async function prepareDeliveryDocs(
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey)))
     throw new Error("Only Accounting or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (wf.stage !== "qa_sales_checked") throw new Error("The order isn't ready for delivery documents.");
+  // Office pickup skips the plant-QC → transfer → Sales-2nd-QC steps, so its
+  // delivery documents are prepared straight after the quality test (qa_tested).
+  const pickupReady = wf.officePickup === true && wf.stage === "qa_tested";
+  if (wf.stage !== "qa_sales_checked" && !pickupReady) throw new Error("The order isn't ready for delivery documents.");
   const documents = {
     ...wf.documents,
     dr: docs.dr.trim() || undefined,
@@ -3743,8 +3776,9 @@ async function loadForCloseDoc(quotationId: string, key: string) {
     || quote.preparedById === user.id
     || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey)
     // Logistics attaches/removes the proof of delivery (the "pod" slot only) —
-    // they own the delivery step but aren't Accounting/Sales.
-    || (key === "pod" && userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey));
+    // they own the delivery step but aren't Accounting/Sales. For office pickup,
+    // Sales uploads the proof of pick up into the same slot.
+    || (key === "pod" && (userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey) || user.role === "SALES"));
   if (!ok) throw new Error("Only Accounting, Sales or an admin can attach closing documents.");
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const sale = saleFromClassification(cls) ?? { arrangement: "downpayment_full" as const, payments: [] };
@@ -3790,13 +3824,39 @@ export async function approveDelivery(quotationId: string): Promise<void> {
   await saveWorkflow(quotationId, cls, { ...wf, stage: "delivery_confirmed", approvals: stamp(wf, "delivery_confirmed", user) });
 }
 
+/**
+ * Office pickup: Sales uploads the proof of pick up and approves it in one step —
+ * marking the pickup successful. Combines the normal flow's Logistics "mark
+ * delivered" and Sales "approve POD" into a single Sales action (delivery_docs_ready
+ * → delivery_confirmed). Only for office-pickup orders.
+ */
+export async function approvePickupDelivery(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.officePickup) throw new Error("This isn't an office-pickup order.");
+  const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
+  if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
+  if (wf.stage !== "delivery_docs_ready") throw new Error("The delivery documents aren't ready yet.");
+  // The proof of pick up must be attached before it can be approved.
+  const podDocs = saleFromClassification(cls)?.docs?.pod ?? [];
+  if (podDocs.length === 0) throw new Error("Upload the proof of pick up before approving.");
+  const approvals = stamp({ approvals: stamp(wf, "delivered", user) }, "delivery_confirmed", user);
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "delivery_confirmed", approvals });
+}
+
 /** Logistics surrenders the client-signed documents to accounting (step 2). */
 export async function surrenderDeliveryDocs(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "logistics" as WorkflowRoleKey)))
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  // Office pickup: Sales surrenders the client-signed documents (not Logistics).
+  if (wf.officePickup === true) {
+    const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
+    if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
+  } else if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "logistics" as WorkflowRoleKey))) {
     throw new Error("Only Logistics or an admin can do this.");
-  const { cls, wf } = await loadWorkflow(quotationId);
+  }
   if (wf.stage !== "delivery_confirmed") throw new Error("The delivery hasn't been confirmed by Sales yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "docs_surrendered", approvals: stamp(wf, "docs_surrendered", user) });
 }

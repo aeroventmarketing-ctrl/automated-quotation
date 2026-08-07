@@ -259,7 +259,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         }
       }
       const stockOnly = isStockOnlyOrder(q.items);
-      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items));
+      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true);
       if (!pend) continue;
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
       const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
