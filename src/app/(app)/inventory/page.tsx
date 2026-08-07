@@ -41,6 +41,9 @@ export default async function InventoryPage() {
   // Adding / importing stock items — the Purchaser or an admin (hidden from the
   // Warehouseman, who still proposes per-row edits/adjustments).
   const canCreateItems = admin || has("purchaser");
+  // Deleting stock items (multi-select bulk delete) — the Purchaser or an admin.
+  // The full "Clear all" wipe stays admin-only.
+  const canDeleteItems = admin || has("purchaser");
   // …and hide the Labels / Reorder header tools from the read-only monitors —
   // the Warehouseman, Plant Manager, Accounting, Logistics and the production
   // heads (their Labels / Reorder target pages deny them anyway). The Purchaser
@@ -226,7 +229,7 @@ export default async function InventoryPage() {
 
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} admin={admin} canScan={canScan} canCreate={canCreateItems} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 

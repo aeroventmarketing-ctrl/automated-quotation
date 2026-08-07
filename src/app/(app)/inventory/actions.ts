@@ -66,6 +66,18 @@ async function requirePriceManager() {
   return user;
 }
 
+/** Removing (soft-deleting) stock items — the Purchaser or an admin. */
+async function requireItemRemover() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (isAdmin(user)) return user;
+  const roles = await getWorkflowRoles();
+  if (!userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)) {
+    throw new Error("Only the Purchaser or an admin can remove stock items.");
+  }
+  return user;
+}
+
 /** Claim the next SKU number (starts at 10001). Runs inside a transaction. */
 async function nextSku(tx: Prisma.TransactionClient): Promise<string> {
   const KEY = "sku_counter";
@@ -348,10 +360,9 @@ export async function mergeStockItemsInto(input: z.infer<typeof mergeIntoSchema>
   revalidatePath("/inventory");
 }
 
-/** Remove (deactivate) a stock item — admin only. History is preserved. */
+/** Remove (deactivate) a stock item — the Purchaser or an admin. History is preserved. */
 export async function removeStockItem(id: string): Promise<void> {
-  const user = await getCurrentUser();
-  if (!isAdmin(user)) throw new Error("Only an admin can remove a stock item.");
+  const user = await requireItemRemover();
   const item = await prisma.stockItem.findUnique({ where: { id } });
   if (!item) throw new Error("Item not found.");
   await prisma.stockItem.update({ where: { id }, data: { active: false } });
@@ -363,10 +374,9 @@ export async function removeStockItem(id: string): Promise<void> {
   revalidatePath("/inventory");
 }
 
-/** Remove several stock items at once (soft-delete). Admin only. */
+/** Remove several stock items at once (soft-delete). The Purchaser or an admin. */
 export async function removeStockItems(ids: string[]): Promise<{ removed: number }> {
-  const user = await getCurrentUser();
-  if (!isAdmin(user)) throw new Error("Only an admin can remove stock items.");
+  const user = await requireItemRemover();
   const clean = [...new Set((ids ?? []).filter((x): x is string => typeof x === "string" && x.length > 0))];
   if (clean.length === 0) return { removed: 0 };
   const res = await prisma.stockItem.updateMany({ where: { id: { in: clean }, active: true }, data: { active: false } });
