@@ -311,6 +311,27 @@ export function orderStockLines(
 }
 
 /**
+ * Whether every from-stock line on an order is in-house duct hardware (Duct Angle
+ * corner, TDC Cleat, S-clip, C-clip). These are the from-stock items an Engineer
+ * may approve for release; if any line is an Office-supplied resale good (AlphaAir,
+ * Vent Cap), only the Plant Manager (or admin) may approve. Returns false when the
+ * order has no from-stock lines at all.
+ */
+export function isDuctHardwareStockOnly(
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+): boolean {
+  const stock = items.filter((it) => {
+    const s = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
+    return isDuctHardware(s) || isOfficeSupplied(s);
+  });
+  if (stock.length === 0) return false;
+  return stock.every((it) => {
+    const s = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
+    return isDuctHardware(s);
+  });
+}
+
+/**
  * A fully from-stock order: every line is issued from stock — in-house duct
  * hardware and/or Office-supplied resale goods (AlphaAir / Vent Cap) — with NO
  * department fabricating anything and NO bought-in supplier goods (KDK etc.).

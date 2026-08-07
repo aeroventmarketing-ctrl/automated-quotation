@@ -6,7 +6,7 @@
 import { prisma } from "@/lib/db";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep } from "@/lib/order-workflow";
-import { isStockOnlyOrder } from "@/lib/department-pnl";
+import { isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
@@ -45,7 +45,8 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
     if (!sale || !isSaleConfirmed(sale)) continue;
 
     const wf = readOrderWorkflow(q.classification);
-    const pend = pendingStep(wf, isStockOnlyOrder(q.items));
+    const stockOnly = isStockOnlyOrder(q.items);
+    const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items));
     if (!pend) continue;
     // Production underway ("Complete production") is ongoing work, not an approval
     // awaiting a decision — don't ring the alarm for it once production has

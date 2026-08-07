@@ -4,7 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { payableTotal, round2 } from "@/lib/quote";
-import { isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
+import { isBoughtInOnlyOrder, isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import {
   saleFromClassification,
   isSaleConfirmed,
@@ -87,7 +87,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       const docMissing = docCheckGate && next?.key === "doc_check" ? docCheckMissing(sale) : [];
       const blockedReason = docMissing.length ? `Attach: ${docMissing.join(", ")}` : null;
       // Who acts next across the whole order (all phases), for the "Awaiting" hint.
-      const pend = pendingStep(wf, stockOnly);
+      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items));
       const awaitingAll = pend
         ? pend.sales
           ? "Sales"

@@ -14,6 +14,23 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Engineer stock-release approval limited to duct hardware (refines #241)
+- **Change (owner-approved, frozen Phase 2):** #241 let an Engineer approve ANY from-stock
+  release. Per owner, restrict that: an Engineer may approve only when every from-stock line
+  is in-house duct hardware — **Duct Angle corner, TDC Cleat, S-clip, C-clip**. If the order
+  has any Office-supplied resale stock (AlphaAir, Vent Cap), only the Plant Manager (or admin)
+  may approve. Plant Manager/admin still approve everything.
+- **New helper:** `isDuctHardwareStockOnly(items)` in `src/lib/department-pnl.ts` — true when
+  all from-stock lines classify as `isDuctHardware` (reuses the existing classifiers).
+- **Where:** server gate `approveStockRelease` (`actions.ts`) now loads items first and gates
+  the Engineer on `isDuctHardwareStockOnly` (clear error otherwise); UI `canApprove` +
+  `engineerEligible` wording on the Phase 2 card (`page.tsx`, `stock-release.tsx`); and
+  `pendingStep(wf, stockOnly, engineerApprovesStock)` gained a 3rd flag so the `engineer`
+  approver flag (banner / dashboard / alarm) is set only for duct-hardware-only orders. All
+  four `pendingStep` callers updated (`orders/[id]/page.tsx`, `orders/page.tsx`,
+  `my-dashboard.ts`, `pending-approvals.ts`).
+- **Pending:** none.
+
 ## 2026-08-07 · "Waiting for" for from-stock orders now routes to Warehouse, not the PO step
 - **Bug:** On a from-stock order, the Phase 2 "WAITING FOR / APPROVERS" banner (and the
   order-list hint, My Dashboard tasks, and approval alarms) showed "Prepare & process the
