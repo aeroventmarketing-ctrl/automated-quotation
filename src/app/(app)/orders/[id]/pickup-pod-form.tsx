@@ -83,8 +83,8 @@ export function PickupPodForm({ orderId, initialFiles, admin = false }: { orderI
           <input type="file" className="hidden" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
         </label>
       </div>
-      <Button size="sm" disabled={busy || files.length === 0} onClick={approve}>{busy ? "Saving…" : "Approve POD - Successful Delivery"}</Button>
-      {files.length === 0 && <p className="text-[11px] text-muted-foreground">Attach the proof of pick up to enable “Approve POD - Successful Delivery”.</p>}
+      <Button size="sm" disabled={busy || files.length === 0} onClick={approve}>{busy ? "Saving…" : "Approve POD - Successful Pick Up"}</Button>
+      {files.length === 0 && <p className="text-[11px] text-muted-foreground">Attach the proof of pick up to enable “Approve POD - Successful Pick Up”.</p>}
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );

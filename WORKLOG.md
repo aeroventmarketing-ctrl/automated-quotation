@@ -14,6 +14,14 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Office pickup — "Pick Up" button wording in Phase 5
+- **Owner-requested label change (pickup only):**
+  - "Save Documents & Approve Delivery" → **"Save Documents & Approve Pick Up"**
+    (`DeliveryDocsForm` gained an `officePickup` prop; passed through from
+    `fulfillment-actions.tsx`; the normal delivery flow keeps "…Approve Delivery").
+  - "Approve POD - Successful Delivery" → **"Approve POD - Successful Pick Up"**
+    (`PickupPodForm` is pickup-only, changed directly — button + enable hint).
+
 ## 2026-08-07 · Office pickup — one-step "Release from Stock and Notify Client"
 - **Feature (owner-requested, frozen Phase 2 stock-release):** when the **Office pick up**
   flag is on, the from-stock Phase-2 panel collapses the normal two steps (Plant

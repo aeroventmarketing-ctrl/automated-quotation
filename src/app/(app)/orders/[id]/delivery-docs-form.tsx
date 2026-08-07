@@ -24,11 +24,14 @@ export function DeliveryDocsForm({
   initialDocs,
   vatInclusive,
   admin = false,
+  officePickup = false,
 }: {
   orderId: string;
   initialDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   admin?: boolean;
+  // Office pickup relabels the approve button ("…Approve Pick Up").
+  officePickup?: boolean;
 }) {
   const router = useRouter();
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialDocs);
@@ -110,7 +113,7 @@ export function DeliveryDocsForm({
         })}
       </div>
 
-      <Button size="sm" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save Documents & Approve Delivery"}</Button>
+      <Button size="sm" disabled={busy} onClick={save}>{busy ? "Saving…" : officePickup ? "Save Documents & Approve Pick Up" : "Save Documents & Approve Delivery"}</Button>
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );

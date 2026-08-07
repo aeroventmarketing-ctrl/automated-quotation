@@ -202,7 +202,7 @@ export function FulfillmentActions({
           straight from the quality test to preparing the delivery documents. */}
       {stage === "qa_tested" && officePickup &&
         (perms.canPrepDocs ? (
-          <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} admin={admin} />
+          <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} admin={admin} officePickup={officePickup} />
         ) : awaiting("to prepare the delivery documents", ["accounting"]))}
 
       {stage === "qa_tested" && !officePickup &&
@@ -241,7 +241,7 @@ export function FulfillmentActions({
       {/* Phase 6 */}
       {stage === "qa_sales_checked" &&
         (perms.canPrepDocs ? (
-          <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} admin={admin} />
+          <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} admin={admin} officePickup={officePickup} />
         ) : awaiting("to prepare the delivery documents", ["accounting"]))}
 
       {stage === "delivery_docs_ready" && (
