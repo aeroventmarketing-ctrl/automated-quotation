@@ -14,6 +14,20 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Fulfilment mode — enum refactor (plant pickup PR 1 of 3)
+- **Refactor (no behaviour change), per `docs/plant-pickup-design.md`:** introduced
+  `wf.fulfillmentMode: "delivery" | "office_pickup" | "plant_pickup"` as the source of
+  truth for the handover mode, in preparation for adding **plant pick up**.
+  - `src/lib/order-workflow.ts` — new `FulfillmentMode` type + `fulfillmentMode` field on
+    `OrderWorkflow`; coerce reads the stored enum, falling back to the legacy `officePickup`
+    boolean (so pre-enum orders keep working). `officePickup` is now **derived**
+    (`=== "office_pickup"`) so all existing office-pickup call sites read unchanged.
+  - `src/app/(app)/orders/actions.ts` — `setOfficePickup` now writes `fulfillmentMode`
+    instead of the boolean.
+- **Zero behaviour change** — legacy data coerces identically; the ~30 `wf.officePickup`
+  reads still work via the derived field. Sets up PR 2 (plant single-batch + 3-way selector)
+  and PR 3 (plant multi-batch).
+
 ## 2026-08-07 · Office pickup — toggle label reads "On - Office pick up / Off - Delivery"
 - **Owner-requested:** the Phase 2 `OfficePickupToggle` label now reads
   **"On - Office pick up / Off - Delivery"** (was "Office pick up"/"Office pick up?"), so

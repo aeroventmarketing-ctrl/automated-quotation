@@ -3218,7 +3218,8 @@ export async function setOfficePickup(quotationId: string, enabled: boolean): Pr
       throw new Error("Office pick up is only available for from-stock orders.");
     }
   }
-  await saveWorkflow(quotationId, cls, { ...wf, officePickup: enabled });
+  // Source of truth is `fulfillmentMode`; `officePickup` is derived on read.
+  await saveWorkflow(quotationId, cls, { ...wf, fulfillmentMode: enabled ? "office_pickup" : "delivery" });
 }
 
 export async function setMultiDelivery(quotationId: string): Promise<void> {
