@@ -10,6 +10,7 @@ import { closeDocsState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sa
 import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
 import { DeliveredForm } from "./delivered-form";
+import { PickupPodForm } from "./pickup-pod-form";
 import { FinalPaymentProof } from "./final-payment-proof";
 import { RecordPaymentBox } from "./record-payment-box";
 import {
@@ -52,6 +53,7 @@ export function FulfillmentActions({
   orderId,
   stage,
   perms,
+  officePickup = false,
   closeDocs,
   vatInclusive,
   canEditCloseDocs,
@@ -67,6 +69,8 @@ export function FulfillmentActions({
   orderId: string;
   stage: string;
   perms: Perms;
+  /** Office-pickup order — from-stock fulfilment with a pickup-flavoured Phase 5. */
+  officePickup?: boolean;
   closeDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   canEditCloseDocs: boolean;
@@ -187,14 +191,21 @@ export function FulfillmentActions({
         (perms.canQaTest ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Quality testing</p>
-            <p className="text-xs text-muted-foreground">The item undergoes quality testing by the Technical Head or an approved Quality Inspector.</p>
+            <p className="text-xs text-muted-foreground">{officePickup ? "The item undergoes quality testing by the 2nd Quality Inspector." : "The item undergoes quality testing by the Technical Head or an approved Quality Inspector."}</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaTest(orderId))}>
               {busy ? "Saving…" : "Quality Tested-Passed"}
             </Button>
           </div>
-        ) : awaiting("to test quality", ["technical_head", "quality_inspector"]))}
+        ) : awaiting("to test quality", officePickup ? ["quality_inspector_2"] : ["technical_head", "quality_inspector"], officePickup))}
 
-      {stage === "qa_tested" &&
+      {/* Office pickup skips the plant-QC / transfer / Sales-2nd-QC steps and goes
+          straight from the quality test to preparing the delivery documents. */}
+      {stage === "qa_tested" && officePickup &&
+        (perms.canPrepDocs ? (
+          <DeliveryDocsForm orderId={orderId} initialDocs={closeDocs} vatInclusive={vatInclusive} admin={admin} />
+        ) : awaiting("to prepare the delivery documents", ["accounting"]))}
+
+      {stage === "qa_tested" && !officePickup &&
         (perms.canQaPlant ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Plant Manager quality &amp; quantity check</p>
@@ -261,7 +272,11 @@ export function FulfillmentActions({
               );
             })}
           </div>
-          {perms.canDeliver ? (
+          {officePickup ? (
+            perms.canApproveDelivery ? (
+              <PickupPodForm orderId={orderId} initialFiles={closeDocs["pod"] ?? []} admin={admin} />
+            ) : awaiting("to upload the proof of pick up and approve", [], true)
+          ) : perms.canDeliver ? (
             <DeliveredForm orderId={orderId} initialFiles={closeDocs["pod"] ?? []} admin={admin} />
           ) : awaiting("to deliver", ["logistics"])}
         </div>
@@ -280,15 +295,15 @@ export function FulfillmentActions({
         ) : awaiting("to approve the proof of delivery", [], true))}
 
       {stage === "delivery_confirmed" &&
-        (perms.canSurrender ? (
+        ((officePickup ? perms.canApproveDelivery : perms.canSurrender) ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Surrender signed documents</p>
-            <p className="text-xs text-muted-foreground">Logistics surrenders the client-signed documents to accounting.</p>
+            <p className="text-xs text-muted-foreground">{officePickup ? "Sales surrenders the client-signed documents to accounting." : "Logistics surrenders the client-signed documents to accounting."}</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => surrenderDeliveryDocs(orderId))}>
               {busy ? "Saving…" : "Documents Surrendered to Accounting"}
             </Button>
           </div>
-        ) : awaiting("to surrender the signed documents to accounting", ["logistics"]))}
+        ) : awaiting("to surrender the signed documents to accounting", officePickup ? [] : ["logistics"], officePickup))}
 
       {/* Two-party handshake: Logistics surrendered; Accounting must confirm
           receipt before the file-and-close step appears. */}

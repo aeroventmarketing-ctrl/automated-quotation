@@ -583,6 +583,7 @@ export function pendingStep(
   wf: OrderWorkflow,
   stockOnly = false,
   engineerApprovesStock = false,
+  officePickup = false,
 ): PendingStep | null {
   // A fully bought-in order has no job-order content — it skips production and its
   // Office-side roles (Logistics / Payment Approver / Sales / Engineer) handle the
@@ -631,10 +632,14 @@ export function pendingStep(
     case "final_pay_checked":
       return { action: "Confirm final payment", roles: ["payment_approver"] };
     case "final_pay_cleared":
+      if (officePickup) return { action: "Quality testing", roles: ["quality_inspector_2"], sales: true };
       return boughtIn
         ? { action: "Quality testing", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
     case "qa_tested":
+      // Office pickup skips plant-QC / transfer / Sales-2nd-QC and goes straight
+      // to preparing the delivery documents.
+      if (officePickup) return { action: "Prepare delivery documents", roles: ["accounting"] };
       return boughtIn
         ? { action: "QC & Quantity Checked", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Plant QC & quantity check", roles: ["plant_manager"] };
@@ -645,11 +650,15 @@ export function pendingStep(
     case "qa_sales_checked":
       return { action: "Prepare delivery documents", roles: ["accounting"] };
     case "delivery_docs_ready":
-      return { action: "Deliver the order", roles: ["logistics"] };
+      return officePickup
+        ? { action: "Upload proof of pick up & approve", roles: [], sales: true }
+        : { action: "Deliver the order", roles: ["logistics"] };
     case "delivered":
       return { action: "Approve proof of delivery (successful delivery)", roles: [], sales: true };
     case "delivery_confirmed":
-      return { action: "Surrender signed documents to accounting", roles: ["logistics"] };
+      return officePickup
+        ? { action: "Surrender signed documents to accounting", roles: [], sales: true }
+        : { action: "Surrender signed documents to accounting", roles: ["logistics"] };
     case "docs_surrendered":
       return { action: "Confirm documents received", roles: ["accounting"] };
     case "docs_received":

@@ -322,7 +322,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Live "who acts next" for the whole order. `stockOnly` routes the "released"
   // stage to the stock-release path (Plant Manager / Engineer approval → Warehouse
   // release) rather than the bought-in Purchase Order step.
-  const pend = pendingStep(wf, stockOnly, engineerApprovesStock);
+  const pend = pendingStep(wf, stockOnly, engineerApprovesStock, wf.officePickup === true);
   const pendingApprovers: string[] = pend
     ? pend.sales
       ? [`Sales${quote.preparedBy?.name ? ` — ${quote.preparedBy.name}` : ""}`]
@@ -383,7 +383,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canNotify: isSalesViewer,
     canCheckPay: hasRole("accounting"),
     canConfirmPay: hasRole("payment_approver"),
-    canQaTest: hasRole("technical_head") || hasRole("quality_inspector") || noProdQa,
+    canQaTest: hasRole("technical_head") || hasRole("quality_inspector") || noProdQa || (wf.officePickup === true && hasRole("quality_inspector_2" as WorkflowRoleKey)),
     canQaPlant: hasRole("plant_manager") || noProdQa,
     canQaTransfer: hasRole("logistics"),
     canQaSales: isSalesViewer || hasRole("quality_inspector_2" as WorkflowRoleKey),
@@ -478,7 +478,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Step 1: persisted flag + tag only (no Phase 5 change yet). Set by the order's
   // salesperson or an admin.
   const officePickup = wf.officePickup === true;
-  const canSetPickup = adminViewer || isPreparerViewer;
+  // Office pickup is a from-stock fulfilment — the toggle is offered only on
+  // from-stock orders, to the salesperson or an admin.
+  const canSetPickup = (adminViewer || isPreparerViewer) && stockOnly;
   // The enable toggle shows to authorized roles from when production starts up
   // until just before the order is actually delivered — so an order can still be
   // switched to batch delivery even after the single-delivery flow has begun
@@ -984,7 +986,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
             {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode !== "EXCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>
