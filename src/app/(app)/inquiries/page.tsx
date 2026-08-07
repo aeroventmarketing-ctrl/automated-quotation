@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { config } from "@/lib/config";
 import { emailConfigured } from "@/lib/email/resend";
+import { payableTotal, round2 } from "@/lib/quote";
+import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { InquiriesTable } from "./inquiries-table";
 import { SalesReportPanel } from "./sales-report-panel";
 
@@ -76,6 +78,8 @@ export default async function InquiriesPage({
         customer: true,
         createdBy: true,
         _count: { select: { items: true, quotations: true } },
+        // For the "won amount": the payable total of each confirmed (won) quotation.
+        quotations: { select: { total: true, discountPct: true, vatMode: true, currency: true, classification: true } },
       },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
@@ -85,17 +89,26 @@ export default async function InquiriesPage({
   ]);
   const admin = isAdmin(user);
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  const rows = inquiries.map((inq) => ({
-    id: inq.id,
-    company: inq.customer.company,
-    customerId: inq.customerId,
-    createdByName: inq.createdBy.name,
-    source: inq.source,
-    items: inq._count.items,
-    quotes: inq._count.quotations,
-    createdISO: inq.createdAt.toISOString(),
-    status: inq.status,
-  }));
+  const rows = inquiries.map((inq) => {
+    // Won amount = the payable total of every confirmed (won) quotation on the
+    // inquiry — the same basis as the WON sales report.
+    const wonQuotes = inq.quotations.filter((qt) => isSaleConfirmed(saleFromClassification(qt.classification)));
+    const wonAmount = round2(wonQuotes.reduce((a, qt) => a + payableTotal(qt), 0));
+    const currency = inq.quotations.find((qt) => qt.currency)?.currency ?? "PHP";
+    return {
+      id: inq.id,
+      company: inq.customer.company,
+      customerId: inq.customerId,
+      createdByName: inq.createdBy.name,
+      source: inq.source,
+      items: inq._count.items,
+      quotes: inq._count.quotations,
+      createdISO: inq.createdAt.toISOString(),
+      status: inq.status,
+      wonAmount,
+      currency,
+    };
+  });
 
   return (
     <div className="space-y-6">

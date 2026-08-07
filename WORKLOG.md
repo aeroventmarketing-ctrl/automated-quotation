@@ -14,6 +14,16 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Inquiries list — show the WON amount
+- **Owner-requested:** the Inquiries list now shows the **won amount** under the status
+  badge for any inquiry with a confirmed (won) quotation. Amount = sum of
+  `payableTotal(q)` over the inquiry's confirmed quotations — the **same basis as the WON
+  sales report** (`isSaleConfirmed(saleFromClassification(...))`), so the two reconcile.
+- **Where:** `src/app/(app)/inquiries/page.tsx` (query now selects each quotation's
+  `total/discountPct/vatMode/currency/classification`; computes `wonAmount` + `currency`
+  per row) and `src/app/(app)/inquiries/inquiries-table.tsx` (renders the amount in
+  emerald under the badge when `wonAmount > 0`).
+
 ## 2026-08-07 · Office pickup — "Pick Up" button wording in Phase 5
 - **Owner-requested label change (pickup only):**
   - "Save Documents & Approve Delivery" → **"Save Documents & Approve Pick Up"**
