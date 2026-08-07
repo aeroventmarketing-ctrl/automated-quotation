@@ -14,6 +14,14 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Office pickup — toggle label reads "On - Office pick up / Off - Delivery"
+- **Owner-requested:** the Phase 2 `OfficePickupToggle` label now reads
+  **"On - Office pick up / Off - Delivery"** (was "Office pick up"/"Office pick up?"), so
+  both toggle positions are self-explanatory. The header badge and the read-only tag keep
+  saying "Office pick up" — they're status indicators shown only when pickup is on, where
+  an on/off legend would be meaningless.
+- **Where:** `src/app/(app)/orders/[id]/office-pickup-toggle.tsx`.
+
 ## 2026-08-07 · Office pickup — multi-batch pick up (client collects in batches)
 - **Feature (owner-requested, frozen Phase 5 multi-batch):** an office-pickup order can be
   picked up in **multiple batches**; each batch repeats the pickup Phase-5 sequence (the
