@@ -1330,10 +1330,10 @@ export async function releaseOrderFromStock(quotationId: string, matches: StockM
   // its two steps (Warehouse releases only after the Plant Manager's approval).
   const pickup = wf.officePickup === true;
   if (pickup) {
-    const isPlantOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey);
-    const engineerMay = user.role === "ENGINEER" && isDuctHardwareStockOnly(items);
-    if (!(isPlantOrAdmin || engineerMay)) {
-      throw new Error("Only the Plant Manager, an Engineer or an admin can release an office-pickup order from stock.");
+    // Office pickup is released by the Engineer alone (or an admin) — not the
+    // Plant Manager.
+    if (!(isAdmin(user) || user.role === "ENGINEER")) {
+      throw new Error("Only an Engineer or an admin can release an office-pickup order from stock.");
     }
   } else {
     if (!(isAdmin(user) || STOCK_RELEASE_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r)))) {

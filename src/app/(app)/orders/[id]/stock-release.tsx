@@ -80,7 +80,7 @@ export function StockRelease({
         <p className="text-xs text-muted-foreground">
           These items are produced in-house by Fans &amp; Blowers and held in stock — no job order or
           purchase order. {officePickup
-            ? `The ${approverPhrase} releases them from stock and notifies the client in one step; it then moves to final payment.`
+            ? "The Engineer releases them from stock and notifies the client in one step; it then moves to final payment."
             : `The ${approverPhrase} approves the release, then the Warehouse issues them from inventory to fulfil the order; it then moves to final payment.`}
         </p>
         <ul className="mt-2 space-y-0.5 text-xs">
@@ -102,7 +102,7 @@ export function StockRelease({
           />
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
-            <span className="text-amber-800 dark:text-amber-300">Awaiting {approverPhrase} to release from stock and notify the client.</span>
+            <span className="text-amber-800 dark:text-amber-300">Awaiting the Engineer to release from stock and notify the client.</span>
             {canApprove && (
               <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => setOpen(true)}>
                 Release from Stock and Notify Client

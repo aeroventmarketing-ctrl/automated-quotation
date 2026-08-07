@@ -23,6 +23,17 @@ and we never redo something that's already done.
   and advances straight to final payment (client notified) — then Accounting issues the
   billing statement (skippable) and the client makes the final payment as before.
 - **Gated on `officePickup`** — the normal from-stock flow keeps its two steps unchanged.
+- **Refinements (owner-requested):**
+  - The pickup release is the **Engineer's** action alone — **not** the Plant Manager.
+    `releaseOrderFromStock` (pickup branch) gates on Engineer / admin only; `pendingStep`
+    returns `{ roles: [], engineer: true }` so the "waiting for" banner, My Dashboard,
+    the orders list and the approver alarm all show **Engineer** only; the panel wording
+    is "Awaiting the Engineer to release from stock and notify the client"; the
+    Phase-2 approve gate (`canApprove`) drops Plant Manager for pickup.
+  - **Toggle-lock policy:** an **admin** can flip Office pick up on/off at any time; a
+    **non-admin** (salesperson) can set it only while the order is still in Phase 2
+    (`stageIndex(wf.stage) <= "released"`), after which it locks for them (they see the
+    read-only tag). `canSetPickup` = `stockOnly && (admin || (preparer && pickupWindowOpen))`.
 - **Where:**
   - `src/app/(app)/orders/actions.ts` — `releaseOrderFromStock` now branches on
     `wf.officePickup`: for pickup it gates on Plant Manager / Engineer(duct-hardware) /

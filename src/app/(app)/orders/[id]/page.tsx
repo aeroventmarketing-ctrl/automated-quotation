@@ -479,8 +479,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // salesperson or an admin.
   const officePickup = wf.officePickup === true;
   // Office pickup is a from-stock fulfilment — the toggle is offered only on
-  // from-stock orders, to the salesperson or an admin.
-  const canSetPickup = (adminViewer || isPreparerViewer) && stockOnly;
+  // from-stock orders. An admin can flip it back and forth at any time; a
+  // non-admin (the salesperson) may set it only while the order is still in
+  // Phase 2 (before it's released from stock), after which it locks for them.
+  const pickupWindowOpen = stageIndex(wf.stage) <= stageIndex("released");
+  const canSetPickup = stockOnly && (adminViewer || (isPreparerViewer && pickupWindowOpen));
   // The enable toggle shows to authorized roles from when production starts up
   // until just before the order is actually delivered — so an order can still be
   // switched to batch delivery even after the single-delivery flow has begun
@@ -835,7 +838,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               canRelease={canReleaseStock}
               approved={!!wf.approvals.stock_release_approved}
               approvedByName={wf.approvals.stock_release_approved?.byName}
-              canApprove={adminViewer || hasRole("plant_manager") || (viewer?.role === "ENGINEER" && engineerApprovesStock)}
+              canApprove={officePickup
+                ? (adminViewer || viewer?.role === "ENGINEER")
+                : (adminViewer || hasRole("plant_manager") || (viewer?.role === "ENGINEER" && engineerApprovesStock))}
               engineerEligible={engineerApprovesStock}
               officePickup={officePickup}
             />
