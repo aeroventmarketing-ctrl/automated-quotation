@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InquiryStatusBadge } from "@/components/status-badge";
-import { formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatTime, formatCurrency } from "@/lib/utils";
 import { ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { InquiryActions } from "./inquiry-actions";
 
@@ -23,6 +23,8 @@ export interface InquiryRow {
   quotes: number;
   createdISO: string;
   status: InquiryStatus;
+  wonAmount: number;
+  currency: string;
 }
 
 type SortKey = "customer" | "sales" | "source" | "items" | "quotes" | "created" | "status";
@@ -182,6 +184,11 @@ export function InquiriesTable({
               </TableCell>
               <TableCell>
                 <InquiryStatusBadge status={inq.status} />
+                {inq.wonAmount > 0 && (
+                  <div className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    {formatCurrency(inq.wonAmount, inq.currency)}
+                  </div>
+                )}
               </TableCell>
               <TableCell>
                 <InquiryActions id={inq.id} label={inq.company} admin={admin} />
