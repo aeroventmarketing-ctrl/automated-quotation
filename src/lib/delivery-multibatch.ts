@@ -89,8 +89,10 @@ export const MULTIBATCH_PICKUP_STEPS: MBStepDef[] = [
   { key: "payment_confirmed", label: "Payment confirmed", done: "Payment confirmed", role: "payment_approver" },
   { key: "qa_tested", label: "Quality tested — pass", done: "Quality tested", role: "quality_inspector_2" },
   { key: "delivery_docs", label: "Save documents & approve pick up", done: "Pick-up documents ready", role: "accounting" },
-  { key: "delivered", label: "Upload proof of pick up & mark picked up", done: "Picked up", role: "sales" },
-  { key: "delivery_confirmed", label: "Approve POD — successful pick up", done: "Pick up confirmed (successful pick up)", role: "sales" },
+  // Combined step (matches the single-pickup flow): Sales uploads the proof of
+  // pick up (into the batch's POD) and approves it in one action. Keeps the
+  // `delivered` key so the POD gate, delivered-qty tracking and close trigger work.
+  { key: "delivered", label: "Approve POD — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
   { key: "docs_surrendered", label: "Documents surrendered to accounting", done: "Signed documents surrendered", role: "sales" },
   { key: "docs_received", label: "Confirm documents received", done: "Documents received by accounting", role: "accounting" },
   { key: "docs_filed", label: "File documents — batch picked up", done: "Documents filed (partial pick up)", role: "accounting" },

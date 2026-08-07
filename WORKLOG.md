@@ -23,11 +23,12 @@ and we never redo something that's already done.
 - **Per-batch pickup sequence** (`MULTIBATCH_PICKUP_STEPS`): notify client (batch ready
   for pick up) → payment checked (collects partial payment) → payment confirmed → quality
   tested (**2nd Quality Inspector**) → save documents & approve pick up (Accounting) →
-  upload proof of pick up & mark picked up (**Sales**) → approve POD — successful pick up
-  (**Sales**) → documents surrendered (**Sales**) → confirm documents received
-  (Accounting) → file documents — batch picked up (Accounting). **Skips** the delivery-only
-  plant-QC → transfer → Sales-2nd-QC. Shares step KEYS with the delivery list so the POD
-  (`delivered`) and document (`delivery_docs`) gates keep working.
+  **Approve POD — successful pick up** (**Sales**; uploads the proof of pick up + approves
+  in one combined step, matching the single-pickup flow) → documents surrendered
+  (**Sales**) → confirm documents received (Accounting) → file documents — batch picked up
+  (Accounting). **Skips** the delivery-only plant-QC → transfer → Sales-2nd-QC. Shares step
+  KEYS with the delivery list; the combined POD+approve step reuses the `delivered` key so
+  the POD gate, delivered-qty tracking and close trigger work unchanged.
 - **Toggle** (`MultiBatchPickupToggle` + `setMultiBatchPickup`): a single "Multi-batch pick
   up" toggle. **Admin** can turn it on/off any time; a **non-admin** (salesperson) can turn
   it ON but **not off** — once on, only an admin can turn it off (enforced server-side).
@@ -45,8 +46,10 @@ and we never redo something that's already done.
   - `src/app/(app)/orders/[id]/multi-batch-panel.tsx` — `officePickup` prop relabels
     "delivery" → "pick up".
   - `src/app/(app)/orders/[id]/multi-batch-pickup-toggle.tsx` — NEW.
-- **Note:** in the multi-batch engine the POD upload and POD approval are two Sales steps
-  (per the engine's structure), where the single-pickup flow combines them into one.
+- **Combined per-batch POD step (owner-requested):** the proof-of-pick-up upload and the
+  POD approval are now **one** Sales step per batch (the `delivered` step relabeled
+  "Approve POD — successful pick up"; the separate `delivery_confirmed` step was dropped
+  from the pickup list) — matching the single-pickup flow. No other engine change needed.
 
 ## 2026-08-07 · Inquiries list — show the WON amount
 - **Owner-requested:** the Inquiries list now shows the **won amount** under the status
