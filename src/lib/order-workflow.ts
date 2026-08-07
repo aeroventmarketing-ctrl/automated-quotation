@@ -558,8 +558,16 @@ export interface PendingStep {
  * it looks identical to a bought-in order and would be routed to the PO step. The
  * caller knows it from the quotation lines (`isStockOnlyOrder`); pass it so the
  * "released" stage routes to the stock-release path instead.
+ *
+ * `engineerApprovesStock` marks a from-stock order whose lines are all in-house duct
+ * hardware — the only case where an Engineer (as well as the Plant Manager) may
+ * approve the release. When false, the stock-release approval step is Plant-Manager-only.
  */
-export function pendingStep(wf: OrderWorkflow, stockOnly = false): PendingStep | null {
+export function pendingStep(
+  wf: OrderWorkflow,
+  stockOnly = false,
+  engineerApprovesStock = false,
+): PendingStep | null {
   // A fully bought-in order has no job-order content — it skips production and its
   // Office-side roles (Logistics / Payment Approver / Sales / Engineer) handle the
   // Phase 5 quality steps instead of the production QC departments.
@@ -578,7 +586,7 @@ export function pendingStep(wf: OrderWorkflow, stockOnly = false): PendingStep |
       if (stockOnly) {
         return wf.approvals.stock_release_approved
           ? { action: "Release from stock", roles: ["warehouse", "prod_head_fans"] }
-          : { action: "Approve stock release", roles: ["plant_manager"], engineer: true };
+          : { action: "Approve stock release", roles: ["plant_manager"], engineer: engineerApprovesStock };
       }
       if (boughtIn) {
         return { action: "Prepare & process the Purchase Order", roles: ["purchaser", "technical_head"] };

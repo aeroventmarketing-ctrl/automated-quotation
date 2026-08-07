@@ -62,7 +62,7 @@ import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { BoughtInProduction } from "./bought-in-production";
-import { orderBoughtInLines, isStockOnlyOrder, orderStockLines } from "@/lib/department-pnl";
+import { orderBoughtInLines, isStockOnlyOrder, orderStockLines, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { StockRelease } from "./stock-release";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
@@ -313,11 +313,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // orders or a PO. Like bought-in, it skips production and Office-side roles run QA.
   const stockOnly = isStockOnlyOrder(quote.items) && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
   const stockLines = stockOnly ? orderStockLines(quote.items) : [];
+  // An Engineer may approve the stock release only when every from-stock line is
+  // in-house duct hardware (angle corner, TDC cleat, S-clip, C-clip); an order with
+  // Office-supplied stock (AlphaAir / Vent Cap) stays Plant-Manager-only.
+  const engineerApprovesStock = stockOnly && isDuctHardwareStockOnly(quote.items);
 
   // Live "who acts next" for the whole order. `stockOnly` routes the "released"
   // stage to the stock-release path (Plant Manager / Engineer approval → Warehouse
   // release) rather than the bought-in Purchase Order step.
-  const pend = pendingStep(wf, stockOnly);
+  const pend = pendingStep(wf, stockOnly, engineerApprovesStock);
   const pendingApprovers: string[] = pend
     ? pend.sales
       ? [`Sales${quote.preparedBy?.name ? ` — ${quote.preparedBy.name}` : ""}`]
@@ -797,7 +801,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               canRelease={canReleaseStock}
               approved={!!wf.approvals.stock_release_approved}
               approvedByName={wf.approvals.stock_release_approved?.byName}
-              canApprove={adminViewer || hasRole("plant_manager") || viewer?.role === "ENGINEER"}
+              canApprove={adminViewer || hasRole("plant_manager") || (viewer?.role === "ENGINEER" && engineerApprovesStock)}
+              engineerEligible={engineerApprovesStock}
             />
           ) : (
             <div className="space-y-4">

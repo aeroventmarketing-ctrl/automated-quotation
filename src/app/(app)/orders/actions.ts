@@ -50,7 +50,7 @@ import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDe
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
-import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
+import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
@@ -1277,16 +1277,15 @@ const STOCK_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse", "prod_head_fans"];
  * skipping production and the supplier PO — mirrors notifyClientBoughtInOrder.
  */
 /**
- * The Plant Manager, an Engineer (or an admin) approves a from-stock order's release
- * before the warehouse issues it — the "ask permission first" gate for stock-only sales.
+ * The Plant Manager or an admin approves any from-stock order's release before the
+ * warehouse issues it. An Engineer may also approve, but only when every from-stock
+ * line is in-house duct hardware (angle corner, TDC cleat, S-clip, C-clip) — not the
+ * Office-supplied resale goods (AlphaAir, Vent Cap). The "ask permission first" gate.
  */
 export async function approveStockRelease(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
-  if (!(isAdmin(user) || user.role === "ENGINEER" || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey))) {
-    throw new Error("Only the Plant Manager, an Engineer or an admin can approve the stock release.");
-  }
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
   const items = await prisma.quotationItem.findMany({
@@ -1294,6 +1293,15 @@ export async function approveStockRelease(quotationId: string): Promise<void> {
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
   });
   if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
+  const isPlantOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey);
+  const engineerMayApprove = user.role === "ENGINEER" && isDuctHardwareStockOnly(items);
+  if (!(isPlantOrAdmin || engineerMayApprove)) {
+    throw new Error(
+      user.role === "ENGINEER"
+        ? "An Engineer can approve the stock release only for in-house duct hardware (angle corner, TDC cleat, S-clip, C-clip). This order has Office-supplied stock, so only the Plant Manager or an admin can approve it."
+        : "Only the Plant Manager, an Engineer or an admin can approve the stock release.",
+    );
+  }
   await saveWorkflow(quotationId, cls, { ...wf, approvals: stamp(wf, "stock_release_approved", user) });
   await logActivity(user, {
     action: "order.stock.release.approve",

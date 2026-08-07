@@ -21,6 +21,7 @@ export function StockRelease({
   approved,
   approvedByName,
   canApprove,
+  engineerEligible = false,
 }: {
   orderId: string;
   lines: { name: string; qty: number }[];
@@ -29,8 +30,13 @@ export function StockRelease({
   approved: boolean;
   approvedByName?: string;
   canApprove: boolean;
+  // An Engineer may approve only when every line is in-house duct hardware; an
+  // order with Office-supplied stock is Plant-Manager-only. Controls the wording.
+  engineerEligible?: boolean;
 }) {
   const router = useRouter();
+  // Who may approve this order's release, for the on-screen wording.
+  const approverPhrase = engineerEligible ? "Plant Manager or an Engineer" : "Plant Manager";
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -54,7 +60,7 @@ export function StockRelease({
         <div className="mb-1 font-medium text-sky-800 dark:text-sky-300">For stock release</div>
         <p className="text-xs text-muted-foreground">
           These items are produced in-house by Fans &amp; Blowers and held in stock — no job order or
-          purchase order. The Plant Manager or an Engineer approves the release, then the Warehouse
+          purchase order. The {approverPhrase} approves the release, then the Warehouse
           issues them from inventory to fulfil the order; it then moves to final payment.
         </p>
         <ul className="mt-2 space-y-0.5 text-xs">
@@ -67,7 +73,7 @@ export function StockRelease({
       {/* Step 1 — Plant Manager / Engineer approval gate. */}
       {!approved ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
-          <span className="text-amber-800 dark:text-amber-300">Awaiting Plant Manager or Engineer approval to release from stock.</span>
+          <span className="text-amber-800 dark:text-amber-300">Awaiting {approverPhrase} approval to release from stock.</span>
           {canApprove && (
             <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => approveStockRelease(orderId))}>
               {busy ? "Approving…" : "Approve stock release"}
