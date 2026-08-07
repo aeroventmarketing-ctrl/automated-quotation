@@ -3281,16 +3281,17 @@ export async function setMultiDelivery(quotationId: string): Promise<void> {
 }
 
 /**
- * Office pickup: turn multiple-batch PICK UP on/off in a single toggle (client
- * collects in several batches). Turning it on enables batch mode and switches the
- * order to multi. An admin can turn it on and off at any time; a non-admin (the
- * salesperson) can turn it ON but not OFF — once on, only an admin can turn it off.
+ * Pick up in multiple batches — a single toggle (client collects in several
+ * batches). Works for office pick up and plant pick up. Turning it on enables
+ * batch mode and switches the order to multi. An admin can turn it on and off any
+ * time; a non-admin (the salesperson) can turn it ON but not OFF — once on, only an
+ * admin can turn it off.
  */
 export async function setMultiBatchPickup(quotationId: string, enabled: boolean): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  if (!wf.officePickup) throw new Error("Office pick up must be on to use multi-batch pick up.");
+  if (wf.fulfillmentMode === "delivery") throw new Error("A pick-up mode must be on to use multi-batch pick up.");
   if (enabled) {
     if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
       throw new Error("Only the order's salesperson or an admin can turn on multi-batch pick up.");
@@ -3360,11 +3361,14 @@ export async function saveMultiBatchPod(quotationId: string, batchId: string, do
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  // Office pickup: Sales attaches the proof of pick up (not Logistics).
-  const pickup = wf.officePickup === true;
-  const salesPickup = pickup && (user.role === "SALES" || quote.preparedById === user.id);
-  if (!(isAdmin(user) || salesPickup || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
-    throw new Error(pickup ? "Only Sales or an admin can attach the proof of pick up." : "Only Logistics or an admin can attach the proof of delivery.");
+  // Who attaches the proof: Sales for office pickup, the Warehouseman for plant
+  // pickup, Logistics for a delivery.
+  const mode = wf.fulfillmentMode;
+  const pickup = mode !== "delivery";
+  const salesPickup = mode === "office_pickup" && (user.role === "SALES" || quote.preparedById === user.id);
+  const warehousePlant = mode === "plant_pickup" && userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
+  if (!(isAdmin(user) || salesPickup || warehousePlant || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
+    throw new Error(pickup ? "Only the pick-up handler or an admin can attach the proof of pick up." : "Only Logistics or an admin can attach the proof of delivery.");
   }
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
@@ -3383,10 +3387,12 @@ export async function removeMultiBatchPod(quotationId: string, batchId: string, 
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const pickup = wf.officePickup === true;
-  const salesPickup = pickup && (user.role === "SALES" || quote.preparedById === user.id);
+  const mode = wf.fulfillmentMode;
+  const pickup = mode !== "delivery";
+  const salesPickup = mode === "office_pickup" && (user.role === "SALES" || quote.preparedById === user.id);
+  const warehousePlant = mode === "plant_pickup" && userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
   const isLogistics = userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
-  if (!(isAdmin(user) || salesPickup || isLogistics)) throw new Error(pickup ? "Only an admin or Sales can remove the proof of pick up." : "Only an admin or Logistics can remove the proof of delivery.");
+  if (!(isAdmin(user) || salesPickup || warehousePlant || isLogistics)) throw new Error(pickup ? "Only an admin or the pick-up handler can remove the proof of pick up." : "Only an admin or Logistics can remove the proof of delivery.");
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch) throw new Error("Delivery batch not found.");
   if (batch.steps[MB_DELIVERED_STEP] && !isAdmin(user)) {
@@ -3407,8 +3413,11 @@ export async function saveMultiBatchDoc(quotationId: string, batchId: string, ke
   if (!MB_DOC_KEYS.has(key)) throw new Error("Unknown document.");
   const roles = await getWorkflowRoles();
   const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { preparedById: true } });
-  const ok = isAdmin(user) || quote?.preparedById === user.id || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey);
-  if (!ok) throw new Error("Only Accounting, Sales or an admin can attach delivery documents.");
+  // Plant pick up: the Warehouseman makes the batch's delivery form / documents.
+  const ok = isAdmin(user) || quote?.preparedById === user.id
+    || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey)
+    || userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only Accounting, the Warehouseman, Sales or an admin can attach delivery documents.");
   const { cls, wf } = await loadWorkflow(quotationId);
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
@@ -3449,11 +3458,11 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
 
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
-  // Office-pickup orders run each batch through the pickup step variant.
-  const pickup = wf.officePickup === true;
-  const stepDef = mbStepDef(stepKey, pickup);
+  // Each batch runs the step variant for the order's fulfilment mode (delivery /
+  // office pick up / plant pick up).
+  const stepDef = mbStepDef(stepKey, wf.fulfillmentMode);
   if (!stepDef) throw new Error("Unknown step.");
-  const { next } = mbProgress(batch, pickup);
+  const { next } = mbProgress(batch, wf.fulfillmentMode);
   if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");
 
   // Logistics must attach the proof of delivery before the batch can be delivered.

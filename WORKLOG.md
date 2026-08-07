@@ -14,6 +14,28 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Plant pick up — multi-batch (PR 3 of 3)
+- **Feature (owner-approved, frozen Phase 5 multi-batch):** plant pick up can be collected
+  in multiple batches; each batch repeats the plant Phase-5 sequence. Reuses the multi-batch
+  engine with a plant step variant, alongside delivery and office-pickup variants.
+- **`MULTIBATCH_PLANT_PICKUP_STEPS`** (per batch): notify client → payment checked → payment
+  confirmed → quality tested (Tech Head/QI) → Plant Manager "Quality & Quantity Approved" →
+  **Warehouseman "Make the delivery form"** (`delivery_docs`) → **Plant Manager "Approve
+  delivery"** (`delivery_approved`) → **Warehouseman "Upload proof of pick up & mark picked
+  up"** (`delivered`) → **Sales "Approve POD"** (`delivery_confirmed`) → Accounting "Confirm
+  documents received" → "File documents — batch picked up".
+- **Engine generalised:** `mbSteps`/`mbStepDef`/`mbProgress` now take a `MBMode`
+  (`delivery | office_pickup | plant_pickup`) instead of an `officePickup` boolean; all
+  callers pass `wf.fulfillmentMode`. `advanceMultiBatch` uses the mode. The Warehouseman may
+  attach the batch's delivery documents + proof of pick up (`saveMultiBatchDoc` /
+  `saveMultiBatchPod` / `removeMultiBatchPod`). `setMultiBatchPickup` now works for any
+  pick-up mode. The "Multi-batch pick up" toggle + multi-mode card + `MultiBatchPanel`
+  relabelling now cover plant pickup (`isPickupMode = office || plant`).
+- **Known simplification:** in multi-batch the "Make the delivery form" step bundles the
+  batch's delivery documents (SI/OR/DR), whereas single-batch splits DR-at-make-form from
+  SI/OR-at-close. Functional; can refine if the owner wants the split per batch.
+- Typecheck + lint clean.
+
 ## 2026-08-07 · Plant pick up — single-batch Phase 5 + 3-way selector (PR 2 of 3)
 - **Feature (owner-approved, frozen Phase 2/5):** adds the **plant pick up** handover mode
   (client collects at the plant). Per `docs/plant-pickup-design.md` + owner confirmations:
