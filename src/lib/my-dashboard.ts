@@ -238,7 +238,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       if (wf.deliveryMode === "multi") {
         for (const b of wf.deliveryBatches) {
           if (b.cancelled || isMbFiled(b)) continue;
-          const next = mbProgress(b).next;
+          const next = mbProgress(b, wf.officePickup === true).next;
           if (!next) continue;
           const owes = next.role === "sales"
             ? (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id || isAdmin(user))

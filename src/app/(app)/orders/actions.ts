@@ -3243,6 +3243,37 @@ export async function setMultiDelivery(quotationId: string): Promise<void> {
   await saveWorkflow(quotationId, cls, { ...wf, deliveryMode: "multi" });
 }
 
+/**
+ * Office pickup: turn multiple-batch PICK UP on/off in a single toggle (client
+ * collects in several batches). Turning it on enables batch mode and switches the
+ * order to multi. An admin can turn it on and off at any time; a non-admin (the
+ * salesperson) can turn it ON but not OFF — once on, only an admin can turn it off.
+ */
+export async function setMultiBatchPickup(quotationId: string, enabled: boolean): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!wf.officePickup) throw new Error("Office pick up must be on to use multi-batch pick up.");
+  if (enabled) {
+    if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
+      throw new Error("Only the order's salesperson or an admin can turn on multi-batch pick up.");
+    }
+    // Available from when the goods are released up until just before the order is
+    // picked up / delivered.
+    if (!(stageIndex(wf.stage) >= stageIndex("producing") && stageIndex(wf.stage) < stageIndex("delivered"))) {
+      throw new Error("Multi-batch pick up can be chosen once the order reaches fulfilment, until just before it is picked up.");
+    }
+    await saveWorkflow(quotationId, cls, { ...wf, batchDeliveryEnabled: true, deliveryMode: "multi" });
+    return;
+  }
+  // Turning off is admin-only, and only when no batch has been opened.
+  if (!isAdmin(user)) throw new Error("Only an admin can turn off multi-batch pick up.");
+  if (wf.deliveryBatches.some((b) => !b.cancelled)) {
+    throw new Error("Cancel the open pick-up batches first before turning off multi-batch pick up.");
+  }
+  await saveWorkflow(quotationId, cls, { ...wf, deliveryMode: undefined, batchDeliveryEnabled: false });
+}
+
 /** Open a delivery batch from finished items (any items / partial quantities). */
 export async function createMultiBatch(quotationId: string, input: z.infer<typeof mbCreateSchema>): Promise<void> {
   const user = await getCurrentUser();
@@ -3291,10 +3322,13 @@ export async function saveMultiBatchPod(quotationId: string, batchId: string, do
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
-  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
-    throw new Error("Only Logistics or an admin can attach the proof of delivery.");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  // Office pickup: Sales attaches the proof of pick up (not Logistics).
+  const pickup = wf.officePickup === true;
+  const salesPickup = pickup && (user.role === "SALES" || quote.preparedById === user.id);
+  if (!(isAdmin(user) || salesPickup || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
+    throw new Error(pickup ? "Only Sales or an admin can attach the proof of pick up." : "Only Logistics or an admin can attach the proof of delivery.");
   }
-  const { cls, wf } = await loadWorkflow(quotationId);
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
   const entry: SaleDoc = { path: String(doc.path), name: String(doc.name || "file"), uploadedAt: doc.uploadedAt || new Date().toISOString() };
@@ -3311,9 +3345,11 @@ export async function removeMultiBatchPod(quotationId: string, batchId: string, 
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const pickup = wf.officePickup === true;
+  const salesPickup = pickup && (user.role === "SALES" || quote.preparedById === user.id);
   const isLogistics = userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey);
-  if (!(isAdmin(user) || isLogistics)) throw new Error("Only an admin or Logistics can remove the proof of delivery.");
-  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!(isAdmin(user) || salesPickup || isLogistics)) throw new Error(pickup ? "Only an admin or Sales can remove the proof of pick up." : "Only an admin or Logistics can remove the proof of delivery.");
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch) throw new Error("Delivery batch not found.");
   if (batch.steps[MB_DELIVERED_STEP] && !isAdmin(user)) {
@@ -3376,9 +3412,11 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
 
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
-  const stepDef = mbStepDef(stepKey);
+  // Office-pickup orders run each batch through the pickup step variant.
+  const pickup = wf.officePickup === true;
+  const stepDef = mbStepDef(stepKey, pickup);
   if (!stepDef) throw new Error("Unknown step.");
-  const { next } = mbProgress(batch);
+  const { next } = mbProgress(batch, pickup);
   if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");
 
   // Logistics must attach the proof of delivery before the batch can be delivered.

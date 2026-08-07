@@ -34,7 +34,7 @@ import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { saleFromClassification, collectedTotal, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
 import {
-  MULTIBATCH_STEPS,
+  mbSteps,
   mbProgress,
   mbBatchedByDescription,
   mbDeliveredByDescription,
@@ -45,6 +45,7 @@ import {
 import { MultiBatchPanel } from "./multi-batch-panel";
 import { MultiDeliveryEntry } from "./multi-delivery-entry";
 import { BatchDeliveryToggle } from "./batch-delivery-toggle";
+import { MultiBatchPickupToggle } from "./multi-batch-pickup-toggle";
 import { OfficePickupToggle } from "./office-pickup-toggle";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
@@ -491,9 +492,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // toggle is on. Switching is blocked once the order is delivered/closed.
   const inDeliveryWindow =
     stageIndex(wf.stage) >= stageIndex("producing") && stageIndex(wf.stage) < stageIndex("delivered");
-  const showBatchToggle = inDeliveryWindow && !multiMode && canEnableBatch;
+  // The normal delivery batch toggle is not used for office-pickup orders — they
+  // get the dedicated single "Multi-batch pick up" toggle below.
+  const showBatchToggle = inDeliveryWindow && !multiMode && canEnableBatch && !officePickup;
   const showMultiEntry =
-    inDeliveryWindow && !multiMode && batchEnabled && (canManageMulti || canEnableBatch);
+    inDeliveryWindow && !multiMode && batchEnabled && (canManageMulti || canEnableBatch) && !officePickup;
+  // Office pickup: a single "Multi-batch pick up" toggle. The salesperson or an
+  // admin can turn it on; only an admin can turn it off (enforced server-side).
+  const showPickupMultiToggle = officePickup && inDeliveryWindow && !multiMode && (adminViewer || isPreparerViewer);
   const mbOrdered = new Map<string, number>();
   for (const it of quote.items) {
     const k = it.descriptionSnapshot.trim();
@@ -511,11 +517,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (role === "sales" ? isPreparerViewer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
   const mbPaymentById = new Map((saleForClose?.payments ?? []).map((p) => [p.id, p] as const));
   const mbBatchViews = wf.deliveryBatches.map((b) => {
-    const steps = MULTIBATCH_STEPS.map((s) => {
+    const steps = mbSteps(officePickup).map((s) => {
       const st = b.steps[s.key];
       return { key: s.key, label: s.done, roleLabel: s.role === "sales" ? "Sales" : workflowRoleLabel(s.role), done: !!st, byName: st?.byName, at: st?.at ? fmtWhen(st.at) : undefined };
     });
-    const { next } = mbProgress(b);
+    const { next } = mbProgress(b, officePickup);
     const nextView = next && !b.cancelled
       ? { key: next.key, label: next.label, roleLabel: next.role === "sales" ? "Sales" : workflowRoleLabel(next.role), canAct: canActMbStep(next.role), collectsPayment: !!next.collectsPayment }
       : null;
@@ -985,6 +991,21 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Card>
       )}
 
+      {/* Multiple-batch PICK UP — office-pickup orders where the client collects in
+          several batches. One toggle: the salesperson/admin turns it on; only an
+          admin can turn it off. Each batch runs the pickup Phase-5 sequence. */}
+      {showPickupMultiToggle && (
+        <Card className="border-primary/30">
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Pick up in multiple batches?</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              For orders the client collects in parts. Turn this on to release finished items in batches — each batch runs its own payment, quality check, pick up and documents. Once on, only an admin can turn it off.
+            </p>
+            <MultiBatchPickupToggle orderId={quote.id} enabled={multiMode} admin={adminViewer} canTurnOn={adminViewer || isPreparerViewer} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Phase 5 — final payment, quality, delivery & documents (single delivery) */}
       {showFulfillment && !multiMode && (
         <Card id="phase-5" className="scroll-mt-24">
@@ -1010,20 +1031,30 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       {/* Phase 5 (multiple deliveries) — each batch runs the full delivery sequence. */}
       {multiMode && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Multiple-batch delivery</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">{officePickup ? "Phase 5 · Multiple-batch pick up" : "Phase 5 · Multiple-batch delivery"}</CardTitle></CardHeader>
           <CardContent>
-            {/* Engineer / Payment Approver / admin can turn batch delivery back
-                off here (returns the order to single delivery) — allowed while no
-                batch has been opened. */}
-            {canEnableBatch && (
-              <div className="mb-3 rounded-md border bg-muted/20 p-2.5">
-                <BatchDeliveryToggle orderId={quote.id} enabled={batchEnabled} multiActive hasOpenBatches={mbBatchViews.some((b) => !b.cancelled)} />
-              </div>
+            {/* Turn batch mode back off (returns the order to the single flow) —
+                allowed while no batch has been opened. For office pickup only an
+                admin can turn it off; otherwise Engineer / Payment Approver / admin. */}
+            {officePickup ? (
+              adminViewer && (
+                <div className="mb-3 rounded-md border bg-muted/20 p-2.5">
+                  <MultiBatchPickupToggle orderId={quote.id} enabled admin={adminViewer} canTurnOn hasOpenBatches={mbBatchViews.some((b) => !b.cancelled)} />
+                </div>
+              )
+            ) : (
+              canEnableBatch && (
+                <div className="mb-3 rounded-md border bg-muted/20 p-2.5">
+                  <BatchDeliveryToggle orderId={quote.id} enabled={batchEnabled} multiActive hasOpenBatches={mbBatchViews.some((b) => !b.cancelled)} />
+                </div>
+              )
             )}
             <p className="mb-3 text-xs text-muted-foreground">
-              Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed.
+              {officePickup
+                ? "Pick up the order in batches — open a batch of released items (any items or partial quantities) and run each through the pick-up sequence: notify client → payment → quality → save documents & approve pick up → proof of pick up → documents. Each batch collects its own partial payment (payment first). The order closes once every item is picked up and all batches are filed."
+                : "Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed."}
             </p>
-            <MultiBatchPanel orderId={quote.id} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null, docs: {} })) : mbBatchViews} payments={restricted ? [] : mbPayments} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canManage={canManageMulti} canCollect={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
+            <MultiBatchPanel orderId={quote.id} officePickup={officePickup} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null, docs: {} })) : mbBatchViews} payments={restricted ? [] : mbPayments} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canManage={canManageMulti} canCollect={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
           </CardContent>
         </Card>
       )}
