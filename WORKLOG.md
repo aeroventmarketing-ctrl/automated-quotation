@@ -14,6 +14,48 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Office pickup — one-step "Release from Stock and Notify Client"
+- **Feature (owner-requested, frozen Phase 2 stock-release):** when the **Office pick up**
+  flag is on, the from-stock Phase-2 panel collapses the normal two steps (Plant
+  Manager/Engineer **approve** → Warehouse **release**) into a **single** action:
+  **"Release from Stock and Notify Client"**, pressed by the Plant Manager / Engineer
+  (in-house duct hardware only) / admin. It picks the stock item(s), deducts inventory,
+  and advances straight to final payment (client notified) — then Accounting issues the
+  billing statement (skippable) and the client makes the final payment as before.
+- **Gated on `officePickup`** — the normal from-stock flow keeps its two steps unchanged.
+- **Refinements (owner-requested):**
+  - The pickup release is the **Engineer's** action alone — **not** the Plant Manager.
+    `releaseOrderFromStock` (pickup branch) gates on Engineer / admin only; `pendingStep`
+    returns `{ roles: [], engineer: true }` so the "waiting for" banner, My Dashboard,
+    the orders list and the approver alarm all show **Engineer** only; the panel wording
+    is "Awaiting the Engineer to release from stock and notify the client"; the
+    Phase-2 approve gate (`canApprove`) drops Plant Manager for pickup.
+  - **Toggle-lock policy:** an **admin** can flip Office pick up on/off at any time; a
+    **non-admin** (salesperson) can set it only while the order is still in Phase 2
+    (`stageIndex(wf.stage) <= "released"`), after which it locks for them (they see the
+    read-only tag). `canSetPickup` = `stockOnly && (admin || (preparer && pickupWindowOpen))`.
+  - **Normal (non-pickup) from-stock release is now Plant-Manager-only** — the mirror of
+    the pickup rule, so the two workflows partition cleanly: **Engineer → office pickup**,
+    **Plant Manager → normal from-stock**. This **supersedes #241/#243** (which had let an
+    Engineer approve normal from-stock release for duct hardware). `approveStockRelease`
+    now gates on Plant Manager / admin only; `pendingStep` drops the `engineer` flag from
+    the normal approve step (so the banner / My Dashboard / orders list / alarm show
+    **Plant Manager** only); `StockRelease` wording is "Awaiting Plant Manager approval";
+    the Phase-2 `canApprove` for non-pickup drops the Engineer. (`isDuctHardwareStockOnly`
+    import removed from `actions.ts`; `engineerApprovesStock` is now unused by `pendingStep`
+    but still passed by callers.)
+- **Where:**
+  - `src/app/(app)/orders/actions.ts` — `releaseOrderFromStock` now branches on
+    `wf.officePickup`: for pickup it gates on Plant Manager / Engineer(duct-hardware) /
+    admin and does NOT require a prior approval stamp; it stamps both
+    `stock_release_approved` and `client_notified`. Normal flow still needs the Warehouse
+    role + prior approval.
+  - `src/lib/order-workflow.ts` — `pendingStep` "released" case returns a single
+    "Release from stock & notify client" step for pickup orders.
+  - `src/app/(app)/orders/[id]/stock-release.tsx` — `officePickup` prop; single combined
+    button that opens the stock picker; shared `release()` helper.
+  - `src/app/(app)/orders/[id]/page.tsx` — passes `officePickup` to `StockRelease`.
+
 ## 2026-08-07 · Office pickup workflow — STEP 2 built (from-stock, pickup Phase 5)
 - **Feature (owner-approved, frozen Phases 1/2/5):** when the **Office pick up** flag is
   on, the order follows a from-stock pickup path. Confirmed with the owner: office pickup

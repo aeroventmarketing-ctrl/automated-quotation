@@ -21,7 +21,7 @@ export function StockRelease({
   approved,
   approvedByName,
   canApprove,
-  engineerEligible = false,
+  officePickup = false,
 }: {
   orderId: string;
   lines: { name: string; qty: number }[];
@@ -30,13 +30,14 @@ export function StockRelease({
   approved: boolean;
   approvedByName?: string;
   canApprove: boolean;
-  // An Engineer may approve only when every line is in-house duct hardware; an
-  // order with Office-supplied stock is Plant-Manager-only. Controls the wording.
-  engineerEligible?: boolean;
+  // Office pickup: one combined step — the Engineer releases from stock and
+  // notifies the client (no separate approval + warehouse release). The normal
+  // (non-pickup) flow is Plant-Manager-approved, then Warehouse-released.
+  officePickup?: boolean;
 }) {
   const router = useRouter();
-  // Who may approve this order's release, for the on-screen wording.
-  const approverPhrase = engineerEligible ? "Plant Manager or an Engineer" : "Plant Manager";
+  // The normal (non-pickup) release is approved by the Plant Manager.
+  const approverPhrase = "Plant Manager";
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -54,14 +55,30 @@ export function StockRelease({
     }
   }
 
+  // Shared release: deduct the matched stock and notify the client (→ final payment).
+  async function release(matches: { stockItemId: string; qty: number }[]) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await releaseOrderFromStock(orderId, matches.map((m) => ({ stockItemId: m.stockItemId, qty: m.qty })));
+      setOpen(false);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to release from stock");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm dark:border-sky-900 dark:bg-sky-950/30">
         <div className="mb-1 font-medium text-sky-800 dark:text-sky-300">For stock release</div>
         <p className="text-xs text-muted-foreground">
           These items are produced in-house by Fans &amp; Blowers and held in stock — no job order or
-          purchase order. The {approverPhrase} approves the release, then the Warehouse
-          issues them from inventory to fulfil the order; it then moves to final payment.
+          purchase order. {officePickup
+            ? "The Engineer releases them from stock and notifies the client in one step; it then moves to final payment."
+            : `The ${approverPhrase} approves the release, then the Warehouse issues them from inventory to fulfil the order; it then moves to final payment.`}
         </p>
         <ul className="mt-2 space-y-0.5 text-xs">
           {lines.map((l, i) => (
@@ -70,8 +87,27 @@ export function StockRelease({
         </ul>
       </div>
 
-      {/* Step 1 — Plant Manager / Engineer approval gate. */}
-      {!approved ? (
+      {/* Office pickup — one combined "release & notify client" action. */}
+      {officePickup ? (
+        open ? (
+          <StockMatchPanel
+            lines={lines.map((l) => ({ label: `${l.qty} pcs · ${l.name}`, qtyDefault: String(l.qty) }))}
+            stockItems={stockItems}
+            submitLabel="Release from Stock and Notify Client"
+            onCancel={() => setOpen(false)}
+            onSubmit={release}
+          />
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+            <span className="text-amber-800 dark:text-amber-300">Awaiting the Engineer to release from stock and notify the client.</span>
+            {canApprove && (
+              <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => setOpen(true)}>
+                Release from Stock and Notify Client
+              </Button>
+            )}
+          </div>
+        )
+      ) : !approved ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
           <span className="text-amber-800 dark:text-amber-300">Awaiting {approverPhrase} approval to release from stock.</span>
           {canApprove && (
@@ -94,19 +130,7 @@ export function StockRelease({
               stockItems={stockItems}
               submitLabel="Release from stock & notify client"
               onCancel={() => setOpen(false)}
-              onSubmit={async (matches) => {
-                setBusy(true);
-                setErr(null);
-                try {
-                  await releaseOrderFromStock(orderId, matches.map((m) => ({ stockItemId: m.stockItemId, qty: m.qty })));
-                  setOpen(false);
-                  router.refresh();
-                } catch (e) {
-                  setErr(e instanceof Error ? e.message : "Failed to release from stock");
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              onSubmit={release}
             />
           ) : (
             <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => setOpen(true)}>
