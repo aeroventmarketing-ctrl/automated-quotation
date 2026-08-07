@@ -14,6 +14,34 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Plant pick up — single-batch Phase 5 + 3-way selector (PR 2 of 3)
+- **Feature (owner-approved, frozen Phase 2/5):** adds the **plant pick up** handover mode
+  (client collects at the plant). Per `docs/plant-pickup-design.md` + owner confirmations:
+  delivery form = the Delivery Receipt (Warehouseman attaches it), Make-form and
+  Approve-delivery are two steps, and from-stock plant pickup uses the same QA roles as
+  produced.
+- **3-way selector** replaces the old office-pickup on/off toggle on the Phase 2 card:
+  **Delivery · Office pick up · Plant pick up** (`FulfillmentModeSelector` +
+  `setFulfillmentMode`). Options gated by contents: office pick up = from-stock; plant pick
+  up = not bought-in-only. Admin can change any time; a non-admin only before the order
+  leaves Phase 2.
+- **Plant pick up Phase 5 (single-batch)** — mapped onto existing stages with plant labels/
+  roles: QA test (Tech Head/QI) `qa_tested` → Plant Manager "Quality & Quantity Approved"
+  `qa_plant_checked` → **Warehouseman "Make the delivery form"** (attach DR) `qa_transferred`
+  → **Plant Manager "Approve Delivery"** `qa_sales_checked` → **Warehouseman "Upload form +
+  proof of pick up"** `delivered` → **Sales "Approve POD – Successful Pick Up"**
+  `delivery_confirmed` → **Accounting "Confirm Documents Received"** (skips surrender)
+  `docs_received` → File. All gated on `fulfillmentMode === "plant_pickup"`.
+- **Where:** `order-workflow.ts` (`pendingStep` plant branches + `plantPickup` arg; 4 callers
+  updated), `actions.ts` (`qaTest`/`qaPlantCheck`/`qaTransfer`/`qaSalesCheck`/`markDelivered`/
+  `confirmDocsReceived` plant branches; `loadForCloseDoc` allows Warehouseman for DR/POD; new
+  `setFulfillmentMode`), `page.tsx` (plant-aware perms; the selector; header badge shows the
+  mode), `fulfillment-actions.tsx` (plant Phase-5 UI), new `plant-doc-step.tsx` +
+  `fulfillment-mode-selector.tsx`. The old `office-pickup-toggle.tsx` is now unused.
+- **Notes:** typecheck + lint clean; the build compiles (the only failure is prerendering an
+  unrelated Supabase-env page). Plant **multi-batch** is PR 3. Single-batch plant pickup on a
+  from-stock order still uses the normal two-step stock release in Phase 2 (fine).
+
 ## 2026-08-07 · Fulfilment mode — enum refactor (plant pickup PR 1 of 3)
 - **Refactor (no behaviour change), per `docs/plant-pickup-design.md`:** introduced
   `wf.fulfillmentMode: "delivery" | "office_pickup" | "plant_pickup"` as the source of
