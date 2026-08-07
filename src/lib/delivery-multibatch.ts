@@ -75,22 +75,51 @@ export const MULTIBATCH_STEPS: MBStepDef[] = [
   { key: "docs_filed", label: "File documents — batch delivered", done: "Documents filed (partial delivery)", role: "accounting" },
 ];
 
+/**
+ * Office-pickup variant of the per-batch sequence. Same engine, but each batch
+ * follows the pickup path: it SKIPS plant-QC → transfer → Sales-2nd-QC, the
+ * quality test is the 2nd Quality Inspector's, and the pick-up documents / proof
+ * of pick up / surrender are handled by Sales (client collects at the office).
+ * Shares the step KEYS with the delivery list so the POD (`delivered`) and
+ * document (`delivery_docs`) gates keep working.
+ */
+export const MULTIBATCH_PICKUP_STEPS: MBStepDef[] = [
+  { key: "client_notified", label: "Notify client — batch ready for pick up", done: "Client notified (batch ready)", role: "sales" },
+  { key: "payment_checked", label: "Payment checked", done: "Payment checked", role: "accounting", collectsPayment: true },
+  { key: "payment_confirmed", label: "Payment confirmed", done: "Payment confirmed", role: "payment_approver" },
+  { key: "qa_tested", label: "Quality tested — pass", done: "Quality tested", role: "quality_inspector_2" },
+  { key: "delivery_docs", label: "Save documents & approve pick up", done: "Pick-up documents ready", role: "accounting" },
+  // Combined step (matches the single-pickup flow): Sales uploads the proof of
+  // pick up (into the batch's POD) and approves it in one action. Keeps the
+  // `delivered` key so the POD gate, delivered-qty tracking and close trigger work.
+  { key: "delivered", label: "Approve POD — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
+  { key: "docs_surrendered", label: "Documents surrendered to accounting", done: "Signed documents surrendered", role: "sales" },
+  { key: "docs_received", label: "Confirm documents received", done: "Documents received by accounting", role: "accounting" },
+  { key: "docs_filed", label: "File documents — batch picked up", done: "Documents filed (partial pick up)", role: "accounting" },
+];
+
 export const MB_DELIVERED_STEP = "delivered";
 export const MB_FINAL_STEP = "docs_filed";
-const MB_STEP_KEYS = new Set(MULTIBATCH_STEPS.map((s) => s.key));
+const MB_STEP_KEYS = new Set([...MULTIBATCH_STEPS, ...MULTIBATCH_PICKUP_STEPS].map((s) => s.key));
 
-export function mbStepDef(key: string): MBStepDef | undefined {
-  return MULTIBATCH_STEPS.find((s) => s.key === key);
+/** The per-batch step sequence for this order (pickup variant when officePickup). */
+export function mbSteps(officePickup = false): MBStepDef[] {
+  return officePickup ? MULTIBATCH_PICKUP_STEPS : MULTIBATCH_STEPS;
+}
+
+export function mbStepDef(key: string, officePickup = false): MBStepDef | undefined {
+  return mbSteps(officePickup).find((s) => s.key === key);
 }
 
 /** Last completed step index (−1 if none) and the next step to do (or null). */
-export function mbProgress(b: MultiDeliveryBatch): { lastDone: number; next: MBStepDef | null } {
+export function mbProgress(b: MultiDeliveryBatch, officePickup = false): { lastDone: number; next: MBStepDef | null } {
+  const steps = mbSteps(officePickup);
   let lastDone = -1;
-  for (let i = 0; i < MULTIBATCH_STEPS.length; i++) {
-    if (b.steps[MULTIBATCH_STEPS[i].key]) lastDone = i;
+  for (let i = 0; i < steps.length; i++) {
+    if (b.steps[steps[i].key]) lastDone = i;
     else break;
   }
-  const next = lastDone + 1 < MULTIBATCH_STEPS.length ? MULTIBATCH_STEPS[lastDone + 1] : null;
+  const next = lastDone + 1 < steps.length ? steps[lastDone + 1] : null;
   return { lastDone, next };
 }
 

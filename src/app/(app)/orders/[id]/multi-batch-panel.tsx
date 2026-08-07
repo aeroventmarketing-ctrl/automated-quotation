@@ -59,6 +59,7 @@ export interface MBBatchView {
  */
 export function MultiBatchPanel({
   orderId,
+  officePickup = false,
   items,
   batches,
   payments = [],
@@ -73,6 +74,8 @@ export function MultiBatchPanel({
   admin = false,
 }: {
   orderId: string;
+  /** Office-pickup order — relabels "delivery" wording to "pick up". */
+  officePickup?: boolean;
   items: MBItem[];
   batches: MBBatchView[];
   /** Every payment recorded on the order — same records as the quotation tab. */
@@ -360,7 +363,7 @@ export function MultiBatchPanel({
       ) : (
         canManage && (
           <Button size="sm" variant="outline" className="h-8 text-xs" disabled={!anyAvailable} onClick={() => setCreating(true)}>
-            <PackagePlus className="mr-1 h-3.5 w-3.5" /> {anyAvailable ? "Open delivery batch" : "All items in a batch"}
+            <PackagePlus className="mr-1 h-3.5 w-3.5" /> {anyAvailable ? (officePickup ? "Open pick-up batch" : "Open delivery batch") : "All items in a batch"}
           </Button>
         )
       )}
@@ -401,7 +404,7 @@ export function MultiBatchPanel({
             )}
             <span className="text-xs text-muted-foreground">opened by {b.createdByName}</span>
             {b.canCancel && !b.cancelled && !b.filed && (
-              <button type="button" disabled={busy != null} onClick={() => { if (window.confirm("Cancel this delivery batch?")) run(b.id + "cancel", () => cancelMultiBatch(orderId, b.id)); }} className="ml-auto text-muted-foreground hover:text-destructive" title="Cancel batch">
+              <button type="button" disabled={busy != null} onClick={() => { if (window.confirm(officePickup ? "Cancel this pick-up batch?" : "Cancel this delivery batch?")) run(b.id + "cancel", () => cancelMultiBatch(orderId, b.id)); }} className="ml-auto text-muted-foreground hover:text-destructive" title="Cancel batch">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
@@ -436,7 +439,7 @@ export function MultiBatchPanel({
               "Mark delivered" step; view without downloading; admins manage anytime. */}
           {(podFiles.length > 0 || canManagePod) && (
             <div className="mt-2 rounded-md border bg-muted/20 p-2">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Proof of delivery</div>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{officePickup ? "Proof of pick up" : "Proof of delivery"}</div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 {podFiles.map((f) => (
                   <span key={f.path} className="inline-flex items-center gap-1.5 text-xs">
@@ -458,13 +461,13 @@ export function MultiBatchPanel({
                 ))}
                 {canManagePod && (
                   <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs hover:bg-accent">
-                    <Upload className="h-3.5 w-3.5" /> {busy === b.id + "pod" ? "Uploading…" : podFiles.length ? "Add file" : "Attach proof of delivery"}
+                    <Upload className="h-3.5 w-3.5" /> {busy === b.id + "pod" ? "Uploading…" : podFiles.length ? "Add file" : officePickup ? "Attach proof of pick up" : "Attach proof of delivery"}
                     <input type="file" className="hidden" disabled={busy != null} onChange={(e) => e.target.files?.[0] && uploadPod(b.id, e.target.files[0])} />
                   </label>
                 )}
               </div>
               {deliverBlocked && canManagePod && (
-                <p className="mt-1 text-[11px] text-muted-foreground">Attach at least one proof of delivery to enable &ldquo;Mark delivered&rdquo;.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{officePickup ? "Attach at least one proof of pick up to enable “Approve POD — successful pick up”." : "Attach at least one proof of delivery to enable “Mark delivered”."}</p>
               )}
             </div>
           )}
@@ -474,7 +477,7 @@ export function MultiBatchPanel({
               Each batch carries its own set; they also appear on the quotation tab. */}
           {!restricted && (atDeliveryDocs || anyBatchDocs || admin) && (
             <div className="mt-2 rounded-md border bg-muted/20 p-2">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Delivery documents (this batch)</div>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{officePickup ? "Pick-up documents (this batch)" : "Delivery documents (this batch)"}</div>
               <div className="space-y-1.5">
                 {deliveryDocSlots.map((t) => {
                   const files = b.docs[t.key] ?? [];
@@ -512,7 +515,7 @@ export function MultiBatchPanel({
                 })}
               </div>
               {docsBlocked && canManageDocs && (
-                <p className="mt-1 text-[11px] text-muted-foreground">Attach every required document to enable &ldquo;Save documents &amp; approve delivery&rdquo;.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{officePickup ? "Attach every required document to enable “Save documents & approve pick up”." : "Attach every required document to enable “Save documents & approve delivery”."}</p>
               )}
             </div>
           )}
