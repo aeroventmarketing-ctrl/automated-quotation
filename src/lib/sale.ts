@@ -104,6 +104,29 @@ export function closeDocsState(docs: Record<string, SaleDoc[]> | undefined, vatI
   return { appear, complete: appear && !bir2307Missing, bir2307Missing, missing: appearKeys.filter((k) => !has(k)) };
 }
 
+/**
+ * Plant pick up closing documents. The **delivery form** (made by the Warehouseman)
+ * is always required. For a **VAT-inclusive** order Accounting also makes the Sales
+ * Invoice, OR/CR/AF and Delivery Receipt. For **VAT-exclusive** the delivery form is
+ * enough.
+ */
+export function plantDocTypes(vatInclusive: boolean): SaleDocType[] {
+  const form: SaleDocType = { key: "delivery_form", label: "Delivery form (Warehouseman)", required: true };
+  if (!vatInclusive) return [form];
+  return [
+    form,
+    { key: "sales_invoice", label: "Sales Invoice", required: true },
+    { key: "or_cr_af", label: "OR / CR / AF", required: true },
+    { key: "delivery_receipt", label: "Delivery Receipt", required: true },
+  ];
+}
+export function plantCloseState(docs: Record<string, SaleDoc[]> | undefined, vatInclusive: boolean) {
+  const has = (k: string) => (docs?.[k]?.length ?? 0) > 0;
+  const missing = plantDocTypes(vatInclusive).map((t) => t.key).filter((k) => !has(k));
+  const appear = missing.length === 0;
+  return { appear, complete: appear, bir2307Missing: false, missing };
+}
+
 /** Coerce one raw doc record into a SaleDoc, or null. */
 function coerceDoc(v: unknown): SaleDoc | null {
   if (!v || typeof v !== "object") return null;

@@ -14,6 +14,24 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Plant pick up — VAT-aware documents (delivery form vs closing docs)
+- **Owner-requested:** for plant pick up the **Warehouseman's delivery form** is a distinct
+  document. **VAT-exclusive** → the delivery form alone is enough to close. **VAT-inclusive**
+  → Accounting also makes the Sales Invoice, OR/CR/AF and Delivery Receipt.
+- **New `delivery_form` doc slot** (Warehouseman) — the "Make the delivery form" step now
+  attaches `delivery_form` (was reusing `delivery_receipt`). `plantDocTypes(vatInclusive)` /
+  `plantCloseState(...)` in `sale.ts` encode the requirement (delivery form always; SI/OR/DR
+  only for VAT-inclusive; no BIR 2307 per owner).
+- **Where:** `sale.ts` (`plantDocTypes`/`plantCloseState`); `actions.ts` (`CLOSE_DOC_KEYS` +
+  `MB_DOC_KEYS` gain `delivery_form`; `qaTransfer` requires the delivery form; `fileDocuments`
+  + the multi-batch `delivery_docs` gate use the plant/VAT requirement; `loadForCloseDoc`
+  lets the Warehouseman attach `delivery_form`); `close-documents.tsx` (plant-aware slots +
+  gate — VAT-exclusive shows no accounting slots, closes on the delivery form); `plant-doc-
+  step.tsx` (form kind → `delivery_form`); `fulfillment-actions.tsx` + `multi-batch-panel.tsx`
+  (plant/VAT doc slots). Typecheck + lint clean.
+- **Multi-batch note:** the WH attaches the batch's delivery documents at the make-form step
+  (bundled); for VAT-inclusive that includes SI/OR/DR (can split to Accounting later).
+
 ## 2026-08-07 · Plant pick up — multi-batch (PR 3 of 3)
 - **Feature (owner-approved, frozen Phase 5 multi-batch):** plant pick up can be collected
   in multiple batches; each batch repeats the plant Phase-5 sequence. Reuses the multi-batch

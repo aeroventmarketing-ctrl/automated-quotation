@@ -30,10 +30,10 @@ export function PlantDocStep({
   initialFiles: SaleDoc[];
   admin?: boolean;
 }) {
-  const slot = kind === "form" ? "delivery_receipt" : "pod";
-  const label = kind === "form" ? "Delivery form (Delivery Receipt)" : "Proof of pick up";
+  const slot = kind === "form" ? "delivery_form" : "pod";
+  const label = kind === "form" ? "Delivery form" : "Proof of pick up";
   const btn = kind === "form" ? "Make delivery form" : "Upload form & proof of pick up";
-  const hint = kind === "form" ? "Attach the Delivery Receipt to enable “Make delivery form”." : "Attach the proof of pick up to enable the button.";
+  const hint = kind === "form" ? "Attach the delivery form to enable “Make delivery form”." : "Attach the proof of pick up to enable the button.";
 
   const router = useRouter();
   const [files, setFiles] = useState<SaleDoc[]>(initialFiles);

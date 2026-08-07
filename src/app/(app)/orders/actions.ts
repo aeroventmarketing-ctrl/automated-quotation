@@ -49,7 +49,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
+import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
 import {
@@ -3404,7 +3404,7 @@ export async function removeMultiBatchPod(quotationId: string, batchId: string, 
 }
 
 /** Valid per-batch closing-document keys (Sales Invoice / OR-CR-AF / DR / 2307). */
-const MB_DOC_KEYS = new Set(["sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307"]);
+const MB_DOC_KEYS = new Set(["sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307", "delivery_form"]);
 
 /** Accounting (or an admin / the Sales preparer) attaches a closing document to a batch. */
 export async function saveMultiBatchDoc(quotationId: string, batchId: string, key: string, doc: SaleDoc): Promise<void> {
@@ -3473,7 +3473,12 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   // OR-CR-AF / Delivery Receipt / BIR 2307) before approving its delivery
   // documents. VAT-exclusive deals don't require the Sales Invoice or BIR 2307.
   if (stepKey === "delivery_docs") {
-    const required = afterPaymentDocTypes(quote.vatMode !== "EXCLUSIVE");
+    const vatInclusive = quote.vatMode !== "EXCLUSIVE";
+    // Plant pick up: the delivery form is required; the Accounting closing docs
+    // (SI / OR / DR) only for VAT-inclusive.
+    const required = wf.fulfillmentMode === "plant_pickup"
+      ? plantDocTypes(vatInclusive)
+      : afterPaymentDocTypes(vatInclusive);
     const missing = required.filter((t) => (batch.docs?.[t.key]?.length ?? 0) === 0);
     if (missing.length) throw new Error(`Attach this batch's ${missing.map((t) => t.label).join(", ")} first.`);
   }
@@ -3801,12 +3806,12 @@ export async function qaTransfer(quotationId: string): Promise<void> {
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "qa_plant_checked") throw new Error("The order hasn't passed the Plant Manager check yet.");
   // Plant pick up: this step is the Warehouseman "making the delivery form" — they
-  // attach the Delivery Receipt (the delivery form) here. No transfer to office.
+  // attach the delivery form here. No transfer to office.
   if (wf.fulfillmentMode === "plant_pickup") {
     if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey)))
       throw new Error("Only the Warehouseman or an admin can make the delivery form.");
-    const dr = saleFromClassification(cls)?.docs?.delivery_receipt ?? [];
-    if (dr.length === 0) throw new Error("Attach the Delivery Receipt (the delivery form) first.");
+    const form = saleFromClassification(cls)?.docs?.delivery_form ?? [];
+    if (form.length === 0) throw new Error("Attach the delivery form first.");
   } else if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))) {
     throw new Error("Only Logistics or an admin can do this.");
   }
@@ -3888,6 +3893,8 @@ const CLOSE_DOC_KEYS = new Set([
   "unsigned_si", "unsigned_or_cr_af", "unsigned_dr",
   // Proof-of-delivery files uploaded by Logistics.
   "pod",
+  // Plant pick up: the delivery form made by the Warehouseman.
+  "delivery_form",
   // Proof of final payment (for the approver's review, then archived).
   "final_payment",
 ]);
@@ -3910,9 +3917,9 @@ async function loadForCloseDoc(quotationId: string, key: string) {
     // they own the delivery step but aren't Accounting/Sales. For office pickup,
     // Sales uploads the proof of pick up into the same slot.
     || (key === "pod" && (userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey) || user.role === "SALES"))
-    // Plant pick up: the Warehouseman attaches the Delivery Receipt (the delivery
-    // form) and the proof of pick up.
-    || ((key === "pod" || key === "delivery_receipt") && userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey));
+    // Plant pick up: the Warehouseman attaches the delivery form and the proof of
+    // pick up.
+    || ((key === "pod" || key === "delivery_form") && userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey));
   if (!ok) throw new Error("Only Accounting, Sales or an admin can attach closing documents.");
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const sale = saleFromClassification(cls) ?? { arrangement: "downpayment_full" as const, payments: [] };
@@ -4025,7 +4032,12 @@ export async function fileDocuments(quotationId: string): Promise<void> {
   if (wf.stage === "docs_received") {
     const vq = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { vatMode: true } });
     const vatInclusive = vq?.vatMode !== "EXCLUSIVE";
-    const closeState = closeDocsState(saleFromClassification(cls)?.docs, vatInclusive);
+    const docs = saleFromClassification(cls)?.docs;
+    // Plant pick up: the Warehouseman's delivery form is required; the Accounting
+    // closing docs (SI / OR / DR) are required only for VAT-inclusive orders.
+    const closeState = wf.fulfillmentMode === "plant_pickup"
+      ? plantCloseState(docs, vatInclusive)
+      : closeDocsState(docs, vatInclusive);
     if (!closeState.appear) throw new Error("Upload all required closing documents before filing.");
     await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
   }

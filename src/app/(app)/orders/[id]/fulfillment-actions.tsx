@@ -6,7 +6,7 @@ import { FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import { workflowRoleLabel } from "@/lib/workflow-roles";
-import { closeDocsState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
+import { closeDocsState, plantCloseState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
 import { DeliveredForm } from "./delivered-form";
@@ -226,7 +226,7 @@ export function FulfillmentActions({
           <div className="space-y-1">
             <p className="text-sm font-medium">Make the delivery form</p>
             <p className="text-xs text-muted-foreground">The Warehouseman attaches the Delivery Receipt (the delivery form).</p>
-            <PlantDocStep orderId={orderId} kind="form" initialFiles={closeDocs["delivery_receipt"] ?? []} admin={admin} />
+            <PlantDocStep orderId={orderId} kind="form" initialFiles={closeDocs["delivery_form"] ?? []} admin={admin} />
           </div>
         ) : awaiting("to make the delivery form", ["warehouse"]))}
 
@@ -374,12 +374,13 @@ export function FulfillmentActions({
           canEdit={canEditCloseDocs}
           canFile={perms.canFile}
           admin={admin}
+          plantPickup={plantPickup}
         />
       )}
 
       {/* Closed but documents still incomplete — no commission yet; show the
           amber "File documents — close order (incomplete)" affordance + slots. */}
-      {stage === "closed" && !closeDocsState(closeDocs, vatInclusive).complete && (
+      {stage === "closed" && !(plantPickup ? plantCloseState(closeDocs, vatInclusive) : closeDocsState(closeDocs, vatInclusive)).complete && (
         <CloseDocuments
           orderId={orderId}
           initialDocs={closeDocs}
@@ -387,11 +388,12 @@ export function FulfillmentActions({
           canEdit={canEditCloseDocs}
           canFile={perms.canFile}
           admin={admin}
+          plantPickup={plantPickup}
           closed
         />
       )}
 
-      {stage === "closed" && closeDocsState(closeDocs, vatInclusive).complete && (
+      {stage === "closed" && (plantPickup ? plantCloseState(closeDocs, vatInclusive) : closeDocsState(closeDocs, vatInclusive)).complete && (
         <p className="text-sm text-emerald-600">Order complete — all documents filed.</p>
       )}
 

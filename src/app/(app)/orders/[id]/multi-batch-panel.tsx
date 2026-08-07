@@ -6,7 +6,7 @@ import { PackagePlus, Trash2, CheckCircle2, Circle, Upload, Eye, FileText, Downl
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { afterPaymentDocTypes, type SaleDoc } from "@/lib/sale";
+import { afterPaymentDocTypes, plantDocTypes, type SaleDoc } from "@/lib/sale";
 import { uploadDocument } from "@/lib/client-upload";
 import { createMultiBatch, advanceMultiBatch, cancelMultiBatch, recordOrderPayment, removeMultiBatchProof, saveMultiBatchPod, removeMultiBatchPod, saveMultiBatchDoc, removeMultiBatchDoc } from "../actions";
 
@@ -60,6 +60,7 @@ export interface MBBatchView {
 export function MultiBatchPanel({
   orderId,
   officePickup = false,
+  plantPickup = false,
   items,
   batches,
   payments = [],
@@ -74,8 +75,10 @@ export function MultiBatchPanel({
   admin = false,
 }: {
   orderId: string;
-  /** Office-pickup order — relabels "delivery" wording to "pick up". */
+  /** Pick-up order (office or plant) — relabels "delivery" wording to "pick up". */
   officePickup?: boolean;
+  /** Plant pick up — the batch documents are the delivery form (+ SI/OR/DR for VAT-inclusive). */
+  plantPickup?: boolean;
   items: MBItem[];
   batches: MBBatchView[];
   /** Every payment recorded on the order — same records as the quotation tab. */
@@ -138,7 +141,7 @@ export function MultiBatchPanel({
 
   // Closing documents Accounting attaches at each batch's "delivery documents"
   // step (per batch). Sales Invoice / BIR 2307 apply to VAT-inclusive deals only.
-  const deliveryDocSlots = afterPaymentDocTypes(vatInclusive);
+  const deliveryDocSlots = plantPickup ? plantDocTypes(vatInclusive) : afterPaymentDocTypes(vatInclusive);
   async function uploadBatchDoc(batchId: string, key: string, file: File) {
     setBusy("doc:" + batchId + key);
     setErr(null);
