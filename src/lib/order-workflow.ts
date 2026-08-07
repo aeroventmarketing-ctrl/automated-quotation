@@ -298,6 +298,11 @@ export interface OrderWorkflow {
   // via a toggle; the single→multi switch itself is still a deliberate click.
   batchDeliveryEnabled?: boolean;
   deliveryBatches: MultiDeliveryBatch[];
+  // When true, the order is collected by the client at the office instead of
+  // being delivered — the "Office pick up" fulfilment path. Set on the Phase 2
+  // card (by Sales / admin). Step 1: this is just a persisted flag + tag; it does
+  // not yet alter the Phase 5 delivery steps (that wiring is a separate change).
+  officePickup?: boolean;
 }
 
 const DEPT_KEYS = new Set(PRODUCTION_DEPTS.map((d) => d.key));
@@ -513,8 +518,9 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
   const deliveryMode = wf?.deliveryMode === "multi" ? "multi" as const : undefined;
   const batchDeliveryEnabled = wf?.batchDeliveryEnabled === true;
   const deliveryBatches = coerceMultiBatches(wf?.deliveryBatches);
+  const officePickup = wf?.officePickup === true;
 
-  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, batchDeliveryEnabled, deliveryBatches };
+  return { stage, approvals, jobOrders, materialRequests, documents, fansJobOrders, joBaseNo, joBaseYear, ductJobOrders, ductJoBaseNo, ductJoBaseYear, accessoriesJobOrders, accJoBaseNo, accJoBaseYear, motorJobOrders, mcJoBaseNo, mcJoBaseYear, conversations, commission, deliveryMode, batchDeliveryEnabled, deliveryBatches, officePickup };
 }
 
 /** The next step to perform at a given stage, or null when Phase 1 is complete. */

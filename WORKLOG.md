@@ -14,6 +14,53 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · "Office pick up" flag on Phase 2 (step 1 of 2 — flag + tag only)
+- **Feature (owner-requested):** an **Office pick up** toggle on the Phase 2 card marks
+  an order as collected by the client at the office instead of delivered. **Step 1
+  only** (per owner): this **persists the flag and shows a tag** — it does **NOT** yet
+  change any Phase 5 delivery logic. Non-destructive / reversible.
+- **Where:**
+  - `src/lib/order-workflow.ts` — `OrderWorkflow` gained `officePickup?: boolean`,
+    coerced from the stored `wf` blob (mirrors `batchDeliveryEnabled`).
+  - `src/app/(app)/orders/actions.ts` — new `setOfficePickup(quotationId, enabled)`
+    server action, gated on `canManageMultiDelivery` (order's salesperson or admin).
+  - `src/app/(app)/orders/[id]/office-pickup-toggle.tsx` — new client toggle
+    (mirrors `batch-delivery-toggle.tsx`, `Store` icon).
+  - `src/app/(app)/orders/[id]/page.tsx` — derives `officePickup` / `canSetPickup`;
+    renders an amber "Office pick up" badge in the order header and a toggle/tag box at
+    the top of the Phase 2 card (toggle for Sales/admin, read-only tag for others).
+- **Note on frozen areas:** the Phase 2 card is a frozen area — the owner explicitly
+  approved adding this checkbox in-conversation. Only additive UI + a new flag were
+  added; no existing Phase 2 job-order logic was changed.
+- **Pending — STEP 2 (owner-supplied office-pickup workflow, NOT yet built):** when the
+  flag is on, Phase 5 should follow the pickup path below. This touches the **frozen
+  Phase 5** delivery workflow and needs its own owner-approved change:
+  - 8. After "Docs checked", Admin/Payment Approver checks proof of payment; if valid &
+    cleared, press **"Clear Payment & release from stock"**.
+  - 9. Order then **awaits the Engineer to release stock**; Engineer presses **"Release
+    from stock and notify client"**. *(NEW step to add.)*
+  - 10. After client coordination, Accounting issues the billing statement.
+  - 11. Client makes the final payment.
+  - 12. Accounting checks the final pay → **"Final Payment Checked"**.
+  - 13. Approver/admin confirms if cleared & valid → **"Confirm Final Payment"**.
+  - 14. 2nd Quality Inspector tests the item → **"Quality tested – Passed"**.
+  - 15. Accounting prepares delivery receipt / sales invoice / official receipt and
+    approves delivery → **"Save Documents & Approve Delivery"**.
+  - 16. Sales uploads the **proof of pick up** and marks success → **"Approve POD –
+    Successful Delivery"**.
+  - 17. Sales surrenders client-signed documents to Accounting → **"Documents
+    Surrendered to Accounting"**.
+  - 18. Accounting confirms receipt → **"Confirm Documents Received"**.
+  - 19. Accounting files all delivery documents → **"File Documents – Close Order"**.
+  - 20. Order closed → sales commission computed.
+  - 21. Admin/approver → **"Approve Commission Amount"**.
+  - 22. Accounting → **"Prepare Commission Voucher"**.
+  - 23. Admin/approver → **"Approve Commission Voucher"**.
+  - 24. Admin/approver → **"Release Commission Budget"**.
+  - 25. Sales receives commission; Accounting → **"Mark Commission received"**.
+  - 26. Accounting uploads the voucher signed by the sales executive.
+  - 27. Accounting-closed once commission received (issued 15 days after the sales month).
+
 ## 2026-08-07 · Approval alarm + dashboard now deep-link to the pending phase
 - **Feature (owner-requested):** Tapping the flashing "Approval needed" pop-up now
   navigates straight to the order, scrolled to the pending phase card — instead of

@@ -3179,6 +3179,22 @@ export async function setBatchDeliveryEnabled(quotationId: string, enabled: bool
   await saveWorkflow(quotationId, cls, { ...wf, batchDeliveryEnabled: true });
 }
 
+/**
+ * Mark an order as "Office pick up" (client collects at the office) instead of a
+ * delivery. Set by the order's salesperson or an admin. Step 1: this only
+ * persists the flag so it can be shown as a tag — it does not yet change the
+ * Phase 5 delivery steps (that wiring is a separate, owner-approved change).
+ */
+export async function setOfficePickup(quotationId: string, enabled: boolean): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
+    throw new Error("Only the order's salesperson or an admin can set office pick up.");
+  }
+  await saveWorkflow(quotationId, cls, { ...wf, officePickup: enabled });
+}
+
 export async function setMultiDelivery(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");

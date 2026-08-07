@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Store } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
@@ -45,6 +45,7 @@ import {
 import { MultiBatchPanel } from "./multi-batch-panel";
 import { MultiDeliveryEntry } from "./multi-delivery-entry";
 import { BatchDeliveryToggle } from "./batch-delivery-toggle";
+import { OfficePickupToggle } from "./office-pickup-toggle";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
 import { DeptProductionControls } from "./dept-production-controls";
@@ -473,6 +474,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canEnableBatch =
     adminViewer || viewer?.role === "ENGINEER" || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey));
   const batchEnabled = wf.batchDeliveryEnabled === true;
+  // "Office pick up" — client collects at the office instead of a delivery.
+  // Step 1: persisted flag + tag only (no Phase 5 change yet). Set by the order's
+  // salesperson or an admin.
+  const officePickup = wf.officePickup === true;
+  const canSetPickup = adminViewer || isPreparerViewer;
   // The enable toggle shows to authorized roles from when production starts up
   // until just before the order is actually delivered — so an order can still be
   // switched to batch delivery even after the single-delivery flow has begun
@@ -721,7 +727,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             )}
           </p>
         </div>
-        <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{displayStageLabel(wf.stage)}</Badge>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {officePickup && (
+            <Badge variant="outline" className="gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
+              <Store className="h-3.5 w-3.5" /> Office pick up
+            </Badge>
+          )}
+          <Badge variant={STAGE_VARIANT[wf.stage]} className="text-sm">{displayStageLabel(wf.stage)}</Badge>
+        </div>
       </div>
 
       {/* Stage progress */}
@@ -783,6 +796,21 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <Card id="phase-2" className="scroll-mt-24">
         <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 2 · Job orders &amp; production</CardTitle></CardHeader>
         <CardContent>
+          {/* Office pick up — client collects at the office instead of a
+              delivery. Step 1: flag + tag only; the Phase 5 pick-up path is a
+              separate change. Set by Sales / admin; shown read-only to others. */}
+          {(canSetPickup || officePickup) && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+              {canSetPickup ? (
+                <OfficePickupToggle orderId={quote.id} enabled={officePickup} />
+              ) : (
+                <span className="flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300">
+                  <Store className="h-4 w-4" /> Office pick up
+                </span>
+              )}
+              <span className="text-[11px] text-muted-foreground">Client collects at the office instead of delivery.</span>
+            </div>
+          )}
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="text-sm text-muted-foreground">Job orders are issued once Phase 1 is complete.</p>
           ) : boughtInOnly && wf.stage === "released" ? (
