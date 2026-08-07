@@ -393,11 +393,11 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   );
 }
 
-export function InventoryManager({ items, canManage, admin = false, canScan = canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canScan?: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, admin = false, canDelete = admin, canScan = canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
-  // Multi-select for bulk delete / clear-all (admin only — the server actions
-  // are admin-gated). Lets an admin wipe items to re-import a fresh Excel/CSV.
+  // Multi-select for bulk delete (the Purchaser or an admin — the removeStockItems
+  // server action is gated to them). The full "Clear all" wipe stays admin-only.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toggleOne = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const searchParams = useSearchParams();
@@ -484,7 +484,7 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices ? 1 : 0) + (admin ? 1 : 0);
+  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices ? 1 : 0) + (canDelete ? 1 : 0);
   // Hide the price-based sort options from viewers who can't see prices.
   const sortOptions = SORT_OPTIONS.filter((o) =>
     (showPrices || (o.key !== "unitCost" && o.key !== "sellPrice" && o.key !== "value")) && (showSell || o.key !== "sellPrice"),
@@ -548,7 +548,7 @@ export function InventoryManager({ items, canManage, admin = false, canScan = ca
     } finally { setBusy(false); }
   }
 
-  const selectable = admin;
+  const selectable = canDelete;
   const filteredIds = useMemo(() => filtered.map((it) => it.id), [filtered]);
   const selectedVisible = filteredIds.filter((id) => selected.has(id));
   const allVisibleSelected = filteredIds.length > 0 && selectedVisible.length === filteredIds.length;
