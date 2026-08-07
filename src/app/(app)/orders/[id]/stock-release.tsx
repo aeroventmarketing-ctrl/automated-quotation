@@ -21,7 +21,6 @@ export function StockRelease({
   approved,
   approvedByName,
   canApprove,
-  engineerEligible = false,
   officePickup = false,
 }: {
   orderId: string;
@@ -31,16 +30,14 @@ export function StockRelease({
   approved: boolean;
   approvedByName?: string;
   canApprove: boolean;
-  // An Engineer may approve only when every line is in-house duct hardware; an
-  // order with Office-supplied stock is Plant-Manager-only. Controls the wording.
-  engineerEligible?: boolean;
-  // Office pickup: one combined step — the Plant Manager / Engineer releases from
-  // stock and notifies the client (no separate approval + warehouse release).
+  // Office pickup: one combined step — the Engineer releases from stock and
+  // notifies the client (no separate approval + warehouse release). The normal
+  // (non-pickup) flow is Plant-Manager-approved, then Warehouse-released.
   officePickup?: boolean;
 }) {
   const router = useRouter();
-  // Who may approve/release this order, for the on-screen wording.
-  const approverPhrase = engineerEligible ? "Plant Manager or an Engineer" : "Plant Manager";
+  // The normal (non-pickup) release is approved by the Plant Manager.
+  const approverPhrase = "Plant Manager";
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

@@ -608,7 +608,7 @@ export function pendingStep(
         }
         return wf.approvals.stock_release_approved
           ? { action: "Release from stock", roles: ["warehouse", "prod_head_fans"] }
-          : { action: "Approve stock release", roles: ["plant_manager"], engineer: engineerApprovesStock };
+          : { action: "Approve stock release", roles: ["plant_manager"] };
       }
       if (boughtIn) {
         return { action: "Prepare & process the Purchase Order", roles: ["purchaser", "technical_head"] };

@@ -50,7 +50,7 @@ import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDe
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
-import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
+import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
 import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
@@ -1293,14 +1293,11 @@ export async function approveStockRelease(quotationId: string): Promise<void> {
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
   });
   if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
-  const isPlantOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey);
-  const engineerMayApprove = user.role === "ENGINEER" && isDuctHardwareStockOnly(items);
-  if (!(isPlantOrAdmin || engineerMayApprove)) {
-    throw new Error(
-      user.role === "ENGINEER"
-        ? "An Engineer can approve the stock release only for in-house duct hardware (angle corner, TDC cleat, S-clip, C-clip). This order has Office-supplied stock, so only the Plant Manager or an admin can approve it."
-        : "Only the Plant Manager, an Engineer or an admin can approve the stock release.",
-    );
+  // Normal (non-pickup) from-stock release is approved by the Plant Manager (or an
+  // admin) only. The Engineer's stock-release role now lives in the office-pickup
+  // flow (which uses the single "Release from Stock and Notify Client" action).
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey))) {
+    throw new Error("Only the Plant Manager or an admin can approve the stock release.");
   }
   await saveWorkflow(quotationId, cls, { ...wf, approvals: stamp(wf, "stock_release_approved", user) });
   await logActivity(user, {

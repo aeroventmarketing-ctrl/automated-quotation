@@ -840,8 +840,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               approvedByName={wf.approvals.stock_release_approved?.byName}
               canApprove={officePickup
                 ? (adminViewer || viewer?.role === "ENGINEER")
-                : (adminViewer || hasRole("plant_manager") || (viewer?.role === "ENGINEER" && engineerApprovesStock))}
-              engineerEligible={engineerApprovesStock}
+                : (adminViewer || hasRole("plant_manager"))}
               officePickup={officePickup}
             />
           ) : (

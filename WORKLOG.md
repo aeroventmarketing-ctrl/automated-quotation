@@ -34,6 +34,16 @@ and we never redo something that's already done.
     **non-admin** (salesperson) can set it only while the order is still in Phase 2
     (`stageIndex(wf.stage) <= "released"`), after which it locks for them (they see the
     read-only tag). `canSetPickup` = `stockOnly && (admin || (preparer && pickupWindowOpen))`.
+  - **Normal (non-pickup) from-stock release is now Plant-Manager-only** — the mirror of
+    the pickup rule, so the two workflows partition cleanly: **Engineer → office pickup**,
+    **Plant Manager → normal from-stock**. This **supersedes #241/#243** (which had let an
+    Engineer approve normal from-stock release for duct hardware). `approveStockRelease`
+    now gates on Plant Manager / admin only; `pendingStep` drops the `engineer` flag from
+    the normal approve step (so the banner / My Dashboard / orders list / alarm show
+    **Plant Manager** only); `StockRelease` wording is "Awaiting Plant Manager approval";
+    the Phase-2 `canApprove` for non-pickup drops the Engineer. (`isDuctHardwareStockOnly`
+    import removed from `actions.ts`; `engineerApprovesStock` is now unused by `pendingStep`
+    but still passed by callers.)
 - **Where:**
   - `src/app/(app)/orders/actions.ts` — `releaseOrderFromStock` now branches on
     `wf.officePickup`: for pickup it gates on Plant Manager / Engineer(duct-hardware) /
