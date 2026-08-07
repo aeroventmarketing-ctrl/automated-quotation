@@ -14,6 +14,19 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-07 · Phase 2 stock-release: Engineer can approve too (alongside Plant Manager)
+- **Change (owner-approved, frozen Phase 2):** The "For stock release" approval gate
+  on a from-stock order now accepts the **Engineer** base role in addition to the
+  Plant Manager (and admin). Requested explicitly by the owner.
+- **Where:** server gate `approveStockRelease` in `src/app/(app)/orders/actions.ts`
+  (added `user.role === "ENGINEER"`), UI gate `canApprove` in
+  `src/app/(app)/orders/[id]/page.tsx`, and the wording in
+  `src/app/(app)/orders/[id]/stock-release.tsx` ("Awaiting Plant Manager or Engineer
+  approval…").
+- **Note:** "Engineer" is a base app role (SALES/ENGINEER/ADMIN), not a workflow role —
+  hence `user.role === "ENGINEER"`, not a `WorkflowRoleKey` check.
+- **Pending:** none.
+
 ## 2026-08-07 · Purchasing draft-PO no longer wiped by auto-refresh — PR #239 (merged)
 - **Bug:** In the Purchaser role, building a combined PO could lose everything
   typed (lines, quantities, prices, ticked requests, supplier/EWT details) the
