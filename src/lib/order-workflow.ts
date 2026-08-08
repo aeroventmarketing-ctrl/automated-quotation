@@ -691,7 +691,9 @@ export function pendingStep(
       return { action: "Transfer items to office", roles: ["logistics"] };
     case "qa_transferred":
       if (plantPickup) return { action: "Approve delivery", roles: ["plant_manager"] };
-      return { action: "Sales 2nd QC & quantity check", roles: ["quality_inspector_2"], sales: true };
+      // A bought-in order has no earlier QC step, so this is its (only) quality &
+      // quantity check — not a "2nd" check.
+      return { action: boughtInOnly ? "Quality & quantity check" : "Sales 2nd QC & quantity check", roles: ["quality_inspector_2"], sales: true };
     case "qa_sales_checked":
       if (plantPickup) return { action: "Upload delivery form & proof of pick up", roles: ["warehouse"] };
       return { action: "Prepare delivery documents", roles: ["accounting"] };

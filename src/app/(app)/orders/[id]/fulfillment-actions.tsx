@@ -58,6 +58,7 @@ export function FulfillmentActions({
   officePickup = false,
   plantPickup = false,
   fromStock = false,
+  boughtIn = false,
   closeDocs,
   vatInclusive,
   zeroRated = false,
@@ -80,6 +81,8 @@ export function FulfillmentActions({
   plantPickup?: boolean;
   /** From-stock delivery order — the Warehouse runs the quality & quantity test. */
   fromStock?: boolean;
+  /** Bought-in order — skips the plant quality steps; Sales does the single QC. */
+  boughtIn?: boolean;
   closeDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   /** Zero-rated order — also requires the Certificate of VAT Exempt/Zero Rated. */
@@ -266,13 +269,13 @@ export function FulfillmentActions({
       {stage === "qa_transferred" && !plantPickup &&
         (perms.canQaSales ? (
           <div className="space-y-1">
-            <p className="text-sm font-medium">Sales 2nd quality &amp; quantity check</p>
-            <p className="text-xs text-muted-foreground">The Sales in-charge makes a 2nd quality and quantity check — any Sales team member or the Sales head can cover if the in-charge is absent or on leave.</p>
+            <p className="text-sm font-medium">Sales quality &amp; quantity check</p>
+            <p className="text-xs text-muted-foreground">The Sales in-charge makes {boughtIn ? "the" : "a 2nd"} quality and quantity check — any Sales team member or the Sales head can cover if the in-charge is absent or on leave.</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaSalesCheck(orderId))}>
-              {busy ? "Saving…" : "Quality & Quantity Re-Checked"}
+              {busy ? "Saving…" : boughtIn ? "Quality & Quantity Checked" : "Quality & Quantity Re-Checked"}
             </Button>
           </div>
-        ) : awaiting("to make the 2nd quality & quantity check", ["quality_inspector_2"], true))}
+        ) : awaiting(`to make the ${boughtIn ? "" : "2nd "}quality & quantity check`, ["quality_inspector_2"], true))}
 
       {/* Plant pick up: Warehouseman uploads the delivery form + proof of pick up. */}
       {stage === "qa_sales_checked" && plantPickup &&
