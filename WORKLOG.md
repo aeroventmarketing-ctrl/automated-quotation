@@ -14,6 +14,22 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Fulfilment selector — show to every role (grayed-out for non-setters)
+- **Owner-requested:** the Phase 2 fulfilment control (Delivery / Office pick up / Plant pick up)
+  was hidden from roles that can't change it (and, on a default delivery order, hidden entirely) —
+  a non-setter saw nothing. Show the button row to **every** role: interactive for those who may
+  change it, **grayed-out (disabled, read-only)** for everyone else, consistently across all order
+  workflows (produced / from-stock / bought-in).
+- **Fix (display/gating only — no P&L, no auth change):**
+  - `page.tsx`: dropped the `(canSetMode || mode !== "delivery")` gate so the fulfilment control
+    always renders in the Phase 2 card.
+  - `fulfillment-mode-selector.tsx`: removed the read-only text-tag branch; the button row now
+    renders for all, with each button `disabled` when the viewer can't set it (or the mode isn't
+    available for the order). The current mode stays highlighted (dimmed primary when read-only),
+    others grayed; a "View only" hint + a tooltip name who may change it. Clicking is a no-op for
+    non-setters and the server action was already gated (Sales / Engineer / Payment Approver /
+    admin). One component ⇒ consistent across every workflow & role. Typecheck + lint clean.
+
 ## 2026-08-08 · Bought-in "Prepare & process the PO" — drop Technical Head from approvers
 - **Owner-requested:** the Phase 4 "Prepare & process the Purchase Order" step (bought-in `released`
   stage) listed **Purchaser + Technical Head** as approvers, but `savePurchaseOrder` is **Purchaser /
