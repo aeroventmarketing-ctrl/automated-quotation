@@ -68,7 +68,7 @@ export function BoughtInProduction({
       {canNotify && (
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" className="h-8 text-xs" disabled={busy || !purchased} onClick={notify}>
-            <PackageCheck className="mr-1 h-3.5 w-3.5" /> {busy ? "Notifying…" : "Notify client – order ready"}
+            <PackageCheck className="mr-1 h-3.5 w-3.5" /> {busy ? "Notifying…" : "Notify Client - Order Ready"}
           </Button>
           {!purchased && <span className="text-xs text-muted-foreground">Available once the Purchaser has bought the goods.</span>}
           {err && <span className="text-xs text-destructive">{err}</span>}
