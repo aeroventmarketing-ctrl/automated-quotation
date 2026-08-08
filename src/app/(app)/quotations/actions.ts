@@ -32,7 +32,7 @@ const createSchema = z.object({
   inquiryId: z.string(),
   templateId: z.string().optional(),
   projectName: z.string().optional(),
-  vatMode: z.enum(["INCLUSIVE", "EXCLUSIVE", "EXCLUSIVE_PLUS"]).default("INCLUSIVE"),
+  vatMode: z.enum(["INCLUSIVE", "EXCLUSIVE", "EXCLUSIVE_PLUS", "ZERO_RATED"]).default("INCLUSIVE"),
   discountPct: z.number().min(0).max(100).default(0),
   headerUnits: z.record(z.string()).optional(),
   // Lines are optional — a draft can be created empty and built in the editor.
@@ -163,7 +163,7 @@ export async function updateQuotationLines(
     terms?: string;
     validUntil?: string;
     projectName?: string;
-    vatMode?: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
+    vatMode?: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
     discountPct?: number;
     pricing?: {
       markupMode: "percent" | "amount";

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { poMemberIds } from "@/lib/purchase-batch";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { round2, readPricing, applyPricing, pricingForVatMode, type PricingAdjust } from "@/lib/quote";
+import { round2, readPricing, applyPricing, pricingForVatMode, vatDisplayBasisIsGross, vatModeChargesOutputVat, type PricingAdjust } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { saleFromClassification } from "@/lib/sale";
 import { coerceChainLog } from "@/lib/purchase-chain-row";
@@ -90,11 +90,24 @@ function addSplit(into: DeptSplit, from: DeptSplit) {
  * strip it — the VAT part flows through Output VAT, not the profit lines.
  */
 function markupDiscountNet(grossSum: number, vatMode: string, pricing: PricingAdjust): { markupNet: number; discountNet: number } {
-  const displayedNet = vatMode === "INCLUSIVE" ? grossSum : grossSum / (1 + VAT_RATE);
+  const displayedNet = vatDisplayBasisIsGross(vatMode) ? grossSum : grossSum / (1 + VAT_RATE);
   // A flat mark-up/discount is VAT-inclusive in EXCLUSIVE_PLUS too (matches INCLUSIVE).
   const { markupAmt, discountAmt } = applyPricing(displayedNet, pricingForVatMode(pricing, vatMode, VAT_RATE));
+  // Only INCLUSIVE has VAT baked into the mark-up/discount to strip; ZERO_RATED's
+  // figure carries no VAT even though it shares the gross display basis.
   const toNet = (x: number) => (vatMode === "INCLUSIVE" ? x / (1 + VAT_RATE) : x);
   return { markupNet: round2(toNet(markupAmt)), discountNet: round2(toNet(discountAmt)) };
+}
+
+/**
+ * Department revenue booked for one quotation line. The stored unit price is
+ * VAT-inclusive, so normally it's stripped of VAT (`lineNetOf`). A ZERO_RATED
+ * sale carries no VAT — the full price is revenue (there's no output VAT to
+ * split it against), so book the gross line as-is.
+ */
+function saleLineNet(unitPrice: number, qty: number, vatMode: string): number {
+  if (vatMode === "ZERO_RATED") return round2((Number(unitPrice) || 0) * (Number(qty) || 0));
+  return lineNetOf(unitPrice, qty, 0);
 }
 
 /**
@@ -232,8 +245,8 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
     if (!recAt) continue;
     if (!ymdInRange(manilaYMD(recAt), lo, hi)) continue;
     salesCount += 1;
-    // A VAT-exclusive quote charges the client no VAT — no output VAT on it.
-    const chargesVat = q.vatMode !== "EXCLUSIVE";
+    // VAT-exclusive (÷1.12) and zero-rated quotes charge the client no output VAT.
+    const chargesVat = vatModeChargesOutputVat(q.vatMode);
     // Departments book the LIST price before the quote's mark-up / discount; the
     // mark-up becomes Office income and the discount an Office expense below.
     let grossSum = 0;
@@ -242,7 +255,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         ? it.specsSnapshot
         : {}) as Record<string, unknown>;
       grossSum += (Number(it.unitPrice) || 0) * (Number(it.qty) || 0);
-      const net = lineNetOf(Number(it.unitPrice), it.qty, 0);
+      const net = saleLineNet(Number(it.unitPrice), it.qty, q.vatMode);
       if (net === 0) continue;
       // Output VAT is charged on the full selling price regardless of the split.
       if (chargesVat) outputVat = round2(outputVat + round2(net * VAT_RATE));
@@ -595,14 +608,14 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     if (!recAt) continue;
     const ymd = manilaYMD(recAt);
     if (!ymdInRange(ymd, lo, hi)) continue;
-    const chargesVat = q.vatMode !== "EXCLUSIVE";
+    const chargesVat = vatModeChargesOutputVat(q.vatMode);
     const lines: PnlSaleLine[] = [];
     let orderOutputVat = 0;
     let grossSum = 0;
     for (const it of q.items) {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Record<string, unknown>;
       grossSum += (Number(it.unitPrice) || 0) * (Number(it.qty) || 0);
-      const net = lineNetOf(Number(it.unitPrice), it.qty, 0);
+      const net = saleLineNet(Number(it.unitPrice), it.qty, q.vatMode);
       if (net === 0) continue;
       let { dept, routing } = lineRouting(specs);
       // A flagged Office/resale product is booked entirely to Office.

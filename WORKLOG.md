@@ -14,6 +14,40 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · New VAT presentation — "VAT exclusive zero rated"
+- **Owner-requested:** add a 4th VAT presentation to the quotation builder, **VAT
+  exclusive zero rated** — the total is the **same figure as VAT inclusive** (the entered
+  price IS the total) but the sale is **zero-rated: 0% output VAT** (usually 1% EWT
+  withheld). Its closing documents are **Sales Invoice, Collection Receipt, Delivery
+  Receipt and EWT** (= BIR 2307).
+- **Stored `vatMode = "ZERO_RATED"`** (the column is a free String, default INCLUSIVE — no
+  migration). Centralised the mode semantics in `quote.ts`:
+  - `vatDisplayBasisIsGross(mode)` → INCLUSIVE & ZERO_RATED show the entered (gross) price
+    as the base; the exclusive modes strip VAT (÷1.12).
+  - `vatModeAddsVat(mode)` → only EXCLUSIVE_PLUS adds 12% on top.
+  - `vatModeChargesOutputVat(mode)` → INCLUSIVE & EXCLUSIVE_PLUS charge output VAT;
+    EXCLUSIVE & ZERO_RATED do not.
+  - `payableTotal` uses `vatDisplayBasisIsGross` → a zero-rated quote's deal value equals the
+    entered price (matches VAT inclusive). Everything computing the deal value flows through
+    `payableTotal` (WON amount, dashboards, sales report, customers, finance monitor).
+- **Documents:** no Phase-5 change needed — the closing-doc derivation is `vatMode !==
+  "EXCLUSIVE"`, so ZERO_RATED already gets the full VAT set (Sales Invoice, Collection
+  Receipt, Delivery Receipt, BIR 2307/EWT). Exactly what zero-rated requires.
+- **Presentation:** builder dropdown option + totals ("NET AMOUNT (VAT zero-rated)"); the
+  quotation **PDF** and **Excel** show the gross figure with a "VAT zero-rated" net label and
+  no VAT line; PDF/Excel routes + `quotations/[id]/page.tsx` pass the mode through.
+- **Management P&L:** zero-rated books **no output VAT**; because it has no VAT to strip, the
+  **full line price is department revenue** (new `saleLineNet` — `lineNetOf` still ÷1.12 for
+  the other modes). `markupDiscountNet` / `pnl-detail` use the gross display basis for
+  ZERO_RATED (but don't strip VAT from the mark-up/discount, since there is none). New
+  `VAT_MODE_LABEL` entry "Zero-rated".
+- **Where:** `quote.ts` (helpers + `payableTotal`); `quotation-builder.tsx`, `pdf/quotation-
+  pdf.tsx`, `excel/quotation-xlsx.ts` (presentation); `pnl-actions.ts`, `pnl-detail.tsx`
+  (output VAT + revenue basis); `quotations/actions.ts` (zod enum), `quotations/[id]/page.tsx`
+  + the pdf/excel routes (passthrough). Typecheck + lint clean.
+- **Out of scope / flagged:** counter-sales keeps its 2-option INCLUSIVE|EXCLUSIVE model —
+  zero-rated wasn't added there (separate channel). Say the word to extend it.
+
 ## 2026-08-08 · Closing documents — VAT-appropriate labels everywhere
 - **Owner-requested:** the closing-document upload slots should be named by the tax
   treatment (matching the counter-sales taxonomy), and consistently across every place

@@ -124,6 +124,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         ? "EXCLUSIVE"
         : quotation.vatMode === "EXCLUSIVE_PLUS"
         ? "EXCLUSIVE_PLUS"
+        : quotation.vatMode === "ZERO_RATED"
+        ? "ZERO_RATED"
         : "INCLUSIVE",
     projectName: quotation.projectName,
     customer: {

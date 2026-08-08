@@ -142,6 +142,8 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
             ? "EXCLUSIVE"
             : quotation.vatMode === "EXCLUSIVE_PLUS"
             ? "EXCLUSIVE_PLUS"
+            : quotation.vatMode === "ZERO_RATED"
+            ? "ZERO_RATED"
             : "INCLUSIVE",
         discountPct: Number(quotation.discountPct ?? 0),
         pricing: readPricing(quotation.classification, Number(quotation.discountPct ?? 0)),
