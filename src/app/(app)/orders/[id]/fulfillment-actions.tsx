@@ -13,6 +13,7 @@ import { DeliveredForm } from "./delivered-form";
 import { PickupPodForm } from "./pickup-pod-form";
 import { PlantDocStep } from "./plant-doc-step";
 import { FinalPaymentProof } from "./final-payment-proof";
+import { BillingStatement } from "./billing-statement";
 import { RecordPaymentBox } from "./record-payment-box";
 import {
   notifyClientReady,
@@ -174,7 +175,10 @@ export function FulfillmentActions({
           Hidden from client-restricted (shop-floor) viewers like the rest of the
           payment/money data. */}
       {!restricted && (stage === "final_pay_review" || stage === "final_pay_checked") && (
-        <FinalPaymentProof orderId={orderId} initialFiles={closeDocs["final_payment"] ?? []} canEdit={canEditCloseDocs} admin={admin} />
+        <>
+          <BillingStatement orderId={orderId} initialFiles={closeDocs["billing_statement"] ?? []} canEdit={canEditCloseDocs} admin={admin} />
+          <FinalPaymentProof orderId={orderId} initialFiles={closeDocs["final_payment"] ?? []} canEdit={canEditCloseDocs} admin={admin} />
+        </>
       )}
 
       {stage === "final_pay_review" &&

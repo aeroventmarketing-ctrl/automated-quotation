@@ -319,14 +319,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Head / Quality Inspector), so its sign-off shows the Warehouse designation.
   if (stockOnly) APPROVAL_DESIGNATION.qa_tested = workflowRoleLabel("warehouse");
   const stockLines = stockOnly ? orderStockLines(quote.items) : [];
-  // An Engineer may approve the stock release only when every from-stock line is
-  // in-house duct hardware (angle corner, TDC cleat, S-clip, C-clip); an order with
-  // Office-supplied stock (AlphaAir / Vent Cap) stays Plant-Manager-only.
+  // Retained for the pendingStep signature; the from-stock release role now depends on
+  // the fulfilment mode (delivery → PM releases + Sales notifies; office pickup → Sales;
+  // plant pickup → Warehouse releases + PM approves) rather than duct-hardware gating.
   const engineerApprovesStock = stockOnly && isDuctHardwareStockOnly(quote.items);
 
   // Live "who acts next" for the whole order. `stockOnly` routes the "released"
-  // stage to the stock-release path (Plant Manager / Engineer approval → Warehouse
-  // release) rather than the bought-in Purchase Order step.
+  // stage to the from-stock release path (by fulfilment mode) rather than the
+  // bought-in Purchase Order step.
   const pend = pendingStep(wf, stockOnly, engineerApprovesStock, wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
   const pendingApprovers: string[] = pend
     ? pend.sales
@@ -385,9 +385,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // approves (like a produced order).
   const officeQaActors = isSalesViewer || hasRole("logistics") || hasRole("payment_approver");
   const boughtInQa = boughtInOnly && officeQaActors;
-  // Who may release a from-stock order's goods from inventory (Phase 2). The Fans &
-  // Blowers head has no authority to release stock items — Warehouse (or admin) only.
-  const canReleaseStock = adminViewer || hasRole("warehouse");
+  // From-stock release (Phase 2) — who does the physical release (step 1) and the
+  // second sign-off (step 2) depends on the fulfilment mode (plant vs office are far
+  // apart). Office pick up → Sales releases (+notifies) in one step. Plant pick up →
+  // Warehouse releases, Plant Manager approves. Delivery → Plant Manager releases,
+  // Sales notifies.
+  const canReleaseStock = adminViewer || (
+    wf.officePickup === true ? isSalesViewer
+      : wf.fulfillmentMode === "plant_pickup" ? hasRole("warehouse")
+      : hasRole("plant_manager"));
+  const canConfirmRelease = adminViewer || (
+    wf.fulfillmentMode === "plant_pickup" ? hasRole("plant_manager") : isSalesViewer);
   // Plant pick up: Warehouseman-driven tail (make form / upload POD) with Plant
   // Manager quality & approve-delivery. Its Phase-5 roles differ from delivery.
   const plantPick = wf.fulfillmentMode === "plant_pickup";
@@ -863,13 +871,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               orderId={quote.id}
               lines={stockLines}
               stockItems={stockItems}
+              mode={officePickup ? "office_pickup" : plantPick ? "plant_pickup" : "delivery"}
+              released={!!wf.approvals.stock_released}
+              releasedByName={wf.approvals.stock_released?.byName}
               canRelease={canReleaseStock}
-              approved={!!wf.approvals.stock_release_approved}
-              approvedByName={wf.approvals.stock_release_approved?.byName}
-              canApprove={officePickup
-                ? (adminViewer || viewer?.role === "ENGINEER")
-                : (adminViewer || hasRole("plant_manager"))}
-              officePickup={officePickup}
+              canConfirm={canConfirmRelease}
             />
           ) : (
             <div className="space-y-4">
