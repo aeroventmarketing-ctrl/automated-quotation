@@ -14,6 +14,17 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Fix: server error uploading the final-payment proof (perms mismatch)
+- **Bug:** uploading the Final payment proof (or Billing statement / closing docs) failed with the
+  masked production error "An error occurred in the Server Components render…". Cause: the order
+  card shows the upload affordance to any **sales viewer** (`canEditCloseDocs = canFile ||
+  isSalesViewer`, which includes the SALES/ENGINEER roles), but the server gate `loadForCloseDoc`
+  only allowed **admin / preparer / accounting** for those keys — so a Sales/Engineer who isn't the
+  order's preparer saw the button and got a (production-masked) server rejection.
+- **Fix:** `loadForCloseDoc` now also allows the sales side (`user.role === "SALES" || "ENGINEER"`)
+  to attach any close-doc key **except** the Warehouseman's `delivery_form` — matching the UI's
+  upload affordance. `orders/actions.ts`. Typecheck + lint clean.
+
 ## 2026-08-08 · Workflow consistency sweep — messages / banners / designations / trail
 - **Owner-requested:** make every message, notification and alarm consistent across the whole
   sourcing × fulfilment matrix. Audited via 3 parallel review agents (single-batch text,
