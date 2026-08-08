@@ -527,10 +527,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const officePickup = wf.officePickup === true;
   // Fulfilment/handover mode (Delivery / Office pick up / Plant pick up). The
   // selector offers the modes the order's items allow: office pick up = from-stock or
-  // bought-in; plant pick up = goods at the plant (not bought-in-only). An admin can change it
-  // any time; a non-admin (the salesperson) only while the order is still in Phase 2.
+  // bought-in; plant pick up = goods at the plant (not bought-in-only). Who may change
+  // it: Sales, an Engineer, the Payment Approver or an admin. An admin can change it any
+  // time; the others only while the order is still in Phase 2 (the pickup window).
   const pickupWindowOpen = stageIndex(wf.stage) <= stageIndex("released");
-  const canSetMode = adminViewer || (isPreparerViewer && pickupWindowOpen);
+  const canSetMode = adminViewer || ((isSalesViewer || hasRole("payment_approver")) && pickupWindowOpen);
   const availableModes: FulfillmentMode[] = [
     "delivery",
     // Office pick up — the client collects at the office. Available for from-stock and

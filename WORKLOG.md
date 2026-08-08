@@ -14,6 +14,17 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Fulfilment-mode selector — broaden who can change it
+- **Owner-requested:** the Phase 2 fulfilment selector (Delivery / Office pick up / Plant pick up)
+  should be pressable by **Sales, Admin, Payment Approver or Engineer** — previously only the admin
+  or the order's own preparer (salesperson) could change it.
+- **Fix:** `canSetMode` (order page) is now `adminViewer || ((isSalesViewer || payment_approver) &&
+  pickupWindowOpen)` — i.e. Sales/Engineer/Payment Approver within the Phase 2 window, admin any
+  time. The `setFulfillmentMode` server action gate matches: `isAdmin || isSalesActor ||
+  canEnableBatchDelivery` (= Sales / Engineer / Payment Approver / admin). Same role set already
+  used by the multiple-batch toggle, so the two are consistent. The Phase-2-window guard for
+  non-admins is unchanged. **No P&L touched.** Typecheck + lint clean.
+
 ## 2026-08-08 · From-stock DELIVERY release → 3-step (Warehouse → Plant Manager → Sales)
 - **Owner-requested:** revise the from-stock **Delivery** release choreography. It was a 2-step
   flow (Plant Manager "Release from Stock" → Sales "Release from Stock & Notify Client", PR #259).

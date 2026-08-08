@@ -3268,8 +3268,12 @@ export async function setFulfillmentMode(quotationId: string, mode: FulfillmentM
     throw new Error("Unknown fulfilment mode.");
   }
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
-    throw new Error("Only the order's salesperson or an admin can set the fulfilment mode.");
+  // Sales, an Engineer, the Payment Approver or an admin may set the fulfilment mode
+  // (matches the selector's gate on the order page).
+  const canSet =
+    isAdmin(user) || isSalesActor(user, quote.preparedById ?? "") || (await canEnableBatchDelivery(user));
+  if (!canSet) {
+    throw new Error("Only Sales, an Engineer, the Payment Approver or an admin can set the fulfilment mode.");
   }
   if (!isAdmin(user) && stageIndex(wf.stage) > stageIndex("released")) {
     throw new Error("Only an admin can change the fulfilment mode once the order has left Phase 2.");
