@@ -607,6 +607,11 @@ export function pendingStep(
   const hasJoContent = [wf.fansJobOrders, wf.ductJobOrders, wf.accessoriesJobOrders, wf.motorJobOrders]
     .some((a) => (a?.length ?? 0) > 0);
   const boughtIn = !hasJoContent;
+  // A from-stock order (F&B on-hand, e.g. angle corner) also has no job-order
+  // content, but — unlike a bought-in order — its goods are at the plant, so its
+  // Phase 5 quality check runs there (Warehouse tests, Plant Manager approves)
+  // rather than by the Office-side actors a bought-in order uses.
+  const boughtInOnly = boughtIn && !stockOnly;
   switch (wf.stage) {
     case "payment_review":
       return { action: "Check order documents", roles: ["accounting"] };
@@ -656,7 +661,9 @@ export function pendingStep(
       // Plant pick up: quality test by the Technical Head / QI regardless of sourcing.
       if (plantPickup) return { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
       if (officePickup) return { action: "Quality testing", roles: ["quality_inspector_2"], sales: true };
-      return boughtIn
+      // From-stock: the Warehouse (who holds the F&B stock) runs the quality test.
+      if (stockOnly) return { action: "Quality & quantity testing", roles: ["warehouse"] };
+      return boughtInOnly
         ? { action: "Quality testing", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
     case "qa_tested":
@@ -666,7 +673,9 @@ export function pendingStep(
       // Office pickup skips plant-QC / transfer / Sales-2nd-QC and goes straight
       // to preparing the delivery documents.
       if (officePickup) return { action: "Prepare delivery documents", roles: ["accounting"] };
-      return boughtIn
+      // From-stock joins produced orders at the Plant Manager check; only a
+      // bought-in order (never at the plant) is checked by the Office-side actors.
+      return boughtInOnly
         ? { action: "QC & Quantity Checked", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Plant QC & quantity check", roles: ["plant_manager"] };
     case "qa_plant_checked":

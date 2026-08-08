@@ -3451,7 +3451,7 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   if (!user) throw new Error("Unauthorized");
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { classification: true, preparedById: true, vatMode: true, items: { select: { qty: true, descriptionSnapshot: true } } },
+    select: { classification: true, preparedById: true, vatMode: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
   });
   if (!quote) throw new Error("Order not found");
   const wf = readOrderWorkflow(quote.classification);
@@ -3460,10 +3460,11 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
   // Each batch runs the step variant for the order's fulfilment mode (delivery /
-  // office pick up / plant pick up).
-  const stepDef = mbStepDef(stepKey, wf.fulfillmentMode);
+  // office pick up / plant pick up); a from-stock delivery has the Warehouse test.
+  const stockOnly = isStockOnlyOrder(quote.items);
+  const stepDef = mbStepDef(stepKey, wf.fulfillmentMode, stockOnly);
   if (!stepDef) throw new Error("Unknown step.");
-  const { next } = mbProgress(batch, wf.fulfillmentMode);
+  const { next } = mbProgress(batch, wf.fulfillmentMode, stockOnly);
   if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");
 
   // Logistics must attach the proof of delivery before the batch can be delivered.
@@ -3750,14 +3751,16 @@ function boughtInQaActor(user: { id: string; role: string }, roles: Awaited<Retu
     || userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey);
 }
 
-// A bought-in or from-stock order skips production, so its Phase 5 quality steps
-// are run by the Office-side actors above rather than the production QC roles.
-async function isNoProductionOrder(quotationId: string): Promise<boolean> {
+// A bought-in or from-stock order skips production. Their Phase 5 quality steps
+// differ: a BOUGHT-IN order (never at the plant) is checked by the Office-side
+// actors above; a FROM-STOCK order (F&B on-hand, e.g. angle corner) is at the
+// plant, so the Warehouse runs the quality test and the Plant Manager approves.
+async function orderSourcingFlags(quotationId: string): Promise<{ stockOnly: boolean; boughtInOnly: boolean }> {
   const items = await prisma.quotationItem.findMany({
     where: { quotationId },
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
   });
-  return isBoughtInOnlyOrder(items) || isStockOnlyOrder(items);
+  return { stockOnly: isStockOnlyOrder(items), boughtInOnly: isBoughtInOnlyOrder(items) };
 }
 
 const BOUGHT_IN_QA_ERR = "Only Logistics, the Engineer, Sales, the Payment Approver or an admin can do this.";
@@ -3767,20 +3770,30 @@ export async function qaTest(quotationId: string): Promise<void> {
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const noProd = await isNoProductionOrder(quotationId);
+  const { stockOnly, boughtInOnly } = await orderSourcingFlags(quotationId);
   // Office pickup: the 2nd Quality Inspector performs the quality test.
   const pickup = wf.officePickup === true;
   // Plant pick up: the Technical Head / Quality Inspector tests, regardless of sourcing.
   const plant = wf.fulfillmentMode === "plant_pickup";
   const techOrQi = userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
     || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey);
+  const warehouse = userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
+  // From-stock delivery: the Warehouse runs the quality & quantity test.
+  const fromStock = stockOnly && !plant && !pickup;
   const ok = isAdmin(user) || (plant
     ? techOrQi
-    : noProd
+    : pickup
       ? boughtInQaActor(user, roles, quote.preparedById ?? "")
-        || (pickup && userHasWorkflowRole(roles, user.id, "quality_inspector_2" as WorkflowRoleKey))
-      : techOrQi);
-  if (!ok) throw new Error(noProd && !plant ? BOUGHT_IN_QA_ERR : "Only the Technical Head, a Quality Inspector or an admin can do this.");
+        || userHasWorkflowRole(roles, user.id, "quality_inspector_2" as WorkflowRoleKey)
+      : fromStock
+        ? warehouse
+        : boughtInOnly
+          ? boughtInQaActor(user, roles, quote.preparedById ?? "")
+          : techOrQi);
+  if (!ok) throw new Error(
+    fromStock ? "Only the Warehouse or an admin can quality-test a from-stock order."
+      : boughtInOnly && !plant ? BOUGHT_IN_QA_ERR
+      : "Only the Technical Head, a Quality Inspector or an admin can do this.");
   if (wf.stage !== "final_pay_cleared") throw new Error("The order isn't ready for quality testing.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_tested", approvals: stamp(wf, "qa_tested", user) });
 }
@@ -3790,13 +3803,15 @@ export async function qaPlantCheck(quotationId: string): Promise<void> {
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
   const { quote, cls, wf } = await loadWorkflow(quotationId);
-  const noProd = await isNoProductionOrder(quotationId);
+  const { boughtInOnly } = await orderSourcingFlags(quotationId);
   // Plant pick up: the Plant Manager approves quality & quantity, regardless of sourcing.
   const plant = wf.fulfillmentMode === "plant_pickup";
-  const ok = isAdmin(user) || (noProd && !plant
+  // From-stock joins produced orders at the Plant Manager check; only a bought-in
+  // order is checked by the Office-side actors.
+  const ok = isAdmin(user) || (boughtInOnly && !plant
     ? boughtInQaActor(user, roles, quote.preparedById ?? "")
     : userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey));
-  if (!ok) throw new Error(noProd && !plant ? BOUGHT_IN_QA_ERR : "Only the Plant Manager or an admin can do this.");
+  if (!ok) throw new Error(boughtInOnly && !plant ? BOUGHT_IN_QA_ERR : "Only the Plant Manager or an admin can do this.");
   if (wf.stage !== "qa_tested") throw new Error("The order hasn't passed quality testing yet.");
   await saveWorkflow(quotationId, cls, { ...wf, stage: "qa_plant_checked", approvals: stamp(wf, "qa_plant_checked", user) });
 }

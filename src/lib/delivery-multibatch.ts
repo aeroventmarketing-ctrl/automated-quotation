@@ -76,6 +76,16 @@ export const MULTIBATCH_STEPS: MBStepDef[] = [
 ];
 
 /**
+ * From-stock delivery variant — for an order fulfilled from Fans & Blowers on-hand
+ * stock (e.g. angle corner). Identical to the delivery sequence except the quality
+ * & quantity test is run by the **Warehouse** (who holds the stock) instead of the
+ * Technical Head; the Plant Manager still approves and Logistics still transfers.
+ */
+export const MULTIBATCH_STOCK_STEPS: MBStepDef[] = MULTIBATCH_STEPS.map((s) =>
+  s.key === "qa_tested" ? { ...s, role: "warehouse" } : s,
+);
+
+/**
  * Office-pickup variant of the per-batch sequence. Same engine, but each batch
  * follows the pickup path: it SKIPS plant-QC → transfer → Sales-2nd-QC, the
  * quality test is the 2nd Quality Inspector's, and the pick-up documents / proof
@@ -127,20 +137,23 @@ const MB_STEP_KEYS = new Set([...MULTIBATCH_STEPS, ...MULTIBATCH_PICKUP_STEPS, .
 /** The order's fulfilment mode, mirrored here to pick the per-batch step table. */
 export type MBMode = "delivery" | "office_pickup" | "plant_pickup";
 
-/** The per-batch step sequence for this order, by fulfilment mode. */
-export function mbSteps(mode: MBMode = "delivery"): MBStepDef[] {
-  return mode === "office_pickup" ? MULTIBATCH_PICKUP_STEPS
-    : mode === "plant_pickup" ? MULTIBATCH_PLANT_PICKUP_STEPS
-    : MULTIBATCH_STEPS;
+/**
+ * The per-batch step sequence for this order, by fulfilment mode. `stockOnly`
+ * selects the from-stock delivery variant (Warehouse runs the quality test).
+ */
+export function mbSteps(mode: MBMode = "delivery", stockOnly = false): MBStepDef[] {
+  if (mode === "office_pickup") return MULTIBATCH_PICKUP_STEPS;
+  if (mode === "plant_pickup") return MULTIBATCH_PLANT_PICKUP_STEPS;
+  return stockOnly ? MULTIBATCH_STOCK_STEPS : MULTIBATCH_STEPS;
 }
 
-export function mbStepDef(key: string, mode: MBMode = "delivery"): MBStepDef | undefined {
-  return mbSteps(mode).find((s) => s.key === key);
+export function mbStepDef(key: string, mode: MBMode = "delivery", stockOnly = false): MBStepDef | undefined {
+  return mbSteps(mode, stockOnly).find((s) => s.key === key);
 }
 
 /** Last completed step index (−1 if none) and the next step to do (or null). */
-export function mbProgress(b: MultiDeliveryBatch, mode: MBMode = "delivery"): { lastDone: number; next: MBStepDef | null } {
-  const steps = mbSteps(mode);
+export function mbProgress(b: MultiDeliveryBatch, mode: MBMode = "delivery", stockOnly = false): { lastDone: number; next: MBStepDef | null } {
+  const steps = mbSteps(mode, stockOnly);
   let lastDone = -1;
   for (let i = 0; i < steps.length; i++) {
     if (b.steps[steps[i].key]) lastDone = i;

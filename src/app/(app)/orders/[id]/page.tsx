@@ -315,6 +315,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // a supplier) is released from Fans & Blowers stock in Phase 2 instead of job
   // orders or a PO. Like bought-in, it skips production and Office-side roles run QA.
   const stockOnly = isStockOnlyOrder(quote.items) && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
+  // A from-stock order's quality test is run by the Warehouse (not the Technical
+  // Head / Quality Inspector), so its sign-off shows the Warehouse designation.
+  if (stockOnly) APPROVAL_DESIGNATION.qa_tested = workflowRoleLabel("warehouse");
   const stockLines = stockOnly ? orderStockLines(quote.items) : [];
   // An Engineer may approve the stock release only when every from-stock line is
   // in-house duct hardware (angle corner, TDC cleat, S-clip, C-clip); an order with
@@ -334,7 +337,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const displayStageLabel = (key: OrderStage): string => {
     if (boughtInOnly && key === "released") return "For PO creation";
     if (stockOnly && key === "released") return "For stock release";
-    if ((boughtInOnly || stockOnly) && key === "qa_plant_checked") return "QC & Quantity Checked";
+    if (boughtInOnly && key === "qa_plant_checked") return "QC & Quantity Checked";
     return stageLabel(key);
   };
 
@@ -376,9 +379,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, role));
   const isSalesViewer =
     adminViewer || (viewer != null && (viewer.id === quote.preparedById || viewer.role === "SALES" || viewer.role === "ENGINEER"));
-  // A bought-in or from-stock order skips the production QC roles — Logistics /
-  // Engineer / Sales / Payment Approver / admin handle its quality steps instead.
-  const noProdQa = (boughtInOnly || stockOnly) && (isSalesViewer || hasRole("logistics") || hasRole("payment_approver"));
+  // A BOUGHT-IN order skips the plant — Logistics / Engineer / Sales / Payment
+  // Approver / admin handle its quality steps. A FROM-STOCK order's goods are at
+  // the plant, so the Warehouse runs the quality test and the Plant Manager
+  // approves (like a produced order).
+  const officeQaActors = isSalesViewer || hasRole("logistics") || hasRole("payment_approver");
+  const boughtInQa = boughtInOnly && officeQaActors;
   // Who may release a from-stock order's goods from inventory (Phase 2). The Fans &
   // Blowers head has no authority to release stock items — Warehouse (or admin) only.
   const canReleaseStock = adminViewer || hasRole("warehouse");
@@ -391,8 +397,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canConfirmPay: hasRole("payment_approver"),
     canQaTest: plantPick
       ? hasRole("technical_head") || hasRole("quality_inspector")
-      : hasRole("technical_head") || hasRole("quality_inspector") || noProdQa || (wf.officePickup === true && hasRole("quality_inspector_2" as WorkflowRoleKey)),
-    canQaPlant: plantPick ? hasRole("plant_manager") : hasRole("plant_manager") || noProdQa,
+      : wf.officePickup === true
+        ? officeQaActors || hasRole("quality_inspector_2" as WorkflowRoleKey)
+        : stockOnly
+          ? hasRole("warehouse")
+          : boughtInOnly
+            ? boughtInQa
+            : hasRole("technical_head") || hasRole("quality_inspector"),
+    canQaPlant: plantPick ? hasRole("plant_manager") : boughtInOnly ? boughtInQa : hasRole("plant_manager"),
     // qa_plant_checked step: Warehouseman "make delivery form" for plant, else Logistics transfer.
     canQaTransfer: plantPick ? hasRole("warehouse") : hasRole("logistics"),
     // qa_transferred step: Plant Manager "approve delivery" for plant, else Sales 2nd QC.
@@ -534,11 +546,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (role === "sales" ? isPreparerViewer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
   const mbPaymentById = new Map((saleForClose?.payments ?? []).map((p) => [p.id, p] as const));
   const mbBatchViews = wf.deliveryBatches.map((b) => {
-    const steps = mbSteps(wf.fulfillmentMode).map((s) => {
+    const steps = mbSteps(wf.fulfillmentMode, stockOnly).map((s) => {
       const st = b.steps[s.key];
       return { key: s.key, label: s.done, roleLabel: s.role === "sales" ? "Sales" : workflowRoleLabel(s.role), done: !!st, byName: st?.byName, at: st?.at ? fmtWhen(st.at) : undefined };
     });
-    const { next } = mbProgress(b, wf.fulfillmentMode);
+    const { next } = mbProgress(b, wf.fulfillmentMode, stockOnly);
     const nextView = next && !b.cancelled
       ? { key: next.key, label: next.label, roleLabel: next.role === "sales" ? "Sales" : workflowRoleLabel(next.role), canAct: canActMbStep(next.role), collectsPayment: !!next.collectsPayment }
       : null;
@@ -1026,7 +1038,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} fromStock={stockOnly} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
             {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>
