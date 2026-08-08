@@ -402,17 +402,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // approves (like a produced order).
   const officeQaActors = isSalesViewer || hasRole("logistics") || hasRole("payment_approver");
   const boughtInQa = boughtInOnly && officeQaActors;
-  // From-stock release (Phase 2) — who does the physical release (step 1) and the
-  // second sign-off (step 2) depends on the fulfilment mode (plant vs office are far
-  // apart). Office pick up → Sales releases (+notifies) in one step. Plant pick up →
-  // Warehouse releases, Plant Manager approves. Delivery → Plant Manager releases,
-  // Sales notifies.
+  // From-stock release (Phase 2) — who does the physical release (step 1), the Plant
+  // Manager approval (step 2) and the Sales client-notify (step 3, delivery only)
+  // depends on the fulfilment mode (plant vs office are far apart). Office pick up →
+  // Sales releases (+notifies) in one step. Plant pick up → Warehouse releases, Plant
+  // Manager approves. Delivery → Warehouse releases, Plant Manager approves, Sales notifies.
   const canReleaseStock = adminViewer || (
-    wf.officePickup === true ? isSalesViewer
-      : wf.fulfillmentMode === "plant_pickup" ? hasRole("warehouse")
-      : hasRole("plant_manager"));
-  const canConfirmRelease = adminViewer || (
-    wf.fulfillmentMode === "plant_pickup" ? hasRole("plant_manager") : isSalesViewer);
+    wf.officePickup === true ? isSalesViewer : hasRole("warehouse"));
+  const canConfirmRelease = adminViewer || hasRole("plant_manager");
+  const canNotifyRelease = adminViewer || isSalesViewer;
   // Plant pick up: Warehouseman-driven tail (make form / upload POD) with Plant
   // Manager quality & approve-delivery. Its Phase-5 roles differ from delivery.
   const plantPick = wf.fulfillmentMode === "plant_pickup";
@@ -895,8 +893,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               mode={officePickup ? "office_pickup" : plantPick ? "plant_pickup" : "delivery"}
               released={!!wf.approvals.stock_released}
               releasedByName={wf.approvals.stock_released?.byName}
+              approved={!!wf.approvals.stock_release_approved}
+              approvedByName={wf.approvals.stock_release_approved?.byName}
               canRelease={canReleaseStock}
               canConfirm={canConfirmRelease}
+              canNotify={canNotifyRelease}
             />
           ) : (
             <div className="space-y-4">

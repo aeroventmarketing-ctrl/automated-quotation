@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
-import { releaseOrderFromStock, confirmStockRelease } from "../actions";
+import { releaseOrderFromStock, confirmStockRelease, notifyStockReleaseClient } from "../actions";
 
 type ReleaseMode = "delivery" | "office_pickup" | "plant_pickup";
 
@@ -14,7 +14,8 @@ type ReleaseMode = "delivery" | "office_pickup" | "plant_pickup";
  * fulfilment mode (the plant and office are far apart):
  *  - Office pick up → **Sales** releases from stock and notifies the client (one step).
  *  - Plant pick up  → the **Warehouse** releases, then the **Plant Manager** approves.
- *  - Delivery       → the **Plant Manager** releases, then **Sales** notifies the client.
+ *  - Delivery       → the **Warehouse** releases, the **Plant Manager** approves the
+ *    quality & quantity, then **Sales** notifies the client.
  * The releaser matches each line to a stock item; inventory is deducted and the order
  * moves to Phase 5.
  */
@@ -25,8 +26,11 @@ export function StockRelease({
   mode,
   released,
   releasedByName,
+  approved,
+  approvedByName,
   canRelease,
   canConfirm,
+  canNotify,
 }: {
   orderId: string;
   lines: { name: string; qty: number }[];
@@ -35,10 +39,15 @@ export function StockRelease({
   /** The stock has been physically released (inventory deducted). */
   released: boolean;
   releasedByName?: string;
+  /** The Plant Manager has approved the release (delivery — before Sales notifies). */
+  approved?: boolean;
+  approvedByName?: string;
   /** May perform the physical release (step 1). */
   canRelease: boolean;
-  /** May perform the second sign-off (step 2 — delivery / plant pick up only). */
+  /** May perform the Plant Manager approval (delivery / plant pick up). */
   canConfirm: boolean;
+  /** May perform the Sales client-notify (delivery only, after approval). */
+  canNotify: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -48,15 +57,13 @@ export function StockRelease({
   const releaseLabel =
     mode === "office_pickup" ? "Release from Stock & Notify Client"
       : "Release from Stock";
-  const releaserPhrase = mode === "office_pickup" ? "Sales" : mode === "plant_pickup" ? "the Warehouse" : "the Plant Manager";
-  const confirmLabel = mode === "plant_pickup" ? "Quality & Quantity Approved" : "Release from Stock & Notify Client";
-  const confirmPhrase = mode === "plant_pickup" ? "the Plant Manager" : "Sales";
+  const releaserPhrase = mode === "office_pickup" ? "Sales" : "the Warehouse";
   const flowText =
     mode === "office_pickup"
       ? "Sales releases them from stock and notifies the client in one step; it then moves to final payment."
       : mode === "plant_pickup"
       ? "The Warehouse releases them from stock, then the Plant Manager approves; it then moves to final payment."
-      : "The Plant Manager releases them from stock, then Sales notifies the client; it then moves to final payment.";
+      : "The Warehouse releases them from stock, the Plant Manager approves, then Sales notifies the client; it then moves to final payment.";
 
   async function run(fn: () => Promise<void>) {
     setBusy(true); setErr(null);
@@ -103,17 +110,35 @@ export function StockRelease({
           </div>
         )
       ) : (
-        // Office pick up advances on release, so step 2 only shows for delivery / plant pick up.
+        // Office pick up advances on release, so the sign-off steps only show for
+        // delivery / plant pick up. Delivery: Plant Manager approves, then Sales notifies.
         <>
           <p className="text-xs text-emerald-700 dark:text-emerald-400">
             Released from stock{releasedByName ? ` — ${releasedByName}` : ""}.
           </p>
-          {canConfirm ? (
-            <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => confirmStockRelease(orderId))}>
-              {busy ? "Saving…" : confirmLabel}
-            </Button>
+          {!approved ? (
+            // Step 2 — Plant Manager quality & quantity approval (delivery & plant pick up).
+            canConfirm ? (
+              <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => confirmStockRelease(orderId))}>
+                {busy ? "Saving…" : "Quality & Quantity Approved"}
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">Awaiting the Plant Manager to approve the release.</p>
+            )
           ) : (
-            <p className="text-xs text-muted-foreground">Awaiting {confirmPhrase} to {mode === "plant_pickup" ? "approve the release" : "notify the client"}.</p>
+            // Step 3 — Sales notifies the client (delivery only; plant pick up advances on approval).
+            <>
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                Quality &amp; quantity approved{approvedByName ? ` — ${approvedByName}` : ""}.
+              </p>
+              {canNotify ? (
+                <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => run(() => notifyStockReleaseClient(orderId))}>
+                  {busy ? "Saving…" : "Release from Stock & Notify Client"}
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">Awaiting Sales to notify the client.</p>
+              )}
+            </>
           )}
         </>
       )}

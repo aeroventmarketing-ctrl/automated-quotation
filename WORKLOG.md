@@ -14,6 +14,23 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · From-stock DELIVERY release → 3-step (Warehouse → Plant Manager → Sales)
+- **Owner-requested:** revise the from-stock **Delivery** release choreography. It was a 2-step
+  flow (Plant Manager "Release from Stock" → Sales "Release from Stock & Notify Client", PR #259).
+  New spec: **(9)** the **Warehouse** presses **"Release From Stock"** → **(10)** the **Plant
+  Manager** approves and presses **"Quality & Quantity Approved"** → **(11)** **Sales** informs the
+  client and presses **"Release from Stock & Notify Client"**. Delivery's release now mirrors plant
+  pick up's (Warehouse releases → Plant Manager approves) plus a Sales-notify tail before Phase 5.
+- **Changes:** `pendingStep` delivery/stockOnly branch now steps Warehouse `stock_released` →
+  Plant Manager `stock_release_approved` → Sales `client_notified` (`order-workflow.ts`).
+  `releaseOrderFromStock` releaser for delivery = Warehouse (was Plant Manager); `confirmStockRelease`
+  is now the Plant Manager approval for both delivery & plant pick up (plant advances to Phase 5,
+  delivery stamps `stock_release_approved` and waits); new `notifyStockReleaseClient` = the Sales
+  client-notify that advances a delivery order to Phase 5 (`orders/actions.ts`). `stock-release.tsx`
+  renders the 3rd stage for delivery; `page.tsx` perms: `canReleaseStock` = Warehouse (non-office),
+  `canConfirmRelease` = Plant Manager, new `canNotifyRelease` = Sales. Office pick up (1-step) and
+  plant pick up (2-step) unchanged. **No P&L touched.** Typecheck + lint clean.
+
 ## 2026-08-08 · From-stock release picker — show the full variant + auto-match from the quotation
 - **Owner-requested:** in the stock-release matcher, an Office-supplied line (e.g. "AlphaAir Duct
   Canvass Connector · Silicone · Per meter") showed only "AlphaAir Duct Canvass Connector" — the
