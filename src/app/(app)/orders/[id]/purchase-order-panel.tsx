@@ -26,6 +26,12 @@ function todayInput(): string {
 const WDRV_SUPPLIER = "JOEL LATERO SHOP";
 const isWdrvLine = (desc: string) => /wind driven roof ventilator/i.test(desc);
 
+// KDK products (e.g. Ceiling Cassette) are sourced from Avesco — a new PO that
+// carries a KDK item auto-fills Avesco from the saved supplier list, so its
+// contact, address, EWT flag & remarks fill in too.
+const KDK_SUPPLIER = "AVESCO";
+const isKdkLine = (desc: string) => /\bkdk\b/i.test(desc);
+
 export function PurchaseOrderPanel({
   prId,
   orderId,
@@ -93,6 +99,7 @@ export function PurchaseOrderPanel({
 
   // Auto-populate the supplier on a new PO (once, when none is chosen yet):
   //  • Wind Driven Roof Ventilator is always sourced from JOEL LATERO SHOP.
+  //  • KDK products are always sourced from Avesco.
   //  • Otherwise, when exactly one catalogued supplier carries the products.
   const autoPicked = useRef(false);
   useEffect(() => {
@@ -103,6 +110,15 @@ export function PurchaseOrderPanel({
       if (saved) pickSupplier(saved);
       else setCompany(WDRV_SUPPLIER);
       setWithEwt(false); // JOEL LATERO SHOP is non-VATable — no EWT.
+      return;
+    }
+    if (lines.some((l) => isKdkLine(l.description))) {
+      autoPicked.current = true;
+      // Match the saved Avesco record by name (contains "avesco"), so its full
+      // registered name, contact, address & EWT flag fill in.
+      const saved = suppliers.find((s) => s.company.toLowerCase().includes(KDK_SUPPLIER.toLowerCase()));
+      if (saved) pickSupplier(saved);
+      else setCompany(KDK_SUPPLIER);
       return;
     }
     if (filtered && eligible.length === 1) { autoPicked.current = true; pickSupplier(eligible[0]); }

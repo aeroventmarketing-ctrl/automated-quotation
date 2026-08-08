@@ -14,6 +14,20 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · PO form — auto-fill Avesco when a KDK product is on the line
+- **Owner-requested:** KDK products (e.g. KDK Ceiling Cassette) are always sourced from **Avesco**,
+  so a new Purchase Order that carries a KDK item should auto-fill the supplier with Avesco's details
+  from the Suppliers list — mirroring the existing Wind Driven Roof Ventilator → JOEL LATERO SHOP
+  rule.
+- **Fix:** `purchase-order-panel.tsx` — added a `KDK_SUPPLIER = "AVESCO"` / `isKdkLine` (`/\bkdk\b/i`)
+  brand rule to the new-PO auto-populate effect. When a line is a KDK product and no supplier is set
+  yet, it finds the saved Avesco record (name contains "avesco") and `pickSupplier`s it, so company,
+  Attention (contact), Address, EWT flag & remarks fill in — and the unit price fills from Avesco's
+  catalogue price if set up. Falls back to just the name if Avesco isn't in the Suppliers list. Runs
+  before the single-carrier fallback, so KDK always resolves to Avesco. Consistent with the WDRV
+  precedent (which likewise lives only in the per-order PO panel, not the combined-PO form).
+  **No P&L / purchasing workflow change.** Typecheck + lint clean.
+
 ## 2026-08-08 · Admin override — roll-back labels match the order's actual workflow
 - **Owner-requested:** the "Admin override" roll-back panel read with the generic produced-delivery
   wording regardless of the order's fulfilment mode / sourcing (e.g. a plant pick up showed
