@@ -1,5 +1,5 @@
 import { FileText, Download, Eye } from "lucide-react";
-import { afterPaymentDocTypes, type SaleDoc } from "@/lib/sale";
+import { afterPaymentDocTypes, type SaleDoc, type SaleDocType } from "@/lib/sale";
 import type { MultiDeliveryBatch } from "@/lib/delivery-multibatch";
 
 const view = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
@@ -12,14 +12,20 @@ const download = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.
  * visible/downloadable here too, grouped by DR / batch. Server component.
  */
 export function BatchDocumentList({ batches, vatInclusive, zeroRated = false }: { batches: MultiDeliveryBatch[]; vatInclusive: boolean; zeroRated?: boolean }) {
-  const slots = afterPaymentDocTypes(vatInclusive, zeroRated);
+  // Include the plant pick up delivery form (its own key) alongside the standard
+  // closing docs; the per-batch proof of delivery is added as its own row below.
+  const slots: SaleDocType[] = [
+    ...afterPaymentDocTypes(vatInclusive, zeroRated),
+    { key: "delivery_form", label: "Delivery form", required: false },
+  ];
   const withDocs = batches
     .filter((b) => !b.cancelled)
     .map((b) => ({
       b,
-      rows: slots
-        .map((t) => ({ label: t.label, files: b.docs?.[t.key] ?? [] }))
-        .filter((r) => r.files.length > 0),
+      rows: [
+        ...slots.map((t) => ({ label: t.label, files: b.docs?.[t.key] ?? [] })),
+        { label: "Proof of delivery", files: b.pod ?? [] },
+      ].filter((r) => r.files.length > 0),
     }))
     .filter((x) => x.rows.length > 0);
   if (withDocs.length === 0) return null;

@@ -9,6 +9,7 @@ import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { BatchDocumentList } from "./batch-document-list";
+import { SaleDocumentList } from "../../orders/[id]/sale-document-list";
 import { quoteApproverNames } from "@/lib/approver-directory";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { readPricing } from "@/lib/quote";
@@ -238,6 +239,18 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         }),
       }}
       />
+      {/* Every document attached on the order's workflow (PO, closing docs,
+          unsigned delivery docs, plant delivery form, billing statement, final
+          payment, proof of delivery) — mirrored here so it's visible/downloadable
+          on the quotation tab too. */}
+      {saleFromClassification(quotation.classification) && (
+        <SaleDocumentList
+          sale={saleFromClassification(quotation.classification)!}
+          vatInclusive={quotation.vatMode !== "EXCLUSIVE"}
+          zeroRated={quotation.vatMode === "ZERO_RATED"}
+          showFinalPayment
+        />
+      )}
       {/* Per-batch closing documents attached on the order's multiple-batch
           delivery — visible/downloadable here too. */}
       <BatchDocumentList

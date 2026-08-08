@@ -17,12 +17,16 @@ export function SaleDocumentList({ sale, vatInclusive, zeroRated = false, showFi
     const files = [...(docs[t.key] ?? []), ...(t.mergeKeys ?? []).flatMap((k) => docs[k] ?? [])];
     if (files.length) rows.push({ label: t.label, files });
   }
+  // Optional billing statement attached on the order (Phase 5).
+  if ((docs["billing_statement"] ?? []).length) rows.push({ label: "Billing statement", files: docs["billing_statement"] });
   for (const t of deliveryUnsignedDocTypes(vatInclusive)) {
     if ((docs[t.key] ?? []).length) rows.push({ label: `${t.label} (unsigned)`, files: docs[t.key] });
   }
   for (const t of afterPaymentDocTypes(vatInclusive, zeroRated)) {
     if ((docs[t.key] ?? []).length) rows.push({ label: t.label, files: docs[t.key] });
   }
+  // Plant pick up: the Warehouseman's delivery form (its own key, not delivery_receipt).
+  if ((docs["delivery_form"] ?? []).length) rows.push({ label: "Delivery form", files: docs["delivery_form"] });
   if (showFinalPayment && (docs["final_payment"] ?? []).length) rows.push({ label: "Final payment", files: docs["final_payment"] });
   if ((docs["pod"] ?? []).length) rows.push({ label: "Proof of delivery", files: docs["pod"] });
   if (rows.length === 0) return null;
