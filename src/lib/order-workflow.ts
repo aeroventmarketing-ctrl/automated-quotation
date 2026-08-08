@@ -658,11 +658,12 @@ export function pendingStep(
     case "final_pay_checked":
       return { action: "Confirm final payment", roles: ["payment_approver"] };
     case "final_pay_cleared":
-      // Plant pick up: quality test by the Technical Head / QI regardless of sourcing.
-      if (plantPickup) return { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
       if (officePickup) return { action: "Quality testing", roles: ["quality_inspector_2"], sales: true };
-      // From-stock: the Warehouse (who holds the F&B stock) runs the quality test.
+      // From-stock (delivery OR plant pick up): the Warehouse (who holds the F&B
+      // stock) runs the quality & quantity test.
       if (stockOnly) return { action: "Quality & quantity testing", roles: ["warehouse"] };
+      // Plant pick up of a produced order: Technical Head / QI test.
+      if (plantPickup) return { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };
       return boughtInOnly
         ? { action: "Quality testing", roles: ["logistics", "payment_approver"], sales: true }
         : { action: "Quality testing", roles: ["technical_head", "quality_inspector"] };

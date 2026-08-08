@@ -3778,18 +3778,17 @@ export async function qaTest(quotationId: string): Promise<void> {
   const techOrQi = userHasWorkflowRole(roles, user.id, "technical_head" as WorkflowRoleKey)
     || userHasWorkflowRole(roles, user.id, "quality_inspector" as WorkflowRoleKey);
   const warehouse = userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
-  // From-stock delivery: the Warehouse runs the quality & quantity test.
-  const fromStock = stockOnly && !plant && !pickup;
-  const ok = isAdmin(user) || (plant
-    ? techOrQi
-    : pickup
-      ? boughtInQaActor(user, roles, quote.preparedById ?? "")
-        || userHasWorkflowRole(roles, user.id, "quality_inspector_2" as WorkflowRoleKey)
-      : fromStock
-        ? warehouse
-        : boughtInOnly
-          ? boughtInQaActor(user, roles, quote.preparedById ?? "")
-          : techOrQi);
+  // From-stock — delivery OR plant pick up — the Warehouse runs the quality &
+  // quantity test (office pickup keeps the 2nd Quality Inspector).
+  const fromStock = stockOnly && !pickup;
+  const ok = isAdmin(user) || (pickup
+    ? boughtInQaActor(user, roles, quote.preparedById ?? "")
+      || userHasWorkflowRole(roles, user.id, "quality_inspector_2" as WorkflowRoleKey)
+    : fromStock
+      ? warehouse
+      : boughtInOnly
+        ? boughtInQaActor(user, roles, quote.preparedById ?? "")
+        : techOrQi);
   if (!ok) throw new Error(
     fromStock ? "Only the Warehouse or an admin can quality-test a from-stock order."
       : boughtInOnly && !plant ? BOUGHT_IN_QA_ERR

@@ -14,6 +14,26 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · From-stock plant pick up — Warehouse runs the quality test
+- **Owner-requested (frozen Phase 5, owner-approved):** extends the from-stock "Warehouse runs
+  the quality & quantity test" rule (#257, delivery) to the **plant pick up** fulfilment mode.
+  For a from-stock order (F&B on-hand, e.g. angle corner) collected at the plant, step "Quality
+  Tested-Passed" is done by the **Warehouse**; the Plant Manager still approves and the
+  Warehouseman still makes the delivery form. **Produced** plant-pickup orders keep Technical
+  Head / QI on the quality test (unchanged — the produced workflow is still owner-pending).
+- **Where:** `pendingStep` (final_pay_cleared: from-stock — delivery OR plant pickup — → Warehouse
+  before the produced plant-pickup Tech-Head/QI branch); `qaTest` action (`fromStock = stockOnly
+  && !pickup`, so plant pickup from-stock authorises the Warehouse); order-page `canQaTest` perm;
+  new `MULTIBATCH_PLANT_STOCK_STEPS` (plant-pickup steps with `qa_tested` role = warehouse) +
+  `mbSteps` returns it for plant_pickup + stockOnly. The FulfillmentActions copy/awaiting
+  (via the existing `fromStock` prop) and the `qa_tested` sign-off designation already keyed off
+  `stockOnly`, so they cover plant pickup automatically. Typecheck + lint clean.
+- **Pending / flagged to owner:** the rest of the three from-stock specs (Delivery / Office pickup
+  / Plant pickup) already match the app **except** the Phase-2 stock-release wording (steps 8–10),
+  which differs across the specs and from the current two-step flow (Payment Cleared → Plant
+  Manager "Approve stock release" → Warehouse "Release from stock" → auto-notify). Awaiting owner
+  confirmation before touching frozen Phase 2. **P&L untouched** per instruction.
+
 ## 2026-08-08 · From-stock (F&B on-hand) delivery — Warehouse runs the quality test
 - **Owner-requested (frozen Phase 5, owner-approved):** for an order fulfilled from Fans &
   Blowers on-hand **stock** (e.g. angle corner), the Phase 5 quality & quantity test (step 15,
