@@ -130,6 +130,15 @@ export const MULTIBATCH_PLANT_PICKUP_STEPS: MBStepDef[] = [
   { key: "docs_filed", label: "File documents — batch picked up", done: "Documents filed (partial pick up)", role: "accounting" },
 ];
 
+/**
+ * From-stock plant-pickup variant — like the plant-pickup sequence, but the quality
+ * & quantity test is run by the **Warehouse** (who holds the F&B stock) instead of
+ * the Technical Head, mirroring the from-stock delivery variant.
+ */
+export const MULTIBATCH_PLANT_STOCK_STEPS: MBStepDef[] = MULTIBATCH_PLANT_PICKUP_STEPS.map((s) =>
+  s.key === "qa_tested" ? { ...s, role: "warehouse" } : s,
+);
+
 export const MB_DELIVERED_STEP = "delivered";
 export const MB_FINAL_STEP = "docs_filed";
 const MB_STEP_KEYS = new Set([...MULTIBATCH_STEPS, ...MULTIBATCH_PICKUP_STEPS, ...MULTIBATCH_PLANT_PICKUP_STEPS].map((s) => s.key));
@@ -143,7 +152,7 @@ export type MBMode = "delivery" | "office_pickup" | "plant_pickup";
  */
 export function mbSteps(mode: MBMode = "delivery", stockOnly = false): MBStepDef[] {
   if (mode === "office_pickup") return MULTIBATCH_PICKUP_STEPS;
-  if (mode === "plant_pickup") return MULTIBATCH_PLANT_PICKUP_STEPS;
+  if (mode === "plant_pickup") return stockOnly ? MULTIBATCH_PLANT_STOCK_STEPS : MULTIBATCH_PLANT_PICKUP_STEPS;
   return stockOnly ? MULTIBATCH_STOCK_STEPS : MULTIBATCH_STEPS;
 }
 

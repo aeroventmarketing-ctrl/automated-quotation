@@ -395,12 +395,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     canNotify: isSalesViewer,
     canCheckPay: hasRole("accounting"),
     canConfirmPay: hasRole("payment_approver"),
-    canQaTest: plantPick
-      ? hasRole("technical_head") || hasRole("quality_inspector")
-      : wf.officePickup === true
-        ? officeQaActors || hasRole("quality_inspector_2" as WorkflowRoleKey)
-        : stockOnly
-          ? hasRole("warehouse")
+    canQaTest: wf.officePickup === true
+      ? officeQaActors || hasRole("quality_inspector_2" as WorkflowRoleKey)
+      : stockOnly
+        ? hasRole("warehouse") // from-stock: delivery OR plant pick up
+        : plantPick
+          ? hasRole("technical_head") || hasRole("quality_inspector") // produced plant pick up
           : boughtInOnly
             ? boughtInQa
             : hasRole("technical_head") || hasRole("quality_inspector"),
