@@ -14,6 +14,22 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · PO price matcher — format-tolerant (word order / separators / model code)
+- **Owner-requested (chose option 3):** a PO line "KDK Ceiling Cassette · 32CHH" didn't match a
+  catalogue product named "CEILING CASSETTE - KDK - 32CHH", so the Avesco price didn't auto-fill.
+  Make the matcher tolerant of word order / separators, keyed on the model code, without renaming.
+- **Fix:** rewrote `matchKey` in `src/lib/po-catalog.ts` (used by `catalogPriceFor`,
+  `catalogReferencePriceFor`, `suppliersForDescription`). Now: exact canon match → **model-code
+  match** (word-order/separator tolerant, and a code match always outranks a generic/substring
+  match so the specific variant wins) → generic/substring fallback. **Cross-model guard:** every
+  model/part-code token of a product name must appear in the line, so "…32CHH" never matches a line
+  for "…24CDH", and the line may still carry extra tokens (qty / "@price" / order-ref suffix).
+  Validated with 14 cases (KDK 32CHH/24CDH/25NFB hit their own price; 32XYZ→none; suffix tolerated;
+  "24" vs "24CDH" never cross; specific beats generic; legacy substring like "GI BOLT" preserved).
+- **Note:** the PO price still comes from the **Products** catalogue (not inventory stock items),
+  so the KDK item must exist as a Product with an Avesco price — but its Product name can now be in
+  the inventory format and still match. **No P&L touched.** Typecheck + lint clean.
+
 ## 2026-08-08 · Purchasing tab — "Completed" section for finished department POs
 - **Owner-reported:** a completed department PO (e.g. PO-AFBM20260000531, Fans & Blower · TKL STEEL
   CORP) showed in the Expenses records but not in the Purchasing tab. Cause: the Expenses report
