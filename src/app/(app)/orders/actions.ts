@@ -1266,46 +1266,47 @@ export async function notifyClientBoughtInOrder(quotationId: string): Promise<vo
   });
 }
 
-/** Who may release a from-stock order — the Warehouse (the Fans & Blowers head has
- *  no authority to release stock items). */
-const STOCK_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse"];
+/** Sales viewer test (matches the "sales" pending-step semantics). */
+function isSalesActor(user: { id: string; role: string }, preparedById: string): boolean {
+  return user.role === "SALES" || user.role === "ENGINEER" || user.id === preparedById;
+}
 
 /**
- * A from-stock order (in-house duct hardware, nothing fabricated, nothing bought
- * from a supplier) is fulfilled by issuing the goods from Fans & Blowers on-hand
- * stock. The Warehouse matches each line to a stock item and releases
- * it here: inventory is deducted (an ISSUE movement is the stock record) and the
- * order jumps straight to Phase 5 (final payment → deliver / client pickup),
- * skipping production and the supplier PO — mirrors notifyClientBoughtInOrder.
+ * The second step of a from-stock release (delivery & plant pick up only). The
+ * order has already been physically released from stock (`stock_released`); this
+ * advances it to Phase 5:
+ *  - Delivery    → **Sales** notifies the client ("Release from Stock & Notify Client").
+ *  - Plant pick up → the **Plant Manager** approves ("Quality & Quantity Approved").
+ * Office pick up has no second step — its release + notify is a single action.
  */
-/**
- * The Plant Manager or an admin approves any from-stock order's release before the
- * warehouse issues it. An Engineer may also approve, but only when every from-stock
- * line is in-house duct hardware (angle corner, TDC cleat, S-clip, C-clip) — not the
- * Office-supplied resale goods (AlphaAir, Vent Cap). The "ask permission first" gate.
- */
-export async function approveStockRelease(quotationId: string): Promise<void> {
+export async function confirmStockRelease(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
-  const { cls, wf } = await loadWorkflow(quotationId);
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
+  if (!wf.approvals.stock_released) throw new Error("The order hasn't been released from stock yet.");
   const items = await prisma.quotationItem.findMany({
     where: { quotationId },
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
   });
   if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
-  // Normal (non-pickup) from-stock release is approved by the Plant Manager (or an
-  // admin) only. The Engineer's stock-release role now lives in the office-pickup
-  // flow (which uses the single "Release from Stock and Notify Client" action).
-  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey))) {
-    throw new Error("Only the Plant Manager or an admin can approve the stock release.");
+  const plant = wf.fulfillmentMode === "plant_pickup";
+  let approvals;
+  if (plant) {
+    if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey)))
+      throw new Error("Only the Plant Manager or an admin can approve the stock release.");
+    approvals = stamp({ approvals: stamp(wf, "stock_release_approved", user) }, "client_notified", user);
+  } else {
+    if (!(isAdmin(user) || isSalesActor(user, quote.preparedById ?? "")))
+      throw new Error("Only Sales or an admin can notify the client.");
+    approvals = stamp(wf, "client_notified", user);
   }
-  await saveWorkflow(quotationId, cls, { ...wf, approvals: stamp(wf, "stock_release_approved", user) });
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_review", approvals });
   await logActivity(user, {
-    action: "order.stock.release.approve",
+    action: "order.stock.release.confirm",
     category: "order",
-    summary: `Approved stock release — ${await orderRefLabel(quotationId)}`,
+    summary: `${plant ? "Approved" : "Notified client for"} stock release — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
     href: `/orders/${quotationId}`,
@@ -1323,36 +1324,35 @@ export async function releaseOrderFromStock(quotationId: string, matches: StockM
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
   });
   if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
-  // Office pickup collapses approval + warehouse release into a single step: the
-  // Plant Manager / Engineer (in-house duct hardware only) / admin releases from
-  // stock and notifies the client in one action. The normal from-stock flow keeps
-  // its two steps (Warehouse releases only after the Plant Manager's approval).
-  const pickup = wf.officePickup === true;
-  if (pickup) {
-    // Office pickup is released by the Engineer alone (or an admin) — not the
-    // Plant Manager.
-    if (!(isAdmin(user) || user.role === "ENGINEER")) {
-      throw new Error("Only an Engineer or an admin can release an office-pickup order from stock.");
-    }
-  } else {
-    if (!(isAdmin(user) || STOCK_RELEASE_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r)))) {
-      throw new Error("Only the Warehouse or an admin can release from stock.");
-    }
-    // The Plant Manager must approve the release before the warehouse issues the stock.
-    if (!wf.approvals.stock_release_approved) {
-      throw new Error("The Plant Manager must approve the stock release first.");
-    }
+  // The physical release (match each line to a stock item + deduct inventory) is done by
+  // a role that depends on where the goods sit / how they're collected:
+  //  - office pick up → Sales (releases AND notifies the client — single step);
+  //  - plant pick up  → the Warehouse (the Plant Manager approves next);
+  //  - delivery       → the Plant Manager (Sales notifies the client next).
+  const officePickup = wf.officePickup === true;
+  const plant = wf.fulfillmentMode === "plant_pickup";
+  let allowed = isAdmin(user);
+  if (!allowed) {
+    if (officePickup) allowed = isSalesActor(user, quote.preparedById ?? "");
+    else if (plant) allowed = userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
+    else allowed = userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey);
+  }
+  if (!allowed) {
+    const who = officePickup ? "Sales" : plant ? "the Warehouse" : "the Plant Manager";
+    throw new Error(`Only ${who} or an admin can release this order from stock.`);
   }
   // Deduct the released quantities from inventory. Unmatched lines are skipped
   // (nothing deducted) — the warehouse reconciles in Inventory if stock went short,
-  // exactly like the MRF release. Then advance straight to Phase 5.
+  // exactly like the MRF release.
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
-  // Pickup records the release-approval stamp too (the single action both approves
-  // and releases), so the trail shows who released it.
-  const approvals = pickup
-    ? stamp({ approvals: stamp(wf, "stock_release_approved", user) }, "client_notified", user)
-    : stamp(wf, "client_notified", user);
-  const workflow = { ...wf, stage: "final_pay_review", approvals };
+  // Office pick up releases AND notifies in one action (→ Phase 5). Delivery / plant
+  // pick up mark the stock released and wait for the second sign-off.
+  const approvals = officePickup
+    ? stamp({ approvals: stamp(wf, "stock_released", user) }, "client_notified", user)
+    : stamp(wf, "stock_released", user);
+  const workflow = officePickup
+    ? { ...wf, stage: "final_pay_review", approvals }
+    : { ...wf, approvals };
   await prisma.$transaction(async (tx) => {
     for (const m of clean) {
       const item = await tx.stockItem.findUnique({ where: { id: m.stockItemId } });
@@ -3913,6 +3913,8 @@ const CLOSE_DOC_KEYS = new Set([
   "delivery_form",
   // Zero-rated: the Certificate of VAT Exempt/Zero Rated.
   "vat_zero_cert",
+  // Billing statement (optional) — issued by Accounting after release, before final payment.
+  "billing_statement",
   // Proof of final payment (for the approver's review, then archived).
   "final_payment",
 ]);

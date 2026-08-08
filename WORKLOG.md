@@ -14,6 +14,31 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · From-stock Phase-2 release — role/order by fulfilment mode + billing upload
+- **Owner-requested (frozen Phase 2, owner-approved):** the from-stock stock-release
+  choreography now differs by fulfilment mode (the plant and office are far apart, so who
+  releases differs). Replaces the old single "PM approves → Warehouse releases → auto-notify".
+  - **Delivery:** Plant Manager **Release from Stock** → Sales **Release from Stock & Notify Client**.
+  - **Office pick up:** Sales **Release from stock & notify client** (one step — was the Engineer).
+  - **Plant pick up:** Warehouse **Release From Stock** → Plant Manager **Quality & Quantity Approved**.
+- **New `stock_released` stamp** marks the physical release (inventory deducted). Two actions:
+  `releaseOrderFromStock` (step 1 — matches lines + deducts; role by mode; office pickup also
+  stamps `client_notified` and advances) and new `confirmStockRelease` (step 2 — delivery: Sales
+  → `client_notified`; plant: PM → `stock_release_approved` + `client_notified`; both → Phase 5).
+  Replaces `approveStockRelease`. `pendingStep` released/stockOnly rewritten for the 3 modes'
+  two-step flow; `StockRelease` UI rewritten (mode-driven labels/roles/awaiting text); order-page
+  perms `canReleaseStock` (step 1) + `canConfirmRelease` (step 2) by mode.
+- **Billing statement (optional):** new `BillingStatement` upload link (clone of the final-payment
+  proof), shown at the final-payment stage (`final_pay_review`/`final_pay_checked`); doc key
+  `billing_statement` added to `CLOSE_DOC_KEYS`. Accounting attaches it after release, before final
+  payment — same appearance/behaviour as the previous upload links.
+- **Notifications/alarms/messages** all derive from `pendingStep`, so the orders-list banner, order
+  "waiting for" card, approver alarm and My Dashboard feed update for every role automatically.
+  **P&L untouched** per instruction. Payment-cleared button label kept as "Clear payment & release
+  from stock" (owner: use that label). Typecheck + lint clean.
+- **Still owner-pending:** the produced (Centrifugal/Axial) and bought-items workflows — to be
+  uploaded later.
+
 ## 2026-08-08 · From-stock plant pick up — Warehouse runs the quality test
 - **Owner-requested (frozen Phase 5, owner-approved):** extends the from-stock "Warehouse runs
   the quality & quantity test" rule (#257, delivery) to the **plant pick up** fulfilment mode.

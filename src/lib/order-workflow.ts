@@ -618,18 +618,25 @@ export function pendingStep(
     case "docs_checked":
       return { action: "Payment Cleared", roles: ["payment_approver"] };
     case "released": {
-      // From-stock order: the Plant Manager or an Engineer approves the release,
-      // then the Warehouse issues it from inventory (the Fans & Blowers head has no
-      // authority to release stock items). No job order and no purchase order.
+      // From-stock order: released from Fans & Blowers on-hand stock. The release
+      // choreography depends on the fulfilment mode (goods at the plant are far from
+      // the office, so who releases differs). No job order and no purchase order.
       if (stockOnly) {
-        // Office pickup: one step — the Engineer releases from stock and notifies
-        // the client (no separate approval, and not the Plant Manager).
+        // Office pick up: one step — Sales releases from stock and notifies the client.
         if (officePickup) {
-          return { action: "Release from stock & notify client", roles: [], engineer: true };
+          return { action: "Release from stock & notify client", roles: [], sales: true };
         }
-        return wf.approvals.stock_release_approved
-          ? { action: "Release from stock", roles: ["warehouse"] }
-          : { action: "Approve stock release", roles: ["plant_manager"] };
+        const released = !!wf.approvals.stock_released;
+        if (plantPickup) {
+          // Plant pick up: the Warehouse releases from stock, then the Plant Manager approves.
+          return released
+            ? { action: "Quality & Quantity Approved", roles: ["plant_manager"] }
+            : { action: "Release From Stock", roles: ["warehouse"] };
+        }
+        // Delivery: the Plant Manager releases from stock, then Sales notifies the client.
+        return released
+          ? { action: "Release from Stock & Notify Client", roles: [], sales: true }
+          : { action: "Release from Stock", roles: ["plant_manager"] };
       }
       if (boughtIn) {
         return { action: "Prepare & process the Purchase Order", roles: ["purchaser", "technical_head"] };
