@@ -14,7 +14,7 @@ import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole } from "@/lib/order-workflow";
-import { isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
+import { isStockOnlyOrder, isBoughtInOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
@@ -236,10 +236,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       // Plant Manager, Logistics, or the order's Sales. Single-delivery approval
       // stages already come through pendingStep(wf) below.
       const stockOnly = isStockOnlyOrder(q.items);
+      const boughtInOnly = isBoughtInOnlyOrder(q.items);
       if (wf.deliveryMode === "multi") {
         for (const b of wf.deliveryBatches) {
           if (b.cancelled || isMbFiled(b)) continue;
-          const next = mbProgress(b, wf.fulfillmentMode, stockOnly).next;
+          const next = mbProgress(b, wf.fulfillmentMode, stockOnly, boughtInOnly).next;
           if (!next) continue;
           const owes = next.role === "sales"
             ? (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id || isAdmin(user))

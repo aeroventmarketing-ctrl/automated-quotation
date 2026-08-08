@@ -14,6 +14,31 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Bought-in (Bought to Supplier) workflows — Delivery + Office pick up
+- **Owner-requested (frozen Phase 5, owner-approved):** the bought-in Phase 5 is shorter than
+  produced/from-stock — a bought-in order has **no plant quality steps**. After Final Payment
+  Confirmed it goes straight to **Transferred to Office (Logistics) → Quality & Quantity Checked
+  (Sales) → Save Documents & Approve Delivery → …**. Also **enables Office pick up** for bought-in
+  orders (previously from-stock only).
+- **Skip mechanism:** `confirmFinalPayment` lands a **bought-in** order on `qa_plant_checked`
+  (instead of `final_pay_cleared`), skipping the quality-test + plant-QC stages; the normal
+  `qa_plant_checked → Transfer → qa_transferred → Sales QC` path then runs. Works for both bought-in
+  **delivery** and **office pick up** (office pickup's `qa_tested` shortcut is naturally bypassed).
+- **Labels:** the Sales QC button/step reads **"Quality & Quantity Checked"** (not "Re-Checked")
+  for bought-in; `pendingStep` `qa_transferred` action + the fulfilment trail label are bought-in
+  aware; the `qa_plant_checked` stage label shows **"For transfer to office"** for bought-in
+  (it's a transient pre-transfer landing). Step-7 button kept "Documents Checked" (owner: leave as is).
+- **Office pick up for bought-in:** `availableModes` adds `office_pickup` for `boughtInOnly`;
+  `setFulfillmentMode` / `setOfficePickup` guards widened. Phase 2 stays the bought-in PO flow
+  (BoughtInProduction); Phase 5 uses the office-pickup tail (Sales uploads proof of pick up / surrenders).
+- **Multi-batch:** new `MULTIBATCH_BOUGHTIN_STEPS` (delivery — drops qa_tested/qa_plant_checked) and
+  `MULTIBATCH_BOUGHTIN_PICKUP_STEPS` (office pickup). `mbSteps`/`mbStepDef`/`mbProgress` take a
+  `boughtInOnly` flag, threaded through `advanceMultiBatch`, the order page batch views and the My
+  Dashboard multi-batch feed.
+- **Where:** `order-workflow.ts`, `delivery-multibatch.ts`, `my-dashboard.ts`, `orders/actions.ts`,
+  `orders/[id]/page.tsx`, `orders/[id]/fulfillment-actions.tsx`, `orders/page.tsx`. **P&L untouched.**
+  Typecheck + lint clean.
+
 ## 2026-08-08 · From-stock Phase-2 release — role/order by fulfilment mode + billing upload
 - **Owner-requested (frozen Phase 2, owner-approved):** the from-stock stock-release
   choreography now differs by fulfilment mode (the plant and office are far apart, so who

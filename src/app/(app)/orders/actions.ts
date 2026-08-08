@@ -3209,15 +3209,15 @@ export async function setOfficePickup(quotationId: string, enabled: boolean): Pr
   if (!(await canManageMultiDelivery(user.id, quote.preparedById))) {
     throw new Error("Only the order's salesperson or an admin can set office pick up.");
   }
-  // Office pickup is a from-stock fulfilment (no production) — only allow it on
-  // orders whose goods are all in stock.
+  // Office pickup (no production) — allowed on from-stock and bought-in orders
+  // (both are handed over from the office, not the plant).
   if (enabled) {
     const items = await prisma.quotationItem.findMany({
       where: { quotationId },
       select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
     });
-    if (!isStockOnlyOrder(items)) {
-      throw new Error("Office pick up is only available for from-stock orders.");
+    if (!(isStockOnlyOrder(items) || isBoughtInOnlyOrder(items))) {
+      throw new Error("Office pick up is only available for from-stock or bought-in orders.");
     }
   }
   // Source of truth is `fulfillmentMode`; `officePickup` is derived on read.
@@ -3249,8 +3249,8 @@ export async function setFulfillmentMode(quotationId: string, mode: FulfillmentM
       where: { quotationId },
       select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
     });
-    if (mode === "office_pickup" && !isStockOnlyOrder(items)) {
-      throw new Error("Office pick up is only available for from-stock orders.");
+    if (mode === "office_pickup" && !(isStockOnlyOrder(items) || isBoughtInOnlyOrder(items))) {
+      throw new Error("Office pick up is only available for from-stock or bought-in orders.");
     }
     if (mode === "plant_pickup" && isBoughtInOnlyOrder(items)) {
       throw new Error("Plant pick up isn't available for bought-in orders.");
@@ -3460,11 +3460,13 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   const batch = wf.deliveryBatches.find((b) => b.id === batchId);
   if (!batch || batch.cancelled) throw new Error("Delivery batch not found.");
   // Each batch runs the step variant for the order's fulfilment mode (delivery /
-  // office pick up / plant pick up); a from-stock delivery has the Warehouse test.
+  // office pick up / plant pick up) and sourcing (from-stock → Warehouse test;
+  // bought-in → skips the plant quality steps).
   const stockOnly = isStockOnlyOrder(quote.items);
-  const stepDef = mbStepDef(stepKey, wf.fulfillmentMode, stockOnly);
+  const boughtInOnly = isBoughtInOnlyOrder(quote.items);
+  const stepDef = mbStepDef(stepKey, wf.fulfillmentMode, stockOnly, boughtInOnly);
   if (!stepDef) throw new Error("Unknown step.");
-  const { next } = mbProgress(batch, wf.fulfillmentMode, stockOnly);
+  const { next } = mbProgress(batch, wf.fulfillmentMode, stockOnly, boughtInOnly);
   if (!next || next.key !== stepKey) throw new Error("That step isn't the next one for this batch.");
 
   // Logistics must attach the proof of delivery before the batch can be delivered.
@@ -3727,7 +3729,12 @@ export async function confirmFinalPayment(quotationId: string): Promise<void> {
     throw new Error("Only the Payment Approver or an admin can do this.");
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "final_pay_checked") throw new Error("Final payment hasn't been checked yet.");
-  await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_cleared", approvals: stamp(wf, "final_pay_confirmed", user) });
+  // A bought-in order has no plant quality steps — after payment it goes straight to
+  // "Transfer to office" (Logistics) then Sales' quality & quantity check. So it skips
+  // the quality-test / plant-QC stages and lands on qa_plant_checked, ready to transfer.
+  const { boughtInOnly } = await orderSourcingFlags(quotationId);
+  const nextStage = boughtInOnly ? "qa_plant_checked" : "final_pay_cleared";
+  await saveWorkflow(quotationId, cls, { ...wf, stage: nextStage, approvals: stamp(wf, "final_pay_confirmed", user) });
 }
 
 /**

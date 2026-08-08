@@ -139,9 +139,38 @@ export const MULTIBATCH_PLANT_STOCK_STEPS: MBStepDef[] = MULTIBATCH_PLANT_PICKUP
   s.key === "qa_tested" ? { ...s, role: "warehouse" } : s,
 );
 
+/**
+ * Bought-in delivery variant — a bought-in order has no plant quality steps, so it
+ * skips "Quality tested" and "Plant QC": after payment it goes straight to Transferred
+ * to office (Logistics), then Sales' (single) quality & quantity check.
+ */
+export const MULTIBATCH_BOUGHTIN_STEPS: MBStepDef[] = MULTIBATCH_STEPS
+  .filter((s) => s.key !== "qa_tested" && s.key !== "qa_plant_checked")
+  .map((s) => (s.key === "qa_sales_checked" ? { ...s, label: "Quality & quantity checked", done: "Quality & quantity checked" } : s));
+
+/**
+ * Bought-in office-pickup variant — the bought-in delivery flow, but the client
+ * collects at the office: Sales uploads the proof of pick up and surrenders the signed
+ * documents (no Logistics delivery / separate POD approval).
+ */
+export const MULTIBATCH_BOUGHTIN_PICKUP_STEPS: MBStepDef[] = [
+  { key: "client_notified", label: "Notify client — batch ready for pick up", done: "Client notified (batch ready)", role: "sales" },
+  { key: "payment_checked", label: "Payment checked", done: "Payment checked", role: "accounting", collectsPayment: true },
+  { key: "payment_confirmed", label: "Payment confirmed", done: "Payment confirmed", role: "payment_approver" },
+  { key: "qa_transferred", label: "Transferred to office", done: "Transferred to office", role: "logistics" },
+  { key: "qa_sales_checked", label: "Quality & quantity checked", done: "Quality & quantity checked", role: "sales" },
+  { key: "delivery_docs", label: "Save documents & approve pick up", done: "Pick-up documents ready", role: "accounting" },
+  { key: "delivered", label: "Mark delivered — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
+  { key: "docs_surrendered", label: "Documents surrendered to accounting", done: "Signed documents surrendered", role: "sales" },
+  { key: "docs_received", label: "Confirm documents received", done: "Documents received by accounting", role: "accounting" },
+  { key: "docs_filed", label: "File documents — batch picked up", done: "Documents filed (partial pick up)", role: "accounting" },
+];
+
 export const MB_DELIVERED_STEP = "delivered";
 export const MB_FINAL_STEP = "docs_filed";
-const MB_STEP_KEYS = new Set([...MULTIBATCH_STEPS, ...MULTIBATCH_PICKUP_STEPS, ...MULTIBATCH_PLANT_PICKUP_STEPS].map((s) => s.key));
+const MB_STEP_KEYS = new Set(
+  [...MULTIBATCH_STEPS, ...MULTIBATCH_PICKUP_STEPS, ...MULTIBATCH_PLANT_PICKUP_STEPS, ...MULTIBATCH_BOUGHTIN_PICKUP_STEPS].map((s) => s.key),
+);
 
 /** The order's fulfilment mode, mirrored here to pick the per-batch step table. */
 export type MBMode = "delivery" | "office_pickup" | "plant_pickup";
@@ -150,19 +179,19 @@ export type MBMode = "delivery" | "office_pickup" | "plant_pickup";
  * The per-batch step sequence for this order, by fulfilment mode. `stockOnly`
  * selects the from-stock delivery variant (Warehouse runs the quality test).
  */
-export function mbSteps(mode: MBMode = "delivery", stockOnly = false): MBStepDef[] {
-  if (mode === "office_pickup") return MULTIBATCH_PICKUP_STEPS;
+export function mbSteps(mode: MBMode = "delivery", stockOnly = false, boughtInOnly = false): MBStepDef[] {
+  if (mode === "office_pickup") return boughtInOnly ? MULTIBATCH_BOUGHTIN_PICKUP_STEPS : MULTIBATCH_PICKUP_STEPS;
   if (mode === "plant_pickup") return stockOnly ? MULTIBATCH_PLANT_STOCK_STEPS : MULTIBATCH_PLANT_PICKUP_STEPS;
-  return stockOnly ? MULTIBATCH_STOCK_STEPS : MULTIBATCH_STEPS;
+  return boughtInOnly ? MULTIBATCH_BOUGHTIN_STEPS : stockOnly ? MULTIBATCH_STOCK_STEPS : MULTIBATCH_STEPS;
 }
 
-export function mbStepDef(key: string, mode: MBMode = "delivery", stockOnly = false): MBStepDef | undefined {
-  return mbSteps(mode, stockOnly).find((s) => s.key === key);
+export function mbStepDef(key: string, mode: MBMode = "delivery", stockOnly = false, boughtInOnly = false): MBStepDef | undefined {
+  return mbSteps(mode, stockOnly, boughtInOnly).find((s) => s.key === key);
 }
 
 /** Last completed step index (−1 if none) and the next step to do (or null). */
-export function mbProgress(b: MultiDeliveryBatch, mode: MBMode = "delivery", stockOnly = false): { lastDone: number; next: MBStepDef | null } {
-  const steps = mbSteps(mode, stockOnly);
+export function mbProgress(b: MultiDeliveryBatch, mode: MBMode = "delivery", stockOnly = false, boughtInOnly = false): { lastDone: number; next: MBStepDef | null } {
+  const steps = mbSteps(mode, stockOnly, boughtInOnly);
   let lastDone = -1;
   for (let i = 0; i < steps.length; i++) {
     if (b.steps[steps[i].key]) lastDone = i;

@@ -337,7 +337,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const displayStageLabel = (key: OrderStage): string => {
     if (boughtInOnly && key === "released") return "For PO creation";
     if (stockOnly && key === "released") return "For stock release";
-    if (boughtInOnly && key === "qa_plant_checked") return "QC & Quantity Checked";
+    // Bought-in skips the plant quality steps and lands here ready to transfer.
+    if (boughtInOnly && key === "qa_plant_checked") return "For transfer to office";
     return stageLabel(key);
   };
 
@@ -436,7 +437,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     fStamp("Quality tested", "qa_tested", A.qa_tested),
     fStamp("Plant QC & quantity passed", "qa_plant_checked", A.qa_plant_checked),
     fStamp("Transferred to office", "qa_transferred", A.qa_transferred),
-    fStamp("Sales 2nd QC & quantity passed", "qa_sales_checked", A.qa_sales_checked),
+    fStamp(boughtInOnly ? "Quality & quantity checked" : "Sales 2nd QC & quantity passed", "qa_sales_checked", A.qa_sales_checked),
     fStamp("Delivery approved", "delivery_approved", A.delivery_approved),
     fStamp("Delivered", "delivered", A.delivered),
     fStamp("Delivery confirmed", "delivery_confirmed", A.delivery_confirmed),
@@ -517,7 +518,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canSetMode = adminViewer || (isPreparerViewer && pickupWindowOpen);
   const availableModes: FulfillmentMode[] = [
     "delivery",
-    ...(stockOnly ? (["office_pickup"] as FulfillmentMode[]) : []),
+    // Office pick up — the client collects at the office. Available for from-stock and
+    // bought-in orders (both are handed over from the office, not the plant).
+    ...(stockOnly || boughtInOnly ? (["office_pickup"] as FulfillmentMode[]) : []),
+    // Plant pick up — goods at the plant (produced or F&B stock; not bought-in).
     ...(!boughtInOnly ? (["plant_pickup"] as FulfillmentMode[]) : []),
   ];
   // The enable toggle shows to authorized roles from when production starts up
@@ -554,11 +558,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (role === "sales" ? isPreparerViewer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
   const mbPaymentById = new Map((saleForClose?.payments ?? []).map((p) => [p.id, p] as const));
   const mbBatchViews = wf.deliveryBatches.map((b) => {
-    const steps = mbSteps(wf.fulfillmentMode, stockOnly).map((s) => {
+    const steps = mbSteps(wf.fulfillmentMode, stockOnly, boughtInOnly).map((s) => {
       const st = b.steps[s.key];
       return { key: s.key, label: s.done, roleLabel: s.role === "sales" ? "Sales" : workflowRoleLabel(s.role), done: !!st, byName: st?.byName, at: st?.at ? fmtWhen(st.at) : undefined };
     });
-    const { next } = mbProgress(b, wf.fulfillmentMode, stockOnly);
+    const { next } = mbProgress(b, wf.fulfillmentMode, stockOnly, boughtInOnly);
     const nextView = next && !b.cancelled
       ? { key: next.key, label: next.label, roleLabel: next.role === "sales" ? "Sales" : workflowRoleLabel(next.role), canAct: canActMbStep(next.role), collectsPayment: !!next.collectsPayment }
       : null;
@@ -1044,7 +1048,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} fromStock={stockOnly} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} fromStock={stockOnly} boughtIn={boughtInOnly} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
             {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>
