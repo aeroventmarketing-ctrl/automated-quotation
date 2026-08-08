@@ -92,6 +92,7 @@ export function PurchasingWorkspace({
   scanProducts,
   admin = false,
   deptRows = [],
+  completedDeptRows = [],
   replenRows = [],
   showAmounts = true,
   showSupplier = true,
@@ -115,6 +116,8 @@ export function PurchasingWorkspace({
   admin?: boolean;
   /** Standalone department requisitions — filtered by the same tab. */
   deptRows?: PurchaseChainRow[];
+  /** Completed standalone department POs (no open return) — the collapsed "Completed" section. */
+  completedDeptRows?: PurchaseChainRow[];
   /** Replenishment (stock top-up) requests — filtered by the same tab. */
   replenRows?: PRRow[];
   /** Whether the viewer may see PO money amounts. */
@@ -437,6 +440,40 @@ export function PurchasingWorkspace({
             ) : (
               <ReplenishmentList rows={shown} admin={admin} />
             )}
+          </section>
+        );
+      })()}
+
+      {/* Completed department POs — finished requisitions (fully received, no open
+          return) kept viewable/printable in a collapsed section, independent of the
+          tab filter above, so a completed PO never just disappears from the tab. */}
+      {completedDeptRows.length > 0 && (() => {
+        const shown = completedDeptRows.filter((r) =>
+          textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query),
+        );
+        return (
+          <section className="space-y-3">
+            <details className="rounded-lg border bg-card">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Completed department POs ({completedDeptRows.length})
+              </summary>
+              <div className="border-t p-4">
+                {shown.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">No completed POs match your search.</p>
+                ) : (
+                  <PurchasingChain
+                    requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
+                    suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
+                    catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
+                    showAmounts={showAmounts}
+                    showSupplier={showSupplier}
+                    showStockCheck={canCheckStock}
+                    canIssueStock={canIssueStock}
+                    adminManage={admin}
+                  />
+                )}
+              </div>
+            </details>
           </section>
         );
       })()}

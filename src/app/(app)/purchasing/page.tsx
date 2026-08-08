@@ -80,6 +80,7 @@ export default async function PurchasingPage() {
   let batches: BatchCard[] = [];
   let suggestions: SupplierSuggestion[] = [];
   let deptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
+  let completedDeptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
   let tableMissing = false;
 
   // Product catalogue → supplier lookup, used to suggest same-supplier combines.
@@ -266,28 +267,35 @@ export default async function PurchasingPage() {
       .filter((g): g is NonNullable<typeof g> => g !== null);
 
     // Uncombined department requisitions → individual chains. Completed ones are
-    // excluded above, except those still carrying an open supplier return so the
-    // replacement can be tracked and resolved after the good items were received.
-    const completedDeptWithReturns = (
+    // excluded from the active list above; a completed one still carrying an open
+    // supplier return stays active (so the replacement can be tracked/resolved),
+    // while the rest move to the collapsed "Completed" section below — so a finished
+    // PO stays viewable/printable instead of vanishing from the tab.
+    const completedDept = (
       await prisma.purchaseRequest.findMany({ where: { kind: "department", status: "COMPLETED" }, orderBy: { createdAt: "desc" } })
-    ).filter((pr) => hasUnresolvedReturn(coercePurchaseReturns(pr.returns)));
+    ).filter((pr) => !pr.quotationId);
+    const hasOpenReturn = (pr: (typeof completedDept)[number]) => hasUnresolvedReturn(coercePurchaseReturns(pr.returns));
+    const deptRowCtx = (pr: { id: string; status: string; createdById: string }) => ({
+      mrfNo: null,
+      canManagePO,
+      canCancel: canCancelPr(pr),
+      canDelete: canDeleteStatus(pr.status),
+      namesForRole,
+      canAct,
+      admin,
+      voucherNo: voucherNoByPr.get(pr.id) ?? null,
+    });
     // Order-linked (bought-in supplier) requisitions carry a quotationId and are
     // shown under their order above — keep them out of the generic Department
     // requisitions section so they render exactly once.
-    deptRows = [...unbatched.filter((pr) => pr.kind === "department"), ...completedDeptWithReturns]
+    deptRows = [...unbatched.filter((pr) => pr.kind === "department"), ...completedDept.filter(hasOpenReturn)]
       .filter((pr) => !pr.quotationId)
-      .map((pr) =>
-      buildPurchaseChainRow(pr, {
-        mrfNo: null,
-        canManagePO,
-        canCancel: canCancelPr(pr),
-        canDelete: canDeleteStatus(pr.status),
-        namesForRole,
-        canAct,
-        admin,
-        voucherNo: voucherNoByPr.get(pr.id) ?? null,
-      }),
-    );
+      .map((pr) => buildPurchaseChainRow(pr, deptRowCtx(pr)));
+    // Completed standalone department POs with no open return — the collapsed
+    // "Completed" section (view / print / reconcile only; the chain is terminal).
+    completedDeptRows = completedDept
+      .filter((pr) => !hasOpenReturn(pr))
+      .map((pr) => buildPurchaseChainRow(pr, deptRowCtx(pr)));
   } catch {
     tableMissing = true;
   }
@@ -360,6 +368,7 @@ export default async function PurchasingPage() {
               scanProducts={scanProducts}
               admin={admin}
               deptRows={deptRows}
+              completedDeptRows={completedDeptRows}
               replenRows={replenRows}
               showAmounts={showAmounts}
               showSupplier={showSupplier}

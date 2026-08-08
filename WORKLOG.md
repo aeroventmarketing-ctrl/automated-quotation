@@ -14,6 +14,21 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Purchasing tab — "Completed" section for finished department POs
+- **Owner-reported:** a completed department PO (e.g. PO-AFBM20260000531, Fans & Blower · TKL STEEL
+  CORP) showed in the Expenses records but not in the Purchasing tab. Cause: the Expenses report
+  lists any non-cancelled PO with cash released, but the Purchasing tab pulls department requests
+  with `status: { notIn: ["COMPLETED"] }` — so a fully-received (COMPLETED) standalone department
+  requisition dropped off (it only stayed if it had an unresolved supplier return).
+- **Fix (owner-approved; Phase 4):** added a collapsed **"Completed department POs"** section at the
+  bottom of the Purchasing tab. `purchasing/page.tsx` now also builds `completedDeptRows` = completed
+  standalone department requisitions (kind=department, no quotationId) **without** an open return
+  (those with an open return stay in the active list, as before). `purchasing-workspace.tsx` renders
+  them in a `<details>` block via the existing `PurchasingChain` (view / print / reconcile only — a
+  COMPLETED chain has no forward steps), searchable, independent of the top tab filter. Order-linked
+  bought-in POs already appear under their order group, so they're unaffected. **No P&L / workflow
+  logic changed.** Typecheck + lint clean.
+
 ## 2026-08-08 · Bought-to-Supplier workflow — verified vs owner spec + message consistency
 - **Owner-requested:** update the Bought-to-Supplier (bought-in) workflow (Delivery + Office Pick
   Up) for consistency across all roles' notifications / alarms / messages. **No P&L touched.**
