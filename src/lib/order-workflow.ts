@@ -590,9 +590,10 @@ export interface PendingStep {
  * caller knows it from the quotation lines (`isStockOnlyOrder`); pass it so the
  * "released" stage routes to the stock-release path instead.
  *
- * `engineerApprovesStock` marks a from-stock order whose lines are all in-house duct
- * hardware — the only case where an Engineer (as well as the Plant Manager) may
- * approve the release. When false, the stock-release approval step is Plant-Manager-only.
+ * `engineerApprovesStock` is vestigial (kept for signature stability): the from-stock
+ * release role now depends on the fulfilment mode — delivery = Plant Manager releases
+ * then Sales notifies; office pick up = Sales; plant pick up = Warehouse releases then
+ * Plant Manager approves — not on duct-hardware/Engineer gating.
  */
 export function pendingStep(
   wf: OrderWorkflow,
@@ -624,14 +625,14 @@ export function pendingStep(
       if (stockOnly) {
         // Office pick up: one step — Sales releases from stock and notifies the client.
         if (officePickup) {
-          return { action: "Release from stock & notify client", roles: [], sales: true };
+          return { action: "Release from Stock & Notify Client", roles: [], sales: true };
         }
         const released = !!wf.approvals.stock_released;
         if (plantPickup) {
           // Plant pick up: the Warehouse releases from stock, then the Plant Manager approves.
           return released
             ? { action: "Quality & Quantity Approved", roles: ["plant_manager"] }
-            : { action: "Release From Stock", roles: ["warehouse"] };
+            : { action: "Release from Stock", roles: ["warehouse"] };
         }
         // Delivery: the Plant Manager releases from stock, then Sales notifies the client.
         return released
@@ -685,7 +686,7 @@ export function pendingStep(
       // bought-in order (never at the plant) is checked by the Office-side actors.
       return boughtInOnly
         ? { action: "QC & Quantity Checked", roles: ["logistics", "payment_approver"], sales: true }
-        : { action: "Plant QC & quantity check", roles: ["plant_manager"] };
+        : { action: "Quality & Quantity Approved", roles: ["plant_manager"] };
     case "qa_plant_checked":
       if (plantPickup) return { action: "Make the delivery form", roles: ["warehouse"] };
       return { action: "Transfer items to office", roles: ["logistics"] };
@@ -702,7 +703,7 @@ export function pendingStep(
         ? { action: "Upload proof of pick up & approve", roles: [], sales: true }
         : { action: "Deliver the order", roles: ["logistics"] };
     case "delivered":
-      return { action: plantPickup ? "Approve POD – successful pick up" : "Approve proof of delivery (successful delivery)", roles: [], sales: true };
+      return { action: plantPickup || officePickup ? "Approve POD - Successful Pick Up" : "Approve POD - Successful Delivery", roles: [], sales: true };
     case "delivery_confirmed":
       // Plant pick up skips the surrender step — straight to Accounting confirming receipt.
       if (plantPickup) return { action: "Confirm documents received", roles: ["accounting"] };

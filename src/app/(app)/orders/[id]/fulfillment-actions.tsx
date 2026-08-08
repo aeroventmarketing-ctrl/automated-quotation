@@ -207,13 +207,13 @@ export function FulfillmentActions({
       {stage === "final_pay_cleared" &&
         (perms.canQaTest ? (
           <div className="space-y-1">
-            <p className="text-sm font-medium">Quality testing</p>
+            <p className="text-sm font-medium">{fromStock ? "Quality & quantity testing" : "Quality testing"}</p>
             <p className="text-xs text-muted-foreground">{officePickup ? "The item undergoes quality testing by the 2nd Quality Inspector." : fromStock ? "The item undergoes quality & quantity testing by the Warehouse." : "The item undergoes quality testing by the Technical Head or an approved Quality Inspector."}</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaTest(orderId))}>
               {busy ? "Saving…" : "Quality Tested-Passed"}
             </Button>
           </div>
-        ) : awaiting("to test quality", officePickup ? ["quality_inspector_2"] : fromStock ? ["warehouse"] : ["technical_head", "quality_inspector"], officePickup))}
+        ) : awaiting(fromStock ? "to test quality & quantity" : "to test quality", officePickup ? ["quality_inspector_2"] : fromStock ? ["warehouse"] : ["technical_head", "quality_inspector"], officePickup))}
 
       {/* Office pickup skips the plant-QC / transfer / Sales-2nd-QC steps and goes
           straight from the quality test to preparing the delivery documents. */}
@@ -226,7 +226,7 @@ export function FulfillmentActions({
         (perms.canQaPlant ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Plant Manager quality &amp; quantity check</p>
-            <p className="text-xs text-muted-foreground">The Plant Manager quality- and quantity-checks the order; only approved quality is transferred to the office.</p>
+            <p className="text-xs text-muted-foreground">The Plant Manager quality- and quantity-checks the order; only approved quality {plantPickup ? "is released for pick up at the plant." : "is transferred to the office."}</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaPlantCheck(orderId))}>
               {busy ? "Saving…" : "Quality & Quantity Approved"}
             </Button>

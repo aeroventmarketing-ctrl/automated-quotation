@@ -64,9 +64,9 @@ export const MULTIBATCH_STEPS: MBStepDef[] = [
   { key: "payment_checked", label: "Payment checked", done: "Payment checked", role: "accounting", collectsPayment: true },
   { key: "payment_confirmed", label: "Payment confirmed", done: "Payment confirmed", role: "payment_approver" },
   { key: "qa_tested", label: "Quality tested — pass", done: "Quality tested", role: "technical_head" },
-  { key: "qa_plant_checked", label: "Quality & quantity approved", done: "Plant QC & quantity passed", role: "plant_manager" },
-  { key: "qa_transferred", label: "Transferred to office", done: "Transferred to office", role: "logistics" },
-  { key: "qa_sales_checked", label: "Quality & quantity re-checked", done: "Sales 2nd QC & quantity passed", role: "sales" },
+  { key: "qa_plant_checked", label: "Quality & Quantity Approved", done: "Plant QC & quantity passed", role: "plant_manager" },
+  { key: "qa_transferred", label: "Transferred to Office", done: "Transferred to office", role: "logistics" },
+  { key: "qa_sales_checked", label: "Quality & Quantity Re-Checked", done: "Sales 2nd QC & quantity passed", role: "sales" },
   { key: "delivery_docs", label: "Save documents & approve delivery", done: "Delivery documents ready", role: "accounting" },
   { key: "delivered", label: "Mark delivered", done: "Delivered", role: "logistics" },
   { key: "delivery_confirmed", label: "Approve POD — successful delivery", done: "Delivery confirmed (successful delivery)", role: "sales" },
@@ -146,7 +146,7 @@ export const MULTIBATCH_PLANT_STOCK_STEPS: MBStepDef[] = MULTIBATCH_PLANT_PICKUP
  */
 export const MULTIBATCH_BOUGHTIN_STEPS: MBStepDef[] = MULTIBATCH_STEPS
   .filter((s) => s.key !== "qa_tested" && s.key !== "qa_plant_checked")
-  .map((s) => (s.key === "qa_sales_checked" ? { ...s, label: "Quality & quantity checked", done: "Quality & quantity checked" } : s));
+  .map((s) => (s.key === "qa_sales_checked" ? { ...s, label: "Quality & Quantity Checked", done: "Quality & quantity checked" } : s));
 
 /**
  * Bought-in office-pickup variant — the bought-in delivery flow, but the client
@@ -157,10 +157,10 @@ export const MULTIBATCH_BOUGHTIN_PICKUP_STEPS: MBStepDef[] = [
   { key: "client_notified", label: "Notify client — batch ready for pick up", done: "Client notified (batch ready)", role: "sales" },
   { key: "payment_checked", label: "Payment checked", done: "Payment checked", role: "accounting", collectsPayment: true },
   { key: "payment_confirmed", label: "Payment confirmed", done: "Payment confirmed", role: "payment_approver" },
-  { key: "qa_transferred", label: "Transferred to office", done: "Transferred to office", role: "logistics" },
-  { key: "qa_sales_checked", label: "Quality & quantity checked", done: "Quality & quantity checked", role: "sales" },
+  { key: "qa_transferred", label: "Transferred to Office", done: "Transferred to office", role: "logistics" },
+  { key: "qa_sales_checked", label: "Quality & Quantity Checked", done: "Quality & quantity checked", role: "sales" },
   { key: "delivery_docs", label: "Save documents & approve pick up", done: "Pick-up documents ready", role: "accounting" },
-  { key: "delivered", label: "Mark delivered — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
+  { key: "delivered", label: "Approve POD — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
   { key: "docs_surrendered", label: "Documents surrendered to accounting", done: "Signed documents surrendered", role: "sales" },
   { key: "docs_received", label: "Confirm documents received", done: "Documents received by accounting", role: "accounting" },
   { key: "docs_filed", label: "File documents — batch picked up", done: "Documents filed (partial pick up)", role: "accounting" },

@@ -14,6 +14,31 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Workflow consistency sweep — messages / banners / designations / trail
+- **Owner-requested:** make every message, notification and alarm consistent across the whole
+  sourcing × fulfilment matrix. Audited via 3 parallel review agents (single-batch text,
+  multi-batch tables, notifications/designations/stale wording).
+- **Real content fix:** the Plant-Manager quality-check step told **plant-pickup** orders their
+  goods "are transferred to the office" — corrected to "released for pick up at the plant"
+  (`fulfillment-actions.tsx`).
+- **Designations + audit trail now mode-aware** (`orders/[id]/page.tsx`): `APPROVAL_DESIGNATION`
+  and the `fTrail` labels reused the same stage keys with the wrong role for plant/office pickup.
+  Now: office-pickup `qa_tested` → 2nd Quality Inspector; plant-pickup `qa_transferred` →
+  Warehouse ("Delivery form made"), `qa_sales_checked` → Plant Manager ("Delivery approved"),
+  `delivered` → Warehouse; from-stock plant-pickup `client_notified` → Plant Manager; pickup
+  `delivered`/`delivery_confirmed` trail rows say "Picked up" / "Pick up confirmed".
+- **Banner ↔ button alignment** (`order-workflow.ts`): the qaPlantCheck "waiting for" banner is
+  now "Quality & Quantity Approved" on both paths (matches the button); the stock-release and
+  `delivered` banners match the button casing/wording; from-stock quality-test wording
+  consistently says "quality & quantity".
+- **Multi-batch table casing** (`delivery-multibatch.ts`): step labels Title-cased to match the
+  single-batch buttons (Transferred to Office, Quality & Quantity Approved/Re-Checked/Checked);
+  bought-in office-pickup delivered label aligned to "Approve POD — successful pick up".
+- **Stale comments/docstrings** refreshed (office pickup = from-stock **or bought-in**;
+  `engineerApprovesStock` marked vestigial; stock-release button casing standardised).
+- P&L untouched. Typecheck + lint clean. (Low-value cosmetic items — a couple of `done`-string
+  and coarse orders-list stage labels — left as-is.)
+
 ## 2026-08-08 · Bought-in (Bought to Supplier) workflows — Delivery + Office pick up
 - **Owner-requested (frozen Phase 5, owner-approved):** the bought-in Phase 5 is shorter than
   produced/from-stock — a bought-in order has **no plant quality steps**. After Final Payment

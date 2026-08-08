@@ -46,8 +46,7 @@ export function StockRelease({
   const [err, setErr] = useState<string | null>(null);
 
   const releaseLabel =
-    mode === "office_pickup" ? "Release from Stock and Notify Client"
-      : mode === "plant_pickup" ? "Release From Stock"
+    mode === "office_pickup" ? "Release from Stock & Notify Client"
       : "Release from Stock";
   const releaserPhrase = mode === "office_pickup" ? "Sales" : mode === "plant_pickup" ? "the Warehouse" : "the Plant Manager";
   const confirmLabel = mode === "plant_pickup" ? "Quality & Quantity Approved" : "Release from Stock & Notify Client";
