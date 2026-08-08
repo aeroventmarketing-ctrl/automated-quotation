@@ -14,6 +14,18 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · From-stock release picker — show the full variant + auto-match from the quotation
+- **Owner-requested:** in the stock-release matcher, an Office-supplied line (e.g. "AlphaAir Duct
+  Canvass Connector · Silicone · Per meter") showed only "AlphaAir Duct Canvass Connector" — the
+  **material (Silicone) was dropped**, and the line wasn't auto-matched to a stock item.
+- **Fix:** `orderStockLines` (Office-supplied branch) now names the line from the salesperson's full
+  **descriptionSnapshot** (flattened, brand-prefixed when missing) instead of `productLabel`
+  (brand+type+model). So the release line shows the full variant, mirroring the quotation, and the
+  fuller name lets the picker's auto-matcher (`autoMatchId`, substring/token match) select the
+  correct stock item automatically. **No P&L math changed** — `orderStockLines` only feeds the
+  release-picker display/matching (`isStockOnlyOrder` only checks its count). `department-pnl.ts`.
+  Typecheck + lint clean.
+
 ## 2026-08-08 · Fix: server error uploading the final-payment proof (perms mismatch)
 - **Bug:** uploading the Final payment proof (or Billing statement / closing docs) failed with the
   masked production error "An error occurred in the Server Components render…". Cause: the order
