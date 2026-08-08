@@ -14,6 +14,31 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Closing documents — VAT-appropriate labels everywhere
+- **Owner-requested:** the closing-document upload slots should be named by the tax
+  treatment (matching the counter-sales taxonomy), and consistently across every place
+  they appear (order Phase 5, quotation Sale panel, delivery-docs prep, multi-batch,
+  plant pick up):
+  - **VAT-inclusive** → **Delivery Receipt** + **Collection Receipt** (plus Sales Invoice
+    & BIR 2307).
+  - **VAT-exclusive** → **Delivery Form** + **Acknowledgement Form**.
+- **Centralised in `sale.ts`:** new `collectionReceiptLabel(vat)` / `deliveryDocLabel(vat)`
+  and a `vatLabel()` remapper. `afterPaymentDocTypes` and `deliveryUnsignedDocTypes` now
+  relabel the `or_cr_af` slot ("Collection Receipt"/"Acknowledgement Form") and the delivery
+  slot (`delivery_receipt`/`unsigned_dr` → "Delivery Receipt"/"Delivery Form") by VAT.
+  **Doc keys are unchanged**, so existing uploads stay valid — only the display labels move.
+  Every consumer already renders `t.label` from these helpers, so the change propagates
+  everywhere with no per-file edits.
+- **Plant pick up reconciled:** `plantDocTypes(false)` (VAT-exclusive) now pairs the
+  Warehouseman's **delivery form** with an **Acknowledgement Form** (`or_cr_af`) slot — this
+  revises the earlier "delivery form alone is enough" so VAT-exclusive plant matches the
+  general VAT-exclusive rule (Delivery Form + Acknowledgement Form). VAT-inclusive plant
+  relabelled to Collection Receipt + Delivery Receipt. Flagged to owner.
+- **Also:** `fulfillment-actions.tsx` plant "Make the delivery form" caption no longer says
+  "Delivery Receipt" (VAT-inclusive-specific) — now "prepares and attaches the delivery form".
+- **Where:** `sale.ts` (label helpers + `afterPaymentDocTypes`/`deliveryUnsignedDocTypes`/
+  `plantDocTypes`); `fulfillment-actions.tsx` (caption). Typecheck + lint clean.
+
 ## 2026-08-07 · Plant pick up — VAT-aware documents (delivery form vs closing docs)
 - **Owner-requested:** for plant pick up the **Warehouseman's delivery form** is a distinct
   document. **VAT-exclusive** → the delivery form alone is enough to close. **VAT-inclusive**

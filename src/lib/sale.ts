@@ -66,6 +66,29 @@ export const SALE_DOCS_AFTER_PAYMENTS: SaleDocType[] = [
 export const SALE_DOC_TYPES: SaleDocType[] = [...SALE_DOCS_BEFORE_PAYMENTS, ...SALE_DOCS_AFTER_PAYMENTS];
 
 /**
+ * VAT-appropriate labels for the two slots whose name depends on the tax
+ * treatment (mirrors the counter-sales taxonomy):
+ * - `or_cr_af` → **Collection Receipt** (VAT-inclusive) / **Acknowledgement Form**
+ *   (VAT-exclusive).
+ * - the delivery document → **Delivery Receipt** (VAT-inclusive) / **Delivery Form**
+ *   (VAT-exclusive).
+ * The underlying doc keys never change, so existing uploads stay valid.
+ */
+export const collectionReceiptLabel = (vatInclusive: boolean) =>
+  vatInclusive ? "Collection Receipt" : "Acknowledgement Form";
+export const deliveryDocLabel = (vatInclusive: boolean) =>
+  vatInclusive ? "Delivery Receipt" : "Delivery Form";
+
+/** Apply the VAT-appropriate label to a slot (leaves other slots untouched). */
+function vatLabel(t: SaleDocType, vatInclusive: boolean): SaleDocType {
+  if (t.key === "or_cr_af" || t.key === "unsigned_or_cr_af")
+    return { ...t, label: collectionReceiptLabel(vatInclusive) };
+  if (t.key === "delivery_receipt" || t.key === "unsigned_dr")
+    return { ...t, label: deliveryDocLabel(vatInclusive) };
+  return t;
+}
+
+/**
  * Unsigned client documents attached when preparing the delivery documents
  * (before the client signs). Stored under their own keys, separate from the
  * signed closing documents. Sales Invoice only applies to VAT-inclusive deals.
@@ -76,18 +99,22 @@ export const DELIVERY_UNSIGNED_DOCS: SaleDocType[] = [
   { key: "unsigned_dr", label: "Delivery Receipt / Delivery Form", required: false },
 ];
 export function deliveryUnsignedDocTypes(vatInclusive: boolean): SaleDocType[] {
-  return DELIVERY_UNSIGNED_DOCS.filter((t) => vatInclusive || t.key !== "unsigned_si");
+  return DELIVERY_UNSIGNED_DOCS.filter((t) => vatInclusive || t.key !== "unsigned_si").map((t) =>
+    vatLabel(t, vatInclusive),
+  );
 }
 
 /**
  * The after-payment (closing) document slots that apply to a transaction. For
  * VAT-exclusive deals the Sales Invoice and BIR 2307 aren't required, so those
- * slots are hidden. VAT-inclusive shows all four.
+ * slots are hidden — leaving the **Delivery Form** and **Acknowledgement Form**.
+ * VAT-inclusive shows all four (Sales Invoice, **Collection Receipt**, **Delivery
+ * Receipt**, BIR 2307).
  */
 export function afterPaymentDocTypes(vatInclusive: boolean): SaleDocType[] {
   return SALE_DOCS_AFTER_PAYMENTS.filter(
     (t) => vatInclusive || (t.key !== "sales_invoice" && t.key !== "bir_2307"),
-  );
+  ).map((t) => vatLabel(t, vatInclusive));
 }
 
 /**
@@ -106,18 +133,18 @@ export function closeDocsState(docs: Record<string, SaleDoc[]> | undefined, vatI
 
 /**
  * Plant pick up closing documents. The **delivery form** (made by the Warehouseman)
- * is always required. For a **VAT-inclusive** order Accounting also makes the Sales
- * Invoice, OR/CR/AF and Delivery Receipt. For **VAT-exclusive** the delivery form is
- * enough.
+ * is always required. For a **VAT-exclusive** order it is paired with the
+ * **Acknowledgement Form**. For a **VAT-inclusive** order Accounting also makes the
+ * Sales Invoice, **Collection Receipt** and **Delivery Receipt**.
  */
 export function plantDocTypes(vatInclusive: boolean): SaleDocType[] {
   const form: SaleDocType = { key: "delivery_form", label: "Delivery form (Warehouseman)", required: true };
-  if (!vatInclusive) return [form];
+  if (!vatInclusive) return [form, { key: "or_cr_af", label: collectionReceiptLabel(false), required: true }];
   return [
     form,
     { key: "sales_invoice", label: "Sales Invoice", required: true },
-    { key: "or_cr_af", label: "OR / CR / AF", required: true },
-    { key: "delivery_receipt", label: "Delivery Receipt", required: true },
+    { key: "or_cr_af", label: collectionReceiptLabel(true), required: true },
+    { key: "delivery_receipt", label: deliveryDocLabel(true), required: true },
   ];
 }
 export function plantCloseState(docs: Record<string, SaleDoc[]> | undefined, vatInclusive: boolean) {

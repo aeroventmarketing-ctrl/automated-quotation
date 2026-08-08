@@ -225,7 +225,7 @@ export function FulfillmentActions({
         (perms.canQaTransfer ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Make the delivery form</p>
-            <p className="text-xs text-muted-foreground">The Warehouseman attaches the Delivery Receipt (the delivery form).</p>
+            <p className="text-xs text-muted-foreground">The Warehouseman prepares and attaches the delivery form.</p>
             <PlantDocStep orderId={orderId} kind="form" initialFiles={closeDocs["delivery_form"] ?? []} admin={admin} />
           </div>
         ) : awaiting("to make the delivery form", ["warehouse"]))}
