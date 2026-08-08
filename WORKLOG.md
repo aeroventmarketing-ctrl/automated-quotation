@@ -14,6 +14,27 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Bought-to-Supplier workflow — verified vs owner spec + message consistency
+- **Owner-requested:** update the Bought-to-Supplier (bought-in) workflow (Delivery + Office Pick
+  Up) for consistency across all roles' notifications / alarms / messages. **No P&L touched.**
+- **Audit result:** the implemented flow already matches the owner's 40-step spec end-to-end —
+  Phase 4 cash-voucher chain (steps 9–19: Approve Purchase → Voucher & Check Prepared → Signed →
+  Cash Released → Give to Purchaser → Confirm → Give to Logistics & Distribute → Logistics Confirm
+  → Item Bought → Check & Approve), Phase 5 (final payment → **Transferred to Office** → Sales
+  **Quality & Quantity Checked** → **Save Documents & Approve Delivery** → Mark Delivered / **Approve
+  POD - Successful Pick Up** for office pickup which is one combined Sales step via
+  `approvePickupDelivery` → surrender → confirm → **File Documents-Close Order**), and Phase 6
+  commission (Approve Amount → Prepare Voucher → Approve Voucher → Release Budget → Mark Received →
+  Upload Signed Voucher). `confirmFinalPayment` lands bought-in at `qa_plant_checked`, so both
+  delivery & office pickup run transfer → Sales QC → prepare docs. Sequence, roles & button labels
+  all align; **no functional change needed.**
+- **Fixed (label consistency only):** the "notify client" button read **"Notify client – order
+  ready"** on the bought-in Phase 2 panel but **"Notify Client - Order Ready"** on the produced
+  path → aligned both (`bought-in-production.tsx`). The delivery POD button read **"Approve
+  POD-Successful Delivery"** (no spaces) while its own waiting-for banner and the pick-up variant use
+  the spaced form → aligned to **"Approve POD - Successful Delivery"** (`fulfillment-actions.tsx`).
+  Typecheck + lint clean.
+
 ## 2026-08-08 · PO form — auto-fill Avesco when a KDK product is on the line
 - **Owner-requested:** KDK products (e.g. KDK Ceiling Cassette) are always sourced from **Avesco**,
   so a new Purchase Order that carries a KDK item should auto-fill the supplier with Avesco's details
