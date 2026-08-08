@@ -1266,13 +1266,14 @@ export async function notifyClientBoughtInOrder(quotationId: string): Promise<vo
   });
 }
 
-/** Who may release a from-stock order — the Warehouse or the Fans & Blowers head. */
-const STOCK_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse", "prod_head_fans"];
+/** Who may release a from-stock order — the Warehouse (the Fans & Blowers head has
+ *  no authority to release stock items). */
+const STOCK_RELEASE_ROLES: WorkflowRoleKey[] = ["warehouse"];
 
 /**
  * A from-stock order (in-house duct hardware, nothing fabricated, nothing bought
  * from a supplier) is fulfilled by issuing the goods from Fans & Blowers on-hand
- * stock. The Warehouse or Fans head matches each line to a stock item and releases
+ * stock. The Warehouse matches each line to a stock item and releases
  * it here: inventory is deducted (an ISSUE movement is the stock record) and the
  * order jumps straight to Phase 5 (final payment → deliver / client pickup),
  * skipping production and the supplier PO — mirrors notifyClientBoughtInOrder.
@@ -1335,7 +1336,7 @@ export async function releaseOrderFromStock(quotationId: string, matches: StockM
     }
   } else {
     if (!(isAdmin(user) || STOCK_RELEASE_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r)))) {
-      throw new Error("Only the Warehouse, Fans & Blowers head or an admin can release from stock.");
+      throw new Error("Only the Warehouse or an admin can release from stock.");
     }
     // The Plant Manager must approve the release before the warehouse issues the stock.
     if (!wf.approvals.stock_release_approved) {

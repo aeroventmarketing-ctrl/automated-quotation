@@ -614,8 +614,8 @@ export function pendingStep(
       return { action: "Payment Cleared", roles: ["payment_approver"] };
     case "released": {
       // From-stock order: the Plant Manager or an Engineer approves the release,
-      // then the Warehouse (or Fans & Blowers head) issues it from inventory. No
-      // job order and no purchase order.
+      // then the Warehouse issues it from inventory (the Fans & Blowers head has no
+      // authority to release stock items). No job order and no purchase order.
       if (stockOnly) {
         // Office pickup: one step — the Engineer releases from stock and notifies
         // the client (no separate approval, and not the Plant Manager).
@@ -623,7 +623,7 @@ export function pendingStep(
           return { action: "Release from stock & notify client", roles: [], engineer: true };
         }
         return wf.approvals.stock_release_approved
-          ? { action: "Release from stock", roles: ["warehouse", "prod_head_fans"] }
+          ? { action: "Release from stock", roles: ["warehouse"] }
           : { action: "Approve stock release", roles: ["plant_manager"] };
       }
       if (boughtIn) {

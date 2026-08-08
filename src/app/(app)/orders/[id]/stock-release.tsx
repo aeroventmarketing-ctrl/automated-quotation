@@ -9,9 +9,10 @@ import { releaseOrderFromStock, approveStockRelease } from "../actions";
 /**
  * Phase 2 card for a from-stock order (in-house duct hardware — angle corner,
  * cleats, clips — nothing fabricated or bought from a supplier). The Plant Manager
- * or an Engineer approves the release first; then the Warehouse / Fans & Blowers head
- * matches each line to a stock item and releases it: inventory is deducted and the
- * order jumps to Phase 5. Mirrors the MRF release picker.
+ * or an Engineer approves the release first; then the Warehouse matches each line to
+ * a stock item and releases it (the Fans & Blowers head has no authority to release
+ * stock): inventory is deducted and the order jumps to Phase 5. Mirrors the MRF
+ * release picker.
  */
 export function StockRelease({
   orderId,
@@ -121,9 +122,9 @@ export function StockRelease({
           <p className="text-xs text-emerald-700 dark:text-emerald-400">
             Stock release approved{approvedByName ? ` — ${approvedByName}` : ""}.
           </p>
-          {/* Step 2 — Warehouse / Fans releases from stock. */}
+          {/* Step 2 — Warehouse releases from stock. */}
           {!canRelease ? (
-            <p className="text-xs text-muted-foreground">Awaiting the Warehouse / Fans &amp; Blowers to release the stock.</p>
+            <p className="text-xs text-muted-foreground">Awaiting the Warehouse to release the stock.</p>
           ) : open ? (
             <StockMatchPanel
               lines={lines.map((l) => ({ label: `${l.qty} pcs · ${l.name}`, qtyDefault: String(l.qty) }))}

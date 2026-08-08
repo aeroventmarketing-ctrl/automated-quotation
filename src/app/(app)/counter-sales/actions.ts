@@ -13,6 +13,7 @@ import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import {
   counterTotals,
   coerceCounterDocs,
+  coerceCounterVatMode,
   counterDocSlots,
   formatCounterSaleNumber,
   isCashMethod,
@@ -88,7 +89,7 @@ async function resolveCustomer(tx: Prisma.TransactionClient, input: CounterSaleI
 /** Create a draft counter sale and open it. The number is claimed on completion. */
 export async function createCounterSale(input: CounterSaleInput): Promise<void> {
   const user = await requireViewer();
-  const vatMode: CounterSaleVatMode = input.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE";
+  const vatMode: CounterSaleVatMode = coerceCounterVatMode(input.vatMode);
   if (!PAYMENT_METHODS.some((m) => m.key === input.paymentMethod)) throw new Error("Choose a payment method.");
   const items = cleanItems(input.items);
   if (items.length === 0) throw new Error("Add at least one item to sell.");
@@ -139,7 +140,7 @@ export async function updateCounterSale(id: string, input: Omit<CounterSaleInput
   const sale = await prisma.counterSale.findUnique({ where: { id }, select: { status: true } });
   if (!sale) throw new Error("Sale not found.");
   if (sale.status !== "DRAFT") throw new Error("Only a draft sale can be edited.");
-  const vatMode: CounterSaleVatMode = input.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE";
+  const vatMode: CounterSaleVatMode = coerceCounterVatMode(input.vatMode);
   if (!PAYMENT_METHODS.some((m) => m.key === input.paymentMethod)) throw new Error("Choose a payment method.");
   const items = cleanItems(input.items);
   if (items.length === 0) throw new Error("Add at least one item to sell.");
@@ -400,7 +401,7 @@ export async function adminEditCounterSale(id: string, input: Omit<CounterSaleIn
   if (!isAdmin(user)) throw new Error("Only an admin can edit a finalized sale.");
   const sale = await prisma.counterSale.findUnique({ where: { id }, include: { items: true } });
   if (!sale) throw new Error("Sale not found.");
-  const vatMode: CounterSaleVatMode = input.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : "INCLUSIVE";
+  const vatMode: CounterSaleVatMode = coerceCounterVatMode(input.vatMode);
   if (!PAYMENT_METHODS.some((m) => m.key === input.paymentMethod)) throw new Error("Choose a payment method.");
   const items = cleanItems(input.items);
   if (items.length === 0) throw new Error("Add at least one item to sell.");

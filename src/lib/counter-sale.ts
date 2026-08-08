@@ -11,8 +11,20 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-export type CounterSaleVatMode = "INCLUSIVE" | "EXCLUSIVE";
+export type CounterSaleVatMode = "INCLUSIVE" | "EXCLUSIVE" | "ZERO_RATED";
 export type CounterSaleStatusKey = "DRAFT" | "COMPLETED" | "VOID";
+
+/** Coerce any stored/incoming value to a known VAT mode (defaults to INCLUSIVE). */
+export function coerceCounterVatMode(v: unknown): CounterSaleVatMode {
+  return v === "EXCLUSIVE" || v === "ZERO_RATED" ? v : "INCLUSIVE";
+}
+
+/** Short + long badge labels per VAT mode. */
+export const COUNTER_VAT_LABEL: Record<CounterSaleVatMode, { short: string; long: string }> = {
+  INCLUSIVE: { short: "VAT incl.", long: "VAT Inclusive" },
+  EXCLUSIVE: { short: "VAT excl.", long: "VAT Exclusive" },
+  ZERO_RATED: { short: "Zero-rated", long: "VAT Zero-Rated" },
+};
 
 export const COUNTER_STATUS_LABEL: Record<CounterSaleStatusKey, string> = {
   DRAFT: "Draft",
@@ -35,8 +47,9 @@ export interface CounterTotals {
 /**
  * Totals for a counter sale. Entered unit prices are what the client pays.
  * INCLUSIVE: the price includes 12% VAT (VAT is backed out for the invoice).
- * EXCLUSIVE: a non-VAT sale (Delivery Form + Acknowledgement Form) — no VAT line,
- * so subtotal = total.
+ * EXCLUSIVE: a non-VAT sale (Delivery Form + Acknowledgement Form) — no VAT line.
+ * ZERO_RATED: a zero-rated sale — the price IS the total, 0% output VAT (usually
+ * 1% EWT withheld); like EXCLUSIVE there's no VAT line, so subtotal = total.
  */
 export function counterTotals(
   lines: CounterLineInput[],
@@ -86,23 +99,27 @@ export interface CounterDocSlot {
 /**
  * Documents handed over, by VAT mode. Record-and-upload — the printed document
  * is attached (its number typed in the note), nothing is generated.
- *   INCLUSIVE → Sales Invoice + Collection Receipt + Delivery Receipt (+ BIR 2307)
- *   EXCLUSIVE → Delivery Form + Acknowledgement Form (+ BIR 2307)
- * BIR 2307 is optional in both — attached only when the client carries one.
+ *   INCLUSIVE  → Sales Invoice + Collection Receipt + Delivery Receipt (+ BIR 2307)
+ *   ZERO_RATED → Sales Invoice + Collection Receipt + Delivery Receipt + EWT (BIR 2307)
+ *   EXCLUSIVE  → Delivery Form + Acknowledgement Form (+ BIR 2307)
+ * BIR 2307 is optional for INCLUSIVE / EXCLUSIVE (attached only when the client
+ * carries one); for ZERO_RATED the EWT (BIR 2307) is expected, so it's not optional.
  */
 export function counterDocSlots(vatMode: CounterSaleVatMode): CounterDocSlot[] {
-  const slots: CounterDocSlot[] =
-    vatMode === "INCLUSIVE"
-      ? [
-          { key: "sales_invoice", label: "Sales Invoice" },
-          { key: "collection_receipt", label: "Collection Receipt" },
-          { key: "delivery_receipt", label: "Delivery Receipt" },
-        ]
-      : [
-          { key: "delivery_form", label: "Delivery Form" },
-          { key: "acknowledgement_form", label: "Acknowledgement Form" },
-        ];
-  return [...slots, { key: "bir_2307", label: "BIR 2307", optional: true }];
+  if (vatMode === "EXCLUSIVE") {
+    return [
+      { key: "delivery_form", label: "Delivery Form" },
+      { key: "acknowledgement_form", label: "Acknowledgement Form" },
+      { key: "bir_2307", label: "BIR 2307", optional: true },
+    ];
+  }
+  const zeroRated = vatMode === "ZERO_RATED";
+  return [
+    { key: "sales_invoice", label: "Sales Invoice" },
+    { key: "collection_receipt", label: "Collection Receipt" },
+    { key: "delivery_receipt", label: "Delivery Receipt" },
+    { key: "bir_2307", label: zeroRated ? "BIR 2307 (EWT)" : "BIR 2307", optional: !zeroRated },
+  ];
 }
 
 /** Coerce a stored docs blob into a clean Record<slotKey, SaleDoc[]>. */

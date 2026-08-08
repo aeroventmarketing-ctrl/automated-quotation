@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { getCounterSaleViewer } from "@/lib/counter-sale-access";
-import { COUNTER_STATUS_LABEL, paymentMethodLabel, type CounterSaleStatusKey } from "@/lib/counter-sale";
+import { COUNTER_STATUS_LABEL, COUNTER_VAT_LABEL, paymentMethodLabel, coerceCounterVatMode, type CounterSaleStatusKey } from "@/lib/counter-sale";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +58,7 @@ export default async function CounterSalesPage() {
                     <Link href={`/counter-sales/${s.id}`} className="-mx-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-2.5 hover:bg-accent">
                       <span className="w-32 shrink-0 font-mono text-xs text-muted-foreground">{s.saleNumber ?? "Draft"}</span>
                       <span className="min-w-0 flex-1 truncate font-medium">{s.customer.company}</span>
-                      <Badge variant={s.vatMode === "INCLUSIVE" ? "secondary" : "default"} className="font-normal">{s.vatMode === "INCLUSIVE" ? "VAT incl." : "VAT excl."}</Badge>
+                      <Badge variant={s.vatMode === "INCLUSIVE" ? "secondary" : "default"} className="font-normal">{COUNTER_VAT_LABEL[coerceCounterVatMode(s.vatMode)].short}</Badge>
                       <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{s._count.items} item{s._count.items === 1 ? "" : "s"}</span>
                       <span className="shrink-0 text-xs text-muted-foreground">{paymentMethodLabel(s.paymentMethod)}</span>
                       {uncleared && <Badge variant="warning" className="font-normal">Uncleared</Badge>}
