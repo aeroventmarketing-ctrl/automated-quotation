@@ -641,7 +641,9 @@ export function pendingStep(
         return { action: "Release from Stock & Notify Client", roles: [], sales: true };
       }
       if (boughtIn) {
-        return { action: "Prepare & process the Purchase Order", roles: ["purchaser", "technical_head"] };
+        // The Purchaser prepares & processes the PO (savePurchaseOrder is Purchaser /
+        // admin only) — the Technical Head has no action here, so isn't an approver.
+        return { action: "Prepare & process the Purchase Order", roles: ["purchaser"] };
       }
       return { action: "Issue job orders", roles: ["technical_head"] };
     }

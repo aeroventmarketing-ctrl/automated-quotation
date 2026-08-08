@@ -14,6 +14,16 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Bought-in "Prepare & process the PO" — drop Technical Head from approvers
+- **Owner-requested:** the Phase 4 "Prepare & process the Purchase Order" step (bought-in `released`
+  stage) listed **Purchaser + Technical Head** as approvers, but `savePurchaseOrder` is **Purchaser /
+  admin only** — the Technical Head has no action there. Remove it.
+- **Fix:** `pendingStep` bought-in `released` branch now returns `roles: ["purchaser"]` (was
+  `["purchaser", "technical_head"]`) in `src/lib/order-workflow.ts`. This drives the order-page
+  APPROVERS line, the alarms and the dashboard "waiting for", so all now show only the Purchaser —
+  matching who can actually act. **No P&L / authorization change** (the server gate was already
+  Purchaser/admin). Typecheck + lint clean.
+
 ## 2026-08-08 · PO price matcher — format-tolerant (word order / separators / model code)
 - **Owner-requested (chose option 3):** a PO line "KDK Ceiling Cassette · 32CHH" didn't match a
   catalogue product named "CEILING CASSETTE - KDK - 32CHH", so the Avesco price didn't auto-fill.
