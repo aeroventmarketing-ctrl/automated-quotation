@@ -3227,7 +3227,7 @@ export async function setOfficePickup(quotationId: string, enabled: boolean): Pr
 /**
  * Set the order's fulfilment/handover mode (delivery / office pick up / plant pick
  * up) — the 3-way selector on the Phase 2 card. Availability depends on the order's
- * contents: office pick up = from-stock only; plant pick up = goods at the plant
+ * contents: office pick up = from-stock or bought-in; plant pick up = goods at the plant
  * (produced or from-stock, never bought-in-only). An admin can change it any time; a
  * non-admin (salesperson) can only change it before the order leaves Phase 2.
  */

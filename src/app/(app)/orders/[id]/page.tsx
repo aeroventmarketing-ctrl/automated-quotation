@@ -315,9 +315,25 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // a supplier) is released from Fans & Blowers stock in Phase 2 instead of job
   // orders or a PO. Like bought-in, it skips production and Office-side roles run QA.
   const stockOnly = isStockOnlyOrder(quote.items) && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
-  // A from-stock order's quality test is run by the Warehouse (not the Technical
-  // Head / Quality Inspector), so its sign-off shows the Warehouse designation.
-  if (stockOnly) APPROVAL_DESIGNATION.qa_tested = workflowRoleLabel("warehouse");
+  // Sign-off designations vary by fulfilment mode / sourcing — the same stage key is
+  // performed by a different role across delivery / office pick up / plant pick up.
+  {
+    const _office = wf.officePickup === true;
+    const _plant = wf.fulfillmentMode === "plant_pickup";
+    // Quality test: office pick up = 2nd Quality Inspector; from-stock (delivery/plant) = Warehouse.
+    if (_office) APPROVAL_DESIGNATION.qa_tested = workflowRoleLabel("quality_inspector_2");
+    else if (stockOnly) APPROVAL_DESIGNATION.qa_tested = workflowRoleLabel("warehouse");
+    if (_plant) {
+      // Plant pick up reuses the QA stage keys for different actors: the Warehouse makes
+      // the delivery form (qa_transferred), the Plant Manager approves delivery
+      // (qa_sales_checked), and the Warehouse uploads the proof of pick up (delivered).
+      APPROVAL_DESIGNATION.qa_transferred = workflowRoleLabel("warehouse");
+      APPROVAL_DESIGNATION.qa_sales_checked = workflowRoleLabel("plant_manager");
+      APPROVAL_DESIGNATION.delivered = workflowRoleLabel("warehouse");
+      // From-stock plant pick up notifies the client via the Plant Manager's release approval.
+      if (stockOnly) APPROVAL_DESIGNATION.client_notified = workflowRoleLabel("plant_manager");
+    }
+  }
   const stockLines = stockOnly ? orderStockLines(quote.items) : [];
   // Retained for the pendingStep signature; the from-stock release role now depends on
   // the fulfilment mode (delivery → PM releases + Sales notifies; office pickup → Sales;
@@ -436,11 +452,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     fStamp("Final payment confirmed", "final_pay_confirmed", A.final_pay_confirmed),
     fStamp("Quality tested", "qa_tested", A.qa_tested),
     fStamp("Plant QC & quantity passed", "qa_plant_checked", A.qa_plant_checked),
-    fStamp("Transferred to office", "qa_transferred", A.qa_transferred),
-    fStamp(boughtInOnly ? "Quality & quantity checked" : "Sales 2nd QC & quantity passed", "qa_sales_checked", A.qa_sales_checked),
+    // Plant pick up reuses these QA keys for the delivery-form / approve-delivery steps.
+    fStamp(plantPick ? "Delivery form made" : "Transferred to office", "qa_transferred", A.qa_transferred),
+    fStamp(plantPick ? "Delivery approved" : boughtInOnly ? "Quality & quantity checked" : "Sales 2nd QC & quantity passed", "qa_sales_checked", A.qa_sales_checked),
     fStamp("Delivery approved", "delivery_approved", A.delivery_approved),
-    fStamp("Delivered", "delivered", A.delivered),
-    fStamp("Delivery confirmed", "delivery_confirmed", A.delivery_confirmed),
+    fStamp(plantPick || wf.officePickup === true ? "Picked up" : "Delivered", "delivered", A.delivered),
+    fStamp(plantPick || wf.officePickup === true ? "Pick up confirmed" : "Delivery confirmed", "delivery_confirmed", A.delivery_confirmed),
     fStamp("Documents surrendered", "docs_surrendered", A.docs_surrendered),
     fStamp("Documents received", "docs_received", A.docs_received),
     fStamp("Documents filed", "documents_filed", A.documents_filed),
@@ -511,8 +528,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // salesperson or an admin.
   const officePickup = wf.officePickup === true;
   // Fulfilment/handover mode (Delivery / Office pick up / Plant pick up). The
-  // selector offers the modes the order's items allow: office pick up = from-stock;
-  // plant pick up = goods at the plant (not bought-in-only). An admin can change it
+  // selector offers the modes the order's items allow: office pick up = from-stock or
+  // bought-in; plant pick up = goods at the plant (not bought-in-only). An admin can change it
   // any time; a non-admin (the salesperson) only while the order is still in Phase 2.
   const pickupWindowOpen = stageIndex(wf.stage) <= stageIndex("released");
   const canSetMode = adminViewer || (isPreparerViewer && pickupWindowOpen);
