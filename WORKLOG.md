@@ -14,6 +14,22 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Documents — full two-way mirror between quotation & order tabs
+- **Owner-requested:** whatever document is on the quotations tab must reflect on the orders-tab
+  workflow and vice versa. Storage was already shared (`sale.docs` in the quote JSON), but the
+  **display** was one-directional: several order-workflow documents never surfaced back on the
+  quotation tab (and two didn't show in the order's own read-only Documents list).
+- **Fix (display-only — no workflow/gate/role/P&L change):**
+  - `sale-document-list.tsx` (order read-only): now also lists **Billing statement**
+    (`billing_statement`) and the plant pick up **Delivery form** (`delivery_form`).
+  - Quotation `page.tsx`: renders the same `SaleDocumentList` so **every** order document (PO,
+    closing docs, unsigned delivery docs, plant delivery form, billing statement, final payment,
+    proof of delivery) is visible/downloadable on the quotation tab too.
+  - `batch-document-list.tsx` (quotation per-batch mirror): now also shows each batch's **Proof of
+    delivery** (`b.pod`) and plant **Delivery form**.
+  - Client-restricted (shop-floor) users are already blocked from the quotation page, so no viewer
+    gains new document access. Typecheck + lint clean.
+
 ## 2026-08-08 · Fulfilment-mode selector — broaden who can change it
 - **Owner-requested:** the Phase 2 fulfilment selector (Delivery / Office pick up / Plant pick up)
   should be pressable by **Sales, Admin, Payment Approver or Engineer** — previously only the admin
