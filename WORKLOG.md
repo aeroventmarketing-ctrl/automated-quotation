@@ -14,6 +14,29 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Counter-sale zero-rated + Fans head can't release stock
+- **Two owner-requested changes:**
+- **(1) Counter sales gains the zero-rated VAT mode** (parity with the quotation builder).
+  `CounterSaleVatMode` adds `ZERO_RATED`; new `coerceCounterVatMode` + `COUNTER_VAT_LABEL`
+  helpers. Totals: like EXCLUSIVE, the entered price IS the total, 0% VAT (`counterTotals`
+  else branch already handled it). Docs (`counterDocSlots`): zero-rated hands over **Sales
+  Invoice + Collection Receipt + Delivery Receipt + EWT (BIR 2307)** — same SI/CR/DR as
+  inclusive, but the BIR 2307 (EWT) is **not optional** for zero-rated. Dropdown option added
+  to the create form and the admin-edit; detail + list badges and the doc description line use
+  the new label. Actions coerce all three modes. **Management P&L:** a zero-rated counter sale
+  charges **no output VAT** (both `cs.vatMode !== "EXCLUSIVE"` output-VAT checks → `=== "INCLUSIVE"`).
+  Files: `lib/counter-sale.ts`, `counter-sales/actions.ts`, `counter-sale-form.tsx`,
+  `counter-sale-admin-edit.tsx`, `counter-sales/[id]/page.tsx`, `counter-sales/page.tsx`,
+  `management/pnl-actions.ts`.
+- **(2) Fans & Blowers head can no longer release from stock** (owner-approved, frozen Phase 2).
+  Items manufactured by Fans & Blowers are released from stock by the **Warehouse only** (the
+  Fans & Blowers head has no authority). Removed `prod_head_fans` from: the "Release from stock"
+  approvers banner (`order-workflow.ts` pendingStep), the release authorization
+  (`STOCK_RELEASE_ROLES` in `orders/actions.ts` + its error text), and the UI gate
+  (`canReleaseStock` in `orders/[id]/page.tsx`). Updated the user-facing "Awaiting the
+  Warehouse to release the stock" wording in `stock-release.tsx`. Plant-Manager/Engineer
+  approval step is unchanged. Typecheck + lint clean.
+
 ## 2026-08-08 · New VAT presentation — "VAT exclusive zero rated"
 - **Owner-requested:** add a 4th VAT presentation to the quotation builder, **VAT
   exclusive zero rated** — the total is the **same figure as VAT inclusive** (the entered

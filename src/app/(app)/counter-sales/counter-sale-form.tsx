@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, isNextControlFlowError } from "@/lib/utils";
-import { PAYMENT_METHODS } from "@/lib/counter-sale";
+import { PAYMENT_METHODS, type CounterSaleVatMode } from "@/lib/counter-sale";
 import { createCounterSale, type CounterSaleItemInput } from "./actions";
 
 interface StockOpt { id: string; name: string; unit: string; sellPrice: number; quantity: number; sku: string | null; category: string | null; location: string | null }
@@ -48,7 +48,7 @@ export function CounterSaleForm({
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
 
-  const [vatMode, setVatMode] = useState<"INCLUSIVE" | "EXCLUSIVE">("INCLUSIVE");
+  const [vatMode, setVatMode] = useState<CounterSaleVatMode>("INCLUSIVE");
   const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHODS[0].key);
   const [salespersonId, setSalespersonId] = useState("");
   const [notes, setNotes] = useState("");
@@ -331,9 +331,10 @@ export function CounterSaleForm({
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1">
               <Label className="text-xs">VAT Presentation</Label>
-              <Select value={vatMode} onChange={(e) => setVatMode(e.target.value as "INCLUSIVE" | "EXCLUSIVE")}>
+              <Select value={vatMode} onChange={(e) => setVatMode(e.target.value as CounterSaleVatMode)}>
                 <option value="INCLUSIVE">VAT Inclusive (SI + CR + DR)</option>
                 <option value="EXCLUSIVE">VAT Exclusive (Delivery Form + Acknowledgement)</option>
+                <option value="ZERO_RATED">VAT Exclusive Zero Rated (SI + CR + DR + EWT)</option>
               </Select>
             </div>
             <div className="space-y-1">

@@ -6,7 +6,7 @@ import { Pencil, Trash2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { PAYMENT_METHODS } from "@/lib/counter-sale";
+import { PAYMENT_METHODS, type CounterSaleVatMode } from "@/lib/counter-sale";
 import { adminEditCounterSale, adminDeleteCounterSale, type CounterSaleItemInput } from "./actions";
 
 interface EditLine { stockItemId: string | null; description: string; unit: string; qty: string; unitPrice: string }
@@ -23,7 +23,7 @@ export function CounterSaleAdminEdit({
 }: {
   saleId: string;
   initial: {
-    vatMode: "INCLUSIVE" | "EXCLUSIVE";
+    vatMode: CounterSaleVatMode;
     paymentMethod: string;
     salespersonId: string | null;
     notes: string;
@@ -106,9 +106,10 @@ export function CounterSaleAdminEdit({
       </div>
       <div className="flex flex-wrap gap-2">
         <label className="flex items-center gap-1 text-xs text-muted-foreground">VAT
-          <Select className="h-8" value={vatMode} onChange={(e) => setVatMode(e.target.value as "INCLUSIVE" | "EXCLUSIVE")}>
+          <Select className="h-8" value={vatMode} onChange={(e) => setVatMode(e.target.value as CounterSaleVatMode)}>
             <option value="INCLUSIVE">Inclusive</option>
             <option value="EXCLUSIVE">Exclusive</option>
+            <option value="ZERO_RATED">Zero-rated</option>
           </Select>
         </label>
         <label className="flex items-center gap-1 text-xs text-muted-foreground">Payment

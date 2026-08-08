@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 import { getCounterSaleViewer } from "@/lib/counter-sale-access";
 import {
   COUNTER_STATUS_LABEL,
+  COUNTER_VAT_LABEL,
   counterDocSlots,
   coerceCounterDocs,
   paymentMethodLabel,
@@ -63,7 +64,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
             <span className="text-muted-foreground">/</span>
             <h1 className="font-mono text-base font-semibold">{sale.saleNumber ?? "Draft sale"}</h1>
             <Badge variant={STATUS_VARIANT[status]} className="font-normal">{COUNTER_STATUS_LABEL[status]}</Badge>
-            <Badge variant={vatMode === "INCLUSIVE" ? "secondary" : "default"} className="font-normal">{vatMode === "INCLUSIVE" ? "VAT Inclusive" : "VAT Exclusive"}</Badge>
+            <Badge variant={vatMode === "INCLUSIVE" ? "secondary" : "default"} className="font-normal">{COUNTER_VAT_LABEL[vatMode].long}</Badge>
             {uncleared && <Badge variant="warning" className="font-normal">Payment Uncleared</Badge>}
           </div>
           <p className="mt-0.5 text-sm text-muted-foreground">
@@ -157,6 +158,8 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
           <p className="mb-2 text-xs text-muted-foreground">
             {vatMode === "INCLUSIVE"
               ? "VAT-inclusive: Sales Invoice, Collection Receipt and Delivery Receipt (BIR 2307 optional)."
+              : vatMode === "ZERO_RATED"
+              ? "VAT zero-rated: Sales Invoice, Collection Receipt, Delivery Receipt and EWT (BIR 2307)."
               : "VAT-exclusive: Delivery Form and Acknowledgement Form (BIR 2307 optional)."}
           </p>
           <CounterSaleDocs saleId={sale.id} slots={slots} docs={docs} canEdit={status !== "VOID"} admin={admin} />

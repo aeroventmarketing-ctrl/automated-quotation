@@ -316,8 +316,8 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   for (const cs of counterSales) {
     if (!cs.completedAt || !ymdInRange(manilaYMD(cs.completedAt.toISOString()), lo, hi)) continue;
     salesCount += 1;
-    const net = Number(cs.subtotal) || 0; // INCLUSIVE backs VAT out; EXCLUSIVE = total
-    if (cs.vatMode !== "EXCLUSIVE") outputVat = round2(outputVat + round2(net * VAT_RATE));
+    const net = Number(cs.subtotal) || 0; // INCLUSIVE backs VAT out; EXCLUSIVE / ZERO_RATED = total
+    if (cs.vatMode === "INCLUSIVE") outputVat = round2(outputVat + round2(net * VAT_RATE));
     const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCostById.get(i.stockItemId)?.cost ?? 0) * Number(i.qty) : 0), 0));
     // In-house duct hardware sold over the counter: Fans is credited its production
     // cost (stock unit cost); Office keeps the margin — same split as a quotation sale.
@@ -709,7 +709,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     const cogs = round2(cs.items.reduce((a, i) => a + (i.stockItemId ? (csCost.get(i.stockItemId)?.cost ?? 0) * Number(i.qty) : 0), 0));
     // In-house duct hardware on a counter sale → Fans is credited its production cost.
     const fansCogs = counterSaleFansCogs(cs.items, csCost);
-    if (cs.vatMode !== "EXCLUSIVE") {
+    if (cs.vatMode === "INCLUSIVE") {
       const v = round2(net * VAT_RATE);
       outputVatByDept.office = round2(outputVatByDept.office + v);
       vatOutputByOrder.push({ quotationId: cs.id, href: `/counter-sales/${cs.id}`, quoteNumber: cs.saleNumber ?? "Counter sale", customer: cs.customer.company, output: v });

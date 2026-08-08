@@ -379,8 +379,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // A bought-in or from-stock order skips the production QC roles — Logistics /
   // Engineer / Sales / Payment Approver / admin handle its quality steps instead.
   const noProdQa = (boughtInOnly || stockOnly) && (isSalesViewer || hasRole("logistics") || hasRole("payment_approver"));
-  // Who may release a from-stock order's goods from inventory (Phase 2).
-  const canReleaseStock = adminViewer || hasRole("warehouse") || hasRole("prod_head_fans" as WorkflowRoleKey);
+  // Who may release a from-stock order's goods from inventory (Phase 2). The Fans &
+  // Blowers head has no authority to release stock items — Warehouse (or admin) only.
+  const canReleaseStock = adminViewer || hasRole("warehouse");
   // Plant pick up: Warehouseman-driven tail (make form / upload POD) with Plant
   // Manager quality & approve-delivery. Its Phase-5 roles differ from delivery.
   const plantPick = wf.fulfillmentMode === "plant_pickup";
