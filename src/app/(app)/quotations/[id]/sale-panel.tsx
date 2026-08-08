@@ -73,6 +73,7 @@ export function SalePanel({
   canClear = false,
   clientTerms = false,
   vatInclusive = true,
+  zeroRated = false,
 }: {
   quotationId: string;
   currency: string;
@@ -87,6 +88,8 @@ export function SalePanel({
   clientTerms?: boolean;
   /** VAT-inclusive shows Sales Invoice + BIR 2307; exclusive hides them. */
   vatInclusive?: boolean;
+  /** Zero-rated also requires the Certificate of VAT Exempt/Zero Rated. */
+  zeroRated?: boolean;
 }) {
   const router = useRouter();
   // A terms client is locked to the "Terms (PO)" arrangement so the PO alone
@@ -472,8 +475,9 @@ export function SalePanel({
         {renderDocSlot({ key: "final_payment", label: "Final payment proof", required: false })}
 
         {/* 8–11. Sales Invoice, OR/CR/AF, Delivery Receipt, BIR 2307
-            (Sales Invoice + BIR 2307 hidden for VAT-exclusive deals). */}
-        {afterPaymentDocTypes(vatInclusive).map((t) => renderDocSlot(t))}
+            (Sales Invoice + BIR 2307 hidden for VAT-exclusive deals; a zero-rated
+            deal adds the Certificate of VAT Exempt/Zero Rated). */}
+        {afterPaymentDocTypes(vatInclusive, zeroRated).map((t) => renderDocSlot(t))}
 
         {/* Client note — additional information given by the client. */}
         <div className="space-y-1">

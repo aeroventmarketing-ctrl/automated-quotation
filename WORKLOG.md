@@ -14,6 +14,30 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Zero-rated — Certificate of VAT Exempt/Zero Rated upload
+- **Owner-requested:** a zero-rated sale also requires a **Certificate of VAT Exempt/Zero
+  Rated**; add an upload slot with the same behaviour as the other closing attachments.
+- **New doc key `vat_zero_cert`** (`VAT_ZERO_CERT_DOC` in `sale.ts`). It's appended (required)
+  only for zero-rated. Threaded a `zeroRated` flag through the closing-doc helpers —
+  `afterPaymentDocTypes`, `plantDocTypes`, `closeDocsState`, `plantCloseState` all take an
+  optional `zeroRated` (default false); when set they add the certificate slot and the close
+  gate requires it. NOT added to `deliveryUnsignedDocTypes` (the cert has no unsigned pre-
+  delivery variant — it's a closing attachment).
+- **Plumbed `zeroRated = quote.vatMode === "ZERO_RATED"`** from the order page + quotation
+  page/builder down through `CloseDocuments`, `SaleDocumentList`, `FulfillmentActions`,
+  `MultiBatchPanel`, `SalePanel`, `BatchDocumentList`. Server gates use it too: `fileDocuments`
+  close gate and the multi-batch `delivery_docs` gate in `orders/actions.ts`. Added
+  `vat_zero_cert` to `CLOSE_DOC_KEYS` + `MB_DOC_KEYS` so uploads are accepted; Accounting/Sales/
+  admin attach it like the other closing docs (no special role gate).
+- **Counter sales:** `counterDocSlots` adds the certificate (required) for `ZERO_RATED`;
+  `addCounterSaleDoc` already validates against the slot list so the upload is accepted; detail-
+  page doc caption updated.
+- **Where:** `lib/sale.ts`, `lib/counter-sale.ts`, `orders/actions.ts`, `orders/[id]/`
+  (`page.tsx`, `close-documents.tsx`, `fulfillment-actions.tsx`, `multi-batch-panel.tsx`,
+  `sale-document-list.tsx`), `quotations/[id]/` (`page.tsx`, `quotation-builder.tsx`,
+  `sale-panel.tsx`, `batch-document-list.tsx`), `counter-sales/[id]/page.tsx`. Typecheck + lint
+  clean.
+
 ## 2026-08-08 · Counter-sale zero-rated + Fans head can't release stock
 - **Two owner-requested changes:**
 - **(1) Counter sales gains the zero-rated VAT mode** (parity with the quotation builder).

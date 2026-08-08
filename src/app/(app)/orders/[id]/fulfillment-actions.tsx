@@ -58,6 +58,7 @@ export function FulfillmentActions({
   plantPickup = false,
   closeDocs,
   vatInclusive,
+  zeroRated = false,
   canEditCloseDocs,
   recordedPayments = [],
   admin = false,
@@ -77,6 +78,8 @@ export function FulfillmentActions({
   plantPickup?: boolean;
   closeDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
+  /** Zero-rated order — also requires the Certificate of VAT Exempt/Zero Rated. */
+  zeroRated?: boolean;
   canEditCloseDocs: boolean;
   recordedPayments?: RecordedPayment[];
   admin?: boolean;
@@ -371,6 +374,7 @@ export function FulfillmentActions({
           orderId={orderId}
           initialDocs={closeDocs}
           vatInclusive={vatInclusive}
+          zeroRated={zeroRated}
           canEdit={canEditCloseDocs}
           canFile={perms.canFile}
           admin={admin}
@@ -380,11 +384,12 @@ export function FulfillmentActions({
 
       {/* Closed but documents still incomplete — no commission yet; show the
           amber "File documents — close order (incomplete)" affordance + slots. */}
-      {stage === "closed" && !(plantPickup ? plantCloseState(closeDocs, vatInclusive) : closeDocsState(closeDocs, vatInclusive)).complete && (
+      {stage === "closed" && !(plantPickup ? plantCloseState(closeDocs, vatInclusive, zeroRated) : closeDocsState(closeDocs, vatInclusive, zeroRated)).complete && (
         <CloseDocuments
           orderId={orderId}
           initialDocs={closeDocs}
           vatInclusive={vatInclusive}
+          zeroRated={zeroRated}
           canEdit={canEditCloseDocs}
           canFile={perms.canFile}
           admin={admin}
@@ -393,7 +398,7 @@ export function FulfillmentActions({
         />
       )}
 
-      {stage === "closed" && (plantPickup ? plantCloseState(closeDocs, vatInclusive) : closeDocsState(closeDocs, vatInclusive)).complete && (
+      {stage === "closed" && (plantPickup ? plantCloseState(closeDocs, vatInclusive, zeroRated) : closeDocsState(closeDocs, vatInclusive, zeroRated)).complete && (
         <p className="text-sm text-emerald-600">Order complete — all documents filed.</p>
       )}
 

@@ -22,6 +22,7 @@ export function CloseDocuments({
   orderId,
   initialDocs,
   vatInclusive,
+  zeroRated = false,
   canEdit,
   canFile,
   admin = false,
@@ -31,6 +32,8 @@ export function CloseDocuments({
   orderId: string;
   initialDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
+  /** Zero-rated order — also requires the Certificate of VAT Exempt/Zero Rated. */
+  zeroRated?: boolean;
   canEdit: boolean;
   canFile: boolean;
   admin?: boolean;
@@ -49,9 +52,9 @@ export function CloseDocuments({
   // step, so here Accounting only attaches SI/OR/DR (VAT-inclusive) — nothing for
   // VAT-exclusive. Non-plant orders keep the normal closing-doc slots.
   const types = plantPickup
-    ? plantDocTypes(vatInclusive).filter((t) => t.key !== "delivery_form")
-    : afterPaymentDocTypes(vatInclusive);
-  const state = plantPickup ? plantCloseState(docs, vatInclusive) : closeDocsState(docs, vatInclusive);
+    ? plantDocTypes(vatInclusive, zeroRated).filter((t) => t.key !== "delivery_form")
+    : afterPaymentDocTypes(vatInclusive, zeroRated);
+  const state = plantPickup ? plantCloseState(docs, vatInclusive, zeroRated) : closeDocsState(docs, vatInclusive, zeroRated);
 
   async function upload(key: string, file: File) {
     setBusy(true); setErr(null);

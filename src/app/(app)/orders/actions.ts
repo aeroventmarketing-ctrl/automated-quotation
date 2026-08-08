@@ -3405,7 +3405,7 @@ export async function removeMultiBatchPod(quotationId: string, batchId: string, 
 }
 
 /** Valid per-batch closing-document keys (Sales Invoice / OR-CR-AF / DR / 2307). */
-const MB_DOC_KEYS = new Set(["sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307", "delivery_form"]);
+const MB_DOC_KEYS = new Set(["sales_invoice", "or_cr_af", "delivery_receipt", "bir_2307", "delivery_form", "vat_zero_cert"]);
 
 /** Accounting (or an admin / the Sales preparer) attaches a closing document to a batch. */
 export async function saveMultiBatchDoc(quotationId: string, batchId: string, key: string, doc: SaleDoc): Promise<void> {
@@ -3475,11 +3475,12 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   // documents. VAT-exclusive deals don't require the Sales Invoice or BIR 2307.
   if (stepKey === "delivery_docs") {
     const vatInclusive = quote.vatMode !== "EXCLUSIVE";
+    const zeroRated = quote.vatMode === "ZERO_RATED";
     // Plant pick up: the delivery form is required; the Accounting closing docs
-    // (SI / OR / DR) only for VAT-inclusive.
+    // (SI / OR / DR) only for VAT-inclusive. Zero-rated also needs the VAT cert.
     const required = wf.fulfillmentMode === "plant_pickup"
-      ? plantDocTypes(vatInclusive)
-      : afterPaymentDocTypes(vatInclusive);
+      ? plantDocTypes(vatInclusive, zeroRated)
+      : afterPaymentDocTypes(vatInclusive, zeroRated);
     const missing = required.filter((t) => (batch.docs?.[t.key]?.length ?? 0) === 0);
     if (missing.length) throw new Error(`Attach this batch's ${missing.map((t) => t.label).join(", ")} first.`);
   }
@@ -3896,6 +3897,8 @@ const CLOSE_DOC_KEYS = new Set([
   "pod",
   // Plant pick up: the delivery form made by the Warehouseman.
   "delivery_form",
+  // Zero-rated: the Certificate of VAT Exempt/Zero Rated.
+  "vat_zero_cert",
   // Proof of final payment (for the approver's review, then archived).
   "final_payment",
 ]);
@@ -4033,12 +4036,14 @@ export async function fileDocuments(quotationId: string): Promise<void> {
   if (wf.stage === "docs_received") {
     const vq = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { vatMode: true } });
     const vatInclusive = vq?.vatMode !== "EXCLUSIVE";
+    const zeroRated = vq?.vatMode === "ZERO_RATED";
     const docs = saleFromClassification(cls)?.docs;
     // Plant pick up: the Warehouseman's delivery form is required; the Accounting
-    // closing docs (SI / OR / DR) are required only for VAT-inclusive orders.
+    // closing docs (SI / OR / DR) are required only for VAT-inclusive orders. A
+    // zero-rated order also requires the Certificate of VAT Exempt/Zero Rated.
     const closeState = wf.fulfillmentMode === "plant_pickup"
-      ? plantCloseState(docs, vatInclusive)
-      : closeDocsState(docs, vatInclusive);
+      ? plantCloseState(docs, vatInclusive, zeroRated)
+      : closeDocsState(docs, vatInclusive, zeroRated);
     if (!closeState.appear) throw new Error("Upload all required closing documents before filing.");
     await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
   }

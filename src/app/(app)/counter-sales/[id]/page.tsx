@@ -159,7 +159,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
             {vatMode === "INCLUSIVE"
               ? "VAT-inclusive: Sales Invoice, Collection Receipt and Delivery Receipt (BIR 2307 optional)."
               : vatMode === "ZERO_RATED"
-              ? "VAT zero-rated: Sales Invoice, Collection Receipt, Delivery Receipt and EWT (BIR 2307)."
+              ? "VAT zero-rated: Sales Invoice, Collection Receipt, Delivery Receipt, EWT (BIR 2307) and Certificate of VAT Exempt/Zero Rated."
               : "VAT-exclusive: Delivery Form and Acknowledgement Form (BIR 2307 optional)."}
           </p>
           <CounterSaleDocs saleId={sale.id} slots={slots} docs={docs} canEdit={status !== "VOID"} admin={admin} />
