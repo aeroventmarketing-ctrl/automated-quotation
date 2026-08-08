@@ -914,13 +914,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 2 · Job orders &amp; production</CardTitle></CardHeader>
         <CardContent>
           {/* Fulfilment/handover mode — Delivery / Office pick up / Plant pick up.
-              Set by the salesperson or an admin (admin can change any time; the
-              salesperson only before the order leaves Phase 2). */}
-          {(canSetMode || wf.fulfillmentMode !== "delivery") && (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
-              <FulfillmentModeSelector orderId={quote.id} mode={wf.fulfillmentMode} available={availableModes} canSet={canSetMode} />
-            </div>
-          )}
+              Shown to every role for consistency: interactive for those who may set it
+              (admin any time; Sales / Engineer / Payment Approver before the order
+              leaves Phase 2), grayed-out (read-only) for everyone else. */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+            <FulfillmentModeSelector orderId={quote.id} mode={wf.fulfillmentMode} available={availableModes} canSet={canSetMode} />
+          </div>
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="text-sm text-muted-foreground">Job orders are issued once Phase 1 is complete.</p>
           ) : boughtInOnly && wf.stage === "released" ? (

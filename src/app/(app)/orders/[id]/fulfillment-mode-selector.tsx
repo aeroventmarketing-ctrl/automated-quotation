@@ -16,7 +16,9 @@ const MODES: { key: FulfillmentMode; label: string; Icon: typeof Truck }[] = [
  * Phase 2 fulfilment/handover selector — Delivery / Office pick up / Plant pick up.
  * Options are limited to what the order's contents allow (`available`). An admin can
  * change it any time; a non-admin only before the order leaves Phase 2 (`canSet`).
- * Non-setters see the current mode as a read-only tag.
+ * The button row shows for EVERY role: interactive for those who may change it,
+ * grayed-out (disabled, current mode still highlighted) for everyone else — so the
+ * fulfilment mode is always visible and the control reads the same across roles.
  */
 export function FulfillmentModeSelector({
   orderId,
@@ -33,8 +35,6 @@ export function FulfillmentModeSelector({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const current = MODES.find((m) => m.key === mode) ?? MODES[0];
-
   async function pick(next: FulfillmentMode) {
     if (busy || next === mode || !canSet) return;
     setBusy(next);
@@ -50,15 +50,6 @@ export function FulfillmentModeSelector({
     }
   }
 
-  if (!canSet) {
-    const Icon = current.Icon;
-    return (
-      <span className="flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300">
-        <Icon className="h-4 w-4" /> {current.label}
-      </span>
-    );
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">Fulfilment</span>
@@ -66,15 +57,28 @@ export function FulfillmentModeSelector({
         {MODES.map(({ key, label, Icon }) => {
           const avail = available.includes(key);
           const active = key === mode;
+          const interactive = canSet && avail;
+          const title = !canSet
+            ? "Only Sales, an Engineer, the Payment Approver or an admin can change this."
+            : !avail
+            ? "Not available for this order's items"
+            : undefined;
           return (
             <button
               key={key}
               type="button"
-              disabled={busy != null || !avail}
+              disabled={busy != null || !interactive}
               onClick={() => pick(key)}
-              title={!avail ? "Not available for this order's items" : undefined}
+              title={title}
+              aria-pressed={active}
               className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
-                active ? "bg-primary text-primary-foreground" : avail ? "hover:bg-accent" : "text-muted-foreground/50"
+                active
+                  ? canSet
+                    ? "bg-primary text-primary-foreground" // current mode, editable
+                    : "bg-primary/40 text-primary-foreground" // current mode, read-only (grayed)
+                  : interactive
+                  ? "hover:bg-accent" // switchable
+                  : "text-muted-foreground/40" // unavailable or read-only
               }`}
             >
               <Icon className="h-4 w-4" /> {label}
@@ -82,6 +86,7 @@ export function FulfillmentModeSelector({
           );
         })}
       </div>
+      {!canSet && <span className="text-[11px] text-muted-foreground">View only</span>}
       {busy && <span className="text-[11px] text-muted-foreground">Saving…</span>}
       {err && <span className="text-xs text-destructive">{err}</span>}
     </div>
