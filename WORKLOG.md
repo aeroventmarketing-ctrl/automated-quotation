@@ -14,6 +14,24 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · Admin override — roll-back labels match the order's actual workflow
+- **Owner-requested:** the "Admin override" roll-back panel read with the generic produced-delivery
+  wording regardless of the order's fulfilment mode / sourcing (e.g. a plant pick up showed
+  "Transferred to office" / "Sales 2nd QC & quantity passed" / "Delivered"; a from-stock order
+  showed "Payment cleared & JO created" though it has no job order).
+- **Fix (display-only — labels & which stages are offered; rollback actions unchanged, they key off
+  stage/approval keys not labels):** the roll-back **approval list** and **stage dropdown** now use
+  mode-aware labels driven by `stockOnly` / `boughtInOnly` / `plantPick` / `officePickup`:
+  - `payment_cleared` → "Payment cleared" (from-stock / bought-in, no JO) vs "Payment cleared & JO created".
+  - `client_notified` → "Released from stock & client notified" (from-stock).
+  - `qa_transferred` → "Delivery form made" (plant pick up) vs "Transferred to office".
+  - `qa_sales_checked` → "Delivery approved" (plant) / "Quality & quantity checked" (bought-in) vs "Sales 2nd QC & quantity passed".
+  - `delivered` / `delivery_confirmed` → "Picked up" / "Pick up confirmed" for pick-up modes.
+  - `released` stage → "For stock release" / "For purchasing" / "For JO creation".
+  - Non-produced orders (from-stock / bought-in) no longer offer the production stages
+    (`in_production` / `jo_received` / `producing` / `production_finished`) as roll-back targets.
+  - `orders/[id]/page.tsx` only. Typecheck + lint clean. **No P&L touched.**
+
 ## 2026-08-08 · Documents — full two-way mirror between quotation & order tabs
 - **Owner-requested:** whatever document is on the quotations tab must reflect on the orders-tab
   workflow and vice versa. Storage was already shared (`sale.docs` in the quote JSON), but the
