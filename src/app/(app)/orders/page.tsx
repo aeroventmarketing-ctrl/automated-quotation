@@ -124,7 +124,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         stage: wf.stage,
         stageText: boughtInOnly && wf.stage === "released" ? "For PO creation"
           : stockOnly && wf.stage === "released" ? "For stock release"
-          : (boughtInOnly || stockOnly) && wf.stage === "qa_plant_checked" ? "QC & Quantity Checked"
+          : boughtInOnly && wf.stage === "qa_plant_checked" ? "QC & Quantity Checked"
           : stageLabel(wf.stage),
         prodDepts,
         nextStep: next?.key ?? null,

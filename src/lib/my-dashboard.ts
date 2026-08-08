@@ -235,10 +235,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       // to the role that must act — Accounting, Payment Approver, Technical Head,
       // Plant Manager, Logistics, or the order's Sales. Single-delivery approval
       // stages already come through pendingStep(wf) below.
+      const stockOnly = isStockOnlyOrder(q.items);
       if (wf.deliveryMode === "multi") {
         for (const b of wf.deliveryBatches) {
           if (b.cancelled || isMbFiled(b)) continue;
-          const next = mbProgress(b, wf.fulfillmentMode).next;
+          const next = mbProgress(b, wf.fulfillmentMode, stockOnly).next;
           if (!next) continue;
           const owes = next.role === "sales"
             ? (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id || isAdmin(user))
@@ -258,7 +259,6 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           });
         }
       }
-      const stockOnly = isStockOnlyOrder(q.items);
       const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
       if (!pend) continue;
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));

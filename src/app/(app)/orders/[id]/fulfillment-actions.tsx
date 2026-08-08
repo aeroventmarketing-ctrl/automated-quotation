@@ -56,6 +56,7 @@ export function FulfillmentActions({
   perms,
   officePickup = false,
   plantPickup = false,
+  fromStock = false,
   closeDocs,
   vatInclusive,
   zeroRated = false,
@@ -76,6 +77,8 @@ export function FulfillmentActions({
   officePickup?: boolean;
   /** Plant-pickup order — client collects at the plant; Warehouseman-driven tail. */
   plantPickup?: boolean;
+  /** From-stock delivery order — the Warehouse runs the quality & quantity test. */
+  fromStock?: boolean;
   closeDocs: Record<string, SaleDoc[]>;
   vatInclusive: boolean;
   /** Zero-rated order — also requires the Certificate of VAT Exempt/Zero Rated. */
@@ -198,12 +201,12 @@ export function FulfillmentActions({
         (perms.canQaTest ? (
           <div className="space-y-1">
             <p className="text-sm font-medium">Quality testing</p>
-            <p className="text-xs text-muted-foreground">{officePickup ? "The item undergoes quality testing by the 2nd Quality Inspector." : "The item undergoes quality testing by the Technical Head or an approved Quality Inspector."}</p>
+            <p className="text-xs text-muted-foreground">{officePickup ? "The item undergoes quality testing by the 2nd Quality Inspector." : fromStock ? "The item undergoes quality & quantity testing by the Warehouse." : "The item undergoes quality testing by the Technical Head or an approved Quality Inspector."}</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => qaTest(orderId))}>
               {busy ? "Saving…" : "Quality Tested-Passed"}
             </Button>
           </div>
-        ) : awaiting("to test quality", officePickup ? ["quality_inspector_2"] : ["technical_head", "quality_inspector"], officePickup))}
+        ) : awaiting("to test quality", officePickup ? ["quality_inspector_2"] : fromStock ? ["warehouse"] : ["technical_head", "quality_inspector"], officePickup))}
 
       {/* Office pickup skips the plant-QC / transfer / Sales-2nd-QC steps and goes
           straight from the quality test to preparing the delivery documents. */}

@@ -14,6 +14,31 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-08 · From-stock (F&B on-hand) delivery — Warehouse runs the quality test
+- **Owner-requested (frozen Phase 5, owner-approved):** for an order fulfilled from Fans &
+  Blowers on-hand **stock** (e.g. angle corner), the Phase 5 quality & quantity test (step 15,
+  "Quality Tested-Passed") is done by the **Warehouse**; the **Plant Manager** then approves
+  (step 16, "Quality & Quantity Approved") and **Logistics** transfers to the office (step 17,
+  "Transferred to Office"). Applies to **single-batch and multi-batch delivery**.
+- **The gap:** the code lumped from-stock with bought-in as "noProd" and routed both to the
+  Office-side actors (Logistics/Sales/Payment Approver). A from-stock item is physically at the
+  plant, so it now joins the produced-order path (Plant Manager QC, Logistics transfer) — but
+  with the **Warehouse** doing the initial quality test instead of the Technical Head/QI. Only a
+  **bought-in** order (never at the plant) keeps the Office-side QA.
+- **Single-batch:** `pendingStep` now splits `boughtInOnly = boughtIn && !stockOnly`; from-stock
+  → Warehouse test then Plant Manager. `qaTest` / `qaPlantCheck` actions authorise accordingly
+  (new `orderSourcingFlags`, replacing `isNoProductionOrder`). Order-page `perms`
+  (`canQaTest`/`canQaPlant`), the `FulfillmentActions` copy + "awaiting" roles (new `fromStock`
+  prop), the `qa_tested` sign-off designation (→ Warehouse), and the `qa_plant_checked` stage
+  label all updated.
+- **Multi-batch:** new `MULTIBATCH_STOCK_STEPS` (delivery steps with `qa_tested` role =
+  `warehouse`); `mbSteps`/`mbStepDef`/`mbProgress` take an optional `stockOnly`. Threaded through
+  `advanceMultiBatch` (auth + progress), the order page's batch views, and the My Dashboard
+  multi-batch feed. Produced & bought-in orders and office/plant pick up are unchanged.
+- **Where:** `lib/order-workflow.ts`, `lib/delivery-multibatch.ts`, `lib/my-dashboard.ts`,
+  `orders/actions.ts`, `orders/[id]/page.tsx`, `orders/[id]/fulfillment-actions.tsx`,
+  `orders/page.tsx`. Typecheck + lint clean.
+
 ## 2026-08-08 · Zero-rated — Certificate of VAT Exempt/Zero Rated upload
 - **Owner-requested:** a zero-rated sale also requires a **Certificate of VAT Exempt/Zero
   Rated**; add an upload slot with the same behaviour as the other closing attachments.
