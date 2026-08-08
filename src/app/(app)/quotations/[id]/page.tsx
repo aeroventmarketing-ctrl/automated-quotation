@@ -243,6 +243,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       <BatchDocumentList
         batches={readOrderWorkflow(quotation.classification).deliveryBatches}
         vatInclusive={quotation.vatMode !== "EXCLUSIVE"}
+        zeroRated={quotation.vatMode === "ZERO_RATED"}
       />
     </div>
   );

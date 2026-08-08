@@ -65,6 +65,7 @@ export function MultiBatchPanel({
   batches,
   payments = [],
   vatInclusive,
+  zeroRated = false,
   canManage,
   canCollect,
   currency,
@@ -84,6 +85,8 @@ export function MultiBatchPanel({
   /** Every payment recorded on the order — same records as the quotation tab. */
   payments?: MBPaymentView[];
   vatInclusive: boolean;
+  /** Zero-rated order — batch closing docs also need the Certificate of VAT Exempt/Zero Rated. */
+  zeroRated?: boolean;
   canManage: boolean;
   /** Sales / Accounting / admin — may record payments against the balance. */
   canCollect: boolean;
@@ -141,7 +144,7 @@ export function MultiBatchPanel({
 
   // Closing documents Accounting attaches at each batch's "delivery documents"
   // step (per batch). Sales Invoice / BIR 2307 apply to VAT-inclusive deals only.
-  const deliveryDocSlots = plantPickup ? plantDocTypes(vatInclusive) : afterPaymentDocTypes(vatInclusive);
+  const deliveryDocSlots = plantPickup ? plantDocTypes(vatInclusive, zeroRated) : afterPaymentDocTypes(vatInclusive, zeroRated);
   async function uploadBatchDoc(batchId: string, key: string, file: File) {
     setBusy("doc:" + batchId + key);
     setErr(null);

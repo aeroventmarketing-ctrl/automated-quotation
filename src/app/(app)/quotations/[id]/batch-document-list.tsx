@@ -11,8 +11,8 @@ const download = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.
  * multiple-batch delivery. Surfaced on the quotation tab so the documents are
  * visible/downloadable here too, grouped by DR / batch. Server component.
  */
-export function BatchDocumentList({ batches, vatInclusive }: { batches: MultiDeliveryBatch[]; vatInclusive: boolean }) {
-  const slots = afterPaymentDocTypes(vatInclusive);
+export function BatchDocumentList({ batches, vatInclusive, zeroRated = false }: { batches: MultiDeliveryBatch[]; vatInclusive: boolean; zeroRated?: boolean }) {
+  const slots = afterPaymentDocTypes(vatInclusive, zeroRated);
   const withDocs = batches
     .filter((b) => !b.cancelled)
     .map((b) => ({

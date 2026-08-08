@@ -472,7 +472,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     fullyPaid &&
     // Multi-batch handles closing documents per batch, so the order-level
     // closing-docs gate only applies to the single-batch flow.
-    (wf.deliveryMode === "multi" || closeDocsState(saleForClose?.docs, quote.vatMode !== "EXCLUSIVE").complete);
+    (wf.deliveryMode === "multi" || closeDocsState(saleForClose?.docs, quote.vatMode !== "EXCLUSIVE", quote.vatMode === "ZERO_RATED").complete);
 
   // Multiple-batch delivery — a separate opt-in mode (never active alongside the
   // single-batch Phase 5 flow). Chosen by Sales/admin as soon as production has
@@ -1026,8 +1026,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
-            {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode !== "EXCLUSIVE"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
+            {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>
       )}
@@ -1064,7 +1064,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 ? "Pick up the order in batches — open a batch of finished/released items (any items or partial quantities) and run each through the pick-up sequence. Each batch collects its own partial payment (payment first). The order closes once every item is picked up and all batches are filed."
                 : "Deliver the order in batches — open a batch of finished items (any items or partial quantities) and run each through the full delivery sequence: notify client → payment → quality → transfer → deliver → documents. Each batch collects its own partial payment (payment first). The order closes once every item is delivered and all batches are filed."}
             </p>
-            <MultiBatchPanel orderId={quote.id} officePickup={isPickupMode} plantPickup={plantPick} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null, docs: {} })) : mbBatchViews} payments={restricted ? [] : mbPayments} vatInclusive={quote.vatMode !== "EXCLUSIVE"} canManage={canManageMulti} canCollect={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
+            <MultiBatchPanel orderId={quote.id} officePickup={isPickupMode} plantPickup={plantPick} items={mbItems} batches={restricted ? mbBatchViews.map((b) => ({ ...b, paymentAmount: undefined, paymentProof: null, docs: {} })) : mbBatchViews} payments={restricted ? [] : mbPayments} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} canManage={canManageMulti} canCollect={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay)} currency={quote.currency} orderAmount={restricted ? 0 : value} amountPaid={restricted ? 0 : collectedTotal(saleForClose)} clientName={custName} restricted={restricted} admin={adminViewer} />
           </CardContent>
         </Card>
       )}

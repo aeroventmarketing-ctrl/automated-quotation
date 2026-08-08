@@ -119,6 +119,8 @@ export function counterDocSlots(vatMode: CounterSaleVatMode): CounterDocSlot[] {
     { key: "collection_receipt", label: "Collection Receipt" },
     { key: "delivery_receipt", label: "Delivery Receipt" },
     { key: "bir_2307", label: zeroRated ? "BIR 2307 (EWT)" : "BIR 2307", optional: !zeroRated },
+    // A zero-rated sale also requires the Certificate of VAT Exempt/Zero Rated.
+    ...(zeroRated ? [{ key: "vat_zero_cert", label: "Certificate of VAT Exempt/Zero Rated" }] : []),
   ];
 }
 

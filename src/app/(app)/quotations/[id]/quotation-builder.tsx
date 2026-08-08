@@ -5989,6 +5989,7 @@ export function QuotationBuilder({
           canClear={canClearSale}
           clientTerms={clientTerms}
           vatInclusive={quotation.vatMode !== "EXCLUSIVE"}
+          zeroRated={quotation.vatMode === "ZERO_RATED"}
         />
       )}
 

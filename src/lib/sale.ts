@@ -66,6 +66,16 @@ export const SALE_DOCS_AFTER_PAYMENTS: SaleDocType[] = [
 export const SALE_DOC_TYPES: SaleDocType[] = [...SALE_DOCS_BEFORE_PAYMENTS, ...SALE_DOCS_AFTER_PAYMENTS];
 
 /**
+ * Certificate of VAT Exempt / Zero Rated — a required supporting document that
+ * accompanies the closing documents of a **zero-rated** sale only.
+ */
+export const VAT_ZERO_CERT_DOC: SaleDocType = {
+  key: "vat_zero_cert",
+  label: "Certificate of VAT Exempt/Zero Rated",
+  required: true,
+};
+
+/**
  * VAT-appropriate labels for the two slots whose name depends on the tax
  * treatment (mirrors the counter-sales taxonomy):
  * - `or_cr_af` → **Collection Receipt** (VAT-inclusive) / **Acknowledgement Form**
@@ -111,10 +121,12 @@ export function deliveryUnsignedDocTypes(vatInclusive: boolean): SaleDocType[] {
  * VAT-inclusive shows all four (Sales Invoice, **Collection Receipt**, **Delivery
  * Receipt**, BIR 2307).
  */
-export function afterPaymentDocTypes(vatInclusive: boolean): SaleDocType[] {
-  return SALE_DOCS_AFTER_PAYMENTS.filter(
+export function afterPaymentDocTypes(vatInclusive: boolean, zeroRated = false): SaleDocType[] {
+  const base = SALE_DOCS_AFTER_PAYMENTS.filter(
     (t) => vatInclusive || (t.key !== "sales_invoice" && t.key !== "bir_2307"),
   ).map((t) => vatLabel(t, vatInclusive));
+  // A zero-rated sale also requires the Certificate of VAT Exempt/Zero Rated.
+  return zeroRated ? [...base, { ...VAT_ZERO_CERT_DOC }] : base;
 }
 
 /**
@@ -123,9 +135,14 @@ export function afterPaymentDocTypes(vatInclusive: boolean): SaleDocType[] {
  * `complete` means everything incl. BIR 2307 is attached; `bir2307Missing`
  * flags the incomplete case (VAT-inclusive with no 2307 yet).
  */
-export function closeDocsState(docs: Record<string, SaleDoc[]> | undefined, vatInclusive: boolean) {
+export function closeDocsState(docs: Record<string, SaleDoc[]> | undefined, vatInclusive: boolean, zeroRated = false) {
   const has = (k: string) => (docs?.[k]?.length ?? 0) > 0;
-  const appearKeys = ["or_cr_af", "delivery_receipt", ...(vatInclusive ? ["sales_invoice"] : [])];
+  const appearKeys = [
+    "or_cr_af",
+    "delivery_receipt",
+    ...(vatInclusive ? ["sales_invoice"] : []),
+    ...(zeroRated ? ["vat_zero_cert"] : []),
+  ];
   const appear = appearKeys.every(has);
   const bir2307Missing = vatInclusive && !has("bir_2307");
   return { appear, complete: appear && !bir2307Missing, bir2307Missing, missing: appearKeys.filter((k) => !has(k)) };
@@ -137,19 +154,21 @@ export function closeDocsState(docs: Record<string, SaleDoc[]> | undefined, vatI
  * **Acknowledgement Form**. For a **VAT-inclusive** order Accounting also makes the
  * Sales Invoice, **Collection Receipt** and **Delivery Receipt**.
  */
-export function plantDocTypes(vatInclusive: boolean): SaleDocType[] {
+export function plantDocTypes(vatInclusive: boolean, zeroRated = false): SaleDocType[] {
   const form: SaleDocType = { key: "delivery_form", label: "Delivery form (Warehouseman)", required: true };
-  if (!vatInclusive) return [form, { key: "or_cr_af", label: collectionReceiptLabel(false), required: true }];
+  const cert = zeroRated ? [{ ...VAT_ZERO_CERT_DOC }] : [];
+  if (!vatInclusive) return [form, { key: "or_cr_af", label: collectionReceiptLabel(false), required: true }, ...cert];
   return [
     form,
     { key: "sales_invoice", label: "Sales Invoice", required: true },
     { key: "or_cr_af", label: collectionReceiptLabel(true), required: true },
     { key: "delivery_receipt", label: deliveryDocLabel(true), required: true },
+    ...cert,
   ];
 }
-export function plantCloseState(docs: Record<string, SaleDoc[]> | undefined, vatInclusive: boolean) {
+export function plantCloseState(docs: Record<string, SaleDoc[]> | undefined, vatInclusive: boolean, zeroRated = false) {
   const has = (k: string) => (docs?.[k]?.length ?? 0) > 0;
-  const missing = plantDocTypes(vatInclusive).map((t) => t.key).filter((k) => !has(k));
+  const missing = plantDocTypes(vatInclusive, zeroRated).map((t) => t.key).filter((k) => !has(k));
   const appear = missing.length === 0;
   return { appear, complete: appear, bir2307Missing: false, missing };
 }
