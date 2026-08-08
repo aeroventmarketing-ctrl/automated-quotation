@@ -240,14 +240,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     wf.stage === "in_production" &&
     (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey)));
 
-  // Admin rollback: earlier stages to return to + the sign-offs on record.
-  const curStageIdx = stageIndex(wf.stage);
-  const priorStages = ORDER_STAGES.filter((_, i) => i < curStageIdx).map((s) => ({ key: s.key, label: s.label }));
-  const rollbackApprovals = Object.entries(wf.approvals)
-    .filter(([k]) => APPROVAL_STEPS[k])
-    .map(([k, a]) => ({ key: k, label: APPROVAL_STEPS[k].label, byName: a.byName, at: fmtWhen(a.at) }))
-    .sort((x, y) => stageIndex(APPROVAL_STEPS[x.key].to) - stageIndex(APPROVAL_STEPS[y.key].to));
-
   // The Engineer (or admin) makes the Fans & Blowers job order. New job orders
   // can no longer be added once the order is In Production (or later).
   const canManageJO = adminViewer || viewer?.role === "ENGINEER";
@@ -460,6 +452,59 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     fStamp("Documents received", "docs_received", A.docs_received),
     fStamp("Documents filed", "documents_filed", A.documents_filed),
   ].filter((s): s is string => s !== null);
+
+  // Admin rollback: earlier stages to return to + the sign-offs on record. Both the
+  // stage dropdown and the approval list read like THIS order's real workflow — the
+  // labels track the fulfilment mode (delivery / office / plant pick up) and sourcing
+  // (produced / from-stock / bought-in), instead of the generic produced-delivery
+  // wording. A pick-up order collects, not "delivers"; plant pick up makes a delivery
+  // form and the Plant Manager approves it (no office transfer / Sales 2nd QC).
+  const isPickup = plantPick || wf.officePickup === true;
+  const rbApprovalLabel = (key: string): string => {
+    switch (key) {
+      case "payment_cleared":
+        return stockOnly || boughtInOnly ? "Payment cleared" : "Payment cleared & JO created";
+      case "client_notified":
+        return stockOnly ? "Released from stock & client notified" : "Client notified (order ready)";
+      case "qa_transferred":
+        return plantPick ? "Delivery form made" : "Transferred to office";
+      case "qa_sales_checked":
+        return plantPick ? "Delivery approved" : boughtInOnly ? "Quality & quantity checked" : "Sales 2nd QC & quantity passed";
+      case "delivered":
+        return isPickup ? "Picked up" : "Delivered";
+      case "delivery_confirmed":
+        return isPickup ? "Pick up confirmed" : "Delivery confirmed";
+      default:
+        return APPROVAL_STEPS[key]?.label ?? key;
+    }
+  };
+  const rbStageLabel = (key: string, base: string): string => {
+    switch (key) {
+      case "released":
+        return stockOnly ? "For stock release" : boughtInOnly ? "For purchasing" : "For JO creation";
+      case "qa_transferred":
+        return plantPick ? "Delivery form made" : "Transferred to office";
+      case "qa_sales_checked":
+        return plantPick ? "Delivery approved" : "Sales re-checked";
+      case "delivered":
+        return isPickup ? "Picked up" : "Delivered";
+      case "delivery_confirmed":
+        return isPickup ? "Pick up confirmed" : "Delivery confirmed";
+      default:
+        return base;
+    }
+  };
+  // Non-produced orders (from-stock / bought-in) skip the production stages
+  // entirely, so they aren't offered as roll-back targets.
+  const PRODUCTION_ONLY_STAGES = new Set<string>(["in_production", "jo_received", "producing", "production_finished"]);
+  const curStageIdx = stageIndex(wf.stage);
+  const priorStages = ORDER_STAGES
+    .filter((s, i) => i < curStageIdx && !((stockOnly || boughtInOnly) && PRODUCTION_ONLY_STAGES.has(s.key)))
+    .map((s) => ({ key: s.key, label: rbStageLabel(s.key, s.label) }));
+  const rollbackApprovals = Object.entries(wf.approvals)
+    .filter(([k]) => APPROVAL_STEPS[k])
+    .map(([k, a]) => ({ key: k, label: rbApprovalLabel(k), byName: a.byName, at: fmtWhen(a.at) }))
+    .sort((x, y) => stageIndex(APPROVAL_STEPS[x.key].to) - stageIndex(APPROVAL_STEPS[y.key].to));
   const fulfillmentStages = new Set([
     "production_finished", "final_pay_review", "final_pay_checked", "final_pay_cleared",
     "qa_tested", "qa_plant_checked", "qa_transferred", "qa_sales_checked",
