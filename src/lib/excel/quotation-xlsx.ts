@@ -9,7 +9,7 @@
  */
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
-import { applyPricing, pricingForVatMode, type PricingAdjust } from "@/lib/quote";
+import { applyPricing, pricingForVatMode, vatDisplayBasisIsGross, type PricingAdjust } from "@/lib/quote";
 import { imageDataUrlSize } from "@/lib/signature";
 import { HEADER_LOGO, HEADER_LOGO_RATIO } from "./header-logo";
 
@@ -35,7 +35,7 @@ export interface XlsxData {
   locked?: boolean;
   projectName?: string | null;
   customerName: string;
-  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
+  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
   discountPct: number; // e.g. 3 for 3% (legacy; superseded by `pricing`)
   pricing?: PricingAdjust; // header mark-up + discount (percent or amount)
   vatRate: number;
@@ -241,7 +241,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ["L", "M", "N"].forEach((c) => (ws.getCell(`${c}${H3}`).border = allBorders));
 
   // --- Data rows ------------------------------------------------------------
-  const f = data.vatMode !== "INCLUSIVE" ? 1 / (1 + data.vatRate) : 1;
+  const f = vatDisplayBasisIsGross(data.vatMode) ? 1 : 1 / (1 + data.vatRate);
   // Mark-up is INTERNAL: it never appears as a line on the client's copy.
   // Instead we fold it into every displayed price via `mFactor`, so the column
   // still sums to the (marked-up) net and the client sees no mark-up row.
@@ -334,7 +334,9 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   const discountAmt = money(adj.discountAmt);
   const finalNet = money(adj.finalNet);
   const netLabel =
-    data.vatMode !== "INCLUSIVE"
+    data.vatMode === "ZERO_RATED"
+      ? "NET AMOUNT (VAT zero-rated) =>"
+      : data.vatMode !== "INCLUSIVE"
       ? "NET AMOUNT (VAT exclusive price) =>"
       : "NET AMOUNT (VAT inclusive price) =>";
 

@@ -108,7 +108,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     projectName: q.projectName,
     customerName: q.inquiry.customer.contactName || q.inquiry.customer.company,
     vatMode:
-      q.vatMode === "EXCLUSIVE" ? "EXCLUSIVE" : q.vatMode === "EXCLUSIVE_PLUS" ? "EXCLUSIVE_PLUS" : "INCLUSIVE",
+      q.vatMode === "EXCLUSIVE"
+        ? "EXCLUSIVE"
+        : q.vatMode === "EXCLUSIVE_PLUS"
+        ? "EXCLUSIVE_PLUS"
+        : q.vatMode === "ZERO_RATED"
+        ? "ZERO_RATED"
+        : "INCLUSIVE",
     discountPct: Number(q.discountPct ?? 0),
     pricing: readPricing(q.classification, Number(q.discountPct ?? 0)),
     vatRate: config.vatRate,

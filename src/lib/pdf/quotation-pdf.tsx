@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 import { COMPANY } from "@/lib/config";
-import { applyPricing, pricingForVatMode, round2, type PricingAdjust } from "@/lib/quote";
+import { applyPricing, pricingForVatMode, vatDisplayBasisIsGross, round2, type PricingAdjust } from "@/lib/quote";
 import { AEROVENT_LOGO } from "./logo";
 
 export interface QuotationPdfLine {
@@ -29,7 +29,7 @@ export interface QuotationPdfData {
   quoteNumber: string;
   createdAt: string;
   validUntil: string | null;
-  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
+  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
   projectName?: string | null;
   customer: { company: string; contactName?: string | null; address?: string | null };
   preparedBy: string;
@@ -162,8 +162,10 @@ function TotalLine({ label, value, leftSpan }: { label: string; value: number; l
 }
 
 export function QuotationPdf({ data }: { data: QuotationPdfData }) {
-  const exclusive = data.vatMode !== "INCLUSIVE";
-  const f = exclusive ? 1 / (1 + data.vatRate) : 1;
+  const grossBasis = vatDisplayBasisIsGross(data.vatMode);
+  const exclusive = !grossBasis; // net-basis presentation (÷1.12)
+  const zeroRated = data.vatMode === "ZERO_RATED";
+  const f = grossBasis ? 1 : 1 / (1 + data.vatRate);
   const leftSpan = W.item + W.qty + W.desc + W.cfm + W.pa + W.inch + W.hp + W.ph + W.volts + W.unit;
 
   // Fold the hidden mark-up into displayed prices and show the discount as its
@@ -242,7 +244,7 @@ export function QuotationPdf({ data }: { data: QuotationPdfData }) {
             </>
           ) : (
             <>
-              <TotalLine leftSpan={leftSpan} label="NET AMOUNT (VAT inclusive price) =>" value={displayedNet} />
+              <TotalLine leftSpan={leftSpan} label={zeroRated ? "NET AMOUNT (VAT zero-rated) =>" : "NET AMOUNT (VAT inclusive price) =>"} value={displayedNet} />
               {hasDiscount && (
                 <>
                   <TotalLine leftSpan={leftSpan} label={discountLabel} value={discountAmt} />

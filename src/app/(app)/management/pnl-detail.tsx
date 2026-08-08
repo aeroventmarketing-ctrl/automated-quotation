@@ -36,7 +36,7 @@ function DeleteButton({ del, label, onChanged }: { del: PnlDeleteRef; label: str
   );
 }
 
-const VAT_MODE_LABEL: Record<string, string> = { INCLUSIVE: "Inclusive", EXCLUSIVE: "Excl. ÷1.12", EXCLUSIVE_PLUS: "Excl. +12%" };
+const VAT_MODE_LABEL: Record<string, string> = { INCLUSIVE: "Inclusive", EXCLUSIVE: "Excl. ÷1.12", EXCLUSIVE_PLUS: "Excl. +12%", ZERO_RATED: "Zero-rated" };
 const r2 = (n: number) => Math.round((n + 1e-9) * 100) / 100;
 
 /**
@@ -50,7 +50,9 @@ function expectedNets(a: PnlPricingAudit): { markupNet: number; discountNet: num
   // For +12%, a flat (amount) mark-up/discount is VAT-inclusive → scale by 1.12.
   const mV = a.vatMode === "EXCLUSIVE_PLUS" && a.markupMode === "amount" ? a.markupValue / F : a.markupValue;
   const dV = a.vatMode === "EXCLUSIVE_PLUS" && a.discountMode === "amount" ? a.discountValue / F : a.discountValue;
-  const displayedNet = a.vatMode === "INCLUSIVE" ? a.grossBase : a.grossBase / F;
+  // INCLUSIVE and ZERO_RATED display on the gross (entered-price) basis; the
+  // exclusive modes strip VAT. Only INCLUSIVE has VAT to strip back out (toNet).
+  const displayedNet = a.vatMode === "INCLUSIVE" || a.vatMode === "ZERO_RATED" ? a.grossBase : a.grossBase / F;
   const afterMarkup = a.markupMode === "percent" ? (1 - mV / 100 > 0 ? displayedNet / (1 - mV / 100) : displayedNet) : displayedNet + mV;
   const markupAmt = afterMarkup - displayedNet;
   const discountAmt = a.discountMode === "percent" ? afterMarkup * (dV / 100) : dV;

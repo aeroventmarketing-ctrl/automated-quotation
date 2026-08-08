@@ -13,7 +13,7 @@ import { QuotationStatusBadge } from "@/components/status-badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { formatCurrency } from "@/lib/utils";
 import { config } from "@/lib/config";
-import { applyPricing, pricingForVatMode, DEFAULT_PRICING, type PricingAdjust, type AdjustMode } from "@/lib/quote";
+import { applyPricing, pricingForVatMode, vatDisplayBasisIsGross, vatModeAddsVat, DEFAULT_PRICING, type PricingAdjust, type AdjustMode } from "@/lib/quote";
 import {
   lookupMotor,
   motorModelCode,
@@ -275,7 +275,7 @@ interface Quote {
   sale: SaleRecord | null;
   revision: number;
   currency: string;
-  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS";
+  vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
   discountPct: number;
   pricing: PricingAdjust;
   headerUnits: { capacity: string; pressure: string; motor: string };
@@ -2767,13 +2767,15 @@ export function QuotationBuilder({
   const totals = useMemo(() => {
     const gross = lines.reduce((a, l) => a + lineGross(l), 0); // VAT-inclusive
     const net = gross / (1 + vatRate);
-    const exclusive = effectiveVatMode !== "INCLUSIVE";
-    const displayedNet = exclusive ? net : gross;
+    const grossBasis = vatDisplayBasisIsGross(effectiveVatMode);
+    const exclusive = !grossBasis;
+    const zeroRated = effectiveVatMode === "ZERO_RATED";
+    const displayedNet = grossBasis ? gross : net;
     const { markupAmt, afterMarkup, discountAmt, finalNet } = applyPricing(displayedNet, pricingForVatMode(pricing, effectiveVatMode, vatRate));
-    const addVat = effectiveVatMode === "EXCLUSIVE_PLUS";
+    const addVat = vatModeAddsVat(effectiveVatMode);
     const vatAmt = addVat ? finalNet * vatRate : 0;
     const grandTotal = finalNet + vatAmt;
-    return { net, vat: gross - net, gross, exclusive, displayedNet, markupAmt, afterMarkup, discountAmt, finalNet, addVat, vatAmt, grandTotal };
+    return { net, vat: gross - net, gross, exclusive, zeroRated, displayedNet, markupAmt, afterMarkup, discountAmt, finalNet, addVat, vatAmt, grandTotal };
   }, [lines, vatRate, effectiveVatMode, pricing]);
 
   // --- Auto-save ---------------------------------------------------------
@@ -5025,6 +5027,7 @@ export function QuotationBuilder({
                 <option value="INCLUSIVE">VAT inclusive</option>
                 <option value="EXCLUSIVE">VAT exclusive (÷1.12)</option>
                 <option value="EXCLUSIVE_PLUS">VAT exclusive (+12%)</option>
+                <option value="ZERO_RATED">VAT exclusive zero rated</option>
               </Select>
             </div>
           </div>
@@ -5930,7 +5933,7 @@ export function QuotationBuilder({
           <div className="flex justify-end">
             <div className="w-80 space-y-1 text-sm">
               <div className="flex justify-between">
-                <span>NET AMOUNT (VAT {totals.exclusive ? "exclusive" : "inclusive"})</span>
+                <span>NET AMOUNT (VAT {totals.zeroRated ? "zero-rated" : totals.exclusive ? "exclusive" : "inclusive"})</span>
                 <span>{formatCurrency(totals.displayedNet, quotation.currency)}</span>
               </div>
               {pricing.markupValue > 0 && (

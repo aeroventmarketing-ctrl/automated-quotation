@@ -137,13 +137,43 @@ export function applyPricing(displayedNet: number, p: PricingAdjust) {
  *  - EXCLUSIVE_PLUS  → ((gross/1.12) − discount) + 12% VAT
  */
 /**
+ * The four VAT presentations a quotation can use:
+ *  - INCLUSIVE      → the entered price already includes 12% VAT.
+ *  - EXCLUSIVE      → the entered price is stripped of VAT (shown ÷1.12), no VAT charged.
+ *  - EXCLUSIVE_PLUS → net price with 12% VAT added on top.
+ *  - ZERO_RATED     → like INCLUSIVE in figure (the entered price IS the total) but the
+ *                     sale is VAT zero-rated (0% output VAT; usually 1% EWT withheld).
+ */
+export type VatMode = "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
+
+/**
+ * Whether the displayed base is the entered (gross) price — true for INCLUSIVE and
+ * ZERO_RATED (the entered figure is already the final amount); the exclusive modes
+ * strip VAT to show the net.
+ */
+export function vatDisplayBasisIsGross(vatMode: string): boolean {
+  return vatMode === "INCLUSIVE" || vatMode === "ZERO_RATED";
+}
+/** Whether 12% VAT is added on top of the net (only EXCLUSIVE_PLUS). */
+export function vatModeAddsVat(vatMode: string): boolean {
+  return vatMode === "EXCLUSIVE_PLUS";
+}
+/**
+ * Whether the sale charges the client output VAT — INCLUSIVE (baked in) and
+ * EXCLUSIVE_PLUS (added on top) do; EXCLUSIVE and ZERO_RATED do not.
+ */
+export function vatModeChargesOutputVat(vatMode: string): boolean {
+  return vatMode === "INCLUSIVE" || vatMode === "EXCLUSIVE_PLUS";
+}
+
+/**
  * The pricing to apply for a given VAT mode. For EXCLUSIVE_PLUS the client price
  * is presented as net + 12% VAT, so a FLAT (amount) mark-up / discount — a
  * VAT-INCLUSIVE peso figure the user typed — is scaled DOWN by 1.12 before it's
  * applied to the net base and grossed back up. That makes a flat ₱X mark-up /
  * discount move the client total by exactly ₱X, identical to VAT inclusive.
- * Percentages need no scaling (they track the base); INCLUSIVE and EXCLUSIVE
- * (÷1.12) are returned unchanged.
+ * Percentages need no scaling (they track the base); INCLUSIVE, EXCLUSIVE
+ * (÷1.12) and ZERO_RATED are returned unchanged.
  */
 export function pricingForVatMode(p: PricingAdjust, vatMode: string, vatRate = config.vatRate): PricingAdjust {
   if (vatMode !== "EXCLUSIVE_PLUS") return p;
@@ -166,10 +196,9 @@ export function payableTotal(
 ): number {
   const gross = Number(q.total);
   const net = gross / (1 + vatRate);
-  const exclusive = q.vatMode !== "INCLUSIVE";
-  const displayedNet = exclusive ? net : gross;
+  const displayedNet = vatDisplayBasisIsGross(q.vatMode) ? gross : net;
   const pricing = pricingForVatMode(readPricing(q.classification, Number(q.discountPct)), q.vatMode, vatRate);
   const { finalNet } = applyPricing(displayedNet, pricing);
-  const vatAmt = q.vatMode === "EXCLUSIVE_PLUS" ? finalNet * vatRate : 0;
+  const vatAmt = vatModeAddsVat(q.vatMode) ? finalNet * vatRate : 0;
   return round2(finalNet + vatAmt);
 }
