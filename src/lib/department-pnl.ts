@@ -297,8 +297,22 @@ export function orderStockLines(
       if (isVentCap(specs)) {
         return { name: ventCapStockName(specs, it.descriptionSnapshot), qty: Number(it.qty) || 1 };
       }
-      // Other Office-supplied products (AlphaAir) match by brand + type + model.
-      const name = productLabel(specs, it.descriptionSnapshot) || str(specs.type) || "Item";
+      // Other Office-supplied products (AlphaAir, e.g. "Duct Canvass Connector /
+      // Silicone / Per meter"): name from the salesperson's full description so the
+      // variant (material / size) shows and matches the quotation — prefixing the
+      // brand when the description omits it. Falls back to the product label.
+      const descName = str(it.descriptionSnapshot)
+        .split(/\r?\n/)
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .join(" ")
+        .slice(0, 90);
+      const brand = str(specs.brand);
+      const name = descName
+        ? brand && !descName.toLowerCase().includes(brand.toLowerCase())
+          ? `${brand} ${descName}`
+          : descName
+        : productLabel(specs, it.descriptionSnapshot) || str(specs.type) || "Item";
       return { name, qty: Number(it.qty) || 1 };
     });
   const combined = new Map<string, { name: string; qty: number }>();
