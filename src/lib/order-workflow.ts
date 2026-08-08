@@ -591,9 +591,9 @@ export interface PendingStep {
  * "released" stage routes to the stock-release path instead.
  *
  * `engineerApprovesStock` is vestigial (kept for signature stability): the from-stock
- * release role now depends on the fulfilment mode — delivery = Plant Manager releases
- * then Sales notifies; office pick up = Sales; plant pick up = Warehouse releases then
- * Plant Manager approves — not on duct-hardware/Engineer gating.
+ * release role now depends on the fulfilment mode — delivery = Warehouse releases,
+ * Plant Manager approves, then Sales notifies; office pick up = Sales; plant pick up =
+ * Warehouse releases then Plant Manager approves — not on duct-hardware/Engineer gating.
  */
 export function pendingStep(
   wf: OrderWorkflow,
@@ -634,10 +634,11 @@ export function pendingStep(
             ? { action: "Quality & Quantity Approved", roles: ["plant_manager"] }
             : { action: "Release from Stock", roles: ["warehouse"] };
         }
-        // Delivery: the Plant Manager releases from stock, then Sales notifies the client.
-        return released
-          ? { action: "Release from Stock & Notify Client", roles: [], sales: true }
-          : { action: "Release from Stock", roles: ["plant_manager"] };
+        // Delivery: the Warehouse releases from stock, the Plant Manager approves the
+        // quality & quantity, then Sales notifies the client.
+        if (!released) return { action: "Release from Stock", roles: ["warehouse"] };
+        if (!wf.approvals.stock_release_approved) return { action: "Quality & Quantity Approved", roles: ["plant_manager"] };
+        return { action: "Release from Stock & Notify Client", roles: [], sales: true };
       }
       if (boughtIn) {
         return { action: "Prepare & process the Purchase Order", roles: ["purchaser", "technical_head"] };

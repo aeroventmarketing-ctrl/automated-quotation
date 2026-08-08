@@ -1272,41 +1272,73 @@ function isSalesActor(user: { id: string; role: string }, preparedById: string):
 }
 
 /**
- * The second step of a from-stock release (delivery & plant pick up only). The
- * order has already been physically released from stock (`stock_released`); this
- * advances it to Phase 5:
- *  - Delivery    → **Sales** notifies the client ("Release from Stock & Notify Client").
- *  - Plant pick up → the **Plant Manager** approves ("Quality & Quantity Approved").
- * Office pick up has no second step — its release + notify is a single action.
+ * The Plant Manager's quality & quantity approval of a from-stock release
+ * (delivery & plant pick up — office pick up releases + notifies in one action).
+ * The order has already been physically released from stock (`stock_released`):
+ *  - Plant pick up → this is the final sign-off; the order advances to Phase 5.
+ *  - Delivery      → this stamps the approval only; the order stays awaiting the
+ *    **Sales** client-notify step (`notifyStockReleaseClient`) before Phase 5.
  */
 export async function confirmStockRelease(quotationId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
-  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
   if (!wf.approvals.stock_released) throw new Error("The order hasn't been released from stock yet.");
+  if (wf.approvals.stock_release_approved) throw new Error("The stock release has already been approved.");
   const items = await prisma.quotationItem.findMany({
     where: { quotationId },
     select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
   });
   if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey)))
+    throw new Error("Only the Plant Manager or an admin can approve the stock release.");
   const plant = wf.fulfillmentMode === "plant_pickup";
-  let approvals;
-  if (plant) {
-    if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey)))
-      throw new Error("Only the Plant Manager or an admin can approve the stock release.");
-    approvals = stamp({ approvals: stamp(wf, "stock_release_approved", user) }, "client_notified", user);
-  } else {
-    if (!(isAdmin(user) || isSalesActor(user, quote.preparedById ?? "")))
-      throw new Error("Only Sales or an admin can notify the client.");
-    approvals = stamp(wf, "client_notified", user);
-  }
-  await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_review", approvals });
+  // Plant pick up: PM approval is the last step (also notifies) → Phase 5. Delivery:
+  // approval only; Sales notifies the client next before it moves to Phase 5.
+  const approvals = plant
+    ? stamp({ approvals: stamp(wf, "stock_release_approved", user) }, "client_notified", user)
+    : stamp(wf, "stock_release_approved", user);
+  const workflow = plant
+    ? { ...wf, stage: "final_pay_review", approvals }
+    : { ...wf, approvals };
+  await saveWorkflow(quotationId, cls, workflow);
   await logActivity(user, {
     action: "order.stock.release.confirm",
     category: "order",
-    summary: `${plant ? "Approved" : "Notified client for"} stock release — ${await orderRefLabel(quotationId)}`,
+    summary: `Approved stock release — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
+}
+
+/**
+ * The final step of a from-stock **delivery** release: once the Warehouse has
+ * released the stock (`stock_released`) and the Plant Manager has approved it
+ * (`stock_release_approved`), **Sales** notifies the client the order is ready and
+ * the order advances to Phase 5.
+ */
+export async function notifyStockReleaseClient(quotationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const { quote, cls, wf } = await loadWorkflow(quotationId);
+  if (wf.stage !== "released") throw new Error("The order isn't awaiting stock release.");
+  if (!wf.approvals.stock_release_approved) throw new Error("The Plant Manager hasn't approved the stock release yet.");
+  const items = await prisma.quotationItem.findMany({
+    where: { quotationId },
+    select: { qty: true, descriptionSnapshot: true, specsSnapshot: true },
+  });
+  if (!isStockOnlyOrder(items)) throw new Error("This order isn't a from-stock order.");
+  if (!(isAdmin(user) || isSalesActor(user, quote.preparedById ?? "")))
+    throw new Error("Only Sales or an admin can notify the client.");
+  const approvals = stamp(wf, "client_notified", user);
+  await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_review", approvals });
+  await logActivity(user, {
+    action: "order.stock.release.notify",
+    category: "order",
+    summary: `Notified client for stock release — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
     href: `/orders/${quotationId}`,
@@ -1328,17 +1360,15 @@ export async function releaseOrderFromStock(quotationId: string, matches: StockM
   // a role that depends on where the goods sit / how they're collected:
   //  - office pick up → Sales (releases AND notifies the client — single step);
   //  - plant pick up  → the Warehouse (the Plant Manager approves next);
-  //  - delivery       → the Plant Manager (Sales notifies the client next).
+  //  - delivery       → the Warehouse (the Plant Manager approves, then Sales notifies).
   const officePickup = wf.officePickup === true;
-  const plant = wf.fulfillmentMode === "plant_pickup";
   let allowed = isAdmin(user);
   if (!allowed) {
     if (officePickup) allowed = isSalesActor(user, quote.preparedById ?? "");
-    else if (plant) allowed = userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
-    else allowed = userHasWorkflowRole(roles, user.id, "plant_manager" as WorkflowRoleKey);
+    else allowed = userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey);
   }
   if (!allowed) {
-    const who = officePickup ? "Sales" : plant ? "the Warehouse" : "the Plant Manager";
+    const who = officePickup ? "Sales" : "the Warehouse";
     throw new Error(`Only ${who} or an admin can release this order from stock.`);
   }
   // Deduct the released quantities from inventory. Unmatched lines are skipped
