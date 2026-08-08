@@ -3937,15 +3937,18 @@ async function loadForCloseDoc(quotationId: string, key: string) {
   });
   if (!quote) throw new Error("Order not found");
   const roles = await getWorkflowRoles();
+  // The sales side (Sales / Engineer, not just the order's preparer) attaches the
+  // final-payment proof and billing statement and helps with the closing documents —
+  // matching the upload affordance shown on the order card (canFile || isSalesViewer).
+  // The Warehouseman's delivery form stays warehouse-only (handled below).
+  const salesActor = user.role === "SALES" || user.role === "ENGINEER";
   const ok = isAdmin(user)
     || quote.preparedById === user.id
     || userHasWorkflowRole(roles, user.id, "accounting" as WorkflowRoleKey)
-    // Logistics attaches/removes the proof of delivery (the "pod" slot only) —
-    // they own the delivery step but aren't Accounting/Sales. For office pickup,
-    // Sales uploads the proof of pick up into the same slot.
-    || (key === "pod" && (userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey) || user.role === "SALES"))
-    // Plant pick up: the Warehouseman attaches the delivery form and the proof of
-    // pick up.
+    || (salesActor && key !== "delivery_form")
+    // Logistics attaches/removes the proof of delivery (the "pod" slot only).
+    || (key === "pod" && userHasWorkflowRole(roles, user.id, "logistics" as WorkflowRoleKey))
+    // Plant pick up: the Warehouseman attaches the delivery form and the proof of pick up.
     || ((key === "pod" || key === "delivery_form") && userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey));
   if (!ok) throw new Error("Only Accounting, Sales or an admin can attach closing documents.");
   const cls = (quote.classification as Record<string, unknown>) ?? {};
