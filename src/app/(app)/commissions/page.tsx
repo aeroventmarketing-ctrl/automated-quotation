@@ -118,7 +118,7 @@ export default async function CommissionsPage() {
                       {rows.map((r) => {
                         const payout = payoutDate(r.salesMonth);
                         return (
-                          <TableRow key={r.id}>
+                          <TableRow key={r.id} id={`commission-${r.id}`} className="scroll-mt-24 target:bg-primary/10">
                             <TableCell className="whitespace-nowrap text-sm">{monthLabel(r.salesMonth)}</TableCell>
                             <TableCell className="text-sm">{r.salespersonName}</TableCell>
                             <TableCell>

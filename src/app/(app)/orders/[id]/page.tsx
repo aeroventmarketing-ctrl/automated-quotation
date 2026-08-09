@@ -871,8 +871,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         })}
       </div>
 
-      {/* Live workflow status — who acts next, visible to everyone */}
-      <Card className={pend ? "border-primary/40 bg-primary/5" : "border-emerald-500/40 bg-emerald-500/5"}>
+      {/* Live workflow status — who acts next, visible to everyone. `#pending` is the
+          deep-link target for order notifications, so they land on the current action. */}
+      <Card id="pending" className={`scroll-mt-24 ${pend ? "border-primary/40 bg-primary/5" : "border-emerald-500/40 bg-emerald-500/5"}`}>
         <CardContent className="py-3">
           {pend ? (
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">

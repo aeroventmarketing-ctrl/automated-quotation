@@ -96,7 +96,7 @@ export async function createSchedule(input: ScheduleInput): Promise<void> {
   const { startAt, endAt } = timesOf(d);
   const now = new Date();
   const extras = await extrasOf(d, user);
-  await prisma.schedule.create({
+  const created = await prisma.schedule.create({
     data: {
       title: d.title,
       details: d.details || null,
@@ -120,7 +120,8 @@ export async function createSchedule(input: ScheduleInput): Promise<void> {
     category: "schedule",
     summary: `Added schedule “${d.title}”${approver ? "" : " (pending approval)"}`,
     entity: "schedule",
-    href: "/calendar",
+    entityId: created.id,
+    href: `/calendar?event=${created.id}`,
   });
   revalidatePath("/management");
   revalidatePath("/calendar");
@@ -190,7 +191,8 @@ export async function decideSchedule(id: string, decision: "approve" | "reject",
     category: "schedule",
     summary: `${decision === "approve" ? "Approved" : "Rejected"} schedule “${s.title}”`,
     entity: "schedule",
-    href: "/calendar",
+    entityId: s.id,
+    href: `/calendar?event=${s.id}`,
   });
   revalidatePath("/management");
   revalidatePath("/calendar");

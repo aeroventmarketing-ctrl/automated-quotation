@@ -14,6 +14,29 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Notifications — deep-link order / cash / schedule / commission alarms
+- **Owner-requested follow-up (#1 + #2 from the purchasing fix):** make every remaining
+  notification land on the pending action, not a generic list.
+- **#1 Orders:** the 16 order-category `logActivity` hrefs now append **`#pending`** (`orders/actions.ts`),
+  and the "Waiting for" status card got `id="pending"` + `scroll-mt-24` (`orders/[id]/page.tsx`), so
+  order notifications scroll straight to the current action/approver.
+- **#2 Cash / Schedule / Commission** (each page previously had no deep-link):
+  - **Cash** (`?id=<id>`): `cash-requests/page.tsx` reads it; `cash-request-list.tsx` defaults to the
+    **All** tab, scrolls to & highlights the row (`cr-<id>`). Hrefs → `/cash-requests?id=<id>`:
+    `cash.request.submit` (now captures the created id) + `cash.<step>` (`cash-requests/actions.ts`)
+    and the dashboard cash task (`my-dashboard.ts`).
+  - **Schedule** (`?event=<id>`): `calendar/page.tsx` reads it; `schedule-calendar.tsx` opens that
+    event's **detail drawer** on load (via `detailKey`), so the approver lands on the Approve action
+    regardless of the calendar view. Hrefs → `/calendar?event=<id>`: `schedule.create` (captures id) +
+    `schedule.<decision>` (`schedule-actions.ts`) and the dashboard schedule task.
+  - **Commission** (`#commission-<id>`): `commissions/page.tsx` rows got `id` + `scroll-mt-24` +
+    `:target` highlight. The dashboard commission task previously linked to the *source doc* (order /
+    counter-sale) though "Mark paid" is on the Commissions page — now `/commissions#commission-<id>`,
+    and `commission.paid/unpaid` (`commissions/actions.ts`) too.
+- **Requisitions:** intentionally skipped — no notification/feed points at `/requisitions` (dept
+  requisitions surface in the Purchasing tab, already deep-linked). Typecheck + lint clean. **No P&L
+  / workflow change.**
+
 ## 2026-08-09 · Notifications — deep-link purchasing alarms to the exact request
 - **Owner-reported:** clicking a notification doesn't land on the pending action, especially in the
   Purchasing tab. **Audit** (read-only agent) confirmed every `logActivity` has an href (all

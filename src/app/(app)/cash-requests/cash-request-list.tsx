@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Printer, Search } from "lucide-react";
@@ -59,7 +59,7 @@ function cashBucket(status: CashRequestStatus): CashBucket {
 }
 
 /** One cash request: header, breakdown, chain actions, trail and liquidation. */
-function CashRow({ r }: { r: CashRequestRow }) {
+function CashRow({ r, highlight = false }: { r: CashRequestRow; highlight?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -107,7 +107,7 @@ function CashRow({ r }: { r: CashRequestRow }) {
   const showLiquidation = r.status === "RECEIVED" || r.status === "LIQUIDATED" || r.status === "SETTLED";
 
   return (
-    <div id={`cr-${r.id}`} className="scroll-mt-20 rounded-lg border p-3">
+    <div id={`cr-${r.id}`} className={`scroll-mt-20 rounded-lg border p-3 ${highlight ? "ring-2 ring-primary ring-offset-2" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -221,9 +221,20 @@ function rowText(r: CashRequestRow): string {
   return [r.number, r.purpose, r.categoryLabel, r.deptLabel ?? "", r.note ?? "", ...r.lines.map((l) => l.description)].join("  ");
 }
 
-export function CashRequestList({ rows }: { rows: CashRequestRow[] }) {
-  const [tab, setTab] = useState<CashTab>("pending");
+export function CashRequestList({ rows, highlightId }: { rows: CashRequestRow[]; highlightId?: string }) {
+  // Deep-link (?id=<id> from a notification): default to the "All" tab so the
+  // request is visible whatever its status, then scroll to & highlight it.
+  const [tab, setTab] = useState<CashTab>(highlightId ? "all" : "pending");
   const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState<string | undefined>(highlightId);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const el = document.getElementById(`cr-${highlightId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = window.setTimeout(() => setHighlight(undefined), 4000);
+    return () => window.clearTimeout(t);
+  }, [highlightId]);
 
   const counts: Record<CashTab, number> = { pending: 0, approved: 0, budgeted: 0, rejected: 0, cancelled: 0, all: 0 };
   for (const r of rows) counts[cashBucket(r.status)]++;
@@ -268,7 +279,7 @@ export function CashRequestList({ rows }: { rows: CashRequestRow[] }) {
             : `No ${tab === "all" ? "" : tab + " "}cash requests${rows.length === 0 ? " yet" : ""}.`}
         </p>
       ) : (
-        shown.map((r) => <CashRow key={r.id} r={r} />)
+        shown.map((r) => <CashRow key={r.id} r={r} highlight={highlight === r.id} />)
       )}
     </div>
   );

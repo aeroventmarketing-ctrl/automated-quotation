@@ -11,7 +11,8 @@ import { CashRequestList } from "./cash-request-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function CashRequestsPage() {
+export default async function CashRequestsPage({ searchParams }: { searchParams?: Promise<{ id?: string }> }) {
+  const highlightId = (await searchParams)?.id;
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   if (!viewer) return null;
   const admin = isAdmin(viewer);
@@ -80,7 +81,7 @@ export default async function CashRequestsPage() {
         {tableMissing ? (
           <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Cash requests aren&apos;t set up yet — run the database migration.</CardContent></Card>
         ) : (
-          <Card><CardContent className="pt-6"><CashRequestList rows={rows} /></CardContent></Card>
+          <Card><CardContent className="pt-6"><CashRequestList rows={rows} highlightId={highlightId} /></CardContent></Card>
         )}
       </div>
     </div>

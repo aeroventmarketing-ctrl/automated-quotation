@@ -400,7 +400,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         key: `cash:${cr.id}`, area: "cash", areaLabel: AREA_LABEL.cash,
         title: cr.number ? `Cash ${cr.number}` : "Cash request", action: steps[0]?.label ?? CASH_STATUS_LABEL[cr.status as CashRequestStatus] ?? "Process",
         client: cr.purpose ?? null, amount: Number(cr.amount), currency: "PHP",
-        href: "/cash-requests",
+        href: `/cash-requests?id=${cr.id}`,
         since: cr.createdAt.toISOString(),
       });
     }
@@ -414,7 +414,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         tasks.push({
           key: `sched:${s.id}`, area: "schedule", areaLabel: AREA_LABEL.schedule,
           title: s.title, action: "Approve schedule", client: null, amount: null, currency: "PHP",
-          href: "/calendar",
+          href: `/calendar?event=${s.id}`,
           since: s.createdAt.toISOString(),
         });
       }
@@ -444,7 +444,8 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           key: `comm:${c.id}`, area: "commission", areaLabel: AREA_LABEL.commission,
           title: `Commission · ${ref.label}`, action: "Mark commission paid",
           client: maskClient(ref.client), amount: maskAmount(Number(c.amount)), currency: "PHP",
-          href: ref.href,
+          // "Mark paid" is done on the Commissions page — deep-link (anchor) to the row.
+          href: `/commissions#commission-${c.id}`,
           since: c.computedAt.toISOString(),
         });
       }

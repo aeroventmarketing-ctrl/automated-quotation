@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
  * the same calendar shown on the Management Dashboard, surfaced on its own page
  * so all roles can see and use it.
  */
-export default async function CalendarPage() {
+export default async function CalendarPage({ searchParams }: { searchParams?: Promise<{ event?: string }> }) {
+  const openScheduleId = (await searchParams)?.event;
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   const canApproveSchedule =
     viewer != null && (canApprove(viewer) || userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey));
@@ -65,7 +66,7 @@ export default async function CalendarPage() {
           {scheduleMissing ? (
             <p className="py-6 text-center text-sm text-muted-foreground">The calendar isn&rsquo;t set up yet — apply the schedule migrations (<code className="rounded bg-muted px-1">0025_schedules</code> … <code className="rounded bg-muted px-1">0030_calendar_features</code>) in Supabase to enable it.</p>
           ) : (
-            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} viewerId={viewer?.id ?? ""} users={users} calendars={calendars} canManageCalendars={canApproveSchedule} scheduleApprovers={scheduleApprovers} />
+            <ScheduleCalendar schedules={scheduleRows} canApprove={canApproveSchedule} viewerId={viewer?.id ?? ""} users={users} calendars={calendars} canManageCalendars={canApproveSchedule} scheduleApprovers={scheduleApprovers} openScheduleId={openScheduleId} />
           )}
         </CardContent>
       </Card>

@@ -25,7 +25,7 @@ export async function markCommissionPaid(commissionId: string, paid: boolean): P
     summary: `Commission marked ${paid ? "paid" : "unpaid"} — ${c.salespersonName} (₱${Number(c.amount).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
     entity: "commission",
     entityId: commissionId,
-    href: "/commissions",
+    href: `/commissions#commission-${commissionId}`,
   });
   revalidatePath("/commissions");
 }
