@@ -201,7 +201,7 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
     summary: `${def.label} — order ${quote.quoteNumber}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
   revalidatePath("/orders");
   revalidatePath(`/orders/${quotationId}`);
@@ -358,7 +358,7 @@ export async function issueJobOrders(quotationId: string, deptKeys: string[]): P
     summary: `Issued job order${added.length > 1 ? "s" : ""} (${added.map(deptLabel).join(", ")}) — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -381,7 +381,7 @@ export async function receiveJobOrders(quotationId: string): Promise<void> {
     summary: `Received job orders — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -436,7 +436,7 @@ export async function advanceJobOrder(
     summary: `${deptLabel(deptKey)}: ${to === "in_production" ? "started" : "finished"} production — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -471,7 +471,7 @@ export async function addJobOrderProof(quotationId: string, dept: string, doc: S
     summary: `${deptLabel(deptKey)}: attached a production proof — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -987,7 +987,7 @@ export async function setJobOrderApproval(
     summary: `${approve ? "Approved" : "Reopened"} ${deptLabel(dept as ProductionDeptKey)} job order — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1262,7 +1262,7 @@ export async function notifyClientBoughtInOrder(quotationId: string): Promise<vo
     summary: `Notified client — bought-in order ready — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1310,7 +1310,7 @@ export async function confirmStockRelease(quotationId: string): Promise<void> {
     summary: `Approved stock release — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1341,7 +1341,7 @@ export async function notifyStockReleaseClient(quotationId: string): Promise<voi
     summary: `Notified client for stock release — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1410,7 +1410,7 @@ export async function releaseOrderFromStock(quotationId: string, matches: StockM
     summary: `Released order from stock — ${await orderRefLabel(quotationId)}`,
     entity: "order",
     entityId: quotationId,
-    href: `/orders/${quotationId}`,
+    href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1496,7 +1496,7 @@ export async function confirmMaterialReceipt(quotationId: string, requestId: str
     summary: hasShortfall
       ? `MRF #${mrf.formNo} received (partial — balance still owing) — ${deptLabel(mrf.dept)} confirmed · ${await orderRefLabel(quotationId)}`
       : `MRF #${mrf.formNo} completed — ${deptLabel(mrf.dept)} confirmed receipt · ${await orderRefLabel(quotationId)}`,
-    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1510,7 +1510,7 @@ export async function followUpMaterialRequest(quotationId: string, requestId: st
   await logActivity(user, {
     action: "mrf.followup", category: "order",
     summary: `${deptLabel(mrf.dept)} followed up MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
-    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1531,7 +1531,7 @@ export async function informMaterialAvailable(quotationId: string, requestId: st
   await logActivity(user, {
     action: "mrf.informed", category: "order",
     summary: `Warehouse told ${deptLabel(mrf.dept)}: MRF #${mrf.formNo} materials are available — ${await orderRefLabel(quotationId)}`,
-    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1617,7 +1617,7 @@ export async function releaseMaterialToRequestor(
   await logActivity(user, {
     action: "mrf.released", category: "order",
     summary: `Released MRF #${mrf.formNo} materials to ${deptLabel(mrf.dept)} — ${await orderRefLabel(quotationId)}`,
-    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1654,7 +1654,7 @@ export async function setMrfReleasedQuantities(
   await logActivity(user, {
     action: "mrf.correct", category: "order",
     summary: `Corrected released quantities on MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
-    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
 
@@ -1689,7 +1689,7 @@ export async function resetMaterialReceipt(quotationId: string, requestId: strin
   await logActivity(user, {
     action: "mrf.reset_receipt", category: "order",
     summary: `Reset receipt confirmation on MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
-    entity: "order", entityId: quotationId, href: `/orders/${quotationId}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
 

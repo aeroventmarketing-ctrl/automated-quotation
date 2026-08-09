@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus, X, Check, Ban, Trash2, Pencil, MapPin, CalendarDays, User, Users, Repeat, Bell, Paperclip, MessageSquare, Send, Upload, Link2, ListChecks, Square, CheckSquare, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,7 @@ export function ScheduleCalendar({
   calendars = [DEFAULT_CAL],
   canManageCalendars = false,
   scheduleApprovers = [],
+  openScheduleId,
 }: {
   schedules: ScheduleView[];
   canApprove: boolean;
@@ -96,6 +97,8 @@ export function ScheduleCalendar({
   calendars?: string[];
   canManageCalendars?: boolean;
   scheduleApprovers?: string[];
+  /** Deep-link (?event=<id>): open this schedule's detail drawer on load. */
+  openScheduleId?: string;
 }) {
   const router = useRouter();
   // Alerts go-live gate: hold the blinking "pending approval" badge until launch.
@@ -106,6 +109,15 @@ export function ScheduleCalendar({
   const [form, setForm] = useState<FormState | null>(null);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [dayList, setDayList] = useState<{ key: string } | null>(null);
+
+  // Deep-link from a notification (?event=<id>): open that schedule's detail drawer
+  // straight away, so the approver lands on the event (and its Approve action).
+  useEffect(() => {
+    if (!openScheduleId) return;
+    const target = schedules.find((s) => s.id === openScheduleId);
+    if (target) setDetailKey(rowKey(target));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openScheduleId]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [comment, setComment] = useState("");

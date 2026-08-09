@@ -93,9 +93,9 @@ export async function createCashRequest(input: {
   const amount = input.amount && input.amount.trim() !== "" ? num(input.amount) : linesTotal;
   if (amount <= 0) throw new Error("Enter the amount being requested (greater than zero).");
 
-  await prisma.$transaction(async (tx) => {
+  const createdId = await prisma.$transaction(async (tx) => {
     const number = await nextCashNumber(tx);
-    await tx.cashRequest.create({
+    const created = await tx.cashRequest.create({
       data: {
         number,
         purpose,
@@ -109,13 +109,15 @@ export async function createCashRequest(input: {
         note: input.note?.trim() || null,
       },
     });
+    return created.id;
   });
   await logActivity(user, {
     action: "cash.request.submit",
     category: "cash",
     summary: `Cash request submitted: ${purpose} (₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
     entity: "cash",
-    href: "/cash-requests",
+    entityId: createdId,
+    href: `/cash-requests?id=${createdId}`,
   });
   revalidatePath("/cash-requests");
 }
@@ -193,7 +195,7 @@ export async function advanceCashRequest(id: string, stepKey: string, note?: str
     summary: `${step.label} — cash request ${pr.number}`,
     entity: "cash",
     entityId: id,
-    href: "/cash-requests",
+    href: `/cash-requests?id=${id}`,
   });
   revalidatePath("/cash-requests");
 }
