@@ -338,7 +338,7 @@ export function FulfillmentActions({
             <p className="text-sm font-medium">{plantPickup ? "Approve proof of pick up" : "Approve proof of delivery"}</p>
             <p className="text-xs text-muted-foreground">{plantPickup ? "Sales approves the proof of pick up and marks the pick up successful." : "Sales approves the proof of delivery and marks the delivery successful."}</p>
             <Button size="sm" disabled={busy} onClick={() => run(() => approveDelivery(orderId))}>
-              {busy ? "Saving…" : plantPickup ? "Approve POD - Successful Pick Up" : "Approve POD - Successful Delivery"}
+              {busy ? "Saving…" : plantPickup ? "Approve POP - Successful Pick Up" : "Approve POD - Successful Delivery"}
             </Button>
           </div>
         ) : awaiting(plantPickup ? "to approve the proof of pick up" : "to approve the proof of delivery", [], true))}

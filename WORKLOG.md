@@ -14,6 +14,18 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Pick-up approval button — POD → POP ("Proof of Pick up")
+- **Owner request:** on pick-up orders the approval button read **"Approve POD - Successful Pick Up"**,
+  but POD = *Proof of Delivery* — wrong for a pick up. Relabel the acronym to **POP** (*Proof of Pick
+  up*) everywhere it refers to a pick up; delivery buttons stay **POD**.
+- **Changed (pick-up branches only):** the single-flow `delivered` button + helper text
+  (`fulfillment-actions.tsx` plant-pickup branch, `pickup-pod-form.tsx` office-pickup),
+  the `pendingStep` "Waiting for" action for pick up (`order-workflow.ts`), the three multi-batch
+  pick-up step labels (`delivery-multibatch.ts` — office / plant / bought-in pickup; the delivery
+  variant keeps "Approve POD — successful delivery"), and the multi-batch panel's gate hint
+  (`multi-batch-panel.tsx`). Delivery-mode labels untouched. Typecheck + lint clean. **Label only —
+  no workflow / P&L change.**
+
 ## 2026-08-09 · Multi-batch delivery — 1st Quality Inspector can run the quality test
 - **Owner-reported:** on a produced order in **multiple-batch delivery** (AFBM00003006R), the
   **"Quality Tested-Passed"** button was missing for a user assigned **1st Quality Inspector**;

@@ -113,7 +113,7 @@ export const MULTIBATCH_PICKUP_STEPS: MBStepDef[] = [
   // Combined step (matches the single-pickup flow): Sales uploads the proof of
   // pick up (into the batch's POD) and approves it in one action. Keeps the
   // `delivered` key so the POD gate, delivered-qty tracking and close trigger work.
-  { key: "delivered", label: "Approve POD — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
+  { key: "delivered", label: "Approve POP — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
   { key: "docs_surrendered", label: "Documents surrendered to accounting", done: "Signed documents surrendered", role: "sales" },
   { key: "docs_received", label: "Confirm documents received", done: "Documents received by accounting", role: "accounting" },
   { key: "docs_filed", label: "File documents — batch picked up", done: "Documents filed (partial pick up)", role: "accounting" },
@@ -136,7 +136,7 @@ export const MULTIBATCH_PLANT_PICKUP_STEPS: MBStepDef[] = [
   { key: "delivery_docs", label: "Make the delivery form", done: "Delivery form made", role: "warehouse" },
   { key: "delivery_approved", label: "Approve delivery", done: "Delivery approved", role: "plant_manager" },
   { key: "delivered", label: "Upload proof of pick up & mark picked up", done: "Picked up", role: "warehouse" },
-  { key: "delivery_confirmed", label: "Approve POD — successful pick up", done: "Pick up confirmed (successful pick up)", role: "sales" },
+  { key: "delivery_confirmed", label: "Approve POP — successful pick up", done: "Pick up confirmed (successful pick up)", role: "sales" },
   { key: "docs_received", label: "Confirm documents received", done: "Documents received by accounting", role: "accounting" },
   { key: "docs_filed", label: "File documents — batch picked up", done: "Documents filed (partial pick up)", role: "accounting" },
 ];
@@ -171,7 +171,7 @@ export const MULTIBATCH_BOUGHTIN_PICKUP_STEPS: MBStepDef[] = [
   { key: "qa_transferred", label: "Transferred to Office", done: "Transferred to office", role: "logistics" },
   { key: "qa_sales_checked", label: "Quality & Quantity Checked", done: "Quality & quantity checked", role: "sales" },
   { key: "delivery_docs", label: "Save documents & approve pick up", done: "Pick-up documents ready", role: "accounting" },
-  { key: "delivered", label: "Approve POD — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
+  { key: "delivered", label: "Approve POP — successful pick up", done: "Picked up (successful pick up)", role: "sales" },
   { key: "docs_surrendered", label: "Documents surrendered to accounting", done: "Signed documents surrendered", role: "sales" },
   { key: "docs_received", label: "Confirm documents received", done: "Documents received by accounting", role: "accounting" },
   { key: "docs_filed", label: "File documents — batch picked up", done: "Documents filed (partial pick up)", role: "accounting" },

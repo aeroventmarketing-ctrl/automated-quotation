@@ -706,7 +706,7 @@ export function pendingStep(
         ? { action: "Upload proof of pick up & approve", roles: [], sales: true }
         : { action: "Deliver the order", roles: ["logistics"] };
     case "delivered":
-      return { action: plantPickup || officePickup ? "Approve POD - Successful Pick Up" : "Approve POD - Successful Delivery", roles: [], sales: true };
+      return { action: plantPickup || officePickup ? "Approve POP - Successful Pick Up" : "Approve POD - Successful Delivery", roles: [], sales: true };
     case "delivery_confirmed":
       // Plant pick up skips the surrender step — straight to Accounting confirming receipt.
       if (plantPickup) return { action: "Confirm documents received", roles: ["accounting"] };
