@@ -60,9 +60,10 @@ export function FollowUpTemplatesSetting({
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Write a different message for each nudge in the cadence. The greeting, the
-          <strong> View your quotation</strong> button, your signature and the opt-out line are added
-          automatically — you only edit the subject and the message. Use the
+          Write a different message for each nudge — <strong>include your own greeting</strong> (the
+          message is printed exactly as written). The
+          <strong> View your quotation</strong> button, the signature (Very Truly Yours / your name)
+          and the opt-out line are added automatically, so don&apos;t repeat those. Use the
           <strong> Preview nudge</strong> control above to email any nudge to yourself.
         </p>
         <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

@@ -120,6 +120,7 @@ export const DEFAULT_FOLLOWUP_TEMPLATES: FollowUpTemplate[] = [
   {
     subject: "Following up on your quotation {quoteNumber}",
     body:
+      "Dear {contactName},\n\n" +
       "Thank you for the opportunity to quote your requirement. We're following up on quotation {quoteNumber}, which we sent for your consideration.\n\n" +
       "Quoted amount: {total}.\n\n" +
       "If you have any questions or would like to make adjustments, simply reply to this email — we would be glad to assist.",
@@ -127,12 +128,14 @@ export const DEFAULT_FOLLOWUP_TEMPLATES: FollowUpTemplate[] = [
   {
     subject: "Still here to help with quotation {quoteNumber}",
     body:
+      "Dear {contactName},\n\n" +
       "We wanted to check in again on quotation {quoteNumber} ({total}). If the scope, specifications, or budget need adjusting, we'd be glad to revise it to fit your project.\n\n" +
       "Just reply with any questions — we're happy to help you move forward.",
   },
   {
     subject: "Your quotation {quoteNumber} — before it expires",
     body:
+      "Dear {contactName},\n\n" +
       "A gentle final reminder on quotation {quoteNumber} ({total}). If you'd like to proceed or discuss options, simply reply and we'll take care of the rest.\n\n" +
       "We value the opportunity and would be glad to assist whenever you're ready.",
   },
@@ -151,7 +154,6 @@ function applyTokens(s: string, tokens: Record<string, string>): string {
 }
 
 export function buildFollowUpEmail(i: FollowUpEmailInput & { template?: FollowUpTemplate }): BuiltEmail {
-  const greetingName = i.contactName?.trim() || i.company;
   const tokens: Record<string, string> = {
     contactName: i.contactName?.trim() || i.company,
     company: i.company,
@@ -170,8 +172,6 @@ export function buildFollowUpEmail(i: FollowUpEmailInput & { template?: FollowUp
   const paragraphs = bodyText.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
 
   const text = [
-    `Dear ${greetingName},`,
-    ``,
     bodyText,
     ``,
     `You can review the quotation anytime here:`,
@@ -189,7 +189,6 @@ export function buildFollowUpEmail(i: FollowUpEmailInput & { template?: FollowUp
 
   const bodyHtml = paragraphs.map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("\n  ");
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1f2933;max-width:560px">
-  <p>Dear ${esc(greetingName)},</p>
   ${bodyHtml}
   <p style="margin:22px 0">
     <a href="${esc(i.quoteUrl)}" style="background:#0d7a84;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;display:inline-block">View your quotation</a>
