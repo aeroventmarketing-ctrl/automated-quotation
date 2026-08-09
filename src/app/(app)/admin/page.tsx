@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
+import { getFollowUpTemplates } from "@/lib/follow-up-templates";
 import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { getNotificationsEnabled } from "@/lib/notification-settings";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
@@ -25,13 +26,14 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { SpLockSetting } from "./sp-lock-setting";
 import { AlertGoLiveSetting } from "./alert-golive-setting";
 import { FollowUpSetting } from "./follow-up-setting";
+import { FollowUpTemplatesSetting } from "./follow-up-templates-setting";
 import { RoleAccessSetting } from "./role-access-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress, notificationsEnabled, stockLocations, docCheckGate] = await Promise.all([
+  const [users, catalogue, prices, ratings, templates, inquiries, quotations, counter, propellerSpLock, axialSpLock, followUpSettings, hideOrderProgress, notificationsEnabled, stockLocations, docCheckGate, followUpTemplates] = await Promise.all([
     prisma.user.count(),
     prisma.catalogueItem.count(),
     prisma.priceListEntry.count(),
@@ -47,6 +49,7 @@ export default async function AdminOverviewPage() {
     getNotificationsEnabled(),
     getStockLocations(),
     getDocCheckGateEnabled(),
+    getFollowUpTemplates(),
   ]);
   const testMode = await getTestMode();
   const notificationBaseline = await getNotificationBaseline();
@@ -269,6 +272,11 @@ export default async function AdminOverviewPage() {
         onSave={saveFollowUpSettingsAction}
         onPreview={runFollowUpPreviewAction}
         onTest={sendTestFollowUpAction}
+      />
+      <FollowUpTemplatesSetting
+        count={followUpSettings.maxNudges}
+        templates={followUpTemplates}
+        onSave={saveFollowUpTemplatesAction}
       />
     </div>
   );

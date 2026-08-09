@@ -16,8 +16,9 @@ import { prisma } from "@/lib/db";
 import { config } from "@/lib/config";
 import { evaluateFollowUp, sentAtFrom, nudgesSentFrom } from "@/lib/follow-up";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
+import { getFollowUpTemplates } from "@/lib/follow-up-templates";
 import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
-import { buildFollowUpEmail, buildInquiryFollowUpEmail } from "@/lib/follow-up-email";
+import { buildFollowUpEmail, buildInquiryFollowUpEmail, templateForNudge } from "@/lib/follow-up-email";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
 
 export type RunAction = "sent" | "preview" | "skipped";
@@ -55,6 +56,7 @@ const SEND_CAP_PER_RUN = 100;
 export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise<FollowUpRunResult> {
   const now = opts.now ?? new Date();
   const settings = await getFollowUpSettings();
+  const templates = await getFollowUpTemplates();
 
   const canSend = emailConfigured() && !!config.followUpFromEmail;
   const effectiveLive = opts.live && settings.enabled && !settings.dryRun && canSend;
@@ -130,6 +132,7 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
       quoteUrl: `${config.appUrl}/q/${q.id}`,
       salesName: q.preparedBy.name,
       nudgeNumber: result.nudgeNumber,
+      template: templateForNudge(templates, result.nudgeNumber),
     });
 
     if (!effectiveLive) {

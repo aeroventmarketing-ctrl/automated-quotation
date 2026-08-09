@@ -80,7 +80,7 @@ export function FollowUpSetting({
   inquiryMaxNudges: number;
   onSave: (input: Config) => Promise<Config>;
   onPreview: () => Promise<RunResult>;
-  onTest: () => Promise<{ ok: boolean; to: string }>;
+  onTest: (nudge: number) => Promise<{ ok: boolean; to: string }>;
 }) {
   const [daysStr, setDaysStr] = useState(offsetsDays.join(", "));
   const [max, setMax] = useState(String(maxNudges));
@@ -92,6 +92,7 @@ export function FollowUpSetting({
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testNudge, setTestNudge] = useState(1);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [run, setRun] = useState<RunResult | null>(null);
 
@@ -151,14 +152,17 @@ export function FollowUpSetting({
     setTesting(true);
     setMsg(null);
     try {
-      const r = await onTest();
-      setMsg({ ok: true, text: `Test email sent to ${r.to}. Check your inbox (and spam folder). No client received it.` });
+      const r = await onTest(testNudge);
+      setMsg({ ok: true, text: `Test (nudge #${testNudge}) sent to ${r.to}. Check your inbox (and spam folder). No client received it.` });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Test send failed" });
     } finally {
       setTesting(false);
     }
   }
+
+  // How many nudges the cadence currently has — drives the test-nudge picker.
+  const nudgeCount = Math.max(1, parseInt(max, 10) || parseDays().length || 1);
 
   const sendingLive = enabled && !dryRun;
 
@@ -225,13 +229,27 @@ export function FollowUpSetting({
           </div>
 
           {/* Test-to-self: sends the real follow-up template to the logged-in admin
-              only — safe way to check formatting + deliverability before going live. */}
+              only — safe way to check formatting + deliverability before going live.
+              The nudge picker previews each nudge's own message. */}
           <div className="flex flex-wrap items-center gap-3">
+            <label className="text-xs text-muted-foreground">
+              Preview nudge{" "}
+              <select
+                value={testNudge}
+                onChange={(e) => setTestNudge(parseInt(e.target.value, 10) || 1)}
+                disabled={testing}
+                className="ml-1 h-8 rounded-md border bg-background px-2 text-sm"
+              >
+                {Array.from({ length: nudgeCount }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>#{n}</option>
+                ))}
+              </select>
+            </label>
             <Button onClick={sendTest} disabled={testing} size="sm" variant="outline">
               {testing ? "Sending…" : "Send test email to me"}
             </Button>
             <span className="text-xs text-muted-foreground">
-              Emails the real follow-up template to your own address only — no client is affected. Works even while sending is off.
+              Sends the real template for that nudge to your own address only — no client is affected. Works even while sending is off.
             </span>
           </div>
         </div>
