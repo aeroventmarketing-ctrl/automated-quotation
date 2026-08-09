@@ -47,7 +47,6 @@ export interface FollowUpRunResult {
   errors: string[];
 }
 
-const SEND_CAP_PER_RUN = 100;
 
 /**
  * Run the follow-up pass. `live` is the caller's intent; the actual send decision
@@ -57,6 +56,8 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
   const now = opts.now ?? new Date();
   const settings = await getFollowUpSettings();
   const templates = await getFollowUpTemplates();
+  // Emails sent per run — quote follow-ups + inquiry check-ins share this budget.
+  const sendCap = settings.maxPerRun;
 
   const canSend = emailConfigured() && !!config.followUpFromEmail;
   const effectiveLive = opts.live && settings.enabled && !settings.dryRun && canSend;
@@ -141,7 +142,7 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
       continue;
     }
 
-    if (sent >= SEND_CAP_PER_RUN) {
+    if (sent >= sendCap) {
       skipped++;
       items.push({ ...base, action: "skipped", reason: "per-run send cap reached" });
       continue;
@@ -234,7 +235,7 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
     const email = buildInquiryFollowUpEmail({ company: c.company, contactName: c.contactName, salesName: inq.createdBy.name, projectName: inq.projectName ?? null });
 
     if (!inquiryLive) { previewed++; items.push({ ...base, action: "preview" }); continue; }
-    if (sent >= SEND_CAP_PER_RUN) { skipped++; items.push({ ...base, reason: "per-run send cap reached" }); continue; }
+    if (sent >= sendCap) { skipped++; items.push({ ...base, reason: "per-run send cap reached" }); continue; }
 
     try {
       await sendEmail({ from, to: c.email, subject: email.subject, text: email.text, html: email.html, replyTo: inq.createdBy.email ?? undefined });

@@ -14,6 +14,7 @@ interface Config {
   inquiryEnabled: boolean;
   inquiryEveryDays: number;
   inquiryMaxNudges: number;
+  maxPerRun: number;
 }
 
 interface RunItem {
@@ -67,6 +68,7 @@ export function FollowUpSetting({
   inquiryEnabled: initInquiryEnabled,
   inquiryEveryDays: initInquiryEveryDays,
   inquiryMaxNudges: initInquiryMaxNudges,
+  maxPerRun: initMaxPerRun,
   onSave,
   onPreview,
   onTest,
@@ -78,6 +80,7 @@ export function FollowUpSetting({
   inquiryEnabled: boolean;
   inquiryEveryDays: number;
   inquiryMaxNudges: number;
+  maxPerRun: number;
   onSave: (input: Config) => Promise<Config>;
   onPreview: () => Promise<RunResult>;
   onTest: (nudge: number) => Promise<{ ok: boolean; to: string }>;
@@ -89,6 +92,7 @@ export function FollowUpSetting({
   const [inquiryEnabled, setInquiryEnabled] = useState(initInquiryEnabled);
   const [inquiryEvery, setInquiryEvery] = useState(String(initInquiryEveryDays));
   const [inquiryMax, setInquiryMax] = useState(String(initInquiryMaxNudges));
+  const [maxPerRun, setMaxPerRun] = useState(String(initMaxPerRun));
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -112,6 +116,7 @@ export function FollowUpSetting({
       const wantMax = parseInt(max, 10);
       const wantEvery = parseInt(inquiryEvery, 10);
       const wantInqMax = parseInt(inquiryMax, 10);
+      const wantPerRun = parseInt(maxPerRun, 10);
       const saved = await onSave({
         offsetsDays: offsets,
         maxNudges: Number.isFinite(wantMax) && wantMax >= 1 ? wantMax : offsets.length,
@@ -120,6 +125,7 @@ export function FollowUpSetting({
         inquiryEnabled: next?.inquiryEnabled ?? inquiryEnabled,
         inquiryEveryDays: Number.isFinite(wantEvery) && wantEvery > 0 ? wantEvery : 30,
         inquiryMaxNudges: Number.isFinite(wantInqMax) && wantInqMax >= 1 ? wantInqMax : 6,
+        maxPerRun: Number.isFinite(wantPerRun) && wantPerRun >= 1 ? wantPerRun : 100,
       });
       setDaysStr(saved.offsetsDays.join(", "));
       setMax(String(saved.maxNudges));
@@ -128,6 +134,7 @@ export function FollowUpSetting({
       setInquiryEnabled(saved.inquiryEnabled);
       setInquiryEvery(String(saved.inquiryEveryDays));
       setInquiryMax(String(saved.inquiryMaxNudges));
+      setMaxPerRun(String(saved.maxPerRun));
       setMsg({ ok: true, text: "Saved." });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to save" });
@@ -187,10 +194,18 @@ export function FollowUpSetting({
               <Label htmlFor="fu-max" className="text-xs">Max nudges</Label>
               <Input id="fu-max" type="number" min={1} value={max} onChange={(e) => setMax(e.target.value)} className="h-9 w-24" />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="fu-perrun" className="text-xs">Max emails per run</Label>
+              <Input id="fu-perrun" type="number" min={1} max={100} value={maxPerRun} onChange={(e) => setMaxPerRun(e.target.value)} className="h-9 w-28" />
+            </div>
             <Button onClick={() => save()} disabled={busy} size="sm">
               {busy ? "Saving…" : "Save cadence"}
             </Button>
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            <strong>Max emails per run</strong> throttles each send for domain warm-up — e.g. set it to
+            <strong> 24</strong> to email 24 clients per run; the rest stay due for the next run (max 100).
+          </p>
         </div>
 
         <hr className="border-border" />

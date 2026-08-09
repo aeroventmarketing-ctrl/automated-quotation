@@ -26,7 +26,16 @@ export interface FollowUpConfig extends FollowUpSettings {
   inquiryEveryDays: number;
   /** Hard cap on how many inquiry nudges a client will ever receive (default 6). */
   inquiryMaxNudges: number;
+  /**
+   * Max emails sent in a single run (across quote follow-ups + inquiry check-ins).
+   * Lets you throttle for domain warm-up — set 24 to send 24 per run; the rest
+   * stay due for the next run. Default 100 (also the hard ceiling).
+   */
+  maxPerRun: number;
 }
+
+/** The hard ceiling on emails per run, regardless of the configured value. */
+export const FOLLOW_UP_MAX_PER_RUN = 100;
 
 export function normalizeFollowUpConfig(
   input: Partial<FollowUpConfig> | null | undefined,
@@ -46,6 +55,10 @@ export function normalizeFollowUpConfig(
   const rawInqMax = Math.floor(Number(input?.inquiryMaxNudges));
   const inquiryMaxNudges = Number.isFinite(rawInqMax) && rawInqMax >= 1 ? rawInqMax : 6;
 
+  const rawPerRun = Math.floor(Number(input?.maxPerRun));
+  const wantPerRun = Number.isFinite(rawPerRun) && rawPerRun >= 1 ? rawPerRun : FOLLOW_UP_MAX_PER_RUN;
+  const maxPerRun = Math.min(wantPerRun, FOLLOW_UP_MAX_PER_RUN);
+
   return {
     offsetsDays,
     maxNudges,
@@ -54,6 +67,7 @@ export function normalizeFollowUpConfig(
     inquiryEnabled: input?.inquiryEnabled === true, // default OFF
     inquiryEveryDays,
     inquiryMaxNudges,
+    maxPerRun,
   };
 }
 
