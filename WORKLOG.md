@@ -14,6 +14,17 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — "Send test email to me" button (safe deliverability check)
+- **Owner need:** verify the automated follow-up email (formatting + does it inbox on the new
+  `aeroventfbm.shop` domain) **without** enabling live sending or emailing any client.
+- **Added:** `sendTestFollowUpAction` (admin-only) in `admin/actions.ts` — builds the real
+  `buildFollowUpEmail` template with representative sample data, prefixes the subject with `[TEST]`
+  + a "sent only to you" note, and sends via Resend **to the logged-in admin's own address only**.
+  Ignores the enabled/dry-run switches (never touches a client) but still requires the Resend key +
+  sender to be set (clear error otherwise). Wired a **"Send test email to me"** button into the
+  Admin follow-up card (`follow-up-setting.tsx`, `admin/page.tsx`). Typecheck + lint clean.
+  **Non-workflow admin utility — no order-workflow / P&L change.**
+
 ## 2026-08-09 · All order workflows tested & locked — approval required for any workflow change
 - **Owner sign-off:** all five phases' workflows have been tested end-to-end and are now
   considered verified/locked. Going forward, change a workflow **only** when the owner explicitly
