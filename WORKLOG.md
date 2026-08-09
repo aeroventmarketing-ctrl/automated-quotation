@@ -14,6 +14,17 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — new email closing & signature
+- **Owner request:** replace the follow-up email's closing/sign-off with the new wording — closing
+  "Thank you for giving Aerovent Fans and Blowers Manufacturing the opportunity to submit our
+  proposal. We look forward to assisting you on this or any future project.", sign-off **Best regards,**,
+  then name / **Aerovent Fans and Blowers Manufacturing** / *Engineering Superior Airflow Solutions*.
+- **Scope guard:** `COMPANY.closing/signoff/signatory` are shared with the **quotation PDF / XLSX** and
+  marketing, so those were **not** touched. Instead added **local** `EMAIL_*` constants +
+  `emailSignatureText/Html()` helpers in `follow-up-email.ts` and used them in **both** the quote
+  follow-up and the inquiry check-in builders. Quote/marketing documents unchanged. Typecheck + lint
+  clean. **Email copy only — no workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups — "Max emails per run" throttle (warm-up / batch size)
 - **Owner need:** with ~48 clients due, send only a batch (e.g. 24) per run instead of all at once —
   a domain warm-up control.
