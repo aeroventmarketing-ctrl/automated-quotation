@@ -269,6 +269,7 @@ export default async function AdminOverviewPage() {
         inquiryEnabled={followUpSettings.inquiryEnabled}
         inquiryEveryDays={followUpSettings.inquiryEveryDays}
         inquiryMaxNudges={followUpSettings.inquiryMaxNudges}
+        maxPerRun={followUpSettings.maxPerRun}
         onSave={saveFollowUpSettingsAction}
         onPreview={runFollowUpPreviewAction}
         onTest={sendTestFollowUpAction}

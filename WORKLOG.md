@@ -14,6 +14,16 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — "Max emails per run" throttle (warm-up / batch size)
+- **Owner need:** with ~48 clients due, send only a batch (e.g. 24) per run instead of all at once —
+  a domain warm-up control.
+- **Added:** `maxPerRun` to `FollowUpConfig` (`follow-up-settings.ts`, default 100 = the hard ceiling,
+  `FOLLOW_UP_MAX_PER_RUN`). The runner (`follow-up-runner.ts`) now caps sends at `settings.maxPerRun`
+  (quote follow-ups + inquiry check-ins share the budget) instead of the old hardcoded 100; oldest due
+  first, the rest stay due for the next run. Admin cadence card gets a **"Max emails per run"** input
+  + warm-up note (`follow-up-setting.tsx`); schema + wiring updated (`admin/actions.ts`, `page.tsx`).
+  Typecheck + lint clean. **Non-workflow — no order-workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups — fix duplicate greeting (message owns the greeting)
 - **Owner-reported:** the sent email showed **"Dear <name>," twice** — the shell auto-added a greeting
   and the admin's custom message *also* began with its own greeting.
