@@ -38,6 +38,33 @@ const fmtDate = (d: Date) =>
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/**
+ * Closing + signature used ONLY in the follow-up / check-in emails. Kept local
+ * here (not the shared COMPANY constants, which drive the quotation PDF / XLSX)
+ * so the email sign-off can differ from the formal quote documents.
+ */
+const EMAIL_CLOSING =
+  "Thank you for giving Aerovent Fans and Blowers Manufacturing the opportunity to submit our proposal. We look forward to assisting you on this or any future project.";
+const EMAIL_SIGNOFF = "Best regards,";
+const EMAIL_COMPANY = "Aerovent Fans and Blowers Manufacturing";
+const EMAIL_TAGLINE = "Engineering Superior Airflow Solutions";
+
+/** The shared HTML signature block (sign-off → name → company → tagline). */
+const emailSignatureHtml = (salesName: string) =>
+  `<p>${esc(EMAIL_CLOSING)}</p>
+  <p style="margin-bottom:2px">${esc(EMAIL_SIGNOFF)}</p>
+  <p style="margin-top:0"><strong>${esc(salesName)}</strong><br>${esc(EMAIL_COMPANY)}<br><em>${esc(EMAIL_TAGLINE)}</em></p>`;
+
+/** The shared plain-text signature lines (sign-off → name → company → tagline). */
+const emailSignatureText = (salesName: string) => [
+  EMAIL_CLOSING,
+  ``,
+  EMAIL_SIGNOFF,
+  salesName,
+  EMAIL_COMPANY,
+  EMAIL_TAGLINE,
+];
+
 export interface InquiryFollowUpInput {
   company: string;
   contactName: string | null;
@@ -64,11 +91,7 @@ export function buildInquiryFollowUpEmail(i: InquiryFollowUpInput): BuiltEmail {
     ``,
     `If there's anything we can assist with, simply reply to this email and we'll get right back to you.`,
     ``,
-    COMPANY.closing,
-    ``,
-    COMPANY.signoff,
-    i.salesName,
-    COMPANY.signatory,
+    ...emailSignatureText(i.salesName),
     ``,
     `—`,
     `If you'd prefer not to receive these check-ins, just reply and let us know and we'll stop.`,
@@ -78,9 +101,7 @@ export function buildInquiryFollowUpEmail(i: InquiryFollowUpInput): BuiltEmail {
   <p>Dear ${esc(greetingName)},</p>
   <p>We wanted to check in and see how things are going${about ? ` regarding ${esc(i.projectName!.trim())}` : ""}. We'd be glad to help you move forward whenever you're ready — whether that's preparing a quotation, answering technical questions, or discussing options for your project.</p>
   <p>If there's anything we can assist with, simply reply to this email and we'll get right back to you.</p>
-  <p>${esc(COMPANY.closing)}</p>
-  <p style="margin-bottom:2px">${esc(COMPANY.signoff)}</p>
-  <p style="margin-top:0"><strong>${esc(i.salesName)}</strong><br>${esc(COMPANY.signatory)}</p>
+  ${emailSignatureHtml(i.salesName)}
   <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
   <p style="font-size:12px;color:#7d9199">If you'd prefer not to receive these check-ins, just reply and let us know and we'll stop.</p>
 </div>`;
@@ -177,11 +198,7 @@ export function buildFollowUpEmail(i: FollowUpEmailInput & { template?: FollowUp
     `You can review the quotation anytime here:`,
     i.quoteUrl,
     ``,
-    COMPANY.closing,
-    ``,
-    COMPANY.signoff,
-    i.salesName,
-    COMPANY.signatory,
+    ...emailSignatureText(i.salesName),
     ``,
     `—`,
     `If you'd prefer not to receive follow-ups on this quotation, just reply and let us know and we'll stop.`,
@@ -193,9 +210,7 @@ export function buildFollowUpEmail(i: FollowUpEmailInput & { template?: FollowUp
   <p style="margin:22px 0">
     <a href="${esc(i.quoteUrl)}" style="background:#0d7a84;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;display:inline-block">View your quotation</a>
   </p>
-  <p>${esc(COMPANY.closing)}</p>
-  <p style="margin-bottom:2px">${esc(COMPANY.signoff)}</p>
-  <p style="margin-top:0"><strong>${esc(i.salesName)}</strong><br>${esc(COMPANY.signatory)}</p>
+  ${emailSignatureHtml(i.salesName)}
   <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
   <p style="font-size:12px;color:#7d9199">If you'd prefer not to receive follow-ups on this quotation, just reply and let us know and we'll stop.</p>
 </div>`;
