@@ -56,6 +56,7 @@ import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
   mbStepDef,
+  mbStepRoles,
   mbProgress,
   mbBatchedByDescription,
   mbDeliveredByDescription,
@@ -3526,11 +3527,14 @@ export async function advanceMultiBatch(quotationId: string, batchId: string, st
   }
 
   const roles = await getWorkflowRoles();
+  // A step may permit more than one role (e.g. the produced quality test — Technical
+  // Head OR 1st Quality Inspector). Allow the actor if they hold ANY of them.
+  const stepRoles = mbStepRoles(stepDef);
   const allowed =
     isAdmin(user) ||
-    (stepDef.role === "sales" ? quote.preparedById === user.id : userHasWorkflowRole(roles, user.id, stepDef.role as WorkflowRoleKey));
+    stepRoles.some((r) => (r === "sales" ? quote.preparedById === user.id : userHasWorkflowRole(roles, user.id, r as WorkflowRoleKey)));
   if (!allowed) {
-    const who = stepDef.role === "sales" ? "Sales" : workflowRoleLabel(stepDef.role);
+    const who = stepRoles.map((r) => (r === "sales" ? "Sales" : workflowRoleLabel(r))).join(" or ");
     throw new Error(`Only ${who} or an admin can do this step.`);
   }
   const d = mbStepSchema.parse(input);

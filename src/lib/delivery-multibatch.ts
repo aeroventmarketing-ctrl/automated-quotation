@@ -51,7 +51,18 @@ export interface MBStepDef {
   label: string;
   done: string;
   role: MBRole;
+  /**
+   * Extra roles allowed to perform this step, beyond `role`. Used for the
+   * produced quality test, which the 1st Quality Inspector may run alongside the
+   * Technical Head — matching the single-batch `canQaTest` gate.
+   */
+  altRoles?: MBRole[];
   collectsPayment?: boolean; // the "Payment checked" step records the partial payment
+}
+
+/** Every role allowed to perform a step (`role` plus any `altRoles`). */
+export function mbStepRoles(s: MBStepDef): MBRole[] {
+  return s.altRoles && s.altRoles.length ? [s.role, ...s.altRoles] : [s.role];
 }
 
 /**
@@ -63,7 +74,7 @@ export const MULTIBATCH_STEPS: MBStepDef[] = [
   { key: "client_notified", label: "Notify client — batch ready", done: "Client notified (order ready)", role: "sales" },
   { key: "payment_checked", label: "Payment checked", done: "Payment checked", role: "accounting", collectsPayment: true },
   { key: "payment_confirmed", label: "Payment confirmed", done: "Payment confirmed", role: "payment_approver" },
-  { key: "qa_tested", label: "Quality tested — pass", done: "Quality tested", role: "technical_head" },
+  { key: "qa_tested", label: "Quality tested — pass", done: "Quality tested", role: "technical_head", altRoles: ["quality_inspector"] },
   { key: "qa_plant_checked", label: "Quality & Quantity Approved", done: "Plant QC & quantity passed", role: "plant_manager" },
   { key: "qa_transferred", label: "Transferred to Office", done: "Transferred to office", role: "logistics" },
   { key: "qa_sales_checked", label: "Quality & Quantity Re-Checked", done: "Sales 2nd QC & quantity passed", role: "sales" },
@@ -82,7 +93,7 @@ export const MULTIBATCH_STEPS: MBStepDef[] = [
  * Technical Head; the Plant Manager still approves and Logistics still transfers.
  */
 export const MULTIBATCH_STOCK_STEPS: MBStepDef[] = MULTIBATCH_STEPS.map((s) =>
-  s.key === "qa_tested" ? { ...s, role: "warehouse" } : s,
+  s.key === "qa_tested" ? { ...s, role: "warehouse", altRoles: undefined } : s,
 );
 
 /**
@@ -120,7 +131,7 @@ export const MULTIBATCH_PLANT_PICKUP_STEPS: MBStepDef[] = [
   { key: "client_notified", label: "Notify client — batch ready for pick up", done: "Client notified (batch ready)", role: "sales" },
   { key: "payment_checked", label: "Payment checked", done: "Payment checked", role: "accounting", collectsPayment: true },
   { key: "payment_confirmed", label: "Payment confirmed", done: "Payment confirmed", role: "payment_approver" },
-  { key: "qa_tested", label: "Quality tested — pass", done: "Quality tested", role: "technical_head" },
+  { key: "qa_tested", label: "Quality tested — pass", done: "Quality tested", role: "technical_head", altRoles: ["quality_inspector"] },
   { key: "qa_plant_checked", label: "Quality & Quantity Approved", done: "Plant QC & quantity passed", role: "plant_manager" },
   { key: "delivery_docs", label: "Make the delivery form", done: "Delivery form made", role: "warehouse" },
   { key: "delivery_approved", label: "Approve delivery", done: "Delivery approved", role: "plant_manager" },
@@ -136,7 +147,7 @@ export const MULTIBATCH_PLANT_PICKUP_STEPS: MBStepDef[] = [
  * the Technical Head, mirroring the from-stock delivery variant.
  */
 export const MULTIBATCH_PLANT_STOCK_STEPS: MBStepDef[] = MULTIBATCH_PLANT_PICKUP_STEPS.map((s) =>
-  s.key === "qa_tested" ? { ...s, role: "warehouse" } : s,
+  s.key === "qa_tested" ? { ...s, role: "warehouse", altRoles: undefined } : s,
 );
 
 /**
