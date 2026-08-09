@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, Eye, Printer } from "lucide-react";
@@ -100,6 +100,7 @@ export function PurchasingWorkspace({
   canCheckStock = false,
   canIssueStock = false,
   depts = [],
+  highlightReq,
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -132,12 +133,44 @@ export function PurchasingWorkspace({
   canIssueStock?: boolean;
   /** Department options for the admin "Add material request" form. */
   depts?: { key: string; label: string }[];
+  /** A purchase-request id to open/scroll to/highlight (deep-link from a notification, `?req=`). */
+  highlightReq?: string;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("pending");
-  const inTab = (bucket: DisplayBucket) => tab === "all" || tab === bucket;
   // A material/MRF requisition stays "pending" until its Purchase Order exists.
   const rowBucket = (r: PurchaseChainRow) => displayBucket(r.status, { isDept: r.isDept, poApproved: r.poApproved });
+
+  // Deep-link (?req=<id>): find which bucket / section holds the request, so the
+  // right tab opens and the card can be scrolled to + highlighted. A combined PO is
+  // keyed by its anchor id; an order/department request by its own id.
+  const targetBucket = useMemo<Tab | "completed" | null>(() => {
+    if (!highlightReq) return null;
+    const batch = batches.find((b) => b.anchorId === highlightReq);
+    if (batch) return displayBucket(batch.status);
+    const inOrders = orderGroups.flatMap((g) => g.rows).find((r) => r.id === highlightReq);
+    if (inOrders) return rowBucket(inOrders);
+    const inDept = deptRows.find((r) => r.id === highlightReq);
+    if (inDept) return rowBucket(inDept);
+    if (completedDeptRows.some((r) => r.id === highlightReq)) return "completed";
+    return "all"; // present in the URL but not found in a known section — show everything
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightReq]);
+
+  const [tab, setTab] = useState<Tab>(targetBucket && targetBucket !== "completed" ? targetBucket : "pending");
+  const [highlightId, setHighlightId] = useState<string | undefined>(highlightReq);
+  const [completedOpen, setCompletedOpen] = useState(targetBucket === "completed");
+  const inTab = (bucket: DisplayBucket) => tab === "all" || tab === bucket;
+
+  // On a deep-link, scroll the targeted card into view and pulse its highlight ring.
+  useEffect(() => {
+    if (!highlightReq) return;
+    const el = document.getElementById(`req-${highlightReq}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = window.setTimeout(() => setHighlightId(undefined), 4000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightReq, tab, completedOpen]);
 
   // Cross-order selection: tick material requests across every order to total
   // their PO amounts and approve them together.
@@ -327,6 +360,7 @@ export function PurchasingWorkspace({
           admin={admin}
           showAmounts={showAmounts}
           showSupplier={showSupplier}
+          highlightId={highlightId}
         />
       )}
 
@@ -377,6 +411,7 @@ export function PurchasingWorkspace({
                       showAmounts={showAmounts}
                       showSupplier={showSupplier}
                       adminManage={admin}
+                      highlightId={highlightId}
                     />
                   </CardContent>
                 </Card>
@@ -415,6 +450,7 @@ export function PurchasingWorkspace({
                   showStockCheck={canCheckStock}
                   canIssueStock={canIssueStock}
                   adminManage={admin}
+                  highlightId={highlightId}
                 />
               </CardContent></Card>
             )}
@@ -453,7 +489,7 @@ export function PurchasingWorkspace({
         );
         return (
           <section className="space-y-3">
-            <details className="rounded-lg border bg-card">
+            <details className="rounded-lg border bg-card" open={completedOpen} onToggle={(e) => setCompletedOpen((e.target as HTMLDetailsElement).open)}>
               <summary className="cursor-pointer px-4 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Completed department POs ({completedDeptRows.length})
               </summary>

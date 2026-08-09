@@ -315,7 +315,8 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           key: `pr-po:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
           title: label, action: "Prepare Purchase Order",
           client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
-          href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+          // Purchaser acts in the Purchasing workspace — deep-link to this request.
+          href: `/purchasing?req=${pr.id}`,
           since: pr.createdAt.toISOString(),
         });
         continue;
@@ -327,7 +328,8 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         key: `pr:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
         title: label, action: steps[0]?.label ?? "Process purchase",
         client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
-        href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+        // Purchase-chain steps are worked in the Purchasing workspace — deep-link to it.
+        href: `/purchasing?req=${pr.id}`,
         ref: coercePurchaseOrder(pr.po)?.poNumber || undefined, // PO number for easy reference
         since: pr.createdAt.toISOString(),
       });
@@ -351,7 +353,8 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         if (rets.length === 0) continue;
         const company = pr.quotation?.inquiry.customer.company ?? null;
         const orderRef = pr.quotationId ? (pr.quotation?.quoteNumber ?? "Order") : `Requisition · ${requisitionDeptLabel(pr.dept)}`;
-        const href = pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing";
+        // Supplier returns are worked in the Purchasing workspace — deep-link to the request.
+        const href = `/purchasing?req=${pr.id}`;
         for (const r of rets) {
           const done = isReturnComplete(r.stage);
           const next = nextReturnStage(r.stage);
@@ -542,7 +545,8 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           variant: st === "COMPLETED" ? "success" : st === "REJECTED" || st === "CANCELLED" ? "destructive" : "warning",
           net: poTotals(po).net,
           currency: "PHP",
-          href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+          // Land on this PO in the Purchasing workspace (scrolls to & highlights it).
+          href: `/purchasing?req=${pr.id}`,
         });
       }
       poSummary = [...byNumber.values()].sort((a, b) => a.poNumber.localeCompare(b.poNumber));

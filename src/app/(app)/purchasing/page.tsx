@@ -28,7 +28,8 @@ const CHAIN_ROLES: WorkflowRoleKey[] = ["payment_approver", "accounting", "logis
 const variantFor = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
   s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
 
-export default async function PurchasingPage() {
+export default async function PurchasingPage({ searchParams }: { searchParams?: Promise<{ req?: string }> }) {
+  const highlightReq = (await searchParams)?.req;
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   const admin = isAdmin(viewer);
   const canView = admin || (viewer != null && CHAIN_ROLES.some((r) => userHasWorkflowRole(assignments, viewer.id, r)));
@@ -370,6 +371,7 @@ export default async function PurchasingPage() {
               deptRows={deptRows}
               completedDeptRows={completedDeptRows}
               replenRows={replenRows}
+              highlightReq={highlightReq}
               showAmounts={showAmounts}
               showSupplier={showSupplier}
               canVoucher={canVoucher}

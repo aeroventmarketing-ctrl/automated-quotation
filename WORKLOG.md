@@ -14,6 +14,27 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Notifications — deep-link purchasing alarms to the exact request
+- **Owner-reported:** clicking a notification doesn't land on the pending action, especially in the
+  Purchasing tab. **Audit** (read-only agent) confirmed every `logActivity` has an href (all
+  clickable), so the problem is **generic/wrong targets**: purchase notifications went to the
+  **order page** (read-only — the purchaser acts in `/purchasing`) or a bare **`/purchasing`** list,
+  and `/purchasing` had **no deep-link support** at all.
+- **Fix (purchasing — the reported bug):**
+  - `/purchasing` now accepts **`?req=<prId>`**: `purchasing/page.tsx` reads it; `purchasing-workspace.tsx`
+    finds the request's bucket, **opens that tab** (or the Completed section), **scrolls to** the card
+    and **pulses a highlight ring** (clears after 4s). Anchors added: `id="req-<id>"` on each
+    `PurchasingChain` row (`orders/[id]/purchasing-chain.tsx`) and each combined-PO card
+    (`combined-purchasing.tsx`), both accepting a `highlightId`.
+  - Hrefs repointed to `/purchasing?req=<id>`: the `purchase.<step>`, `purchase.split` and supplier-
+    return `logActivity` calls (`orders/actions.ts`) and the My Dashboard purchasing feeds
+    (`my-dashboard.ts`): Prepare PO, purchase task (`pr:`), returns feed/task, PO summary row.
+  - Typecheck + lint clean. **No P&L / workflow logic changed.**
+- **Still generic (audit findings, not yet fixed — offered as follow-ups):** activity-bell **order**
+  notifications land at the top of the order page (no `#phase-N` anchor; the My Dashboard order feed
+  already anchors); **cash / schedule / commission / requisitions** pages have no deep-link support,
+  so those feeds land on an unfiltered list.
+
 ## 2026-08-09 · Revision restore — re-point a quote to an earlier revision (Sales → Engineer/Admin)
 - **Owner-requested:** a client sometimes settles on an earlier revision (e.g. buy on rev 1 after
   rev 2/3 exist). Owner chose: **re-point** the live quote back to that revision, **keep the same

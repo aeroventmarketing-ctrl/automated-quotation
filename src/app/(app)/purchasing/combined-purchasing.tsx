@@ -101,6 +101,7 @@ export function CombinedPurchasing({
   admin = false,
   showAmounts = true,
   showSupplier = true,
+  highlightId,
 }: {
   combinable: CombinableItem[];
   batches: BatchCard[];
@@ -116,6 +117,8 @@ export function CombinedPurchasing({
   admin?: boolean;
   showAmounts?: boolean;
   showSupplier?: boolean;
+  /** A combined-PO anchor id to scroll to / highlight (deep-link from a notification). */
+  highlightId?: string;
 }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -165,7 +168,9 @@ export function CombinedPurchasing({
     <div className="space-y-3">
       {/* Existing combined POs */}
       {batches.map((b) => (
-        <BatchCardView key={b.anchorId} batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
+        <div key={b.anchorId} id={`req-${b.anchorId}`} className={`scroll-mt-24 rounded-lg ${highlightId === b.anchorId ? "ring-2 ring-primary ring-offset-2" : ""}`}>
+          <BatchCardView batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
+        </div>
       ))}
 
       {/* Combine builder. Stays mounted while `building` even if `combinable`
