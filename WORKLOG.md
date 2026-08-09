@@ -14,6 +14,21 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Multi-batch delivery — 1st Quality Inspector can run the quality test
+- **Owner-reported:** on a produced order in **multiple-batch delivery** (AFBM00003006R), the
+  **"Quality Tested-Passed"** button was missing for a user assigned **1st Quality Inspector**;
+  a refresh didn't help.
+- **Root cause:** the per-batch quality-test step (`qa_tested`) in `delivery-multibatch.ts` was gated
+  to **`technical_head` only**, whereas the single-batch `canQaTest` allows **Technical Head OR 1st
+  Quality Inspector**. So a 1st QI could test a single-batch order but not a multi-batch one.
+- **Fix:** `MBStepDef` gained an optional **`altRoles`** list (+ `mbStepRoles()` helper). The produced
+  `qa_tested` step in `MULTIBATCH_STEPS` and `MULTIBATCH_PLANT_PICKUP_STEPS` now carries
+  `altRoles: ["quality_inspector"]`; the from-stock variants (Warehouse test) explicitly strip it. The
+  order page's `canAct` (`orders/[id]/page.tsx`) and the `advanceMultiBatch` server action
+  (`orders/actions.ts`) now allow the actor if they hold **any** of the step's roles, and the
+  "Waiting on …" label lists both. Bought-in / office-pickup (2nd QI) / stock (Warehouse) variants
+  unchanged. Typecheck + lint clean. **No P&L change — workflow role gate only.**
+
 ## 2026-08-09 · Notifications — deep-link order / cash / schedule / commission alarms
 - **Owner-requested follow-up (#1 + #2 from the purchasing fix):** make every remaining
   notification land on the pending action, not a generic list.

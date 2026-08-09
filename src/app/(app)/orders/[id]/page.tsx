@@ -37,6 +37,7 @@ import { saleFromClassification, collectedTotal, closeDocsState, PAYMENT_KIND_LA
 import {
   mbSteps,
   mbProgress,
+  mbStepRoles,
   mbBatchedByDescription,
   mbDeliveredByDescription,
   isMbDelivered,
@@ -617,6 +618,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   }));
   const canActMbStep = (role: MBRole): boolean =>
     adminViewer || (role === "sales" ? isPreparerViewer : viewer != null && userHasWorkflowRole(assignments, viewer.id, role as WorkflowRoleKey));
+  // A step may allow more than one role (e.g. the produced quality test — Technical
+  // Head OR 1st Quality Inspector). The viewer can act if they hold ANY of them.
+  const canActMbRoles = (roles: MBRole[]): boolean => roles.some(canActMbStep);
   const mbPaymentById = new Map((saleForClose?.payments ?? []).map((p) => [p.id, p] as const));
   const mbBatchViews = wf.deliveryBatches.map((b) => {
     const steps = mbSteps(wf.fulfillmentMode, stockOnly, boughtInOnly).map((s) => {
@@ -625,7 +629,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     });
     const { next } = mbProgress(b, wf.fulfillmentMode, stockOnly, boughtInOnly);
     const nextView = next && !b.cancelled
-      ? { key: next.key, label: next.label, roleLabel: next.role === "sales" ? "Sales" : workflowRoleLabel(next.role), canAct: canActMbStep(next.role), collectsPayment: !!next.collectsPayment }
+      ? { key: next.key, label: next.label, roleLabel: mbStepRoles(next).map((r) => (r === "sales" ? "Sales" : workflowRoleLabel(r))).join(" or "), canAct: canActMbRoles(mbStepRoles(next)), collectsPayment: !!next.collectsPayment }
       : null;
     return {
       id: b.id,
