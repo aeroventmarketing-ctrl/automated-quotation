@@ -12,6 +12,14 @@ requested task would touch these areas, stop and ask for approval first — even
 a small tweak or a change that seems obviously correct. When in doubt about
 whether something is part of a frozen area, ask before editing.
 
+> **All five phases were tested and signed off by the owner on 2026-08-09.** Every
+> order workflow is now considered verified and locked. From this point on, change a
+> workflow **only** when the owner explicitly approves that specific change in the
+> current conversation — this applies to *every* phase equally, not just the ones
+> listed below. UI-only, copy/label, or non-workflow changes are fine; anything that
+> alters who acts, the step order, the gating, or the stage progression needs approval
+> first.
+
 ### Phase 1 · Order intake & payment clearing
 
 The approval sign-offs that take an order from intake through documents-checked

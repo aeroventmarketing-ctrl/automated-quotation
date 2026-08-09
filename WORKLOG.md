@@ -14,6 +14,14 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · All order workflows tested & locked — approval required for any workflow change
+- **Owner sign-off:** all five phases' workflows have been tested end-to-end and are now
+  considered verified/locked. Going forward, change a workflow **only** when the owner explicitly
+  approves that specific change in the conversation — applies to every phase equally.
+- **What counts as a workflow change (needs approval):** who acts on a step, the step order, the
+  gating/role checks, or the stage progression. UI-only / copy / label tweaks are still fine.
+- **Recorded in `CLAUDE.md`** (frozen-area intro) so every future session honors it. Doc only.
+
 ## 2026-08-09 · Pick-up approval button — POD → POP ("Proof of Pick up")
 - **Owner request:** on pick-up orders the approval button read **"Approve POD - Successful Pick Up"**,
   but POD = *Proof of Delivery* — wrong for a pick up. Relabel the acronym to **POP** (*Proof of Pick
