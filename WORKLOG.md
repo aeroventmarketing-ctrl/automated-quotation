@@ -14,6 +14,15 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — fix duplicate greeting (message owns the greeting)
+- **Owner-reported:** the sent email showed **"Dear <name>," twice** — the shell auto-added a greeting
+  and the admin's custom message *also* began with its own greeting.
+- **Fix:** removed the auto **"Dear …,"** from the branded shell in `buildFollowUpEmail` (text + html);
+  the greeting is now part of the editable message. Added `Dear {contactName},` to the three
+  `DEFAULT_FOLLOWUP_TEMPLATES` so un-customized nudges still greet. Updated the editor helper text
+  (`follow-up-templates-setting.tsx`) to say include your own greeting; the button / signature /
+  opt-out stay automatic. Typecheck + lint clean. **Email copy only — no workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups — editable per-nudge email content (Admin)
 - **Owner request:** give each follow-up nudge its own wording (same branded design), editable in
   Admin.
