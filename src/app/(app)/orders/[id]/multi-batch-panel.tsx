@@ -473,7 +473,7 @@ export function MultiBatchPanel({
                 )}
               </div>
               {deliverBlocked && canManagePod && (
-                <p className="mt-1 text-[11px] text-muted-foreground">{officePickup ? "Attach at least one proof of pick up to enable “Approve POD — successful pick up”." : "Attach at least one proof of delivery to enable “Mark delivered”."}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{officePickup ? "Attach at least one proof of pick up to enable “Approve POP — successful pick up”." : "Attach at least one proof of delivery to enable “Mark delivered”."}</p>
               )}
             </div>
           )}
