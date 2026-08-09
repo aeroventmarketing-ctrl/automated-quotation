@@ -54,6 +54,7 @@ import {
   AIR_DUCT_LABOR_PER_SHEET,
 } from "@/lib/air-duct-pricing-reference";
 import { updateQuotationLines, transitionQuotation, reviseQuotation, checkDuplicateQuote } from "../actions";
+import { RevisionRestore } from "./revision-restore";
 import type { DuplicateMatch } from "@/lib/quote-duplicates";
 import { SimilarQuotes } from "./similar-quotes";
 import { SalePanel } from "./sale-panel";
@@ -266,6 +267,8 @@ export interface RevisionSnapshot {
   vat: number;
   total: number;
   lines: { itemLabel: string; description: string; qty: number; unitPrice: number; lineTotal: number }[];
+  /** Full per-line content (incl. specs) for an exact restore; absent on older snapshots. */
+  fullLines?: unknown[];
 }
 
 interface Quote {
@@ -293,6 +296,10 @@ interface Quote {
   preparedBy: string;
   approvedBy: string | null;
   items: Line[];
+  /** Pending revision-restore request (Sales asked to re-point to an earlier rev). */
+  revisionRestore?: { targetRev: number; requestedByName: string; requestedAt: string } | null;
+  /** Log of approved revision restores (who / position / when). */
+  revisionRestores?: { fromRev: number; toRev: number; requestedByName?: string | null; approvedByName: string; approvedPosition: string; approvedAt: string }[];
 }
 
 const numOrNull = (v: string): number | null => (v === "" ? null : Number(v) || 0);
@@ -6031,6 +6038,18 @@ export function QuotationBuilder({
                 </div>
               </details>
             ))}
+            {/* Re-point the live quote to an earlier revision (Sales requests →
+                Engineer/Admin approves). Hidden once the order is in production. */}
+            <RevisionRestore
+              quotationId={quotation.id}
+              currentRev={quotation.revision}
+              revisions={revisionHistory.map((r) => ({ rev: r.rev, savedAt: r.savedAt, total: r.total, hasFull: !!(r.fullLines && r.fullLines.length) }))}
+              pending={quotation.revisionRestore ?? null}
+              log={quotation.revisionRestores ?? []}
+              canRequest={(isPreparer || canApprove) && !orderInProduction}
+              canApprove={canApprove && !orderInProduction}
+              currency={quotation.currency}
+            />
           </CardContent>
         </Card>
       )}
