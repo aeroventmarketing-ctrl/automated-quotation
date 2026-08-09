@@ -14,6 +14,26 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — editable per-nudge email content (Admin)
+- **Owner request:** give each follow-up nudge its own wording (same branded design), editable in
+  Admin.
+- **Design:** the branded shell (greeting → body → **View your quotation** button → signature →
+  opt-out) is generated automatically; only the **subject + message body per nudge** are editable, so
+  every nudge stays visually consistent while the copy escalates (reminder → value → gentle urgency).
+- **Added:**
+  - `FollowUpTemplate` type, `DEFAULT_FOLLOWUP_TEMPLATES` (3 escalating), `templateForNudge()`,
+    `FOLLOWUP_PLACEHOLDERS`, and a token substituter in `follow-up-email.ts`; `buildFollowUpEmail`
+    now renders a per-nudge `template` (falls back to defaults — backward compatible).
+  - `follow-up-templates.ts` — AppSetting persistence (`follow_up_templates`, no migration), defaults
+    when unset.
+  - Runner (`follow-up-runner.ts`) loads the templates and passes the right one per nudge.
+  - Admin editor `follow-up-templates-setting.tsx` (+ `saveFollowUpTemplatesAction`) — one subject +
+    message box per nudge (count follows Max nudges), with the placeholder list
+    (`{contactName} {company} {quoteNumber} {projectName} {total} {validUntil} {salesName}`).
+  - The "Send test email to me" button got a **Preview nudge #** picker so each nudge's design can be
+    emailed to the admin; `sendTestFollowUpAction(nudge)` uses that nudge's template.
+- Typecheck + lint clean. **Non-workflow (marketing email content) — no order-workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups — "Send test email to me" button (safe deliverability check)
 - **Owner need:** verify the automated follow-up email (formatting + does it inbox on the new
   `aeroventfbm.shop` domain) **without** enabling live sending or emailing any client.

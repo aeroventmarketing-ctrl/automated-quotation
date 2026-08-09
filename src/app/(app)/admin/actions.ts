@@ -21,7 +21,8 @@ import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settin
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { config } from "@/lib/config";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
-import { buildFollowUpEmail } from "@/lib/follow-up-email";
+import { buildFollowUpEmail, templateForNudge, type FollowUpTemplate } from "@/lib/follow-up-email";
+import { getFollowUpTemplates, setFollowUpTemplates } from "@/lib/follow-up-templates";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
 import { setUserSalesPersonnel } from "@/lib/sales-personnel";
 import { setFanMotorBrand } from "@/lib/fan-motor-brand";
@@ -537,7 +538,7 @@ export interface FollowUpTestResult {
  * sending or touching any client. Ignores the enabled/dry-run switches (it never
  * emails a client), but still needs the Resend key + sender to be configured.
  */
-export async function sendTestFollowUpAction(): Promise<FollowUpTestResult> {
+export async function sendTestFollowUpAction(nudge = 1): Promise<FollowUpTestResult> {
   const user = await assertAdmin();
   if (!emailConfigured()) {
     throw new Error("No Resend API key set (RESEND_API_KEY). Add it in Vercel and redeploy first.");
@@ -549,6 +550,8 @@ export async function sendTestFollowUpAction(): Promise<FollowUpTestResult> {
     throw new Error("Your account has no email address on file, so there's nowhere to send the test.");
   }
 
+  const nudgeNumber = Number.isFinite(nudge) && nudge >= 1 ? Math.floor(nudge) : 1;
+  const templates = await getFollowUpTemplates();
   // A representative sample so the email renders exactly as a client's would.
   const validUntil = new Date();
   validUntil.setDate(validUntil.getDate() + 30);
@@ -562,19 +565,34 @@ export async function sendTestFollowUpAction(): Promise<FollowUpTestResult> {
     validUntil,
     quoteUrl: `${config.appUrl}/q/sample-quote`,
     salesName: user.name,
-    nudgeNumber: 1,
+    nudgeNumber,
+    template: templateForNudge(templates, nudgeNumber),
   });
 
   await sendEmail({
     from: `${config.followUpFromName} <${config.followUpFromEmail}>`,
     to: user.email,
-    subject: `[TEST] ${email.subject}`,
-    text: `This is a TEST of the automated follow-up email — sent only to you. No client received it.\n\n${email.text}`,
-    html: `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#7d9199">This is a <strong>TEST</strong> of the automated follow-up email — sent only to you. No client received it.</p>${email.html}`,
+    subject: `[TEST nudge #${nudgeNumber}] ${email.subject}`,
+    text: `This is a TEST of the automated follow-up email (nudge #${nudgeNumber}) — sent only to you. No client received it.\n\n${email.text}`,
+    html: `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#7d9199">This is a <strong>TEST</strong> of the automated follow-up email (nudge #${nudgeNumber}) — sent only to you. No client received it.</p>${email.html}`,
     replyTo: user.email,
   });
 
   return { ok: true, to: user.email };
+}
+
+const followUpTemplatesSchema = z.object({
+  templates: z.array(z.object({ subject: z.string(), body: z.string() })),
+});
+/** Save the admin-edited per-nudge follow-up templates. */
+export async function saveFollowUpTemplatesAction(
+  input: z.infer<typeof followUpTemplatesSchema>,
+): Promise<FollowUpTemplate[]> {
+  await assertAdmin();
+  const { templates } = followUpTemplatesSchema.parse(input);
+  const saved = await setFollowUpTemplates(templates);
+  revalidatePath("/admin");
+  return saved;
 }
 
 // --- Material Request Form numbering ----------------------------------------
