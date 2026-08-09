@@ -14,6 +14,28 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Revision restore — re-point a quote to an earlier revision (Sales → Engineer/Admin)
+- **Owner-requested:** a client sometimes settles on an earlier revision (e.g. buy on rev 1 after
+  rev 2/3 exist). Owner chose: **re-point** the live quote back to that revision, **keep the same
+  number**, **stay APPROVED** (rev was approved before), and **keep the other revisions**. Flow:
+  **Sales requests → Engineer/Admin approves**, recording approver **name / position / date-time**.
+- **How it works:** `approveRevisionRestore` snapshots the current (superseded) version first (so
+  nothing is lost), drops the target from history (it becomes live), rebuilds the live line items
+  from the target snapshot, sets `revision = targetRev`, keeps status, and appends an approval log
+  entry. So restoring rev 1 leaves history = rev 0/2/3, current = rev 1. Next **Revise** numbers as
+  **max-ever + 1** (so re-pointing never collides). `requestRevisionRestore` /
+  `cancelRevisionRestore` manage the pending request.
+- **Snapshot enrichment:** `reviseQuotation` now stores each revision's **full per-line content**
+  (`fullLines`, incl. specsSnapshot) + vatMode/discountPct, so restores are exact **going forward**.
+  Revisions snapshotted before this change have summary only → restore rebuilds descriptions / qty /
+  prices but not detailed specs; the UI **warns** ("saved before full specs were stored").
+- **Files:** `quotations/actions.ts` (helper `buildRevSnapshot`, `REVISION_SELECT`, 3 new actions,
+  max+1 numbering); `quotations/[id]/revision-restore.tsx` (new UI: request select + approve/cancel
+  banner + approvals audit log); wired into `quotation-builder.tsx` (revision-history card) and
+  `quotations/[id]/page.tsx` (pass pending request + log). Restore controls hidden once the order is
+  in production. `QuotationItem` has no inbound FKs, so delete/recreate is safe. Typecheck + lint
+  clean. **No P&L math changed** (totals restored from each revision's own snapshot).
+
 ## 2026-08-08 · Fulfilment selector — show to every role (grayed-out for non-setters)
 - **Owner-requested:** the Phase 2 fulfilment control (Delivery / Office pick up / Plant pick up)
   was hidden from roles that can't change it (and, on a default delivery order, hidden entirely) —

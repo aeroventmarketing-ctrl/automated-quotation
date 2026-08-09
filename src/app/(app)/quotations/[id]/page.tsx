@@ -137,6 +137,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         status: quotation.status,
         sale: saleFromClassification(quotation.classification),
         revision: ((r) => (typeof r === "number" ? r : 0))((quotation.classification as Record<string, unknown> | null)?.revision),
+        revisionRestore: ((v) => (v && typeof v === "object" ? (v as { targetRev: number; requestedByName: string; requestedAt: string }) : null))(
+          (quotation.classification as Record<string, unknown> | null)?.revisionRestore,
+        ),
+        revisionRestores: ((v) => (Array.isArray(v) ? (v as { fromRev: number; toRev: number; requestedByName?: string | null; approvedByName: string; approvedPosition: string; approvedAt: string }[]) : []))(
+          (quotation.classification as Record<string, unknown> | null)?.revisionRestores,
+        ),
         currency: quotation.currency,
         vatMode:
           quotation.vatMode === "EXCLUSIVE"

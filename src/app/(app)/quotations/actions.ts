@@ -333,24 +333,78 @@ export async function transitionQuotation(quotationId: string, to: string) {
  * clearing the prior approval so it is re-approved). The counter rides in the
  * classification JSON, so no schema change is needed.
  */
+// Fields a revision snapshot needs from the live quotation + its items.
+const REVISION_SELECT = {
+  id: true,
+  classification: true,
+  preparedById: true,
+  subtotal: true,
+  vat: true,
+  total: true,
+  vatMode: true,
+  discountPct: true,
+  inquiry: { select: { customerId: true } },
+  items: {
+    orderBy: { sortOrder: "asc" as const },
+    select: {
+      descriptionSnapshot: true,
+      specsSnapshot: true,
+      qty: true,
+      unitPrice: true,
+      lineTotal: true,
+      selectionNote: true,
+      sortOrder: true,
+    },
+  },
+} as const;
+
+type RevisionQuote = {
+  subtotal: unknown; vat: unknown; total: unknown; vatMode: string; discountPct: unknown;
+  items: { descriptionSnapshot: string; specsSnapshot: unknown; qty: number; unitPrice: unknown; lineTotal: unknown; selectionNote: string | null; sortOrder: number }[];
+};
+
+/**
+ * Build a revision snapshot from the live quotation. Stores the display summary
+ * (`lines`) AND the full per-line content (`fullLines`, incl. specsSnapshot) plus
+ * the pricing context, so a revision can later be RESTORED faithfully — not just
+ * shown. (Snapshots taken before `fullLines` existed restore from the summary only.)
+ */
+function buildRevSnapshot(rev: number, userId: string, q: RevisionQuote) {
+  const labelOf = (s: unknown) => (typeof (s as Record<string, unknown>)?.itemLabel === "string" ? (s as Record<string, string>).itemLabel : "");
+  return {
+    rev,
+    savedAt: new Date().toISOString(),
+    savedById: userId,
+    subtotal: Number(q.subtotal),
+    vat: Number(q.vat),
+    total: Number(q.total),
+    vatMode: q.vatMode,
+    discountPct: Number(q.discountPct),
+    lines: q.items.map((it) => ({
+      itemLabel: labelOf(it.specsSnapshot),
+      description: it.descriptionSnapshot,
+      qty: it.qty,
+      unitPrice: Number(it.unitPrice),
+      lineTotal: Number(it.lineTotal),
+    })),
+    fullLines: q.items.map((it) => ({
+      descriptionSnapshot: it.descriptionSnapshot,
+      specsSnapshot: (it.specsSnapshot ?? {}) as Prisma.InputJsonValue,
+      qty: it.qty,
+      unitPrice: Number(it.unitPrice),
+      lineTotal: Number(it.lineTotal),
+      selectionNote: it.selectionNote ?? null,
+      sortOrder: it.sortOrder,
+    })),
+  };
+}
+
 export async function reviseQuotation(quotationId: string) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: {
-      id: true,
-      classification: true,
-      preparedById: true,
-      subtotal: true,
-      vat: true,
-      total: true,
-      inquiry: { select: { customerId: true } },
-      items: {
-        orderBy: { sortOrder: "asc" },
-        select: { descriptionSnapshot: true, specsSnapshot: true, qty: true, unitPrice: true, lineTotal: true },
-      },
-    },
+    select: REVISION_SELECT,
   });
   if (!quote) throw new Error("Quotation not found");
   const admin = isAdmin(user);
@@ -377,26 +431,13 @@ export async function reviseQuotation(quotationId: string) {
   const cls = (quote.classification as Record<string, unknown>) ?? {};
   const currentRev = typeof cls.revision === "number" ? cls.revision : 0;
   // Snapshot the version being superseded so past revisions stay for reference.
-  const snapshot = {
-    rev: currentRev,
-    savedAt: new Date().toISOString(),
-    savedById: user.id,
-    subtotal: Number(quote.subtotal),
-    vat: Number(quote.vat),
-    total: Number(quote.total),
-    lines: quote.items.map((it) => ({
-      itemLabel: ((s) => (typeof s?.itemLabel === "string" ? s.itemLabel : ""))(
-        it.specsSnapshot as Record<string, unknown>,
-      ),
-      description: it.descriptionSnapshot,
-      qty: it.qty,
-      unitPrice: Number(it.unitPrice),
-      lineTotal: Number(it.lineTotal),
-    })),
-  };
-  const prev = Array.isArray(cls.revisions) ? cls.revisions : [];
+  const snapshot = buildRevSnapshot(currentRev, user.id, quote);
+  const prev = Array.isArray(cls.revisions) ? (cls.revisions as { rev?: unknown }[]) : [];
   const revisions = [...prev, snapshot];
-  const revision = currentRev + 1;
+  // New revision number = one past the highest ever used, so re-pointing to an
+  // earlier revision (which lowers `revision`) never collides with an existing one.
+  const maxRev = Math.max(currentRev, ...prev.map((r) => (typeof r.rev === "number" ? r.rev : 0)));
+  const revision = maxRev + 1;
 
   await prisma.quotation.update({
     where: { id: quotationId },
@@ -407,6 +448,201 @@ export async function reviseQuotation(quotationId: string) {
       // the Excel / PDF follows the current revision, not the original creation.
       classification: { ...cls, revision, revisions, revisedAt: new Date().toISOString() } as Prisma.InputJsonObject,
     },
+  });
+  revalidatePath(`/quotations/${quotationId}`);
+  revalidatePath("/dashboard");
+}
+
+// ── Revision restore (re-point the live quote to an earlier revision) ──────────
+// A client sometimes settles on an earlier revision. Sales requests the restore;
+// an Engineer / admin approves it. On approval the live quote is re-pointed to the
+// chosen revision — the same quotation number, still APPROVED — while every other
+// revision is kept (the superseded current version is snapshotted first).
+
+type RestoreLine = {
+  descriptionSnapshot: string; specsSnapshot?: unknown; qty: number; unitPrice: number;
+  lineTotal: number; selectionNote?: string | null; sortOrder?: number;
+};
+type RevSnap = {
+  rev: number; total?: number; subtotal?: number; vat?: number; vatMode?: string; discountPct?: number;
+  fullLines?: RestoreLine[]; lines?: { itemLabel?: string; description: string; qty: number; unitPrice: number; lineTotal: number }[];
+};
+
+/** Read the revisions array from a classification blob. */
+function readRevisions(cls: Record<string, unknown>): RevSnap[] {
+  return Array.isArray(cls.revisions) ? (cls.revisions as RevSnap[]) : [];
+}
+
+/** Sales (preparer / current owner) or an Engineer / admin requests a restore. */
+export async function requestRevisionRestore(quotationId: string, targetRev: number) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { classification: true, preparedById: true, inquiry: { select: { customerId: true } } },
+  });
+  if (!quote) throw new Error("Quotation not found");
+  const isPreparer = quote.preparedById === user.id || (await isCurrentAccountOwner(quote.inquiry.customerId, user.id));
+  if (!(isAdmin(user) || user.role === "ENGINEER" || isPreparer)) {
+    throw new Error("Only the preparer, an Engineer or an admin can request a revision restore.");
+  }
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const currentRev = typeof cls.revision === "number" ? cls.revision : 0;
+  if (targetRev === currentRev) throw new Error("That revision is already the current one.");
+  if (!readRevisions(cls).some((r) => r.rev === targetRev)) throw new Error("That revision isn't in the history.");
+  const revisionRestore = {
+    targetRev,
+    requestedById: user.id,
+    requestedByName: user.name,
+    requestedAt: new Date().toISOString(),
+  };
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, revisionRestore } as Prisma.InputJsonObject },
+  });
+  await logActivity(user, {
+    action: "quotation.revision.restore.request",
+    category: "quotation",
+    summary: `Requested restore to rev. ${targetRev}`,
+    entity: "quotation",
+    entityId: quotationId,
+    href: `/quotations/${quotationId}`,
+  });
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
+/** Cancel a pending restore request (the requester, an Engineer or an admin). */
+export async function cancelRevisionRestore(quotationId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { classification: true, preparedById: true, inquiry: { select: { customerId: true } } },
+  });
+  if (!quote) throw new Error("Quotation not found");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const req = cls.revisionRestore as { requestedById?: string } | undefined;
+  const isRequester = !!req?.requestedById && req.requestedById === user.id;
+  const isPreparer = quote.preparedById === user.id || (await isCurrentAccountOwner(quote.inquiry.customerId, user.id));
+  if (!(isAdmin(user) || user.role === "ENGINEER" || isRequester || isPreparer)) {
+    throw new Error("You can't cancel this restore request.");
+  }
+  const next = { ...cls };
+  delete next.revisionRestore;
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: next as Prisma.InputJsonObject },
+  });
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
+/**
+ * Engineer / admin approves the pending restore: re-point the live quote to the
+ * requested revision. The superseded current version is snapshotted first (so no
+ * revision is lost); the target is rebuilt as the live line items (full specs when
+ * the snapshot has them, summary otherwise); the quote keeps its APPROVED status;
+ * and the approval (who / position / when) is recorded.
+ */
+export async function approveRevisionRestore(quotationId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || user.role === "ENGINEER")) {
+    throw new Error("Only an Engineer or an admin can approve a revision restore.");
+  }
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: REVISION_SELECT,
+  });
+  if (!quote) throw new Error("Quotation not found");
+  const cls = (quote.classification as Record<string, unknown>) ?? {};
+  const req = cls.revisionRestore as { targetRev?: number; requestedByName?: string; requestedAt?: string } | undefined;
+  if (typeof req?.targetRev !== "number") throw new Error("There's no pending restore request.");
+  const targetRev = req.targetRev;
+  const currentRev = typeof cls.revision === "number" ? cls.revision : 0;
+  const revisions = readRevisions(cls);
+  const target = revisions.find((r) => r.rev === targetRev);
+  if (!target) throw new Error("That revision is no longer in the history.");
+
+  // Snapshot the current (superseded) version so it isn't lost, then drop the
+  // target from history (it becomes the live version). Everything else is kept.
+  const currentSnap = buildRevSnapshot(currentRev, user.id, quote);
+  const nextRevisions = [...revisions.filter((r) => r.rev !== targetRev), currentSnap];
+
+  // Rebuild the target's line items. Prefer the full snapshot; fall back to the
+  // display summary (older snapshots) — descriptions/qty/price only, minimal specs.
+  const src: RestoreLine[] = target.fullLines?.length
+    ? target.fullLines
+    : (target.lines ?? []).map((l, i) => ({
+        descriptionSnapshot: l.description,
+        specsSnapshot: l.itemLabel ? { itemLabel: l.itemLabel } : {},
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        lineTotal: l.lineTotal,
+        selectionNote: null,
+        sortOrder: i,
+      }));
+  if (src.length === 0) throw new Error("That revision has no line items to restore.");
+
+  const position = isAdmin(user) ? "Admin" : "Engineer";
+  const restoreLog = Array.isArray(cls.revisionRestores) ? (cls.revisionRestores as unknown[]) : [];
+  const nextClassification = { ...cls } as Record<string, unknown>;
+  delete nextClassification.revisionRestore;
+  nextClassification.revision = targetRev;
+  nextClassification.revisions = nextRevisions;
+  nextClassification.revisionRestores = [
+    ...restoreLog,
+    {
+      fromRev: currentRev,
+      toRev: targetRev,
+      requestedByName: req.requestedByName ?? null,
+      requestedAt: req.requestedAt ?? null,
+      approvedById: user.id,
+      approvedByName: user.name,
+      approvedPosition: position,
+      approvedAt: new Date().toISOString(),
+    },
+  ];
+
+  const subtotal = round2(Number(target.subtotal ?? src.reduce((a, l) => a + l.lineTotal, 0)));
+  const vat = round2(Number(target.vat ?? 0));
+  const total = round2(Number(target.total ?? subtotal + vat));
+
+  await prisma.$transaction([
+    prisma.quotationItem.deleteMany({ where: { quotationId } }),
+    ...src.map((l, i) =>
+      prisma.quotationItem.create({
+        data: {
+          quotationId,
+          descriptionSnapshot: l.descriptionSnapshot,
+          qty: l.qty,
+          unitPrice: round2(l.unitPrice),
+          lineTotal: round2(l.lineTotal ?? l.unitPrice * l.qty),
+          selectionNote: l.selectionNote ?? null,
+          sortOrder: l.sortOrder ?? i,
+          specsSnapshot: (l.specsSnapshot ?? {}) as Prisma.InputJsonValue,
+        },
+      }),
+    ),
+    prisma.quotation.update({
+      where: { id: quotationId },
+      data: {
+        subtotal,
+        vat,
+        total,
+        ...(target.vatMode ? { vatMode: target.vatMode as "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED" } : {}),
+        ...(typeof target.discountPct === "number" ? { discountPct: target.discountPct } : {}),
+        classification: nextClassification as Prisma.InputJsonObject,
+        // Status stays as-is (the restored revision was approved before).
+      },
+    }),
+  ]);
+  await logActivity(user, {
+    action: "quotation.revision.restore.approve",
+    category: "quotation",
+    summary: `Restored rev. ${targetRev} (from rev. ${currentRev})`,
+    entity: "quotation",
+    entityId: quotationId,
+    href: `/quotations/${quotationId}`,
   });
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
