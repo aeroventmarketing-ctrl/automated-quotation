@@ -19,6 +19,9 @@ import { setDocViewers } from "@/lib/doc-viewers";
 import { setDisabledRoles } from "@/lib/role-access";
 import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
+import { config } from "@/lib/config";
+import { sendEmail, emailConfigured } from "@/lib/email/resend";
+import { buildFollowUpEmail } from "@/lib/follow-up-email";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
 import { setUserSalesPersonnel } from "@/lib/sales-personnel";
 import { setFanMotorBrand } from "@/lib/fan-motor-brand";
@@ -521,6 +524,57 @@ export async function saveFollowUpSettingsAction(
 export async function runFollowUpPreviewAction(): Promise<FollowUpRunResult> {
   await assertAdmin();
   return runFollowUps({ live: false });
+}
+
+export interface FollowUpTestResult {
+  ok: boolean;
+  to: string;
+}
+/**
+ * Send ONE real follow-up email — the exact template clients receive — to the
+ * logged-in admin's own address only. Lets an admin verify formatting and
+ * deliverability (does it inbox on the new domain?) WITHOUT enabling automated
+ * sending or touching any client. Ignores the enabled/dry-run switches (it never
+ * emails a client), but still needs the Resend key + sender to be configured.
+ */
+export async function sendTestFollowUpAction(): Promise<FollowUpTestResult> {
+  const user = await assertAdmin();
+  if (!emailConfigured()) {
+    throw new Error("No Resend API key set (RESEND_API_KEY). Add it in Vercel and redeploy first.");
+  }
+  if (!config.followUpFromEmail) {
+    throw new Error("No sender address set (FOLLOW_UP_FROM_EMAIL). Add it in Vercel and redeploy first.");
+  }
+  if (!user.email) {
+    throw new Error("Your account has no email address on file, so there's nowhere to send the test.");
+  }
+
+  // A representative sample so the email renders exactly as a client's would.
+  const validUntil = new Date();
+  validUntil.setDate(validUntil.getDate() + 30);
+  const email = buildFollowUpEmail({
+    company: "Sample Client Corporation",
+    contactName: user.name,
+    quoteNumber: "TEST-0001",
+    projectName: "Sample industrial ventilation project",
+    total: 125000,
+    currency: "PHP",
+    validUntil,
+    quoteUrl: `${config.appUrl}/q/sample-quote`,
+    salesName: user.name,
+    nudgeNumber: 1,
+  });
+
+  await sendEmail({
+    from: `${config.followUpFromName} <${config.followUpFromEmail}>`,
+    to: user.email,
+    subject: `[TEST] ${email.subject}`,
+    text: `This is a TEST of the automated follow-up email — sent only to you. No client received it.\n\n${email.text}`,
+    html: `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#7d9199">This is a <strong>TEST</strong> of the automated follow-up email — sent only to you. No client received it.</p>${email.html}`,
+    replyTo: user.email,
+  });
+
+  return { ok: true, to: user.email };
 }
 
 // --- Material Request Form numbering ----------------------------------------

@@ -69,6 +69,7 @@ export function FollowUpSetting({
   inquiryMaxNudges: initInquiryMaxNudges,
   onSave,
   onPreview,
+  onTest,
 }: {
   offsetsDays: number[];
   maxNudges: number;
@@ -79,6 +80,7 @@ export function FollowUpSetting({
   inquiryMaxNudges: number;
   onSave: (input: Config) => Promise<Config>;
   onPreview: () => Promise<RunResult>;
+  onTest: () => Promise<{ ok: boolean; to: string }>;
 }) {
   const [daysStr, setDaysStr] = useState(offsetsDays.join(", "));
   const [max, setMax] = useState(String(maxNudges));
@@ -89,6 +91,7 @@ export function FollowUpSetting({
   const [inquiryMax, setInquiryMax] = useState(String(initInquiryMaxNudges));
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [run, setRun] = useState<RunResult | null>(null);
 
@@ -141,6 +144,19 @@ export function FollowUpSetting({
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Preview failed" });
     } finally {
       setPreviewing(false);
+    }
+  }
+
+  async function sendTest() {
+    setTesting(true);
+    setMsg(null);
+    try {
+      const r = await onTest();
+      setMsg({ ok: true, text: `Test email sent to ${r.to}. Check your inbox (and spam folder). No client received it.` });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Test send failed" });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -206,6 +222,17 @@ export function FollowUpSetting({
             ) : (
               <>Live sending is <strong>OFF</strong> — nothing is emailed automatically. Turn on the master switch and turn off dry-run to go live.</>
             )}
+          </div>
+
+          {/* Test-to-self: sends the real follow-up template to the logged-in admin
+              only — safe way to check formatting + deliverability before going live. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={sendTest} disabled={testing} size="sm" variant="outline">
+              {testing ? "Sending…" : "Send test email to me"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Emails the real follow-up template to your own address only — no client is affected. Works even while sending is off.
+            </span>
           </div>
         </div>
 
