@@ -119,6 +119,7 @@ export function PurchasingChain({
   showStockCheck = false,
   canIssueStock = false,
   adminManage = false,
+  highlightId,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -172,6 +173,8 @@ export function PurchasingChain({
   canIssueStock?: boolean;
   /** Admin manage: show per-row "Edit item lines" (Purchasing workspace only). */
   adminManage?: boolean;
+  /** A request id to scroll to / highlight (deep-link from a notification). */
+  highlightId?: string;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -277,7 +280,11 @@ export function PurchasingChain({
             ? r.actions.filter((a) => (a.key === "approve" || a.key === "reject") && a.canAct)
             : [];
         return (
-          <div key={r.id} className="rounded-md border bg-card p-3">
+          <div
+            key={r.id}
+            id={`req-${r.id}`}
+            className={`scroll-mt-24 rounded-md border bg-card p-3 ${highlightId === r.id ? "ring-2 ring-primary ring-offset-2" : ""}`}
+          >
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2 text-sm font-medium">
                 {(() => {

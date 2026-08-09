@@ -2195,7 +2195,9 @@ export async function advancePurchaseRequest(
     summary: `${step.label} — ${pr.quotationId ? await orderRefLabel(pr.quotationId) : "purchase request"}`,
     entity: "purchase",
     entityId: purchaseRequestId,
-    href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+    // Purchase-chain steps are acted on in the Purchasing workspace — deep-link
+    // straight to this request (opens its tab, scrolls to & highlights the card).
+    href: `/purchasing?req=${purchaseRequestId}`,
   });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
@@ -2328,7 +2330,8 @@ export async function advancePurchaseReturn(
     summary: `Supplier return — ${next.label}${pr.quotationId ? ` — ${await orderRefLabel(pr.quotationId)}` : ""}`,
     entity: "order",
     entityId: pr.quotationId ?? purchaseRequestId,
-    href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+    // The return handshake is worked in the Purchasing workspace — deep-link to it.
+    href: `/purchasing?req=${purchaseRequestId}`,
   });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
@@ -2926,7 +2929,7 @@ export async function splitPurchaseRequest(purchaseRequestId: string, moveItems:
     summary: `Split requisition — moved ${move.length} line${move.length > 1 ? "s" : ""} to a new supplier PO`,
     entity: "purchase",
     entityId: purchaseRequestId,
-    href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+    href: `/purchasing?req=${purchaseRequestId}`,
   });
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
