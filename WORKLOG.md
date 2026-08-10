@@ -14,6 +14,16 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — plain email format (land in Primary, not Promotions)
+- **Owner-reported:** the follow-up landed in Gmail's **Promotions** tab.
+- **Cause:** the big styled "View your quotation" CTA button + heavy HTML read as marketing.
+- **Fix (owner chose "plain & personal"):** in `follow-up-email.ts`, replaced the colored button with a
+  plain inline text link ("You can view your quotation here: <url>"), dropped the `<hr>`, and reduced the
+  signature/wrapper styling (no button, no `<em>`, minimal inline CSS) so it reads like a 1-to-1 email —
+  the strongest lever for Primary placement. Applied to both the quote follow-up and inquiry check-in.
+  **Subjects/messages left to the owner** (their custom templates untouched). Typecheck + lint clean.
+  **Email format only — no workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups — test email to any address (warm-up different inboxes)
 - **Owner need:** the "Send test email" button always went to the admin's own account; they want to
   send test follow-ups to other mailboxes to warm up the domain.
