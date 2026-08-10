@@ -14,6 +14,11 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · "Reconciled by hand" — also exclude admin-approved discrepancies
+- **Owner request:** drop from the list any reconciliation whose discrepancy was approved by an Admin.
+- **Change (`manual-reconciliations.ts`):** skip a PO row when `reconciliation.approval?.role === "Admin"`
+  (the discrepancy has been authorised → handled). Live filter, applies to future ones automatically.
+
 ## 2026-08-10 · "Reconciled by hand" — exclude Admin / Payment Approver tallies
 - **Owner request:** the list should not include items tallied by an Admin or the Payment Approver (they're
   the authorised manual-tally roles for unbalanced records) — surface only hand-tallies by everyone else.
