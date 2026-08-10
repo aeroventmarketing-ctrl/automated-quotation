@@ -1,58 +1,86 @@
 /**
- * "Reconciled by hand" — purchase-order vouchers whose reconciliation figures were
- * typed in manually (tallied against the PO) rather than AI-read and verified
- * against the uploaded receipt. Read-only reporting for the Production Dashboard.
+ * "Reconciled by hand" — every item whose reconciliation / liquidation figures
+ * were typed in manually (tallied against the PO / released cash) rather than
+ * AI-read and verified against the uploaded receipt. Read-only reporting for the
+ * Production Dashboard. Covers two sources:
  *
- * A row qualifies when the reconciliation has recorded lines, was NOT AI-verified
- * (`aiVerified !== true`), and carries a `recordedAt` stamp — i.e. someone tallied
- * it by hand. Each row keeps who recorded it, their designation, and the date/time.
+ *  - PurchaseRequest reconciliations → POs and department requisitions
+ *    (`/purchasing?req=<id>` opens the Purchasing tab on that request).
+ *  - CashRequest liquidations → cash vouchers
+ *    (`/cash-requests?id=<id>` opens the Cash Requests tab on that voucher).
+ *
+ * A row qualifies when it was recorded (has `recordedAt`) and was NOT AI-verified
+ * (`aiVerified !== true`). Each row keeps who recorded it, their designation, and
+ * the date/time.
  */
 import { prisma } from "@/lib/db";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
+import { coerceLiquidation, isLiquidated } from "@/lib/cash-request";
+import { isDeptRequisition } from "@/lib/purchasing";
 import { formatDateTime } from "@/lib/utils";
 
+export type ManualReconKind = "PO" | "Requisition" | "Cash";
+
 export interface ManualReconRow {
-  prId: string;
-  poNumber: string;
-  supplier: string;
-  amount: number; // voucher (PO net)
-  actualSpent: number | null;
-  recordedByName: string;
-  recordedRole: string; // designation, e.g. "Accounting"
-  recordedAtISO: string;
+  id: string;
+  kind: ManualReconKind;
+  ref: string; // PO number or cash-voucher number
+  title: string; // supplier (PO) or purpose (cash)
+  amount: number;
   recordedLabel: string; // "Name (Designation) · Aug 9, 2026, 6:27 PM"
+  recordedAtISO: string;
   href: string;
 }
 
+const recordedLabel = (name?: string, role?: string, at?: string): string =>
+  `${name || "—"}${role ? ` (${role})` : ""}${at ? ` · ${formatDateTime(new Date(at))}` : ""}`;
+
 export async function getManualReconciliations(): Promise<ManualReconRow[]> {
-  const prs = await prisma.purchaseRequest
-    .findMany({ select: { id: true, po: true, reconciliation: true } })
-    .catch(() => []);
+  const [prs, crs] = await Promise.all([
+    prisma.purchaseRequest
+      .findMany({ select: { id: true, kind: true, mrfId: true, po: true, reconciliation: true } })
+      .catch(() => []),
+    prisma.cashRequest
+      .findMany({ select: { id: true, number: true, purpose: true, amount: true, liquidation: true } })
+      .catch(() => []),
+  ]);
 
   const rows: ManualReconRow[] = [];
+
+  // POs / requisitions — reconciled by hand (not AI-verified).
   for (const pr of prs) {
     const r = coerceReconciliation(pr.reconciliation);
-    // Reconciled by hand = recorded tally, NOT AI-verified against the receipt.
     if (!isReconciled(r) || r.aiVerified === true || !r.recordedAt) continue;
-
     const po = coercePurchaseOrder(pr.po);
-    const net = po ? poTotals(po).net : 0;
-    const actual = Array.isArray(r.lines) ? r.lines.reduce((a, l) => a + (Number(l.actualAmount) || 0), 0) : null;
-    const role = r.recordedRole || "";
     rows.push({
-      prId: pr.id,
-      poNumber: po?.poNumber || "—",
-      supplier: po?.supplier?.company || "",
-      amount: net,
-      actualSpent: actual,
-      recordedByName: r.recordedByName || "—",
-      recordedRole: role,
+      id: `pr-${pr.id}`,
+      kind: isDeptRequisition(pr) ? "Requisition" : "PO",
+      ref: po?.poNumber || "—",
+      title: po?.supplier?.company || "",
+      amount: po ? poTotals(po).net : 0,
+      recordedLabel: recordedLabel(r.recordedByName, r.recordedRole, r.recordedAt),
       recordedAtISO: r.recordedAt,
-      recordedLabel: `${r.recordedByName || "—"}${role ? ` (${role})` : ""} · ${formatDateTime(new Date(r.recordedAt))}`,
-      href: `/purchasing/po/${pr.id}/view`,
+      href: `/purchasing?req=${pr.id}`,
     });
   }
+
+  // Cash vouchers — liquidated by hand (not AI-verified).
+  for (const cr of crs) {
+    const l = coerceLiquidation(cr.liquidation);
+    if (!isLiquidated(l) || l.aiVerified === true || !l.recordedAt) continue;
+    rows.push({
+      id: `cr-${cr.id}`,
+      kind: "Cash",
+      ref: cr.number,
+      title: cr.purpose || "",
+      amount: typeof l.actualSpent === "number" ? l.actualSpent : Number(cr.amount) || 0,
+      recordedLabel: recordedLabel(l.recordedByName, l.recordedRole, l.recordedAt),
+      recordedAtISO: l.recordedAt,
+      href: `/cash-requests?id=${cr.id}`,
+    });
+  }
+
   // Most recently recorded first.
   return rows.sort((a, b) => b.recordedAtISO.localeCompare(a.recordedAtISO));
 }
