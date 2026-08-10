@@ -27,6 +27,7 @@ import { canManagePayroll, getPayrollMonth } from "./payroll-actions";
 import type { DeptSplit } from "@/lib/department-pnl";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { FanCogsEditor } from "./fan-cogs-editor";
+import { CashVouchersCard, type CashVoucherView } from "./cash-vouchers-card";
 import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
 import { getTestMode } from "@/lib/test-mode";
 import { getAlertGoLive, alertsSuppressedNow, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
@@ -418,42 +419,46 @@ export default async function ManagementPage() {
     : [];
   const voucherPrNet = new Map(voucherPrs.map((pr) => { const po = coercePurchaseOrder(pr.po); return [pr.id, po ? poTotals(po).net : 0]; }));
   const voucherReconciled = new Map(voucherPrs.map((pr) => [pr.id, isReconciled(coerceReconciliation(pr.reconciliation))]));
-  type VoucherReportRow = {
-    no: string; ids: string[]; kind: "po" | "cash"; paidTo: string;
-    lines: { description: string; amount: number }[]; total: number; approvedTotal: number;
-    state: "mismatch" | "awaiting" | "tallied"; printedByName: string; printedAt: string;
-  };
-  const poVoucherReport: VoucherReportRow[] = printedVouchers.map((v) => {
+  const poVoucherViews: CashVoucherView[] = printedVouchers.map((v) => {
     const approvedTotal = round2(v.ids.reduce((s, id) => s + (voucherPrNet.get(id) ?? 0), 0));
     const amountMatches = Math.abs(approvedTotal - round2(v.total)) < 0.01;
     // Every covered request's voucher reconciliation has been recorded.
     const reconciled = v.ids.length > 0 && v.ids.every((id) => voucherReconciled.get(id));
     const state: "mismatch" | "awaiting" | "tallied" = !amountMatches ? "mismatch" : reconciled ? "tallied" : "awaiting";
-    return { ...v, kind: "po", approvedTotal, state };
+    return {
+      no: v.no, kind: "po" as const, paidTo: v.paidTo,
+      detail: v.lines.map((l) => l.description).filter(Boolean).join("; "),
+      total: v.total, approvedTotal, state, cashStatus: null, statusLabel: null,
+      printedByName: v.printedByName, printedAt: v.printedAt,
+      href: v.ids.length ? `/purchasing/po/${v.ids[0]}` : "/purchasing",
+    };
   });
   // Released cash-request vouchers (operating-expense cash vouchers — not PO-tied).
-  // Same released statuses + go-live createdAt scope the P&L / Expenses report use.
+  // Released after go-live (mirrors the PO vouchers' printedAt > cutoff filter).
   const RELEASED_CASH = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
+  const CASH_SHORT_STATUS: Record<string, string> = {
+    CASH_RELEASED: "Released", DISBURSED: "Handed over", RECEIVED: "Received", LIQUIDATED: "Liquidated", SETTLED: "Settled",
+  };
   const cashCrs = await prisma.cashRequest
     .findMany({
-      // Released after go-live (mirrors the PO vouchers' printedAt > cutoff filter).
       where: { releasedAt: goLiveCutoff ? { not: null, gt: goLiveCutoff.gt } : { not: null } },
-      select: { number: true, purpose: true, amount: true, requestedByName: true, voucherByName: true, releasedByName: true, voucherAt: true, releasedAt: true, status: true },
+      select: { id: true, number: true, purpose: true, amount: true, requestedByName: true, voucherByName: true, releasedByName: true, voucherAt: true, releasedAt: true, status: true },
     })
     .catch(() => []);
-  const cashVoucherReport: VoucherReportRow[] = cashCrs
+  const cashVoucherViews: CashVoucherView[] = cashCrs
     .filter((cr) => RELEASED_CASH.has(cr.status) && cr.releasedAt)
     .map((cr) => {
       const total = round2(Number(cr.amount) || 0);
       return {
-        no: cr.number, ids: [], kind: "cash" as const, paidTo: cr.requestedByName || "—",
-        lines: cr.purpose ? [{ description: cr.purpose, amount: total }] : [],
-        total, approvedTotal: total, state: "tallied" as const,
+        no: cr.number, kind: "cash" as const, paidTo: cr.requestedByName || "—",
+        detail: cr.purpose || "", total, approvedTotal: total, state: "tallied" as const,
+        cashStatus: cr.status, statusLabel: CASH_SHORT_STATUS[cr.status] ?? cr.status,
         printedByName: cr.voucherByName || cr.releasedByName || cr.requestedByName || "",
         printedAt: (cr.voucherAt ?? cr.releasedAt)!.toISOString(),
+        href: `/cash-requests/${cr.id}/voucher`,
       };
     });
-  const voucherReport: VoucherReportRow[] = [...poVoucherReport, ...cashVoucherReport].sort((a, b) => b.printedAt.localeCompare(a.printedAt));
+  const voucherViews: CashVoucherView[] = [...poVoucherViews, ...cashVoucherViews].sort((a, b) => b.printedAt.localeCompare(a.printedAt));
 
   // Phase distribution for the donut.
   const phaseCount = new Map<string, number>();
@@ -994,66 +999,9 @@ export default async function ManagementPage() {
         </Card>
       </div>
 
-      {/* Cash vouchers — number, details and whether they tally with the approved
-          requests they cover. Always shown; empty until a voucher is printed. */}
-      <Card className="mt-4 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Banknote className="h-4 w-4 text-muted-foreground" /> Cash vouchers
-              {voucherReport.length > 0 && (
-                <span className="ml-1 text-xs font-normal text-muted-foreground">
-                  ({voucherReport.filter((v) => v.kind === "po" && v.state === "mismatch").length} not tallied · {voucherReport.filter((v) => v.kind === "po" && v.state === "awaiting").length} awaiting reconciliation{voucherReport.filter((v) => v.kind === "cash").length > 0 ? ` · ${voucherReport.filter((v) => v.kind === "cash").length} cash` : ""})
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {voucherReport.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                No cash vouchers printed yet. Print one from <Link href="/purchasing" className="text-primary hover:underline">Purchasing</Link> (tick approved requests → Print voucher) and it will appear here.
-              </p>
-            ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[680px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs text-muted-foreground">
-                    <th className="py-1.5 pr-3 font-medium">Voucher No.</th>
-                    <th className="py-1.5 pr-3 font-medium">Details</th>
-                    <th className="py-1.5 pr-3 text-right font-medium">Amount</th>
-                    <th className="py-1.5 pr-3 font-medium">Status</th>
-                    <th className="py-1.5 font-medium">Printed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {voucherReport.map((v) => (
-                    <tr key={v.no} className="border-b align-top last:border-0">
-                      <td className="py-1.5 pr-3 font-semibold tabular-nums text-red-600">{v.no}</td>
-                      <td className="py-1.5 pr-3">
-                        <div className="font-medium">Paid to {v.paidTo || "—"}</div>
-                        <div className="text-xs text-muted-foreground">{v.lines.map((l) => l.description).filter(Boolean).join("; ")}</div>
-                        {v.kind === "po" && v.state === "mismatch" && <div className="text-xs text-amber-700">Approved total {formatCurrency(v.approvedTotal, CURRENCY)} · voucher {formatCurrency(v.total, CURRENCY)}</div>}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right tabular-nums">{formatCurrency(v.total, CURRENCY)}</td>
-                      <td className="py-1.5 pr-3">
-                        {v.kind === "cash" ? (
-                          <Badge variant="secondary">Cash voucher</Badge>
-                        ) : v.state === "mismatch" ? (
-                          <Badge variant="warning">Not tallied</Badge>
-                        ) : v.state === "awaiting" ? (
-                          <Badge variant="secondary">Awaiting reconciliation</Badge>
-                        ) : (
-                          <Badge variant="success">Tallied</Badge>
-                        )}
-                      </td>
-                      <td className="py-1.5 text-xs text-muted-foreground">{v.printedByName}{v.printedAt ? ` · ${formatDateTime(v.printedAt)}` : ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* Cash vouchers — collapsible, clickable rows (open the voucher), with the
+          real cash status. PO-based printed vouchers + released cash vouchers. */}
+      <CashVouchersCard vouchers={voucherViews} />
     </div>
   );
 }
