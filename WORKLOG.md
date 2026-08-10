@@ -24,11 +24,14 @@ and we never redo something that's already done.
   `my-dashboard/manual-reconcile-card.tsx` (matches the stat-tile look; click → **expand inline** list, rows
   link to the PO). Wired into `my-dashboard/page.tsx` after the count grid, shown to Admin / Payment Approver /
   Accounting. Frozen Phase 3 MRF feed untouched (separate lib + card).
-- **Gating (frozen Phase 4, owner-approved):** `recordReconciliation` now blocks a **manual** tally
-  (`aiVerified !== true`) unless the user is the **Payment Approver or an admin** — Accounting & Purchaser must
-  use the AI receipt-read path (auto-records `aiVerified=true`). Panel `purchase-reconcile-panel.tsx`:
-  `canManualRecord = canApprove || admin` (removed the old hasAiRead/limit unlock); messages updated so
-  non-approvers are told to use Auto-read / ask the approver-admin instead of "enter figures manually".
+- **Gating (frozen Phase 4, owner-approved) — balance-aware (refined per owner):** a **manual** tally
+  (`aiVerified !== true`) that **balances** may be recorded by anyone allowed to record (incl. Accounting &
+  Purchaser); an **unbalanced** manual tally (a discrepancy) is restricted to the **Payment Approver or an
+  admin**. `recordReconciliation` computes `reconcileTotals(lines, vatMode).status` and throws only when
+  `manual && !balanced && !approver/admin`. Panel `purchase-reconcile-panel.tsx`:
+  `canManualRecord = canApprove || admin || previewBalanced` (previewBalanced from `balanceTolerance`); the
+  Record button + hint enforce the discrepancy restriction live as figures are typed. AI receipt-read path
+  (`aiVerified=true`) unaffected.
 - **Name/designation/date/time** were already captured (`recordedByName`/`recordedRole`/`recordedAt`) and shown
   ("Reconciled by …"); now also surfaced in the new card. Typecheck + lint clean; app compiles.
 

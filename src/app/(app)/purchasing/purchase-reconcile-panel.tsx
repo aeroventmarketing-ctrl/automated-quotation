@@ -73,17 +73,17 @@ export function PurchaseReconcilePanel({
   const [reads, setReads] = useState(reconcile.aiReads);
   const readsLeft = Math.max(0, AI_RECEIPT_READ_LIMIT - reads);
   const limitReached = !admin && readsLeft <= 0;
-  // Manual (typed) reconciliation is an authority action — only the Payment
-  // Approver or an admin may record figures by hand. Accounting and the Purchaser
-  // reconcile through the AI receipt read, which auto-records an AI-verified tally.
-  const canManualRecord = canApprove || admin;
-
   const factor = vatMode === "exclusive" ? 1 + VAT : 1;
   const preview = useMemo(() => {
     const voucher = round2(rows.reduce((a, r) => a + r.poAmount, 0) * factor);
     const actual = round2(rows.reduce((a, r) => a + num(r.actual), 0));
     return { voucher, actual, variance: round2(voucher - actual) };
   }, [rows, factor]);
+  // Manual (typed) entry: a BALANCED tally may be recorded by anyone who can record
+  // (incl. Accounting / the Purchaser); an UNBALANCED tally (a discrepancy) is an
+  // authority action — only the Payment Approver or an admin may record it by hand.
+  const previewBalanced = Math.abs(preview.variance) <= balanceTolerance(preview.voucher);
+  const canManualRecord = canApprove || admin || previewBalanced;
 
   function startEdit() {
     setRows(seed()); setVatMode(reconcile.vatMode); setNote(""); setReceipts([]); setErr(null); setOpen(true);
@@ -212,7 +212,7 @@ export function PurchaseReconcilePanel({
   }
 
   async function record() {
-    if (!canManualRecord) { setErr("Manual (typed) reconciliation is restricted to the Payment Approver or an admin. Record the tally from the AI receipt read instead."); return; }
+    if (!canManualRecord) { setErr("This voucher doesn't balance — a discrepancy can only be recorded by the Payment Approver or an admin. A balanced tally can be recorded here."); return; }
     setBusy("record"); setErr(null);
     // Manual record: figures typed by hand — NOT verified against the receipt image.
     await submitRecord(vatMode, rows, note, false);
@@ -287,10 +287,7 @@ export function PurchaseReconcilePanel({
       {!readOnly && limitReached && (
         <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5">
           <p className="text-xs font-medium text-destructive">
-            AI read limit reached ({AI_RECEIPT_READ_LIMIT} of {AI_RECEIPT_READ_LIMIT} used).{" "}
-            {canManualRecord
-              ? "Check the receipt and enter the figures manually — or allow more reads."
-              : "Ask the admin/approver to record the tally, or to allow more AI reads."}
+            AI read limit reached ({AI_RECEIPT_READ_LIMIT} of {AI_RECEIPT_READ_LIMIT} used). Check the receipt and enter the figures manually — or ask the admin/approver to allow more reads.
           </p>
           {reconcile.aiReadEscalated ? (
             <p className="text-xs text-amber-700">Sent to the admin/approver — {reconcile.aiReadEscalated}</p>
@@ -548,11 +545,7 @@ export function PurchaseReconcilePanel({
             </ul>
           )}
           {limitReached ? (
-            <p className="text-xs font-medium text-destructive">
-              {canManualRecord
-                ? "AI read limit reached — check the receipt and enter the figures manually (see the notice above), or ask the admin/approver to allow more reads."
-                : "AI read limit reached — ask the admin/approver to record the tally or to allow more AI reads."}
-            </p>
+            <p className="text-xs font-medium text-destructive">AI read limit reached — check the receipt and enter the figures manually (see the notice above), or ask the admin/approver to allow more reads.</p>
           ) : admin ? (
             <p className="text-xs text-muted-foreground">Admin — no AI read limit.</p>
           ) : reads > 0 ? (
@@ -561,7 +554,7 @@ export function PurchaseReconcilePanel({
           <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
           {!canManualRecord && (
             <p className="text-xs text-muted-foreground">
-              Use <span className="font-medium">Auto-read receipt</span> to record. Typing figures by hand is restricted to the <span className="font-medium">Payment Approver or an admin</span>.
+              This voucher doesn&rsquo;t balance — a discrepancy can only be recorded by the <span className="font-medium">Payment Approver or an admin</span>. A balanced tally can be recorded here.
             </p>
           )}
           <div className="flex items-center gap-2">
