@@ -138,8 +138,10 @@ export default async function MyDashboardPage() {
     </div>
   );
 
-  // Counts by area — click a box to jump to that area's items below.
-  const ordersGrid = data.byArea.length > 0 && (
+  // Counts by area — click a box to jump to that area's items below. The
+  // "Reconciled by hand" tile (when shown) joins the same row; its list expands
+  // full-width beneath the row (col-span-full).
+  const ordersGrid = (data.byArea.length > 0 || manualReconCard) && (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {data.byArea.map((a) => {
         const Icon = AREA_ICON[a.area];
@@ -157,6 +159,7 @@ export default async function MyDashboardPage() {
           </Link>
         );
       })}
+      {manualReconCard}
     </div>
   );
 
@@ -374,7 +377,6 @@ export default async function MyDashboardPage() {
         <AutoRefresh />
         {header}
         {ordersGrid}
-        {manualReconCard}
         {pendingCard}
         <UnreconciledPaymentsCard data={finance} />
         <CashVouchersCard data={finance} />
@@ -401,7 +403,6 @@ export default async function MyDashboardPage() {
       {productionCard}
       {inventoryCard}
       {ordersGrid}
-      {manualReconCard}
       {pendingCard}
       {poSummaryCard}
       {materialsCard}

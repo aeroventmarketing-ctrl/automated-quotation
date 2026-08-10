@@ -50,7 +50,7 @@ export async function getManualReconciliations(): Promise<ManualReconRow[]> {
       recordedRole: role,
       recordedAtISO: r.recordedAt,
       recordedLabel: `${r.recordedByName || "—"}${role ? ` (${role})` : ""} · ${formatDateTime(new Date(r.recordedAt))}`,
-      href: `/purchasing/po/${pr.id}`,
+      href: `/purchasing/po/${pr.id}/view`,
     });
   }
   // Most recently recorded first.

@@ -430,7 +430,7 @@ export default async function ManagementPage() {
       detail: v.lines.map((l) => l.description).filter(Boolean).join("; "),
       total: v.total, approvedTotal, state, cashStatus: null, statusLabel: null,
       printedByName: v.printedByName, printedAt: v.printedAt,
-      href: v.ids.length ? `/purchasing/po/${v.ids[0]}` : "/purchasing",
+      href: v.ids.length ? `/purchasing/po/${v.ids[0]}/view` : "/purchasing",
     };
   });
   // Released cash-request vouchers (operating-expense cash vouchers — not PO-tied).
