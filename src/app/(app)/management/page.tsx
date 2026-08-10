@@ -28,8 +28,6 @@ import type { DeptSplit } from "@/lib/department-pnl";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { FanCogsEditor } from "./fan-cogs-editor";
 import { CashVouchersCard, type CashVoucherView } from "./cash-vouchers-card";
-import { RecentActivityCard } from "./recent-activity-card";
-import { getRecentActivity } from "@/lib/recent-activity";
 import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
 import { getTestMode } from "@/lib/test-mode";
 import { getAlertGoLive, alertsSuppressedNow, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
@@ -461,9 +459,6 @@ export default async function ManagementPage() {
       };
     });
   const voucherViews: CashVoucherView[] = [...poVoucherViews, ...cashVoucherViews].sort((a, b) => b.printedAt.localeCompare(a.printedAt));
-
-  // Recent activity — last 3 days of requisitions, POs, vouchers, reconciliations, MRFs.
-  const recentActivity = await getRecentActivity(3);
 
   // Phase distribution for the donut.
   const phaseCount = new Map<string, number>();
@@ -1007,10 +1002,6 @@ export default async function ManagementPage() {
       {/* Cash vouchers — collapsible, clickable rows (open the voucher), with the
           real cash status. PO-based printed vouchers + released cash vouchers. */}
       <CashVouchersCard vouchers={voucherViews} />
-
-      {/* Recent activity — reconciled vouchers, MRFs, requisitions, POs & other,
-          for today / yesterday / the day before. */}
-      <RecentActivityCard days={recentActivity} />
     </div>
   );
 }
