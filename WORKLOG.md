@@ -14,10 +14,13 @@ and we never redo something that's already done.
 
 ---
 
-## 2026-08-10 · "Reconciled by hand" — also exclude admin-approved discrepancies
-- **Owner request:** drop from the list any reconciliation whose discrepancy was approved by an Admin.
-- **Change (`manual-reconciliations.ts`):** skip a PO row when `reconciliation.approval?.role === "Admin"`
-  (the discrepancy has been authorised → handled). Live filter, applies to future ones automatically.
+## 2026-08-10 · "Reconciled by hand" — also exclude approved discrepancies (Approver or Admin)
+- **Owner request:** drop from the list any reconciliation whose discrepancy has been approved. First
+  scoped to Admin-approved; owner then extended it to **Payment Approver too**.
+- **Change (`manual-reconciliations.ts`):** skip a PO row when `reconciliation.approval` exists (the
+  discrepancy was authorised by the Payment Approver or an Admin → handled). Live filter, applies to future
+  ones automatically. (Note: the 14 that remained were all Accounting/Requestor with no Admin-only approval;
+  broadening to any approval is what actually reduces the count.)
 
 ## 2026-08-10 · "Reconciled by hand" — exclude Admin / Payment Approver tallies
 - **Owner request:** the list should not include items tallied by an Admin or the Payment Approver (they're
