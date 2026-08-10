@@ -14,6 +14,19 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · Management Cash Vouchers card — collapsible, clickable rows, real status (owner-approved)
+- **Owner request:** make the Cash Vouchers card collapsible + rows clickable, and show the real status
+  (Settled / Liquidated / etc.) instead of a generic "Cash voucher" badge.
+- **Change:** extracted the management page's inline card into a client component
+  `management/cash-vouchers-card.tsx` (`CashVouchersCard` + `CashVoucherView`). It's **collapsible**
+  (default collapsed; header shows "N not tallied · M awaiting · K cash · ₱total"), **rows are clickable**
+  (router.push → cash rows open `/cash-requests/{id}/voucher`, PO rows `/purchasing/po/{prId}`), and cash
+  rows show a **status badge** (SETTLED→success, LIQUIDATED→default, else secondary) with a short label
+  (Released / Handed over / Received / Liquidated / Settled). The page now builds `CashVoucherView[]`
+  (adds `id` to the cash query) and renders the component.
+- Display-only enhancement to the frozen Phase 4 reporting surface (owner-approved) — no workflow change.
+  Typecheck + lint clean.
+
 ## 2026-08-10 · Management Cash Vouchers card — include released cash-request vouchers (Phase 4, owner-approved)
 - **Owner-reported:** the Management **"Cash Vouchers"** card said "No cash vouchers printed yet" while
   the Expenses report listed cash vouchers (0000845–0852, Office expenses).
