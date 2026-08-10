@@ -574,21 +574,31 @@ export interface SmsTestResult {
   ok: boolean;
   to: string;
   balance: number | null;
+  /** A friendly failure reason (returned as data — Next redacts THROWN messages
+   *  in production, so we never throw for user-facing errors here). */
+  error?: string;
 }
 /**
  * Send ONE real follow-up SMS — the exact message clients receive — to a chosen
  * mobile number, so an admin can verify wording, sender name and deliverability
  * WITHOUT enabling automated SMS or texting any client. Ignores the enable /
  * dry-run switches, but still needs SEMAPHORE_API_KEY.
+ *
+ * Returns failures as `{ ok:false, error }` instead of throwing, because Next.js
+ * strips thrown error messages in production ("An error occurred in the Server
+ * Components render…") — so a throw would hide the real reason (missing key,
+ * pending sender name, no credits) from the admin. This way they see it.
  */
 export async function sendTestSmsAction(toNumber: string): Promise<SmsTestResult> {
   await assertAdmin();
+  const fail = (error: string): SmsTestResult => ({ ok: false, to: "", balance: null, error });
+
   if (!smsConfigured()) {
-    throw new Error("No Semaphore API key set (SEMAPHORE_API_KEY). Add it in Vercel and redeploy first.");
+    return fail("No Semaphore API key set. Add SEMAPHORE_API_KEY in Vercel → Environment Variables and redeploy first.");
   }
   const phone = normalizePhMobile(toNumber);
   if (!phone) {
-    throw new Error(`"${toNumber}" isn't a valid PH mobile number (e.g. 09171234567).`);
+    return fail(`"${toNumber}" isn't a valid PH mobile number (e.g. 09171234567).`);
   }
   const settings = await getFollowUpSettings();
   const message = buildFollowUpSms({
@@ -600,7 +610,13 @@ export async function sendTestSmsAction(toNumber: string): Promise<SmsTestResult
     quoteUrl: `${config.appUrl}/q/sample-quote`,
     template: settings.smsTemplate,
   });
-  await sendSms({ to: phone, message: `[TEST] ${message}` });
+  try {
+    await sendSms({ to: phone, message: `[TEST] ${message}` });
+  } catch (e) {
+    // Surface Semaphore's own message (unregistered/pending sender name, no
+    // credits, bad number, network) so the admin knows exactly what to fix.
+    return fail(e instanceof Error ? e.message : "Semaphore rejected the message.");
+  }
   const acct = await getSemaphoreBalance();
   return { ok: true, to: phone, balance: acct?.balance ?? null };
 }
