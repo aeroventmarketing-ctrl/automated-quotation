@@ -30,6 +30,9 @@ export interface LowStockRow { id: string; name: string; unit: string; quantity:
 export type VoucherState = "mismatch" | "awaiting" | "tallied";
 export interface VoucherRow {
   no: string;
+  /** "po" = printed from Purchasing against a PO (tallied vs approved PO);
+   *  "cash" = a released cash-request voucher (operating expense, not PO-tied). */
+  kind: "po" | "cash";
   paidTo: string;
   lines: PrintedVoucherLine[];
   total: number;
@@ -134,13 +137,42 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
     : [];
   const voucherPrNet = new Map(voucherPrs.map((pr) => { const po = coercePurchaseOrder(pr.po); return [pr.id, po ? poTotals(po).net : 0]; }));
   const voucherReconciled = new Map(voucherPrs.map((pr) => [pr.id, isReconciled(coerceReconciliation(pr.reconciliation))]));
-  const vouchers: VoucherRow[] = printedVouchers.map((v) => {
+  const poVouchers: VoucherRow[] = printedVouchers.map((v) => {
     const approvedTotal = round2(v.ids.reduce((s, id) => s + (voucherPrNet.get(id) ?? 0), 0));
     const amountMatches = Math.abs(approvedTotal - round2(v.total)) < 0.01;
     const reconciled = v.ids.length > 0 && v.ids.every((id) => voucherReconciled.get(id));
     const state: VoucherState = !amountMatches ? "mismatch" : reconciled ? "tallied" : "awaiting";
-    return { no: v.no, paidTo: v.paidTo, lines: v.lines, total: v.total, approvedTotal, state, printedByName: v.printedByName, printedAt: v.printedAt };
+    return { no: v.no, kind: "po" as const, paidTo: v.paidTo, lines: v.lines, total: v.total, approvedTotal, state, printedByName: v.printedByName, printedAt: v.printedAt };
   });
+
+  // Released cash-request vouchers (operating-expense cash vouchers — Office
+  // internet, fuel, permits, etc. — not tied to a PO). Same released statuses and
+  // go-live scope the P&L uses, so the card mirrors the Expenses report.
+  const RELEASED_CASH = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
+  const cashCrs = await prisma.cashRequest
+    .findMany({
+      where: { releasedAt: { not: null }, ...createdFilter },
+      select: { number: true, purpose: true, amount: true, requestedByName: true, voucherByName: true, releasedByName: true, voucherAt: true, releasedAt: true, status: true },
+    })
+    .catch(() => []);
+  const cashVouchers: VoucherRow[] = cashCrs
+    .filter((cr) => RELEASED_CASH.has(cr.status) && cr.releasedAt)
+    .map((cr) => {
+      const total = round2(Number(cr.amount) || 0);
+      return {
+        no: cr.number,
+        kind: "cash" as const,
+        paidTo: cr.requestedByName || "—",
+        lines: cr.purpose ? [{ description: cr.purpose, amount: total }] : [],
+        total,
+        approvedTotal: total, // no PO to tally against — the voucher is its own total
+        state: "tallied" as VoucherState,
+        printedByName: cr.voucherByName || cr.releasedByName || cr.requestedByName || "",
+        printedAt: (cr.voucherAt ?? cr.releasedAt)!.toISOString(),
+      };
+    });
+
+  const vouchers: VoucherRow[] = [...poVouchers, ...cashVouchers].sort((a, b) => b.printedAt.localeCompare(a.printedAt));
 
   return { outstanding, billed, collected, collectedPct, unbalanced, deliveredUnpaid, lowStock, prPendingCount: prPending.length, commissionsUnpaidCount: payableCommissions.length, unpaidCommission, vouchers };
 }

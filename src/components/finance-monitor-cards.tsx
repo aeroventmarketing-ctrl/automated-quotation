@@ -170,15 +170,16 @@ export function FinanceStatsRow({ data }: { data: FinanceMonitor }) {
 /** Printed cash vouchers and whether they tally with their POs. */
 export function CashVouchersCard({ data }: { data: FinanceMonitor }) {
   const { vouchers } = data;
-  const notTallied = vouchers.filter((v) => v.state === "mismatch").length;
-  const awaiting = vouchers.filter((v) => v.state === "awaiting").length;
+  const notTallied = vouchers.filter((v) => v.kind === "po" && v.state === "mismatch").length;
+  const awaiting = vouchers.filter((v) => v.kind === "po" && v.state === "awaiting").length;
+  const cashCount = vouchers.filter((v) => v.kind === "cash").length;
   return (
       <Card className="shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
             <Banknote className="h-4 w-4 text-muted-foreground" /> Cash Vouchers
             {vouchers.length > 0 && (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">({notTallied} not tallied · {awaiting} awaiting reconciliation)</span>
+              <span className="ml-1 text-xs font-normal text-muted-foreground">({notTallied} not tallied · {awaiting} awaiting reconciliation{cashCount > 0 ? ` · ${cashCount} cash` : ""})</span>
             )}
           </CardTitle>
         </CardHeader>
@@ -206,11 +207,11 @@ export function CashVouchersCard({ data }: { data: FinanceMonitor }) {
                       <td className="py-1.5 pr-3">
                         <div className="font-medium">Paid to {v.paidTo || "—"}</div>
                         <div className="text-xs text-muted-foreground">{v.lines.map((l) => l.description).filter(Boolean).join("; ")}</div>
-                        {v.state === "mismatch" && <div className="text-xs text-amber-700">Approved total {formatCurrency(v.approvedTotal, CURRENCY)} · voucher {formatCurrency(v.total, CURRENCY)}</div>}
+                        {v.kind === "po" && v.state === "mismatch" && <div className="text-xs text-amber-700">Approved total {formatCurrency(v.approvedTotal, CURRENCY)} · voucher {formatCurrency(v.total, CURRENCY)}</div>}
                       </td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{formatCurrency(v.total, CURRENCY)}</td>
                       <td className="py-1.5 pr-3">
-                        {v.state === "mismatch" ? <Badge variant="warning">Not tallied</Badge> : v.state === "awaiting" ? <Badge variant="secondary">Awaiting reconciliation</Badge> : <Badge variant="success">Tallied</Badge>}
+                        {v.kind === "cash" ? <Badge variant="secondary">Cash voucher</Badge> : v.state === "mismatch" ? <Badge variant="warning">Not tallied</Badge> : v.state === "awaiting" ? <Badge variant="secondary">Awaiting reconciliation</Badge> : <Badge variant="success">Tallied</Badge>}
                       </td>
                       <td className="py-1.5 text-xs text-muted-foreground">{v.printedByName}{v.printedAt ? ` · ${formatDateTime(v.printedAt)}` : ""}</td>
                     </tr>
