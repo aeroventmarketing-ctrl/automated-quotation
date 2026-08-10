@@ -138,11 +138,28 @@ export function sentAtFrom(classification: unknown): string | null {
 
 /** The latest "at" among the auto follow-ups already sent for a quote, or null. */
 export function lastNudgeAtFrom(classification: unknown): string | null {
+  return latestAtOf(classification, "sent");
+}
+
+/** Count of auto follow-up SMS already sent for a quote (independent channel). */
+export function smsNudgesSentFrom(classification: unknown): number {
   const fu = (classification as Record<string, unknown> | null)?.followUp as Record<string, unknown> | undefined;
-  const sent = fu?.sent;
-  if (!Array.isArray(sent) || sent.length === 0) return null;
+  const sent = fu?.smsSent;
+  return Array.isArray(sent) ? sent.length : 0;
+}
+
+/** The latest "at" among the auto follow-up SMS already sent for a quote, or null. */
+export function lastSmsAtFrom(classification: unknown): string | null {
+  return latestAtOf(classification, "smsSent");
+}
+
+/** Latest "at" timestamp within a `followUp.<key>` array (`sent` / `smsSent`). */
+function latestAtOf(classification: unknown, key: "sent" | "smsSent"): string | null {
+  const fu = (classification as Record<string, unknown> | null)?.followUp as Record<string, unknown> | undefined;
+  const arr = fu?.[key];
+  if (!Array.isArray(arr) || arr.length === 0) return null;
   let latest: string | null = null;
-  for (const s of sent) {
+  for (const s of arr) {
     const at = (s as Record<string, unknown> | null)?.at;
     if (typeof at === "string" && (latest === null || at > latest)) latest = at;
   }

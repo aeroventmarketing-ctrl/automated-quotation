@@ -27,6 +27,10 @@ export const config = {
   // a domain verified in Resend (a Gmail address will not work).
   followUpFromName: (process.env.FOLLOW_UP_FROM_NAME ?? "").trim() || "AEROVENT FBM",
   followUpFromEmail: (process.env.FOLLOW_UP_FROM_EMAIL ?? "").trim(),
+  // Automated client follow-up SMS (Semaphore, semaphore.co). The sender name must
+  // be one registered on your Semaphore account; leave unset to use their default
+  // shared "SEMAPHORE" sender. The API key itself is read from SEMAPHORE_API_KEY.
+  semaphoreSenderName: (process.env.SEMAPHORE_SENDER_NAME ?? "").trim(),
 };
 
 export const COMPANY = {

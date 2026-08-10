@@ -14,12 +14,23 @@ import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { config } from "@/lib/config";
-import { evaluateFollowUp, sentAtFrom, nudgesSentFrom, lastNudgeAtFrom } from "@/lib/follow-up";
+import { evaluateFollowUp, sentAtFrom, nudgesSentFrom, lastNudgeAtFrom, smsNudgesSentFrom, lastSmsAtFrom } from "@/lib/follow-up";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getFollowUpTemplates } from "@/lib/follow-up-templates";
 import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
 import { buildFollowUpEmail, buildInquiryFollowUpEmail, templateForNudge } from "@/lib/follow-up-email";
+import { buildFollowUpSms } from "@/lib/follow-up-sms";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
+import { sendSms, smsConfigured, normalizePhMobile } from "@/lib/sms/semaphore";
+
+/** Money formatter shared by the SMS builder (email formats its own internally). */
+function money(total: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-PH", { style: "currency", currency, maximumFractionDigits: 2 }).format(total);
+  } catch {
+    return `${currency} ${total.toLocaleString()}`;
+  }
+}
 
 export type RunAction = "sent" | "preview" | "skipped";
 
@@ -31,6 +42,8 @@ export interface RunItem {
   action: RunAction;
   reason?: string;
   kind?: "quote" | "inquiry";
+  /** Which channel this item is for — defaults to Email when absent. */
+  channel?: "Email" | "SMS";
 }
 
 export interface FollowUpRunResult {
@@ -43,6 +56,11 @@ export interface FollowUpRunResult {
   sent: number;
   previewed: number;
   skipped: number;
+  /** SMS channel counters (independent of the email due/sent above). */
+  smsDue: number;
+  smsSent: number;
+  smsPreviewed: number;
+  smsSkipped: number;
   items: RunItem[];
   errors: string[];
 }
@@ -292,6 +310,114 @@ export async function runFollowUps(opts: {
   }
   } // end inquiry pass (skipped for targeted sends)
 
+  // --- SMS follow-up pass (independent channel, same cadence) --------------
+  // Texts due clients who have a phone number, tracked separately from email
+  // (its own `followUp.smsSent` stamps) so the two channels never block each
+  // other. Own enable + dry-run + per-run cap. Skipped for targeted sends.
+  let smsDue = 0;
+  let smsSent = 0;
+  let smsPreviewed = 0;
+  let smsSkipped = 0;
+  if (!targeted && settings.smsEnabled) {
+    const smsLive = opts.live && settings.smsEnabled && !settings.smsDryRun && smsConfigured();
+    const smsCap = settings.smsMaxPerRun;
+
+    for (const q of quotes) {
+      const sentIso = sentAtFrom(q.classification);
+      const sentAt = sentIso ? new Date(sentIso) : q.createdAt;
+      const lastIso = lastSmsAtFrom(q.classification);
+      const result = evaluateFollowUp(
+        {
+          sentAt,
+          validUntil: q.validUntil ?? null,
+          won: false,
+          nudgesSent: smsNudgesSentFrom(q.classification),
+          now,
+          campaignStartAt,
+          lastSentAt: lastIso ? new Date(lastIso) : null,
+        },
+        settings,
+      );
+      if (result.state !== "due") continue;
+
+      smsDue++;
+      const c = q.inquiry.customer;
+      const phone = normalizePhMobile(c.phone);
+      const base: RunItem = { quoteNumber: q.quoteNumber, company: c.company, to: phone, nudge: result.nudgeNumber, action: "skipped", kind: "quote", channel: "SMS" };
+
+      if (accounts[c.id]?.optOutFollowUp) {
+        smsSkipped++;
+        items.push({ ...base, reason: "opted out" });
+        continue;
+      }
+      if (!phone) {
+        smsSkipped++;
+        items.push({ ...base, reason: "no valid mobile on file" });
+        continue;
+      }
+
+      const message = buildFollowUpSms({
+        company: c.company,
+        contactName: c.contactName,
+        quoteNumber: q.quoteNumber,
+        total: money(Number(q.total), q.currency),
+        salesName: q.preparedBy.name,
+        quoteUrl: `${config.appUrl}/q/${q.id}`,
+        template: settings.smsTemplate,
+      });
+
+      if (!smsLive) {
+        smsPreviewed++;
+        items.push({ ...base, action: "preview" });
+        continue;
+      }
+      if (smsSent >= smsCap) {
+        smsSkipped++;
+        items.push({ ...base, reason: "per-run SMS cap reached" });
+        continue;
+      }
+
+      try {
+        await sendSms({ to: phone, message });
+
+        // Record the SMS nudge on the quote (separate array) so it's never repeated.
+        const cls = (q.classification as Record<string, unknown>) ?? {};
+        const fu = (cls.followUp as Record<string, unknown> | undefined) ?? {};
+        const smsArr = Array.isArray(fu.smsSent) ? (fu.smsSent as unknown[]) : [];
+        smsArr.push({ nudge: result.nudgeNumber, at: now.toISOString(), channel: "SMS", to: phone });
+        await prisma.quotation.update({
+          where: { id: q.id },
+          data: { classification: { ...cls, followUp: { ...fu, smsSent: smsArr } } as Prisma.InputJsonObject },
+        });
+
+        // Log it into the client's conversation history.
+        const entry: ConversationEntry = {
+          id: randomUUID(),
+          date: now.toISOString(),
+          channel: "SMS",
+          contactPerson: c.contactName ?? c.company,
+          message: `Automated follow-up SMS sent (nudge #${result.nudgeNumber}) for quotation ${q.quoteNumber}.`,
+          quoteNumber: q.quoteNumber,
+          nextFollowUp: null,
+          loggedById: q.preparedById,
+          loggedByName: q.preparedBy.name,
+          createdAt: now.toISOString(),
+        };
+        const acct = accounts[c.id] ?? { history: [], conversations: [] };
+        acct.conversations = [...(acct.conversations ?? []), entry];
+        accounts[c.id] = acct;
+        accountsDirty = true;
+
+        smsSent++;
+        items.push({ ...base, action: "sent" });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "sms failed";
+        errors.push(`${q.quoteNumber} (SMS): ${msg}`);
+        items.push({ ...base, reason: "send failed" });
+      }
+    }
+  }
+
   if (accountsDirty) await saveAccountsRegistry(accounts);
 
   return {
@@ -304,6 +430,10 @@ export async function runFollowUps(opts: {
     sent,
     previewed,
     skipped,
+    smsDue,
+    smsSent,
+    smsPreviewed,
+    smsSkipped,
     items,
     errors,
   };
