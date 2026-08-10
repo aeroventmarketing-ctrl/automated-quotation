@@ -14,6 +14,16 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · Follow-ups — SMS reach indicator ("X of Y clients have a valid mobile")
+- **Owner request:** show how many follow-up clients the SMS channel can actually reach.
+- **`src/lib/sms-reach.ts`:** `getSmsReach()` — over the SMS universe (distinct clients with an open,
+  non-won/lost SENT quote), counts how many have a valid mobile via the **same** `normalizePhMobile`
+  the sender uses, so it reflects exactly who a live run would text. Returns `{ total, withMobile }`.
+- **Admin UI:** the SMS section shows **"Reach: X of Y follow-up clients have a valid mobile number (NN%)"**
+  under the sender/balance line, noting the remainder are skipped automatically (or "No open sent quotes
+  to text yet." when empty). Wired via a `smsReach` prop from the admin page.
+- Typecheck + lint clean. **Non-workflow (CRM) — no order-workflow / P&L change.**
+
 ## 2026-08-10 · Follow-ups — per-nudge SMS messages (like the per-nudge emails)
 - **Owner request:** custom SMS text per nudge, same as the email per-nudge templates.
 - **Change:** SMS setting `smsTemplate` (single string) → **`smsTemplates: string[]`** (one per nudge).
