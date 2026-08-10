@@ -14,6 +14,17 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · My Dashboard — fix amount mismatch (show payable, not gross)
+- **Owner-reported:** an order showed a different price on **My Dashboard → Pending Your Action**
+  (₱1,333,114.72) vs the **order page** header (₱1,106,961.33).
+- **Cause:** the dashboard feed used the raw `quote.total` (gross, pre-discount) while the order page,
+  orders list, and quotation page all use `payableTotal(quote)` (after discount + VAT mode). The
+  dashboard was the lone outlier.
+- **Fix (display-only):** `src/lib/my-dashboard.ts` now uses `payableTotal(...)` for both the **Orders**
+  pending-action feed and the **Quotations awaiting approval** feed. No change to who acts, gating, step
+  order or stage progression — **non-workflow display fix** (both queries already `include` the full
+  quotation, so `total/discountPct/vatMode/classification` are available). Typecheck + lint clean.
+
 ## 2026-08-10 · Follow-ups — SMS reach indicator ("X of Y clients have a valid mobile")
 - **Owner request:** show how many follow-up clients the SMS channel can actually reach.
 - **`src/lib/sms-reach.ts`:** `getSmsReach()` — over the SMS universe (distinct clients with an open,

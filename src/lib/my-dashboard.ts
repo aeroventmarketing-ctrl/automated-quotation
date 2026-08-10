@@ -18,6 +18,7 @@ import { isStockOnlyOrder, isBoughtInOnlyOrder, isDuctHardwareStockOnly } from "
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
+import { payableTotal } from "@/lib/quote";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
@@ -273,7 +274,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       tasks.push({
         key: `order:${q.id}`, area: "order", areaLabel: AREA_LABEL.order,
         title: q.quoteNumber, action: pend.action,
-        client: maskClient(q.inquiry.customer.company), amount: maskAmount(Number(q.total)), currency: q.currency,
+        client: maskClient(q.inquiry.customer.company), amount: maskAmount(payableTotal(q)), currency: q.currency,
         href: `/orders/${q.id}${phaseAnchor(wf.stage) ? `#${phaseAnchor(wf.stage)}` : ""}`,
         deliveryMode: wf.deliveryMode === "multi" ? "multi" : "single",
         since: orderSince,
@@ -465,7 +466,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         tasks.push({
           key: `quote:${quote.id}`, area: "quotation", areaLabel: AREA_LABEL.quotation,
           title: quote.quoteNumber, action: "Approve quotation",
-          client: maskClient(quote.inquiry.customer.company), amount: maskAmount(Number(quote.total)), currency: quote.currency,
+          client: maskClient(quote.inquiry.customer.company), amount: maskAmount(payableTotal(quote)), currency: quote.currency,
           href: `/quotations/${quote.id}`,
           since: quote.createdAt.toISOString(),
         });
