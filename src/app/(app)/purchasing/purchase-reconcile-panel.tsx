@@ -73,20 +73,20 @@ export function PurchaseReconcilePanel({
   const [reads, setReads] = useState(reconcile.aiReads);
   const readsLeft = Math.max(0, AI_RECEIPT_READ_LIMIT - reads);
   const limitReached = !admin && readsLeft <= 0;
+  // The receipt must be AI-read before a manual record is allowed — unless the AI
+  // read limit is reached, or the approver/admin (who can always record/correct).
+  const [hasAiRead, setHasAiRead] = useState(false);
+  const canManualRecord = hasAiRead || limitReached || canApprove;
+
   const factor = vatMode === "exclusive" ? 1 + VAT : 1;
   const preview = useMemo(() => {
     const voucher = round2(rows.reduce((a, r) => a + r.poAmount, 0) * factor);
     const actual = round2(rows.reduce((a, r) => a + num(r.actual), 0));
     return { voucher, actual, variance: round2(voucher - actual) };
   }, [rows, factor]);
-  // Manual (typed) entry: a BALANCED tally may be recorded by anyone who can record
-  // (incl. Accounting / the Purchaser); an UNBALANCED tally (a discrepancy) is an
-  // authority action — only the Payment Approver or an admin may record it by hand.
-  const previewBalanced = Math.abs(preview.variance) <= balanceTolerance(preview.voucher);
-  const canManualRecord = canApprove || admin || previewBalanced;
 
   function startEdit() {
-    setRows(seed()); setVatMode(reconcile.vatMode); setNote(""); setReceipts([]); setErr(null); setOpen(true);
+    setRows(seed()); setVatMode(reconcile.vatMode); setNote(""); setReceipts([]); setErr(null); setHasAiRead(false); setOpen(true);
   }
   function setActual(i: number, v: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, actual: v } : r)));
@@ -165,6 +165,7 @@ export function PurchaseReconcilePanel({
         throw new Error(data.error || "Could not read the receipt.");
       }
       if (typeof data.reads === "number") setReads(data.reads);
+      setHasAiRead(true); // the receipt has now been read by AI — allow recording
 
       const vatUsed: "inclusive" | "exclusive" = data.vatMode === "exclusive" ? "exclusive" : data.vatMode === "inclusive" ? "inclusive" : vatMode;
       const newRows = rows.map((r, i) => {
@@ -212,7 +213,7 @@ export function PurchaseReconcilePanel({
   }
 
   async function record() {
-    if (!canManualRecord) { setErr("This voucher doesn't balance — a discrepancy can only be recorded by the Payment Approver or an admin. A balanced tally can be recorded here."); return; }
+    if (!canManualRecord) { setErr("Read the receipt with AI first — manual entry is only allowed once the AI read limit is reached or an approver allows it."); return; }
     setBusy("record"); setErr(null);
     // Manual record: figures typed by hand — NOT verified against the receipt image.
     await submitRecord(vatMode, rows, note, false);
@@ -554,7 +555,7 @@ export function PurchaseReconcilePanel({
           <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
           {!canManualRecord && (
             <p className="text-xs text-muted-foreground">
-              This voucher doesn&rsquo;t balance — a discrepancy can only be recorded by the <span className="font-medium">Payment Approver or an admin</span>. A balanced tally can be recorded here.
+              Use <span className="font-medium">Auto-read receipt</span> to record. Manual entry unlocks after the AI read limit is reached or an approver allows it.
             </p>
           )}
           <div className="flex items-center gap-2">
