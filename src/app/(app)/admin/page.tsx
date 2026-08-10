@@ -8,6 +8,7 @@ import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getFollowUpTemplates } from "@/lib/follow-up-templates";
 import { config } from "@/lib/config";
 import { smsConfigured, getSemaphoreBalance } from "@/lib/sms/semaphore";
+import { getSmsReach } from "@/lib/sms-reach";
 import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { getNotificationsEnabled } from "@/lib/notification-settings";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
@@ -56,6 +57,7 @@ export default async function AdminOverviewPage() {
   ]);
   const testMode = await getTestMode();
   const smsBalance = smsConfigured() ? (await getSemaphoreBalance())?.balance ?? null : null;
+  const smsReach = await getSmsReach();
   const me = await getCurrentUser();
   const notificationBaseline = await getNotificationBaseline();
   const alertGoLive = await getAlertGoLive();
@@ -286,6 +288,7 @@ export default async function AdminOverviewPage() {
         smsConfigured={smsConfigured()}
         smsSenderName={config.semaphoreSenderName}
         smsBalance={smsBalance}
+        smsReach={smsReach}
         onSave={saveFollowUpSettingsAction}
         onPreview={runFollowUpPreviewAction}
         onTest={sendTestFollowUpAction}

@@ -86,6 +86,7 @@ export function FollowUpSetting({
   smsConfigured = false,
   smsSenderName = "",
   smsBalance: initSmsBalance = null,
+  smsReach,
   onSave,
   onPreview,
   onTest,
@@ -119,6 +120,7 @@ export function FollowUpSetting({
   smsConfigured?: boolean;
   smsSenderName?: string;
   smsBalance?: number | null;
+  smsReach?: { total: number; withMobile: number };
   onSms: (input: { smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplates: string[] }) => Promise<{ smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplates: string[] }>;
   onTestSms: (toNumber: string, nudge: number) => Promise<{ ok: boolean; to: string; balance: number | null; error?: string }>;
   defaultTestEmail?: string;
@@ -496,6 +498,24 @@ export function FollowUpSetting({
             {smsBalance != null && <span>· Credit balance: <strong className="text-foreground">{smsBalance}</strong></span>}
             {!smsConfigured && <span className="text-amber-600">· No API key set</span>}
           </div>
+
+          {smsReach && (
+            <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
+              {smsReach.total === 0 ? (
+                <span className="text-muted-foreground">No open sent quotes to text yet.</span>
+              ) : (
+                <>
+                  <span className="text-foreground">
+                    Reach: <strong>{smsReach.withMobile}</strong> of <strong>{smsReach.total}</strong> follow-up clients have a valid mobile number
+                    {" "}({Math.round((smsReach.withMobile / smsReach.total) * 100)}%).
+                  </span>
+                  {smsReach.withMobile < smsReach.total && (
+                    <span className="text-muted-foreground"> The other {smsReach.total - smsReach.withMobile} have no valid mobile on file and are skipped automatically.</span>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label className="text-xs">SMS message per nudge</Label>
