@@ -10,8 +10,10 @@
  *    (`/cash-requests?id=<id>` opens the Cash Requests tab on that voucher).
  *
  * A row qualifies when it was recorded (has `recordedAt`) and was NOT AI-verified
- * (`aiVerified !== true`). Each row keeps who recorded it, their designation, and
- * the date/time.
+ * (`aiVerified !== true`). Tallies recorded by an Admin or the Payment Approver are
+ * excluded — they're the authorised manual-tally roles, so this list surfaces only
+ * the hand-tallies done by everyone else (Accounting / Purchaser / requestor). Each
+ * row keeps who recorded it, their designation, and the date/time.
  */
 import { prisma } from "@/lib/db";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
@@ -36,6 +38,10 @@ export interface ManualReconRow {
 const recordedLabel = (name?: string, role?: string, at?: string): string =>
   `${name || "—"}${role ? ` (${role})` : ""}${at ? ` · ${formatDateTime(new Date(at))}` : ""}`;
 
+// Authorised manual-tally roles — a hand-tally by these is expected, so it's kept
+// off the oversight list.
+const EXCLUDED_ROLES = new Set(["Admin", "Payment Approver"]);
+
 export async function getManualReconciliations(): Promise<ManualReconRow[]> {
   const [prs, crs] = await Promise.all([
     prisma.purchaseRequest
@@ -52,6 +58,7 @@ export async function getManualReconciliations(): Promise<ManualReconRow[]> {
   for (const pr of prs) {
     const r = coerceReconciliation(pr.reconciliation);
     if (!isReconciled(r) || r.aiVerified === true || !r.recordedAt) continue;
+    if (r.recordedRole && EXCLUDED_ROLES.has(r.recordedRole)) continue;
     const po = coercePurchaseOrder(pr.po);
     rows.push({
       id: `pr-${pr.id}`,
@@ -69,6 +76,7 @@ export async function getManualReconciliations(): Promise<ManualReconRow[]> {
   for (const cr of crs) {
     const l = coerceLiquidation(cr.liquidation);
     if (!isLiquidated(l) || l.aiVerified === true || !l.recordedAt) continue;
+    if (l.recordedRole && EXCLUDED_ROLES.has(l.recordedRole)) continue;
     rows.push({
       id: `cr-${cr.id}`,
       kind: "Cash",
