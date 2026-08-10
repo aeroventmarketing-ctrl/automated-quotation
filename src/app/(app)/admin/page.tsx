@@ -282,7 +282,7 @@ export default async function AdminOverviewPage() {
         smsEnabled={followUpSettings.smsEnabled}
         smsDryRun={followUpSettings.smsDryRun}
         smsMaxPerRun={followUpSettings.smsMaxPerRun}
-        smsTemplate={followUpSettings.smsTemplate}
+        smsTemplates={followUpSettings.smsTemplates}
         smsConfigured={smsConfigured()}
         smsSenderName={config.semaphoreSenderName}
         smsBalance={smsBalance}

@@ -22,7 +22,7 @@ import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { config } from "@/lib/config";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
 import { sendSms, smsConfigured, normalizePhMobile, getSemaphoreBalance } from "@/lib/sms/semaphore";
-import { buildFollowUpSms } from "@/lib/follow-up-sms";
+import { buildFollowUpSms, smsTemplateForNudge } from "@/lib/follow-up-sms";
 import { buildFollowUpEmail, templateForNudge, type FollowUpTemplate } from "@/lib/follow-up-email";
 import { getFollowUpTemplates, setFollowUpTemplates } from "@/lib/follow-up-templates";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
@@ -555,7 +555,7 @@ const followUpSmsSchema = z.object({
   smsEnabled: z.boolean(),
   smsDryRun: z.boolean(),
   smsMaxPerRun: z.number().optional(),
-  smsTemplate: z.string().optional(),
+  smsTemplates: z.array(z.string()).optional(),
 });
 /** Save the SMS follow-up (Semaphore) switches + message. Merges over current. */
 export async function saveFollowUpSmsAction(
@@ -589,7 +589,7 @@ export interface SmsTestResult {
  * Components render…") — so a throw would hide the real reason (missing key,
  * pending sender name, no credits) from the admin. This way they see it.
  */
-export async function sendTestSmsAction(toNumber: string): Promise<SmsTestResult> {
+export async function sendTestSmsAction(toNumber: string, nudge = 1): Promise<SmsTestResult> {
   await assertAdmin();
   const fail = (error: string): SmsTestResult => ({ ok: false, to: "", balance: null, error });
 
@@ -601,6 +601,7 @@ export async function sendTestSmsAction(toNumber: string): Promise<SmsTestResult
     return fail(`"${toNumber}" isn't a valid PH mobile number (e.g. 09171234567).`);
   }
   const settings = await getFollowUpSettings();
+  const nudgeNumber = Number.isFinite(nudge) && nudge >= 1 ? Math.floor(nudge) : 1;
   const message = buildFollowUpSms({
     company: "Sample Client Corporation",
     contactName: null,
@@ -608,7 +609,7 @@ export async function sendTestSmsAction(toNumber: string): Promise<SmsTestResult
     total: "₱125,000.00",
     salesName: "Aerovent FBM",
     quoteUrl: `${config.appUrl}/q/sample-quote`,
-    template: settings.smsTemplate,
+    template: smsTemplateForNudge(settings.smsTemplates, nudgeNumber),
   });
   try {
     await sendSms({ to: phone, message: `[TEST] ${message}` });

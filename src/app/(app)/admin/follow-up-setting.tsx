@@ -82,7 +82,7 @@ export function FollowUpSetting({
   smsEnabled: initSmsEnabled = false,
   smsDryRun: initSmsDryRun = true,
   smsMaxPerRun: initSmsMaxPerRun = 24,
-  smsTemplate: initSmsTemplate = "",
+  smsTemplates: initSmsTemplates = [],
   smsConfigured = false,
   smsSenderName = "",
   smsBalance: initSmsBalance = null,
@@ -115,12 +115,12 @@ export function FollowUpSetting({
   smsEnabled?: boolean;
   smsDryRun?: boolean;
   smsMaxPerRun?: number;
-  smsTemplate?: string;
+  smsTemplates?: string[];
   smsConfigured?: boolean;
   smsSenderName?: string;
   smsBalance?: number | null;
-  onSms: (input: { smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplate: string }) => Promise<{ smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplate: string }>;
-  onTestSms: (toNumber: string) => Promise<{ ok: boolean; to: string; balance: number | null; error?: string }>;
+  onSms: (input: { smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplates: string[] }) => Promise<{ smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplates: string[] }>;
+  onTestSms: (toNumber: string, nudge: number) => Promise<{ ok: boolean; to: string; balance: number | null; error?: string }>;
   defaultTestEmail?: string;
 }) {
   const [daysStr, setDaysStr] = useState(offsetsDays.join(", "));
@@ -140,9 +140,10 @@ export function FollowUpSetting({
   const [smsEnabled, setSmsEnabled] = useState(initSmsEnabled);
   const [smsDryRun, setSmsDryRun] = useState(initSmsDryRun);
   const [smsPerRun, setSmsPerRun] = useState(String(initSmsMaxPerRun));
-  const [smsTemplate, setSmsTemplate] = useState(initSmsTemplate);
+  const [smsTemplates, setSmsTemplates] = useState<string[]>(initSmsTemplates);
   const [smsBusy, setSmsBusy] = useState(false);
   const [smsTestTo, setSmsTestTo] = useState("");
+  const [smsTestNudge, setSmsTestNudge] = useState(1);
   const [smsTesting, setSmsTesting] = useState(false);
   const [smsBalance, setSmsBalance] = useState<number | null>(initSmsBalance);
   const [busy, setBusy] = useState(false);
@@ -257,16 +258,18 @@ export function FollowUpSetting({
     setMsg(null);
     try {
       const wantPerRun = parseInt(smsPerRun, 10);
+      // Send one message per nudge (blank rows fall back to the default server-side).
+      const templates = Array.from({ length: nudgeCount }, (_, i) => smsTemplates[i] ?? "");
       const saved = await onSms({
         smsEnabled: next?.smsEnabled ?? smsEnabled,
         smsDryRun: next?.smsDryRun ?? smsDryRun,
         smsMaxPerRun: Number.isFinite(wantPerRun) && wantPerRun >= 1 ? wantPerRun : 24,
-        smsTemplate,
+        smsTemplates: templates,
       });
       setSmsEnabled(saved.smsEnabled);
       setSmsDryRun(saved.smsDryRun);
       setSmsPerRun(String(saved.smsMaxPerRun));
-      setSmsTemplate(saved.smsTemplate);
+      setSmsTemplates(saved.smsTemplates);
       setMsg({ ok: true, text: "SMS settings saved." });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to save SMS settings" });
@@ -279,7 +282,7 @@ export function FollowUpSetting({
     setSmsTesting(true);
     setMsg(null);
     try {
-      const r = await onTestSms(smsTestTo.trim());
+      const r = await onTestSms(smsTestTo.trim(), smsTestNudge);
       if (!r.ok) {
         setMsg({ ok: false, text: r.error ?? "Test SMS failed." });
         return;
@@ -494,22 +497,36 @@ export function FollowUpSetting({
             {!smsConfigured && <span className="text-amber-600">· No API key set</span>}
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="sms-template" className="text-xs">SMS message</Label>
-            <textarea
-              id="sms-template"
-              value={smsTemplate}
-              onChange={(e) => setSmsTemplate(e.target.value)}
-              disabled={smsBusy}
-              rows={3}
-              placeholder="Leave blank to use the built-in default message."
-              className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
-            />
+          <div className="space-y-2">
+            <Label className="text-xs">SMS message per nudge</Label>
             <p className="text-[11px] text-muted-foreground">
-              Placeholders: <code>{"{contactName} {company} {quoteNumber} {total} {salesName} {quoteUrl}"}</code>.
-              Keep it short — every 160 characters is one Semaphore credit.{" "}
-              {smsTemplate.trim() ? `${smsTemplate.length} characters.` : "Using the built-in default."}
+              A separate text for each nudge (matches your <strong>Max nudges</strong>). Placeholders:{" "}
+              <code>{"{contactName} {company} {quoteNumber} {total} {salesName} {quoteUrl}"}</code>. Leave a
+              box blank to use that nudge&apos;s built-in default. Keep each short — every 160 characters is one Semaphore credit.
             </p>
+            {Array.from({ length: nudgeCount }, (_, i) => {
+              const val = smsTemplates[i] ?? "";
+              const chars = val.trim().length;
+              const segs = Math.max(1, Math.ceil(Math.max(1, chars) / 160));
+              return (
+                <div key={i} className="space-y-1 rounded-md border p-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nudge #{i + 1}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {chars ? `${chars} chars · ${segs} credit${segs === 1 ? "" : "s"}` : "using default"}
+                    </span>
+                  </div>
+                  <textarea
+                    value={val}
+                    onChange={(e) => setSmsTemplates((prev) => { const n = [...prev]; n[i] = e.target.value; return n; })}
+                    disabled={smsBusy}
+                    rows={2}
+                    placeholder="Leave blank to use the built-in default for this nudge."
+                    className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex flex-wrap items-end gap-4">
@@ -518,7 +535,7 @@ export function FollowUpSetting({
               <Input id="sms-perrun" type="number" min={1} max={100} value={smsPerRun} onChange={(e) => setSmsPerRun(e.target.value)} className="h-9 w-28" />
             </div>
             <Button onClick={() => saveSms()} disabled={smsBusy} size="sm">
-              {smsBusy ? "Saving…" : "Save SMS message"}
+              {smsBusy ? "Saving…" : "Save SMS messages"}
             </Button>
           </div>
 
@@ -547,6 +564,19 @@ export function FollowUpSetting({
 
           {/* Test SMS to a chosen number — no client is affected. */}
           <div className="flex flex-wrap items-center gap-3">
+            <label className="text-xs text-muted-foreground">
+              Nudge{" "}
+              <select
+                value={smsTestNudge}
+                onChange={(e) => setSmsTestNudge(parseInt(e.target.value, 10) || 1)}
+                disabled={smsTesting}
+                className="ml-1 h-8 rounded-md border bg-background px-2 text-sm"
+              >
+                {Array.from({ length: nudgeCount }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>#{n}</option>
+                ))}
+              </select>
+            </label>
             <input
               type="tel"
               value={smsTestTo}
@@ -558,7 +588,7 @@ export function FollowUpSetting({
             <Button onClick={sendTestSms} disabled={smsTesting} size="sm" variant="outline">
               {smsTesting ? "Sending…" : "Send test SMS"}
             </Button>
-            <span className="text-xs text-muted-foreground">Sends the real SMS to that number only — no client is affected.</span>
+            <span className="text-xs text-muted-foreground">Sends that nudge&apos;s real SMS to the number only — no client is affected.</span>
           </div>
         </div>
 

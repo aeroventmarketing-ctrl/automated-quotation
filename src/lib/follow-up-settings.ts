@@ -61,8 +61,9 @@ export interface FollowUpConfig extends FollowUpSettings {
   smsDryRun: boolean;
   /** Max texts sent in a single run (default 24, hard ceiling FOLLOW_UP_MAX_PER_RUN). */
   smsMaxPerRun: number;
-  /** The editable SMS message (with {placeholders}). Blank → the built-in default. */
-  smsTemplate: string;
+  /** Per-nudge SMS messages (with {placeholders}), one per nudge like the emails.
+   *  A blank entry falls back to that nudge's built-in default. */
+  smsTemplates: string[];
 }
 
 /** The hard ceiling on emails per run, regardless of the configured value. */
@@ -105,7 +106,14 @@ export function normalizeFollowUpConfig(
   const rawSmsPerRun = Math.floor(Number(input?.smsMaxPerRun));
   const wantSmsPerRun = Number.isFinite(rawSmsPerRun) && rawSmsPerRun >= 1 ? rawSmsPerRun : 24;
   const smsMaxPerRun = Math.min(wantSmsPerRun, FOLLOW_UP_MAX_PER_RUN);
-  const smsTemplate = typeof input?.smsTemplate === "string" ? input.smsTemplate : "";
+  // Per-nudge SMS messages. Migrate a legacy single `smsTemplate` string into the
+  // first slot so nothing an admin already typed is lost.
+  const legacySms = (input as { smsTemplate?: unknown } | null | undefined)?.smsTemplate;
+  const smsTemplates = Array.isArray(input?.smsTemplates)
+    ? input!.smsTemplates.map((t) => (typeof t === "string" ? t : ""))
+    : typeof legacySms === "string" && legacySms.trim()
+      ? [legacySms]
+      : [];
 
   return {
     offsetsDays,
@@ -124,7 +132,7 @@ export function normalizeFollowUpConfig(
     smsEnabled: input?.smsEnabled === true, // default OFF
     smsDryRun: input?.smsDryRun !== false, // default ON (safe)
     smsMaxPerRun,
-    smsTemplate,
+    smsTemplates,
   };
 }
 
