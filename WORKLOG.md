@@ -14,6 +14,18 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · Restore Accounting's reconciliation permission (revert #304/#305 gating)
+- **Owner request:** restore the previous permission given to Accounting for reconciliation.
+- **Change:** reverted the manual-tally gating added in #304 (Approver/Admin-only) and #305 (balance-aware)
+  by restoring `src/app/(app)/orders/actions.ts` (`recordReconciliation`) and
+  `src/app/(app)/purchasing/purchase-reconcile-panel.tsx` to their pre-#304 (0663e57) versions — the only
+  commits that had touched them. Server gate is back to **admin OR purchaser/accounting/payment_approver**
+  (no balance restriction, no `reconcileTotals` gate); panel `canManualRecord = hasAiRead || limitReached ||
+  canApprove` (AI-read-first, with the original messages). Accounting can again record a manual tally
+  regardless of balance.
+- **Untouched:** the "Reconciled by hand" card and all its filters (#307–#313) and the collapsible Expenses
+  card (#311) stay as-is. Typecheck + lint clean.
+
 ## 2026-08-10 · "Reconciled by hand" — apply the approved-discrepancy exclusion to CASH too
 - **Owner-reported:** cash voucher 0000867 was liquidated by the requestor, its discrepancy approved and
   settled by Admin, yet it still showed. **Cause:** the approved-discrepancy exclusion was only in the PO
