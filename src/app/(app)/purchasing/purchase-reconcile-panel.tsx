@@ -73,10 +73,10 @@ export function PurchaseReconcilePanel({
   const [reads, setReads] = useState(reconcile.aiReads);
   const readsLeft = Math.max(0, AI_RECEIPT_READ_LIMIT - reads);
   const limitReached = !admin && readsLeft <= 0;
-  // The receipt must be AI-read before a manual record is allowed — unless the AI
-  // read limit is reached, or the approver/admin (who can always record/correct).
-  const [hasAiRead, setHasAiRead] = useState(false);
-  const canManualRecord = hasAiRead || limitReached || canApprove;
+  // Manual (typed) reconciliation is an authority action — only the Payment
+  // Approver or an admin may record figures by hand. Accounting and the Purchaser
+  // reconcile through the AI receipt read, which auto-records an AI-verified tally.
+  const canManualRecord = canApprove || admin;
 
   const factor = vatMode === "exclusive" ? 1 + VAT : 1;
   const preview = useMemo(() => {
@@ -86,7 +86,7 @@ export function PurchaseReconcilePanel({
   }, [rows, factor]);
 
   function startEdit() {
-    setRows(seed()); setVatMode(reconcile.vatMode); setNote(""); setReceipts([]); setErr(null); setHasAiRead(false); setOpen(true);
+    setRows(seed()); setVatMode(reconcile.vatMode); setNote(""); setReceipts([]); setErr(null); setOpen(true);
   }
   function setActual(i: number, v: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, actual: v } : r)));
@@ -165,7 +165,6 @@ export function PurchaseReconcilePanel({
         throw new Error(data.error || "Could not read the receipt.");
       }
       if (typeof data.reads === "number") setReads(data.reads);
-      setHasAiRead(true); // the receipt has now been read by AI — allow recording
 
       const vatUsed: "inclusive" | "exclusive" = data.vatMode === "exclusive" ? "exclusive" : data.vatMode === "inclusive" ? "inclusive" : vatMode;
       const newRows = rows.map((r, i) => {
@@ -213,7 +212,7 @@ export function PurchaseReconcilePanel({
   }
 
   async function record() {
-    if (!canManualRecord) { setErr("Read the receipt with AI first — manual entry is only allowed once the AI read limit is reached or an approver allows it."); return; }
+    if (!canManualRecord) { setErr("Manual (typed) reconciliation is restricted to the Payment Approver or an admin. Record the tally from the AI receipt read instead."); return; }
     setBusy("record"); setErr(null);
     // Manual record: figures typed by hand — NOT verified against the receipt image.
     await submitRecord(vatMode, rows, note, false);
@@ -288,7 +287,10 @@ export function PurchaseReconcilePanel({
       {!readOnly && limitReached && (
         <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5">
           <p className="text-xs font-medium text-destructive">
-            AI read limit reached ({AI_RECEIPT_READ_LIMIT} of {AI_RECEIPT_READ_LIMIT} used). Check the receipt and enter the figures manually — or ask the admin/approver to allow more reads.
+            AI read limit reached ({AI_RECEIPT_READ_LIMIT} of {AI_RECEIPT_READ_LIMIT} used).{" "}
+            {canManualRecord
+              ? "Check the receipt and enter the figures manually — or allow more reads."
+              : "Ask the admin/approver to record the tally, or to allow more AI reads."}
           </p>
           {reconcile.aiReadEscalated ? (
             <p className="text-xs text-amber-700">Sent to the admin/approver — {reconcile.aiReadEscalated}</p>
@@ -546,7 +548,11 @@ export function PurchaseReconcilePanel({
             </ul>
           )}
           {limitReached ? (
-            <p className="text-xs font-medium text-destructive">AI read limit reached — check the receipt and enter the figures manually (see the notice above), or ask the admin/approver to allow more reads.</p>
+            <p className="text-xs font-medium text-destructive">
+              {canManualRecord
+                ? "AI read limit reached — check the receipt and enter the figures manually (see the notice above), or ask the admin/approver to allow more reads."
+                : "AI read limit reached — ask the admin/approver to record the tally or to allow more AI reads."}
+            </p>
           ) : admin ? (
             <p className="text-xs text-muted-foreground">Admin — no AI read limit.</p>
           ) : reads > 0 ? (
@@ -555,7 +561,7 @@ export function PurchaseReconcilePanel({
           <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
           {!canManualRecord && (
             <p className="text-xs text-muted-foreground">
-              Use <span className="font-medium">Auto-read receipt</span> to record. Manual entry unlocks after the AI read limit is reached or an approver allows it.
+              Use <span className="font-medium">Auto-read receipt</span> to record. Typing figures by hand is restricted to the <span className="font-medium">Payment Approver or an admin</span>.
             </p>
           )}
           <div className="flex items-center gap-2">

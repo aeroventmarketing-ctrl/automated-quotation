@@ -20,6 +20,8 @@ import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
 import { getExpensesReport } from "../management/pnl-actions";
 import { ExpensesReport } from "./expenses-report";
+import { getManualReconciliations } from "@/lib/manual-reconciliations";
+import { ManualReconcileCard } from "./manual-reconcile-card";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +110,12 @@ export default async function MyDashboardPage() {
   // payments, Cash vouchers, Stock alerts, Purchasing & commissions) here too.
   const isAccounting = userHasWorkflowRole(assignments, user.id, "accounting" as WorkflowRoleKey);
   const finance = isAccounting ? await getFinanceMonitor().catch(() => null) : null;
+  // "Reconciled by hand" oversight — for the Admin, the Payment Approver and
+  // Accounting: count + inline list of vouchers whose figures were typed in
+  // manually (not AI-verified against the receipt).
+  const canSeeManualRecon = admin || isAccounting || userHasWorkflowRole(assignments, user.id, "payment_approver" as WorkflowRoleKey);
+  const manualRecon = canSeeManualRecon ? await getManualReconciliations().catch(() => []) : null;
+  const manualReconCard = manualRecon ? <ManualReconcileCard rows={manualRecon} /> : null;
   const stockPending: StockActionView[] = (invWarehouse || invPurchaser)
     ? (await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" }, take: 50 }).catch(() => [])).map((a) => ({
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
@@ -366,6 +374,7 @@ export default async function MyDashboardPage() {
         <AutoRefresh />
         {header}
         {ordersGrid}
+        {manualReconCard}
         {pendingCard}
         <UnreconciledPaymentsCard data={finance} />
         <CashVouchersCard data={finance} />
@@ -392,6 +401,7 @@ export default async function MyDashboardPage() {
       {productionCard}
       {inventoryCard}
       {ordersGrid}
+      {manualReconCard}
       {pendingCard}
       {poSummaryCard}
       {materialsCard}

@@ -2370,6 +2370,14 @@ export async function recordReconciliation(
   if (!(admin || recRole)) {
     throw new Error("Only the Purchaser, Accounting, the Approver or an admin can reconcile a voucher.");
   }
+  // A MANUAL (typed) tally is an authority action: only the Payment Approver or an
+  // admin may record figures by hand. Accounting and the Purchaser must go through
+  // the AI receipt-read path (which records an AI-verified tally, aiVerified=true).
+  const manualTally = input.aiVerified !== true;
+  const isApprover = admin || userHasWorkflowRole(assignments, user.id, "payment_approver");
+  if (manualTally && !isApprover) {
+    throw new Error("Manual (typed) reconciliation is restricted to the Payment Approver or an admin. Accounting and the Purchaser must record the tally from the AI receipt read.");
+  }
   const lines = (input.lines ?? [])
     .map((l) => ({
       description: String(l.description ?? ""),
