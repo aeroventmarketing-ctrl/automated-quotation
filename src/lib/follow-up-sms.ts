@@ -17,13 +17,28 @@ export const FOLLOWUP_SMS_PLACEHOLDERS = [
 ] as const;
 
 /**
- * Default SMS copy — a concise, personal nudge that fits one 160-char segment.
- * The quote link is intentionally left out of the default (a long URL pushes the
- * message onto a second billed segment); an admin can add {quoteUrl} if they want
- * to include it.
+ * Default SMS copy per nudge — a gentle escalation (reminder → helpful → final
+ * courtesy), each kept concise so it fits one 160-char segment. The quote link is
+ * intentionally left out of the defaults (a long URL pushes the message onto a
+ * second billed segment); an admin can add {quoteUrl} to any nudge. Used when the
+ * admin hasn't customized a given nudge.
  */
-export const DEFAULT_FOLLOWUP_SMS =
-  "Hi {contactName}, this is {salesName} of Aerovent FBM following up on quotation {quoteNumber} ({total}). Reply here if you'd like to proceed or have any questions. Thank you!";
+export const DEFAULT_FOLLOWUP_SMS_TEMPLATES: string[] = [
+  "Hi {contactName}, this is {salesName} of Aerovent FBM following up on quotation {quoteNumber} ({total}). Reply here if you'd like to proceed or have any questions. Thank you!",
+  "Hi {contactName}, just checking in on your Aerovent quotation {quoteNumber} ({total}). We'd gladly adjust the scope or specs to fit your project - reply anytime. - {salesName}",
+  "Hi {contactName}, a final reminder on quotation {quoteNumber} ({total}) before it expires. Reply to proceed or with any questions and we'll take care of it. - {salesName}, Aerovent FBM",
+];
+
+/** The first default, kept as a named export for the single-message fallback. */
+export const DEFAULT_FOLLOWUP_SMS = DEFAULT_FOLLOWUP_SMS_TEMPLATES[0];
+
+/** The message for a given nudge (1-based). Falls back to the last, then default. */
+export function smsTemplateForNudge(templates: string[], nudgeNumber: number): string {
+  const list = templates.filter((t) => typeof t === "string");
+  const idx = Math.max(1, Math.floor(nudgeNumber || 1)) - 1;
+  const pick = list[idx] ?? list[list.length - 1] ?? "";
+  return pick.trim() ? pick : (DEFAULT_FOLLOWUP_SMS_TEMPLATES[idx] ?? DEFAULT_FOLLOWUP_SMS);
+}
 
 export interface FollowUpSmsInput {
   company: string;

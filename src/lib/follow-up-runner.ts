@@ -19,7 +19,7 @@ import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getFollowUpTemplates } from "@/lib/follow-up-templates";
 import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
 import { buildFollowUpEmail, buildInquiryFollowUpEmail, templateForNudge } from "@/lib/follow-up-email";
-import { buildFollowUpSms } from "@/lib/follow-up-sms";
+import { buildFollowUpSms, smsTemplateForNudge } from "@/lib/follow-up-sms";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
 import { sendSms, smsConfigured, normalizePhMobile } from "@/lib/sms/semaphore";
 
@@ -363,7 +363,7 @@ export async function runFollowUps(opts: {
         total: money(Number(q.total), q.currency),
         salesName: q.preparedBy.name,
         quoteUrl: `${config.appUrl}/q/${q.id}`,
-        template: settings.smsTemplate,
+        template: smsTemplateForNudge(settings.smsTemplates, result.nudgeNumber),
       });
 
       if (!smsLive) {

@@ -14,6 +14,19 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · Follow-ups — per-nudge SMS messages (like the per-nudge emails)
+- **Owner request:** custom SMS text per nudge, same as the email per-nudge templates.
+- **Change:** SMS setting `smsTemplate` (single string) → **`smsTemplates: string[]`** (one per nudge).
+  Normalize migrates any legacy single value into slot 1. New `smsTemplateForNudge(list, n)` +
+  `DEFAULT_FOLLOWUP_SMS_TEMPLATES` (3 defaults) in `follow-up-sms.ts`; runner picks the message for
+  each nudge. Blank row → that nudge's built-in default.
+- **Admin UI:** SMS section now shows **one message box per nudge** (count follows Max nudges) with a
+  per-row char/credit hint, and the **Send test SMS** gained a **nudge picker** so you can preview each
+  nudge's text. `saveFollowUpSmsAction` takes `smsTemplates`; `sendTestSmsAction(number, nudge)`.
+- Typecheck + lint clean. **Non-workflow (CRM) — no order-workflow / P&L change.**
+- Note: still blocked on Semaphore **sender-name approval** (AEROVENTFAN pending) before any live send —
+  the "No active sender name found" error is external to the app.
+
 ## 2026-08-10 · Follow-ups — SMS channel via Semaphore (independent of email)
 - **Owner request:** add SMS follow-ups through Semaphore (semaphore.co). Owner chose **"SMS only /
   separate channel"** — leave the email flow untouched, run SMS as its own independent channel to any
