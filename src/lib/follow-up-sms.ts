@@ -40,6 +40,8 @@ export function smsTemplateForNudge(templates: string[], nudgeNumber: number): s
   return pick.trim() ? pick : (DEFAULT_FOLLOWUP_SMS_TEMPLATES[idx] ?? DEFAULT_FOLLOWUP_SMS);
 }
 
+import { firstNameOf } from "@/lib/follow-up-email";
+
 export interface FollowUpSmsInput {
   company: string;
   contactName: string | null;
@@ -59,7 +61,7 @@ function applyTokens(s: string, tokens: Record<string, string>): string {
 /** Build the final SMS text for one follow-up. Collapses stray whitespace. */
 export function buildFollowUpSms(i: FollowUpSmsInput): string {
   const tokens: Record<string, string> = {
-    contactName: i.contactName?.trim() || i.company,
+    contactName: i.contactName?.trim() ? firstNameOf(i.contactName) : i.company,
     company: i.company,
     quoteNumber: i.quoteNumber,
     total: i.total,
