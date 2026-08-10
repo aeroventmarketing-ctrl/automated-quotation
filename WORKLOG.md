@@ -14,6 +14,19 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · "Reconciled by hand" — single-row tile, working PO link (404 fix)
+- **Owner follow-ups:** (1) AI-first flow confirmed (AI reads + autofills; unbalanced → only Admin/Approver
+  manual tally) — already the behavior, no change. (2) Put the tile on the **same row** as the other count
+  cards. (3) The list link **404'd**.
+- **Single row:** `ManualReconcileCard` now returns a Fragment — the tile is a **grid cell** (rendered inside
+  the count grid, so it's the 6th tile on one row) and the expanded list is **`col-span-full`** beneath the
+  row. `page.tsx` renders `{manualReconCard}` inside the grid and the grid shows when byArea OR the card has
+  content.
+- **404 fix:** `/purchasing/po/{prId}` has no page — only `/view` + `/xlsx` route handlers. Link now targets
+  `/purchasing/po/{prId}/view` (the PO HTML doc), opened in a new tab via a real `<a target="_blank">`. Same
+  bug fixed on the **management Cash Vouchers card** (PO rows → `window.open(.../view)`; cash rows keep
+  `router.push`). Typecheck + lint clean.
+
 ## 2026-08-10 · "Reconciled by hand" card + restrict manual reconcile to Approver/Admin (Phase 4, owner-approved)
 - **Owner request (Production Dashboard):** add a count of vouchers reconciled by hand (typed figures, not
   AI-verified against the receipt); clicking the card expands the list inline. Also: **disallow Accounting

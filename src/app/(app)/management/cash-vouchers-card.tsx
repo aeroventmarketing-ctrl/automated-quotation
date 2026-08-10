@@ -91,7 +91,7 @@ export function CashVouchersCard({ vouchers }: { vouchers: CashVoucherView[] }) 
                   {vouchers.map((v) => (
                     <tr
                       key={v.no}
-                      onClick={() => router.push(v.href)}
+                      onClick={() => (v.kind === "po" ? window.open(v.href, "_blank", "noopener") : router.push(v.href))}
                       className="cursor-pointer border-b align-top transition-colors last:border-0 hover:bg-muted/40"
                     >
                       <td className="py-1.5 pr-3 font-semibold tabular-nums text-red-600 underline-offset-2 hover:underline">{v.no}</td>
