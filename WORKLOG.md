@@ -14,6 +14,17 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — hand-pick recipients ("Send to selected" warm-up)
+- **Owner need:** choose exactly which clients to email (not just an oldest-first batch) to warm up the
+  new sending domain gradually.
+- **Added:** `runFollowUps` now accepts `onlyQuoteIds` (restrict the send to specific quotes; skips the
+  inquiry pass + ignores the per-run cap) and `ignoreEnabledDryRun` (manual send bypasses the
+  scheduler's on/off + dry-run, still needs Resend keys). New admin-only action
+  `sendSelectedFollowUpsAction` (`follow-ups/actions.ts`). The **Follow-ups due** page table is now a
+  client component (`due-table.tsx`) with **checkboxes + "Send to selected (N)"** for admins (email-less
+  rows disabled; confirm before sending; shows sent/skipped/errors); non-admins keep the read-only list.
+  Typecheck + lint clean. **Non-workflow — no order-workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups — new email closing & signature
 - **Owner request:** replace the follow-up email's closing/sign-off with the new wording — closing
   "Thank you for giving Aerovent Fans and Blowers Manufacturing the opportunity to submit our

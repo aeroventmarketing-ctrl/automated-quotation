@@ -1,13 +1,12 @@
-import Link from "next/link";
-import { Info, Eye } from "lucide-react";
+import { Info } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { evaluateFollowUp, sentAtFrom, nudgesSentFrom } from "@/lib/follow-up";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
+import { DueTable, type DueRow } from "./due-table";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +58,24 @@ export default async function FollowUpsPage() {
     .sort((a, b) => b.result.daysSinceSent - a.result.daysSinceSent);
 
   const cadence = settings.offsetsDays.join(", ");
+  const canSend = isAdmin(viewer);
+  const dueRows: DueRow[] = rows.map(({ q, sentAt, result }) => {
+    const c = q.inquiry.customer;
+    return {
+      id: q.id,
+      company: c.company,
+      contactName: c.contactName,
+      email: c.email,
+      phone: c.phone,
+      quoteNumber: q.quoteNumber,
+      amountLabel: num(Number(q.total)),
+      sentLabel: fmtDate(sentAt),
+      days: result.daysSinceSent,
+      nudge: result.nudgeNumber,
+      maxNudges: settings.maxNudges,
+      salesName: q.preparedBy.name,
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -92,73 +109,7 @@ export default async function FollowUpsPage() {
               No follow-ups due right now. 🎉
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Quote</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Sent</TableHead>
-                    <TableHead className="text-right">Days</TableHead>
-                    <TableHead>Nudge</TableHead>
-                    <TableHead>Sales</TableHead>
-                    <TableHead className="text-right">Link</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map(({ q, sentAt, result }) => {
-                    const c = q.inquiry.customer;
-                    return (
-                      <TableRow key={q.id}>
-                        <TableCell>
-                          <div className="font-medium">{c.company}</div>
-                          {c.contactName && (
-                            <div className="text-xs text-muted-foreground">{c.contactName}</div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {c.email ? <div>{c.email}</div> : null}
-                          {c.phone ? <div className="text-muted-foreground">{c.phone}</div> : null}
-                          {!c.email && !c.phone && (
-                            <span className="text-muted-foreground">No contact on file</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Link href={`/quotations/${q.id}`} className="font-medium text-primary hover:underline">
-                            {q.quoteNumber}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{num(Number(q.total))}</TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">{fmtDate(sentAt)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{result.daysSinceSent}</TableCell>
-                        <TableCell>
-                          <Badge variant={result.nudgeNumber >= settings.maxNudges ? "destructive" : "default"}>
-                            #{result.nudgeNumber}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{q.preparedBy.name}</TableCell>
-                        <TableCell className="text-right">
-                          {canView && (
-                            <a
-                              href={`/api/quotations/${q.id}/pdf`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="View quotation (PDF)"
-                              aria-label="View quotation"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </a>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+            <DueTable rows={dueRows} canSend={canSend} canView={canView} />
           )}
         </CardContent>
       </Card>

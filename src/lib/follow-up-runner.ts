@@ -52,28 +52,44 @@ export interface FollowUpRunResult {
  * Run the follow-up pass. `live` is the caller's intent; the actual send decision
  * also requires the enabled flag, a Resend key, and a configured sender.
  */
-export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise<FollowUpRunResult> {
+export async function runFollowUps(opts: {
+  now?: Date;
+  live: boolean;
+  /** Restrict the send to these quote ids only (manual "send to selected"). When
+   *  set, the inquiry check-in pass is skipped. */
+  onlyQuoteIds?: string[];
+  /** Manual send: ignore the enabled / dry-run switches (still needs Resend keys).
+   *  Used by the "send to selected" warm-up action, not the daily scheduler. */
+  ignoreEnabledDryRun?: boolean;
+}): Promise<FollowUpRunResult> {
   const now = opts.now ?? new Date();
   const settings = await getFollowUpSettings();
   const templates = await getFollowUpTemplates();
+  const targeted = Array.isArray(opts.onlyQuoteIds);
   // Emails sent per run — quote follow-ups + inquiry check-ins share this budget.
-  const sendCap = settings.maxPerRun;
+  // A targeted manual send (admin hand-picked the recipients) ignores the cap.
+  const sendCap = targeted ? Number.POSITIVE_INFINITY : settings.maxPerRun;
 
   const canSend = emailConfigured() && !!config.followUpFromEmail;
-  const effectiveLive = opts.live && settings.enabled && !settings.dryRun && canSend;
+  const switchesOk = opts.ignoreEnabledDryRun || (settings.enabled && !settings.dryRun);
+  const effectiveLive = opts.live && switchesOk && canSend;
   let reason: string | undefined;
   if (opts.live && !effectiveLive) {
-    reason = !settings.enabled
-      ? "automated sending is disabled"
-      : settings.dryRun
-        ? "dry-run is on"
-        : !emailConfigured()
-          ? "no Resend API key configured"
-          : "no sender address configured (FOLLOW_UP_FROM_EMAIL)";
+    reason = !switchesOk
+      ? !settings.enabled
+        ? "automated sending is disabled"
+        : "dry-run is on"
+      : !emailConfigured()
+        ? "no Resend API key configured"
+        : "no sender address configured (FOLLOW_UP_FROM_EMAIL)";
   }
 
   const quotes = await prisma.quotation.findMany({
-    where: { status: "SENT", inquiry: { status: { notIn: ["WON", "LOST"] } } },
+    where: {
+      status: "SENT",
+      inquiry: { status: { notIn: ["WON", "LOST"] } },
+      ...(targeted ? { id: { in: opts.onlyQuoteIds } } : {}),
+    },
     include: { inquiry: { include: { customer: true } }, preparedBy: true },
     orderBy: { createdAt: "asc" },
   });
@@ -199,6 +215,9 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
   // Clients with an OPEN inquiry and no quotation ever sent get a periodic
   // check-in (every `inquiryEveryDays`, up to `inquiryMaxNudges`), one nudge per
   // client. Independent switch (`inquiryEnabled`), still gated by dry-run + keys.
+  // Skipped entirely for a targeted quote send.
+  let inquiryEvaluated = 0;
+  if (!targeted) {
   const inquiryLive = opts.live && settings.inquiryEnabled && !settings.dryRun && canSend;
   const inqOffsets = Array.from({ length: settings.inquiryMaxNudges }, (_, i) => (i + 1) * settings.inquiryEveryDays);
   const inqSettings = { offsetsDays: inqOffsets, maxNudges: settings.inquiryMaxNudges };
@@ -219,6 +238,7 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
     if (quotedCustomerIds.has(inq.customerId)) continue;
     if (!inquiryByCustomer.has(inq.customerId)) inquiryByCustomer.set(inq.customerId, inq);
   }
+  inquiryEvaluated = inquiryByCustomer.size;
 
   for (const inq of inquiryByCustomer.values()) {
     const c = inq.customer;
@@ -266,6 +286,7 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
       items.push({ ...base, reason: "send failed" });
     }
   }
+  } // end inquiry pass (skipped for targeted sends)
 
   if (accountsDirty) await saveAccountsRegistry(accounts);
 
@@ -274,7 +295,7 @@ export async function runFollowUps(opts: { now?: Date; live: boolean }): Promise
     live: effectiveLive,
     requestedLive: opts.live,
     reason,
-    evaluated: quotes.length + inquiryByCustomer.size,
+    evaluated: quotes.length + inquiryEvaluated,
     due,
     sent,
     previewed,
