@@ -39,6 +39,16 @@ const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /**
+ * Just the first name from a full contact name ("Juan Dela Cruz" → "Juan"), for a
+ * friendlier greeting. Falls back to the whole trimmed string when there's no
+ * space. Callers should still handle the empty case (blank name → use company).
+ */
+export function firstNameOf(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.split(/\s+/)[0] || trimmed;
+}
+
+/**
  * Closing + signature used ONLY in the follow-up / check-in emails. Kept local
  * here (not the shared COMPANY constants, which drive the quotation PDF / XLSX)
  * so the email sign-off can differ from the formal quote documents.
@@ -82,7 +92,7 @@ export interface InquiryFollowUpInput {
  * referencing a specific quote. Always offers an easy opt-out.
  */
 export function buildInquiryFollowUpEmail(i: InquiryFollowUpInput): BuiltEmail {
-  const greetingName = i.contactName?.trim() || i.company;
+  const greetingName = i.contactName?.trim() ? firstNameOf(i.contactName) : i.company;
   const about = i.projectName?.trim() ? ` regarding ${i.projectName.trim()}` : "";
 
   const subject = `Just checking in from ${COMPANY.name}`;
@@ -178,7 +188,7 @@ function applyTokens(s: string, tokens: Record<string, string>): string {
 
 export function buildFollowUpEmail(i: FollowUpEmailInput & { template?: FollowUpTemplate }): BuiltEmail {
   const tokens: Record<string, string> = {
-    contactName: i.contactName?.trim() || i.company,
+    contactName: i.contactName?.trim() ? firstNameOf(i.contactName) : i.company,
     company: i.company,
     quoteNumber: i.quoteNumber,
     projectName: i.projectName?.trim() || "",
