@@ -32,6 +32,12 @@ export interface FollowUpConfig extends FollowUpSettings {
    * stay due for the next run. Default 100 (also the hard ceiling).
    */
   maxPerRun: number;
+  /**
+   * Optional backlog-campaign start (ISO date). When set, every open sent quote
+   * becomes due for its first nudge on/after this day (throttled by maxPerRun),
+   * instead of only quotes that recently crossed a cadence day. Null = off.
+   */
+  campaignStartAt: string | null;
 }
 
 /** The hard ceiling on emails per run, regardless of the configured value. */
@@ -59,6 +65,10 @@ export function normalizeFollowUpConfig(
   const wantPerRun = Number.isFinite(rawPerRun) && rawPerRun >= 1 ? rawPerRun : FOLLOW_UP_MAX_PER_RUN;
   const maxPerRun = Math.min(wantPerRun, FOLLOW_UP_MAX_PER_RUN);
 
+  const rawCampaign = input?.campaignStartAt;
+  const campaignStartAt =
+    typeof rawCampaign === "string" && !Number.isNaN(Date.parse(rawCampaign)) ? rawCampaign : null;
+
   return {
     offsetsDays,
     maxNudges,
@@ -68,6 +78,7 @@ export function normalizeFollowUpConfig(
     inquiryEveryDays,
     inquiryMaxNudges,
     maxPerRun,
+    campaignStartAt,
   };
 }
 

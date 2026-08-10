@@ -4,7 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { evaluateFollowUp, sentAtFrom, nudgesSentFrom } from "@/lib/follow-up";
+import { evaluateFollowUp, sentAtFrom, nudgesSentFrom, lastNudgeAtFrom } from "@/lib/follow-up";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { DueTable, type DueRow } from "./due-table";
 
@@ -38,10 +38,12 @@ export default async function FollowUpsPage() {
     orderBy: { createdAt: "asc" },
   });
 
+  const campaignStartAt = settings.campaignStartAt ? new Date(settings.campaignStartAt) : null;
   const rows = quotes
     .map((q) => {
       const sentIso = sentAtFrom(q.classification);
       const sentAt = sentIso ? new Date(sentIso) : q.createdAt;
+      const lastIso = lastNudgeAtFrom(q.classification);
       const result = evaluateFollowUp(
         {
           sentAt,
@@ -49,6 +51,8 @@ export default async function FollowUpsPage() {
           won: false, // WON/LOST inquiries are already filtered out
           nudgesSent: nudgesSentFrom(q.classification),
           now,
+          campaignStartAt,
+          lastSentAt: lastIso ? new Date(lastIso) : null,
         },
         settings,
       );

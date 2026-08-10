@@ -15,6 +15,7 @@ interface Config {
   inquiryEveryDays: number;
   inquiryMaxNudges: number;
   maxPerRun: number;
+  campaignStartAt: string | null;
 }
 
 interface RunItem {
@@ -69,9 +70,11 @@ export function FollowUpSetting({
   inquiryEveryDays: initInquiryEveryDays,
   inquiryMaxNudges: initInquiryMaxNudges,
   maxPerRun: initMaxPerRun,
+  campaignStartAt: initCampaignStartAt,
   onSave,
   onPreview,
   onTest,
+  onCampaign,
 }: {
   offsetsDays: number[];
   maxNudges: number;
@@ -81,9 +84,11 @@ export function FollowUpSetting({
   inquiryEveryDays: number;
   inquiryMaxNudges: number;
   maxPerRun: number;
+  campaignStartAt: string | null;
   onSave: (input: Config) => Promise<Config>;
   onPreview: () => Promise<RunResult>;
   onTest: (nudge: number) => Promise<{ ok: boolean; to: string }>;
+  onCampaign: (start: boolean) => Promise<Config>;
 }) {
   const [daysStr, setDaysStr] = useState(offsetsDays.join(", "));
   const [max, setMax] = useState(String(maxNudges));
@@ -93,6 +98,8 @@ export function FollowUpSetting({
   const [inquiryEvery, setInquiryEvery] = useState(String(initInquiryEveryDays));
   const [inquiryMax, setInquiryMax] = useState(String(initInquiryMaxNudges));
   const [maxPerRun, setMaxPerRun] = useState(String(initMaxPerRun));
+  const [campaignAt, setCampaignAt] = useState<string | null>(initCampaignStartAt);
+  const [campaignBusy, setCampaignBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -126,6 +133,7 @@ export function FollowUpSetting({
         inquiryEveryDays: Number.isFinite(wantEvery) && wantEvery > 0 ? wantEvery : 30,
         inquiryMaxNudges: Number.isFinite(wantInqMax) && wantInqMax >= 1 ? wantInqMax : 6,
         maxPerRun: Number.isFinite(wantPerRun) && wantPerRun >= 1 ? wantPerRun : 100,
+        campaignStartAt: campaignAt,
       });
       setDaysStr(saved.offsetsDays.join(", "));
       setMax(String(saved.maxNudges));
@@ -168,8 +176,25 @@ export function FollowUpSetting({
     }
   }
 
+  async function campaign(start: boolean) {
+    if (start && !window.confirm("Start the backlog campaign today? Every open sent quote becomes due for its first follow-up now (throttled by Max emails per run).")) return;
+    setCampaignBusy(true);
+    setMsg(null);
+    try {
+      const saved = await onCampaign(start);
+      setCampaignAt(saved.campaignStartAt);
+      setMsg({ ok: true, text: start ? "Campaign started — the whole backlog is now due for its first nudge." : "Campaign stopped — back to the normal cadence." });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Failed" });
+    } finally {
+      setCampaignBusy(false);
+    }
+  }
+
   // How many nudges the cadence currently has — drives the test-nudge picker.
   const nudgeCount = Math.max(1, parseInt(max, 10) || parseDays().length || 1);
+  const campaignOn = !!campaignAt;
+  const campaignDateLabel = campaignAt ? new Date(campaignAt).toLocaleDateString() : "";
 
   const sendingLive = enabled && !dryRun;
 
@@ -206,6 +231,34 @@ export function FollowUpSetting({
             <strong>Max emails per run</strong> throttles each send for domain warm-up — e.g. set it to
             <strong> 24</strong> to email 24 clients per run; the rest stay due for the next run (max 100).
           </p>
+
+          {/* Backlog campaign — make the whole open-sent-quote backlog due for its
+              first nudge today, then let the throttle work through it. */}
+          <div className={`mt-1 rounded-md border px-3 py-2 ${campaignOn ? "border-primary/40 bg-primary/5" : "border-dashed bg-muted/30"}`}>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="text-sm">
+                <div className="font-medium">Backlog follow-up campaign</div>
+                <div className="text-xs text-muted-foreground">
+                  {campaignOn
+                    ? `Active since ${campaignDateLabel} — every open sent quote is due for its first nudge; later nudges are spaced from each client's first send.`
+                    : "Off — only quotes that just crossed a cadence day (3, 7, 14…) are due."}
+                </div>
+              </div>
+              {campaignOn ? (
+                <Button size="sm" variant="outline" className="ml-auto" disabled={campaignBusy} onClick={() => campaign(false)}>
+                  {campaignBusy ? "…" : "Stop campaign"}
+                </Button>
+              ) : (
+                <Button size="sm" className="ml-auto" disabled={campaignBusy} onClick={() => campaign(true)}>
+                  {campaignBusy ? "…" : "Start campaign today"}
+                </Button>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Use with <strong>Max emails per run</strong> (e.g. 24) to send the whole backlog gradually.
+              Clients with no email are skipped automatically.
+            </p>
+          </div>
         </div>
 
         <hr className="border-border" />
