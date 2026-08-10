@@ -14,6 +14,13 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · "Reconciled by hand" — exclude Admin / Payment Approver tallies
+- **Owner request:** the list should not include items tallied by an Admin or the Payment Approver (they're
+  the authorised manual-tally roles for unbalanced records) — surface only hand-tallies by everyone else.
+- **Change (`manual-reconciliations.ts`):** skip any row whose `recordedRole` ∈ {"Admin", "Payment Approver"}
+  in both the PurchaseRequest-reconciliation and CashRequest-liquidation loops. The count reflects the
+  filtered list. Typecheck + lint clean.
+
 ## 2026-08-10 · "Reconciled by hand" — include cash vouchers + deep-link to the item
 - **Owner request:** the card should include **all** hand-tallied items (POs, requisitions, cash vouchers),
   and each row should open **that item in its own tab**: a PO → Purchasing tab on that PO; a cash voucher →
@@ -1150,5 +1157,3 @@ and we never redo something that's already done.
 ## 2026-08-07 · Purchaser can delete stock items — PR #238 (merged)
 - Added a delete control for stock items in the Purchaser role.
 - **Pending:** none.
-
-<!-- redeploy trigger PR#307 reconciled-by-hand deep-links -->
