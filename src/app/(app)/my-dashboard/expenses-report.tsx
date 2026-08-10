@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Search, ArrowUp, ArrowDown, FileSpreadsheet, FileText, Eye } from "lucide-react";
+import { Search, ArrowUp, ArrowDown, FileSpreadsheet, FileText, Eye, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
@@ -39,6 +39,7 @@ export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [group, setGroup] = useState<ExpGroupKey>("none");
   const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState(true);
   const [pending, startTransition] = useTransition();
 
   function reload(nextFrom: string, nextTo: string) {
@@ -65,12 +66,16 @@ export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-          <FileText className="h-4 w-4 text-muted-foreground" /> Expenses Records
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">{view.count}</span>
-          <span className="ml-auto font-mono text-sm font-semibold text-foreground">{formatCurrency(view.total)}</span>
-        </CardTitle>
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 text-left">
+          {open ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+          <CardTitle className="flex flex-1 flex-wrap items-center gap-2 text-sm">
+            <FileText className="h-4 w-4 text-muted-foreground" /> Expenses Records
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">{view.count}</span>
+            <span className="ml-auto font-mono text-sm font-semibold text-foreground">{formatCurrency(view.total)}</span>
+          </CardTitle>
+        </button>
       </CardHeader>
+      {open && (
       <CardContent className="space-y-3">
         {/* Date range — re-fetches from the server. */}
         <div className="flex flex-wrap items-end gap-2">
@@ -191,6 +196,7 @@ export function ExpensesReport({ initial }: { initial: ExpensesReportData }) {
           </div>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }
