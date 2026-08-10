@@ -1150,3 +1150,5 @@ and we never redo something that's already done.
 ## 2026-08-07 · Purchaser can delete stock items — PR #238 (merged)
 - Added a delete control for stock items in the Purchaser role.
 - **Pending:** none.
+
+<!-- redeploy trigger PR#307 reconciled-by-hand deep-links -->
