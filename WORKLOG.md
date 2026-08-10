@@ -14,6 +14,20 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · "Reconciled by hand" — include cash vouchers + deep-link to the item
+- **Owner request:** the card should include **all** hand-tallied items (POs, requisitions, cash vouchers),
+  and each row should open **that item in its own tab**: a PO → Purchasing tab on that PO; a cash voucher →
+  Cash Requests tab on that voucher.
+- **Data (`manual-reconciliations.ts`):** now scans **both** sources — `PurchaseRequest.reconciliation`
+  (kind `PO` / `Requisition` via `isDeptRequisition`) **and** `CashRequest.liquidation` (kind `Cash`), each
+  filtered to recorded + `aiVerified !== true`. Unified `ManualReconRow { kind, ref, title, amount,
+  recordedLabel, href }`, newest-first.
+- **Deep-links (existing highlight mechanisms):** PO/requisition → `/purchasing?req=<prId>` (opens the tab,
+  scrolls to `req-<id>`, pulses the ring); cash → `/cash-requests?id=<crId>` (opens the tab, scrolls to
+  `cr-<id>`, highlights).
+- **Card:** kind badge (PO/Requisition/Cash) per row; rows are `next/link` to the deep-link target. Typecheck
+  + lint clean.
+
 ## 2026-08-10 · "Reconciled by hand" — single-row tile, working PO link (404 fix)
 - **Owner follow-ups:** (1) AI-first flow confirmed (AI reads + autofills; unbalanced → only Admin/Approver
   manual tally) — already the behavior, no change. (2) Put the tile on the **same row** as the other count
