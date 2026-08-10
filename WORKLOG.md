@@ -14,6 +14,17 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups due — search / group / sort toolbar (matches other lists)
+- **Owner request:** add search, group, sort (asc/desc) to the Follow-ups due list, same look &
+  behavior as the other tables.
+- **Added** to `due-table.tsx` the same toolbar pattern as `orders-table.tsx`: a **search** box (client /
+  contact / email / phone / quote no. / sales, separator-insensitive quote match), **Group by**
+  (Client / Sales / Nudge) with group-header rows, **Sort by** (Days waiting / Sent date / Amount /
+  Client / Nudge / Sales) and an **Asc/Desc** toggle; "N shown" count and an empty-state row. Selection
+  + "Send to selected" still work (select-all now targets the filtered rows). Page passes numeric
+  `amount` + `sentMs` for sorting (`page.tsx`). Typecheck + lint clean. **Non-workflow — no
+  order-workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups — hand-pick recipients ("Send to selected" warm-up)
 - **Owner need:** choose exactly which clients to email (not just an oldest-first batch) to warm up the
   new sending domain gradually.
