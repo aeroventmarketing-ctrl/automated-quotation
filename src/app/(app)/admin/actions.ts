@@ -17,7 +17,7 @@ import { setAlertGoLive, type AlertGoLive } from "@/lib/alert-golive";
 import { setStockLocations } from "@/lib/stock-locations";
 import { setDocViewers } from "@/lib/doc-viewers";
 import { setDisabledRoles } from "@/lib/role-access";
-import { setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
+import { getFollowUpSettings, setFollowUpSettings, type FollowUpConfig } from "@/lib/follow-up-settings";
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { config } from "@/lib/config";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
@@ -516,7 +516,10 @@ export async function saveFollowUpSettingsAction(
 ): Promise<FollowUpConfig> {
   await assertAdmin();
   const d = followUpSettingsSchema.parse(input);
-  const saved = await setFollowUpSettings(d);
+  // Merge over the saved config so fields not in this form (e.g. the campaign
+  // start date) are preserved rather than reset.
+  const current = await getFollowUpSettings();
+  const saved = await setFollowUpSettings({ ...current, ...d });
   revalidatePath("/admin");
   revalidatePath("/follow-ups");
   return saved;
@@ -526,6 +529,24 @@ export async function saveFollowUpSettingsAction(
 export async function runFollowUpPreviewAction(): Promise<FollowUpRunResult> {
   await assertAdmin();
   return runFollowUps({ live: false });
+}
+
+/**
+ * Start (or stop) the backlog follow-up campaign. Starting sets the campaign
+ * start to the beginning of today, so every open sent quote becomes due for its
+ * first nudge now (throttled by "Max emails per run"); stopping clears it and
+ * returns to the normal day-3/7/14 cadence. Merges into the saved settings so
+ * nothing else changes.
+ */
+export async function setFollowUpCampaignAction(start: boolean): Promise<FollowUpConfig> {
+  await assertAdmin();
+  const current = await getFollowUpSettings();
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const saved = await setFollowUpSettings({ ...current, campaignStartAt: start ? startOfToday : null });
+  revalidatePath("/admin");
+  revalidatePath("/follow-ups");
+  return saved;
 }
 
 export interface FollowUpTestResult {

@@ -37,6 +37,20 @@ export interface FollowUpInput {
   nudgesSent: number;
   /** "Now" — passed in so the function stays pure and testable. */
   now: Date;
+  /**
+   * Optional campaign start. When set, a quote's FIRST nudge is due no earlier
+   * than this date — so a whole backlog of already-sent quotes all become due for
+   * nudge 1 on the campaign start day, instead of nothing (or everything's later
+   * nudges) firing at once. New quotes sent after the start keep their normal
+   * `sentAt + offsets[0]` timing.
+   */
+  campaignStartAt?: Date | null;
+  /**
+   * When the most recent nudge actually went out. When known, each SUBSEQUENT
+   * nudge is spaced by the cadence interval from this date (not from `sentAt`), so
+   * throttled/backlog sends never bunch several nudges together for one client.
+   */
+  lastSentAt?: Date | null;
 }
 
 export interface FollowUpResult {
@@ -72,7 +86,6 @@ export function evaluateFollowUp(
   const offsets = settings.offsetsDays.slice(0, settings.maxNudges);
   const daysSinceSent = calendarDaysBetween(input.sentAt, input.now);
   const sent = Math.max(0, input.nudgesSent);
-  const offsetDate = (i: number) => new Date(startOfDay(input.sentAt).getTime() + offsets[i] * DAY_MS);
 
   if (input.won) return { state: "won", daysSinceSent, nudgeNumber: sent, dueDate: null };
 
@@ -84,12 +97,28 @@ export function evaluateFollowUp(
     return { state: "exhausted", daysSinceSent, nudgeNumber: sent, dueDate: null };
   }
 
-  // The next unsent nudge is index `sent`. Due once its offset day has arrived.
+  // Due date for the next unsent nudge (index `sent`).
   const nudgeNumber = sent + 1;
-  const dueDate = offsetDate(sent);
-  const passed = offsets.filter((o) => daysSinceSent >= o).length;
-  if (passed > sent) return { state: "due", daysSinceSent, nudgeNumber, dueDate };
-  return { state: "waiting", daysSinceSent, nudgeNumber, dueDate };
+  let dueDate: Date;
+  if (sent === 0) {
+    // First nudge: normally `sentAt + offsets[0]`, but never earlier than the
+    // campaign start — so an old backlog quote becomes due on the start day while
+    // a freshly-sent quote still waits its offset.
+    const baseDue = startOfDay(input.sentAt).getTime() + offsets[0] * DAY_MS;
+    const campaign = input.campaignStartAt ? startOfDay(input.campaignStartAt).getTime() : -Infinity;
+    dueDate = new Date(Math.max(baseDue, campaign));
+  } else if (input.lastSentAt) {
+    // Subsequent nudge: space the cadence interval from the last ACTUAL send, so
+    // a client reached late in a backlog isn't hit with several nudges at once.
+    const gap = Math.max(1, offsets[sent] - offsets[sent - 1]);
+    dueDate = new Date(startOfDay(input.lastSentAt).getTime() + gap * DAY_MS);
+  } else {
+    // No send timestamp known — fall back to the classic offset-from-sent timing.
+    dueDate = new Date(startOfDay(input.sentAt).getTime() + offsets[sent] * DAY_MS);
+  }
+
+  const due = calendarDaysBetween(dueDate, input.now) >= 0; // now has reached the due day
+  return { state: due ? "due" : "waiting", daysSinceSent, nudgeNumber, dueDate };
 }
 
 /** Read the count of auto follow-ups already sent from a quote's classification JSON. */
@@ -105,4 +134,17 @@ export function nudgesSentFrom(classification: unknown): number {
 export function sentAtFrom(classification: unknown): string | null {
   const v = (classification as Record<string, unknown> | null)?.sentAt;
   return typeof v === "string" ? v : null;
+}
+
+/** The latest "at" among the auto follow-ups already sent for a quote, or null. */
+export function lastNudgeAtFrom(classification: unknown): string | null {
+  const fu = (classification as Record<string, unknown> | null)?.followUp as Record<string, unknown> | undefined;
+  const sent = fu?.sent;
+  if (!Array.isArray(sent) || sent.length === 0) return null;
+  let latest: string | null = null;
+  for (const s of sent) {
+    const at = (s as Record<string, unknown> | null)?.at;
+    if (typeof at === "string" && (latest === null || at > latest)) latest = at;
+  }
+  return latest;
 }

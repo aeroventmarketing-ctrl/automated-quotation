@@ -14,7 +14,7 @@ import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { config } from "@/lib/config";
-import { evaluateFollowUp, sentAtFrom, nudgesSentFrom } from "@/lib/follow-up";
+import { evaluateFollowUp, sentAtFrom, nudgesSentFrom, lastNudgeAtFrom } from "@/lib/follow-up";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getFollowUpTemplates } from "@/lib/follow-up-templates";
 import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
@@ -69,6 +69,7 @@ export async function runFollowUps(opts: {
   // Emails sent per run — quote follow-ups + inquiry check-ins share this budget.
   // A targeted manual send (admin hand-picked the recipients) ignores the cap.
   const sendCap = targeted ? Number.POSITIVE_INFINITY : settings.maxPerRun;
+  const campaignStartAt = settings.campaignStartAt ? new Date(settings.campaignStartAt) : null;
 
   const canSend = emailConfigured() && !!config.followUpFromEmail;
   const switchesOk = opts.ignoreEnabledDryRun || (settings.enabled && !settings.dryRun);
@@ -111,6 +112,7 @@ export async function runFollowUps(opts: {
   for (const q of quotes) {
     const sentIso = sentAtFrom(q.classification);
     const sentAt = sentIso ? new Date(sentIso) : q.createdAt;
+    const lastIso = lastNudgeAtFrom(q.classification);
     const result = evaluateFollowUp(
       {
         sentAt,
@@ -118,6 +120,8 @@ export async function runFollowUps(opts: {
         won: false,
         nudgesSent: nudgesSentFrom(q.classification),
         now,
+        campaignStartAt,
+        lastSentAt: lastIso ? new Date(lastIso) : null,
       },
       settings,
     );

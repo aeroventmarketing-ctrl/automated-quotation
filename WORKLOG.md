@@ -14,6 +14,26 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — backlog "campaign" (start whole backlog today, no cascade)
+- **Owner need:** kick off follow-ups for the whole ~625 open-sent-quote backlog *today* (24/day via
+  the per-run cap), not just the handful that happen to cross a cadence day.
+- **Engine (`follow-up.ts`):** `evaluateFollowUp` gains `campaignStartAt` + `lastSentAt`. First nudge is
+  due at `max(sentAt + offsets[0], campaignStart)` — so old quotes all become due on the start day while
+  fresh quotes still wait their offset. **Subsequent** nudges are spaced by the cadence interval from the
+  **last actual send** (`lastSentAt`) instead of from the quote date — so a client reached late in a
+  throttled backlog is never hit with several nudges at once. Fully backward-compatible when both are
+  absent. New helper `lastNudgeAtFrom()`.
+- **Setting:** `campaignStartAt` (ISO or null) on `FollowUpConfig`. Admin action
+  `setFollowUpCampaignAction(start)` sets it to start-of-today / clears it; `saveFollowUpSettingsAction`
+  now merges over current so it isn't wiped by a cadence save.
+- **Wiring:** runner + `/follow-ups` page pass `campaignStartAt` + per-quote `lastSentAt`. Admin card
+  gets a **"Backlog follow-up campaign"** Start/Stop control with status (`follow-up-setting.tsx`,
+  `page.tsx`).
+- **Usage:** Start campaign + Max emails per run 24 + enable sending → the backlog goes out 24/day
+  (no-email clients skipped), each client's later nudges spaced from their own first send.
+- Typecheck + lint clean; unrelated pre-existing `selection.test.ts` fan-motorPole failure only.
+  **Non-workflow (CRM/email) — no order-workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups due — search / group / sort toolbar (matches other lists)
 - **Owner request:** add search, group, sort (asc/desc) to the Follow-ups due list, same look &
   behavior as the other tables.
