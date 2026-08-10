@@ -75,6 +75,7 @@ export function FollowUpSetting({
   onPreview,
   onTest,
   onCampaign,
+  defaultTestEmail = "",
 }: {
   offsetsDays: number[];
   maxNudges: number;
@@ -87,8 +88,9 @@ export function FollowUpSetting({
   campaignStartAt: string | null;
   onSave: (input: Config) => Promise<Config>;
   onPreview: () => Promise<RunResult>;
-  onTest: (nudge: number) => Promise<{ ok: boolean; to: string }>;
+  onTest: (nudge: number, toEmail?: string) => Promise<{ ok: boolean; to: string }>;
   onCampaign: (start: boolean) => Promise<Config>;
+  defaultTestEmail?: string;
 }) {
   const [daysStr, setDaysStr] = useState(offsetsDays.join(", "));
   const [max, setMax] = useState(String(maxNudges));
@@ -104,6 +106,7 @@ export function FollowUpSetting({
   const [previewing, setPreviewing] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testNudge, setTestNudge] = useState(1);
+  const [testTo, setTestTo] = useState(defaultTestEmail);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [run, setRun] = useState<RunResult | null>(null);
 
@@ -167,8 +170,8 @@ export function FollowUpSetting({
     setTesting(true);
     setMsg(null);
     try {
-      const r = await onTest(testNudge);
-      setMsg({ ok: true, text: `Test (nudge #${testNudge}) sent to ${r.to}. Check your inbox (and spam folder). No client received it.` });
+      const r = await onTest(testNudge, testTo.trim() || undefined);
+      setMsg({ ok: true, text: `Test (nudge #${testNudge}) sent to ${r.to}. Check that inbox (and spam folder). No client received it.` });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : "Test send failed" });
     } finally {
@@ -313,11 +316,19 @@ export function FollowUpSetting({
                 ))}
               </select>
             </label>
+            <input
+              type="email"
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+              disabled={testing}
+              placeholder="send to (email)…"
+              className="h-8 w-60 rounded-md border bg-background px-2 text-sm"
+            />
             <Button onClick={sendTest} disabled={testing} size="sm" variant="outline">
-              {testing ? "Sending…" : "Send test email to me"}
+              {testing ? "Sending…" : "Send test email"}
             </Button>
             <span className="text-xs text-muted-foreground">
-              Sends the real template for that nudge to your own address only — no client is affected. Works even while sending is off.
+              Sends the real template for that nudge to the address above (defaults to your own) — no client is affected. Great for warming up different inboxes.
             </span>
           </div>
         </div>
