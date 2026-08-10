@@ -418,14 +418,42 @@ export default async function ManagementPage() {
     : [];
   const voucherPrNet = new Map(voucherPrs.map((pr) => { const po = coercePurchaseOrder(pr.po); return [pr.id, po ? poTotals(po).net : 0]; }));
   const voucherReconciled = new Map(voucherPrs.map((pr) => [pr.id, isReconciled(coerceReconciliation(pr.reconciliation))]));
-  const voucherReport = printedVouchers.map((v) => {
+  type VoucherReportRow = {
+    no: string; ids: string[]; kind: "po" | "cash"; paidTo: string;
+    lines: { description: string; amount: number }[]; total: number; approvedTotal: number;
+    state: "mismatch" | "awaiting" | "tallied"; printedByName: string; printedAt: string;
+  };
+  const poVoucherReport: VoucherReportRow[] = printedVouchers.map((v) => {
     const approvedTotal = round2(v.ids.reduce((s, id) => s + (voucherPrNet.get(id) ?? 0), 0));
     const amountMatches = Math.abs(approvedTotal - round2(v.total)) < 0.01;
     // Every covered request's voucher reconciliation has been recorded.
     const reconciled = v.ids.length > 0 && v.ids.every((id) => voucherReconciled.get(id));
     const state: "mismatch" | "awaiting" | "tallied" = !amountMatches ? "mismatch" : reconciled ? "tallied" : "awaiting";
-    return { ...v, approvedTotal, state };
+    return { ...v, kind: "po", approvedTotal, state };
   });
+  // Released cash-request vouchers (operating-expense cash vouchers — not PO-tied).
+  // Same released statuses + go-live createdAt scope the P&L / Expenses report use.
+  const RELEASED_CASH = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
+  const cashCrs = await prisma.cashRequest
+    .findMany({
+      // Released after go-live (mirrors the PO vouchers' printedAt > cutoff filter).
+      where: { releasedAt: goLiveCutoff ? { not: null, gt: goLiveCutoff.gt } : { not: null } },
+      select: { number: true, purpose: true, amount: true, requestedByName: true, voucherByName: true, releasedByName: true, voucherAt: true, releasedAt: true, status: true },
+    })
+    .catch(() => []);
+  const cashVoucherReport: VoucherReportRow[] = cashCrs
+    .filter((cr) => RELEASED_CASH.has(cr.status) && cr.releasedAt)
+    .map((cr) => {
+      const total = round2(Number(cr.amount) || 0);
+      return {
+        no: cr.number, ids: [], kind: "cash" as const, paidTo: cr.requestedByName || "—",
+        lines: cr.purpose ? [{ description: cr.purpose, amount: total }] : [],
+        total, approvedTotal: total, state: "tallied" as const,
+        printedByName: cr.voucherByName || cr.releasedByName || cr.requestedByName || "",
+        printedAt: (cr.voucherAt ?? cr.releasedAt)!.toISOString(),
+      };
+    });
+  const voucherReport: VoucherReportRow[] = [...poVoucherReport, ...cashVoucherReport].sort((a, b) => b.printedAt.localeCompare(a.printedAt));
 
   // Phase distribution for the donut.
   const phaseCount = new Map<string, number>();
@@ -974,7 +1002,7 @@ export default async function ManagementPage() {
               <Banknote className="h-4 w-4 text-muted-foreground" /> Cash vouchers
               {voucherReport.length > 0 && (
                 <span className="ml-1 text-xs font-normal text-muted-foreground">
-                  ({voucherReport.filter((v) => v.state === "mismatch").length} not tallied · {voucherReport.filter((v) => v.state === "awaiting").length} awaiting reconciliation)
+                  ({voucherReport.filter((v) => v.kind === "po" && v.state === "mismatch").length} not tallied · {voucherReport.filter((v) => v.kind === "po" && v.state === "awaiting").length} awaiting reconciliation{voucherReport.filter((v) => v.kind === "cash").length > 0 ? ` · ${voucherReport.filter((v) => v.kind === "cash").length} cash` : ""})
                 </span>
               )}
             </CardTitle>
@@ -1003,11 +1031,13 @@ export default async function ManagementPage() {
                       <td className="py-1.5 pr-3">
                         <div className="font-medium">Paid to {v.paidTo || "—"}</div>
                         <div className="text-xs text-muted-foreground">{v.lines.map((l) => l.description).filter(Boolean).join("; ")}</div>
-                        {v.state === "mismatch" && <div className="text-xs text-amber-700">Approved total {formatCurrency(v.approvedTotal, CURRENCY)} · voucher {formatCurrency(v.total, CURRENCY)}</div>}
+                        {v.kind === "po" && v.state === "mismatch" && <div className="text-xs text-amber-700">Approved total {formatCurrency(v.approvedTotal, CURRENCY)} · voucher {formatCurrency(v.total, CURRENCY)}</div>}
                       </td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{formatCurrency(v.total, CURRENCY)}</td>
                       <td className="py-1.5 pr-3">
-                        {v.state === "mismatch" ? (
+                        {v.kind === "cash" ? (
+                          <Badge variant="secondary">Cash voucher</Badge>
+                        ) : v.state === "mismatch" ? (
                           <Badge variant="warning">Not tallied</Badge>
                         ) : v.state === "awaiting" ? (
                           <Badge variant="secondary">Awaiting reconciliation</Badge>
