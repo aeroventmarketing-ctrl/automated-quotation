@@ -120,7 +120,7 @@ export function FollowUpSetting({
   smsSenderName?: string;
   smsBalance?: number | null;
   onSms: (input: { smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplate: string }) => Promise<{ smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplate: string }>;
-  onTestSms: (toNumber: string) => Promise<{ ok: boolean; to: string; balance: number | null }>;
+  onTestSms: (toNumber: string) => Promise<{ ok: boolean; to: string; balance: number | null; error?: string }>;
   defaultTestEmail?: string;
 }) {
   const [daysStr, setDaysStr] = useState(offsetsDays.join(", "));
@@ -280,6 +280,10 @@ export function FollowUpSetting({
     setMsg(null);
     try {
       const r = await onTestSms(smsTestTo.trim());
+      if (!r.ok) {
+        setMsg({ ok: false, text: r.error ?? "Test SMS failed." });
+        return;
+      }
       if (r.balance != null) setSmsBalance(r.balance);
       setMsg({ ok: true, text: `Test SMS sent to ${r.to}${r.balance != null ? ` · Semaphore balance: ${r.balance}` : ""}. No client was texted.` });
     } catch (e) {
