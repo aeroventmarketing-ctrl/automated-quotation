@@ -25,12 +25,17 @@ interface RunItem {
   action: "sent" | "preview" | "skipped";
   reason?: string;
   kind?: "quote" | "inquiry";
+  channel?: "Email" | "SMS";
 }
 interface RunResult {
   due: number;
   previewed: number;
   sent: number;
   skipped: number;
+  smsDue?: number;
+  smsPreviewed?: number;
+  smsSent?: number;
+  smsSkipped?: number;
   live: boolean;
   reason?: string;
   items: RunItem[];
@@ -74,11 +79,20 @@ export function FollowUpSetting({
   scheduleMode: initScheduleMode = "daily",
   sendHour: initSendHour = 9,
   intervalHours: initIntervalHours = 24,
+  smsEnabled: initSmsEnabled = false,
+  smsDryRun: initSmsDryRun = true,
+  smsMaxPerRun: initSmsMaxPerRun = 24,
+  smsTemplate: initSmsTemplate = "",
+  smsConfigured = false,
+  smsSenderName = "",
+  smsBalance: initSmsBalance = null,
   onSave,
   onPreview,
   onTest,
   onCampaign,
   onSchedule,
+  onSms,
+  onTestSms,
   defaultTestEmail = "",
 }: {
   offsetsDays: number[];
@@ -98,6 +112,15 @@ export function FollowUpSetting({
   sendHour?: number;
   intervalHours?: number;
   onSchedule: (input: { scheduleMode: "daily" | "interval"; sendHour: number; intervalHours: number }) => Promise<{ scheduleMode: "daily" | "interval"; sendHour: number; intervalHours: number }>;
+  smsEnabled?: boolean;
+  smsDryRun?: boolean;
+  smsMaxPerRun?: number;
+  smsTemplate?: string;
+  smsConfigured?: boolean;
+  smsSenderName?: string;
+  smsBalance?: number | null;
+  onSms: (input: { smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplate: string }) => Promise<{ smsEnabled: boolean; smsDryRun: boolean; smsMaxPerRun: number; smsTemplate: string }>;
+  onTestSms: (toNumber: string) => Promise<{ ok: boolean; to: string; balance: number | null }>;
   defaultTestEmail?: string;
 }) {
   const [daysStr, setDaysStr] = useState(offsetsDays.join(", "));
@@ -114,6 +137,14 @@ export function FollowUpSetting({
   const [schedHour, setSchedHour] = useState(initSendHour);
   const [schedInterval, setSchedInterval] = useState(initIntervalHours);
   const [schedBusy, setSchedBusy] = useState(false);
+  const [smsEnabled, setSmsEnabled] = useState(initSmsEnabled);
+  const [smsDryRun, setSmsDryRun] = useState(initSmsDryRun);
+  const [smsPerRun, setSmsPerRun] = useState(String(initSmsMaxPerRun));
+  const [smsTemplate, setSmsTemplate] = useState(initSmsTemplate);
+  const [smsBusy, setSmsBusy] = useState(false);
+  const [smsTestTo, setSmsTestTo] = useState("");
+  const [smsTesting, setSmsTesting] = useState(false);
+  const [smsBalance, setSmsBalance] = useState<number | null>(initSmsBalance);
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -221,8 +252,46 @@ export function FollowUpSetting({
       setSchedBusy(false);
     }
   }
+  async function saveSms(next?: Partial<{ smsEnabled: boolean; smsDryRun: boolean }>) {
+    setSmsBusy(true);
+    setMsg(null);
+    try {
+      const wantPerRun = parseInt(smsPerRun, 10);
+      const saved = await onSms({
+        smsEnabled: next?.smsEnabled ?? smsEnabled,
+        smsDryRun: next?.smsDryRun ?? smsDryRun,
+        smsMaxPerRun: Number.isFinite(wantPerRun) && wantPerRun >= 1 ? wantPerRun : 24,
+        smsTemplate,
+      });
+      setSmsEnabled(saved.smsEnabled);
+      setSmsDryRun(saved.smsDryRun);
+      setSmsPerRun(String(saved.smsMaxPerRun));
+      setSmsTemplate(saved.smsTemplate);
+      setMsg({ ok: true, text: "SMS settings saved." });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to save SMS settings" });
+    } finally {
+      setSmsBusy(false);
+    }
+  }
+
+  async function sendTestSms() {
+    setSmsTesting(true);
+    setMsg(null);
+    try {
+      const r = await onTestSms(smsTestTo.trim());
+      if (r.balance != null) setSmsBalance(r.balance);
+      setMsg({ ok: true, text: `Test SMS sent to ${r.to}${r.balance != null ? ` · Semaphore balance: ${r.balance}` : ""}. No client was texted.` });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Test SMS failed" });
+    } finally {
+      setSmsTesting(false);
+    }
+  }
+
   const hourOpts = Array.from({ length: 24 }, (_, h) => h);
   const hour12 = (h: number) => `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? "AM" : "PM"}`;
+  const smsLive = smsEnabled && !smsDryRun;
 
   // How many nudges the cadence currently has — drives the test-nudge picker.
   const nudgeCount = Math.max(1, parseInt(max, 10) || parseDays().length || 1);
@@ -404,6 +473,93 @@ export function FollowUpSetting({
 
         <hr className="border-border" />
 
+        {/* SMS follow-up (Semaphore) — independent channel, texts due clients with a phone. */}
+        <div className="space-y-3">
+          <div>
+            <div className="text-sm font-medium">SMS follow-up (Semaphore)</div>
+            <p className="text-xs text-muted-foreground">
+              Texts due clients who have a phone number — an independent channel on the same cadence as the
+              email follow-ups, tracked separately so it never changes the emails. Still respects opt-out.
+              {smsConfigured ? "" : " Add SEMAPHORE_API_KEY in Vercel to enable sending."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>Sender name: <strong className="text-foreground">{smsSenderName || "SEMAPHORE (shared default)"}</strong></span>
+            {smsBalance != null && <span>· Credit balance: <strong className="text-foreground">{smsBalance}</strong></span>}
+            {!smsConfigured && <span className="text-amber-600">· No API key set</span>}
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="sms-template" className="text-xs">SMS message</Label>
+            <textarea
+              id="sms-template"
+              value={smsTemplate}
+              onChange={(e) => setSmsTemplate(e.target.value)}
+              disabled={smsBusy}
+              rows={3}
+              placeholder="Leave blank to use the built-in default message."
+              className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Placeholders: <code>{"{contactName} {company} {quoteNumber} {total} {salesName} {quoteUrl}"}</code>.
+              Keep it short — every 160 characters is one Semaphore credit.{" "}
+              {smsTemplate.trim() ? `${smsTemplate.length} characters.` : "Using the built-in default."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="sms-perrun" className="text-xs">Max texts per run</Label>
+              <Input id="sms-perrun" type="number" min={1} max={100} value={smsPerRun} onChange={(e) => setSmsPerRun(e.target.value)} className="h-9 w-28" />
+            </div>
+            <Button onClick={() => saveSms()} disabled={smsBusy} size="sm">
+              {smsBusy ? "Saving…" : "Save SMS message"}
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Switch checked={smsEnabled} disabled={smsBusy} onChange={() => saveSms({ smsEnabled: !smsEnabled })} />
+            <div>
+              <div className="text-sm font-medium">Automatic follow-up SMS</div>
+              <div className="text-xs text-muted-foreground">Master switch for the SMS channel (separate from email).</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch checked={smsDryRun} disabled={smsBusy || !smsEnabled} onChange={() => saveSms({ smsDryRun: !smsDryRun })} />
+            <div>
+              <div className="text-sm font-medium">Dry run (don&apos;t actually text)</div>
+              <div className="text-xs text-muted-foreground">Keep this on while testing — computes and logs but sends no SMS.</div>
+            </div>
+          </div>
+
+          <div className={`rounded-md border px-3 py-2 text-xs ${smsLive ? "border-amber-300 bg-amber-50 text-amber-800" : "border-dashed bg-muted/40 text-muted-foreground"}`}>
+            {smsLive ? (
+              <>Live SMS is <strong>ON</strong> — the scheduler will text due clients who have a phone (needs a Semaphore API key + credits).</>
+            ) : (
+              <>Live SMS is <strong>OFF</strong> — nothing is texted automatically. Turn on the master switch and turn off dry-run to go live.</>
+            )}
+          </div>
+
+          {/* Test SMS to a chosen number — no client is affected. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="tel"
+              value={smsTestTo}
+              onChange={(e) => setSmsTestTo(e.target.value)}
+              disabled={smsTesting}
+              placeholder="send test to (09XXXXXXXXX)…"
+              className="h-8 w-56 rounded-md border bg-background px-2 text-sm"
+            />
+            <Button onClick={sendTestSms} disabled={smsTesting} size="sm" variant="outline">
+              {smsTesting ? "Sending…" : "Send test SMS"}
+            </Button>
+            <span className="text-xs text-muted-foreground">Sends the real SMS to that number only — no client is affected.</span>
+          </div>
+        </div>
+
+        <hr className="border-border" />
+
         {/* Inquiry "constant communication" check-ins */}
         <div className="space-y-3">
           <div>
@@ -450,6 +606,7 @@ export function FollowUpSetting({
             <div className="rounded-md border bg-muted/30 p-3 text-xs">
               <div className="mb-2 font-medium text-foreground">
                 {run.due} due · {run.previewed} would be emailed · {run.skipped} skipped
+                {(run.smsDue ?? 0) > 0 && ` · SMS: ${run.smsDue} due, ${run.smsPreviewed ?? 0} would text`}
                 {run.errors.length > 0 && ` · ${run.errors.length} errors`}
               </div>
               {run.items.length === 0 ? (
@@ -461,9 +618,10 @@ export function FollowUpSetting({
                       <span className="truncate">
                         {it.company} <span className="text-muted-foreground">· {it.quoteNumber} · nudge #{it.nudge}</span>
                         {it.kind === "inquiry" && <span className="ml-1 rounded bg-sky-500/15 px-1 py-0.5 text-[10px] text-sky-700">check-in</span>}
+                        {it.channel === "SMS" && <span className="ml-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] text-violet-700">SMS</span>}
                       </span>
                       <span className={it.action === "skipped" ? "text-amber-600" : "text-emerald-600"}>
-                        {it.action === "preview" ? "would email" : it.action}
+                        {it.action === "preview" ? (it.channel === "SMS" ? "would text" : "would email") : it.action}
                         {it.reason ? ` (${it.reason})` : ""}
                       </span>
                     </li>

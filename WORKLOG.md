@@ -14,6 +14,29 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · Follow-ups — SMS channel via Semaphore (independent of email)
+- **Owner request:** add SMS follow-ups through Semaphore (semaphore.co). Owner chose **"SMS only /
+  separate channel"** — leave the email flow untouched, run SMS as its own independent channel to any
+  due client who has a phone number.
+- **Client (`src/lib/sms/semaphore.ts`):** HTTP wrapper over Semaphore v4 — `smsConfigured()`,
+  `sendSms()`, `normalizePhMobile()` (→ `09XXXXXXXXX`, handles +63/63/9 forms, rejects non-mobiles),
+  `getSemaphoreBalance()`. Reads `SEMAPHORE_API_KEY`; optional `SEMAPHORE_SENDER_NAME` (config).
+- **Message (`src/lib/follow-up-sms.ts`):** single editable template (not per-nudge — SMS is short),
+  `buildFollowUpSms()`, `DEFAULT_FOLLOWUP_SMS`, same `{placeholders}` as email (+ `{quoteUrl}`),
+  `smsSegments()`.
+- **Runner:** new **independent SMS pass** in `runFollowUps` — same cadence engine, but tracked in a
+  separate `classification.followUp.smsSent` array (via new `smsNudgesSentFrom` / `lastSmsAtFrom`), own
+  `smsEnabled` + `smsDryRun` + `smsMaxPerRun` gate, records channel "SMS" on the quote + conversation
+  history. Result gains `smsDue/smsSent/smsPreviewed/smsSkipped`; `RunItem` gains `channel`. Email path
+  is unchanged.
+- **Settings:** `smsEnabled` (OFF), `smsDryRun` (ON), `smsMaxPerRun` (24), `smsTemplate` + normalize.
+- **Admin UI:** new **"SMS follow-up (Semaphore)"** section — sender + credit-balance display, editable
+  message, per-run cap, enable + dry-run switches, live/off banner, and a **Send test SMS** to any
+  number (`sendTestSmsAction`), plus `saveFollowUpSmsAction`. Preview run now shows SMS due/would-text.
+- Opt-out reuses `optOutFollowUp`. `.env.example` documented. Typecheck + lint clean.
+  **Non-workflow (CRM) — no order-workflow / P&L change.** Needs a Semaphore account + `SEMAPHORE_API_KEY`
+  in Vercel to actually text; starts OFF + dry-run for safe testing.
+
 ## 2026-08-09 · Follow-ups — configurable send schedule (daily at hour / every N hours)
 - **Owner request:** a time picker to control when auto follow-ups send — per day at a chosen time, or
   every N hours.

@@ -50,6 +50,19 @@ export interface FollowUpConfig extends FollowUpSettings {
   intervalHours: number;
   /** Internal: when the scheduler last actually ran (ISO). Set by the cron. */
   lastRunAt: string | null;
+  /**
+   * SMS follow-up (Semaphore) — an independent channel that texts due clients who
+   * have a phone number, on the same cadence as email but tracked separately.
+   * Leaves the email flow untouched.
+   */
+  /** Master switch for automated SMS (default false). */
+  smsEnabled: boolean;
+  /** When true, compute + log but never text (default true — safe). */
+  smsDryRun: boolean;
+  /** Max texts sent in a single run (default 24, hard ceiling FOLLOW_UP_MAX_PER_RUN). */
+  smsMaxPerRun: number;
+  /** The editable SMS message (with {placeholders}). Blank → the built-in default. */
+  smsTemplate: string;
 }
 
 /** The hard ceiling on emails per run, regardless of the configured value. */
@@ -89,6 +102,11 @@ export function normalizeFollowUpConfig(
   const rawLastRun = input?.lastRunAt;
   const lastRunAt = typeof rawLastRun === "string" && !Number.isNaN(Date.parse(rawLastRun)) ? rawLastRun : null;
 
+  const rawSmsPerRun = Math.floor(Number(input?.smsMaxPerRun));
+  const wantSmsPerRun = Number.isFinite(rawSmsPerRun) && rawSmsPerRun >= 1 ? rawSmsPerRun : 24;
+  const smsMaxPerRun = Math.min(wantSmsPerRun, FOLLOW_UP_MAX_PER_RUN);
+  const smsTemplate = typeof input?.smsTemplate === "string" ? input.smsTemplate : "";
+
   return {
     offsetsDays,
     maxNudges,
@@ -103,6 +121,10 @@ export function normalizeFollowUpConfig(
     sendHour,
     intervalHours,
     lastRunAt,
+    smsEnabled: input?.smsEnabled === true, // default OFF
+    smsDryRun: input?.smsDryRun !== false, // default ON (safe)
+    smsMaxPerRun,
+    smsTemplate,
   };
 }
 

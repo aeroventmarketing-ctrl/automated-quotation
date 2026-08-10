@@ -21,6 +21,8 @@ import { getFollowUpSettings, setFollowUpSettings, type FollowUpConfig } from "@
 import { runFollowUps, type FollowUpRunResult } from "@/lib/follow-up-runner";
 import { config } from "@/lib/config";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
+import { sendSms, smsConfigured, normalizePhMobile, getSemaphoreBalance } from "@/lib/sms/semaphore";
+import { buildFollowUpSms } from "@/lib/follow-up-sms";
 import { buildFollowUpEmail, templateForNudge, type FollowUpTemplate } from "@/lib/follow-up-email";
 import { getFollowUpTemplates, setFollowUpTemplates } from "@/lib/follow-up-templates";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
@@ -547,6 +549,60 @@ export async function setFollowUpCampaignAction(start: boolean): Promise<FollowU
   revalidatePath("/admin");
   revalidatePath("/follow-ups");
   return saved;
+}
+
+const followUpSmsSchema = z.object({
+  smsEnabled: z.boolean(),
+  smsDryRun: z.boolean(),
+  smsMaxPerRun: z.number().optional(),
+  smsTemplate: z.string().optional(),
+});
+/** Save the SMS follow-up (Semaphore) switches + message. Merges over current. */
+export async function saveFollowUpSmsAction(
+  input: z.infer<typeof followUpSmsSchema>,
+): Promise<FollowUpConfig> {
+  await assertAdmin();
+  const d = followUpSmsSchema.parse(input);
+  const current = await getFollowUpSettings();
+  const saved = await setFollowUpSettings({ ...current, ...d });
+  revalidatePath("/admin");
+  revalidatePath("/follow-ups");
+  return saved;
+}
+
+export interface SmsTestResult {
+  ok: boolean;
+  to: string;
+  balance: number | null;
+}
+/**
+ * Send ONE real follow-up SMS — the exact message clients receive — to a chosen
+ * mobile number, so an admin can verify wording, sender name and deliverability
+ * WITHOUT enabling automated SMS or texting any client. Ignores the enable /
+ * dry-run switches, but still needs SEMAPHORE_API_KEY.
+ */
+export async function sendTestSmsAction(toNumber: string): Promise<SmsTestResult> {
+  await assertAdmin();
+  if (!smsConfigured()) {
+    throw new Error("No Semaphore API key set (SEMAPHORE_API_KEY). Add it in Vercel and redeploy first.");
+  }
+  const phone = normalizePhMobile(toNumber);
+  if (!phone) {
+    throw new Error(`"${toNumber}" isn't a valid PH mobile number (e.g. 09171234567).`);
+  }
+  const settings = await getFollowUpSettings();
+  const message = buildFollowUpSms({
+    company: "Sample Client Corporation",
+    contactName: null,
+    quoteNumber: "TEST-0001",
+    total: "₱125,000.00",
+    salesName: "Aerovent FBM",
+    quoteUrl: `${config.appUrl}/q/sample-quote`,
+    template: settings.smsTemplate,
+  });
+  await sendSms({ to: phone, message: `[TEST] ${message}` });
+  const acct = await getSemaphoreBalance();
+  return { ok: true, to: phone, balance: acct?.balance ?? null };
 }
 
 const followUpScheduleSchema = z.object({

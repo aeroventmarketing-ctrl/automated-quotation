@@ -6,6 +6,8 @@ import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getFollowUpTemplates } from "@/lib/follow-up-templates";
+import { config } from "@/lib/config";
+import { smsConfigured, getSemaphoreBalance } from "@/lib/sms/semaphore";
 import { getHideOrderProgress } from "@/lib/order-progress-visibility";
 import { getNotificationsEnabled } from "@/lib/notification-settings";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
@@ -29,7 +31,7 @@ import { AlertGoLiveSetting } from "./alert-golive-setting";
 import { FollowUpSetting } from "./follow-up-setting";
 import { FollowUpTemplatesSetting } from "./follow-up-templates-setting";
 import { RoleAccessSetting } from "./role-access-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setFollowUpCampaignAction, saveFollowUpScheduleAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setFollowUpCampaignAction, saveFollowUpScheduleAction, saveFollowUpSmsAction, sendTestSmsAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +55,7 @@ export default async function AdminOverviewPage() {
     getFollowUpTemplates(),
   ]);
   const testMode = await getTestMode();
+  const smsBalance = smsConfigured() ? (await getSemaphoreBalance())?.balance ?? null : null;
   const me = await getCurrentUser();
   const notificationBaseline = await getNotificationBaseline();
   const alertGoLive = await getAlertGoLive();
@@ -276,11 +279,20 @@ export default async function AdminOverviewPage() {
         scheduleMode={followUpSettings.scheduleMode}
         sendHour={followUpSettings.sendHour}
         intervalHours={followUpSettings.intervalHours}
+        smsEnabled={followUpSettings.smsEnabled}
+        smsDryRun={followUpSettings.smsDryRun}
+        smsMaxPerRun={followUpSettings.smsMaxPerRun}
+        smsTemplate={followUpSettings.smsTemplate}
+        smsConfigured={smsConfigured()}
+        smsSenderName={config.semaphoreSenderName}
+        smsBalance={smsBalance}
         onSave={saveFollowUpSettingsAction}
         onPreview={runFollowUpPreviewAction}
         onTest={sendTestFollowUpAction}
         onCampaign={setFollowUpCampaignAction}
         onSchedule={saveFollowUpScheduleAction}
+        onSms={saveFollowUpSmsAction}
+        onTestSms={sendTestSmsAction}
         defaultTestEmail={me?.email ?? ""}
       />
       <FollowUpTemplatesSetting
