@@ -14,6 +14,14 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · "Reconciled by hand" — apply the approved-discrepancy exclusion to CASH too
+- **Owner-reported:** cash voucher 0000867 was liquidated by the requestor, its discrepancy approved and
+  settled by Admin, yet it still showed. **Cause:** the approved-discrepancy exclusion was only in the PO
+  loop; the CashRequest loop never checked the liquidation's `approval`.
+- **Fix (`manual-reconciliations.ts`):** in the cash loop, also `continue` when `liquidation.approval` exists
+  (`CashLiquidation` carries the same `approval`/`settled` stamps as PO reconciliation). Now an approved cash
+  discrepancy drops off too.
+
 ## 2026-08-10 · "Reconciled by hand" — also exclude approved discrepancies (Approver or Admin)
 - **Owner request:** drop from the list any reconciliation whose discrepancy has been approved. First
   scoped to Admin-approved; owner then extended it to **Payment Approver too**.
