@@ -14,6 +14,21 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · Management dashboard — "Recent activity" (last 3 days) card
+- **Owner request:** show reconciled vouchers, MRFs, requisitions, POs & other, dated today / yesterday /
+  the day before, on the Management dashboard.
+- **`src/lib/recent-activity.ts`:** `getRecentActivity(days=3)` — read-only aggregation over real
+  action dates: PurchaseRequest columns (createdAt→requisition raised, purchasedAt→PO issued,
+  receivedAt→PO received) + reconciliation JSON (settled/approval/recordedAt → "Voucher reconciled",
+  gated by `isReconciled`); CashRequest (releasedAt→"Voucher released", SETTLED/LIQUIDATED via updatedAt
+  → "Voucher settled/liquidated"); MRFs from `readOrderWorkflow(classification).materialRequests`
+  (raisedAt/releasedAt/confirmedAt). Grouped by Manila day (Today / Yesterday / weekday), items sorted
+  newest-first. (Quotation has no updatedAt, so MRFs are scanned over orders created within ~180 days,
+  keeping only in-window MRF events.)
+- **UI:** `management/recent-activity-card.tsx` — collapsible (default open), grouped-by-day, clickable
+  rows (open the PO / voucher / order), kind badge + ref + detail + amount + Manila time.
+- Read-only reporting on frozen Phase 3/4 data — no workflow change. Typecheck + lint clean.
+
 ## 2026-08-10 · Management Cash Vouchers card — collapsible, clickable rows, real status (owner-approved)
 - **Owner request:** make the Cash Vouchers card collapsible + rows clickable, and show the real status
   (Settled / Liquidated / etc.) instead of a generic "Cash voucher" badge.
