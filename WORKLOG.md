@@ -14,6 +14,21 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · Management Cash Vouchers card — include released cash-request vouchers (Phase 4, owner-approved)
+- **Owner-reported:** the Management **"Cash Vouchers"** card said "No cash vouchers printed yet" while
+  the Expenses report listed cash vouchers (0000845–0852, Office expenses).
+- **Cause:** the card only read `getPrintedVouchers()` (PO-based vouchers printed from Purchasing);
+  those Office vouchers are **released cash requests** (`cashRequest`), a different source.
+- **Change (owner picked option C, explicitly approved in-conversation — this is a FROZEN Phase 4
+  cash-voucher/management-tally surface):** `getFinanceMonitor` now also includes released cash-request
+  vouchers. `VoucherRow` gains `kind: "po" | "cash"`. PO rows keep the exact tally/mismatch/reconcile
+  logic; cash rows (released statuses CASH_RELEASED/DISBURSED/RECEIVED/LIQUIDATED/SETTLED, same go-live
+  `createdAt` scope as the P&L) show `approvedTotal = total` and a neutral **"Cash voucher"** badge.
+  Card header count now reads "(N not tallied · M awaiting · K cash)"; the mismatch detail line is
+  PO-only. Merged list sorted by printedAt desc.
+- Typecheck + lint clean. Only the voucher *reporting* surface changed — no change to who acts, gating,
+  step order, stage progression, or how vouchers are created/printed.
+
 ## 2026-08-10 · My Dashboard — fix amount mismatch (show payable, not gross)
 - **Owner-reported:** an order showed a different price on **My Dashboard → Pending Your Action**
   (₱1,333,114.72) vs the **order page** header (₱1,106,961.33).
