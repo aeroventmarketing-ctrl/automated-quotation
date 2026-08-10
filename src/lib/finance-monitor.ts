@@ -151,7 +151,8 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
   const RELEASED_CASH = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const cashCrs = await prisma.cashRequest
     .findMany({
-      where: { releasedAt: { not: null }, ...createdFilter },
+      // Released after go-live (mirrors the PO vouchers' printedAt > cutoff filter).
+      where: { releasedAt: goLiveCutoff ? { not: null, gt: goLiveCutoff.gt } : { not: null } },
       select: { number: true, purpose: true, amount: true, requestedByName: true, voucherByName: true, releasedByName: true, voucherAt: true, releasedAt: true, status: true },
     })
     .catch(() => []);
