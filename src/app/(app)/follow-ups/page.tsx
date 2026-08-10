@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { evaluateFollowUp, sentAtFrom, nudgesSentFrom, lastNudgeAtFrom } from "@/lib/follow-up";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
+import { config } from "@/lib/config";
+import { emailConfigured } from "@/lib/email/resend";
 import { DueTable, type DueRow } from "./due-table";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +65,11 @@ export default async function FollowUpsPage() {
 
   const cadence = settings.offsetsDays.join(", ");
   const canSend = isAdmin(viewer);
+  // Real send status (mirrors the Admin follow-up card), so this page never
+  // shows a stale "dry run" message once sending is actually live.
+  const senderReady = emailConfigured() && !!config.followUpFromEmail;
+  const liveSending = settings.enabled && !settings.dryRun && senderReady;
+  const noKeys = !senderReady;
   const dueRows: DueRow[] = rows.map(({ q, sentAt, result }) => {
     const c = q.inquiry.customer;
     return {
@@ -97,16 +104,34 @@ export default async function FollowUpsPage() {
         </Badge>
       </div>
 
-      {/* Dry-run notice: nothing is sent automatically yet. */}
-      <div className="flex items-start gap-3 rounded-md border border-dashed bg-muted/40 px-4 py-3 text-sm">
-        <Info className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
-        <p className="text-muted-foreground">
-          <span className="font-medium text-foreground">Dry run — nothing is sent automatically.</span>{" "}
-          This list recommends who to follow up, on a day&nbsp;{cadence} cadence after a quote is sent
-          (max {settings.maxNudges} nudges), and stops once a deal is won or the quote expires.
-          Automatic sending gets switched on later, once the email channel is connected.
-        </p>
-      </div>
+      {/* Live status — reflects the real Admin settings (not a fixed message). */}
+      {liveSending ? (
+        <div className="flex items-start gap-3 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm">
+          <Info className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+          <p className="text-emerald-800">
+            <span className="font-medium">Live sending is ON.</span>{" "}
+            The daily scheduler emails due clients automatically at <strong>~9:00&nbsp;AM (Manila)</strong>,
+            up to <strong>{settings.maxPerRun}</strong> per run, on a day&nbsp;{cadence} cadence (max{" "}
+            {settings.maxNudges} nudges). You can also send some now with <em>Send to selected</em> below.
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 rounded-md border border-dashed bg-muted/40 px-4 py-3 text-sm">
+          <Info className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
+          <p className="text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {noKeys
+                ? "Not connected — the email sender isn't configured yet."
+                : "Automatic sending is off — nothing is emailed automatically."}
+            </span>{" "}
+            This list recommends who to follow up, on a day&nbsp;{cadence} cadence after a quote is sent
+            (max {settings.maxNudges} nudges), and stops once a deal is won or the quote expires.
+            {noKeys
+              ? " Add the Resend key + sender, then turn on Automatic follow-up emails in Admin."
+              : " Turn on Automatic follow-up emails (and turn off Dry run) in Admin to send on schedule."}
+          </p>
+        </div>
+      )}
 
       <Card>
         <CardContent className="pt-6">

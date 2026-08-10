@@ -14,6 +14,14 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups due — live-status banner (was hardcoded "Dry run")
+- **Owner-reported:** turned Automatic ON / Dry-run OFF in Admin, but the Follow-ups page still showed
+  a hardcoded **"Dry run — nothing is sent automatically"** notice — misleading.
+- **Fix:** `/follow-ups` page now computes the real status (`enabled && !dryRun && Resend configured`)
+  and shows a green **"Live sending is ON — daily ~9:00 AM Manila, up to {maxPerRun}/run"** banner when
+  live, or an accurate off/not-connected message otherwise. Typecheck + lint clean. **UI only — no
+  workflow / P&L change.** (Send-time configurability tracked separately.)
+
 ## 2026-08-09 · Follow-ups — plain email format (land in Primary, not Promotions)
 - **Owner-reported:** the follow-up landed in Gmail's **Promotions** tab.
 - **Cause:** the big styled "View your quotation" CTA button + heavy HTML read as marketing.
