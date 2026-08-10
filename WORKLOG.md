@@ -14,6 +14,24 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · "Reconciled by hand" card + restrict manual reconcile to Approver/Admin (Phase 4, owner-approved)
+- **Owner request (Production Dashboard):** add a count of vouchers reconciled by hand (typed figures, not
+  AI-verified against the receipt); clicking the card expands the list inline. Also: **disallow Accounting
+  from reconciling manually**, and stamp name/designation/date/time on a manual tally.
+- **Count card (display-only):** `src/lib/manual-reconciliations.ts` `getManualReconciliations()` — PRs whose
+  reconciliation `isReconciled` + `aiVerified !== true` + has `recordedAt` (i.e. typed by hand). Returns PO
+  no., supplier, amount, and "Name (Designation) · date time". New client tile
+  `my-dashboard/manual-reconcile-card.tsx` (matches the stat-tile look; click → **expand inline** list, rows
+  link to the PO). Wired into `my-dashboard/page.tsx` after the count grid, shown to Admin / Payment Approver /
+  Accounting. Frozen Phase 3 MRF feed untouched (separate lib + card).
+- **Gating (frozen Phase 4, owner-approved):** `recordReconciliation` now blocks a **manual** tally
+  (`aiVerified !== true`) unless the user is the **Payment Approver or an admin** — Accounting & Purchaser must
+  use the AI receipt-read path (auto-records `aiVerified=true`). Panel `purchase-reconcile-panel.tsx`:
+  `canManualRecord = canApprove || admin` (removed the old hasAiRead/limit unlock); messages updated so
+  non-approvers are told to use Auto-read / ask the approver-admin instead of "enter figures manually".
+- **Name/designation/date/time** were already captured (`recordedByName`/`recordedRole`/`recordedAt`) and shown
+  ("Reconciled by …"); now also surfaced in the new card. Typecheck + lint clean; app compiles.
+
 ## 2026-08-10 · Receipt-reading reference doc (Petron + S.I.# duplicate rule)
 - **Owner supplied** a Petron fuel Sales Invoice as "training for future reference": Total = number right
   of `TOTAL`; refill date = `Date:` row (NOT the bottom "Date Issued" accreditation/PTU dates); sales
