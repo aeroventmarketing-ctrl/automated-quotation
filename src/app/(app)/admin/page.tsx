@@ -29,7 +29,7 @@ import { AlertGoLiveSetting } from "./alert-golive-setting";
 import { FollowUpSetting } from "./follow-up-setting";
 import { FollowUpTemplatesSetting } from "./follow-up-templates-setting";
 import { RoleAccessSetting } from "./role-access-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setFollowUpCampaignAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setFollowUpCampaignAction, saveFollowUpScheduleAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -273,10 +273,14 @@ export default async function AdminOverviewPage() {
         inquiryMaxNudges={followUpSettings.inquiryMaxNudges}
         maxPerRun={followUpSettings.maxPerRun}
         campaignStartAt={followUpSettings.campaignStartAt}
+        scheduleMode={followUpSettings.scheduleMode}
+        sendHour={followUpSettings.sendHour}
+        intervalHours={followUpSettings.intervalHours}
         onSave={saveFollowUpSettingsAction}
         onPreview={runFollowUpPreviewAction}
         onTest={sendTestFollowUpAction}
         onCampaign={setFollowUpCampaignAction}
+        onSchedule={saveFollowUpScheduleAction}
         defaultTestEmail={me?.email ?? ""}
       />
       <FollowUpTemplatesSetting

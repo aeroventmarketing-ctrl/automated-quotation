@@ -1,15 +1,20 @@
 /**
- * Daily follow-up scheduler endpoint, triggered by Vercel Cron (see vercel.json).
+ * Follow-up scheduler endpoint, triggered hourly by Vercel Cron (see vercel.json).
  *
  * Auth: requires the CRON_SECRET as `Authorization: Bearer <secret>` (Vercel Cron
  * sends this automatically when CRON_SECRET is set) or `?key=<secret>`. When
  * CRON_SECRET is unset the endpoint refuses to run, so it can never be triggered
- * anonymously. It asks the runner for a live send; the runner still enforces the
- * enabled + dry-run + key guards, so nothing goes out until an admin turns it on.
+ * anonymously.
+ *
+ * The cron fires every hour, but sending is gated by the admin's chosen schedule
+ * (daily at a set hour, or every N hours) via `shouldRunScheduler` + a stored
+ * `lastRunAt`. Add `?force=1` to bypass the schedule gate for a manual run. The
+ * runner still enforces the enabled + dry-run + key guards on top of this.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { runFollowUps } from "@/lib/follow-up-runner";
 import { runMarketingRecurring } from "@/lib/marketing-runner";
+import { getFollowUpSettings, setFollowUpSettings, shouldRunScheduler } from "@/lib/follow-up-settings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,11 +32,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
+    const settings = await getFollowUpSettings();
+    const now = new Date();
+    const force = req.nextUrl.searchParams.get("force") === "1";
+    const gate = shouldRunScheduler(settings, now);
+    if (!force && !gate.run) {
+      return NextResponse.json({ skipped: true, reason: gate.reason, schedule: settings.scheduleMode });
+    }
     const [followUps, marketing] = await Promise.all([
       runFollowUps({ live: true }),
       runMarketingRecurring({ live: true }),
     ]);
-    return NextResponse.json({ followUps, marketing });
+    // Stamp the run so the schedule gate advances (merge to preserve other fields).
+    await setFollowUpSettings({ ...settings, lastRunAt: now.toISOString() });
+    return NextResponse.json({ ran: true, forced: force, reason: gate.reason, followUps, marketing });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Follow-up run failed";
     return NextResponse.json({ error: message }, { status: 500 });

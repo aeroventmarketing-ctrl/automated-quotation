@@ -71,10 +71,14 @@ export function FollowUpSetting({
   inquiryMaxNudges: initInquiryMaxNudges,
   maxPerRun: initMaxPerRun,
   campaignStartAt: initCampaignStartAt,
+  scheduleMode: initScheduleMode = "daily",
+  sendHour: initSendHour = 9,
+  intervalHours: initIntervalHours = 24,
   onSave,
   onPreview,
   onTest,
   onCampaign,
+  onSchedule,
   defaultTestEmail = "",
 }: {
   offsetsDays: number[];
@@ -90,6 +94,10 @@ export function FollowUpSetting({
   onPreview: () => Promise<RunResult>;
   onTest: (nudge: number, toEmail?: string) => Promise<{ ok: boolean; to: string }>;
   onCampaign: (start: boolean) => Promise<Config>;
+  scheduleMode?: "daily" | "interval";
+  sendHour?: number;
+  intervalHours?: number;
+  onSchedule: (input: { scheduleMode: "daily" | "interval"; sendHour: number; intervalHours: number }) => Promise<{ scheduleMode: "daily" | "interval"; sendHour: number; intervalHours: number }>;
   defaultTestEmail?: string;
 }) {
   const [daysStr, setDaysStr] = useState(offsetsDays.join(", "));
@@ -102,6 +110,10 @@ export function FollowUpSetting({
   const [maxPerRun, setMaxPerRun] = useState(String(initMaxPerRun));
   const [campaignAt, setCampaignAt] = useState<string | null>(initCampaignStartAt);
   const [campaignBusy, setCampaignBusy] = useState(false);
+  const [schedMode, setSchedMode] = useState<"daily" | "interval">(initScheduleMode);
+  const [schedHour, setSchedHour] = useState(initSendHour);
+  const [schedInterval, setSchedInterval] = useState(initIntervalHours);
+  const [schedBusy, setSchedBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -193,6 +205,24 @@ export function FollowUpSetting({
       setCampaignBusy(false);
     }
   }
+
+  async function saveSchedule() {
+    setSchedBusy(true);
+    setMsg(null);
+    try {
+      const saved = await onSchedule({ scheduleMode: schedMode, sendHour: schedHour, intervalHours: schedInterval });
+      setSchedMode(saved.scheduleMode);
+      setSchedHour(saved.sendHour);
+      setSchedInterval(saved.intervalHours);
+      setMsg({ ok: true, text: "Send schedule saved." });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to save schedule" });
+    } finally {
+      setSchedBusy(false);
+    }
+  }
+  const hourOpts = Array.from({ length: 24 }, (_, h) => h);
+  const hour12 = (h: number) => `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? "AM" : "PM"}`;
 
   // How many nudges the cadence currently has — drives the test-nudge picker.
   const nudgeCount = Math.max(1, parseInt(max, 10) || parseDays().length || 1);
@@ -297,6 +327,45 @@ export function FollowUpSetting({
             ) : (
               <>Live sending is <strong>OFF</strong> — nothing is emailed automatically. Turn on the master switch and turn off dry-run to go live.</>
             )}
+          </div>
+
+          {/* Send schedule — when the automatic scheduler runs. */}
+          <div className="rounded-md border bg-muted/20 p-3">
+            <div className="text-sm font-medium">Send schedule</div>
+            <p className="mb-2 text-xs text-muted-foreground">When the automatic scheduler emails due clients.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={schedMode}
+                onChange={(e) => setSchedMode(e.target.value as "daily" | "interval")}
+                disabled={schedBusy}
+                className="h-8 rounded-md border bg-background px-2 text-sm"
+              >
+                <option value="daily">Once a day</option>
+                <option value="interval">Every N hours</option>
+              </select>
+              {schedMode === "daily" ? (
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  at
+                  <select value={schedHour} onChange={(e) => setSchedHour(parseInt(e.target.value, 10))} disabled={schedBusy} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
+                    {hourOpts.map((h) => <option key={h} value={h}>{hour12(h)}</option>)}
+                  </select>
+                  <span>Manila</span>
+                </label>
+              ) : (
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  every
+                  <input type="number" min={1} max={24} value={schedInterval} onChange={(e) => setSchedInterval(parseInt(e.target.value, 10) || 1)} disabled={schedBusy} className="h-8 w-20 rounded-md border bg-background px-2 text-sm" />
+                  hours
+                </label>
+              )}
+              <Button size="sm" variant="outline" disabled={schedBusy} onClick={saveSchedule}>
+                {schedBusy ? "Saving…" : "Save schedule"}
+              </Button>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              The scheduler checks hourly and sends on this schedule (up to <strong>Max emails per run</strong> each time).
+              Hourly checking needs a Vercel plan that runs the cron hourly; otherwise it effectively sends once a day.
+            </p>
           </div>
 
           {/* Test-to-self: sends the real follow-up template to the logged-in admin

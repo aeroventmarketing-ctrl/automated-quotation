@@ -549,6 +549,24 @@ export async function setFollowUpCampaignAction(start: boolean): Promise<FollowU
   return saved;
 }
 
+const followUpScheduleSchema = z.object({
+  scheduleMode: z.enum(["daily", "interval"]),
+  sendHour: z.number().int().min(0).max(23),
+  intervalHours: z.number().int().min(1).max(24),
+});
+/** Save when the scheduler sends (daily at an hour, or every N hours). */
+export async function saveFollowUpScheduleAction(
+  input: z.infer<typeof followUpScheduleSchema>,
+): Promise<FollowUpConfig> {
+  await assertAdmin();
+  const d = followUpScheduleSchema.parse(input);
+  const current = await getFollowUpSettings();
+  const saved = await setFollowUpSettings({ ...current, ...d });
+  revalidatePath("/admin");
+  revalidatePath("/follow-ups");
+  return saved;
+}
+
 export interface FollowUpTestResult {
   ok: boolean;
   to: string;

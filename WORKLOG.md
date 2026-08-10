@@ -14,6 +14,22 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — configurable send schedule (daily at hour / every N hours)
+- **Owner request:** a time picker to control when auto follow-ups send — per day at a chosen time, or
+  every N hours.
+- **Cron:** `vercel.json` cron changed from daily (`0 1 * * *`) to **hourly** (`0 * * * *`). The route
+  (`api/cron/follow-ups`) now gates each hourly fire with `shouldRunScheduler(settings, now)` + a stored
+  `lastRunAt`, so it only sends on the chosen schedule; `?force=1` bypasses the gate for manual runs.
+  ⚠️ **Hourly cron needs a Vercel plan that allows it (Pro);** on Hobby the cron is once/day so only the
+  daily mode fires (a failed build from an unsupported schedule doesn't affect the live site — revert
+  the one line to `0 1 * * *`).
+- **Settings (`follow-up-settings.ts`):** `scheduleMode` (`daily`|`interval`), `sendHour` (0–23 Manila,
+  default 9), `intervalHours` (1–24, default 24), internal `lastRunAt`. Helpers `shouldRunScheduler`,
+  `scheduleLabel`, `hourLabel`.
+- **UI:** admin **"Send schedule"** section (Once a day at <hour> / Every N hours) + `saveFollowUpScheduleAction`
+  (merges over current). The `/follow-ups` live banner now shows the real schedule via `scheduleLabel`.
+- Typecheck + lint clean. **Non-workflow (CRM/email) — no order-workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups due — live-status banner (was hardcoded "Dry run")
 - **Owner-reported:** turned Automatic ON / Dry-run OFF in Admin, but the Follow-ups page still showed
   a hardcoded **"Dry run — nothing is sent automatically"** notice — misleading.

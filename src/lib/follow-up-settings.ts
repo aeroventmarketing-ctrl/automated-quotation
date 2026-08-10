@@ -38,6 +38,18 @@ export interface FollowUpConfig extends FollowUpSettings {
    * instead of only quotes that recently crossed a cadence day. Null = off.
    */
   campaignStartAt: string | null;
+  /**
+   * When the scheduler sends. "daily" = once a day at `sendHour` (Manila);
+   * "interval" = every `intervalHours` hours. The hourly Vercel cron gates on
+   * these (needs a plan that runs the cron hourly to honour anything but daily).
+   */
+  scheduleMode: "daily" | "interval";
+  /** Hour of day (0–23, Asia/Manila) for the daily send. Default 9 (9 AM). */
+  sendHour: number;
+  /** Hours between sends for interval mode (1–24). Default 24. */
+  intervalHours: number;
+  /** Internal: when the scheduler last actually ran (ISO). Set by the cron. */
+  lastRunAt: string | null;
 }
 
 /** The hard ceiling on emails per run, regardless of the configured value. */
@@ -69,6 +81,14 @@ export function normalizeFollowUpConfig(
   const campaignStartAt =
     typeof rawCampaign === "string" && !Number.isNaN(Date.parse(rawCampaign)) ? rawCampaign : null;
 
+  const scheduleMode = input?.scheduleMode === "interval" ? "interval" : "daily";
+  const rawHour = Math.floor(Number(input?.sendHour));
+  const sendHour = Number.isFinite(rawHour) && rawHour >= 0 && rawHour <= 23 ? rawHour : 9;
+  const rawInterval = Math.floor(Number(input?.intervalHours));
+  const intervalHours = Number.isFinite(rawInterval) && rawInterval >= 1 && rawInterval <= 24 ? rawInterval : 24;
+  const rawLastRun = input?.lastRunAt;
+  const lastRunAt = typeof rawLastRun === "string" && !Number.isNaN(Date.parse(rawLastRun)) ? rawLastRun : null;
+
   return {
     offsetsDays,
     maxNudges,
@@ -79,7 +99,49 @@ export function normalizeFollowUpConfig(
     inquiryMaxNudges,
     maxPerRun,
     campaignStartAt,
+    scheduleMode,
+    sendHour,
+    intervalHours,
+    lastRunAt,
   };
+}
+
+const MANILA_OFFSET_MS = 8 * 3_600_000; // Asia/Manila is UTC+8, no DST.
+
+/** 12-hour label for an hour-of-day, e.g. 9 → "9:00 AM", 13 → "1:00 PM". */
+export function hourLabel(h: number): string {
+  const hr = ((h % 24) + 24) % 24;
+  const ampm = hr < 12 ? "AM" : "PM";
+  const h12 = hr % 12 === 0 ? 12 : hr % 12;
+  return `${h12}:00 ${ampm}`;
+}
+
+/** Human description of when the scheduler sends (for the UI + banners). */
+export function scheduleLabel(s: FollowUpConfig): string {
+  return s.scheduleMode === "interval"
+    ? `every ${s.intervalHours} hour${s.intervalHours === 1 ? "" : "s"}`
+    : `daily at ${hourLabel(s.sendHour)} (Manila)`;
+}
+
+/**
+ * Should the hourly scheduler actually run right now? Gates on the configured
+ * schedule + last run so the cron can fire hourly but only send on cadence.
+ */
+export function shouldRunScheduler(s: FollowUpConfig, now: Date): { run: boolean; reason: string } {
+  const lastRun = s.lastRunAt ? new Date(s.lastRunAt) : null;
+  if (s.scheduleMode === "interval") {
+    const elapsedH = lastRun ? (now.getTime() - lastRun.getTime()) / 3_600_000 : Infinity;
+    if (elapsedH >= s.intervalHours - 0.02) return { run: true, reason: `every ${s.intervalHours}h — due` };
+    return { run: false, reason: `every ${s.intervalHours}h — ${Math.max(0, s.intervalHours - elapsedH).toFixed(1)}h to go` };
+  }
+  // daily at sendHour (Manila), at most once per Manila day
+  const manila = new Date(now.getTime() + MANILA_OFFSET_MS);
+  const manilaHour = manila.getUTCHours();
+  const manilaDate = manila.toISOString().slice(0, 10);
+  const lastManilaDate = lastRun ? new Date(lastRun.getTime() + MANILA_OFFSET_MS).toISOString().slice(0, 10) : null;
+  if (lastManilaDate === manilaDate) return { run: false, reason: "already ran today" };
+  if (manilaHour < s.sendHour) return { run: false, reason: `before ${hourLabel(s.sendHour)} Manila` };
+  return { run: true, reason: `daily ${hourLabel(s.sendHour)} reached` };
 }
 
 /** The active follow-up config (defaults when never configured). */
