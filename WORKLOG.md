@@ -14,6 +14,17 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-10 · Receipt-reading reference doc (Petron + S.I.# duplicate rule)
+- **Owner supplied** a Petron fuel Sales Invoice as "training for future reference": Total = number right
+  of `TOTAL`; refill date = `Date:` row (NOT the bottom "Date Issued" accreditation/PTU dates); sales
+  invoice no. = `S.I.#` row; same `S.I.#` = the same receipt being re-uploaded.
+- **Action (owner chose "document only"):** wrote `docs/receipt-reading.md` capturing the Petron reading
+  rules, the date trap, and the desired **S.I.# duplicate-block** (reject reusing an S.I.# across
+  reconciliations/liquidations — owner wants it on **both** readers when built).
+- **Not implemented:** neither `read-receipt` (PO reconcile) nor `read-cash-receipt` (cash liquidation)
+  extracts the S.I.# or dedups today; that's a **frozen Phase 4** change needing owner approval. Doc only —
+  no code/workflow change.
+
 ## 2026-08-10 · Management dashboard — "Recent activity" (last 3 days) card
 - **Owner request:** show reconciled vouchers, MRFs, requisitions, POs & other, dated today / yesterday /
   the day before, on the Management dashboard.
