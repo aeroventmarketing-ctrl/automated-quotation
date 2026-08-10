@@ -5,7 +5,7 @@ import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { evaluateFollowUp, sentAtFrom, nudgesSentFrom, lastNudgeAtFrom } from "@/lib/follow-up";
-import { getFollowUpSettings } from "@/lib/follow-up-settings";
+import { getFollowUpSettings, scheduleLabel } from "@/lib/follow-up-settings";
 import { config } from "@/lib/config";
 import { emailConfigured } from "@/lib/email/resend";
 import { DueTable, type DueRow } from "./due-table";
@@ -110,7 +110,7 @@ export default async function FollowUpsPage() {
           <Info className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
           <p className="text-emerald-800">
             <span className="font-medium">Live sending is ON.</span>{" "}
-            The daily scheduler emails due clients automatically at <strong>~9:00&nbsp;AM (Manila)</strong>,
+            The scheduler emails due clients automatically <strong>{scheduleLabel(settings)}</strong>,
             up to <strong>{settings.maxPerRun}</strong> per run, on a day&nbsp;{cadence} cadence (max{" "}
             {settings.maxNudges} nudges). You can also send some now with <em>Send to selected</em> below.
           </p>
