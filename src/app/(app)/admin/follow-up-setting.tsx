@@ -503,6 +503,7 @@ export function FollowUpSetting({
               A separate text for each nudge (matches your <strong>Max nudges</strong>). Placeholders:{" "}
               <code>{"{contactName} {company} {quoteNumber} {total} {salesName} {quoteUrl}"}</code>. Leave a
               box blank to use that nudge&apos;s built-in default. Keep each short — every 160 characters is one Semaphore credit.
+              For SMS, <code>{"{contactName}"}</code> uses the first name and <code>{"{quoteNumber}"}</code> uses just the code (e.g. 2026 - AFBM00002982K) for a predictable length.
             </p>
             {Array.from({ length: nudgeCount }, (_, i) => {
               const val = smsTemplates[i] ?? "";

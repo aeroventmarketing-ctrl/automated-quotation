@@ -53,6 +53,18 @@ export interface FollowUpSmsInput {
   template?: string;
 }
 
+/**
+ * Just the quote-number CODE from a (possibly free-text) quote number, e.g.
+ * "2026 - AFBM00002982K - Paintplas - Proposed LIMA Plant" → "2026 - AFBM00002982K".
+ * The quote-number field is editable, and staff sometimes append the project name;
+ * for SMS we strip that so the message length (and Semaphore segment count) stays
+ * predictable. Falls back to the whole trimmed string when no code is recognized.
+ */
+export function shortQuoteNumber(quoteNumber: string): string {
+  const m = quoteNumber.match(/(\d{4})\s*-\s*([A-Za-z]+\d+[A-Za-z]?)/);
+  return m ? `${m[1]} - ${m[2]}` : quoteNumber.trim();
+}
+
 /** Substitute {placeholders}; known-but-empty → "", unknown left as typed. */
 function applyTokens(s: string, tokens: Record<string, string>): string {
   return s.replace(/\{(\w+)\}/g, (_, k) => (k in tokens ? tokens[k] : `{${k}}`));
@@ -63,7 +75,7 @@ export function buildFollowUpSms(i: FollowUpSmsInput): string {
   const tokens: Record<string, string> = {
     contactName: i.contactName?.trim() ? firstNameOf(i.contactName) : i.company,
     company: i.company,
-    quoteNumber: i.quoteNumber,
+    quoteNumber: shortQuoteNumber(i.quoteNumber),
     total: i.total,
     salesName: i.salesName,
     quoteUrl: i.quoteUrl,
