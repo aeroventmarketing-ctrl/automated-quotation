@@ -14,6 +14,16 @@ and we never redo something that's already done.
 
 ---
 
+## 2026-08-09 · Follow-ups — test email to any address (warm-up different inboxes)
+- **Owner need:** the "Send test email" button always went to the admin's own account; they want to
+  send test follow-ups to other mailboxes to warm up the domain.
+- **Added:** `sendTestFollowUpAction(nudge, toEmail?)` now accepts a recipient (validated with
+  `z.string().email()`), defaulting to the admin's own address; reply-to stays the admin. Admin card
+  got an **email input** next to the nudge picker (prefilled with the admin's email via new
+  `defaultTestEmail` prop; `admin/page.tsx` passes `getCurrentUser().email`); button relabeled
+  "Send test email". Still admin-only, still bypasses the client list. Typecheck + lint clean.
+  **Non-workflow admin utility — no order-workflow / P&L change.**
+
 ## 2026-08-09 · Follow-ups — backlog "campaign" (start whole backlog today, no cascade)
 - **Owner need:** kick off follow-ups for the whole ~625 open-sent-quote backlog *today* (24/day via
   the per-run cap), not just the handful that happen to cross a cadence day.

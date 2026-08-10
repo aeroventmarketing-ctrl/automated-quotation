@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
@@ -52,6 +53,7 @@ export default async function AdminOverviewPage() {
     getFollowUpTemplates(),
   ]);
   const testMode = await getTestMode();
+  const me = await getCurrentUser();
   const notificationBaseline = await getNotificationBaseline();
   const alertGoLive = await getAlertGoLive();
   const disabledRoles = await getDisabledRoles();
@@ -275,6 +277,7 @@ export default async function AdminOverviewPage() {
         onPreview={runFollowUpPreviewAction}
         onTest={sendTestFollowUpAction}
         onCampaign={setFollowUpCampaignAction}
+        defaultTestEmail={me?.email ?? ""}
       />
       <FollowUpTemplatesSetting
         count={followUpSettings.maxNudges}

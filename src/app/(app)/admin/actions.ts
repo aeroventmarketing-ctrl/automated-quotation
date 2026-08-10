@@ -554,13 +554,13 @@ export interface FollowUpTestResult {
   to: string;
 }
 /**
- * Send ONE real follow-up email — the exact template clients receive — to the
- * logged-in admin's own address only. Lets an admin verify formatting and
- * deliverability (does it inbox on the new domain?) WITHOUT enabling automated
- * sending or touching any client. Ignores the enabled/dry-run switches (it never
- * emails a client), but still needs the Resend key + sender to be configured.
+ * Send ONE real follow-up email — the exact template clients receive — to a
+ * chosen address (defaults to the logged-in admin's own). Lets an admin verify
+ * formatting and deliverability, and warm up the domain by sending to several
+ * mailboxes, WITHOUT enabling automated sending or touching any client. Ignores
+ * the enabled/dry-run switches, but still needs the Resend key + sender set.
  */
-export async function sendTestFollowUpAction(nudge = 1): Promise<FollowUpTestResult> {
+export async function sendTestFollowUpAction(nudge = 1, toEmail?: string): Promise<FollowUpTestResult> {
   const user = await assertAdmin();
   if (!emailConfigured()) {
     throw new Error("No Resend API key set (RESEND_API_KEY). Add it in Vercel and redeploy first.");
@@ -568,9 +568,15 @@ export async function sendTestFollowUpAction(nudge = 1): Promise<FollowUpTestRes
   if (!config.followUpFromEmail) {
     throw new Error("No sender address set (FOLLOW_UP_FROM_EMAIL). Add it in Vercel and redeploy first.");
   }
-  if (!user.email) {
-    throw new Error("Your account has no email address on file, so there's nowhere to send the test.");
+  const wanted = (toEmail ?? "").trim() || (user.email ?? "").trim();
+  if (!wanted) {
+    throw new Error("Enter an email address to send the test to.");
   }
+  const parsedTo = z.string().email().safeParse(wanted);
+  if (!parsedTo.success) {
+    throw new Error(`"${wanted}" isn't a valid email address.`);
+  }
+  const to = parsedTo.data;
 
   const nudgeNumber = Number.isFinite(nudge) && nudge >= 1 ? Math.floor(nudge) : 1;
   const templates = await getFollowUpTemplates();
@@ -593,14 +599,14 @@ export async function sendTestFollowUpAction(nudge = 1): Promise<FollowUpTestRes
 
   await sendEmail({
     from: `${config.followUpFromName} <${config.followUpFromEmail}>`,
-    to: user.email,
+    to,
     subject: `[TEST nudge #${nudgeNumber}] ${email.subject}`,
-    text: `This is a TEST of the automated follow-up email (nudge #${nudgeNumber}) — sent only to you. No client received it.\n\n${email.text}`,
-    html: `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#7d9199">This is a <strong>TEST</strong> of the automated follow-up email (nudge #${nudgeNumber}) — sent only to you. No client received it.</p>${email.html}`,
-    replyTo: user.email,
+    text: `This is a TEST of the automated follow-up email (nudge #${nudgeNumber}) — no client received it.\n\n${email.text}`,
+    html: `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#7d9199">This is a <strong>TEST</strong> of the automated follow-up email (nudge #${nudgeNumber}) — no client received it.</p>${email.html}`,
+    replyTo: user.email ?? undefined,
   });
 
-  return { ok: true, to: user.email };
+  return { ok: true, to };
 }
 
 const followUpTemplatesSchema = z.object({
