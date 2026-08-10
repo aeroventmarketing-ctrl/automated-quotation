@@ -48,7 +48,7 @@ import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
-import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
+import { coerceReconciliation, canReconcileAt, isReconciled, reconcileTotals } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
@@ -2370,14 +2370,6 @@ export async function recordReconciliation(
   if (!(admin || recRole)) {
     throw new Error("Only the Purchaser, Accounting, the Approver or an admin can reconcile a voucher.");
   }
-  // A MANUAL (typed) tally is an authority action: only the Payment Approver or an
-  // admin may record figures by hand. Accounting and the Purchaser must go through
-  // the AI receipt-read path (which records an AI-verified tally, aiVerified=true).
-  const manualTally = input.aiVerified !== true;
-  const isApprover = admin || userHasWorkflowRole(assignments, user.id, "payment_approver");
-  if (manualTally && !isApprover) {
-    throw new Error("Manual (typed) reconciliation is restricted to the Payment Approver or an admin. Accounting and the Purchaser must record the tally from the AI receipt read.");
-  }
   const lines = (input.lines ?? [])
     .map((l) => ({
       description: String(l.description ?? ""),
@@ -2386,6 +2378,18 @@ export async function recordReconciliation(
       actualAmount: Number(l.actualAmount) || 0,
     }));
   if (lines.length === 0) throw new Error("Nothing to reconcile — the PO has no lines.");
+
+  // Manual (typed) reconciliation gate. A BALANCED tally may be recorded by hand by
+  // anyone allowed to record (incl. Accounting / the Purchaser). An UNBALANCED tally
+  // (a discrepancy) is an authority action — only the Payment Approver or an admin
+  // may record it by hand. The AI receipt-read path (aiVerified=true) is unaffected.
+  const manualTally = input.aiVerified !== true;
+  const vatModeForCheck = input.vatMode === "exclusive" ? "exclusive" : "inclusive";
+  const balanced = reconcileTotals(lines, vatModeForCheck).status === "balanced";
+  const isApprover = admin || userHasWorkflowRole(assignments, user.id, "payment_approver");
+  if (manualTally && !balanced && !isApprover) {
+    throw new Error("This voucher doesn't balance — a manual tally with a discrepancy can only be recorded by the Payment Approver or an admin. Accounting and the Purchaser may record a manual tally only when it balances.");
+  }
 
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
