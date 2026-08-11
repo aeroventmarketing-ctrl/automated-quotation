@@ -48,6 +48,10 @@ export interface AccountData {
   marketingList?: boolean;
   // Automatic recurring marketing check-ins sent to this client — one per send.
   marketingFollowUp?: { sent: { at: string }[] };
+  // One-shot "thank you" messages sent when a client's inquiry is Won / Lost.
+  // Keyed by `${inquiryId}:won` / `${inquiryId}:lost` → ISO timestamp, so each is
+  // sent at most once even if the status toggles.
+  thankYou?: Record<string, string>;
 }
 
 /** The current sales in-charge (the open assignment), or null. */
@@ -82,9 +86,13 @@ function parseAccounts(config: unknown): Record<string, AccountData> {
     const mkt = rec?.marketingFollowUp as { sent?: unknown } | undefined;
     const mktSent = mkt && Array.isArray(mkt.sent) ? (mkt.sent as { at: string }[]) : null;
     const onMktList = rec?.marketingList === true;
+    const ty =
+      rec?.thankYou && typeof rec.thankYou === "object" && !Array.isArray(rec.thankYou)
+        ? (rec.thankYou as Record<string, string>)
+        : null;
     if (
       Array.isArray(hist) || Array.isArray(convs) || rec?.optOutFollowUp != null ||
-      rec?.terms != null || inqSent || mktSent || onMktList
+      rec?.terms != null || inqSent || mktSent || onMktList || ty
     ) {
       out[cid] = {
         history: Array.isArray(hist) ? (hist as AccountAssignment[]) : [],
@@ -94,6 +102,7 @@ function parseAccounts(config: unknown): Record<string, AccountData> {
         ...(inqSent ? { inquiryFollowUp: { sent: inqSent } } : {}),
         ...(onMktList ? { marketingList: true } : {}),
         ...(mktSent ? { marketingFollowUp: { sent: mktSent } } : {}),
+        ...(ty ? { thankYou: ty } : {}),
       };
     }
   }

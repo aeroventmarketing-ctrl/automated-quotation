@@ -1,3 +1,23 @@
+## 2026-08-11 · Thank-you messages for Won / Lost clients (email + SMS, auto-send)
+- **Owner request:** add an option to attach a thank-you message for won and lost clients. Chosen:
+  **auto-send** on the Won/Lost transition, **Email + SMS**.
+- **Config (`src/lib/thank-you.ts`):** `ThankYouConfig` (won/lost each: enabled + email subject/body + SMS)
+  + shared `dryRun`, stored in AppSetting `thank_you_settings` (defaults OFF + dry-run ON, like follow-ups).
+  Placeholders `{contactName}{company}{quoteNumber}{total}{salesName}{quoteUrl}`. `sendThankYou(inquiryId,
+  outcome)` — one-shot, best-effort, NON-throwing: respects the per-client `optOutFollowUp`, idempotent via a
+  new `accounts[cid].thankYou["<inquiryId>:won|lost"]` stamp, gated by dry-run + Resend/Semaphore config, logs
+  a ConversationEntry. Email uses a branded shell; SMS via Semaphore.
+- **Idempotency store:** added `thankYou?: Record<string,string>` to `AccountData` + preserved it in
+  `parseAccounts` (registry coercion drops unknown fields).
+- **Won hook:** `quotations/actions.ts` — after the sale flow sets inquiry WON (both the convert-to-sale toggle
+  and record-sale), `await sendThankYou(inquiryId, "won")`. Non-blocking side-effect; no workflow change.
+- **Lost setter (new):** there was NO UI to mark an inquiry LOST (`setInquiryStatus` was dead code). Added
+  `markInquiryLost` / `reopenInquiry` actions (`inquiries/actions.ts`; lost fires the lost thank-you) and an
+  `InquiryStatusControl` client component (Mark as lost / Reopen) beside the status badge on the inquiry page.
+- **Admin UI:** `admin/thank-you-setting.tsx` card (won + lost editors, enable toggles, dry-run, placeholder
+  chips, SMS segment counter) + `saveThankYouAction` (assertAdmin) + rendered on `/admin`.
+- Typecheck + lint clean; production build compiles.
+
 # Work log
 
 A running record of completed work and open follow-ups, so a fresh Claude Code

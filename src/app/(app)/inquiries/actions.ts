@@ -10,6 +10,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { makeUnlockToken, RFQ_UNLOCK_COOKIE, RFQ_UNLOCK_TTL_MS } from "@/lib/rfq-unlock";
 import { findContactOwner } from "@/lib/client-ownership";
 import { setInquiryDocs } from "@/lib/inquiry-docs-store";
+import { sendThankYou } from "@/lib/thank-you";
 import type { InquirySource } from "@prisma/client";
 
 const inquiryDocSchema = z.object({ path: z.string(), name: z.string(), uploadedAt: z.string() });
@@ -201,6 +202,29 @@ export async function setInquiryStatus(inquiryId: string, status: string) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   await prisma.inquiry.update({ where: { id: inquiryId }, data: { status: status as never } });
+  revalidatePath(`/inquiries/${inquiryId}`);
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Mark an inquiry LOST (the quotation didn't push through) and send the one-shot
+ * "lost" thank-you (best-effort; idempotent; never blocks). Won is set through the
+ * sale flow instead — this is the counterpart for the loss.
+ */
+export async function markInquiryLost(inquiryId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  await prisma.inquiry.update({ where: { id: inquiryId }, data: { status: "LOST" } });
+  await sendThankYou(inquiryId, "lost");
+  revalidatePath(`/inquiries/${inquiryId}`);
+  revalidatePath("/dashboard");
+}
+
+/** Reopen a Lost inquiry back to SENT (does not un-send a thank-you already sent). */
+export async function reopenInquiry(inquiryId: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  await prisma.inquiry.update({ where: { id: inquiryId }, data: { status: "SENT" } });
   revalidatePath(`/inquiries/${inquiryId}`);
   revalidatePath("/dashboard");
 }

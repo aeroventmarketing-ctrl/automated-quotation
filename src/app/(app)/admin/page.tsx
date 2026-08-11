@@ -6,6 +6,7 @@ import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getFollowUpTemplates } from "@/lib/follow-up-templates";
+import { getThankYouSettings } from "@/lib/thank-you";
 import { config } from "@/lib/config";
 import { smsConfigured, getSemaphoreBalance } from "@/lib/sms/semaphore";
 import { getSmsReach } from "@/lib/sms-reach";
@@ -31,8 +32,9 @@ import { SpLockSetting } from "./sp-lock-setting";
 import { AlertGoLiveSetting } from "./alert-golive-setting";
 import { FollowUpSetting } from "./follow-up-setting";
 import { FollowUpTemplatesSetting } from "./follow-up-templates-setting";
+import { ThankYouSetting } from "./thank-you-setting";
 import { RoleAccessSetting } from "./role-access-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setFollowUpCampaignAction, saveFollowUpScheduleAction, saveFollowUpSmsAction, sendTestSmsAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setFollowUpCampaignAction, saveFollowUpScheduleAction, saveFollowUpSmsAction, sendTestSmsAction, saveThankYouAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +58,7 @@ export default async function AdminOverviewPage() {
     getFollowUpTemplates(),
   ]);
   const testMode = await getTestMode();
+  const thankYou = await getThankYouSettings();
   const smsBalance = smsConfigured() ? (await getSemaphoreBalance())?.balance ?? null : null;
   const smsReach = await getSmsReach();
   const me = await getCurrentUser();
@@ -303,6 +306,7 @@ export default async function AdminOverviewPage() {
         templates={followUpTemplates}
         onSave={saveFollowUpTemplatesAction}
       />
+      <ThankYouSetting initial={thankYou} onSave={saveThankYouAction} />
     </div>
   );
 }

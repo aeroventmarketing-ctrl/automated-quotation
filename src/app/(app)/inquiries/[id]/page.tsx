@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-badge";
+import { InquiryStatusControl } from "./inquiry-status-control";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { InquiryWorkspace } from "./inquiry-workspace";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, ensureBuiltinTemplates, sortTemplatesByName } from "@/lib/ensure-templates";
@@ -80,7 +81,10 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
             {inquiry.source} · created by {inquiry.createdBy.name} · {formatDate(inquiry.createdAt)}
           </p>
         </div>
-        <InquiryStatusBadge status={inquiry.status} />
+        <div className="flex items-center gap-3">
+          <InquiryStatusBadge status={inquiry.status} />
+          <InquiryStatusControl inquiryId={inquiry.id} status={inquiry.status} />
+        </div>
       </div>
 
       {(inquiry.customer.contactName || owner) && (
