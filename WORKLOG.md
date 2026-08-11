@@ -1,3 +1,15 @@
+## 2026-08-11 · Purchaser My Dashboard — stock cards (Low/out-of-stock count + Stock alerts list)
+- **Owner request:** add the "Low / out of stock" count tile and the "Stock alerts" list to the Purchaser
+  role's My Dashboard.
+- **`src/lib/low-stock.ts`:** `getLowStock()` — active stock at/below reorder level (or zero), mirroring the
+  finance-monitor computation (same `active:true` + alert-go-live scoping) so all dashboards agree.
+- **`my-dashboard/stock-alerts-cards.tsx`:** presentational `StockAlertsCards` — a count tile (n +
+  "needs reorder", PackageX, links to /inventory/reorder) + a "Stock alerts" list (top 7 items with Out/Low
+  badges, "+N more"). Matches the finance-monitor styling.
+- **Wiring (`my-dashboard/page.tsx`):** shown to the Purchaser (and admin) in the general branch, gated
+  `isPurchaser && !finance` so Accounting (who already gets stock alerts via the finance-monitor row) doesn't
+  double up. Rendered right after the count grid. Typecheck + lint clean.
+
 ## 2026-08-11 · Thank-you messages for Won / Lost clients (email + SMS, auto-send)
 - **Owner request:** add an option to attach a thank-you message for won and lost clients. Chosen:
   **auto-send** on the Won/Lost transition, **Email + SMS**.

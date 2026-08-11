@@ -22,6 +22,8 @@ import { getExpensesReport } from "../management/pnl-actions";
 import { ExpensesReport } from "./expenses-report";
 import { getManualReconciliations } from "@/lib/manual-reconciliations";
 import { ManualReconcileCard } from "./manual-reconcile-card";
+import { getLowStock } from "@/lib/low-stock";
+import { StockAlertsCards } from "./stock-alerts-cards";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +112,11 @@ export default async function MyDashboardPage() {
   // payments, Cash vouchers, Stock alerts, Purchasing & commissions) here too.
   const isAccounting = userHasWorkflowRole(assignments, user.id, "accounting" as WorkflowRoleKey);
   const finance = isAccounting ? await getFinanceMonitor().catch(() => null) : null;
+  // Purchaser (and admin) get the stock cards — "Low / out of stock" count + the
+  // Stock alerts list — on their dashboard so reorder needs are front-and-centre.
+  // Accounting already sees stock alerts via the finance-monitor row below.
+  const isPurchaser = admin || userHasWorkflowRole(assignments, user.id, "purchaser" as WorkflowRoleKey);
+  const stockAlertsCard = isPurchaser && !finance ? <StockAlertsCards lowStock={await getLowStock().catch(() => [])} /> : null;
   // "Reconciled by hand" oversight — for the Admin, the Payment Approver and
   // Accounting: count + inline list of vouchers whose figures were typed in
   // manually (not AI-verified against the receipt).
@@ -403,6 +410,7 @@ export default async function MyDashboardPage() {
       {productionCard}
       {inventoryCard}
       {ordersGrid}
+      {stockAlertsCard}
       {pendingCard}
       {poSummaryCard}
       {materialsCard}
