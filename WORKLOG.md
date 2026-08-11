@@ -1,3 +1,13 @@
+## 2026-08-11 · Reorder page — search + sort + group + asc/desc (default: lowest stock first)
+- **Owner request:** add a search bar, sort, group, and ascend/descend to the Reorder "Needs reordering"
+  list; make the "low" selection the default view.
+- **Change (`inventory/reorder/reorder-list.tsx`):** added client-side controls over the Needs list —
+  **Search** (item name or category), **Sort** (Stock level / Item name / Reorder level / Status / Category),
+  **Asc/Desc** toggle, **Group** (None / Category / Status). Default **Sort = Stock level, ascending** so the
+  lowest / out-of-stock items surface first ("low selection as default"). Grouped view renders group-header
+  rows in the same table; header count shows "N of TOTAL" when filtered. Bulk actions still act over all rows.
+- Typecheck + lint clean.
+
 ## 2026-08-11 · Purchaser My Dashboard — stock cards (Low/out-of-stock count + Stock alerts list)
 - **Owner request:** add the "Low / out of stock" count tile and the "Stock alerts" list to the Purchaser
   role's My Dashboard.
