@@ -27,5 +27,7 @@ export async function getLowStock(): Promise<LowStockRow[]> {
       const r = Number(i.reorderLevel);
       return q <= 0 || (r > 0 && q <= r);
     })
-    .map((i) => ({ id: i.id, name: i.name, unit: i.unit, quantity: Number(i.quantity) }));
+    .map((i) => ({ id: i.id, name: i.name, unit: i.unit, quantity: Number(i.quantity) }))
+    // Low stock (still has some) first, then Out (0); name order kept within each.
+    .sort((a, b) => (a.quantity <= 0 ? 1 : 0) - (b.quantity <= 0 ? 1 : 0));
 }

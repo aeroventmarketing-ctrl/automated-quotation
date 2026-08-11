@@ -33,10 +33,10 @@ export interface OnOrderRow {
 type SortKey = "stock" | "name" | "reorder" | "status" | "category";
 type GroupKey = "none" | "category" | "status";
 const SORTS: { key: SortKey; label: string }[] = [
-  { key: "stock", label: "Stock level" }, // default — lowest / most-depleted first
+  { key: "status", label: "Status" }, // default — Low stock first, then Out
+  { key: "stock", label: "Stock level" },
   { key: "name", label: "Item name" },
   { key: "reorder", label: "Reorder level" },
-  { key: "status", label: "Status" },
   { key: "category", label: "Category" },
 ];
 const GROUPS: { key: GroupKey; label: string }[] = [
@@ -44,8 +44,8 @@ const GROUPS: { key: GroupKey; label: string }[] = [
   { key: "category", label: "Category" },
   { key: "status", label: "Status" },
 ];
-// Out is more urgent than Low, so it ranks first when sorting by status ascending.
-const statusRank = (s: NeedsRow["status"]) => (s === "out" ? 0 : 1);
+// Default view shows Low stock first, then Out (ascending status rank).
+const statusRank = (s: NeedsRow["status"]) => (s === "low" ? 0 : 1);
 
 export function ReorderList({ needs, onOrder, canAct }: { needs: NeedsRow[]; onOrder: OnOrderRow[]; canAct: boolean }) {
   const router = useRouter();
@@ -56,9 +56,9 @@ export function ReorderList({ needs, onOrder, canAct }: { needs: NeedsRow[]; onO
   const [err, setErr] = useState<string | null>(null);
 
   // Search / sort / group / direction for the "Needs reordering" list. Defaults to
-  // Stock level ascending, so the lowest (out-of-stock) items surface first.
+  // Status ascending, so Low-stock items surface first (then Out).
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("stock");
+  const [sort, setSort] = useState<SortKey>("status");
   const [dir, setDir] = useState<"asc" | "desc">("asc");
   const [group, setGroup] = useState<GroupKey>("none");
 

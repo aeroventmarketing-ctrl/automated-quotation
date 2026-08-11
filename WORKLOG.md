@@ -1,3 +1,11 @@
+## 2026-08-11 · Reorder + Purchaser Stock alerts — default to Low stock first
+- **Owner follow-up:** show LOW-status items before OUT by default (Reorder list + purchaser Stock alerts card).
+- **Reorder (`reorder-list.tsx`):** default Sort is now **Status, ascending** with `statusRank` Low=0/Out=1, so
+  Low items lead, then Out. (Stock level / name / etc. still selectable.)
+- **Stock alerts card (`low-stock.ts`):** `getLowStock()` now sorts Low (qty>0) before Out (qty<=0), name order
+  kept within each — so the purchaser card's top rows are the Low items.
+- Typecheck + lint clean.
+
 ## 2026-08-11 · Reorder page — search + sort + group + asc/desc (default: lowest stock first)
 - **Owner request:** add a search bar, sort, group, and ascend/descend to the Reorder "Needs reordering"
   list; make the "low" selection the default view.
