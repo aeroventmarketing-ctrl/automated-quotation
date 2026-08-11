@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuotationStatusBadge } from "@/components/status-badge";
+import { LostQuotationToggle } from "./lost-quotation-toggle";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { formatCurrency } from "@/lib/utils";
 import { config } from "@/lib/config";
@@ -293,6 +294,9 @@ interface Quote {
   templateName: string;
   customer: string;
   customerId: string;
+  inquiryId: string;
+  /** The inquiry's status (NEW/…/SENT/WON/LOST) — drives the "Lost" tickbox. */
+  inquiryStatus: string;
   preparedBy: string;
   approvedBy: string | null;
   items: Line[];
@@ -4942,6 +4946,7 @@ export function QuotationBuilder({
               Go to workflow →
             </a>
           )}
+          {!orderPaid && <LostQuotationToggle inquiryId={quotation.inquiryId} inquiryStatus={quotation.inquiryStatus} />}
           <QuotationStatusBadge status={quotation.status} />
         </div>
       </div>
