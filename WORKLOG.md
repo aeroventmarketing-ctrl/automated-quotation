@@ -1,3 +1,15 @@
+## 2026-08-11 · "Lost" tickbox on the quotation header
+- **Owner request:** add a tick box on the quotation page; when ticked the quotation is recorded as LOST,
+  follow-up email/SMS stop, but the lost thank-you is still sent.
+- **How it works:** reuses the existing `markInquiryLost` / `reopenInquiry` actions (#315). Marking LOST sets
+  the inquiry status → the follow-up runner already excludes WON/LOST (so nudges stop) and `markInquiryLost`
+  fires the one-shot lost thank-you. Unticking reopens to SENT.
+- **UI:** new `quotations/[id]/lost-quotation-toggle.tsx` (`LostQuotationToggle`) — a checkbox in the quotation
+  header next to the status badge, with a confirm; optimistic + `router.refresh()`; hidden once the order is
+  paid (Won). Added `inquiryId` + `inquiryStatus` to the builder `Quote` type and passed them from
+  `quotations/[id]/page.tsx`.
+- Typecheck + lint clean; build compiles.
+
 ## 2026-08-11 · Reorder + Purchaser Stock alerts — default to Low stock first
 - **Owner follow-up:** show LOW-status items before OUT by default (Reorder list + purchaser Stock alerts card).
 - **Reorder (`reorder-list.tsx`):** default Sort is now **Status, ascending** with `statusRank` Low=0/Out=1, so
