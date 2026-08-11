@@ -25,6 +25,7 @@ import { sendSms, smsConfigured, normalizePhMobile, getSemaphoreBalance } from "
 import { buildFollowUpSms, smsTemplateForNudge } from "@/lib/follow-up-sms";
 import { buildFollowUpEmail, templateForNudge, type FollowUpTemplate } from "@/lib/follow-up-email";
 import { getFollowUpTemplates, setFollowUpTemplates } from "@/lib/follow-up-templates";
+import { setThankYouSettings, type ThankYouConfig } from "@/lib/thank-you";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
 import { setUserSalesPersonnel } from "@/lib/sales-personnel";
 import { setFanMotorBrand } from "@/lib/fan-motor-brand";
@@ -710,6 +711,26 @@ export async function saveFollowUpTemplatesAction(
   await assertAdmin();
   const { templates } = followUpTemplatesSchema.parse(input);
   const saved = await setFollowUpTemplates(templates);
+  revalidatePath("/admin");
+  return saved;
+}
+
+const thankYouSideSchema = z.object({
+  enabled: z.boolean(),
+  subject: z.string(),
+  body: z.string(),
+  sms: z.string(),
+});
+const thankYouSchema = z.object({
+  dryRun: z.boolean(),
+  won: thankYouSideSchema,
+  lost: thankYouSideSchema,
+});
+/** Save the Won / Lost thank-you message configuration. */
+export async function saveThankYouAction(input: ThankYouConfig): Promise<ThankYouConfig> {
+  await assertAdmin();
+  const parsed = thankYouSchema.parse(input);
+  const saved = await setThankYouSettings(parsed);
   revalidatePath("/admin");
   return saved;
 }

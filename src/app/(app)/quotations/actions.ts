@@ -10,6 +10,7 @@ import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
 import { config } from "@/lib/config";
+import { sendThankYou } from "@/lib/thank-you";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
 import { isSaleConfirmed, saleFromClassification, type SaleRecord, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
@@ -789,6 +790,8 @@ export async function markQuotationSold(quotationId: string, sold: boolean) {
       data: { status: sold ? "WON" : "SENT" },
     }),
   ]);
+  // Won → send the one-shot thank-you (best-effort; idempotent; never throws).
+  if (sold) await sendThankYou(quote.inquiryId, "won");
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
 }
@@ -864,6 +867,8 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
       data: { status: confirmed ? "WON" : "SENT" },
     }),
   ]);
+  // Won → send the one-shot thank-you (best-effort; idempotent; never throws).
+  if (confirmed) await sendThankYou(quote.inquiryId, "won");
   if (confirmed) {
     await logActivity(user, {
       action: "sale.recorded",
