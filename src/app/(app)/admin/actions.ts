@@ -25,7 +25,7 @@ import { sendSms, smsConfigured, normalizePhMobile, getSemaphoreBalance } from "
 import { buildFollowUpSms, smsTemplateForNudge } from "@/lib/follow-up-sms";
 import { buildFollowUpEmail, templateForNudge, type FollowUpTemplate } from "@/lib/follow-up-email";
 import { getFollowUpTemplates, setFollowUpTemplates } from "@/lib/follow-up-templates";
-import { setThankYouSettings, buildThankYouEmail, type ThankYouConfig } from "@/lib/thank-you";
+import { setThankYouSettings, buildThankYouEmail, buildThankYouSms, type ThankYouConfig } from "@/lib/thank-you";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
 import { setUserSalesPersonnel } from "@/lib/sales-personnel";
 import { setFanMotorBrand } from "@/lib/fan-motor-brand";
@@ -781,6 +781,49 @@ export async function sendTestThankYouAction(input: z.infer<typeof thankYouTestS
   });
 
   return { ok: true, to };
+}
+
+const thankYouSmsTestSchema = z.object({
+  outcome: z.enum(["won", "lost"]),
+  toNumber: z.string().default(""),
+  sms: z.string().default(""),
+});
+/** Send a TEST of a Won/Lost thank-you SMS (uses the form's current copy) so an
+ *  admin can check it before it goes to a real client. */
+export async function sendTestThankYouSmsAction(input: z.infer<typeof thankYouSmsTestSchema>): Promise<SmsTestResult> {
+  await assertAdmin();
+  const { outcome, toNumber, sms } = thankYouSmsTestSchema.parse(input);
+  const fail = (error: string): SmsTestResult => ({ ok: false, to: "", balance: null, error });
+
+  if (!smsConfigured()) {
+    return fail("No Semaphore API key set. Add SEMAPHORE_API_KEY in Vercel → Environment Variables and redeploy first.");
+  }
+  const phone = normalizePhMobile(toNumber);
+  if (!phone) {
+    return fail(`"${toNumber}" isn't a valid PH mobile number (e.g. 09171234567).`);
+  }
+  const message = buildThankYouSms(
+    { enabled: true, subject: "", body: "", sms },
+    {
+      contactName: null,
+      company: "Sample Client Corporation",
+      quoteNumber: "TEST-0001",
+      total: "₱125,000.00",
+      salesName: "Aerovent FBM",
+      quoteUrl: `${config.appUrl}/q/sample-quote`,
+    },
+  );
+  if (!message.trim()) {
+    return fail("The SMS message is empty — write one in the box above first.");
+  }
+  const label = outcome === "won" ? "WON" : "LOST";
+  try {
+    await sendSms({ to: phone, message: `[TEST ${label}] ${message}` });
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Semaphore rejected the message.");
+  }
+  const acct = await getSemaphoreBalance();
+  return { ok: true, to: phone, balance: acct?.balance ?? null };
 }
 
 // --- Material Request Form numbering ----------------------------------------

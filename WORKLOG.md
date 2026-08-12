@@ -1,3 +1,16 @@
+## 2026-08-12 · Thank-you (Won/Lost) — "Send test" SMS in admin
+- **Owner request:** add a "send test SMS" option to the Won and Lost thank-you editors so the SMS details /
+  appearance can be checked before real sends (mirrors the "Send test email" from #321).
+- **Change:** new `sendTestThankYouSmsAction({ outcome, toNumber, sms })` in `admin/actions.ts` — mirrors
+  `sendTestSmsAction`: assertAdmin, requires SEMAPHORE_API_KEY, validates the PH mobile via `normalizePhMobile`,
+  builds the message via `buildThankYouSms` with sample tokens (Sample Client Corporation / TEST-0001 /
+  ₱125,000 / quote.appUrl/q/sample-quote), prefixes with a "[TEST WON/LOST]" notice, sends via Semaphore, and
+  returns the account balance (`SmsTestResult`). Uses the **form's current SMS copy** so unsaved edits test.
+- **UI (`admin/thank-you-setting.tsx`):** each side editor (Won / Lost) now has a "Send a test SMS" row — a
+  tel input (placeholder `09171234567`) + "Send test SMS" button + success/error message showing the balance.
+  `ThankYouSetting` gains `onTestSms`; wired in `admin/page.tsx`.
+- Typecheck + lint clean.
+
 ## 2026-08-12 · Thank-you (Won/Lost) — "Send test" email in admin
 - **Owner request:** add a "send test email" option to the Won and Lost thank-you editors so the appearance
   can be checked before real sends.
