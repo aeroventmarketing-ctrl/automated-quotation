@@ -198,7 +198,7 @@ function CashRow({ r, highlight = false }: { r: CashRequestRow; highlight?: bool
               <label className="flex items-center gap-1 text-xs text-muted-foreground">Amount<Input className="h-8 w-32" type="number" step="any" min={0} value={eAmount} onChange={(e) => setEAmount(e.target.value)} /></label>
               <Input className="h-8 flex-1 min-w-[10rem]" placeholder="Note" value={eNote} onChange={(e) => setENote(e.target.value)} />
             </div>
-            <p className="text-[10px] text-amber-700 dark:text-amber-400">The amount here is the figure the P&amp;L uses. Any per-line breakdown is left unchanged.</p>
+            <p className="text-[10px] text-amber-700 dark:text-amber-400">This is the released amount. Before liquidation it&apos;s the figure the P&amp;L books; once liquidated, the P&amp;L uses the actual spend (edit it per line in the liquidation panel).</p>
             <div className="flex items-center gap-2">
               <Button size="sm" className="h-7 text-xs" disabled={busy === "edit"} onClick={saveEdit}>{busy === "edit" ? "Saving…" : "Save"}</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditing(false); setEPurpose(r.purpose); setEAmount(String(r.amount)); setENote(r.note ?? ""); }}>Cancel</Button>

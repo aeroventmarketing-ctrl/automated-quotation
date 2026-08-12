@@ -17,6 +17,7 @@ import { getTestMode, testModeCreatedAtFilter } from "@/lib/test-mode";
 import { getAlertGoLive } from "@/lib/alert-golive";
 import { payrollExpenseForRange } from "./payroll-actions";
 import { isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
+import { cashExpenseBooked } from "@/lib/cash-request";
 import {
   PNL_DEPARTMENTS,
   DEPT_LABEL,
@@ -354,14 +355,14 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const crs = await prisma.cashRequest.findMany({
     where: { releasedAt: { not: null }, ...(cutoff ? { createdAt: cutoff } : {}) },
-    select: { dept: true, amount: true, releasedAt: true, status: true },
+    select: { dept: true, amount: true, releasedAt: true, status: true, liquidation: true },
   });
   for (const cr of crs) {
     if (!RELEASED.has(cr.status)) continue;
     if (!cr.releasedAt) continue;
     if (!ymdInRange(manilaYMD(cr.releasedAt.toISOString()), lo, hi)) continue;
     const dept: DeptKey = cr.dept && PROD_DEPT_KEYS.has(cr.dept as DeptKey) ? (cr.dept as DeptKey) : "office";
-    expenses[dept] = round2(expenses[dept] + (Number(cr.amount) || 0));
+    expenses[dept] = round2(expenses[dept] + cashExpenseBooked(Number(cr.amount) || 0, cr.liquidation));
   }
 
   // --- Expenses: manual departmental payroll (months overlapping the range) ---
@@ -761,13 +762,13 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const crs = await prisma.cashRequest.findMany({
     where: { releasedAt: { not: null }, ...(cutoff ? { createdAt: cutoff } : {}) },
-    select: { id: true, number: true, dept: true, amount: true, releasedAt: true, status: true },
+    select: { id: true, number: true, dept: true, amount: true, releasedAt: true, status: true, liquidation: true },
   });
   for (const cr of crs) {
     if (!RELEASED.has(cr.status) || !cr.releasedAt) continue;
     if (!ymdInRange(manilaYMD(cr.releasedAt.toISOString()), lo, hi)) continue;
     const dept: DeptKey = cr.dept && PROD_DEPT_KEYS.has(cr.dept as DeptKey) ? (cr.dept as DeptKey) : "office";
-    expenses.push({ dept, source: "Cash voucher", ref: cr.number, date: manilaYMD(cr.releasedAt.toISOString()), amount: round2(Number(cr.amount) || 0), del: { kind: "voucher", id: cr.id } });
+    expenses.push({ dept, source: "Cash voucher", ref: cr.number, date: manilaYMD(cr.releasedAt.toISOString()), amount: cashExpenseBooked(Number(cr.amount) || 0, cr.liquidation), del: { kind: "voucher", id: cr.id } });
   }
   try {
     const months: string[] = [];
@@ -906,7 +907,7 @@ export async function getExpensesReport(from: string, to: string): Promise<Expen
   const RELEASED = new Set(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
   const crs = await prisma.cashRequest.findMany({
     where: { releasedAt: { not: null }, ...(cutoff ? { createdAt: cutoff } : {}) },
-    select: { id: true, number: true, dept: true, amount: true, releasedAt: true, status: true, purpose: true, category: true, releasedByName: true, requestedByName: true },
+    select: { id: true, number: true, dept: true, amount: true, releasedAt: true, status: true, purpose: true, category: true, releasedByName: true, requestedByName: true, liquidation: true },
   });
   for (const cr of crs) {
     if (!RELEASED.has(cr.status) || !cr.releasedAt) continue;
@@ -916,7 +917,7 @@ export async function getExpensesReport(from: string, to: string): Promise<Expen
     records.push({
       id: `cash-${cr.id}`, date: ymd, source: "Cash voucher", ref: cr.number || "—",
       dept, deptLabel: DEPT_LABEL[dept], who: cr.releasedByName || cr.requestedByName || "—",
-      detail: cr.purpose || cr.category || "", amount: round2(Number(cr.amount) || 0), href: "/cash-requests",
+      detail: cr.purpose || cr.category || "", amount: cashExpenseBooked(Number(cr.amount) || 0, cr.liquidation), href: "/cash-requests",
     });
   }
 

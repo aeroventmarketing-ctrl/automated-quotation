@@ -1,3 +1,19 @@
+## 2026-08-12 · P&L books the actual liquidated spend (per-line edits flow through)
+- **Owner request:** once the liquidation is edited per line, it should also reflect in the P&L.
+- **Finding:** the P&L (`management/pnl-actions.ts`) booked every released cash voucher at `cr.amount` (the
+  *released* figure), never the liquidated spend — so per-line edits (and any change-returned / overspend) never
+  moved the P&L.
+- **Change:** new `cashExpenseBooked(released, liquidation)` in `lib/cash-request.ts` — returns the **actual
+  spend** (Σ line actuals) once liquidated, else the released amount; the released figure itself is untouched
+  (still the liquidation's tally denominator). Applied at all three P&L cash-voucher sites (dept expense totals,
+  Expenses report, expense records) and the Management-dashboard **Cash vouchers** mirror card
+  (`lib/finance-monitor.ts`). Admin per-line edits already revalidate `/management`, so the P&L updates on save.
+- **Effect:** for any liquidated voucher where spend differed from what was released, the P&L now books the
+  real spend (correct expense). Balanced liquidations (spent == released) are unchanged. Updated the admin
+  "Edit (admin)" note in `cash-request-list.tsx` to say the total is the *released* figure and the P&L uses the
+  actual spend once liquidated.
+- Typecheck + lint clean.
+
 ## 2026-08-12 · Cash liquidation — admin per-line tally edit (Planned + Actual)
 - **Owner request:** add an option to edit the liquidation per line so it can be tallied — for a request whose
   total balances but whose per-line breakdown is off (and where the existing per-line editor is hidden because
