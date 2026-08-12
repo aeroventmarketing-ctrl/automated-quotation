@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Scale, Upload, Sparkles, Pencil } from "lucide-react";
+import { Scale, Upload, Sparkles, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApproverHighlight } from "@/components/approver-highlight";
@@ -97,6 +97,9 @@ export function CashLiquidationPanel({
   }
   function setAdminField(i: number, key: "planned" | "actual", v: string) {
     setAdminRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: v } : r)));
+  }
+  function removeAdminRow(i: number) {
+    setAdminRows((rs) => (rs.length <= 1 ? rs : rs.filter((_, idx) => idx !== i)));
   }
   async function saveAdminEdit() {
     setAdminBusy(true); setErr(null);
@@ -564,6 +567,7 @@ export function CashLiquidationPanel({
                   <th className="w-28 py-1 px-1 text-right font-medium">Planned</th>
                   <th className="w-28 py-1 px-1 text-right font-medium">Actual</th>
                   <th className="w-20 py-1 px-1 text-right font-medium">Diff.</th>
+                  <th className="w-7" aria-label="Remove" />
                 </tr>
               </thead>
               <tbody>
@@ -577,6 +581,18 @@ export function CashLiquidationPanel({
                       <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(diff) < 0.005 ? "text-emerald-700" : diff > 0 ? "text-amber-700" : "text-destructive"}`}>
                         {Math.abs(diff) < 0.005 ? "✓" : (diff > 0 ? "" : "-") + peso(Math.abs(diff))}
                       </td>
+                      <td className="py-1 pl-1 text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeAdminRow(i)}
+                          disabled={adminRows.length <= 1}
+                          title={adminRows.length <= 1 ? "Keep at least one line" : "Delete line"}
+                          aria-label="Delete line"
+                          className="text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -589,12 +605,13 @@ export function CashLiquidationPanel({
                   <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(adminPreview.variance) < 0.005 ? "text-emerald-700" : adminPreview.variance > 0 ? "text-amber-700" : "text-destructive"}`}>
                     {Math.abs(adminPreview.variance) < 0.005 ? "✓" : (adminPreview.variance > 0 ? "" : "-") + peso(Math.abs(adminPreview.variance))}
                   </td>
+                  <td className="w-7" />
                 </tr>
               </tfoot>
             </table>
           </div>
           <p className="text-[11px] text-amber-700 dark:text-amber-400">
-            Adjust the planned / actual figures so each line — and the overall total — tally. The request stays at its current stage; the tally is marked recorded-by-hand (not receipt-verified).
+            Adjust the planned / actual figures — or delete a line with the trash icon — so each line and the overall total tally. The request stays at its current stage; once you save, this admin tally clears the voucher from &ldquo;Reconciled by hand&rdquo;.
           </p>
           <div className="flex items-center gap-2">
             <Button size="sm" className="h-7 text-xs" disabled={adminBusy} onClick={saveAdminEdit}>{adminBusy ? "Saving…" : "Save per-line tally"}</Button>
