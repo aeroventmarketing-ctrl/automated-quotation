@@ -1,3 +1,17 @@
+## 2026-08-12 · Cash liquidation — admin per-line tally edit (Planned + Actual)
+- **Owner request:** add an option to edit the liquidation per line so it can be tallied — for a request whose
+  total balances but whose per-line breakdown is off (and where the existing per-line editor is hidden because
+  the request is already Settled).
+- **Change (server, `cash-requests/actions.ts`):** new admin-only `adminEditCashLiquidationLines(id, lines)` —
+  rewrites the liquidation's per-line `{description, budgetAmount, actualAmount}`, recomputes `actualSpent` from
+  the edited actuals, and drops the receipt-verified (`aiVerified`) claim since the figures are now hand-typed.
+  **Leaves the request at its current stage** (a Settled request stays Settled — in-place correction, not a
+  re-liquidation). Revalidates `/cash-requests` + `/management`.
+- **UI (`cash-liquidation-panel.tsx`):** admins get an **"Edit per-line tally (admin)"** button on any recorded
+  liquidation (including Settled). Opens an editor with **Planned + Actual** inputs per line, a live per-line
+  Diff and an overall released-vs-spent tally, and a "Save per-line tally" action. Non-admins are unaffected.
+- Typecheck + lint clean.
+
 ## 2026-08-12 · Thank-you (Won/Lost) — "Send test" SMS in admin
 - **Owner request:** add a "send test SMS" option to the Won and Lost thank-you editors so the SMS details /
   appearance can be checked before real sends (mirrors the "Send test email" from #321).
