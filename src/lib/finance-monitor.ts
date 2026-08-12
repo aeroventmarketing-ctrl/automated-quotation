@@ -11,6 +11,7 @@ import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/s
 import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
+import { cashExpenseBooked } from "@/lib/cash-request";
 import { getPrintedVouchers, type PrintedVoucherLine } from "@/lib/purchase-voucher";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { getAlertGoLive, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
@@ -153,13 +154,13 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
     .findMany({
       // Released after go-live (mirrors the PO vouchers' printedAt > cutoff filter).
       where: { releasedAt: goLiveCutoff ? { not: null, gt: goLiveCutoff.gt } : { not: null } },
-      select: { number: true, purpose: true, amount: true, requestedByName: true, voucherByName: true, releasedByName: true, voucherAt: true, releasedAt: true, status: true },
+      select: { number: true, purpose: true, amount: true, requestedByName: true, voucherByName: true, releasedByName: true, voucherAt: true, releasedAt: true, status: true, liquidation: true },
     })
     .catch(() => []);
   const cashVouchers: VoucherRow[] = cashCrs
     .filter((cr) => RELEASED_CASH.has(cr.status) && cr.releasedAt)
     .map((cr) => {
-      const total = round2(Number(cr.amount) || 0);
+      const total = cashExpenseBooked(Number(cr.amount) || 0, cr.liquidation);
       return {
         no: cr.number,
         kind: "cash" as const,

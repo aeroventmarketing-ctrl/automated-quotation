@@ -214,6 +214,18 @@ export function isLiquidated(l: CashLiquidation): boolean {
   return typeof l.actualSpent === "number";
 }
 
+/**
+ * The amount a released cash voucher books as an expense in the P&L: once the
+ * cash has been liquidated, the *actual* spend (Σ line actuals) — so change
+ * returned / overspend, and any admin per-line correction, flow through — and
+ * otherwise the released (requested) amount. The released figure itself is left
+ * untouched (it stays the tally denominator on the liquidation).
+ */
+export function cashExpenseBooked(releasedAmount: number, liquidation: unknown): number {
+  const l = coerceLiquidation(liquidation);
+  return isLiquidated(l) ? round2(l.actualSpent ?? 0) : round2(releasedAmount);
+}
+
 /** Released vs actual spend → variance (released − spent) and its status. */
 export function liquidationVariance(released: number, l: CashLiquidation): { released: number; spent: number; variance: number; status: ReconcileStatus } {
   const spent = round2(l.actualSpent ?? 0);
