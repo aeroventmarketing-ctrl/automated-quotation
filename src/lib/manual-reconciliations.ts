@@ -13,9 +13,10 @@
  * (`aiVerified !== true`). Tallies recorded by an Admin or the Payment Approver are
  * excluded — they're the authorised manual-tally roles, so this list surfaces only
  * the hand-tallies done by everyone else (Accounting / Purchaser / requestor). A
- * reconciliation / liquidation whose discrepancy has already been approved (by the
- * Payment Approver or an Admin) is also excluded (it's been handled). Each row keeps
- * who recorded it, their designation, and the date/time.
+ * cash liquidation whose per-line tally an admin has since corrected (`adminTally`),
+ * or a reconciliation / liquidation whose discrepancy has already been approved (by
+ * the Payment Approver or an Admin), is also excluded (it's been handled). Each row
+ * keeps who recorded it, their designation, and the date/time.
  */
 import { prisma } from "@/lib/db";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
@@ -82,6 +83,9 @@ export async function getManualReconciliations(): Promise<ManualReconRow[]> {
     const l = coerceLiquidation(cr.liquidation);
     if (!isLiquidated(l) || l.aiVerified === true || !l.recordedAt) continue;
     if (l.recordedRole && EXCLUDED_ROLES.has(l.recordedRole)) continue;
+    // An admin has corrected the per-line tally — an authorised hand-tally, so
+    // it's handled and drops off this oversight list.
+    if (l.adminTally) continue;
     // A discrepancy that's been authorised (Payment Approver or Admin) is handled.
     if (l.approval) continue;
     rows.push({

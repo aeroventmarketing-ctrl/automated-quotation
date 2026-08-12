@@ -1,3 +1,18 @@
+## 2026-08-12 · Cash liquidation — admin per-line: delete a row + clear "Reconciled by hand"
+- **Owner request:** (1) add a delete-row option to the admin per-line tally editor; (2) once an admin has
+  tallied a voucher, remove it from the "Reconciled by hand" card.
+- **Delete row (`cash-liquidation-panel.tsx`):** the admin "Edit per-line tally" table gets a trash-icon
+  column — `removeAdminRow(i)` drops a line (disabled when only one line remains; server also enforces ≥1).
+  Saving persists the reduced line set through the existing `adminEditCashLiquidationLines` (which recomputes
+  `actualSpent`), so the P&L / tally follow automatically.
+- **Clear from Reconciled-by-hand:** new `adminTally?: CashStamp` on `CashLiquidation`
+  (`lib/cash-request.ts`, incl. coercion). `adminEditCashLiquidationLines` now stamps
+  `adminTally = { byName, role: "Admin", at }` on save. `getManualReconciliations` (`lib/manual-reconciliations.ts`)
+  excludes any cash liquidation carrying `adminTally` — an admin is an authorised manual-tally role, so once
+  they've corrected it the voucher drops off the oversight card (its count decrements). The original
+  `recordedByName/Role` is preserved, so the panel's "Liquidated by …" line is unchanged.
+- Updated the admin-panel help note and the module doc comment. Typecheck + lint clean.
+
 ## 2026-08-12 · P&L books the actual liquidated spend (per-line edits flow through)
 - **Owner request:** once the liquidation is edited per line, it should also reflect in the P&L.
 - **Finding:** the P&L (`management/pnl-actions.ts`) booked every released cash voucher at `cr.amount` (the

@@ -290,6 +290,10 @@ export async function adminEditCashLiquidationLines(
     // Hand-corrected by an admin — the figures no longer come straight from an
     // AI-read receipt, so drop the receipt-verified claim.
     aiVerified: false,
+    // Stamp the admin tally. An admin is an authorised manual-tally role, so once
+    // they've tallied it the voucher drops off the "Reconciled by hand" oversight
+    // list (see manual-reconciliations.ts).
+    adminTally: { byName: user.name, role: "Admin", at: new Date().toISOString() },
   };
   await prisma.cashRequest.update({
     where: { id },

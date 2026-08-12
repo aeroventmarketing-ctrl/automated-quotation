@@ -170,6 +170,7 @@ export interface CashLiquidation {
   escalation?: CashStamp; // requestor/accounting informed the approver
   approval?: CashStamp; // the approver authorised the discrepancy
   settled?: CashStamp; // change returned / overspend reimbursed
+  adminTally?: CashStamp; // an admin corrected the per-line tally (authorised hand-tally)
 }
 
 function coerceStamp(v: unknown): CashStamp | undefined {
@@ -206,6 +207,7 @@ export function coerceLiquidation(v: unknown): CashLiquidation {
     escalation: coerceStamp(o.escalation),
     approval: coerceStamp(o.approval),
     settled: coerceStamp(o.settled),
+    adminTally: coerceStamp(o.adminTally),
   };
 }
 
