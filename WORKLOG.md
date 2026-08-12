@@ -1,3 +1,16 @@
+## 2026-08-12 · Thank-you (Won/Lost) — "Send test" email in admin
+- **Owner request:** add a "send test email" option to the Won and Lost thank-you editors so the appearance
+  can be checked before real sends.
+- **Change:** new `sendTestThankYouAction(outcome, toEmail, subject, body)` in `admin/actions.ts` — mirrors
+  `sendTestFollowUpAction`: assertAdmin, requires RESEND key + FOLLOW_UP_FROM_EMAIL, builds the email via
+  `buildThankYouEmail` with sample tokens (Sample Client Corporation / TEST-0001 / ₱125,000 /
+  quote.appUrl/q/sample-quote), prefixes subject/body with a "[TEST WON/LOST thank-you]" notice, sends via
+  Resend. Uses the **form's current copy** so unsaved edits can be tested.
+- **UI (`admin/thank-you-setting.tsx`):** each side editor (Won / Lost) now has a "Send a test email" row —
+  email input (defaults to the admin's email) + "Send test" button + success/error message. `ThankYouSetting`
+  gains `onTest` + `defaultTestEmail`; wired in `admin/page.tsx`.
+- Typecheck + lint clean.
+
 ## 2026-08-11 · Cash requests — Accounting can raise for any department
 - **Owner request:** give Accounting access to all departments in the Cash Requests tab.
 - **Finding:** Accounting already *sees* all departments' requests (it's a `finance` role → `where: {}`). The

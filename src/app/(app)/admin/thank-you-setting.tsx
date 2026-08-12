@@ -21,14 +21,38 @@ function SideEditor({
   side,
   onChange,
   idp,
+  outcome,
+  onTest,
+  defaultTestEmail,
 }: {
   title: string;
   hint: string;
   side: ThankYouSide;
   onChange: (patch: Partial<ThankYouSide>) => void;
   idp: string;
+  outcome: "won" | "lost";
+  onTest?: (input: { outcome: "won" | "lost"; toEmail: string; subject: string; body: string }) => Promise<{ ok: true; to: string }>;
+  defaultTestEmail?: string;
 }) {
   const seg = Math.max(1, Math.ceil((side.sms || "").length / 160));
+  const [testEmail, setTestEmail] = useState(defaultTestEmail ?? "");
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function sendTest() {
+    if (!onTest) return;
+    setTesting(true);
+    setTestMsg(null);
+    try {
+      const res = await onTest({ outcome, toEmail: testEmail.trim(), subject: side.subject, body: side.body });
+      setTestMsg({ ok: true, text: `Test sent to ${res.to}. Check your inbox (it uses the copy above).` });
+    } catch (e) {
+      setTestMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to send test" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   return (
     <div className="space-y-3 rounded-md border p-3">
       <div className="flex items-center justify-between gap-2">
@@ -51,6 +75,17 @@ function SideEditor({
         <Label htmlFor={`${idp}-sms`} className="text-xs">SMS message <span className="font-normal text-muted-foreground">({side.sms.length} chars · {seg} segment{seg === 1 ? "" : "s"})</span></Label>
         <Textarea id={`${idp}-sms`} value={side.sms} onChange={(e) => onChange({ sms: e.target.value })} rows={3} placeholder="Keep it short — one 160-char segment is one SMS credit." />
       </div>
+
+      {onTest && (
+        <div className="space-y-1 border-t pt-2">
+          <Label htmlFor={`${idp}-test`} className="text-xs text-muted-foreground">Send a test email (uses the copy above — no client is emailed)</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input id={`${idp}-test`} type="email" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="you@example.com" className="h-9 w-56" />
+            <Button type="button" size="sm" variant="outline" onClick={sendTest} disabled={testing}>{testing ? "Sending…" : "Send test"}</Button>
+            {testMsg && <span className={`text-xs ${testMsg.ok ? "text-emerald-600" : "text-destructive"}`}>{testMsg.text}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -58,9 +93,13 @@ function SideEditor({
 export function ThankYouSetting({
   initial,
   onSave,
+  onTest,
+  defaultTestEmail,
 }: {
   initial: ThankYouConfig;
   onSave: (input: ThankYouConfig) => Promise<ThankYouConfig>;
+  onTest?: (input: { outcome: "won" | "lost"; toEmail: string; subject: string; body: string }) => Promise<{ ok: true; to: string }>;
+  defaultTestEmail?: string;
 }) {
   const [cfg, setCfg] = useState<ThankYouConfig>(initial);
   const [busy, setBusy] = useState(false);
@@ -110,6 +149,9 @@ export function ThankYouSetting({
           hint="A warm thank-you for a client whose order pushed through."
           side={cfg.won}
           idp="ty-won"
+          outcome="won"
+          onTest={onTest}
+          defaultTestEmail={defaultTestEmail}
           onChange={(patch) => setCfg((c) => ({ ...c, won: { ...c.won, ...patch } }))}
         />
         <SideEditor
@@ -117,6 +159,9 @@ export function ThankYouSetting({
           hint="A gracious note for a client who didn't proceed, keeping the door open."
           side={cfg.lost}
           idp="ty-lost"
+          outcome="lost"
+          onTest={onTest}
+          defaultTestEmail={defaultTestEmail}
           onChange={(patch) => setCfg((c) => ({ ...c, lost: { ...c.lost, ...patch } }))}
         />
 
