@@ -10,7 +10,7 @@ import type { CashLiquidationView } from "@/lib/cash-request-row";
 import type { SaleDoc } from "@/lib/sale";
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { UploadLink } from "@/components/upload-link";
-import { recordCashLiquidation, settleCashLiquidation, escalateCashLiquidation, approveCashLiquidation, escalateCashAiRead, resetCashAiRead, removeCashLiquidationReceipt, addCashLiquidationReceipt, replaceCashLiquidationReceipt } from "./actions";
+import { recordCashLiquidation, settleCashLiquidation, escalateCashLiquidation, approveCashLiquidation, escalateCashAiRead, resetCashAiRead, removeCashLiquidationReceipt, addCashLiquidationReceipt, replaceCashLiquidationReceipt, adminEditCashLiquidationLines } from "./actions";
 
 // Mirrors balanceTolerance() on the server so an AI-read receipt that tallies
 // within a small margin reads as "balanced", not a discrepancy.
@@ -80,6 +80,32 @@ export function CashLiquidationPanel({
     const actual = round2(rows.reduce((a, r) => a + num(r.actual), 0));
     return { budget, actual, variance: round2(released - actual) };
   }, [rows, released]);
+
+  // Admin-only per-line correction: edit BOTH planned and actual on a recorded
+  // liquidation so it can be made to tally, in place (status unchanged).
+  const [adminEdit, setAdminEdit] = useState(false);
+  const [adminRows, setAdminRows] = useState<{ description: string; planned: string; actual: string }[]>([]);
+  const [adminBusy, setAdminBusy] = useState(false);
+  const adminPreview = useMemo(() => {
+    const actual = round2(adminRows.reduce((a, r) => a + num(r.actual), 0));
+    return { actual, variance: round2(released - actual) };
+  }, [adminRows, released]);
+
+  function startAdminEdit() {
+    setAdminRows((liquidation.lines ?? []).map((l) => ({ description: l.description, planned: String(l.budgetAmount), actual: String(l.actualAmount) })));
+    setErr(null); setOpen(false); setAdminEdit(true);
+  }
+  function setAdminField(i: number, key: "planned" | "actual", v: string) {
+    setAdminRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: v } : r)));
+  }
+  async function saveAdminEdit() {
+    setAdminBusy(true); setErr(null);
+    try {
+      await adminEditCashLiquidationLines(id, adminRows.map((r) => ({ description: r.description, budgetAmount: r.planned, actualAmount: r.actual })));
+      setAdminEdit(false); router.refresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setAdminBusy(false); }
+  }
 
   function startEdit() {
     setRows(seed()); setNote(""); setReceipts([]); setErr(null); setAiInfo(null); setAiWarnings([]); setHasAiRead(false); setOpen(true);
@@ -414,11 +440,18 @@ export function CashLiquidationPanel({
             <ApproverHighlight role={liquidation.accountingLabel} detail="to close the liquidation" />
           )}
 
-          {canRecord && !open && (
-            <button type="button" onClick={startEdit} className="text-xs font-medium text-muted-foreground hover:text-foreground">
-              Edit liquidation
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-3">
+            {canRecord && !open && (
+              <button type="button" onClick={startEdit} className="text-xs font-medium text-muted-foreground hover:text-foreground">
+                Edit liquidation
+              </button>
+            )}
+            {admin && recorded && liquidation.lines && !adminEdit && (
+              <button type="button" onClick={startAdminEdit} className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-800 dark:text-amber-400">
+                <Pencil className="h-3 w-3" /> Edit per-line tally (admin)
+              </button>
+            )}
+          </div>
         </>
       ) : canRecord && !open ? (
         <button type="button" onClick={startEdit}
@@ -517,6 +550,55 @@ export function CashLiquidationPanel({
           <div className="flex items-center gap-2">
             <Button size="sm" className="h-7 text-xs" disabled={busy === "record" || !canManualRecord} onClick={record}>{busy === "record" ? "Saving…" : "Record & tally"}</Button>
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setOpen(false); setErr(null); }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+      {admin && adminEdit && (
+        <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50/60 p-2 dark:border-amber-800 dark:bg-amber-950/30">
+          <div className="text-xs font-semibold text-amber-800 dark:text-amber-300">Edit per-line tally (admin)</div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[460px] border-collapse text-xs">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="py-1 pr-2 font-medium">Line</th>
+                  <th className="w-28 py-1 px-1 text-right font-medium">Planned</th>
+                  <th className="w-28 py-1 px-1 text-right font-medium">Actual</th>
+                  <th className="w-20 py-1 px-1 text-right font-medium">Diff.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminRows.map((r, i) => {
+                  const diff = round2(num(r.planned) - num(r.actual));
+                  return (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="py-1 pr-2">{r.description || `Line ${i + 1}`}</td>
+                      <td className="py-1 px-1"><Input className="h-7 text-right text-xs" value={r.planned} onChange={(e) => setAdminField(i, "planned", e.target.value)} placeholder="0.00" /></td>
+                      <td className="py-1 px-1"><Input className="h-7 text-right text-xs" value={r.actual} onChange={(e) => setAdminField(i, "actual", e.target.value)} placeholder="0.00" /></td>
+                      <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(diff) < 0.005 ? "text-emerald-700" : diff > 0 ? "text-amber-700" : "text-destructive"}`}>
+                        {Math.abs(diff) < 0.005 ? "✓" : (diff > 0 ? "" : "-") + peso(Math.abs(diff))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t font-medium">
+                  <td className="py-1 pr-2">Cash released / spent</td>
+                  <td className="py-1 px-1 text-right tabular-nums text-muted-foreground">{peso(released)}</td>
+                  <td className="py-1 px-1 text-right tabular-nums">{peso(adminPreview.actual)}</td>
+                  <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(adminPreview.variance) < 0.005 ? "text-emerald-700" : adminPreview.variance > 0 ? "text-amber-700" : "text-destructive"}`}>
+                    {Math.abs(adminPreview.variance) < 0.005 ? "✓" : (adminPreview.variance > 0 ? "" : "-") + peso(Math.abs(adminPreview.variance))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+            Adjust the planned / actual figures so each line — and the overall total — tally. The request stays at its current stage; the tally is marked recorded-by-hand (not receipt-verified).
+          </p>
+          <div className="flex items-center gap-2">
+            <Button size="sm" className="h-7 text-xs" disabled={adminBusy} onClick={saveAdminEdit}>{adminBusy ? "Saving…" : "Save per-line tally"}</Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setAdminEdit(false); setErr(null); }}>Cancel</Button>
           </div>
         </div>
       )}

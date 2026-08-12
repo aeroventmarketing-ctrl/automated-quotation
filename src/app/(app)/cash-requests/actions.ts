@@ -256,6 +256,49 @@ export async function adminEditCashRequest(id: string, input: {
   revalidatePath("/management");
 }
 
+/**
+ * Admin: rewrite the liquidation's per-line breakdown (planned + actual) so an
+ * already-recorded tally can be corrected — e.g. figures were logged against the
+ * wrong lines. Recomputes the total spent from the edited actuals but leaves the
+ * request at its current stage (a Settled request stays Settled — this is an
+ * in-place correction, not a re-liquidation). Because the numbers are now typed
+ * by hand, the tally is no longer treated as receipt-verified.
+ */
+export async function adminEditCashLiquidationLines(
+  id: string,
+  lines: { description: string; budgetAmount: string; actualAmount: string }[],
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can edit the liquidation breakdown.");
+  const pr = await loadOr404(id);
+  const cur = coerceLiquidation(pr.liquidation);
+  if (!isLiquidated(cur)) throw new Error("This cash hasn't been liquidated yet — record the spend first.");
+
+  const clean = (lines ?? []).map((l) => ({
+    description: String(l.description ?? ""),
+    budgetAmount: num(l.budgetAmount),
+    actualAmount: num(l.actualAmount),
+  }));
+  if (clean.length === 0) throw new Error("Keep at least one line.");
+  const actualSpent = round2(clean.reduce((a, l) => a + l.actualAmount, 0));
+
+  const next = {
+    ...cur,
+    lines: clean,
+    actualSpent,
+    // Hand-corrected by an admin — the figures no longer come straight from an
+    // AI-read receipt, so drop the receipt-verified claim.
+    aiVerified: false,
+  };
+  await prisma.cashRequest.update({
+    where: { id },
+    data: { liquidation: next as unknown as Prisma.InputJsonValue },
+  });
+  revalidatePath("/cash-requests");
+  revalidatePath("/management");
+}
+
 /** Admin: permanently delete a cash request on any status. */
 export async function adminDeleteCashRequest(id: string): Promise<void> {
   const user = await getCurrentUser();
