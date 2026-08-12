@@ -23,6 +23,7 @@ function SideEditor({
   idp,
   outcome,
   onTest,
+  onTestSms,
   defaultTestEmail,
 }: {
   title: string;
@@ -32,12 +33,16 @@ function SideEditor({
   idp: string;
   outcome: "won" | "lost";
   onTest?: (input: { outcome: "won" | "lost"; toEmail: string; subject: string; body: string }) => Promise<{ ok: true; to: string }>;
+  onTestSms?: (input: { outcome: "won" | "lost"; toNumber: string; sms: string }) => Promise<{ ok: boolean; to: string; balance: number | null; error?: string }>;
   defaultTestEmail?: string;
 }) {
   const seg = Math.max(1, Math.ceil((side.sms || "").length / 160));
   const [testEmail, setTestEmail] = useState(defaultTestEmail ?? "");
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testPhone, setTestPhone] = useState("");
+  const [smsTesting, setSmsTesting] = useState(false);
+  const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function sendTest() {
     if (!onTest) return;
@@ -50,6 +55,24 @@ function SideEditor({
       setTestMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to send test" });
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function sendTestSms() {
+    if (!onTestSms) return;
+    setSmsTesting(true);
+    setSmsMsg(null);
+    try {
+      const res = await onTestSms({ outcome, toNumber: testPhone.trim(), sms: side.sms });
+      setSmsMsg(
+        res.ok
+          ? { ok: true, text: `Test SMS sent to ${res.to}${res.balance != null ? ` · balance ₱${res.balance}` : ""}.` }
+          : { ok: false, text: res.error ?? "Failed to send test SMS" },
+      );
+    } catch (e) {
+      setSmsMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to send test SMS" });
+    } finally {
+      setSmsTesting(false);
     }
   }
 
@@ -86,6 +109,17 @@ function SideEditor({
           </div>
         </div>
       )}
+
+      {onTestSms && (
+        <div className="space-y-1 border-t pt-2">
+          <Label htmlFor={`${idp}-test-sms`} className="text-xs text-muted-foreground">Send a test SMS (uses the SMS copy above — no client is texted)</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input id={`${idp}-test-sms`} type="tel" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="09171234567" className="h-9 w-56" />
+            <Button type="button" size="sm" variant="outline" onClick={sendTestSms} disabled={smsTesting}>{smsTesting ? "Sending…" : "Send test SMS"}</Button>
+            {smsMsg && <span className={`text-xs ${smsMsg.ok ? "text-emerald-600" : "text-destructive"}`}>{smsMsg.text}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -94,11 +128,13 @@ export function ThankYouSetting({
   initial,
   onSave,
   onTest,
+  onTestSms,
   defaultTestEmail,
 }: {
   initial: ThankYouConfig;
   onSave: (input: ThankYouConfig) => Promise<ThankYouConfig>;
   onTest?: (input: { outcome: "won" | "lost"; toEmail: string; subject: string; body: string }) => Promise<{ ok: true; to: string }>;
+  onTestSms?: (input: { outcome: "won" | "lost"; toNumber: string; sms: string }) => Promise<{ ok: boolean; to: string; balance: number | null; error?: string }>;
   defaultTestEmail?: string;
 }) {
   const [cfg, setCfg] = useState<ThankYouConfig>(initial);
@@ -151,6 +187,7 @@ export function ThankYouSetting({
           idp="ty-won"
           outcome="won"
           onTest={onTest}
+          onTestSms={onTestSms}
           defaultTestEmail={defaultTestEmail}
           onChange={(patch) => setCfg((c) => ({ ...c, won: { ...c.won, ...patch } }))}
         />
@@ -161,6 +198,7 @@ export function ThankYouSetting({
           idp="ty-lost"
           outcome="lost"
           onTest={onTest}
+          onTestSms={onTestSms}
           defaultTestEmail={defaultTestEmail}
           onChange={(patch) => setCfg((c) => ({ ...c, lost: { ...c.lost, ...patch } }))}
         />
