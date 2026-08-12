@@ -1,3 +1,12 @@
+## 2026-08-11 · Cash requests — Accounting can raise for any department
+- **Owner request:** give Accounting access to all departments in the Cash Requests tab.
+- **Finding:** Accounting already *sees* all departments' requests (it's a `finance` role → `where: {}`). The
+  gap was the **department picker on the cash-request form** — Accounting was locked to its own department.
+- **Change:** added `accounting` to the "pick any of the 5 departments" group in both the page
+  (`cash-requests/page.tsx` `plantMgrDepts`) and the server enforcement (`cash-requests/actions.ts`
+  `canPickAnyDept`), so Accounting can now raise/tag a cash request for any department (UI + server aligned).
+- Typecheck + lint clean.
+
 ## 2026-08-11 · "Lost" tickbox on the quotation header
 - **Owner request:** add a tick box on the quotation page; when ticked the quotation is recorded as LOST,
   follow-up email/SMS stop, but the lost thank-you is still sent.

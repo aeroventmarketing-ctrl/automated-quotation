@@ -23,10 +23,10 @@ export default async function CashRequestsPage({ searchParams }: { searchParams?
   // The requestor's own department — fixed on the cash-request form (not selectable).
   const cashDeptKey = requestorDeptKey((role) => has(role as WorkflowRoleKey));
   const cashDept = { key: cashDeptKey, label: requisitionDeptLabel(cashDeptKey) };
-  // Purchaser, Technical Head, Logistics (and admins) may pick any of the 5
-  // departments (incl. Office); the Plant Manager and Warehouseman pick the 4
+  // Accounting, Purchaser, Technical Head, Logistics (and admins) may pick any of
+  // the 5 departments (incl. Office); the Plant Manager and Warehouseman pick the 4
   // production departments (never Office).
-  const plantMgrDepts = admin || has("purchaser") || has("technical_head") || has("logistics")
+  const plantMgrDepts = admin || has("accounting") || has("purchaser") || has("technical_head") || has("logistics")
     ? REQUISITION_DEPTS.map((d) => ({ key: d.key, label: d.label }))
     : has("plant_manager") || has("warehouse")
     ? PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label }))

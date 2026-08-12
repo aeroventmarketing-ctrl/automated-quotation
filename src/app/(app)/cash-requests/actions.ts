@@ -69,11 +69,12 @@ export async function createCashRequest(input: {
   const assignments = await getWorkflowRoles();
   // Logistics may pick any of the 5 departments (incl. Office); the Plant Manager
   // and Warehouseman pick the 4 production departments (never Office).
-  // Purchaser, Technical Head and Logistics (and admins) may pick any of the 5
-  // departments (incl. Office); the Plant Manager and Warehouseman pick the 4
-  // production departments (never Office).
+  // Accounting, Purchaser, Technical Head and Logistics (and admins) may pick any
+  // of the 5 departments (incl. Office); the Plant Manager and Warehouseman pick
+  // the 4 production departments (never Office).
   const canPickAnyDept =
     isAdmin(user) ||
+    userHasWorkflowRole(assignments, user.id, "accounting" as WorkflowRoleKey) ||
     userHasWorkflowRole(assignments, user.id, "logistics" as WorkflowRoleKey) ||
     userHasWorkflowRole(assignments, user.id, "purchaser" as WorkflowRoleKey) ||
     userHasWorkflowRole(assignments, user.id, "technical_head" as WorkflowRoleKey);
