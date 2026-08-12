@@ -34,7 +34,7 @@ import { FollowUpSetting } from "./follow-up-setting";
 import { FollowUpTemplatesSetting } from "./follow-up-templates-setting";
 import { ThankYouSetting } from "./thank-you-setting";
 import { RoleAccessSetting } from "./role-access-setting";
-import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setFollowUpCampaignAction, saveFollowUpScheduleAction, saveFollowUpSmsAction, sendTestSmsAction, saveThankYouAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
+import { savePropellerSpLockSetting, saveAxialSpLockSetting, saveHideOrderProgressSetting, saveNotificationsSetting, saveNotificationBaselineSetting, saveAlertGoLiveSetting, saveDocCheckGateSetting, saveTestModeSetting, saveStockLocationsAction, saveFollowUpSettingsAction, runFollowUpPreviewAction, sendTestFollowUpAction, saveFollowUpTemplatesAction, setFollowUpCampaignAction, saveFollowUpScheduleAction, saveFollowUpSmsAction, sendTestSmsAction, saveThankYouAction, sendTestThankYouAction, setDuctJoNextNo, setAccJoNextNo, setMcJoNextNo, saveRoleAccessAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -306,7 +306,7 @@ export default async function AdminOverviewPage() {
         templates={followUpTemplates}
         onSave={saveFollowUpTemplatesAction}
       />
-      <ThankYouSetting initial={thankYou} onSave={saveThankYouAction} />
+      <ThankYouSetting initial={thankYou} onSave={saveThankYouAction} onTest={sendTestThankYouAction} defaultTestEmail={me?.email ?? ""} />
     </div>
   );
 }

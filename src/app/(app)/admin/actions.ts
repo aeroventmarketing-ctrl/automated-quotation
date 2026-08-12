@@ -25,7 +25,7 @@ import { sendSms, smsConfigured, normalizePhMobile, getSemaphoreBalance } from "
 import { buildFollowUpSms, smsTemplateForNudge } from "@/lib/follow-up-sms";
 import { buildFollowUpEmail, templateForNudge, type FollowUpTemplate } from "@/lib/follow-up-email";
 import { getFollowUpTemplates, setFollowUpTemplates } from "@/lib/follow-up-templates";
-import { setThankYouSettings, type ThankYouConfig } from "@/lib/thank-you";
+import { setThankYouSettings, buildThankYouEmail, type ThankYouConfig } from "@/lib/thank-you";
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
 import { setUserSalesPersonnel } from "@/lib/sales-personnel";
 import { setFanMotorBrand } from "@/lib/fan-motor-brand";
@@ -733,6 +733,54 @@ export async function saveThankYouAction(input: ThankYouConfig): Promise<ThankYo
   const saved = await setThankYouSettings(parsed);
   revalidatePath("/admin");
   return saved;
+}
+
+const thankYouTestSchema = z.object({
+  outcome: z.enum(["won", "lost"]),
+  toEmail: z.string().default(""),
+  subject: z.string().default(""),
+  body: z.string().default(""),
+});
+/** Send a TEST of a Won/Lost thank-you email (uses the form's current copy) so an
+ *  admin can preview the appearance before it goes to a real client. */
+export async function sendTestThankYouAction(input: z.infer<typeof thankYouTestSchema>): Promise<{ ok: true; to: string }> {
+  const user = await assertAdmin();
+  if (!emailConfigured()) {
+    throw new Error("No Resend API key set (RESEND_API_KEY). Add it in Vercel and redeploy first.");
+  }
+  if (!config.followUpFromEmail) {
+    throw new Error("No sender address set (FOLLOW_UP_FROM_EMAIL). Add it in Vercel and redeploy first.");
+  }
+  const { outcome, toEmail, subject, body } = thankYouTestSchema.parse(input);
+  const wanted = (toEmail ?? "").trim() || (user.email ?? "").trim();
+  if (!wanted) throw new Error("Enter an email address to send the test to.");
+  const parsedTo = z.string().email().safeParse(wanted);
+  if (!parsedTo.success) throw new Error(`"${wanted}" isn't a valid email address.`);
+  const to = parsedTo.data;
+
+  const money = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 2 }).format(125000);
+  const email = buildThankYouEmail(
+    { enabled: true, subject, body, sms: "" },
+    {
+      contactName: user.name,
+      company: "Sample Client Corporation",
+      quoteNumber: "TEST-0001",
+      total: money,
+      salesName: user.name,
+      quoteUrl: `${config.appUrl}/q/sample-quote`,
+    },
+  );
+  const label = outcome === "won" ? "WON" : "LOST";
+  await sendEmail({
+    from: `${config.followUpFromName} <${config.followUpFromEmail}>`,
+    to,
+    subject: `[TEST ${label} thank-you] ${email.subject}`,
+    text: `This is a TEST of the ${label} thank-you email — no client received it.\n\n${email.text}`,
+    html: `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#7d9199">This is a <strong>TEST</strong> of the ${label} thank-you email — no client received it.</p>${email.html}`,
+    replyTo: user.email ?? undefined,
+  });
+
+  return { ok: true, to };
 }
 
 // --- Material Request Form numbering ----------------------------------------
