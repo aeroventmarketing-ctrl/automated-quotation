@@ -1,3 +1,20 @@
+## 2026-08-13 · Purchasing — Purchaser can reject a pending request
+- **Owner request (frozen Phase 4, explicit approval):** add a Reject button for the Purchaser on pending
+  purchasing requests (so they can turn away something they can't source), alongside the approving role's
+  Approve/Reject.
+- **Permission** (`advancePurchaseRequest`): the Purchaser is now allowed on the `reject` / `reject_po` steps in
+  addition to the step's approving role (Payment Approver / Plant Manager) and admin.
+- **Honest trail:** rejections now stamp the acting role. `reject` writes `chainLog.reject = {byName, at, role}`
+  and `reject_po`/`approve_po` carry `role` too; `coerceChainLog` reads it and `buildPurchaseTrail` prefers it,
+  so a Purchaser reject shows "(Purchaser)" — not the default approver designation. Backward-compatible
+  (historical entries with no role fall back to the step's default title).
+- **Row + UI:** `buildPurchaseChainRow` exposes `canPurchaserReject` (Purchaser role && the request is in the
+  **pending** bucket — PENDING_APPROVAL, or a dept MRF Plant-Manager-approved but not yet purchase-approved).
+  `purchasing-chain.tsx` renders a confirmed **Reject** button on the interactive chain for that case, picking
+  `reject` (pending) or `reject_po` (approved-awaiting-purchase-approval), and de-duped against the approving
+  role's own reject when the viewer holds both. Read-only surfaces (order page, requisitions) are unaffected.
+- Typecheck + lint clean; `next build` compiles & type-validates.
+
 ## 2026-08-13 · Purchasing — approve first, PO after (flip the PO-before-approval gate)
 - **Owner request (explicit approval to change the frozen Phase 4):** a pending purchase request must NOT
   require the Purchaser to create the PO first; approval happens while pending (no PO), and only once approved

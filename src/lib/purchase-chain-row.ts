@@ -4,7 +4,7 @@
  * and the central Purchasing workspace (where the purchaser processes them).
  */
 import { coercePurchaseOrder, poLinesFromPRItems, poLineAmount, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
-import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, statusBucket, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import {
   coercePurchaseReturns,
   hasUnresolvedReturn,
@@ -173,6 +173,10 @@ export interface PurchaseChainRow {
   // A warehouse/material requisition — the Plant Manager approves the request
   // itself (step 16), so approve/reject don't wait for a Purchase Order.
   isDept: boolean;
+  // The Purchaser may reject a still-pending request (in the pending bucket:
+  // PENDING_APPROVAL, or a dept MRF approved by the Plant Manager but not yet
+  // purchase-approved). Rendered as a Reject button on the interactive chain.
+  canPurchaserReject: boolean;
   // The Approver has approved the raised PO (chainLog.approve_po). For a dept
   // requisition this is what moves it from "pending" to "approved".
   poApproved: boolean;
@@ -247,14 +251,18 @@ export function buildReturnViews(pr: PurchaseRequestLike): PurchaseReturnView[] 
   });
 }
 
-interface ChainLogEntry { byName?: string; at?: string }
+interface ChainLogEntry { byName?: string; at?: string; role?: string }
 export function coerceChainLog(v: unknown): Record<string, ChainLogEntry> {
   if (!v || typeof v !== "object") return {};
   const out: Record<string, ChainLogEntry> = {};
   for (const [k, e] of Object.entries(v as Record<string, unknown>)) {
     if (e && typeof e === "object") {
       const o = e as Record<string, unknown>;
-      out[k] = { byName: typeof o.byName === "string" ? o.byName : undefined, at: typeof o.at === "string" ? o.at : undefined };
+      out[k] = {
+        byName: typeof o.byName === "string" ? o.byName : undefined,
+        at: typeof o.at === "string" ? o.at : undefined,
+        role: typeof o.role === "string" ? o.role : undefined,
+      };
     }
   }
   return out;
@@ -271,7 +279,9 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
     who ? `${label} — ${who} (${title}) · ${formatDateTime(at ?? undefined)}` : null;
   const lstamp = (label: string, title: string, key: string) => {
     const e = log[key];
-    return e?.byName ? `${label} — ${e.byName} (${title}) · ${formatDateTime(e.at ? new Date(e.at) : undefined)}` : null;
+    // Prefer the role stamped on the entry (e.g. a Purchaser reject) over the
+    // step's default designation.
+    return e?.byName ? `${label} — ${e.byName} (${e.role ?? title}) · ${formatDateTime(e.at ? new Date(e.at) : undefined)}` : null;
   };
   const approver = workflowRoleLabel("payment_approver");
   const acct = workflowRoleLabel("accounting");
@@ -286,10 +296,17 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
   // approval — so the decided-by line stays "Approved" and the rejection shows
   // as its own line below.
   const rejectedAtPo = !!log["reject_po"];
+  const rejectEntry = log["reject"];
   const firstLabel = status === "REJECTED" && !rejectedAtPo ? "Rejected" : "Approved";
+  // A PENDING reject records who / what-role in chainLog.reject — use it so a
+  // Purchaser reject shows as the Purchaser, not the default approving role.
+  const firstLine =
+    status === "REJECTED" && !rejectedAtPo && rejectEntry?.byName
+      ? `Rejected — ${rejectEntry.byName} (${rejectEntry.role ?? decider}) · ${formatDateTime(rejectEntry.at ? new Date(rejectEntry.at) : undefined)}`
+      : stamp(firstLabel, decider, pr.decidedByName, pr.decidedAt);
   return [
     stamp("Requested", "Requestor", pr.createdByName, pr.createdAt),
-    stamp(firstLabel, decider, pr.decidedByName, pr.decidedAt),
+    firstLine,
     lstamp("Purchase order approved", approver, "approve_po"),
     lstamp("Purchase order rejected", approver, "reject_po"),
     stamp("Voucher & checks prepared", acct, pr.voucherByName, pr.voucherAt),
@@ -388,6 +405,7 @@ export function buildPurchaseChainRow(
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,
+    canPurchaserReject: ctx.canAct("purchaser") && statusBucket(status, { isDept, poApproved }) === "pending",
     poApproved,
   };
 }
