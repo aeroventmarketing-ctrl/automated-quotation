@@ -84,6 +84,10 @@ export interface PoSummaryRow {
   net: number; // PO net amount
   currency: string;
   href: string;
+  // When the item was received into stock (Warehouseman's "Receive & Add to Stock"),
+  // and who — null until received. For a combined PO, the most recent member receipt.
+  receivedAt: string | null; // ISO
+  receivedByName: string | null;
 }
 
 export interface MyDashboard {
@@ -537,7 +541,17 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const byNumber = new Map<string, PoSummaryRow>();
       for (const pr of withPo) {
         const po = coercePurchaseOrder(pr.po);
-        if (!po?.poNumber || byNumber.has(po.poNumber)) continue;
+        if (!po?.poNumber) continue;
+        const receivedAt = pr.receivedAt ? pr.receivedAt.toISOString() : null;
+        const existing = byNumber.get(po.poNumber);
+        if (existing) {
+          // Combined PO (shared number) — surface the most recent member receipt.
+          if (receivedAt && (!existing.receivedAt || receivedAt > existing.receivedAt)) {
+            existing.receivedAt = receivedAt;
+            existing.receivedByName = pr.receivedByName ?? null;
+          }
+          continue;
+        }
         const st = pr.status as PRStatus;
         byNumber.set(po.poNumber, {
           key: `po:${po.poNumber}`,
@@ -550,6 +564,8 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           currency: "PHP",
           // Land on this PO in the Purchasing workspace (scrolls to & highlights it).
           href: `/purchasing?req=${pr.id}`,
+          receivedAt,
+          receivedByName: pr.receivedByName ?? null,
         });
       }
       poSummary = [...byNumber.values()].sort((a, b) => a.poNumber.localeCompare(b.poNumber));
