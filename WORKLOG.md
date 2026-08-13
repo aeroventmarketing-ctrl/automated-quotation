@@ -1,3 +1,22 @@
+## 2026-08-13 · Receipt reader — 5 more suppliers, alphanumeric serial, handwritten PAID/EWT trap
+- **Owner lessons (5 sales invoices):** Topphand Enterprises (No. 14037 → 48,000.00), Tozen Philippines
+  (SI000003966 → Amount Due 11,212.00), Rite Products (37966 → 8,078.02), Metal Exponents (100580 → 68,845.00),
+  Taian (Subic) Electric (012047 → 35,620.00). All confirm the standing rule: the **VAT-inclusive gross** ("Total
+  Sales (VAT Inclusive)" / "Total Amount Due" / "Amount Due") goes into the reconciliation **Actual** column.
+- **New — alphanumeric invoice serials:** Tozen's SAP serial is **"SI000003966"** (2 letters + 9 digits). Broadened
+  the invoice-number rule from "4–8 digits" to a **4–9-char serial that may carry a letter prefix**, keeping every
+  leading zero AND any letters; added Tozen serial-reading to the SAP/"SUPPLIER SALES INVOICE" section (it read the
+  amount but never the No.) and dropped the "digits only" schema note. New worked serials: 14037, 37966, 100580, 012047.
+- **New trap (c) — handwritten "PAID – CASH – ₱… / EWT ₱…":** Metal Exponents stamps the net-of-withholding CASH
+  (68,230.00 = 68,845.00 − 614.69 EWT) by hand; the reader must still use the **printed VAT-inclusive Total Amount
+  Due 68,845.00**, not the handwritten paid figure. (A "Less 2% COD Discount" already baked into 68,845.00 stays.)
+- **Reinforced the withholding trap** with Rite Products (8,078.02 not 8,005.89 after "Less: Withholding Tax 72.13"),
+  and the "no/blank withholding line → Total Amount Due = gross" case with Topphand (48,000.00) and Taian (35,620.00).
+- **Tozen date:** use the invoice **"Date" (07/17/2026), not the Delivery Date** (already in the SAP section; added
+  the worked value). **PDC exception:** for a post-dated-check invoice with a "Payment Due Date" (e.g. Rite "PDC 15
+  DAYS / 06/12/2026"), book the due date as the receipt date.
+- Both readers (`api/ai/read-receipt` + `read-cash-receipt`) updated in parallel. Prompt-only; typecheck + lint clean.
+
 ## 2026-08-13 · Dashboard — "Sales this month" now reconciles with the WON sales report
 - **Owner report ("this are not tally"):** the "Sales this month" KPI (₱2,785,603.32) didn't match the WON
   sales report's GRAND TOTAL Value (₱2,626,932.12) — a ₱158,671.20 gap.
