@@ -1,3 +1,16 @@
+## 2026-08-13 · Receipt reader — cover printed booklets (Golden Pacific) + the net-of-VAT trap
+- **Owner lesson:** a printed Golden Pacific sales invoice — 5-digit "No." (top-right), typed date
+  (August 11, 2026), row 2 · ASAHI UCF208-24 · 750 · 1,500, and TOTAL AMT. DUE 1,500 → Actual.
+- **Prompt refinement (`api/ai/read-receipt`):** generalised the booklet-invoice section from "handwritten" to
+  **handwritten OR pre-printed** (Wings *and* Golden Pacific; columns QUANTITY | ARTICLES/DESCRIPTION | UNIT
+  PRICE | AMOUNT). The invoice "No." may be red **or** black (4–6 digits); the date may be handwritten M/D/YY or
+  typed in full. Key fix: use the **grand-total** row ("TOTAL AMOUNT DUE" / "TOTAL AMT. DUE", VAT-inclusive) and
+  explicitly DON'T use the mid "AMOUNT DUE" / "Amount Net of VAT" line — on a VAT-inclusive PH invoice that's the
+  net figure (e.g. 1,339.29 + 12% VAT 160.71 = 1,500.00 payable). Ignore Less-VAT / Withholding / VATable /
+  Zero-rated / VAT-Amount rows.
+- Invoice-number capture, dedup and display were already in place (#333); this is a reader-quality prompt-only
+  change. Typecheck + lint clean.
+
 ## 2026-08-13 · Receipt reader — handwritten sales invoices + invoice-number dedup
 - **Owner lesson:** the voucher-reconciliation AI reader must read a handwritten PH "sales invoice" booklet
   (e.g. Wings Commercial): (1) the red pre-printed serial "No." → invoice number; (2) the "Date" (M/D/YY);
