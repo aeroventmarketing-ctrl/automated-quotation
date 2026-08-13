@@ -1,3 +1,12 @@
+## 2026-08-13 · Receipt reader — VIS Industrial + Trade One sales invoices
+- **Owner lessons (2 sales invoices):** VIS Industrial Corp. (No. 119839 → 20,320.00) and Trade One Incorporated
+  (No. 000964 → 116,178.00). Both confirm the standing rule — the **VAT-inclusive gross** ("Total Sales (VAT
+  Inclusive)" / "Total Amount Due") is the reconciliation **Actual**.
+- **Change (`api/ai/read-receipt` + `read-cash-receipt`):** added both suppliers to the booklet list; added worked
+  serials **119839** and leading-zero **000964**; and added them to the "no/blank withholding line → Total Amount
+  Due = gross" examples — Trade One explicitly shows "Less: Withholding Tax **0.00**" so its Total Amount Due
+  116,178.00 is the gross. Prompt-only; typecheck + lint clean.
+
 ## 2026-08-13 · Receipt reader — book the printed invoice date, not the payment due date
 - **Owner correction:** for Rite Products (and any PDC / post-dated-check invoice), use the **printed invoice
   "Date" 05/28/2026**, NOT the "Payment Due Date" 06/12/2026. Reverses the PDC exception added earlier today.
