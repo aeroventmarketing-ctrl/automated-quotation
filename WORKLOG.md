@@ -1,3 +1,20 @@
+## 2026-08-13 · Receipt reader — handwritten sales invoices + invoice-number dedup
+- **Owner lesson:** the voucher-reconciliation AI reader must read a handwritten PH "sales invoice" booklet
+  (e.g. Wings Commercial): (1) the red pre-printed serial "No." → invoice number; (2) the "Date" (M/D/YY);
+  (3) the QTY / DESCRIPTION / UNIT PRICE / AMOUNT body rows; (4) "TOTAL AMOUNT DUE" → the Actual column
+  (VAT-inclusive); (5) don't reuse the same sales-invoice number across different POs/vouchers.
+- **Prompt (`api/ai/read-receipt`):** added a HANDWRITTEN / BOOKLET SALES INVOICE section to the SYSTEM prompt
+  (read the red "No.", the handwritten date, the body columns, and use TOTAL AMOUNT DUE as the VAT-inclusive
+  amount so the line actuals sum to it; handwritten figures on a *supplier* invoice are official — unlike bank
+  slips). Added `invoiceNumber` to `receiptReadSchema` and the userPrompt JSON shape.
+- **Dedup:** after a read, the route checks other purchase requests' reconciliations for the same
+  `invoiceNumber` (Prisma JSON-path filter) and, if found, prepends a warning naming the other PO(s).
+- **Store + show:** `Reconciliation` gains `invoiceNumber` (coerced); `recordReconciliation` persists it
+  (preserving any prior); `PurchaseReconcileView`/`buildReconcileView` expose it; the reconcile panel captures
+  the read number, passes it through, shows "SI No. …" in the header and in the AI read summary (with the date).
+- Scope: purchase voucher-reconciliation reader only (the cash-liquidation reader is untouched). Display/reader
+  quality + validation — non-workflow. Typecheck + lint clean; `next build` compiles & type-validates.
+
 ## 2026-08-13 · PO Summary — show the received-into-stock date
 - **Owner request:** in the Purchase Orders — Summary card, show the date the Warehouseman received the item
   (pressed "Receive & Add to Stock"); visible to Purchaser, Admin and Payment Approver.

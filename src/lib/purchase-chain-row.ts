@@ -81,6 +81,7 @@ export interface PurchaseReconcileView {
   aiReads: number; // AI receipt reads used (against the per-voucher limit)
   aiReadEscalated: string | null; // accounting informed the approver the AI limit was hit
   voucherNo: string | null; // printed cash-voucher number covering this request (if any)
+  invoiceNumber: string | null; // supplier sales-invoice / OR number read off the receipt
 }
 
 export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileView {
@@ -133,6 +134,7 @@ export function buildReconcileView(pr: PurchaseRequestLike): PurchaseReconcileVi
     aiReads: r.aiReadCount ?? 0,
     aiReadEscalated: stampLabel(r.aiReadEscalation),
     voucherNo: null, // set by the page from the printed-voucher records
+    invoiceNumber: r.invoiceNumber ?? null,
   };
 }
 

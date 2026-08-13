@@ -49,6 +49,9 @@ export const receiptLineSchema = z.object({
 
 export const receiptReadSchema = z.object({
   supplier: z.string().nullable().default(null),
+  // The receipt / sales-invoice serial number (e.g. the red pre-printed "No." on a
+  // supplier sales-invoice booklet). Used to flag a re-used invoice number.
+  invoiceNumber: z.string().nullable().default(null),
   date: z.string().nullable().default(null),
   vatMode: z.enum(["inclusive", "exclusive"]).nullable().default(null),
   receiptTotal: z.number().nullable().default(null),

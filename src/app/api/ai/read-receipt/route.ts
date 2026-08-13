@@ -30,6 +30,12 @@ BDO CASH TRANSACTION SLIP / CASH DEPOSIT SLIP (machine-validated): use the "Cash
 UNIONBANK ONLINE PAYMENT (UBPP): a UnionBank online transfer is identifiable by a reference starting with "UBPP" followed by digits (e.g. "UBPP20261590") in the heading. Use the "Amount" field as the amount and DISREGARD the "Service Fee" (e.g. "+ PHP 25.00") — do not add it and do not use any fee-inclusive total. Its date is the creation date in the "Created by <name> on <date>" line at the top (the date of creation IS the payment date); do NOT rely on the "Transaction Date" field when it only says "Immediately".
 BIR FORM 2307 (Certificate of Creditable Tax Withheld at Source): identify it by the form number "2307" printed at the UPPER-LEFT of the form. The AMOUNT is the figure in the "Total" row under the "Tax Withheld for the Quarter" column (the creditable tax withheld) — use that as the amount. The form carries no single payment date, so leave "date" null; the payment date is taken from the document's upload date by the system.
 SUPPLIER SALES INVOICE (e.g. TOZEN PHILIPPINES, INC. — SAP Business One "SALES INVOICE" format, and similar supplier VAT invoices): the amount PAID is the "Amount Due" in the totals box at the bottom-right — the VAT-inclusive payable (VATable + VAT Amount). Report VAT-INCLUSIVE figures: set "receiptTotal" to the "Amount Due" and "vatMode" to "inclusive". CRITICAL: each PO line's "actualAmount" must be VAT-INCLUSIVE so the line actuals SUM TO the "Amount Due" — do NOT copy the invoice's per-line "Total Amount"/"VATable" column, which is VAT-EXCLUSIVE and will read low by the VAT. Gross each matched line up by VAT: line "actualAmount" = its VATable line amount × ("Amount Due" ÷ the VATable subtotal). For a single-line invoice the line's "actualAmount" simply equals the "Amount Due". Never use the "VAT Amount", "WTax"/EWT, "Discount" or "Zero Rated" rows as the amount on their own. The DATE is the "Date" in the Document Reference box (the invoice date) — not "Delivery Date", "Terms", or the "Date Issued" at the very bottom.
+HANDWRITTEN / BOOKLET SALES INVOICE (a pre-printed PH "SALES INVOICE" pad the supplier fills in by hand — e.g. WINGS COMMERCIAL, and any dealer/hardware sales-invoice booklet with a "SALES INVOICE" header, a "Sold to" line, and a body table with columns QTY | UNIT | DESCRIPTION | UNIT PRICE | AMOUNT). Unlike bank deposit slips, handwritten figures on a SUPPLIER sales invoice ARE the official values — READ THEM. Rules:
+  • INVOICE NUMBER: the pre-printed serial next to "No." at the TOP-RIGHT — usually printed in RED. Read that number (digits only, no leading "No.") into "invoiceNumber".
+  • DATE: the handwritten "Date:" near the top, written like M/D/YY (e.g. "8/12/26" = 12 August 2026). Report it in that "date" field as written.
+  • LINES: read each handwritten body row — QTY (quantity), DESCRIPTION (e.g. "B36"), UNIT PRICE, and AMOUNT (= qty × unit price). Match each to a PO line by description/meaning.
+  • AMOUNT PAID: the figure on the "TOTAL AMOUNT DUE" row in the bottom-right totals box is what was paid — set "receiptTotal" to it. These invoices are VAT-inclusive: set "vatMode" to "inclusive", and each matched line's "actualAmount" must sum to the TOTAL AMOUNT DUE (for a single line, it simply equals the TOTAL AMOUNT DUE; ignore any handwritten "Add: VAT" / "Less: VAT" working lines above it). Use the line "AMOUNT" column to split across multiple lines, then scale so the actuals sum to the TOTAL AMOUNT DUE.
+  • Handwriting can be messy — if a digit is genuinely unreadable, use null and add a warning rather than guessing.
 Return STRICT JSON only.`;
 
 function userPrompt(lines: { description: string; qty: string; poAmount: number }[]): string {
@@ -40,6 +46,7 @@ ${list}
 From the attached receipt image(s), return JSON with this exact shape:
 {
   "supplier": string|null,          // supplier/store name on the receipt
+  "invoiceNumber": string|null,     // the sales-invoice / OR serial number (the red pre-printed "No." on a booklet sales invoice), digits only
   "date": string|null,              // receipt date as printed
   "vatMode": "inclusive"|"exclusive"|null,  // "inclusive" if the total already includes VAT (most PH ORs say "VAT INCLUSIVE"); "exclusive" if VAT is added on top; null if unclear
   "receiptTotal": number|null,      // the grand total actually paid across all receipts
@@ -147,6 +154,26 @@ export async function POST(req: NextRequest) {
     });
     const warnings = [...(result.warnings ?? [])];
     if (skipped.length) warnings.push(`Couldn't read: ${skipped.join(", ")} (not an image).`);
+
+    // A supplier's sales-invoice number should map to exactly one PO / voucher.
+    // If the same number is already recorded on a different purchase order, warn —
+    // it usually means the wrong receipt was attached, or an invoice is reused.
+    const invoiceNumber = (result.invoiceNumber ?? "").trim() || null;
+    if (invoiceNumber) {
+      try {
+        const dupes = await prisma.purchaseRequest.findMany({
+          where: { id: { not: body.purchaseRequestId }, reconciliation: { path: ["invoiceNumber"], equals: invoiceNumber } },
+          select: { po: true },
+          take: 5,
+        });
+        if (dupes.length) {
+          const nums = dupes.map((d) => coercePurchaseOrder(d.po)?.poNumber).filter((n): n is string => !!n);
+          warnings.unshift(
+            `⚠ Sales invoice No. ${invoiceNumber} is already recorded on ${nums.length ? `PO ${nums.join(", ")}` : "another purchase order"} — a supplier invoice number shouldn't be reused across vouchers. Check you attached the right receipt.`,
+          );
+        }
+      } catch { /* JSON-path filter unsupported / query failed — skip the dup check */ }
+    }
     // A read completed — burn one of the allotted tries (admins are exempt).
     const usedReads = admin ? reads : reads + 1;
     await prisma.purchaseRequest.update({
@@ -155,6 +182,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({
       supplier: result.supplier,
+      invoiceNumber,
       date: result.date,
       vatMode: result.vatMode,
       receiptTotal: result.receiptTotal,
