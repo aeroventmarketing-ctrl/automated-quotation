@@ -1,3 +1,17 @@
+## 2026-08-13 · Purchasing — Create-PO & Split only after approval (hidden while pending)
+- **Owner request (frozen Phase 4, explicit approval):** hide the "Create Purchase Order" and "Split
+  (multi-supplier)" buttons while a request is in the **pending** tab; show them only once approved (in the
+  **approved** tab). Apply to all roles and tabs.
+- **Row** (`buildPurchaseChainRow`): new `canPreparePO` = `status === "APPROVED" && statusBucket(...) ===
+  "approved"` — i.e. approved and out of the pending bucket (a dept MRF needs the Approver's `approve_po`).
+- **Chain UI** (`purchasing-chain.tsx`): the **Create Purchase Order** button and the **Split (multi-supplier)**
+  control now render only when `r.canPreparePO`; while pending they're hidden (Create-PO falls back to the
+  "No purchase order yet." text). Read-only surfaces already hid them.
+- **Server guards** (defense-in-depth, consistency): `savePurchaseOrder` and `splitPurchaseRequest` now refuse
+  while the request is in the pending bucket (was: only `PENDING_APPROVAL`), so a dept MRF awaiting `approve_po`
+  can't get a PO / be split until purchase-approved. Split still also blocks once past APPROVED.
+- Typecheck + lint clean; `next build` compiles & type-validates.
+
 ## 2026-08-13 · Purchasing — Purchaser can reject a pending request
 - **Owner request (frozen Phase 4, explicit approval):** add a Reject button for the Purchaser on pending
   purchasing requests (so they can turn away something they can't source), alongside the approving role's

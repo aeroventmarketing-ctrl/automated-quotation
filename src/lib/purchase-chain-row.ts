@@ -177,6 +177,10 @@ export interface PurchaseChainRow {
   // PENDING_APPROVAL, or a dept MRF approved by the Plant Manager but not yet
   // purchase-approved). Rendered as a Reject button on the interactive chain.
   canPurchaserReject: boolean;
+  // The request is fully approved and now at the PO-preparation stage (APPROVED &
+  // out of the pending bucket) — the point at which "Create Purchase Order" and
+  // "Split (multi-supplier)" are offered. Hidden while the request is still pending.
+  canPreparePO: boolean;
   // The Approver has approved the raised PO (chainLog.approve_po). For a dept
   // requisition this is what moves it from "pending" to "approved".
   poApproved: boolean;
@@ -406,6 +410,9 @@ export function buildPurchaseChainRow(
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,
     canPurchaserReject: ctx.canAct("purchaser") && statusBucket(status, { isDept, poApproved }) === "pending",
+    // PO prep opens once the request is approved (out of the pending bucket) and
+    // still at APPROVED — before the voucher. Keeps Create-PO / Split off pending.
+    canPreparePO: status === "APPROVED" && statusBucket(status, { isDept, poApproved }) === "approved",
     poApproved,
   };
 }
