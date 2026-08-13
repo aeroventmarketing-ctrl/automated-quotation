@@ -53,3 +53,13 @@ export async function signedUrl(
   if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
   return data.signedUrl;
 }
+
+/**
+ * A long-lived signed URL, for embedding a stored image in an outbound email
+ * (recipients' mail clients fetch it unauthenticated, possibly weeks later, so a
+ * short expiry would break the images). Defaults to ~3 years. The bucket stays
+ * private — only holders of this signed link can read the object.
+ */
+export async function longLivedImageUrl(path: string): Promise<string> {
+  return signedUrl(path, 60 * 60 * 24 * 365 * 3);
+}
