@@ -46,7 +46,7 @@ import {
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
-import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
@@ -2844,10 +2844,10 @@ export async function savePurchaseOrder(
   if (isPoApproved(pr.chainLog) && coercePurchaseOrder(pr.po) && !isAdmin(user)) {
     throw new Error("This purchase order is approved — only an admin can edit it.");
   }
-  // A purchase order can't be prepared until the request has been approved: a
-  // still-pending request (an order-linked one, or a material/department MRF
-  // awaiting the Plant Manager) has to clear approval first.
-  if (pr.status === "PENDING_APPROVAL") {
+  // A purchase order can't be prepared until the request has cleared approval and
+  // left the pending bucket — PENDING_APPROVAL, or a material/department MRF the
+  // Plant Manager approved but the Approver hasn't purchase-approved yet.
+  if (statusBucket(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) === "pending") {
     throw new Error("This request must be approved before a purchase order can be created.");
   }
 
@@ -2892,9 +2892,13 @@ export async function splitPurchaseRequest(purchaseRequestId: string, moveItems:
   }
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
-  // Only while still in approval / PO preparation — once the voucher / cash /
-  // purchase steps have run, the chain is committed and can't be re-split.
-  if (pr.status !== "PENDING_APPROVAL" && pr.status !== "APPROVED") {
+  // Only at the PO-preparation stage: the request must be approved (out of the
+  // pending bucket) and still at APPROVED — once the voucher / cash / purchase
+  // steps have run, the chain is committed and can't be re-split.
+  if (statusBucket(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) === "pending") {
+    throw new Error("Approve this requisition before splitting it for purchase orders.");
+  }
+  if (pr.status !== "APPROVED") {
     throw new Error("This requisition has progressed past PO preparation — it can no longer be split.");
   }
   if (poBatchId(pr.po)) throw new Error("This requisition is part of a combined PO and can't be split.");

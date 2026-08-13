@@ -62,6 +62,7 @@ interface PRRow {
   isDept?: boolean;
   poApproved?: boolean;
   canPurchaserReject?: boolean;
+  canPreparePO?: boolean;
 }
 
 /** Normalise a description for loose matching (lower-case, single-spaced). */
@@ -345,9 +346,9 @@ export function PurchasingChain({
             </ul>
             {/* Admin: edit the item lines in place (delete lives in the actions row). */}
             {adminManage && admin && !readOnly && <AdminPrEditDelete prId={r.id} items={r.items} showDelete={false} />}
-            {/* Split a multi-supplier requisition into a sibling with its own PO
-                (Purchaser / admin, while still in approval / PO preparation). */}
-            {!readOnly && (canManagePO || admin) && r.items.length > 1 && (r.status === "PENDING_APPROVAL" || r.status === "APPROVED") && (
+            {/* Split a multi-supplier requisition into a sibling with its own PO —
+                only once approved (the PO-preparation stage), never while pending. */}
+            {!readOnly && (canManagePO || admin) && r.items.length > 1 && r.canPreparePO && (
               <SplitRequisition prId={r.id} items={r.items} poLineDescs={r.po?.lines?.map((l) => l.description) ?? []} />
             )}
             {/* Stock availability lookup — plus per-line issue-from-stock for the
@@ -553,9 +554,8 @@ export function PurchasingChain({
                     </button>
                   )}
                 </div>
-              ) : readOnly ? (
-                <span className="text-xs text-muted-foreground">No purchase order yet.</span>
-              ) : r.canManagePO ? (
+              ) : !readOnly && r.canManagePO && r.canPreparePO ? (
+                // Only once approved (out of the pending bucket) — never while pending.
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPoEditId(r.id)}>Create Purchase Order</Button>
               ) : (
                 <span className="text-xs text-muted-foreground">No purchase order yet.</span>
