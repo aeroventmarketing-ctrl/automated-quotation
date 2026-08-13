@@ -61,6 +61,7 @@ interface PRRow {
   priorStatuses?: { key: string; label: string }[];
   isDept?: boolean;
   poApproved?: boolean;
+  canPurchaserReject?: boolean;
 }
 
 /** Normalise a description for loose matching (lower-case, single-spaced). */
@@ -244,6 +245,13 @@ export function PurchasingChain({
     } finally {
       setBusy(null);
     }
+  }
+
+  // The Purchaser rejecting a still-pending request (PENDING → reject; a
+  // Plant-Manager-approved MRF → reject_po). Confirmed, since it ends the request.
+  async function purchaserReject(prId: string, stepKey: string) {
+    if (!window.confirm("Reject this purchase request? It will be moved to Rejected.")) return;
+    await run(prId, stepKey);
   }
 
   if (requests.length === 0) {
@@ -435,6 +443,21 @@ export function PurchasingChain({
             ) : awaitingPlantApproval ? (
               <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval on the order&rsquo;s Materials tab.</div>
             ) : null}
+
+            {/* The Purchaser can reject a still-pending request they can't source —
+                separate from the approving role's own Approve/Reject above (shown
+                only when that reject isn't already available to this viewer). */}
+            {!readOnly && r.canPurchaserReject && (() => {
+              const key = r.status === "PENDING_APPROVAL" ? "reject" : "reject_po";
+              if (actionable.some((a) => a.key === key)) return null;
+              return (
+                <div className="mt-2">
+                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy === r.id + key} onClick={() => purchaserReject(r.id, key)}>
+                    {busy === r.id + key ? "Saving…" : "Reject"}
+                  </Button>
+                </div>
+              );
+            })()}
 
             {/* Supplier returns — disapproved items sent back for replacement.
                 Like reconciliation, interactivity follows the row's own return

@@ -2111,9 +2111,23 @@ export async function advancePurchaseRequest(
   // Department / material requisitions: the Plant Manager approves the MRF
   // (approve), then the Approver approves the raised PO (approve_po).
   const stepRole = effectiveStepRole(step, isDept);
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, stepRole))) {
-    throw new Error(`Only ${workflowRoleLabel(stepRole)} or an admin can do this.`);
+  const roles = await getWorkflowRoles();
+  const holdsStepRole = userHasWorkflowRole(roles, user.id, stepRole);
+  // The Purchaser may also reject a still-pending purchase request (reject /
+  // reject_po) — alongside the approving role — so they can turn away a request
+  // they can't source before it goes any further.
+  const isRejectStep = stepKey === "reject" || stepKey === "reject_po";
+  const purchaserRejecting = isRejectStep && userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
+  if (!(isAdmin(user) || holdsStepRole || purchaserRejecting)) {
+    throw new Error(`Only ${workflowRoleLabel(stepRole)}${isRejectStep ? " or the Purchaser" : ""} or an admin can do this.`);
   }
+  // The role this user is acting as — stamped on rejections so the trail names the
+  // right designation (e.g. a Purchaser reject isn't labelled as the Approver).
+  const actorRoleLabel = holdsStepRole
+    ? workflowRoleLabel(stepRole)
+    : purchaserRejecting
+    ? workflowRoleLabel("purchaser" as WorkflowRoleKey)
+    : "Admin";
 
   if (!purchaseStepsFrom(pr.status as PRStatus, isDept, isPoApproved(pr.chainLog)).some((s) => s.key === stepKey)) {
     throw new Error("That step isn't available at the current status.");
@@ -2131,6 +2145,7 @@ export async function advancePurchaseRequest(
   }
 
   const now = new Date();
+  const chainLogBase = (pr.chainLog && typeof pr.chainLog === "object" ? pr.chainLog : {}) as Record<string, unknown>;
   const data: Prisma.PurchaseRequestUpdateInput = { status: step.to };
   switch (stepKey) {
     case "approve":
@@ -2139,6 +2154,11 @@ export async function advancePurchaseRequest(
       data.decidedByName = user.name;
       data.decidedAt = now;
       if (note) data.decisionNote = note;
+      // Stamp who rejected (and as what role) so the trail is accurate even when
+      // the Purchaser — not the approving role — turns the request away.
+      if (stepKey === "reject") {
+        data.chainLog = { ...chainLogBase, reject: { byName: user.name, at: now.toISOString(), role: actorRoleLabel } } as Prisma.InputJsonValue;
+      }
       break;
     case "voucher":
       data.voucherByName = user.name;
@@ -2155,8 +2175,11 @@ export async function advancePurchaseRequest(
     case "logistics_confirm":
     case "deliver":
     case "warehouse_approve": {
-      const log = (pr.chainLog && typeof pr.chainLog === "object" ? pr.chainLog : {}) as Record<string, unknown>;
-      data.chainLog = { ...log, [stepKey]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue;
+      const entry: Record<string, unknown> = { byName: user.name, at: now.toISOString() };
+      // Record the acting role on the approve/reject decisions so the trail names
+      // the right designation (a Purchaser reject, an Admin override, etc.).
+      if (stepKey === "approve_po" || stepKey === "reject_po") entry.role = actorRoleLabel;
+      data.chainLog = { ...chainLogBase, [stepKey]: entry } as Prisma.InputJsonValue;
       if (note && (stepKey === "approve_po" || stepKey === "reject_po")) data.decisionNote = note;
       break;
     }
