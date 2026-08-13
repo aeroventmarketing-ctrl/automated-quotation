@@ -96,6 +96,25 @@ export async function getMarketingRecipients(audience: MarketingAudience): Promi
   return out;
 }
 
+export interface ContactLite {
+  company: string;
+  contactName: string | null;
+  email: string | null;
+}
+
+/** Resolve customer ids → basic contact info, for the campaign-results breakdown. */
+export async function resolveContacts(ids: string[]): Promise<Record<string, ContactLite>> {
+  const unique = [...new Set(ids)].filter(Boolean);
+  if (!unique.length) return {};
+  const rows = await prisma.customer.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, company: true, contactName: true, email: true },
+  });
+  const out: Record<string, ContactLite> = {};
+  for (const r of rows) out[r.id] = { company: r.company, contactName: r.contactName, email: r.email };
+  return out;
+}
+
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 

@@ -23,6 +23,7 @@ import {
   getMarketingRecipients,
   buildMarketingEmail,
   type MarketingAudience,
+  type MarketingRecipient,
 } from "@/lib/marketing";
 import {
   buildCampaignEmail,
@@ -33,6 +34,11 @@ import {
   recordCampaignSend,
   getScheduledCampaigns,
   updateScheduledCampaign,
+  getCampaignSends,
+  getAbTests,
+  addAbTest,
+  updateAbTest,
+  type AbTest,
 } from "@/lib/marketing-store";
 
 const MARKETING_CAP_PER_RUN = 300;
@@ -250,6 +256,22 @@ export async function sendCampaign(opts: {
   /** Campaign name for the send record (defaults to the subject). */
   campaignName?: string;
 }): Promise<MarketingRunResult> {
+  const recipients = await getMarketingRecipients(opts.audience);
+  return deliverCampaign({ ...opts, recipients, audience: opts.audience });
+}
+
+/**
+ * Deliver a campaign to a specific recipient list (the shared core of a direct
+ * send, a scheduled send, and each A/B variant / remainder send).
+ */
+export async function deliverCampaign(opts: {
+  draft: CampaignDraft;
+  recipients: MarketingRecipient[];
+  live: boolean;
+  audience?: MarketingAudience; // for the send record's label only
+  actor?: { id: string; name: string };
+  campaignName?: string;
+}): Promise<MarketingRunResult> {
   const now = new Date();
   const canSend = emailConfigured() && !!appConfig.followUpFromEmail;
   const effectiveLive = opts.live && canSend;
@@ -258,7 +280,7 @@ export async function sendCampaign(opts: {
     reason = !emailConfigured() ? "no Resend API key configured" : "no sender address configured (FOLLOW_UP_FROM_EMAIL)";
   }
 
-  const list = await getMarketingRecipients(opts.audience);
+  const list = opts.recipients;
   const accounts = await getAccountsRegistry();
   const from = senderFrom(opts.draft.senderName);
   const imageUrls = effectiveLive ? await resolveCampaignImageUrls(opts.draft) : {};
@@ -304,7 +326,7 @@ export async function sendCampaign(opts: {
       id: sendId,
       name: (opts.campaignName ?? "").trim() || subjectSample || "Campaign",
       subject: subjectSample,
-      audience: opts.audience,
+      audience: opts.audience ?? "custom",
       sentAt: now.toISOString(),
       sentByName: opts.actor?.name ?? "Marketing",
       recipients: list.length,
@@ -368,4 +390,126 @@ export async function sendCampaignTest(opts: { draft: CampaignDraft; toEmail: st
     html: mail.html,
   });
   return { ok: true };
+}
+
+// ===========================================================================
+// A/B subject testing
+// ===========================================================================
+
+/** Fisher–Yates shuffle (Math.random is fine here — normal server code). */
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * Start an A/B subject test: send subject A and subject B to two halves of a
+ * small test slice of the audience now; the cron picks the higher-opening subject
+ * after `decideAfterHours` and sends it to the remaining recipients.
+ */
+export async function startAbTest(opts: {
+  draft: CampaignDraft;
+  subjectB: string;
+  audience: MarketingAudience;
+  testFraction: number;
+  decideAfterHours: number;
+  actor?: { id: string; name: string };
+  name?: string;
+}): Promise<{ ok: boolean; reason?: string; test?: AbTest }> {
+  if (!emailConfigured() || !appConfig.followUpFromEmail) {
+    return { ok: false, reason: !emailConfigured() ? "no Resend API key configured" : "no sender address configured (FOLLOW_UP_FROM_EMAIL)" };
+  }
+  const subjectA = opts.draft.subject.trim();
+  const subjectB = opts.subjectB.trim();
+  if (!subjectA || !subjectB) return { ok: false, reason: "both subject A and subject B are required" };
+
+  const all = await getMarketingRecipients(opts.audience);
+  if (all.length < 4) return { ok: false, reason: "need at least 4 recipients to A/B test the subject" };
+
+  const frac = Math.min(0.9, Math.max(0.1, opts.testFraction || 0.3));
+  const shuffled = shuffle(all);
+  let testCount = Math.round(all.length * frac);
+  testCount = Math.max(2, Math.min(testCount, all.length - 1)); // ≥2 to split, keep ≥1 for the remainder
+  const testGroup = shuffled.slice(0, testCount);
+  const half = Math.floor(testGroup.length / 2);
+  const groupA = testGroup.slice(0, half);
+  const groupB = testGroup.slice(half);
+
+  const now = new Date();
+  const name = (opts.name ?? "").trim() || subjectA || "A/B test";
+  const decideHours = Math.max(1, Math.round(opts.decideAfterHours || 4));
+
+  const resA = await deliverCampaign({ draft: { ...opts.draft, subject: subjectA }, recipients: groupA, live: true, actor: opts.actor, campaignName: `${name} — A` });
+  const resB = await deliverCampaign({ draft: { ...opts.draft, subject: subjectB }, recipients: groupB, live: true, actor: opts.actor, campaignName: `${name} — B` });
+
+  const test: AbTest = {
+    id: randomUUID(),
+    name,
+    draft: opts.draft,
+    subjectA,
+    subjectB,
+    audience: opts.audience,
+    testFraction: frac,
+    decideAfterHours: decideHours,
+    status: "testing",
+    createdByName: opts.actor?.name ?? "Marketing",
+    createdAt: now.toISOString(),
+    decideAt: new Date(now.getTime() + decideHours * 3600_000).toISOString(),
+    testedIdsA: groupA.map((r) => r.id),
+    testedIdsB: groupB.map((r) => r.id),
+    sendIdA: resA.sendId,
+    sendIdB: resB.sendId,
+  };
+  await addAbTest(test);
+  return { ok: true, test };
+}
+
+/**
+ * Finish any A/B tests whose decision time has passed: compare the open rate of
+ * the two test variants, then send the winning subject to everyone who wasn't in
+ * the test slice. Called hourly by the cron.
+ */
+export async function runAbTests(opts: { now?: Date; live: boolean }): Promise<{ processed: number; completed: number }> {
+  const now = opts.now ?? new Date();
+  const tests = await getAbTests();
+  const due = tests.filter((t) => t.status === "testing" && t.decideAt && new Date(t.decideAt).getTime() <= now.getTime());
+  let processed = 0;
+  let completed = 0;
+  for (const t of due) {
+    if (!opts.live) continue;
+    processed++;
+    try {
+      const sends = await getCampaignSends();
+      const a = sends.find((s) => s.id === t.sendIdA);
+      const b = sends.find((s) => s.id === t.sendIdB);
+      const rateA = a && a.sent > 0 ? a.openedIds.length / a.sent : 0;
+      const rateB = b && b.sent > 0 ? b.openedIds.length / b.sent : 0;
+      const winner: "A" | "B" = rateB > rateA ? "B" : "A"; // tie → A
+      const winnerSubject = winner === "A" ? t.subjectA : t.subjectB;
+
+      const audience = await getMarketingRecipients(t.audience);
+      const tested = new Set([...t.testedIdsA, ...t.testedIdsB]);
+      const remainder = audience.filter((r) => !tested.has(r.id));
+      let remainderSendId: string | undefined;
+      if (remainder.length > 0) {
+        const res = await deliverCampaign({
+          draft: { ...t.draft, subject: winnerSubject },
+          recipients: remainder,
+          live: true,
+          actor: { id: "scheduler", name: t.createdByName || "Scheduler" },
+          campaignName: `${t.name} — winner (${winner})`,
+        });
+        remainderSendId = res.sendId;
+      }
+      await updateAbTest(t.id, { status: "completed", winner, winnerSubject, remainderSendId, remainderCount: remainder.length, completedAt: now.toISOString() });
+      completed++;
+    } catch (e) {
+      await updateAbTest(t.id, { status: "failed", error: e instanceof Error ? e.message : "A/B finalize failed" });
+    }
+  }
+  return { processed, completed };
 }
