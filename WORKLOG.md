@@ -1,3 +1,16 @@
+## 2026-08-13 · Receipt reader — more suppliers, Collection Receipts, 7-digit No., EWT rule confirmed
+- **Owner lessons (5 receipts):** Alloymaster, Ideal Controls (7-digit No. 0001877), International Spring, JSL
+  Electric (all sales invoices → VAT-inclusive gross into Actual), and DJC-Serv (a **Collection Receipt**).
+- **EWT contradiction resolved:** TKL/DJC said use the gross (before withholding); JSL cited the after-withholding
+  total. Owner confirmed **always the VAT-inclusive gross (before EWT)** — the prompt already did this; added JSL
+  (16,295 not 16,149.51) as a second worked example next to TKL.
+- **Prompt updates (`api/ai/read-receipt` + `read-cash-receipt`):** cover "CHARGE SALES INVOICE"; added the new
+  supplier examples; broadened the invoice No. to **4–8 digits, keep leading zeros** (e.g. 0001877); added the
+  "4-17-26" date format; and added a **COLLECTION / ACKNOWLEDGEMENT RECEIPT** section (DJC-Serv): read the red
+  serial + date, and gross the "TOTAL PAYMENT" (net of 1% EWT) back up — receiptTotal = TOTAL PAYMENT × 1.12 ÷
+  1.11 (× 1.12 ÷ 1.10 for 2% services), worked example 23,785.71 → 24,000.00, with a verify warning.
+- Prompt-only; typecheck + lint clean.
+
 ## 2026-08-13 · Receipt reader — VAT-inclusive gross (withholding-tax trap) + cash reader
 - **Owner lesson (TKL Steel invoice):** the Actual should be **"Total Sales (VAT Inclusive)" = 12,840.00**, NOT
   the final "Total Amount Due" 12,725.36 — that has "Less: Withholding Tax 11.64" subtracted, and EWT is a
