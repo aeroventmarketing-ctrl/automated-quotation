@@ -1,3 +1,28 @@
+## 2026-08-13 · Purchasing — approve first, PO after (flip the PO-before-approval gate)
+- **Owner request (explicit approval to change the frozen Phase 4):** a pending purchase request must NOT
+  require the Purchaser to create the PO first; approval happens while pending (no PO), and only once approved
+  does the Purchaser make the PO. Apply across every flow, role and tab. Clarified: no second sign-off on the
+  finished PO; keep today's "lock at approval" edit rule.
+- **Core gate** (`orders/actions.ts` `advancePurchaseRequest`): `needsPo` reduced to **`stepKey === "voucher"`**
+  — approve / reject / approve_po / reject_po no longer require a PO; the PO must exist by the voucher step.
+- **`savePurchaseOrder`**: creating the first PO is always allowed post-approval (the old `isPoApproved` lock now
+  only blocks *editing an existing* PO); a PO can no longer be prepared while the request is still
+  `PENDING_APPROVAL` (must be approved first) — for every kind, not just dept.
+- **Bulk approve** (`purchasing-workspace.tsx` `forwardStep`): only the voucher step waits on a PO.
+- **Chain UI** (`purchasing-chain.tsx`): the "Create the Purchase Order first" hint + button-hide now apply to
+  the **voucher** step only, so approval buttons show without a PO. Status labels reworked for the new order —
+  dept MRF `APPROVED && !poApproved` → "Plant Manager approved — awaiting purchase approval"; any
+  `APPROVED && !po` (post-approval) → "Approved — awaiting Purchase Order". Added `kind` to the chain row to
+  exclude replenishments.
+- **Order MRF badge** (`material-requests.tsx`): same reordering (awaiting-purchase-approval before awaiting-PO).
+- **Dashboard** (`my-dashboard.ts`): the Purchaser's "Prepare Purchase Order" task now fires only once fully
+  approved (`poApproved || !isDept`), so the Approver's `approve_po` task surfaces first.
+- **Combined PO** (`createCombinedPO` + `purchasing/page.tsx` combinable + workspace `showBuilder`): combine
+  **approved** PO-less requests (was pending), so batching also happens after approval — the combine builder now
+  lives on the **Approved** tab.
+- Updated the now-outdated `purchasing.ts` doc comments. `statusBucket` unchanged (still holds a dept MRF in
+  Pending until `approve_po`). Typecheck + lint clean; `next build` compiles & type-validates.
+
 ## 2026-08-13 · Email marketing — recipient breakdown & A/B subject testing
 - **Owner request:** add a per-campaign recipient breakdown (who opened / clicked) and A/B subject testing.
 - **Recipient breakdown:** `resolveContacts(ids)` in `lib/marketing.ts` (customerId → company/contact/email).

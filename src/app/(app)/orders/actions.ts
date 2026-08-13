@@ -2119,16 +2119,13 @@ export async function advancePurchaseRequest(
     throw new Error("That step isn't available at the current status.");
   }
 
-  // The supplier Purchase Order must be issued before the purchase can be
-  // approved by the Approver (approve_po) or the voucher & check readied —
-  // everything downstream is drawn against the PO. For an order-linked request
-  // the single "approve"/"reject" IS the PO approval, so it also needs the PO;
-  // a department MRF's Plant-Manager approve/reject comes before the PO exists.
+  // Approval no longer waits for a Purchase Order: a PENDING request is approved
+  // first (by the Approver, or the Plant Manager for a material/department MRF),
+  // and only AFTER approval does the Purchaser prepare the PO. The PO must exist
+  // by the time Accounting readies the voucher & check, since everything
+  // downstream is drawn against it — so that's the one step still gated on the PO.
   // (Replenishment top-ups have no PO panel, so this only gates real POs.)
-  const needsPo =
-    stepKey === "voucher" ||
-    stepKey === "approve_po" ||
-    ((stepKey === "approve" || stepKey === "reject") && !isDept);
+  const needsPo = stepKey === "voucher";
   if (needsPo && pr.kind !== "replenishment" && !coercePurchaseOrder(pr.po)) {
     throw new Error("Create the Purchase Order first.");
   }
@@ -2818,14 +2815,17 @@ export async function savePurchaseOrder(
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
   if (!pr) throw new Error("Purchase request not found");
   if (pr.status === "REJECTED") throw new Error("This purchase request was rejected.");
-  // Once the purchase order is approved, only an admin may edit it.
-  if (isPoApproved(pr.chainLog) && !isAdmin(user)) {
+  // The purchase is approved first, then the Purchaser prepares the PO — so
+  // creating the first PO is always allowed. Only EDITING an existing PO locks
+  // once the purchase is approved (admin override aside).
+  if (isPoApproved(pr.chainLog) && coercePurchaseOrder(pr.po) && !isAdmin(user)) {
     throw new Error("This purchase order is approved — only an admin can edit it.");
   }
-  // A material/department requisition needs the Plant Manager's approval (step 16)
-  // before the Purchaser prepares the purchase order (step 17).
-  if (pr.status === "PENDING_APPROVAL" && isDeptRequisition(pr)) {
-    throw new Error("The Plant Manager must approve this material request before a purchase order can be created.");
+  // A purchase order can't be prepared until the request has been approved: a
+  // still-pending request (an order-linked one, or a material/department MRF
+  // awaiting the Plant Manager) has to clear approval first.
+  if (pr.status === "PENDING_APPROVAL") {
+    throw new Error("This request must be approved before a purchase order can be created.");
   }
 
   const lines = d.lines.filter((l) => l.description.trim() !== "");
@@ -2963,7 +2963,9 @@ export async function createCombinedPO(
   const prs = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
   if (prs.length !== ids.length) throw new Error("Some requests could not be found.");
   for (const pr of prs) {
-    if (pr.status !== "PENDING_APPROVAL") throw new Error("Every request must be awaiting approval to combine.");
+    // The PO is prepared after approval now, so members must already be approved
+    // (and PO-less) to be combined onto one purchase order.
+    if (pr.status !== "APPROVED") throw new Error("Every request must be approved (awaiting its Purchase Order) to combine.");
     if (coercePurchaseOrder(pr.po)) throw new Error("One of the requests already has a purchase order.");
     // Material/department requisitions need the Plant Manager's approval first.
     if (isDeptRequisition(pr)) throw new Error("A material requisition must be approved by the Plant Manager before its purchase order can be prepared.");

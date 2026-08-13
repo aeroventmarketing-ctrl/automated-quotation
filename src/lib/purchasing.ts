@@ -48,10 +48,10 @@ export const PR_STATUS_LABEL: Record<PRStatus, string> = {
 export type PRBucket = "pending" | "approved" | "rejected" | "cancelled";
 /**
  * The tab a purchase request belongs to. A material/department requisition is
- * kept in "pending" until the Approver approves its Purchase Order: the Plant
- * Manager approving the MRF (→ APPROVED) only clears it FOR purchasing, and the
- * Purchaser still has to raise the PO and the Approver still has to approve it
- * (chainLog.approve_po). Only then does it belong under "Approved".
+ * kept in "pending" until the Approver approves the purchase: the Plant Manager
+ * approving the MRF (→ APPROVED) only clears it for the Approver, who then
+ * approves it (chainLog.approve_po) — no PO required yet. Only after that
+ * approval does it belong under "Approved", where the Purchaser prepares the PO.
  */
 export function statusBucket(status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }): PRBucket {
   if (status === "PENDING_APPROVAL") return "pending";
@@ -84,17 +84,18 @@ export interface PurchaseStepDef {
 /**
  * The chain, in order. PENDING_APPROVAL offers both approve and reject. For a
  * material/department requisition the Plant Manager's approval (approve) only
- * clears the MRF; the Purchaser then raises the PO and the Approver approves it
- * (approve_po, recorded in chainLog while the status stays APPROVED) before
- * accounting readies the voucher. Order-linked (non-department) requests skip
- * that second gate — their single "approve" IS the Approver's PO approval.
+ * clears the MRF; the Approver then approves the purchase (approve_po, recorded
+ * in chainLog while the status stays APPROVED) — no PO needed yet. The Purchaser
+ * prepares the PO after approval, and it must exist by the time accounting readies
+ * the voucher. Order-linked (non-department) requests skip that second gate —
+ * their single "approve" is the purchase approval.
  */
 export const PURCHASE_STEPS: PurchaseStepDef[] = [
   { key: "approve", from: "PENDING_APPROVAL", to: "APPROVED", role: "payment_approver", label: "Approve purchase" },
   { key: "reject", from: "PENDING_APPROVAL", to: "REJECTED", role: "payment_approver", label: "Reject" },
-  // The Approver's PO approval keeps the status at APPROVED (it's recorded in
-  // chainLog.approve_po) so no new enum value / DB migration is needed; the
-  // voucher step then unlocks. reject_po sends it to REJECTED.
+  // The Approver's purchase approval keeps the status at APPROVED (it's recorded
+  // in chainLog.approve_po) so no new enum value / DB migration is needed; the PO
+  // is then prepared and the voucher step unlocks. reject_po sends it to REJECTED.
   { key: "approve_po", from: "APPROVED", to: "APPROVED", role: "payment_approver", label: "Approve purchase" },
   { key: "reject_po", from: "APPROVED", to: "REJECTED", role: "payment_approver", label: "Reject" },
   { key: "voucher", from: "APPROVED", to: "VOUCHER_READY", role: "accounting", label: "Voucher & Check Prepared" },
@@ -133,10 +134,11 @@ export function priorPurchaseStatuses(status: PRStatus): PRStatus[] {
 
 /**
  * The steps available from a status. For a material/department requisition the
- * APPROVED status has two sub-stages: before the Approver approves the PO it
- * offers approve_po / reject_po; once approved (chainLog.approve_po, passed as
- * `poApproved`) it offers the voucher. An order-linked request goes straight
- * from APPROVED to the voucher.
+ * APPROVED status has two sub-stages: before the Approver approves the purchase
+ * it offers approve_po / reject_po (no PO needed); once approved (chainLog.
+ * approve_po, passed as `poApproved`) it offers the voucher — by which point the
+ * Purchaser must have prepared the PO. An order-linked request goes straight from
+ * APPROVED to the voucher.
  */
 export function purchaseStepsFrom(status: PRStatus, isDept = false, poApproved = false): PurchaseStepDef[] {
   if (status === "APPROVED") {

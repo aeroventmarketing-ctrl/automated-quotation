@@ -308,10 +308,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           createdAt: pr.quotation?.createdAt.toISOString(),
         });
       }
-      // The Purchaser must raise the PO for an approved requisition that has none
-      // yet (e.g. an escalated MRF the Plant Manager just approved). The chain's
-      // "approve PO" step assumes a PO already exists, so surface this explicitly.
-      if (has("purchaser") && pr.status === "APPROVED" && !pr.po) {
+      // The Purchaser raises the PO once the request is fully approved but has no
+      // PO yet. Approval comes before the PO now, so for a material/department MRF
+      // this waits until the Approver's approve_po (poApproved); an order-linked
+      // request has no second gate, so any APPROVED request qualifies.
+      if (has("purchaser") && pr.status === "APPROVED" && !pr.po && (poApproved || !isDept)) {
         tasks.push({
           key: `pr-po:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
           title: label, action: "Prepare Purchase Order",

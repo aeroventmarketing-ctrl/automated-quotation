@@ -325,10 +325,10 @@ export function MaterialRequests({
                     <Badge variant="destructive">Materials request rejected</Badge>
                   ) : r.poStatus && r.poStatusLabel ? (
                     <Badge variant={r.poStatusVariant ?? "warning"}>
-                      {r.poStatus === "APPROVED" && !r.hasPo
-                        ? "Approved — awaiting Purchase Order"
-                        : r.poStatus === "APPROVED" && r.hasPo && !r.poApproved
+                      {r.poStatus === "APPROVED" && !r.poApproved
                         ? "Plant Manager approved — awaiting purchase approval"
+                        : r.poStatus === "APPROVED" && !r.hasPo
+                        ? "Approved — awaiting Purchase Order"
                         : r.poStatusLabel}
                     </Badge>
                   ) : (
