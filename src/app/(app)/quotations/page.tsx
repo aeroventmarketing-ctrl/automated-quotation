@@ -56,6 +56,7 @@ export default async function QuotationsPage({
   const searchOr: Prisma.QuotationWhereInput[] = [
     { quoteNumber: { contains: q, mode: Prisma.QueryMode.insensitive } },
     { inquiry: { customer: { company: { contains: q, mode: Prisma.QueryMode.insensitive } } } },
+    { inquiry: { customer: { email: { contains: q, mode: Prisma.QueryMode.insensitive } } } },
     { preparedBy: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
     ...(statusMatches.length ? [{ status: { in: statusMatches } }] : []),
   ];
