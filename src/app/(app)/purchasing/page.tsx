@@ -18,7 +18,7 @@ import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
-import { type PRRow } from "./replenishment-list";
+import { type ReplenScanRow } from "./replenishment-list";
 import { PurchasingWorkspace } from "./purchasing-workspace";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
@@ -301,8 +301,12 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     tableMissing = true;
   }
 
-  // Replenishment (stock top-ups).
-  let replenRows: PRRow[] = [];
+  // Replenishment (stock top-ups). These now follow the SAME purchasing chain as
+  // department requisitions (approve → Create PO → voucher → … → receive), so they
+  // render through PurchasingChain. A parallel `replenScan` list feeds the
+  // scan-to-receive quick box for those that have reached the receive step.
+  let replenRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
+  let replenScan: ReplenScanRow[] = [];
   if (!tableMissing) {
     try {
       // All statuses — the workspace tab (Pending/Approved/Rejected/Cancelled)
@@ -314,25 +318,17 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       const stockIds = [...new Set(prs.map((p) => p.stockItemId).filter((s): s is string => !!s))];
       const stock = stockIds.length ? await prisma.stockItem.findMany({ where: { id: { in: stockIds } }, select: { id: true, sku: true, unit: true } }) : [];
       const stockById = new Map(stock.map((s) => [s.id, s]));
-      replenRows = prs.map((pr) => {
-        const status = pr.status as PRStatus;
-        const trail = buildPurchaseTrail(pr);
-        const actions = purchaseStepsFrom(status).map((step) => ({ key: step.key, label: step.label, roleLabel: workflowRoleLabel(step.role), canAct: canAct(step.role) }));
-        const si = pr.stockItemId ? stockById.get(pr.stockItemId) : undefined;
-        return {
-          id: pr.id,
-          stockItemId: pr.stockItemId ?? "",
-          sku: si?.sku ?? null,
-          unit: si?.unit ?? "",
-          items: Array.isArray(pr.items) ? (pr.items as string[]) : [],
-          note: pr.note,
-          status,
-          statusLabel: PR_STATUS_LABEL[status],
-          variant: variantFor(status),
-          trail,
-          actions,
-        };
-      });
+      replenRows = prs.map((pr) =>
+        buildPurchaseChainRow(pr, { mrfNo: null, canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null }),
+      );
+      // Ready to receive = the receive step is available (PLANT_APPROVED) and the
+      // viewer is the Warehouse/admin who can post it into stock.
+      replenScan = prs
+        .filter((pr) => pr.status === "PLANT_APPROVED" && (admin || canAct("warehouse")))
+        .map((pr) => {
+          const si = pr.stockItemId ? stockById.get(pr.stockItemId) : undefined;
+          return { id: pr.id, stockItemId: pr.stockItemId ?? "", sku: si?.sku ?? null, unit: si?.unit ?? "", items: Array.isArray(pr.items) ? (pr.items as string[]) : [] };
+        });
     } catch {
       tableMissing = true;
     }
@@ -371,6 +367,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
               deptRows={deptRows}
               completedDeptRows={completedDeptRows}
               replenRows={replenRows}
+              replenScan={replenScan}
               highlightReq={highlightReq}
               showAmounts={showAmounts}
               showSupplier={showSupplier}

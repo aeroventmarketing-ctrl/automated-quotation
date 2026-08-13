@@ -2138,9 +2138,10 @@ export async function advancePurchaseRequest(
   // and only AFTER approval does the Purchaser prepare the PO. The PO must exist
   // by the time Accounting readies the voucher & check, since everything
   // downstream is drawn against it — so that's the one step still gated on the PO.
-  // (Replenishment top-ups have no PO panel, so this only gates real POs.)
+  // This applies to every request kind, replenishment top-ups included: they
+  // follow the same PO → voucher → … → receive chain as any other purchase.
   const needsPo = stepKey === "voucher";
-  if (needsPo && pr.kind !== "replenishment" && !coercePurchaseOrder(pr.po)) {
+  if (needsPo && !coercePurchaseOrder(pr.po)) {
     throw new Error("Create the Purchase Order first.");
   }
 

@@ -279,7 +279,7 @@ export function PurchasingChain({
         // Fully approved but no PO yet — now awaits the Purchaser preparing the
         // Purchase Order (for a dept MRF, that's after the Approver's approve_po).
         const requisitionAwaitingPO =
-          r.status === "APPROVED" && !r.po && r.kind !== "replenishment" && (!r.isDept || r.poApproved);
+          r.status === "APPROVED" && !r.po && (!r.isDept || r.poApproved);
         const statusLabel = requisitionAwaitingApproval
           ? "Plant Manager approved — awaiting purchase approval"
           : requisitionAwaitingPO

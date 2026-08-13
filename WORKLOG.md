@@ -1,3 +1,19 @@
+## 2026-08-13 · Purchasing — replenishments follow the full PO workflow
+- **Owner report (frozen Phase 4):** a replenishment (stock top-up) skipped the PO — it jumped from Approved
+  straight to "Voucher & Check Prepared". Once approved, the Purchaser should make a PO and it should follow the
+  same chain as every other request.
+- **Server** (`advancePurchaseRequest`): dropped the `pr.kind !== "replenishment"` exemption from the voucher
+  PO-gate, so the voucher now waits for a PO for replenishments too (like every kind).
+- **Rendering:** replenishments now render through the **same `PurchasingChain`** as department requisitions —
+  giving them the Create-PO button, PO panel, voucher/cash chain, reconciliation, and receive. `page.tsx` builds
+  `replenRows` via `buildPurchaseChainRow` (was a minimal row) and a parallel `replenScan` list. The dedicated
+  **"Scan to receive"** quick box is kept (owner asked): `replenishment-list.tsx` now exports a small
+  `ReplenishmentScanBar` rendered above the chain; the old `ReplenishmentList`/`PRCard` is gone.
+- **Label** (`purchasing-chain.tsx`): removed the `kind !== "replenishment"` exclusion from `requisitionAwaitingPO`
+  so an approved-but-PO-less replenishment reads "Approved — awaiting Purchase Order".
+- `savePurchaseOrder` / `canPreparePO` already work for non-dept requests, so the Purchaser can create the PO at
+  APPROVED. Typecheck + lint clean; `next build` compiles & type-validates.
+
 ## 2026-08-13 · Receipt reader — more suppliers, Collection Receipts, 7-digit No., EWT rule confirmed
 - **Owner lessons (5 receipts):** Alloymaster, Ideal Controls (7-digit No. 0001877), International Spring, JSL
   Electric (all sales invoices → VAT-inclusive gross into Actual), and DJC-Serv (a **Collection Receipt**).
