@@ -1,3 +1,13 @@
+## 2026-08-13 · PO Summary — show the received-into-stock date
+- **Owner request:** in the Purchase Orders — Summary card, show the date the Warehouseman received the item
+  (pressed "Receive & Add to Stock"); visible to Purchaser, Admin and Payment Approver.
+- **Change (display-only, non-workflow):** `PoSummaryRow` gains `receivedAt` / `receivedByName`; `my-dashboard.ts`
+  populates them from the PurchaseRequest's `receivedAt` / `receivedByName` (the `receive` step), taking the most
+  recent member receipt for a combined PO. The card (`my-dashboard/page.tsx`) shows a green
+  "Received <date> · <name>" line when received. The card already renders for Admin / Payment Approver /
+  Accounting / Purchaser, so no gating change was needed.
+- Typecheck + lint clean; `next build` compiles & type-validates.
+
 ## 2026-08-13 · Purchasing — Create-PO & Split only after approval (hidden while pending)
 - **Owner request (frozen Phase 4, explicit approval):** hide the "Create Purchase Order" and "Split
   (multi-supplier)" buttons while a request is in the **pending** tab; show them only once approved (in the

@@ -313,6 +313,11 @@ export default async function MyDashboardPage() {
                   <div className="truncate text-xs text-muted-foreground">
                     {po.supplier ?? "—"} · {po.orderRef} · {formatCurrency(po.net, po.currency)}
                   </div>
+                  {po.receivedAt && (
+                    <div className="truncate text-xs text-emerald-700 dark:text-emerald-500">
+                      Received {fmtWhen(po.receivedAt)}{po.receivedByName ? ` · ${po.receivedByName}` : ""}
+                    </div>
+                  )}
                 </div>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </Link>
