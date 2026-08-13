@@ -17,7 +17,7 @@ import type { CatalogPrices, CatalogSuppliers } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
 import { CombinedPurchasing, type BatchCard, type CombinableItem, type SupplierSuggestion } from "./combined-purchasing";
-import { ReplenishmentList, type PRRow } from "./replenishment-list";
+import { ReplenishmentScanBar, type ReplenScanRow } from "./replenishment-list";
 import { AdminAddDeptRequest, AdminAddReplenishment } from "./admin-pr-manage";
 import type { StockOpt } from "../orders/[id]/stock-match-panel";
 
@@ -94,6 +94,7 @@ export function PurchasingWorkspace({
   deptRows = [],
   completedDeptRows = [],
   replenRows = [],
+  replenScan = [],
   showAmounts = true,
   showSupplier = true,
   canVoucher = false,
@@ -119,8 +120,10 @@ export function PurchasingWorkspace({
   deptRows?: PurchaseChainRow[];
   /** Completed standalone department POs (no open return) — the collapsed "Completed" section. */
   completedDeptRows?: PurchaseChainRow[];
-  /** Replenishment (stock top-up) requests — filtered by the same tab. */
-  replenRows?: PRRow[];
+  /** Replenishment (stock top-up) requests — render through the full chain, same tab filter. */
+  replenRows?: PurchaseChainRow[];
+  /** Replenishments ready to receive — feed the scan-to-receive quick box. */
+  replenScan?: ReplenScanRow[];
   /** Whether the viewer may see PO money amounts. */
   showAmounts?: boolean;
   /** Whether the viewer may see the supplier's name. */
@@ -243,7 +246,7 @@ export function PurchasingWorkspace({
   for (const b of batches) counts[displayBucket(b.status)]++;
   for (const g of orderGroups) for (const r of g.rows) counts[rowBucket(r)]++;
   for (const r of deptRows) counts[rowBucket(r)]++;
-  for (const r of replenRows) counts[displayBucket(r.status as PRStatus)]++;
+  for (const r of replenRows) counts[rowBucket(r)]++;
   counts.all = counts.pending + counts.approved + counts.budgeted + counts.rejected + counts.cancelled;
 
   // The combine builder lists approved, PO-less requests (the PO is prepared after
@@ -466,18 +469,31 @@ export function PurchasingWorkspace({
           cancelled), never across all tabs. */}
       {(replenRows.length > 0 || admin) && (() => {
         const shown = replenRows
-          .filter((r) => inTab(displayBucket(r.status as PRStatus)))
-          .filter((r) => textMatch([...r.items, r.note ?? "", r.sku ?? ""].join("  "), query));
+          .filter((r) => inTab(rowBucket(r)))
+          .filter((r) => textMatch([...r.items, r.note ?? "", r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
         return (
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Replenishment (stock top-ups)</h2>
               {admin && <AdminAddReplenishment stockItems={stockItems} />}
             </div>
+            <ReplenishmentScanBar rows={replenScan} />
             {shown.length === 0 ? (
               <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}replenishment requests.</CardContent></Card>
             ) : (
-              <ReplenishmentList rows={shown} admin={admin} />
+              <Card><CardContent className="pt-6">
+                <PurchasingChain
+                  requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
+                  suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
+                  catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
+                  showAmounts={showAmounts}
+                  showSupplier={showSupplier}
+                  showStockCheck={canCheckStock}
+                  canIssueStock={canIssueStock}
+                  adminManage={admin}
+                  highlightId={highlightId}
+                />
+              </CardContent></Card>
             )}
           </section>
         );
