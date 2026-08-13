@@ -68,6 +68,8 @@ export function PurchaseReconcilePanel({
   // AI read-receipt results (info + warnings shown under the table).
   const [aiInfo, setAiInfo] = useState<string | null>(null);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+  // Sales-invoice number read off the receipt (carried into the recorded record).
+  const [invoiceNo, setInvoiceNo] = useState<string | null>(null);
   // AI reads are capped per voucher — after the limit, figures go in by hand.
   // Admins are exempt: no cap, so the button never locks for them.
   const [reads, setReads] = useState(reconcile.aiReads);
@@ -129,7 +131,7 @@ export function PurchaseReconcilePanel({
 
   // Persist a reconciliation (shared by the manual "Record" button and the
   // fully-automatic path). Returns true on success.
-  async function submitRecord(vatModeArg: "inclusive" | "exclusive", rowsArg: typeof rows, noteArg: string, aiVerified: boolean): Promise<boolean> {
+  async function submitRecord(vatModeArg: "inclusive" | "exclusive", rowsArg: typeof rows, noteArg: string, aiVerified: boolean, invoiceNumberArg: string | null = invoiceNo): Promise<boolean> {
     try {
       await recordReconciliation(prId, {
         vatMode: vatModeArg,
@@ -137,6 +139,7 @@ export function PurchaseReconcilePanel({
         receipts,
         note: noteArg,
         aiVerified,
+        invoiceNumber: invoiceNumberArg,
       });
       setOpen(false); setReceipts([]); setNote("");
       router.refresh();
@@ -166,6 +169,8 @@ export function PurchaseReconcilePanel({
       }
       if (typeof data.reads === "number") setReads(data.reads);
       setHasAiRead(true); // the receipt has now been read by AI — allow recording
+      const invNo: string | null = typeof data.invoiceNumber === "string" && data.invoiceNumber.trim() ? data.invoiceNumber.trim() : null;
+      setInvoiceNo(invNo);
 
       const vatUsed: "inclusive" | "exclusive" = data.vatMode === "exclusive" ? "exclusive" : data.vatMode === "inclusive" ? "inclusive" : vatMode;
       const newRows = rows.map((r, i) => {
@@ -192,13 +197,15 @@ export function PurchaseReconcilePanel({
         // Fully automatic — no human needed. Record it straight away.
         setBusy("record");
         const okNote = `Auto-reconciled from receipt (AI)${note ? ` · ${note}` : ""}`;
-        await submitRecord(vatUsed, newRows, okNote, true);
+        await submitRecord(vatUsed, newRows, okNote, true, invNo);
         return;
       }
 
       // Needs a human: doesn't balance, or a line couldn't be matched.
       const bits = [
         data.supplier ? `Supplier: ${data.supplier}` : "",
+        invNo ? `SI No. ${invNo}` : "",
+        data.date ? `Date: ${data.date}` : "",
         typeof data.receiptTotal === "number" ? `Receipt total: ₱${new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2 }).format(data.receiptTotal)}` : "",
       ].filter(Boolean);
       warns.unshift(
@@ -280,6 +287,7 @@ export function PurchaseReconcilePanel({
       <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         <Scale className="h-3.5 w-3.5" /> Voucher reconciliation
         {reconcile.voucherNo && <span className="ml-1 font-normal normal-case text-red-600">· Voucher No. {reconcile.voucherNo}</span>}
+        {reconcile.invoiceNumber && <span className="ml-1 font-normal normal-case">· SI No. {reconcile.invoiceNumber}</span>}
         <span className="ml-1 font-normal normal-case">· VAT {reconcile.vatMode === "exclusive" ? "exclusive (+12%)" : "inclusive"}</span>
       </div>
 

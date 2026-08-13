@@ -37,6 +37,9 @@ export interface ReconcileStamp {
 export interface Reconciliation {
   vatMode?: ReconcileVatMode;
   lines?: ReconcileLine[]; // per-line actuals
+  // Supplier sales-invoice / OR number read off the receipt — kept so the same
+  // invoice number can't be silently reused across different POs / vouchers.
+  invoiceNumber?: string;
   receipts?: SaleDoc[]; // uploaded receipts / official receipts
   recordedByName?: string;
   recordedRole?: string;
@@ -89,6 +92,7 @@ export function coerceReconciliation(v: unknown): Reconciliation {
   return {
     vatMode: o.vatMode === "exclusive" ? "exclusive" : o.vatMode === "inclusive" ? "inclusive" : undefined,
     lines: Array.isArray(o.lines) ? o.lines.map(coerceLine).filter((l): l is ReconcileLine => l !== null) : undefined,
+    invoiceNumber: typeof o.invoiceNumber === "string" && o.invoiceNumber.trim() ? o.invoiceNumber.trim() : undefined,
     receipts: Array.isArray(o.receipts) ? o.receipts.map(coerceDoc).filter((d): d is SaleDoc => d !== null) : undefined,
     recordedByName: typeof o.recordedByName === "string" ? o.recordedByName : undefined,
     recordedRole: typeof o.recordedRole === "string" ? o.recordedRole : undefined,

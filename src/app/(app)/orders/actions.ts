@@ -2378,6 +2378,7 @@ export async function recordReconciliation(
     receipts?: { path: string; name: string; uploadedAt?: string }[];
     note?: string;
     aiVerified?: boolean;
+    invoiceNumber?: string | null;
   },
 ): Promise<void> {
   const user = await getCurrentUser();
@@ -2412,6 +2413,9 @@ export async function recordReconciliation(
     ...cur,
     vatMode: input.vatMode === "exclusive" ? "exclusive" : "inclusive",
     lines,
+    // Keep the sales-invoice number read off the receipt (preserve any prior one
+    // when this record didn't carry one).
+    invoiceNumber: (typeof input.invoiceNumber === "string" && input.invoiceNumber.trim()) || cur.invoiceNumber || undefined,
     receipts: receipts.length ? receipts : cur.receipts,
     recordedByName: user.name,
     recordedRole: recRole ? workflowRoleLabel(recRole) : "Admin",
