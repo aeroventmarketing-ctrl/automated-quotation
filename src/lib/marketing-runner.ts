@@ -29,6 +29,11 @@ import {
   campaignImagePaths,
   type CampaignDraft,
 } from "@/lib/marketing-campaign";
+import {
+  recordCampaignSend,
+  getScheduledCampaigns,
+  updateScheduledCampaign,
+} from "@/lib/marketing-store";
 
 const MARKETING_CAP_PER_RUN = 300;
 
@@ -50,6 +55,8 @@ export interface MarketingRunResult {
   skipped: number;
   items: MarketingRunItem[];
   errors: string[];
+  /** The send-record id (set on a live campaign send — used for open/click tracking). */
+  sendId?: string;
 }
 
 const senderFrom = (nameOverride?: string) =>
@@ -240,6 +247,8 @@ export async function sendCampaign(opts: {
   audience: MarketingAudience;
   live: boolean;
   actor?: { id: string; name: string };
+  /** Campaign name for the send record (defaults to the subject). */
+  campaignName?: string;
 }): Promise<MarketingRunResult> {
   const now = new Date();
   const canSend = emailConfigured() && !!appConfig.followUpFromEmail;
@@ -253,6 +262,8 @@ export async function sendCampaign(opts: {
   const accounts = await getAccountsRegistry();
   const from = senderFrom(opts.draft.senderName);
   const imageUrls = effectiveLive ? await resolveCampaignImageUrls(opts.draft) : {};
+  const sendId = randomUUID();
+  const trackBase = appConfig.appUrl.replace(/\/+$/, "");
 
   const items: MarketingRunItem[] = [];
   const errors: string[] = [];
@@ -260,6 +271,7 @@ export async function sendCampaign(opts: {
   let previewed = 0;
   let skipped = 0;
   let dirty = false;
+  let subjectSample = "";
 
   for (const r of list) {
     if (!effectiveLive) { previewed++; items.push({ company: r.company, to: r.email, action: "preview" }); continue; }
@@ -269,7 +281,9 @@ export async function sendCampaign(opts: {
         recipient: { company: r.company, contactName: r.contactName },
         imageUrls,
         unsubscribeUrl: unsubscribeUrl(r.id),
+        tracking: { base: trackBase, sendId, customerId: r.id },
       });
+      subjectSample = mail.subject;
       await sendEmail({ from, to: r.email, subject: mail.subject, text: mail.text, html: mail.html });
       const a = accounts[r.id] ?? { history: [], conversations: [] };
       a.conversations = [...(a.conversations ?? []), logEntry(now, r.company, r.contactName, `Marketing campaign sent: “${mail.subject}”.`, opts.actor)];
@@ -284,7 +298,52 @@ export async function sendCampaign(opts: {
   }
 
   if (dirty) await saveAccountsRegistry(accounts);
-  return { ranAt: now.toISOString(), live: effectiveLive, requestedLive: opts.live, reason, recipients: list.length, sent, previewed, skipped, items, errors };
+  // Record the send for the results view (only when something actually went out).
+  if (effectiveLive && sent > 0) {
+    await recordCampaignSend({
+      id: sendId,
+      name: (opts.campaignName ?? "").trim() || subjectSample || "Campaign",
+      subject: subjectSample,
+      audience: opts.audience,
+      sentAt: now.toISOString(),
+      sentByName: opts.actor?.name ?? "Marketing",
+      recipients: list.length,
+      sent,
+    });
+  }
+  return { ranAt: now.toISOString(), live: effectiveLive, requestedLive: opts.live, reason, recipients: list.length, sent, previewed, skipped, items, errors, sendId: effectiveLive && sent > 0 ? sendId : undefined };
+}
+
+/**
+ * Fire any scheduled campaigns whose time has arrived. Called hourly by the cron
+ * — independent of the recurring-check-in schedule gate.
+ */
+export async function runScheduledCampaigns(opts: { now?: Date; live: boolean }): Promise<{ processed: number; sent: number; failed: number }> {
+  const now = opts.now ?? new Date();
+  const jobs = await getScheduledCampaigns();
+  const due = jobs.filter((j) => j.status === "pending" && j.scheduledFor && new Date(j.scheduledFor).getTime() <= now.getTime());
+  let processed = 0;
+  let sentTotal = 0;
+  let failed = 0;
+  for (const job of due) {
+    if (!opts.live) continue;
+    processed++;
+    try {
+      const res = await sendCampaign({ draft: job.draft, audience: job.audience, live: true, campaignName: job.name, actor: { id: "scheduler", name: job.createdByName || "Scheduler" } });
+      sentTotal += res.sent;
+      await updateScheduledCampaign(job.id, {
+        status: "sent",
+        sentAt: now.toISOString(),
+        sendId: res.sendId,
+        result: { sent: res.sent, skipped: res.skipped, failed: res.errors.length },
+        ...(res.reason ? { error: res.reason } : {}),
+      });
+    } catch (e) {
+      failed++;
+      await updateScheduledCampaign(job.id, { status: "failed", error: e instanceof Error ? e.message : "send failed" });
+    }
+  }
+  return { processed, sent: sentTotal, failed };
 }
 
 /**

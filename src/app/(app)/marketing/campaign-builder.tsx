@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Upload, Trash2, Plus, Image as ImageIcon } from "lucide-react";
+import { Upload, Trash2, Plus, Image as ImageIcon, Save, Copy, FolderOpen, Clock } from "lucide-react";
 import type { CampaignDraft, CampaignProduct, CampaignImage } from "@/lib/marketing-campaign";
 import type { MarketingRunResult, CampaignPreview } from "@/lib/marketing-runner";
+import type { SavedCampaign, ScheduledCampaign } from "@/lib/marketing-store";
 
 // Personalization tokens (kept in sync with CAMPAIGN_TOKENS on the server). Held
 // locally so this client component never imports the server-only campaign lib.
@@ -25,6 +27,7 @@ const thumbUrl = (path: string) => `/api/marketing-uploads?path=${encodeURICompo
 
 export function CampaignBuilder({
   draft,
+  templates: initialTemplates,
   listCount,
   allCount,
   emailReady,
@@ -33,8 +36,13 @@ export function CampaignBuilder({
   onPreviewRecipients,
   onSend,
   onTest,
+  onSaveTemplate,
+  onDeleteTemplate,
+  onDuplicateTemplate,
+  onSchedule,
 }: {
   draft: CampaignDraft;
+  templates: SavedCampaign[];
   listCount: number;
   allCount: number;
   emailReady: boolean;
@@ -43,7 +51,12 @@ export function CampaignBuilder({
   onPreviewRecipients: (input: { draft: CampaignDraft; audience: Audience }) => Promise<MarketingRunResult>;
   onSend: (input: { draft: CampaignDraft; audience: Audience }) => Promise<MarketingRunResult>;
   onTest: (input: { draft: CampaignDraft; toEmail: string }) => Promise<{ ok: boolean; reason?: string }>;
+  onSaveTemplate: (input: { id?: string; name: string; draft: CampaignDraft }) => Promise<SavedCampaign[]>;
+  onDeleteTemplate: (id: string) => Promise<SavedCampaign[]>;
+  onDuplicateTemplate: (id: string) => Promise<SavedCampaign[]>;
+  onSchedule: (input: { name: string; draft: CampaignDraft; audience: Audience; scheduledFor: string }) => Promise<ScheduledCampaign[]>;
 }) {
+  const router = useRouter();
   const [d, setD] = useState<CampaignDraft>(draft);
   // Benefits edited as free text (one per line) so blank lines survive typing.
   const [benefitsText, setBenefitsText] = useState((draft.benefits ?? []).join("\n"));
@@ -85,6 +98,55 @@ export function CampaignBuilder({
     try { await onSaveDraft(current); setSaveMsg({ ok: true, text: "Draft saved." }); }
     catch (e) { setSaveMsg({ ok: false, text: e instanceof Error ? e.message : "Save failed" }); }
     finally { setSaving(false); }
+  }
+
+  // ---- Saved templates ----
+  const [templates, setTemplates] = useState<SavedCampaign[]>(initialTemplates);
+  const [loadedId, setLoadedId] = useState<string>("");
+  const [tplBusy, setTplBusy] = useState<string | null>(null);
+  const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const loaded = templates.find((t) => t.id === loadedId) ?? null;
+
+  function loadDraft(next: CampaignDraft) {
+    setD(next);
+    setBenefitsText((next.benefits ?? []).join("\n"));
+  }
+  function loadTemplate(id: string) {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    setLoadedId(id);
+    loadDraft(t.draft);
+    setTplMsg({ ok: true, text: `Loaded “${t.name}”.` });
+  }
+  async function saveTemplate(asNew: boolean) {
+    const suggested = asNew ? "" : loaded?.name ?? "";
+    const name = window.prompt(asNew ? "Save as a new campaign — name:" : "Update campaign name:", suggested);
+    if (name === null) return;
+    if (!name.trim()) { setTplMsg({ ok: false, text: "Name the campaign." }); return; }
+    setTplBusy("save"); setTplMsg(null);
+    try {
+      const list = await onSaveTemplate({ id: asNew ? undefined : loaded?.id, name: name.trim(), draft: current });
+      setTemplates(list);
+      const match = list.find((t) => t.name === name.trim());
+      if (match) setLoadedId(match.id);
+      setTplMsg({ ok: true, text: asNew ? "Saved to the library." : "Template updated." });
+    } catch (e) { setTplMsg({ ok: false, text: e instanceof Error ? e.message : "Save failed" }); }
+    finally { setTplBusy(null); }
+  }
+  async function duplicateTemplate() {
+    if (!loaded) return;
+    setTplBusy("dup"); setTplMsg(null);
+    try { setTemplates(await onDuplicateTemplate(loaded.id)); setTplMsg({ ok: true, text: "Duplicated." }); }
+    catch (e) { setTplMsg({ ok: false, text: e instanceof Error ? e.message : "Failed" }); }
+    finally { setTplBusy(null); }
+  }
+  async function deleteTemplate() {
+    if (!loaded) return;
+    if (!window.confirm(`Delete the saved campaign “${loaded.name}”?`)) return;
+    setTplBusy("del"); setTplMsg(null);
+    try { setTemplates(await onDeleteTemplate(loaded.id)); setLoadedId(""); setTplMsg({ ok: true, text: "Deleted." }); }
+    catch (e) { setTplMsg({ ok: false, text: e instanceof Error ? e.message : "Failed" }); }
+    finally { setTplBusy(null); }
   }
 
   // ---- Images / products upload ----
@@ -155,6 +217,24 @@ export function CampaignBuilder({
     finally { setBusy(null); }
   }
 
+  // ---- Schedule for later ----
+  const [scheduleAt, setScheduleAt] = useState("");
+  const [scheduleMsg, setScheduleMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function schedule() {
+    if (!scheduleAt) { setScheduleMsg({ ok: false, text: "Pick a date and time." }); return; }
+    const iso = new Date(scheduleAt).toISOString();
+    if (new Date(iso).getTime() <= Date.now()) { setScheduleMsg({ ok: false, text: "Pick a time in the future." }); return; }
+    setBusy("schedule"); setScheduleMsg(null);
+    try {
+      await onSaveDraft(current);
+      await onSchedule({ name: loaded?.name ?? current.subject, draft: current, audience, scheduledFor: iso });
+      setScheduleMsg({ ok: true, text: `Scheduled for ${new Date(iso).toLocaleString()} to ${audienceCount} client${audienceCount === 1 ? "" : "s"}.` });
+      setScheduleAt("");
+      router.refresh(); // surface it in the activity panel below
+    } catch (e) { setScheduleMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to schedule" }); }
+    finally { setBusy(null); }
+  }
+
   const field = "space-y-1";
   const hint = "text-[11px] text-muted-foreground";
 
@@ -167,6 +247,28 @@ export function CampaignBuilder({
         <div className="grid gap-5 lg:grid-cols-2">
           {/* ---------- Editor ---------- */}
           <div className="space-y-4">
+            {/* Saved templates library */}
+            <div className="space-y-1 rounded-md border bg-muted/20 p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                <Select value={loadedId} onChange={(e) => (e.target.value ? loadTemplate(e.target.value) : setLoadedId(""))} className="h-8 min-w-[12rem] flex-1 text-xs">
+                  <option value="">Saved campaigns…{templates.length ? "" : " (none yet)"}</option>
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </Select>
+                <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => saveTemplate(true)} disabled={tplBusy != null}>
+                  <Save className="mr-1 h-3.5 w-3.5" /> Save as new
+                </Button>
+                {loaded && (
+                  <>
+                    <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => saveTemplate(false)} disabled={tplBusy != null}>Update</Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={duplicateTemplate} disabled={tplBusy != null}><Copy className="mr-1 h-3.5 w-3.5" />Duplicate</Button>
+                    <button type="button" onClick={deleteTemplate} disabled={tplBusy != null} className="text-muted-foreground hover:text-destructive" aria-label="Delete campaign"><Trash2 className="h-4 w-4" /></button>
+                  </>
+                )}
+              </div>
+              {tplMsg && <p className={`text-xs ${tplMsg.ok ? "text-emerald-600" : "text-destructive"}`}>{tplMsg.text}</p>}
+            </div>
+
             <p className={hint}>
               Every section is optional — leave one blank and it&rsquo;s dropped from the email. Use tokens{" "}
               {TOKENS.map((t) => <code key={t.token} className="mx-0.5 rounded bg-muted px-1">{t.token}</code>)} to personalize per client.
@@ -354,6 +456,13 @@ export function CampaignBuilder({
                 <Button size="sm" onClick={send} disabled={busy != null || !emailReady}>{busy === "send" ? "Sending…" : `Send now${audienceCount ? ` (${audienceCount})` : ""}`}</Button>
                 {sendErr && <span className="text-xs text-destructive">{sendErr}</span>}
               </div>
+              {/* Schedule for later */}
+              <div className="flex flex-wrap items-center gap-2 border-t pt-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <Input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className="h-8 w-56 text-xs" />
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={schedule} disabled={busy != null || !emailReady || !scheduleAt}>{busy === "schedule" ? "Scheduling…" : "Schedule send"}</Button>
+              </div>
+              {scheduleMsg && <p className={`text-xs ${scheduleMsg.ok ? "text-emerald-600" : "text-destructive"}`}>{scheduleMsg.text}</p>}
               {result && (
                 <div className="rounded-md border bg-muted/30 p-2 text-xs">
                   {result.live ? (

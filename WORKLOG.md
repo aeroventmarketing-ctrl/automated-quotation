@@ -1,3 +1,24 @@
+## 2026-08-13 · Email marketing — saved templates, scheduling & open/click tracking
+- **Owner request:** add all three follow-ons to the campaign builder.
+- **New `src/lib/marketing-store.ts`:** three AppSetting JSON stores (no schema change) + CRUD —
+  `SavedCampaign` templates (`marketing_campaign_library`), `ScheduledCampaign` jobs (`marketing_scheduled`),
+  `CampaignSendRecord` analytics (`marketing_sends`, capped 100). Best-effort `recordCampaignEvent` de-dupes
+  open/click per recipient (a click implies an open).
+- **Saved templates:** `upsert/delete/duplicate` helpers + actions; builder gets a library toolbar (load from a
+  dropdown, Save as new / Update / Duplicate / Delete). The working draft is unchanged.
+- **Schedule for later:** `addScheduledCampaign`/`cancelScheduledCampaign` + `scheduleCampaignAction`;
+  `runScheduledCampaigns` in the runner fires due jobs; wired into the hourly cron **before** the follow-up
+  schedule gate (so a scheduled campaign fires on its own timestamp regardless of the recurring-nudge schedule).
+  Builder has a datetime-local + "Schedule send"; the activity panel lists upcoming/past with Cancel.
+- **Open/click tracking:** `buildCampaignEmail` now embeds a 1×1 open pixel and wraps the CTA in a click
+  redirect (`tracking` ctx, omitted for preview/test). New public `/api/marketing-track` route (gif for opens,
+  validated redirect for clicks) records into the send record; added to middleware `PUBLIC_PATHS`.
+  `sendCampaign` mints a `sendId`, personalizes tracking per recipient, and writes a `CampaignSendRecord`.
+- **Results view:** new `campaign-activity.tsx` (scheduled list + delivered-campaign table with sent / opens
+  (%) / clicks (%)) + `cancel-scheduled-button.tsx`; wired into `page.tsx`. Opens noted as approximate.
+- Typecheck + lint clean; `next build` compiles & type-validates (unrelated `/reset-password` prerender fails
+  only for lack of Supabase env in the sandbox). Both new routes are force-dynamic.
+
 ## 2026-08-13 · Email marketing — customizable campaign builder
 - **Owner request:** a customizable email-marketing campaign with structured, editable "rows": sender name,
   benefit-focused subject, preheader, personalized greeting, opening hook, value prop, relevant products,

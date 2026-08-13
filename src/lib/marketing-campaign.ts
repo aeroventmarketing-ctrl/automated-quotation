@@ -256,6 +256,14 @@ export interface CampaignRenderCtx {
   imageUrls: Record<string, string>;
   /** Per-recipient one-click unsubscribe URL, if available. */
   unsubscribeUrl?: string;
+  /** Open/click tracking for this recipient's copy (omit for preview/test). */
+  tracking?: { base: string; sendId: string; customerId: string };
+}
+
+/** Wrap a link so a click is recorded before redirecting to the real target. */
+function trackedLink(url: string, t: CampaignRenderCtx["tracking"]): string {
+  if (!t) return url;
+  return `${t.base}/api/marketing-track?s=${encodeURIComponent(t.sendId)}&c=${encodeURIComponent(t.customerId)}&e=click&u=${encodeURIComponent(url)}`;
 }
 
 /**
@@ -360,8 +368,9 @@ export function buildCampaignEmail(draft: CampaignDraft, ctx: CampaignRenderCtx)
   for (const p of paras(socialProof)) body.push(`<p style="margin:0 0 14px;color:${muted};font-style:italic">${escLines(p)}</p>`);
 
   if (draft.ctaLabel.trim() && draft.ctaUrl.trim()) {
+    const href = trackedLink(draft.ctaUrl.trim(), ctx.tracking);
     body.push(
-      `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 18px"><tr><td style="border-radius:6px;background:${brand}"><a href="${esc(draft.ctaUrl.trim())}" target="_blank" style="display:inline-block;padding:12px 26px;color:#ffffff;font-weight:700;text-decoration:none;font-size:15px">${esc(draft.ctaLabel.trim())}</a></td></tr></table>`,
+      `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 18px"><tr><td style="border-radius:6px;background:${brand}"><a href="${esc(href)}" target="_blank" style="display:inline-block;padding:12px 26px;color:#ffffff;font-weight:700;text-decoration:none;font-size:15px">${esc(draft.ctaLabel.trim())}</a></td></tr></table>`,
     );
   }
 
@@ -393,6 +402,10 @@ export function buildCampaignEmail(draft: CampaignDraft, ctx: CampaignRenderCtx)
     ? `<span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all">${esc(preheader)}</span>`
     : "";
 
+  const openPixel = ctx.tracking
+    ? `<img src="${esc(`${ctx.tracking.base}/api/marketing-track?s=${encodeURIComponent(ctx.tracking.sendId)}&c=${encodeURIComponent(ctx.tracking.customerId)}&e=open`)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0">`
+    : "";
+
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>
 <body style="margin:0;padding:0;background:#eef2f6">${preheaderSpan}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f6"><tr><td align="center" style="padding:20px 12px">
@@ -401,7 +414,7 @@ export function buildCampaignEmail(draft: CampaignDraft, ctx: CampaignRenderCtx)
 ${sections.join("\n")}
 </table>
 </td></tr></table>
-</body></html>`;
+${openPixel}</body></html>`;
 
   return { subject, text, html };
 }
