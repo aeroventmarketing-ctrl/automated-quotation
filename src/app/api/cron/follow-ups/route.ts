@@ -13,7 +13,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { runFollowUps } from "@/lib/follow-up-runner";
-import { runMarketingRecurring, runScheduledCampaigns } from "@/lib/marketing-runner";
+import { runMarketingRecurring, runScheduledCampaigns, runAbTests } from "@/lib/marketing-runner";
 import { getFollowUpSettings, setFollowUpSettings, shouldRunScheduler } from "@/lib/follow-up-settings";
 
 export const dynamic = "force-dynamic";
@@ -35,12 +35,13 @@ export async function GET(req: NextRequest) {
     const settings = await getFollowUpSettings();
     const now = new Date();
     const force = req.nextUrl.searchParams.get("force") === "1";
-    // Scheduled campaigns fire on their own timestamp, so process them every hour
-    // — independent of the follow-up schedule gate below.
+    // Scheduled campaigns + A/B test finalizers fire on their own timestamps, so
+    // process them every hour — independent of the follow-up schedule gate below.
     const scheduled = await runScheduledCampaigns({ now, live: true });
+    const abTests = await runAbTests({ now, live: true });
     const gate = shouldRunScheduler(settings, now);
     if (!force && !gate.run) {
-      return NextResponse.json({ skipped: true, reason: gate.reason, schedule: settings.scheduleMode, scheduled });
+      return NextResponse.json({ skipped: true, reason: gate.reason, schedule: settings.scheduleMode, scheduled, abTests });
     }
     const [followUps, marketing] = await Promise.all([
       runFollowUps({ live: true }),
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
     ]);
     // Stamp the run so the schedule gate advances (merge to preserve other fields).
     await setFollowUpSettings({ ...settings, lastRunAt: now.toISOString() });
-    return NextResponse.json({ ran: true, forced: force, reason: gate.reason, followUps, marketing, scheduled });
+    return NextResponse.json({ ran: true, forced: force, reason: gate.reason, followUps, marketing, scheduled, abTests });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Follow-up run failed";
     return NextResponse.json({ error: message }, { status: 500 });

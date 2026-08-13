@@ -21,8 +21,10 @@ import { normalizeCampaignDraft, type CampaignDraft } from "@/lib/marketing-camp
 export const MARKETING_TEMPLATES_KEY = "marketing_campaign_library";
 export const MARKETING_SCHEDULED_KEY = "marketing_scheduled";
 export const MARKETING_SENDS_KEY = "marketing_sends";
+export const MARKETING_ABTESTS_KEY = "marketing_abtests";
 
 const SENDS_KEEP = 100; // cap the analytics history so the row stays small
+const ABTESTS_KEEP = 50;
 
 const str = (v: unknown, d = ""): string => (typeof v === "string" ? v : d);
 const int = (v: unknown): number => (Number.isFinite(Number(v)) ? Math.floor(Number(v)) : 0);
@@ -261,4 +263,99 @@ export async function recordCampaignEvent(sendId: string, customerId: string, ev
     if (event === "click" && !rec.openedIds.includes(customerId)) rec.openedIds.push(customerId);
     await writeRow(MARKETING_SENDS_KEY, { sends: list });
   }
+}
+
+// ---- A/B subject tests ----------------------------------------------------
+
+export type AbStatus = "testing" | "completed" | "failed" | "cancelled";
+
+export interface AbTest {
+  id: string;
+  name: string;
+  draft: CampaignDraft; // the base draft (its subject is variant A)
+  subjectA: string;
+  subjectB: string;
+  audience: MarketingAudience;
+  testFraction: number; // 0..1 of the audience used for the test (split A/B)
+  decideAfterHours: number;
+  status: AbStatus;
+  createdByName: string;
+  createdAt: string;
+  decideAt: string; // ISO — when the winner is picked & the remainder sent
+  testedIdsA: string[];
+  testedIdsB: string[];
+  sendIdA?: string;
+  sendIdB?: string;
+  winner?: "A" | "B";
+  winnerSubject?: string;
+  remainderSendId?: string;
+  remainderCount?: number;
+  completedAt?: string;
+  error?: string;
+}
+
+function parseAbTests(v: unknown): AbTest[] {
+  const arr = (v as { tests?: unknown } | null)?.tests;
+  if (!Array.isArray(arr)) return [];
+  const out: AbTest[] = [];
+  for (const e of arr) {
+    if (!e || typeof e !== "object") continue;
+    const o = e as Record<string, unknown>;
+    if (!str(o.id)) continue;
+    const status = str(o.status) as AbStatus;
+    const w = str(o.winner);
+    out.push({
+      id: str(o.id),
+      name: str(o.name) || "Untitled A/B test",
+      draft: normalizeCampaignDraft(o.draft as Partial<CampaignDraft> | null),
+      subjectA: str(o.subjectA),
+      subjectB: str(o.subjectB),
+      audience: o.audience === "all" ? "all" : "list",
+      testFraction: Number.isFinite(Number(o.testFraction)) ? Number(o.testFraction) : 0.3,
+      decideAfterHours: Number.isFinite(Number(o.decideAfterHours)) ? Number(o.decideAfterHours) : 4,
+      status: (["testing", "completed", "failed", "cancelled"] as string[]).includes(status) ? status : "testing",
+      createdByName: str(o.createdByName),
+      createdAt: str(o.createdAt),
+      decideAt: str(o.decideAt),
+      testedIdsA: strArr(o.testedIdsA),
+      testedIdsB: strArr(o.testedIdsB),
+      ...(str(o.sendIdA) ? { sendIdA: str(o.sendIdA) } : {}),
+      ...(str(o.sendIdB) ? { sendIdB: str(o.sendIdB) } : {}),
+      ...(w === "A" || w === "B" ? { winner: w } : {}),
+      ...(str(o.winnerSubject) ? { winnerSubject: str(o.winnerSubject) } : {}),
+      ...(str(o.remainderSendId) ? { remainderSendId: str(o.remainderSendId) } : {}),
+      ...(o.remainderCount != null ? { remainderCount: int(o.remainderCount) } : {}),
+      ...(str(o.completedAt) ? { completedAt: str(o.completedAt) } : {}),
+      ...(str(o.error) ? { error: str(o.error) } : {}),
+    });
+  }
+  return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function getAbTests(): Promise<AbTest[]> {
+  return readRow(MARKETING_ABTESTS_KEY, parseAbTests);
+}
+
+export async function addAbTest(test: AbTest): Promise<AbTest[]> {
+  const list = await getAbTests();
+  list.unshift(test);
+  await writeRow(MARKETING_ABTESTS_KEY, { tests: list.slice(0, ABTESTS_KEEP) });
+  return parseAbTests({ tests: list.slice(0, ABTESTS_KEEP) });
+}
+
+export async function updateAbTest(id: string, patch: Partial<AbTest>): Promise<AbTest[]> {
+  const list = await getAbTests();
+  const t = list.find((x) => x.id === id);
+  if (t) Object.assign(t, patch);
+  await writeRow(MARKETING_ABTESTS_KEY, { tests: list });
+  return parseAbTests({ tests: list });
+}
+
+/** Cancel an A/B test that's still in its testing window (before the winner sends). */
+export async function cancelAbTest(id: string): Promise<AbTest[]> {
+  const list = await getAbTests();
+  const t = list.find((x) => x.id === id);
+  if (t && t.status === "testing") t.status = "cancelled";
+  await writeRow(MARKETING_ABTESTS_KEY, { tests: list });
+  return parseAbTests({ tests: list });
 }

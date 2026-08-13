@@ -1,3 +1,21 @@
+## 2026-08-13 · Email marketing — recipient breakdown & A/B subject testing
+- **Owner request:** add a per-campaign recipient breakdown (who opened / clicked) and A/B subject testing.
+- **Recipient breakdown:** `resolveContacts(ids)` in `lib/marketing.ts` (customerId → company/contact/email).
+  The results table became a client `campaign-results.tsx` — click a campaign row to expand **Opened** and
+  **Clicked** contact lists. The page resolves all opener/clicker ids once and passes a contacts map down.
+- **A/B subject testing:** new `AbTest` store (`marketing_abtests`) + CRUD in `marketing-store.ts`. Refactored
+  the runner: extracted `deliverCampaign(recipients…)` as the shared send core (direct / scheduled / A/B all use
+  it); `sendCampaign` is now a thin audience→deliver wrapper. `startAbTest` shuffles the audience, sends subject
+  A and subject B to two halves of a test slice now (each its own tracked send record), and stores the tested
+  ids + a `decideAt`. `runAbTests` (hourly cron, next to `runScheduledCampaigns`) picks the higher **open-rate**
+  variant after the window and sends the winning subject to everyone not in the test slice.
+- **UI:** builder gains an “A/B test the subject” toggle (Subject B, test-slice %, decide-after hours, Start).
+  `campaign-activity.tsx` gains an **A/B subject tests** panel (per-variant opens, winner, remainder, cancel
+  while testing) alongside the scheduled list and the drill-down results.
+- **Actions:** `startAbTestAction`, `cancelAbTestAction`, `listAbTestsAction`; contacts resolved in `page.tsx`.
+- Typecheck + lint clean; `next build` compiles & type-validates (unrelated `/reset-password` prerender needs
+  Supabase env absent in the sandbox).
+
 ## 2026-08-13 · Email marketing — saved templates, scheduling & open/click tracking
 - **Owner request:** add all three follow-ons to the campaign builder.
 - **New `src/lib/marketing-store.ts`:** three AppSetting JSON stores (no schema change) + CRUD —

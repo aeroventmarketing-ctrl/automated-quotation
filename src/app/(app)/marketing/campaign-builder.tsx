@@ -40,6 +40,7 @@ export function CampaignBuilder({
   onDeleteTemplate,
   onDuplicateTemplate,
   onSchedule,
+  onStartAb,
 }: {
   draft: CampaignDraft;
   templates: SavedCampaign[];
@@ -55,6 +56,7 @@ export function CampaignBuilder({
   onDeleteTemplate: (id: string) => Promise<SavedCampaign[]>;
   onDuplicateTemplate: (id: string) => Promise<SavedCampaign[]>;
   onSchedule: (input: { name: string; draft: CampaignDraft; audience: Audience; scheduledFor: string }) => Promise<ScheduledCampaign[]>;
+  onStartAb: (input: { name?: string; draft: CampaignDraft; subjectB: string; audience: Audience; testFraction: number; decideAfterHours: number }) => Promise<{ ok: boolean; reason?: string }>;
 }) {
   const router = useRouter();
   const [d, setD] = useState<CampaignDraft>(draft);
@@ -232,6 +234,29 @@ export function CampaignBuilder({
       setScheduleAt("");
       router.refresh(); // surface it in the activity panel below
     } catch (e) { setScheduleMsg({ ok: false, text: e instanceof Error ? e.message : "Failed to schedule" }); }
+    finally { setBusy(null); }
+  }
+
+  // ---- A/B subject test ----
+  const [abOn, setAbOn] = useState(false);
+  const [subjectB, setSubjectB] = useState("");
+  const [testPct, setTestPct] = useState("30");
+  const [decideHours, setDecideHours] = useState("4");
+  const [abMsg, setAbMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function startAb() {
+    const b = subjectB.trim();
+    if (!b) { setAbMsg({ ok: false, text: "Enter subject B." }); return; }
+    const frac = Math.min(90, Math.max(10, parseInt(testPct, 10) || 30)) / 100;
+    const hours = Math.min(72, Math.max(1, parseInt(decideHours, 10) || 4));
+    const testCount = Math.round(audienceCount * frac);
+    if (!window.confirm(`Start A/B test: send subjects A & B to ~${testCount} of ${audienceCount} client${audienceCount === 1 ? "" : "s"} now, then send the winner to the rest in ${hours}h?`)) return;
+    setBusy("ab"); setAbMsg(null);
+    try {
+      await onSaveDraft(current);
+      const r = await onStartAb({ name: loaded?.name ?? current.subject, draft: current, subjectB: b, audience, testFraction: frac, decideAfterHours: hours });
+      if (r.ok) { setAbMsg({ ok: true, text: "A/B test started — the winner sends automatically." }); router.refresh(); }
+      else setAbMsg({ ok: false, text: r.reason || "Could not start the test." });
+    } catch (e) { setAbMsg({ ok: false, text: e instanceof Error ? e.message : "Failed" }); }
     finally { setBusy(null); }
   }
 
@@ -471,6 +496,37 @@ export function CampaignBuilder({
                     <p className="font-medium text-foreground">{result.previewed} client{result.previewed === 1 ? "" : "s"} would receive this{result.reason ? ` · not sent: ${result.reason}` : ""}.</p>
                   )}
                   {result.errors.length > 0 && <ul className="mt-1 list-inside list-disc text-destructive">{result.errors.slice(0, 8).map((er, i) => <li key={i}>{er}</li>)}</ul>}
+                </div>
+              )}
+            </div>
+
+            {/* A/B subject test */}
+            <div className="space-y-2 rounded-md border p-2">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={abOn} onChange={(e) => setAbOn(e.target.checked)} className="h-3.5 w-3.5" />
+                <span className="text-xs font-medium">A/B test the subject line</span>
+              </label>
+              {abOn && (
+                <div className="space-y-2">
+                  <p className={hint}>
+                    Sends your <strong>Subject</strong> (A) and Subject B to a small slice of the audience now, then automatically emails the higher-opening subject to everyone else.
+                  </p>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Subject B (variant)</Label>
+                    <Input value={subjectB} onChange={(e) => setSubjectB(e.target.value)} placeholder="An alternative subject line to test" />
+                  </div>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Test slice (%)</Label>
+                      <Input type="number" min={10} max={90} value={testPct} onChange={(e) => setTestPct(e.target.value)} className="h-8 w-24 text-xs" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Decide after (hours)</Label>
+                      <Input type="number" min={1} max={72} value={decideHours} onChange={(e) => setDecideHours(e.target.value)} className="h-8 w-28 text-xs" />
+                    </div>
+                    <Button size="sm" className="h-8 text-xs" onClick={startAb} disabled={busy != null || !emailReady || !subjectB.trim()}>{busy === "ab" ? "Starting…" : "Start A/B test"}</Button>
+                  </div>
+                  {abMsg && <p className={`text-xs ${abMsg.ok ? "text-emerald-600" : "text-destructive"}`}>{abMsg.text}</p>}
                 </div>
               )}
             </div>

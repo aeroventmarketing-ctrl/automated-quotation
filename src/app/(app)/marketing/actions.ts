@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { setMarketingConfig, type MarketingConfig } from "@/lib/marketing";
-import { renderCampaignPreview, sendCampaign, sendCampaignTest, type MarketingRunResult, type CampaignPreview } from "@/lib/marketing-runner";
+import { renderCampaignPreview, sendCampaign, sendCampaignTest, startAbTest, type MarketingRunResult, type CampaignPreview } from "@/lib/marketing-runner";
 import { setCampaignDraft, normalizeCampaignDraft, type CampaignDraft } from "@/lib/marketing-campaign";
 import {
   upsertCampaignTemplate,
@@ -12,8 +12,11 @@ import {
   duplicateCampaignTemplate,
   addScheduledCampaign,
   cancelScheduledCampaign,
+  cancelAbTest,
+  getAbTests,
   type SavedCampaign,
   type ScheduledCampaign,
+  type AbTest,
 } from "@/lib/marketing-store";
 
 /** Marketing is a sales function — Sales / Engineer / Admin. */
@@ -162,4 +165,45 @@ export async function cancelScheduledCampaignAction(id: string): Promise<Schedul
   const res = await cancelScheduledCampaign(z.string().parse(id));
   revalidatePath("/marketing");
   return res;
+}
+
+// ---- A/B subject testing --------------------------------------------------
+
+const abSchema = z.object({
+  name: z.string().optional(),
+  draft: draftSchema,
+  subjectB: z.string().min(1, "Enter subject B."),
+  audience: audienceSchema,
+  testFraction: z.number().min(0.1).max(0.9),
+  decideAfterHours: z.number().min(1).max(72),
+});
+
+/** Start an A/B subject test — sends both variants to a test slice now. */
+export async function startAbTestAction(input: z.infer<typeof abSchema>): Promise<{ ok: boolean; reason?: string }> {
+  const user = await assertMarketer();
+  const p = abSchema.parse(input);
+  const res = await startAbTest({
+    draft: normalizeCampaignDraft(p.draft as Partial<CampaignDraft>),
+    subjectB: p.subjectB,
+    audience: p.audience,
+    testFraction: p.testFraction,
+    decideAfterHours: p.decideAfterHours,
+    name: p.name,
+    actor: { id: user.id, name: user.name },
+  });
+  revalidatePath("/marketing");
+  return { ok: res.ok, reason: res.reason };
+}
+
+export async function cancelAbTestAction(id: string): Promise<AbTest[]> {
+  await assertMarketer();
+  const res = await cancelAbTest(z.string().parse(id));
+  revalidatePath("/marketing");
+  return res;
+}
+
+/** Fetch A/B tests (used to refresh the panel after starting one). */
+export async function listAbTestsAction(): Promise<AbTest[]> {
+  await assertMarketer();
+  return getAbTests();
 }
