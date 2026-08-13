@@ -16,12 +16,19 @@ import { config as appConfig } from "@/lib/config";
 import { calendarDaysBetween } from "@/lib/follow-up";
 import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
+import { longLivedImageUrl } from "@/lib/storage";
+import { unsubscribeUrl } from "@/lib/marketing-unsubscribe";
 import {
   getMarketingConfig,
   getMarketingRecipients,
   buildMarketingEmail,
   type MarketingAudience,
 } from "@/lib/marketing";
+import {
+  buildCampaignEmail,
+  campaignImagePaths,
+  type CampaignDraft,
+} from "@/lib/marketing-campaign";
 
 const MARKETING_CAP_PER_RUN = 300;
 
@@ -45,8 +52,8 @@ export interface MarketingRunResult {
   errors: string[];
 }
 
-const senderFrom = () =>
-  appConfig.followUpFromEmail ? `${appConfig.followUpFromName} <${appConfig.followUpFromEmail}>` : "";
+const senderFrom = (nameOverride?: string) =>
+  appConfig.followUpFromEmail ? `${(nameOverride?.trim() || appConfig.followUpFromName)} <${appConfig.followUpFromEmail}>` : "";
 
 function logEntry(now: Date, company: string, contactName: string | null, message: string, actor?: { id: string; name: string }): ConversationEntry {
   return {
@@ -179,4 +186,127 @@ export async function sendMarketingCampaign(opts: {
 
   if (dirty) await saveAccountsRegistry(accounts);
   return { ranAt: now.toISOString(), live: effectiveLive, requestedLive: opts.live, reason, recipients: list.length, sent, previewed, skipped, items, errors };
+}
+
+// ===========================================================================
+// Rich campaign builder — a structured, sectioned promotional email.
+// ===========================================================================
+
+/** Resolve every image path referenced by a draft to a long-lived signed URL. */
+async function resolveCampaignImageUrls(draft: CampaignDraft): Promise<Record<string, string>> {
+  const paths = campaignImagePaths(draft);
+  const urls: Record<string, string> = {};
+  await Promise.all(
+    paths.map(async (p) => {
+      try { urls[p] = await longLivedImageUrl(p); } catch { /* drop broken image silently */ }
+    }),
+  );
+  return urls;
+}
+
+export interface CampaignPreview {
+  subject: string;
+  html: string;
+  text: string;
+  sampleTo: string; // the sample recipient the preview was personalized for
+}
+
+/**
+ * Render the campaign for a single sample recipient — the exact HTML/text that
+ * would be sent. Used by the builder's live preview. Sends nothing.
+ */
+export async function renderCampaignPreview(draft: CampaignDraft): Promise<CampaignPreview> {
+  const imageUrls = await resolveCampaignImageUrls(draft);
+  // Personalize against a real recipient when one exists, else a placeholder.
+  const [sample] = await getMarketingRecipients("all");
+  const recipient = sample
+    ? { company: sample.company, contactName: sample.contactName }
+    : { company: "Sample Company Inc.", contactName: "Juan Dela Cruz" };
+  const mail = buildCampaignEmail(draft, {
+    recipient,
+    imageUrls,
+    unsubscribeUrl: unsubscribeUrl(sample?.id ?? "sample"),
+  });
+  return { subject: mail.subject, html: mail.html, text: mail.text, sampleTo: sample?.company ?? "a sample client" };
+}
+
+/**
+ * Send one built campaign to the chosen audience now. `live: false` previews
+ * (counts recipients, sends nothing). Honours opt-outs, skips no-email clients,
+ * personalizes per recipient and embeds a one-click unsubscribe link.
+ */
+export async function sendCampaign(opts: {
+  draft: CampaignDraft;
+  audience: MarketingAudience;
+  live: boolean;
+  actor?: { id: string; name: string };
+}): Promise<MarketingRunResult> {
+  const now = new Date();
+  const canSend = emailConfigured() && !!appConfig.followUpFromEmail;
+  const effectiveLive = opts.live && canSend;
+  let reason: string | undefined;
+  if (opts.live && !effectiveLive) {
+    reason = !emailConfigured() ? "no Resend API key configured" : "no sender address configured (FOLLOW_UP_FROM_EMAIL)";
+  }
+
+  const list = await getMarketingRecipients(opts.audience);
+  const accounts = await getAccountsRegistry();
+  const from = senderFrom(opts.draft.senderName);
+  const imageUrls = effectiveLive ? await resolveCampaignImageUrls(opts.draft) : {};
+
+  const items: MarketingRunItem[] = [];
+  const errors: string[] = [];
+  let sent = 0;
+  let previewed = 0;
+  let skipped = 0;
+  let dirty = false;
+
+  for (const r of list) {
+    if (!effectiveLive) { previewed++; items.push({ company: r.company, to: r.email, action: "preview" }); continue; }
+    if (sent >= MARKETING_CAP_PER_RUN) { skipped++; items.push({ company: r.company, to: r.email, action: "skipped", reason: "per-run send cap reached" }); continue; }
+    try {
+      const mail = buildCampaignEmail(opts.draft, {
+        recipient: { company: r.company, contactName: r.contactName },
+        imageUrls,
+        unsubscribeUrl: unsubscribeUrl(r.id),
+      });
+      await sendEmail({ from, to: r.email, subject: mail.subject, text: mail.text, html: mail.html });
+      const a = accounts[r.id] ?? { history: [], conversations: [] };
+      a.conversations = [...(a.conversations ?? []), logEntry(now, r.company, r.contactName, `Marketing campaign sent: “${mail.subject}”.`, opts.actor)];
+      accounts[r.id] = a;
+      dirty = true;
+      sent++;
+      items.push({ company: r.company, to: r.email, action: "sent" });
+    } catch (e) {
+      errors.push(`${r.company}: ${e instanceof Error ? e.message : "send failed"}`);
+      items.push({ company: r.company, to: r.email, action: "skipped", reason: "send failed" });
+    }
+  }
+
+  if (dirty) await saveAccountsRegistry(accounts);
+  return { ranAt: now.toISOString(), live: effectiveLive, requestedLive: opts.live, reason, recipients: list.length, sent, previewed, skipped, items, errors };
+}
+
+/**
+ * Send one test copy of the campaign to a single address (personalized with
+ * sample tokens), so the sender can check how it looks before a real blast.
+ */
+export async function sendCampaignTest(opts: { draft: CampaignDraft; toEmail: string }): Promise<{ ok: boolean; reason?: string }> {
+  if (!emailConfigured() || !appConfig.followUpFromEmail) {
+    return { ok: false, reason: !emailConfigured() ? "no Resend API key configured" : "no sender address configured (FOLLOW_UP_FROM_EMAIL)" };
+  }
+  const imageUrls = await resolveCampaignImageUrls(opts.draft);
+  const mail = buildCampaignEmail(opts.draft, {
+    recipient: { company: "Sample Company Inc.", contactName: "Juan Dela Cruz" },
+    imageUrls,
+    unsubscribeUrl: unsubscribeUrl("sample"),
+  });
+  await sendEmail({
+    from: senderFrom(opts.draft.senderName),
+    to: opts.toEmail,
+    subject: `[TEST] ${mail.subject}`,
+    text: mail.text,
+    html: mail.html,
+  });
+  return { ok: true };
 }

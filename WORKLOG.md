@@ -1,3 +1,38 @@
+## 2026-08-13 · Email marketing — customizable campaign builder
+- **Owner request:** a customizable email-marketing campaign with structured, editable "rows": sender name,
+  benefit-focused subject, preheader, personalized greeting, opening hook, value prop, relevant products,
+  benefits (not specs), visuals, social proof, one primary CTA, contact info, footer, unsubscribe. Bulk-send to
+  selected clients; new Marketing page; uploaded images.
+- **Approach:** extended the existing (basic) `/marketing` feature into a full section-based builder. Every
+  section is optional (blank ⇒ dropped). Draft persists in an `AppSetting` (`marketing_campaign_draft`), no
+  schema change.
+- **New `src/lib/marketing-campaign.ts`:** `CampaignDraft` / `CampaignProduct` / `CampaignImage` types,
+  `defaultCampaignDraft` (pre-filled from the request's examples + `COMPANY`), `normalize/get/setCampaignDraft`,
+  `campaignImagePaths`, personalization tokens (`{firstName}`/`{contactName}`/`{company}` plus `[First Name]`
+  bracket aliases) via `applyCampaignTokens`, and `buildCampaignEmail(draft, ctx)` → responsive, table-based,
+  email-client-safe HTML + plain-text (hero image, greeting, hook, value prop, product cards, benefit bullets,
+  gallery, social proof, CTA button, contact, dark footer, preheader span).
+- **One-click unsubscribe:** `src/lib/marketing-unsubscribe.ts` (HMAC token under `CRON_SECRET`), public
+  `/unsubscribe` page (confirm button → POST, so link prefetch can't opt anyone out) that sets the same
+  `optOutFollowUp` flag campaigns/follow-ups already honour; `/unsubscribe` added to middleware `PUBLIC_PATHS`.
+  Each email embeds a per-recipient unsubscribe link.
+- **Images:** `/api/marketing-uploads` route (marketer-gated upload + signed-URL GET, `marketing/` scope) and
+  `longLivedImageUrl` in `storage.ts` (~3-yr signed URLs embedded at send time, since recipients' mail clients
+  fetch images unauthenticated later). Bucket stays private.
+- **Runner (`marketing-runner.ts`):** `renderCampaignPreview` (personalizes for a sample client),
+  `sendCampaign` (bulk to `list`/`all`, per-recipient personalization + unsubscribe link, opt-outs skipped,
+  300/run cap, logs to the account conversation history), `sendCampaignTest` (one `[TEST]` copy). `senderFrom`
+  now takes the campaign's sender-name override.
+- **Actions (`marketing/actions.ts`):** `saveCampaignDraftAction`, `previewCampaignBuilderAction`,
+  `previewCampaignRecipientsAction`, `sendCampaignBuilderAction`, `sendCampaignTestAction` (Zod-validated,
+  `assertMarketer`). Removed the old free-text campaign actions (superseded).
+- **UI:** new `campaign-builder.tsx` (client) — editor for every row (products & images add/remove, benefits as
+  lines, image upload, token hints) with a **debounced live preview** rendered server-side into an iframe,
+  test-send, audience selector + recipient count, and Send. `marketing-workspace.tsx` trimmed to the recurring
+  check-in card; `page.tsx` renders the builder + recurring.
+- Typecheck + lint clean; `next build` compiles & type-validates (the sandbox's unrelated `/reset-password`
+  prerender fails only because no Supabase env is present here). `/unsubscribe` is force-dynamic.
+
 ## 2026-08-12 · Cash liquidation — admin per-line: delete a row + clear "Reconciled by hand"
 - **Owner request:** (1) add a delete-row option to the admin per-line tally editor; (2) once an admin has
   tallied a voucher, remove it from the "Reconciled by hand" card.
