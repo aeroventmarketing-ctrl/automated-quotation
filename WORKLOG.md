@@ -1,3 +1,17 @@
+## 2026-08-13 · Receipt reader — VAT-inclusive gross (withholding-tax trap) + cash reader
+- **Owner lesson (TKL Steel invoice):** the Actual should be **"Total Sales (VAT Inclusive)" = 12,840.00**, NOT
+  the final "Total Amount Due" 12,725.36 — that has "Less: Withholding Tax 11.64" subtracted, and EWT is a
+  creditable tax remitted to BIR (2307), not a cost reduction. Also: read invoice No. 954314 and date 12-Aug-26.
+- **Amount rule reworked (`api/ai/read-receipt`):** the booklet-invoice amount now anchors on the **VAT-inclusive
+  gross** ("Total Sales (VAT Inclusive)" = VATable + VAT = Σ body AMOUNT column). Two explicit traps: (a) don't
+  use the mid "Amount Net of VAT" (VAT-exclusive); (b) don't use a "Total Amount Due" with "Less: Withholding
+  Tax" subtracted — use the VAT-inclusive gross (worked TKL example). Added TKL Steel + "Invoice No." / 12-Aug-26
+  formats to the examples.
+- **Cash-liquidation reader (`api/ai/read-cash-receipt`):** added the same PH SALES-INVOICE BOOKLET section
+  (handwritten/printed, invoice No., date, lines, VAT-inclusive-gross with the same two traps) so the cash
+  reconciliation autofills from these invoices too.
+- Prompt-only; typecheck + lint clean.
+
 ## 2026-08-13 · Inquiries & Quotations — search by client email
 - **Owner request:** allow searching by email address in the Inquiries and Quotations tabs.
 - **Change:** added `customer.email` (insensitive `contains`) to the search `OR` in both list queries —
