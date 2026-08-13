@@ -12,10 +12,11 @@ import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Award } from "lucide-react";
-import { saleFromClassification, isSaleConfirmed, type SaleRecord } from "@/lib/sale";
+import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { getProductionStatus } from "@/lib/production-status";
 import { ProductionStatusCard } from "@/components/production-status-card";
 import { payableTotal } from "@/lib/quote";
+import { saleRecognitionDate } from "@/lib/department-pnl";
 import type { InquiryStatus } from "@prisma/client";
 
 const STATUSES: InquiryStatus[] = ["NEW", "DRAFTING", "QUOTED", "SENT", "WON", "LOST"];
@@ -27,27 +28,16 @@ const MONTHS = 6; // monthly trend window
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 const monthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
 
-const parseDate = (s?: string | null): Date | null => {
-  if (!s) return null;
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d;
-};
-
 /**
- * Best-known date a sale happened, for windowing/bucketing: when it was first
- * confirmed (soldAt), else its earliest payment, else when the PO was uploaded,
- * else the quote's own date. Keeps a recently-confirmed sale on an older quote
- * inside the window even when a legacy record never stored soldAt.
+ * The date a confirmed sale is booked on — the SAME recognition date the P&L and
+ * the WON sales report use (a Terms/PO client on the PO date, everyone else on the
+ * first payment date), so "Sales this month" and the top-salesperson figures
+ * reconcile with the WON report (Payment-date basis). Falls back to the quote's own
+ * date only if a confirmed sale somehow carries no recognition date.
  */
-const saleDate = (sale: SaleRecord, fallback: Date): Date => {
-  const sold = parseDate(sale.soldAt);
-  if (sold) return sold;
-  let earliest: Date | null = null;
-  for (const p of sale.payments ?? []) {
-    const d = parseDate(p.date);
-    if (d && (!earliest || d < earliest)) earliest = d;
-  }
-  return earliest ?? parseDate(sale.po?.uploadedAt) ?? fallback;
+const saleBookDate = (sale: Parameters<typeof saleRecognitionDate>[0], fallback: Date): Date => {
+  const iso = saleRecognitionDate(sale);
+  return iso ? new Date(iso) : fallback;
 };
 
 /**
@@ -103,9 +93,6 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
   since30.setDate(since30.getDate() - (LINE_DAYS - 1));
   const weekAgo = new Date(startOfDay);
   weekAgo.setDate(weekAgo.getDate() - 6);
-  const since6mo = new Date(startOfDay);
-  since6mo.setDate(1);
-  since6mo.setMonth(since6mo.getMonth() - (MONTHS - 1));
 
   // Test mode hides pre-cutoff records from the dashboard too (kept, not deleted).
   const testMode = await getTestMode();
@@ -121,7 +108,10 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
       include: { customer: true, _count: { select: { items: true } } },
     }),
     prisma.quotation.findMany({
-      where: { createdAt: { gte: since6mo, ...(cutoff ?? {}) } },
+      // Scan ALL quotations (not just the last 6 months) so a sale recognised
+      // this month on an older quote still counts — matching the WON sales report,
+      // which iterates every quotation. Windowed viz below self-limits by date.
+      where: cutoff ? { createdAt: cutoff } : undefined,
       select: {
         createdAt: true,
         total: true,
@@ -189,14 +179,16 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
     }
     // Sales = the full deal value of each CONFIRMED sale (a partial payment —
     // or, on terms, the PO alone — books the whole amount), credited to the
-    // preparer and dated by soldAt (falling back to the quote's date for older
-    // records). Feeds the top-salesperson card, the 30-day chart and the MTD KPI.
+    // preparer and dated by its RECOGNITION date (PO date on terms, else first
+    // payment date) — the same basis the P&L and the WON sales report use, so the
+    // "Sales this month" KPI reconciles with that report. Feeds the top-salesperson
+    // card, the salesperson-month map and the MTD KPI.
     const sale = saleFromClassification(q.classification);
     if (sale && isSaleConfirmed(sale)) {
       // Credit the true deal value — the discounted, VAT-adjusted amount the
       // client pays — so a revised (e.g. discounted) PO updates sales figures.
       const deal = payableTotal(q);
-      const sd = saleDate(sale, at);
+      const sd = saleBookDate(sale, at);
       const smk = monthKey(sd);
       const sms = monthSales.get(smk);
       if (sms) sms.set(name, (sms.get(name) ?? 0) + deal);

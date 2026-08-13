@@ -1,3 +1,20 @@
+## 2026-08-13 · Dashboard — "Sales this month" now reconciles with the WON sales report
+- **Owner report ("this are not tally"):** the "Sales this month" KPI (₱2,785,603.32) didn't match the WON
+  sales report's GRAND TOTAL Value (₱2,626,932.12) — a ₱158,671.20 gap.
+- **Root cause:** both use the same value basis (`payableTotal`) and the same confirmed-sale filter, but different
+  *dates*. The dashboard booked each sale on `saleDate` (soldAt-first), while the P&L and the WON report book on
+  `saleRecognitionDate` (PO date for Terms clients, else first payment date). A sale marked sold in one month but
+  paid / PO-dated in another landed in different months on each screen. The dashboard's 6-month `createdAt` query
+  window also dropped this-month sales sitting on older quotes.
+- **Fix (`dashboard/sales-dashboard-body.tsx`):** the sales loop now dates each confirmed sale by
+  `saleRecognitionDate` (new `saleBookDate` helper delegating to `@/lib/department-pnl`), the exact basis the WON
+  report and P&L use. Widened the `quotation.findMany` scan from "last 6 months" to **all quotations** (matching
+  the report, which iterates every quotation) so a sale recognised this month on an older quote still counts; the
+  windowed charts (14-day bars, 30-day line/customers, 6-month trend) already self-limit by date so they're
+  unaffected. Removed the now-unused `since6mo`.
+- **Note:** `buildSalesReport` doesn't apply the test-mode cutoff while the dashboard does, so the two reconcile
+  when test mode is off (no cutoff). Typecheck + lint clean; `next build` compiles & type-validates.
+
 ## 2026-08-13 · Purchasing — replenishments follow the full PO workflow
 - **Owner report (frozen Phase 4):** a replenishment (stock top-up) skipped the PO — it jumped from Approved
   straight to "Voucher & Check Prepared". Once approved, the Purchaser should make a PO and it should follow the
