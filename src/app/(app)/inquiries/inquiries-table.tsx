@@ -102,7 +102,7 @@ export function InquiriesTable({
           onChange={(e) => setQueryInput(e.target.value)}
           onFocus={() => { focusedRef.current = true; }}
           onBlur={() => { focusedRef.current = false; }}
-          placeholder="Search customer, source, status…"
+          placeholder="Search customer, email, source, status…"
           className="pl-8"
         />
       </div>

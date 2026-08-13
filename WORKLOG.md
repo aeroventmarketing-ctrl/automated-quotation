@@ -1,3 +1,10 @@
+## 2026-08-13 · Inquiries & Quotations — search by client email
+- **Owner request:** allow searching by email address in the Inquiries and Quotations tabs.
+- **Change:** added `customer.email` (insensitive `contains`) to the search `OR` in both list queries —
+  `inquiries/page.tsx` and `quotations/page.tsx` (via `inquiry.customer.email`). Updated both search-box
+  placeholders to mention "email". Existing customer/quote#/sales/status/source matching is unchanged.
+- Typecheck + lint clean.
+
 ## 2026-08-13 · Receipt reader — cover printed booklets (Golden Pacific) + the net-of-VAT trap
 - **Owner lesson:** a printed Golden Pacific sales invoice — 5-digit "No." (top-right), typed date
   (August 11, 2026), row 2 · ASAHI UCF208-24 · 750 · 1,500, and TOTAL AMT. DUE 1,500 → Actual.

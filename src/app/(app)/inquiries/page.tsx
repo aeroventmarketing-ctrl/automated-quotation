@@ -53,13 +53,14 @@ export default async function InquiriesPage({
   const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
 
-  // Search across customer company, sales (createdBy) name, source, and status
-  // (enum values matched by substring). Combined with the status filter via AND.
+  // Search across customer company, customer email, sales (createdBy) name,
+  // source, and status (enum values matched by substring). AND with the status filter.
   const ql = q.toLowerCase();
   const statusMatches = q ? Object.values(InquiryStatus).filter((s) => s.toLowerCase().includes(ql)) : [];
   const sourceMatches = q ? Object.values(InquirySource).filter((s) => s.toLowerCase().includes(ql)) : [];
   const searchOr: Prisma.InquiryWhereInput[] = [
     { customer: { company: { contains: q, mode: Prisma.QueryMode.insensitive } } },
+    { customer: { email: { contains: q, mode: Prisma.QueryMode.insensitive } } },
     { createdBy: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
     ...(statusMatches.length ? [{ status: { in: statusMatches } }] : []),
     ...(sourceMatches.length ? [{ source: { in: sourceMatches } }] : []),

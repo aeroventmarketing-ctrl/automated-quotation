@@ -105,7 +105,7 @@ export function QuotationsTable({
           onChange={(e) => setQueryInput(e.target.value)}
           onFocus={() => { focusedRef.current = true; }}
           onBlur={() => { focusedRef.current = false; }}
-          placeholder="Search quote #, customer, prepared by, status…"
+          placeholder="Search quote #, customer, email, prepared by, status…"
           className="pl-8"
         />
       </div>
