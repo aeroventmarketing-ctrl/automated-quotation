@@ -1,3 +1,11 @@
+## 2026-08-13 · Receipt reader — book the printed invoice date, not the payment due date
+- **Owner correction:** for Rite Products (and any PDC / post-dated-check invoice), use the **printed invoice
+  "Date" 05/28/2026**, NOT the "Payment Due Date" 06/12/2026. Reverses the PDC exception added earlier today.
+- **Change (`api/ai/read-receipt` + `read-cash-receipt`):** replaced the "PDC → use Payment Due Date" exception
+  with an explicit rule to **always use the printed invoice date**, never a "Payment Due Date" / "Payment
+  Term"/"PDC" date or "Delivery Date" (worked Rite example: Date 05/28/2026 with Payment Due Date 06/12/2026 → use
+  05/28/2026). Prompt-only; typecheck + lint clean.
+
 ## 2026-08-13 · Receipt reader — 5 more suppliers, alphanumeric serial, handwritten PAID/EWT trap
 - **Owner lessons (5 sales invoices):** Topphand Enterprises (No. 14037 → 48,000.00), Tozen Philippines
   (SI000003966 → Amount Due 11,212.00), Rite Products (37966 → 8,078.02), Metal Exponents (100580 → 68,845.00),
