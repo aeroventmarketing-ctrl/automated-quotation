@@ -6,6 +6,15 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { setMarketingConfig, type MarketingConfig } from "@/lib/marketing";
 import { renderCampaignPreview, sendCampaign, sendCampaignTest, type MarketingRunResult, type CampaignPreview } from "@/lib/marketing-runner";
 import { setCampaignDraft, normalizeCampaignDraft, type CampaignDraft } from "@/lib/marketing-campaign";
+import {
+  upsertCampaignTemplate,
+  deleteCampaignTemplate,
+  duplicateCampaignTemplate,
+  addScheduledCampaign,
+  cancelScheduledCampaign,
+  type SavedCampaign,
+  type ScheduledCampaign,
+} from "@/lib/marketing-store";
 
 /** Marketing is a sales function — Sales / Engineer / Admin. */
 async function assertMarketer() {
@@ -99,4 +108,58 @@ export async function sendCampaignTestAction(input: { draft: z.infer<typeof draf
   await assertMarketer();
   const toEmail = z.string().email().parse(input.toEmail);
   return sendCampaignTest({ draft: normalizeCampaignDraft(draftSchema.parse(input.draft) as Partial<CampaignDraft>), toEmail });
+}
+
+// ---- Saved templates ------------------------------------------------------
+
+/** Create (no id) or update (with id) a saved campaign template. */
+export async function saveCampaignTemplateAction(input: { id?: string; name: string; draft: z.infer<typeof draftSchema> }): Promise<SavedCampaign[]> {
+  await assertMarketer();
+  return upsertCampaignTemplate({
+    id: input.id,
+    name: z.string().min(1, "Name the campaign.").parse(input.name),
+    draft: normalizeCampaignDraft(draftSchema.parse(input.draft) as Partial<CampaignDraft>),
+  });
+}
+
+export async function deleteCampaignTemplateAction(id: string): Promise<SavedCampaign[]> {
+  await assertMarketer();
+  return deleteCampaignTemplate(z.string().parse(id));
+}
+
+export async function duplicateCampaignTemplateAction(id: string): Promise<SavedCampaign[]> {
+  await assertMarketer();
+  return duplicateCampaignTemplate(z.string().parse(id));
+}
+
+// ---- Scheduling -----------------------------------------------------------
+
+const scheduleSchema = z.object({
+  name: z.string(),
+  draft: draftSchema,
+  audience: audienceSchema,
+  scheduledFor: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "Invalid date/time"),
+});
+
+/** Queue a campaign to send at a future time (fired by the hourly cron). */
+export async function scheduleCampaignAction(input: z.infer<typeof scheduleSchema>): Promise<ScheduledCampaign[]> {
+  const user = await assertMarketer();
+  const parsed = scheduleSchema.parse(input);
+  if (Date.parse(parsed.scheduledFor) <= Date.now()) throw new Error("Pick a time in the future.");
+  const res = await addScheduledCampaign({
+    name: parsed.name.trim() || parsed.draft.subject || "Campaign",
+    draft: normalizeCampaignDraft(parsed.draft as Partial<CampaignDraft>),
+    audience: parsed.audience,
+    scheduledFor: new Date(parsed.scheduledFor).toISOString(),
+    createdByName: user.name,
+  });
+  revalidatePath("/marketing");
+  return res;
+}
+
+export async function cancelScheduledCampaignAction(id: string): Promise<ScheduledCampaign[]> {
+  await assertMarketer();
+  const res = await cancelScheduledCampaign(z.string().parse(id));
+  revalidatePath("/marketing");
+  return res;
 }

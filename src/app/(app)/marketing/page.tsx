@@ -2,10 +2,12 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getMarketingConfig, getMarketingRecipients } from "@/lib/marketing";
 import { getCampaignDraft } from "@/lib/marketing-campaign";
+import { getCampaignTemplates, getScheduledCampaigns, getCampaignSends } from "@/lib/marketing-store";
 import { emailConfigured } from "@/lib/email/resend";
 import { config as appConfig } from "@/lib/config";
 import { MarketingWorkspace } from "./marketing-workspace";
 import { CampaignBuilder } from "./campaign-builder";
+import { CampaignActivity } from "./campaign-activity";
 import {
   saveMarketingSettingsAction,
   saveCampaignDraftAction,
@@ -13,6 +15,10 @@ import {
   previewCampaignRecipientsAction,
   sendCampaignBuilderAction,
   sendCampaignTestAction,
+  saveCampaignTemplateAction,
+  deleteCampaignTemplateAction,
+  duplicateCampaignTemplateAction,
+  scheduleCampaignAction,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +27,12 @@ export default async function MarketingPage() {
   const user = await getCurrentUser();
   if (!user || !(isAdmin(user) || user.role === "SALES" || user.role === "ENGINEER")) redirect("/dashboard");
 
-  const [config, draft, listRecipients, allRecipients] = await Promise.all([
+  const [config, draft, templates, scheduled, sends, listRecipients, allRecipients] = await Promise.all([
     getMarketingConfig(),
     getCampaignDraft(),
+    getCampaignTemplates(),
+    getScheduledCampaigns(),
+    getCampaignSends(),
     getMarketingRecipients("list"),
     getMarketingRecipients("all"),
   ]);
@@ -41,6 +50,7 @@ export default async function MarketingPage() {
 
       <CampaignBuilder
         draft={draft}
+        templates={templates}
         listCount={listRecipients.length}
         allCount={allRecipients.length}
         emailReady={emailReady}
@@ -49,7 +59,13 @@ export default async function MarketingPage() {
         onPreviewRecipients={previewCampaignRecipientsAction}
         onSend={sendCampaignBuilderAction}
         onTest={sendCampaignTestAction}
+        onSaveTemplate={saveCampaignTemplateAction}
+        onDeleteTemplate={deleteCampaignTemplateAction}
+        onDuplicateTemplate={duplicateCampaignTemplateAction}
+        onSchedule={scheduleCampaignAction}
       />
+
+      <CampaignActivity scheduled={scheduled} sends={sends} />
 
       <MarketingWorkspace
         config={config}
