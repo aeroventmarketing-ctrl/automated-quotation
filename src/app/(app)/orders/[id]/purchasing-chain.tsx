@@ -33,6 +33,7 @@ interface ActionOpt {
 }
 interface PRRow {
   id: string;
+  kind?: string | null;
   deptLabel: string;
   mrfNo?: string | null;
   items: string[];
@@ -259,19 +260,21 @@ export function PurchasingChain({
         const actionable = shownActions.filter((a) => a.canAct);
         const awaiting = shownActions.find((a) => !a.canAct);
         const awaitingPlantApproval = hideApproval && r.status === "PENDING_APPROVAL";
-        // A material/department requisition's PO is only created after the Plant
-        // Manager approves the request — the Purchaser can't create it while it's
-        // still pending, and "awaiting voucher" doesn't apply until the PO exists.
+        // A material/department requisition can't get a PO while it's still
+        // pending the Plant Manager's approval.
         const requisitionNeedsApproval = !!r.isDept && r.status === "PENDING_APPROVAL";
-        const requisitionAwaitingPO = !!r.isDept && r.status === "APPROVED" && !r.po;
-        // Dept/MRF at APPROVED with a PO but not yet PO-approved: the Plant
-        // Manager approved the MRF and the PO is raised — now it awaits the
-        // Approver's purchase-order approval.
-        const requisitionAwaitingApproval = !!r.isDept && r.status === "APPROVED" && !!r.po && !r.poApproved;
-        const statusLabel = requisitionAwaitingPO
-          ? "Approved — awaiting Purchase Order"
-          : requisitionAwaitingApproval
+        // Dept/MRF approved by the Plant Manager but not yet approved by the
+        // Approver (approve_po). Approval now comes before the PO, so this no
+        // longer waits for a PO to exist.
+        const requisitionAwaitingApproval = !!r.isDept && r.status === "APPROVED" && !r.poApproved;
+        // Fully approved but no PO yet — now awaits the Purchaser preparing the
+        // Purchase Order (for a dept MRF, that's after the Approver's approve_po).
+        const requisitionAwaitingPO =
+          r.status === "APPROVED" && !r.po && r.kind !== "replenishment" && (!r.isDept || r.poApproved);
+        const statusLabel = requisitionAwaitingApproval
           ? "Plant Manager approved — awaiting purchase approval"
+          : requisitionAwaitingPO
+          ? "Approved — awaiting Purchase Order"
           : r.statusLabel;
         // Standalone department requisitions (Requisitions page): the Plant Manager
         // approves/rejects here, since there's no order Materials tab to do it on.
@@ -405,14 +408,12 @@ export function PurchasingChain({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {/* Always name who must act (designation + name), alongside the buttons. */}
                 {shownActions[0] && <ApproverHighlight role={shownActions[0].roleLabel} />}
-                {/* Approval/rejection/voucher can't proceed until the PO exists —
-                    hide those buttons (rather than showing them disabled) and
-                    show a hint instead, so nothing dead is clickable. EXCEPTION:
-                    a warehouse/material requisition is approved (or rejected) by
-                    the Plant Manager as the request itself (step 16), before the
-                    Purchaser prepares the PO (step 17) — so those don't wait for a PO. */}
+                {/* Approval comes before the PO now — only the voucher waits for
+                    the Purchase Order. Hide the voucher button (rather than show it
+                    disabled) until the Purchaser has raised the PO, and show a hint
+                    instead so nothing dead is clickable. */}
                 {actionable
-                  .filter((a) => !((a.key === "voucher" || a.key === "approve_po" || a.key === "reject_po" || ((a.key === "approve" || a.key === "reject") && !r.isDept)) && !r.po))
+                  .filter((a) => !(a.key === "voucher" && !r.po))
                   .map((a) => (
                     <Button
                       key={a.key}
@@ -425,7 +426,7 @@ export function PurchasingChain({
                       {busy === r.id + a.key ? "Saving…" : a.label}
                     </Button>
                   ))}
-                {actionable.some((a) => a.key === "voucher" || a.key === "approve_po" || a.key === "reject_po" || ((a.key === "approve" || a.key === "reject") && !r.isDept)) && !r.po && (
+                {actionable.some((a) => a.key === "voucher") && !r.po && (
                   <span className="text-xs text-muted-foreground">Create the Purchase Order first.</span>
                 )}
               </div>

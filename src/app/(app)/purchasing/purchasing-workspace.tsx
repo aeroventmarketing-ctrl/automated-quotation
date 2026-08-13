@@ -202,8 +202,9 @@ export function PurchasingWorkspace({
   const forwardStep = (r: PurchaseChainRow) => {
     const a = r.actions.find((x) => x.canAct && x.key !== "reject" && x.key !== "reject_po" && x.key !== "receive");
     if (!a) return null;
-    const needsPo = a.key === "voucher" || a.key === "approve_po" || (a.key === "approve" && !r.isDept);
-    if (needsPo && !r.po) return null;
+    // Approval no longer needs a PO — only the voucher does (it's prepared after
+    // the Purchaser has raised the PO).
+    if (a.key === "voucher" && !r.po) return null;
     return a;
   };
   const actionableRows = selectedRows
@@ -245,7 +246,9 @@ export function PurchasingWorkspace({
   for (const r of replenRows) counts[displayBucket(r.status as PRStatus)]++;
   counts.all = counts.pending + counts.approved + counts.budgeted + counts.rejected + counts.cancelled;
 
-  const showBuilder = tab === "pending" || tab === "all";
+  // The combine builder lists approved, PO-less requests (the PO is prepared after
+  // approval), so it belongs on the Approved tab (and All).
+  const showBuilder = tab === "approved" || tab === "all";
 
   // Search / sort / group over the batches and per-order requisition cards.
   const [query, setQuery] = useState("");
