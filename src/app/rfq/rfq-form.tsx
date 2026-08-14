@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Eye, X, Paperclip } from "lucide-react";
 
 export interface RfqPrefill {
   c?: string;
@@ -10,30 +11,86 @@ export interface RfqPrefill {
   email?: string;
 }
 
+const MAX_FILES = 10;
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 40 * 1024 * 1024;
+const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.xlsx,.xls,.csv,.doc,.docx,.ppt,.pptx,.dwg,.dxf,.zip,.rar,.7z,.txt";
+const ALLOWED_EXT = new Set([
+  "pdf", "jpg", "jpeg", "png", "webp", "gif", "heic",
+  "xlsx", "xls", "csv", "doc", "docx", "ppt", "pptx",
+  "dwg", "dxf", "zip", "rar", "7z", "txt",
+]);
+
+type Picked = { id: string; file: File; url: string };
+
 const label: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 600, color: "#1f2933", margin: "0 0 5px" };
 const input: React.CSSProperties = {
   width: "100%", boxSizing: "border-box", padding: "10px 12px", fontSize: 14,
   border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", color: "#1f2933",
 };
 
+function prettySize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /**
- * Public RFQ submission form. Posts multipart form-data to /api/rfq, which stores
- * the files and drops the request into the Inbound RFQ review queue. Shows a
- * thank-you on success. Includes a honeypot ("website") that real users leave blank.
+ * Public RFQ submission form. Files are managed in state so the client can ADD
+ * several across multiple picks (the native input replaces its selection each
+ * time), preview each with the eye button, and remove any before submitting.
+ * Posts multipart form-data to /api/rfq. Includes a honeypot ("website").
  */
 export function RfqForm({ prefill }: { prefill: RfqPrefill }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const [fileNames, setFileNames] = useState<string[]>([]);
-  const formRef = useRef<HTMLFormElement>(null);
+  const [picked, setPicked] = useState<Picked[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const idRef = useRef(0);
+
+  // Revoke every object URL still around when the form unmounts.
+  const pickedRef = useRef<Picked[]>([]);
+  useEffect(() => { pickedRef.current = picked; }, [picked]);
+  useEffect(() => () => pickedRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
+
+  function addFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    setErr(null);
+    setPicked((prev) => {
+      const next = [...prev];
+      let total = prev.reduce((a, p) => a + p.file.size, 0);
+      for (const f of Array.from(list)) {
+        const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+        if (!ALLOWED_EXT.has(ext)) { setErr(`"${f.name}" is not an accepted file type.`); continue; }
+        if (f.size > MAX_FILE_BYTES) { setErr(`"${f.name}" is larger than 15 MB.`); continue; }
+        if (next.some((p) => p.file.name === f.name && p.file.size === f.size)) continue; // skip duplicates
+        if (next.length >= MAX_FILES) { setErr(`You can attach at most ${MAX_FILES} files.`); break; }
+        if (total + f.size > MAX_TOTAL_BYTES) { setErr("Your attachments total more than 40 MB — please remove a file."); break; }
+        total += f.size;
+        next.push({ id: String(++idRef.current), file: f, url: URL.createObjectURL(f) });
+      }
+      return next;
+    });
+    if (inputRef.current) inputRef.current.value = ""; // allow re-picking the same file after removal
+  }
+
+  function remove(id: string) {
+    setPicked((prev) => {
+      const p = prev.find((x) => x.id === id);
+      if (p) URL.revokeObjectURL(p.url);
+      return prev.filter((x) => x.id !== id);
+    });
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/rfq", { method: "POST", body: new FormData(e.currentTarget) });
+      const fd = new FormData(e.currentTarget); // text fields + honeypot + c/t
+      for (const p of picked) fd.append("files", p.file); // files come from state, not the input
+      const res = await fetch("/api/rfq", { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Something went wrong. Please try again.");
       setDone(true);
@@ -57,8 +114,10 @@ export function RfqForm({ prefill }: { prefill: RfqPrefill }) {
     );
   }
 
+  const totalBytes = picked.reduce((a, p) => a + p.file.size, 0);
+
   return (
-    <form ref={formRef} onSubmit={onSubmit} style={{ display: "grid", gap: 14 }}>
+    <form onSubmit={onSubmit} style={{ display: "grid", gap: 14 }}>
       {prefill.c && <input type="hidden" name="c" value={prefill.c} />}
       {prefill.t && <input type="hidden" name="t" value={prefill.t} />}
       {/* Honeypot — hidden from people, tempting to bots. */}
@@ -90,23 +149,53 @@ export function RfqForm({ prefill }: { prefill: RfqPrefill }) {
         <textarea style={{ ...input, minHeight: 96, resize: "vertical" }} name="message"
           placeholder="Describe your requirement — fan/blower type, airflow, static pressure, quantity, application, delivery location, etc." />
       </div>
+
       <div>
         <label style={label}>Attach your RFQ / drawings</label>
-        <input
-          type="file"
-          name="files"
-          multiple
-          accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.xlsx,.xls,.csv,.doc,.docx,.ppt,.pptx,.dwg,.dxf,.zip,.rar,.7z,.txt"
-          onChange={(e) => setFileNames(Array.from(e.target.files ?? []).map((f) => f.name))}
-          style={{ fontSize: 13, color: "#1f2933" }}
-        />
+        <input ref={inputRef} type="file" multiple accept={ACCEPT} onChange={(e) => addFiles(e.target.files)} style={{ display: "none" }} />
+        <button type="button" onClick={() => inputRef.current?.click()}
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #cbd5e1",
+            borderRadius: 8, padding: "9px 16px", fontSize: 14, fontWeight: 600, color: "#0b5c8f", cursor: "pointer" }}>
+          <Paperclip size={16} /> {picked.length ? "Add more files" : "Choose files"}
+        </button>
         <p style={{ color: "#94a3b8", fontSize: 12, margin: "6px 0 0" }}>
-          PDF, images, Excel/Word, CAD (DWG/DXF) or ZIP · up to 10 files, 15&nbsp;MB each.
+          PDF, images, Excel/Word, CAD (DWG/DXF) or ZIP · up to 10 files, 15&nbsp;MB each. Add as many as you need.
         </p>
-        {fileNames.length > 0 && (
-          <ul style={{ margin: "8px 0 0", padding: 0, listStyle: "none", fontSize: 12, color: "#607080" }}>
-            {fileNames.map((n, i) => <li key={i}>📎 {n}</li>)}
+
+        {picked.length > 0 && (
+          <ul style={{ margin: "10px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
+            {picked.map((p) => {
+              const isImg = p.file.type.startsWith("image/");
+              return (
+                <li key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid #e2e8f0", borderRadius: 8, padding: 8 }}>
+                  {isImg ? (
+                    <img src={p.url} alt="" width={40} height={40} style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, border: "1px solid #e2e8f0" }} />
+                  ) : (
+                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, borderRadius: 6, background: "#f1f5f9", color: "#64748b" }}>
+                      <Paperclip size={18} />
+                    </span>
+                  )}
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, color: "#1f2933", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.file.name}</span>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{prettySize(p.file.size)}</span>
+                  </span>
+                  <a href={p.url} target="_blank" rel="noreferrer" title="Preview" aria-label={`Preview ${p.file.name}`}
+                    style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 6, border: "1px solid #e2e8f0", color: "#0b5c8f", textDecoration: "none" }}>
+                    <Eye size={16} />
+                  </a>
+                  <button type="button" onClick={() => remove(p.id)} title="Remove" aria-label={`Remove ${p.file.name}`}
+                    style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", color: "#dc2626", cursor: "pointer" }}>
+                    <X size={16} />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
+        )}
+        {picked.length > 0 && (
+          <p style={{ color: "#94a3b8", fontSize: 12, margin: "8px 0 0" }}>
+            {picked.length} file{picked.length === 1 ? "" : "s"} · {prettySize(totalBytes)} total
+          </p>
         )}
       </div>
 
