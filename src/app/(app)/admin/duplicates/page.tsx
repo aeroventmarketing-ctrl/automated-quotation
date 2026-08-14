@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { normalizeCompany, normalizePerson, normalizeEmail, phoneKey } from "@/lib/client-ownership";
 import { DuplicateGroup, type DupRecord } from "./duplicate-group";
+import { DuplicatesExport, type DupExportRow } from "./duplicates-export";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,25 @@ export default async function DuplicatesPage({
 
   const dupCount = dupGroups.reduce((a, g) => a + g.rows.length, 0);
 
+  // Flatten the duplicate groups into a downloadable report (reviewed before any
+  // delete/merge). Each record carries its group number + the shared value.
+  const exportRows: DupExportRow[] = dupGroups.flatMap((g, gi) =>
+    g.rows.map((r) => {
+      const names = [...new Map(r.inquiries.map((i) => [i.createdBy.id, i.createdBy.name])).values()];
+      return {
+        group: gi + 1,
+        value: g.display,
+        company: r.company,
+        contactName: r.contactName ?? "",
+        email: r.email ?? "",
+        phone: r.phone ?? "",
+        inquiries: r.inquiries.length,
+        salespeople: names.join(", "),
+        id: r.id,
+      };
+    }),
+  );
+
   return (
     <div className="space-y-4">
       <div>
@@ -126,11 +146,14 @@ export default async function DuplicatesPage({
         )}
       </form>
 
-      <p className="text-sm text-muted-foreground">
-        {dupGroups.length === 0
-          ? `No duplicate ${field.label.toLowerCase()} found.`
-          : `${dupGroups.length} duplicate ${field.label.toLowerCase()} ${dupGroups.length === 1 ? "value" : "values"} across ${dupCount} client records.`}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          {dupGroups.length === 0
+            ? `No duplicate ${field.label.toLowerCase()} found.`
+            : `${dupGroups.length} duplicate ${field.label.toLowerCase()} ${dupGroups.length === 1 ? "value" : "values"} across ${dupCount} client records.`}
+        </p>
+        <DuplicatesExport rows={exportRows} fieldLabel={field.label} by={by} />
+      </div>
 
       <div className="space-y-3">
         {dupGroups.map((g) => {
