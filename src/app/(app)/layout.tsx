@@ -11,6 +11,7 @@ import { getDisabledRoles, isRoleEnabled } from "@/lib/role-access";
 import { getWorkflowRoles, userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import { getDashboardAlerts } from "@/lib/dashboard-alerts";
+import { getInboundQueue } from "@/lib/inbound-rfq";
 import { getAlertGoLive, alertsSuppressedNow } from "@/lib/alert-golive";
 import { AlertSuppressionProvider } from "@/components/alert-golive-context";
 
@@ -80,13 +81,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
 
+  // A blinking count on "Inbound RFQs" for the roles that handle them, so a
+  // client-submitted RFQ waiting to be reviewed can't be missed.
+  const navCounts: Record<string, number> = {};
+  if (user.role === "ADMIN" || user.role === "SALES" || user.role === "ENGINEER") {
+    const pending = (await getInboundQueue().catch(() => [])).filter((i) => i.status === "pending").length;
+    if (pending > 0) navCounts["/inbound-rfq"] = pending;
+  }
+
   const layout = (
     <div className="flex min-h-screen flex-col">
       {/* Live clock — pinned to the very top, persists on every page. */}
       <LiveClock />
       <div className="flex flex-1">
         <aside className="hidden w-60 shrink-0 self-start border-r bg-background md:sticky md:top-11 md:block md:h-[calc(100vh-2.75rem)] md:overflow-y-auto print:!hidden">
-          <AppNav role={user.role} name={user.name} workflowRoles={workflowRoles} salesPersonnel={salesPersonnel} dashboardAlerts={dashboardAlerts} />
+          <AppNav role={user.role} name={user.name} workflowRoles={workflowRoles} salesPersonnel={salesPersonnel} dashboardAlerts={dashboardAlerts} navCounts={navCounts} />
         </aside>
         {/* overflow-x-clip (not -hidden) prevents horizontal overflow WITHOUT
             making <main> a scroll container — otherwise the mobile bar's sticky
@@ -101,7 +110,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               alt="Aerovent Fans and Blowers Manufacturing"
               className="h-7 w-auto"
             />
-            <MobileNav role={user.role} name={user.name} workflowRoles={workflowRoles} salesPersonnel={salesPersonnel} dashboardAlerts={dashboardAlerts} />
+            <MobileNav role={user.role} name={user.name} workflowRoles={workflowRoles} salesPersonnel={salesPersonnel} dashboardAlerts={dashboardAlerts} navCounts={navCounts} />
           </div>
           <div className="mx-auto max-w-6xl p-4 md:p-8 print:max-w-none print:p-0">{children}</div>
         </main>

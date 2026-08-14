@@ -113,7 +113,7 @@ export function visibleNav(role: Role, workflowRoles: string[], salesPersonnel =
   return workflowRoles.length > 0 || role === "ADMIN" || role === "SALES" || role === "ENGINEER" ? [dash, ...items] : items;
 }
 
-export function AppNav({ role, name, workflowRoles = [], salesPersonnel = false, dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; salesPersonnel?: boolean; dashboardAlerts?: Record<string, boolean> }) {
+export function AppNav({ role, name, workflowRoles = [], salesPersonnel = false, dashboardAlerts = {}, navCounts = {} }: { role: Role; name: string; workflowRoles?: string[]; salesPersonnel?: boolean; dashboardAlerts?: Record<string, boolean>; navCounts?: Record<string, number> }) {
   const pathname = usePathname();
   const items = visibleNav(role, workflowRoles, salesPersonnel);
 
@@ -135,6 +135,7 @@ export function AppNav({ role, name, workflowRoles = [], salesPersonnel = false,
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
           const alert = dashboardAlerts[item.href];
+          const count = navCounts[item.href] ?? 0;
           return (
             <Link
               key={item.href}
@@ -148,8 +149,18 @@ export function AppNav({ role, name, workflowRoles = [], salesPersonnel = false,
             >
               <Icon className="h-4 w-4" />
               {item.label}
-              {/* New-activity indicator — flashes on the dashboard with new items. */}
-              {alert && <span className="ml-auto h-2.5 w-2.5 shrink-0 animate-approver-blink rounded-full bg-amber-500" aria-label="New activity" />}
+              {/* A blinking numeric badge (e.g. Inbound RFQs ready to view) takes
+                  priority; otherwise the small new-activity dot. */}
+              {count > 0 ? (
+                <span
+                  className="ml-auto inline-flex h-5 min-w-[1.25rem] shrink-0 animate-approver-blink items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white"
+                  aria-label={`${count} ready to view`}
+                >
+                  {count > 99 ? "99+" : count}
+                </span>
+              ) : alert ? (
+                <span className="ml-auto h-2.5 w-2.5 shrink-0 animate-approver-blink rounded-full bg-amber-500" aria-label="New activity" />
+              ) : null}
             </Link>
           );
         })}

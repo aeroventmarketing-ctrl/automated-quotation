@@ -9,7 +9,7 @@ import { visibleNav } from "./app-nav";
 import type { Role } from "@prisma/client";
 
 /** Hamburger menu for the mobile top bar (the sidebar is hidden below md). */
-export function MobileNav({ role, name, workflowRoles = [], salesPersonnel = false, dashboardAlerts = {} }: { role: Role; name: string; workflowRoles?: string[]; salesPersonnel?: boolean; dashboardAlerts?: Record<string, boolean> }) {
+export function MobileNav({ role, name, workflowRoles = [], salesPersonnel = false, dashboardAlerts = {}, navCounts = {} }: { role: Role; name: string; workflowRoles?: string[]; salesPersonnel?: boolean; dashboardAlerts?: Record<string, boolean>; navCounts?: Record<string, number> }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const items = visibleNav(role, workflowRoles, salesPersonnel);
@@ -34,6 +34,7 @@ export function MobileNav({ role, name, workflowRoles = [], salesPersonnel = fal
             {items.map((item) => {
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
               const Icon = item.icon;
+              const count = navCounts[item.href] ?? 0;
               return (
                 <Link
                   key={item.href}
@@ -48,7 +49,16 @@ export function MobileNav({ role, name, workflowRoles = [], salesPersonnel = fal
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}
-                  {dashboardAlerts[item.href] && <span className="ml-auto h-2.5 w-2.5 shrink-0 animate-approver-blink rounded-full bg-amber-500" aria-label="New activity" />}
+                  {count > 0 ? (
+                    <span
+                      className="ml-auto inline-flex h-5 min-w-[1.25rem] shrink-0 animate-approver-blink items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white"
+                      aria-label={`${count} ready to view`}
+                    >
+                      {count > 99 ? "99+" : count}
+                    </span>
+                  ) : dashboardAlerts[item.href] ? (
+                    <span className="ml-auto h-2.5 w-2.5 shrink-0 animate-approver-blink rounded-full bg-amber-500" aria-label="New activity" />
+                  ) : null}
                 </Link>
               );
             })}
