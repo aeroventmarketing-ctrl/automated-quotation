@@ -1,3 +1,9 @@
+## 2026-08-14 · Unsubscribe page — fix literal "You&rsquo;ve" heading
+- **Owner report:** the confirmation heading showed the raw entity `You&rsquo;ve been unsubscribed`.
+- **Cause:** the `shell()` **title** is a plain JS string, which React renders as text without decoding HTML
+  entities (unlike the `<p>` JSX children, where `&rsquo;` decodes) — so the entity printed literally.
+- **Fix (`unsubscribe/page.tsx`):** used the actual `’` character in the title string. Typecheck + lint clean.
+
 ## 2026-08-14 · RFQ ack email — plain-text emails (clear Resend link-domain insight)
 - **Owner note:** Resend's "Needs attention" insight flagged the body `mailto:` links (@aeroventfbm.com) as not
   matching the sending domain (@aeroventfbm.shop) — a spam-filter heuristic (email still delivered fine).
