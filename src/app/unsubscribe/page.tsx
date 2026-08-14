@@ -41,7 +41,7 @@ export default async function UnsubscribePage({
     return shell("Something went wrong", <p style={{ color: "#607080", fontSize: 14, lineHeight: 1.6 }}>We couldn&rsquo;t process that request. Please try the link again, or reply to any of our emails to opt out.</p>);
   }
   if (done) {
-    return shell("You&rsquo;ve been unsubscribed", <p style={{ color: "#1f2933", fontSize: 14, lineHeight: 1.6 }}>{who} has been removed from our marketing list. You won&rsquo;t receive further promotional emails from us. Thank you.</p>);
+    return shell("You’ve been unsubscribed", <p style={{ color: "#1f2933", fontSize: 14, lineHeight: 1.6 }}>{who} has been removed from our marketing list. You won&rsquo;t receive further promotional emails from us. Thank you.</p>);
   }
 
   return shell(
