@@ -17,7 +17,8 @@
  */
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { COMPANY } from "@/lib/config";
+import { COMPANY, config } from "@/lib/config";
+import { appendRfqPrefill, RFQ_PATH } from "@/lib/rfq-link";
 import type { BuiltEmail } from "@/lib/follow-up-email";
 
 export const MARKETING_CAMPAIGN_KEY = "marketing_campaign_draft";
@@ -71,10 +72,8 @@ export interface CampaignDraft {
   unsubscribeText: string;
 }
 
-const websiteUrl = () => {
-  const w = COMPANY.website.trim();
-  return /^https?:\/\//i.test(w) ? w : `https://${w}`;
-};
+/** Default CTA target: the public RFQ intake page (clients upload their RFQ). */
+const rfqBaseUrl = () => `${config.appUrl.replace(/\/+$/, "")}${RFQ_PATH}`;
 
 const DEFAULT_CONTACT = [
   `Website: ${COMPANY.website}`,
@@ -109,7 +108,7 @@ export function defaultCampaignDraft(): CampaignDraft {
     socialProof:
       "Trusted by manufacturers, warehouses, and commercial facilities across the Philippines — backed by years of airflow engineering, in-house testing, and completed installations.",
     ctaLabel: "Request a Quotation",
-    ctaUrl: websiteUrl(),
+    ctaUrl: rfqBaseUrl(),
     contactInfo: DEFAULT_CONTACT,
     footer: DEFAULT_FOOTER,
     unsubscribeText:
@@ -258,6 +257,12 @@ export interface CampaignRenderCtx {
   unsubscribeUrl?: string;
   /** Open/click tracking for this recipient's copy (omit for preview/test). */
   tracking?: { base: string; sendId: string; customerId: string };
+  /**
+   * Per-recipient RFQ prefill token. Applied ONLY when the CTA points at our /rfq
+   * intake page — appends ?c/&t so the form pre-fills this client's details. Never
+   * added to any other CTA URL (so the id/token can't leak to external links).
+   */
+  rfqPrefill?: { customerId: string; token: string };
 }
 
 /** Wrap a link so a click is recorded before redirecting to the real target. */
@@ -309,7 +314,7 @@ export function buildCampaignEmail(draft: CampaignDraft, ctx: CampaignRenderCtx)
     textParts.push("");
   }
   if (socialProof) textParts.push(...paras(socialProof).flatMap((p) => [p, ""]));
-  if (draft.ctaLabel.trim() && draft.ctaUrl.trim()) textParts.push(`${draft.ctaLabel.trim()}: ${draft.ctaUrl.trim()}`, "");
+  if (draft.ctaLabel.trim() && draft.ctaUrl.trim()) textParts.push(`${draft.ctaLabel.trim()}: ${appendRfqPrefill(draft.ctaUrl.trim(), ctx.rfqPrefill)}`, "");
   if (contactInfo) textParts.push(contactInfo, "");
   if (footer) textParts.push("—", footer);
   if (unsub) {
@@ -368,7 +373,7 @@ export function buildCampaignEmail(draft: CampaignDraft, ctx: CampaignRenderCtx)
   for (const p of paras(socialProof)) body.push(`<p style="margin:0 0 14px;color:${muted};font-style:italic">${escLines(p)}</p>`);
 
   if (draft.ctaLabel.trim() && draft.ctaUrl.trim()) {
-    const href = trackedLink(draft.ctaUrl.trim(), ctx.tracking);
+    const href = trackedLink(appendRfqPrefill(draft.ctaUrl.trim(), ctx.rfqPrefill), ctx.tracking);
     body.push(
       `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 18px"><tr><td style="border-radius:6px;background:${brand}"><a href="${esc(href)}" target="_blank" style="display:inline-block;padding:12px 26px;color:#ffffff;font-weight:700;text-decoration:none;font-size:15px">${esc(draft.ctaLabel.trim())}</a></td></tr></table>`,
     );

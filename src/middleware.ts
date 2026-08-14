@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth/signout", "/offline", "/q/", "/api/cron/", "/unsubscribe", "/api/marketing-track"]; // /q/ = public shared quote links; /api/cron/ = scheduler (secret-checked in the route); /unsubscribe = marketing opt-out (HMAC-token-checked); /api/marketing-track = email open/click pixel
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth/signout", "/offline", "/q/", "/api/cron/", "/unsubscribe", "/api/marketing-track", "/rfq", "/api/rfq"]; // /q/ = public shared quote links; /api/cron/ = scheduler (secret-checked in the route); /unsubscribe = marketing opt-out (HMAC-token-checked); /api/marketing-track = email open/click pixel; /rfq + /api/rfq = public RFQ intake form (honeypot + rate-limited; a valid ?c/&t prefill token is HMAC-checked). NOTE: /api/rfq-uploads/view is deliberately NOT public — attachments are staff-only.
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -35,7 +35,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p));
+  // Match a public path exactly, as a slash-terminated prefix (entries ending in
+  // "/"), or on a path-segment boundary — so "/api/rfq" does NOT also whitelist
+  // the staff-only "/api/rfq-uploads/view".
+  const isPublic = PUBLIC_PATHS.some((p) => path === p || (p.endsWith("/") && path.startsWith(p)) || path.startsWith(p + "/"));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

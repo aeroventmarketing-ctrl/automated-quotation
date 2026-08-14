@@ -1,3 +1,23 @@
+## 2026-08-14 · Public RFQ intake page — marketing CTA → client uploads their RFQ
+- **Owner request:** make the email-marketing CTA point to a page where the client can upload their RFQ. (The
+  Inquiries tab is behind login — external clients can't reach it — so this needed a public page.)
+- **New public page `/rfq`** (`src/app/rfq/page.tsx` + `rfq-form.tsx`): a branded, no-login "Request a Quotation"
+  form — company, contact, email, phone, message, and multi-file upload (PDF / images / Excel / Word / CAD / ZIP).
+- **New public API `POST /api/rfq`** (`src/app/api/rfq/route.ts`): validates + stores files in the private bucket
+  (`rfq-uploads/…`) and drops a **pending item into the existing Inbound RFQ queue** (`addInboundItem`) — the same
+  place emailed RFQs land, so Sales reviews it and clicks the existing **"Turn into an inquiry"**. No auto-inquiry.
+  Guards: honeypot field, per-IP rate limit (5 / 10 min), file type + 15 MB/file + 40 MB/submission + 10-file caps.
+- **Attachments** served staff-only via `GET /api/rfq-uploads/view` (auth-checked, `rfq-uploads/` paths only).
+- **Middleware:** whitelisted `/rfq` + `/api/rfq`; tightened the public-path matcher to a path-segment boundary so
+  `/api/rfq` does **not** also expose the staff-only `/api/rfq-uploads/view`.
+- **Per-client prefill (`src/lib/rfq-link.ts`):** each recipient's CTA carries `?c=&t=` (HMAC token, same scheme as
+  unsubscribe) — applied **only** when the CTA points at `/rfq` (`appendRfqPrefill`, wired into `buildCampaignEmail`
+  HTML + text and the runner's live/preview/A-B/scheduled sends), so the form pre-fills their details and attributes
+  the RFQ to their client record. Token/id are never appended to any other CTA URL.
+- **Default CTA** for new campaigns now points at `{appUrl}/rfq` (was the website). Typecheck + lint clean;
+  `next build` compiles. NOTE: set the existing campaign's CTA link to `https://<app-domain>/rfq`, and ensure
+  `NEXT_PUBLIC_APP_URL` is the real domain so tokens/links resolve.
+
 ## 2026-08-14 · Duplicate clients — export a report (Excel/CSV) before deleting
 - **Owner request:** after importing 1,000+ clients, check for duplicate emails and **report to an Excel file
   first, before deleting**.
