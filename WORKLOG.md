@@ -1,3 +1,15 @@
+## 2026-08-14 · RFQ form — accumulate multiple files with per-file preview + remove
+- **Owner request:** on the public /rfq form, let the client add multiple files and preview each ("eye view").
+- **Problem:** the native file input **replaces** its selection each pick, so a client couldn't build up several
+  files, and there was no way to view or drop an individual one.
+- **Change (`rfq-form.tsx`):** files are now held in React state. A **"Choose files" / "Add more files"** button
+  appends across picks (dedupes by name+size, resets the input so the same file can be re-added after removal). Each
+  file shows a row with an **image thumbnail** (or a file icon), name + size, an **eye button** that opens a preview
+  in a new tab (object URL), and an **✕ remove**. Client-side limits mirror the server (10 files, 15 MB each, 40 MB
+  total) with friendly inline errors, and a running "N files · X MB total" line. On submit the files are appended to
+  the FormData from state (not the input). Object URLs are revoked on remove/unmount. Typecheck + lint clean;
+  `next build` compiles.
+
 ## 2026-08-14 · Public RFQ intake page — marketing CTA → client uploads their RFQ
 - **Owner request:** make the email-marketing CTA point to a page where the client can upload their RFQ. (The
   Inquiries tab is behind login — external clients can't reach it — so this needed a public page.)
