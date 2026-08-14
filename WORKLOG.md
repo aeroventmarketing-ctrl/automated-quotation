@@ -1,3 +1,14 @@
+## 2026-08-14 · RFQ form — fix multi-file add (only one file stuck)
+- **Owner report:** on `/rfq`, only a single file could be attached — adding more didn't work.
+- **Root cause (`rfq-form.tsx`):** `addFiles` read the live `FileList` **inside** the `setPicked` updater, but the
+  input was reset (`value = ""`) right after queuing the update — clearing that same `FileList` before the deferred
+  updater ran, so subsequent picks added nothing. Side-effects (`createObjectURL`, id counter) also lived inside the
+  updater (double-invoked under StrictMode).
+- **Fix:** snapshot `Array.from(list)` up front, reset the input, then compute the additions (dedupe vs the current
+  files + within the batch, enforce the 10-file / 15 MB / 40 MB caps) **outside** the updater, and commit with a pure
+  `setPicked((prev) => [...prev, ...additions])`. Multi-select in one dialog and adding across several picks both
+  work now. Typecheck + lint clean; `next build` compiles.
+
 ## 2026-08-14 · Inbound RFQs — blinking count badge on the nav + RFQ page contact details
 - **Owner request:** show a number + blinking highlight on the **Inbound RFQs** sidebar item when RFQs are waiting,
   and put the real contact numbers / emails on the `/rfq` page footer.
