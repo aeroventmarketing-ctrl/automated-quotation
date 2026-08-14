@@ -59,9 +59,10 @@ export function InboundReviewQueue({
   return (
     <div className="space-y-3">
       {!configured && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Inbound isn&rsquo;t wired up yet — set <code>INBOUND_WEBHOOK_SECRET</code> and point your Resend inbound webhook
-          at <code>/api/inbound-email</code>. Until then this queue stays empty.
+        <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          The website <strong>Request a Quotation</strong> form (<code>/rfq</code>) already feeds this queue. To <em>also</em>
+          capture RFQs that clients send as <strong>email replies</strong>, set <code>INBOUND_WEBHOOK_SECRET</code> and point
+          your Resend inbound webhook at <code>/api/inbound-email</code>.
         </div>
       )}
 
