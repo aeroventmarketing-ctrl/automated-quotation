@@ -1,3 +1,14 @@
+## 2026-08-14 · Inbound RFQs — blinking count badge on the nav + RFQ page contact details
+- **Owner request:** show a number + blinking highlight on the **Inbound RFQs** sidebar item when RFQs are waiting,
+  and put the real contact numbers / emails on the `/rfq` page footer.
+- **Nav badge:** added a `navCounts` prop to `AppNav` + `MobileNav`; the app layout counts **pending** inbound-RFQ
+  queue items (for ADMIN / SALES / ENGINEER — who see the tab) and passes `{"/inbound-rfq": n}`. When n > 0 the item
+  shows a **blinking red pill with the number** (`animate-approver-blink`, "99+" cap); it takes priority over the
+  existing amber activity dot. Zero → no badge.
+- **RFQ footer (`/rfq`):** replaced the single email/landline line with the full block — Landline (02) 85619413;
+  Smart 0928-948-0600 / 0999-664-9997; Globe 0927-325-8887 / 0954-429-8999; Info/Technical info@aeroventfbm.com;
+  Sales sales@aeroventfbm.com (emails are mailto links). Typecheck + lint clean; `next build` compiles.
+
 ## 2026-08-14 · RFQ form — accumulate multiple files with per-file preview + remove
 - **Owner request:** on the public /rfq form, let the client add multiple files and preview each ("eye view").
 - **Problem:** the native file input **replaces** its selection each pick, so a client couldn't build up several

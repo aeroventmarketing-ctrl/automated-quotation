@@ -50,8 +50,19 @@ export default async function RfqPage({
         </p>
         <RfqForm prefill={prefill} />
         <hr style={{ border: "none", borderTop: "1px solid #e2e8f0", margin: "22px 0 14px" }} />
-        <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.7 }}>
-          Prefer email or phone? {COMPANY.email} · {COMPANY.landline}
+        <div style={{ color: "#607080", fontSize: 12.5, lineHeight: 1.8 }}>
+          <div style={{ fontWeight: 700, color: "#1f2933", marginBottom: 4 }}>Prefer to reach us directly?</div>
+          <div><strong style={{ color: "#1f2933" }}>Landline:</strong> (02) 85619413</div>
+          <div><strong style={{ color: "#1f2933" }}>Smart:</strong> 0928-948-0600 / 0999-664-9997</div>
+          <div><strong style={{ color: "#1f2933" }}>Globe:</strong> 0927-325-8887 / 0954-429-8999</div>
+          <div style={{ marginTop: 6 }}>
+            <strong style={{ color: "#1f2933" }}>Info / Technical:</strong>{" "}
+            <a href="mailto:info@aeroventfbm.com" style={{ color: "#0b5c8f", textDecoration: "none" }}>info@aeroventfbm.com</a>
+          </div>
+          <div>
+            <strong style={{ color: "#1f2933" }}>Sales:</strong>{" "}
+            <a href="mailto:sales@aeroventfbm.com" style={{ color: "#0b5c8f", textDecoration: "none" }}>sales@aeroventfbm.com</a>
+          </div>
         </div>
       </div>
     </div>
