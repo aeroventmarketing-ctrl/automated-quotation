@@ -18,12 +18,14 @@ type Tab = "pending" | "handled";
 export function InboundReviewQueue({
   items,
   configured,
+  salespeople,
   onCreate,
   onDismiss,
 }: {
   items: InboundRfqItem[];
   configured: boolean;
-  onCreate: (itemId: string) => Promise<{ inquiryId: string }>;
+  salespeople: { id: string; name: string }[];
+  onCreate: (itemId: string, assigneeId?: string) => Promise<{ inquiryId: string }>;
   onDismiss: (itemId: string) => Promise<void>;
 }) {
   const router = useRouter();
@@ -31,6 +33,7 @@ export function InboundReviewQueue({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [created, setCreated] = useState<Record<string, string>>({});
+  const [assignee, setAssignee] = useState<Record<string, string>>({});
 
   const pending = items.filter((i) => i.status === "pending");
   const handled = items.filter((i) => i.status !== "pending");
@@ -39,7 +42,7 @@ export function InboundReviewQueue({
   async function create(id: string) {
     setBusy(id); setErr(null);
     try {
-      const { inquiryId } = await onCreate(id);
+      const { inquiryId } = await onCreate(id, assignee[id] || undefined);
       setCreated((c) => ({ ...c, [id]: inquiryId }));
       router.refresh();
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
@@ -110,6 +113,20 @@ export function InboundReviewQueue({
                       <Link href={`/inquiries/${created[it.id]}`} className="text-sm font-medium text-primary hover:underline">Inquiry created — open →</Link>
                     ) : (
                       <>
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          Assign to
+                          <select
+                            value={assignee[it.id] ?? ""}
+                            disabled={busy === it.id}
+                            onChange={(e) => setAssignee((a) => ({ ...a, [it.id]: e.target.value }))}
+                            className="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+                          >
+                            <option value="">Me (whoever converts)</option>
+                            {salespeople.map((s) => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </label>
                         <Button size="sm" disabled={busy === it.id} onClick={() => create(it.id)}>{busy === it.id ? "Working…" : "Create inquiry"}</Button>
                         <Button size="sm" variant="outline" disabled={busy === it.id} onClick={() => dismiss(it.id)}>Dismiss</Button>
                       </>
@@ -118,7 +135,7 @@ export function InboundReviewQueue({
                 ) : (
                   <div className="text-xs text-muted-foreground">
                     {it.status === "accepted"
-                      ? <>Inquiry created{it.inquiryId ? <> — <Link href={`/inquiries/${it.inquiryId}`} className="text-primary hover:underline">open →</Link></> : null}{it.handledByName ? ` · by ${it.handledByName}` : ""}</>
+                      ? <>Inquiry created{it.inquiryId ? <> — <Link href={`/inquiries/${it.inquiryId}`} className="text-primary hover:underline">open →</Link></> : null}{it.assignedToName ? ` · assigned to ${it.assignedToName}` : ""}{it.handledByName ? ` · by ${it.handledByName}` : ""}</>
                       : <>Dismissed{it.handledByName ? ` · by ${it.handledByName}` : ""}</>}
                   </div>
                 )}

@@ -34,6 +34,7 @@ export interface InboundRfqItem {
   status: InboundRfqStatus;
   inquiryId?: string; // set when turned into an inquiry
   handledByName?: string; // who accepted / dismissed it
+  assignedToName?: string; // the salesperson the inquiry was assigned to (if not the converter)
   handledAt?: string; // ISO
 }
 
@@ -57,6 +58,7 @@ function coerce(value: unknown): InboundRfqItem[] {
       status: r.status === "accepted" || r.status === "dismissed" ? r.status : "pending",
       inquiryId: typeof r.inquiryId === "string" ? r.inquiryId : undefined,
       handledByName: typeof r.handledByName === "string" ? r.handledByName : undefined,
+      assignedToName: typeof r.assignedToName === "string" ? r.assignedToName : undefined,
       handledAt: typeof r.handledAt === "string" ? r.handledAt : undefined,
     });
   }

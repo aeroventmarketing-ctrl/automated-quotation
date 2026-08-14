@@ -5,6 +5,7 @@ import type { InquirySource } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getInboundQueue, updateInboundItem } from "@/lib/inbound-rfq";
+import { getSalespeople } from "@/lib/sales-personnel";
 
 async function assertSales() {
   const user = await getCurrentUser();
@@ -17,13 +18,28 @@ async function assertSales() {
 /**
  * Turn a queued inbound RFQ into an Inquiry: match the sender's email to an
  * existing client (or create one), create the inquiry (source Email) carrying the
- * message + attachment links, and mark the queue item accepted.
+ * message + attachment links, and mark the queue item accepted. Optionally assign
+ * the inquiry to a chosen salesperson (its owner / `createdById`); when none is
+ * given it's owned by whoever converted it.
  */
-export async function createInquiryFromInbound(itemId: string): Promise<{ inquiryId: string }> {
+export async function createInquiryFromInbound(itemId: string, assigneeId?: string): Promise<{ inquiryId: string }> {
   const user = await assertSales();
   const item = (await getInboundQueue()).find((i) => i.id === itemId);
   if (!item) throw new Error("That inbound message is no longer in the queue.");
   if (item.status !== "pending") throw new Error("That message has already been handled.");
+
+  // Resolve the owner: a chosen salesperson (validated against the salesperson
+  // list) or, by default, the person converting it.
+  let ownerId = user.id;
+  let ownerName = user.name;
+  const chosen = (assigneeId ?? "").trim();
+  if (chosen && chosen !== user.id) {
+    const sales = await getSalespeople();
+    const match = sales.find((s) => s.id === chosen);
+    if (!match) throw new Error("That salesperson isn't available to assign.");
+    ownerId = match.id;
+    ownerName = match.name;
+  }
 
   // Match the sender to an existing client by email, else create a new one.
   const email = item.fromEmail.trim();
@@ -52,7 +68,7 @@ export async function createInquiryFromInbound(itemId: string): Promise<{ inquir
       customerId,
       source: "EMAIL" as InquirySource,
       status: "DRAFTING",
-      createdById: user.id,
+      createdById: ownerId,
       projectName: item.subject?.trim() || null,
       notes,
     },
@@ -63,6 +79,7 @@ export async function createInquiryFromInbound(itemId: string): Promise<{ inquir
     status: "accepted",
     inquiryId: inquiry.id,
     handledByName: user.name,
+    assignedToName: ownerId !== user.id ? ownerName : undefined,
     handledAt: new Date().toISOString(),
   });
 
