@@ -1,3 +1,13 @@
+## 2026-08-14 · Bulk import — download a ready-to-fill template (Excel or CSV)
+- **Owner request:** on the Admin → Import page, add a way to download a template file to fill in.
+- **Change (`admin/import/page.tsx`):** added **Download Excel template** and **Download CSV template** buttons next
+  to "Load sample into editor". Each builds a header-row + one-example-row file for the currently-selected data type
+  (Catalogue / Pricelist / Rating points / Clients), so e.g. the Clients template ships the exact
+  `company, contactName, email, phone, address, notes` headers. CSV downloads the spec sample verbatim; Excel
+  lazy-loads `exceljs` (same lib the reader uses), parses the sample with a small RFC-4180 CSV parser, bolds the
+  header row and sizes the columns. Client-side Blob download; no server route. Typecheck + lint clean; `next build`
+  compiles.
+
 ## 2026-08-14 · Purchasing — split (multi-supplier) kept the child's approval (frozen Phase 4)
 - **Owner report (frozen Phase 4):** splitting an approved requisition across two suppliers sent one PO to
   Accounting correctly, but the **other split-off list dropped back to Pending** — re-demanding the Payment

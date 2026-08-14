@@ -163,6 +163,74 @@ export default function ImportPage() {
     markLoaded(file.name, await file.text());
   }
 
+  // Trigger a browser download of an in-memory file.
+  function downloadBlob(name: string, mime: string, data: BlobPart) {
+    const blob = new Blob([data], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // Minimal RFC-4180 CSV parse (handles quotes, "" escapes, commas/newlines in
+  // quotes) — used to turn a sample string into rows for the Excel template.
+  function parseCsv(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = "";
+    let inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQ = false;
+        } else field += c;
+      } else if (c === '"') inQ = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c !== "\r") field += c;
+    }
+    row.push(field);
+    if (row.length > 1 || row[0] !== "") rows.push(row);
+    return rows;
+  }
+
+  // Download a ready-to-fill template (header row + one example row) for the
+  // selected data type, as CSV or Excel.
+  function downloadCsvTemplate() {
+    downloadBlob(`${type}-template.csv`, "text/csv;charset=utf-8", SPECS[type].sample + "\n");
+  }
+  async function downloadExcelTemplate() {
+    setError(null);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Template");
+      const rows = parseCsv(SPECS[type].sample);
+      rows.forEach((r) => ws.addRow(r));
+      if (rows[0]) {
+        ws.getRow(1).font = { bold: true };
+        ws.columns.forEach((col, i) => {
+          const header = rows[0][i] ?? "";
+          col.width = Math.min(40, Math.max(14, header.length + 4));
+        });
+      }
+      const buf = await wb.xlsx.writeBuffer();
+      downloadBlob(
+        `${type}-template.xlsx`,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        buf,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not build the Excel template");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="border-destructive/40">
@@ -248,14 +316,17 @@ export default function ImportPage() {
             <code>{SPECS[type].cols}</code>
             <div className="mt-2 font-medium">Sample:</div>
             <pre className="whitespace-pre-wrap">{SPECS[type].sample}</pre>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2"
-              onClick={() => setCsv(SPECS[type].sample)}
-            >
-              Load sample into editor
-            </Button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setCsv(SPECS[type].sample)}>
+                Load sample into editor
+              </Button>
+              <Button size="sm" variant="outline" onClick={downloadExcelTemplate}>
+                Download Excel template
+              </Button>
+              <Button size="sm" variant="outline" onClick={downloadCsvTemplate}>
+                Download CSV template
+              </Button>
+            </div>
           </div>
 
           <Textarea
