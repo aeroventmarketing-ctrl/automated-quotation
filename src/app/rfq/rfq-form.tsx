@@ -217,7 +217,7 @@ export function RfqForm({ prefill }: { prefill: RfqPrefill }) {
       <button type="submit" disabled={busy}
         style={{ justifySelf: "start", background: busy ? "#7ca7c4" : "#0b5c8f", color: "#fff", border: "none",
           borderRadius: 8, padding: "12px 28px", fontSize: 15, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>
-        {busy ? "Sending…" : "Submit request"}
+        {busy ? "Sending…" : "Submit Request"}
       </button>
     </form>
   );
