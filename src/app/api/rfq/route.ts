@@ -16,6 +16,9 @@ import { uploadToStorage } from "@/lib/storage";
 import { addInboundItem } from "@/lib/inbound-rfq";
 import { verifyRfqToken } from "@/lib/rfq-link";
 import { prisma } from "@/lib/db";
+import { config, COMPANY } from "@/lib/config";
+import { sendEmail, emailConfigured } from "@/lib/email/resend";
+import { sendSms, smsConfigured, normalizePhMobile } from "@/lib/sms/semaphore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -156,5 +159,45 @@ export async function POST(req: NextRequest) {
     status: "pending",
   });
 
+  // Acknowledge the client on both channels (best-effort — a failure here must
+  // never fail the submission, which is already safely queued above).
+  await sendAcknowledgements({ email, phone, contactName, company });
+
   return NextResponse.json({ ok: true });
+}
+
+/** Email + SMS "we received your request" acknowledgement to the client. */
+async function sendAcknowledgements(to: { email: string; phone: string; contactName: string; company: string }) {
+  const who = to.contactName || to.company || "there";
+
+  // --- Email ---
+  if (emailConfigured() && config.followUpFromEmail) {
+    try {
+      const from = `${config.followUpFromName} <${config.followUpFromEmail}>`;
+      const text = `Dear ${who},\n\nThank you for your request. We've received it and our engineering team will review it shortly. We'll get back to you at this email address with a quotation or any follow-up questions.\n\nBest regards,\n${COMPANY.name}\n${COMPANY.tagline}\n\nSales: sales@aeroventfbm.com · Info/Technical: info@aeroventfbm.com\nLandline: (02) 85619413`;
+      const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1f2933">
+<p>Dear ${esc(who)},</p>
+<p>Thank you for your request. We&rsquo;ve received it and our engineering team will review it shortly. We&rsquo;ll get back to you at this email address with a quotation or any follow-up questions.</p>
+<p style="margin-top:18px">Best regards,<br><strong>${esc(COMPANY.name)}</strong><br><span style="color:#607080;font-size:12px">${esc(COMPANY.tagline)}</span></p>
+<p style="color:#607080;font-size:12px">Sales: <a href="mailto:sales@aeroventfbm.com">sales@aeroventfbm.com</a> &middot; Info/Technical: <a href="mailto:info@aeroventfbm.com">info@aeroventfbm.com</a><br>Landline: (02) 85619413</p>
+</div>`;
+      await sendEmail({ from, to: to.email, subject: "We've received your request — Aerovent Fans & Blowers", text, html, replyTo: "sales@aeroventfbm.com" });
+    } catch (e) {
+      console.error("rfq ack email failed", e);
+    }
+  }
+
+  // --- SMS (Philippine mobiles only) ---
+  const mobile = normalizePhMobile(to.phone);
+  if (mobile && smsConfigured()) {
+    try {
+      await sendSms({ to: mobile, message: "Aerovent Fans & Blowers: We've received your quotation request and our team will get back to you shortly. Thank you!" });
+    } catch (e) {
+      console.error("rfq ack sms failed", e);
+    }
+  }
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

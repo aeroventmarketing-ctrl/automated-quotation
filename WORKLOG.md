@@ -1,3 +1,15 @@
+## 2026-08-14 · RFQ — "Submit Request" + email & SMS acknowledgement to the client
+- **Owner request:** rename the button to **"Submit Request"**, and on submit notify the client (email **and** SMS)
+  that we received their inquiry.
+- **Button** (`rfq-form.tsx`): "Submit request" → "Submit Request".
+- **Acknowledgement (`api/rfq/route.ts`):** after the RFQ is safely queued, best-effort send:
+  - **Email** via Resend (from the configured follow-up sender, reply-to sales@aeroventfbm.com) — "We've received
+    your request" with a short branded body + contact details.
+  - **SMS** via Semaphore — only when the phone normalizes to a PH mobile (`normalizePhMobile`): a one-line
+    acknowledgement.
+  Both are wrapped in try/catch and only run when their channel is configured (`emailConfigured` / `smsConfigured`),
+  so a send failure (or missing key) never fails the submission. Typecheck + lint clean; `next build` compiles.
+
 ## 2026-08-14 · RFQ form — fix multi-file add (only one file stuck)
 - **Owner report:** on `/rfq`, only a single file could be attached — adding more didn't work.
 - **Root cause (`rfq-form.tsx`):** `addFiles` read the live `FileList` **inside** the `setPicked` updater, but the
