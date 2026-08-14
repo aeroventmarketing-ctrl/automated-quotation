@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
   // Upload each file to the private bucket, then reference it by a staff-only
   // view link (the same shape the inbound queue renders).
   const id = randomUUID();
-  const attachments: { name: string; url: string }[] = [];
+  const attachments: { name: string; url: string; path: string }[] = [];
   try {
     for (const f of files) {
       const clean = safeName(f.name);
@@ -132,6 +132,7 @@ export async function POST(req: NextRequest) {
       attachments.push({
         name: f.name,
         url: `/api/rfq-uploads/view?path=${encodeURIComponent(path)}&name=${encodeURIComponent(f.name)}`,
+        path,
       });
     }
   } catch {

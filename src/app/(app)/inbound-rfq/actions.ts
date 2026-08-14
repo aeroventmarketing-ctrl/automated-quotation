@@ -6,6 +6,9 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getInboundQueue, updateInboundItem } from "@/lib/inbound-rfq";
 import { getSalespeople } from "@/lib/sales-personnel";
+import { downloadFromStorage, uploadToStorage } from "@/lib/storage";
+import { addInquiryAssignment } from "@/lib/inquiry-notifications";
+import { Prisma } from "@prisma/client";
 
 async function assertSales() {
   const user = await getCurrentUser();
@@ -58,8 +61,15 @@ export async function createInquiryFromInbound(itemId: string, assigneeId?: stri
     customerId = created.id;
   }
 
-  const attachmentNote = item.attachments.length
-    ? `\n\nAttachments (from the client's email):\n${item.attachments.map((a) => `- ${a.name}: ${a.url}`).join("\n")}`
+  // Attachments the client uploaded via the web form carry a Storage path — those
+  // become proper RFQ/BOQ documents on the inquiry (viewable / printable /
+  // downloadable). Attachments that are only external links (e.g. from an email
+  // reply) stay as links in the notes.
+  const storable = item.attachments.filter((a) => a.path && a.path.startsWith("rfq-uploads/"));
+  const external = item.attachments.filter((a) => !storable.includes(a));
+
+  const attachmentNote = external.length
+    ? `\n\nAttachments (from the client's email):\n${external.map((a) => `- ${a.name}: ${a.url}`).join("\n")}`
     : "";
   const notes = `${item.text?.trim() ?? ""}${attachmentNote}`.trim() || null;
 
@@ -75,6 +85,30 @@ export async function createInquiryFromInbound(itemId: string, assigneeId?: stri
     select: { id: true },
   });
 
+  // Copy each uploaded RFQ file into the inquiry's own storage so the standard
+  // inquiry doc viewer (owner-scoped access) can open it, then record them under
+  // the "RFQ / BOQ" document slot.
+  if (storable.length) {
+    const rfqDocs: { path: string; name: string; uploadedAt: string }[] = [];
+    for (const [i, a] of storable.entries()) {
+      try {
+        const { base64, contentType } = await downloadFromStorage(a.path!);
+        const ext = a.name.split(".").pop()?.toLowerCase() || "bin";
+        const dest = `inquiries/${inquiry.id}/rfq-${Date.now()}-${i}.${ext}`;
+        await uploadToStorage(dest, Buffer.from(base64, "base64"), contentType);
+        rfqDocs.push({ path: dest, name: a.name, uploadedAt: new Date().toISOString() });
+      } catch (e) {
+        console.error("rfq attachment copy failed", a.path, e);
+      }
+    }
+    if (rfqDocs.length) {
+      await prisma.inquiry.update({
+        where: { id: inquiry.id },
+        data: { docs: { rfq_boq: rfqDocs } as unknown as Prisma.InputJsonValue },
+      });
+    }
+  }
+
   await updateInboundItem(itemId, {
     status: "accepted",
     inquiryId: inquiry.id,
@@ -82,6 +116,17 @@ export async function createInquiryFromInbound(itemId: string, assigneeId?: stri
     assignedToName: ownerId !== user.id ? ownerName : undefined,
     handledAt: new Date().toISOString(),
   });
+
+  // Notify the assigned salesperson (unless they converted it themselves).
+  if (ownerId !== user.id) {
+    const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { company: true } }).catch(() => null);
+    await addInquiryAssignment(ownerId, {
+      inquiryId: inquiry.id,
+      customer: customer?.company || item.fromName || email || "New client",
+      fromName: user.name,
+      at: new Date().toISOString(),
+    });
+  }
 
   revalidatePath("/inbound-rfq");
   revalidatePath("/inquiries");

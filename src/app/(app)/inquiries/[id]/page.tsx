@@ -10,6 +10,7 @@ import { RETAINED_TEMPLATE_LAYOUT_KEYS, ensureBuiltinTemplates, sortTemplatesByN
 import { findContactOwner } from "@/lib/client-ownership";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { coerceInquiryDocs } from "@/lib/inquiry-docs";
+import { clearInquiryAssignment } from "@/lib/inquiry-notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,9 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
   const viewer = await getCurrentUser();
   const canEditDocs = viewer != null && (isAdmin(viewer) || inquiry.createdById === viewer.id);
   const inquiryDocs = coerceInquiryDocs((inquiry as { docs?: unknown }).docs);
+
+  // Opening the inquiry clears its "assigned to you" notification for this viewer.
+  if (viewer) await clearInquiryAssignment(viewer.id, id).catch(() => {});
 
   // First-contact owner for this client's contact details (dispute authority).
   const owner = await findContactOwner({

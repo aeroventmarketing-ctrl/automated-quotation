@@ -21,6 +21,7 @@ export type InboundRfqStatus = "pending" | "accepted" | "dismissed";
 export interface InboundAttachment {
   name: string;
   url: string;
+  path?: string; // Supabase Storage path (web-form uploads) — lets conversion carry the file onto the inquiry
 }
 
 export interface InboundRfqItem {
@@ -52,7 +53,9 @@ function coerce(value: unknown): InboundRfqItem[] {
       subject: typeof r.subject === "string" ? r.subject : undefined,
       text: typeof r.text === "string" ? r.text : undefined,
       attachments: Array.isArray(r.attachments)
-        ? r.attachments.filter((a): a is InboundAttachment => !!a && typeof a.name === "string" && typeof a.url === "string")
+        ? r.attachments
+            .filter((a): a is InboundAttachment => !!a && typeof a.name === "string" && typeof a.url === "string")
+            .map((a) => ({ name: a.name, url: a.url, ...(typeof a.path === "string" ? { path: a.path } : {}) }))
         : [],
       receivedAt: typeof r.receivedAt === "string" ? r.receivedAt : new Date(0).toISOString(),
       status: r.status === "accepted" || r.status === "dismissed" ? r.status : "pending",
