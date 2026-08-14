@@ -56,23 +56,34 @@ export function RfqForm({ prefill }: { prefill: RfqPrefill }) {
 
   function addFiles(list: FileList | null) {
     if (!list || list.length === 0) return;
-    setErr(null);
-    setPicked((prev) => {
-      const next = [...prev];
-      let total = prev.reduce((a, p) => a + p.file.size, 0);
-      for (const f of Array.from(list)) {
-        const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-        if (!ALLOWED_EXT.has(ext)) { setErr(`"${f.name}" is not an accepted file type.`); continue; }
-        if (f.size > MAX_FILE_BYTES) { setErr(`"${f.name}" is larger than 15 MB.`); continue; }
-        if (next.some((p) => p.file.name === f.name && p.file.size === f.size)) continue; // skip duplicates
-        if (next.length >= MAX_FILES) { setErr(`You can attach at most ${MAX_FILES} files.`); break; }
-        if (total + f.size > MAX_TOTAL_BYTES) { setErr("Your attachments total more than 40 MB — please remove a file."); break; }
-        total += f.size;
-        next.push({ id: String(++idRef.current), file: f, url: URL.createObjectURL(f) });
-      }
-      return next;
-    });
+    // Snapshot the picked files NOW — resetting the input below empties the live
+    // FileList, and a deferred state updater would otherwise read nothing.
+    const incoming = Array.from(list);
     if (inputRef.current) inputRef.current.value = ""; // allow re-picking the same file after removal
+
+    const existing = pickedRef.current;
+    const additions: Picked[] = [];
+    let total = existing.reduce((a, p) => a + p.file.size, 0);
+    let count = existing.length;
+    let error: string | null = null;
+    const isDup = (f: File) =>
+      existing.some((p) => p.file.name === f.name && p.file.size === f.size) ||
+      additions.some((p) => p.file.name === f.name && p.file.size === f.size);
+
+    for (const f of incoming) {
+      const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ALLOWED_EXT.has(ext)) { error = `"${f.name}" is not an accepted file type.`; continue; }
+      if (f.size > MAX_FILE_BYTES) { error = `"${f.name}" is larger than 15 MB.`; continue; }
+      if (isDup(f)) continue; // skip files already added
+      if (count >= MAX_FILES) { error = `You can attach at most ${MAX_FILES} files.`; break; }
+      if (total + f.size > MAX_TOTAL_BYTES) { error = "Your attachments total more than 40 MB — please remove a file."; break; }
+      total += f.size;
+      count++;
+      additions.push({ id: String(++idRef.current), file: f, url: URL.createObjectURL(f) });
+    }
+
+    setErr(error);
+    if (additions.length) setPicked((prev) => [...prev, ...additions]);
   }
 
   function remove(id: string) {
