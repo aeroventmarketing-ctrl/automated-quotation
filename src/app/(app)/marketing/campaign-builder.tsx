@@ -433,7 +433,6 @@ export function CampaignBuilder({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-xs">Live preview {previewing && <span className="text-muted-foreground">· updating…</span>}</Label>
-              {preview && <span className="text-[11px] text-muted-foreground">personalized for {preview.sampleTo}</span>}
             </div>
             <div className="overflow-hidden rounded-md border bg-white">
               {preview ? (

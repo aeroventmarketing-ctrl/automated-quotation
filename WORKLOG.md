@@ -1,3 +1,7 @@
+## 2026-08-14 · Marketing builder — remove "personalized for …" label
+- **Owner request:** remove the "personalized for <company>" text next to the Live preview header.
+- **Change (`campaign-builder.tsx`):** dropped that `<span>` from the preview header. UI-only; typecheck + lint clean.
+
 ## 2026-08-14 · Assigned RFQ → salesperson notification + RFQ files become inquiry docs
 - **Owner request:** when an RFQ is assigned to a salesperson, they should get a notification in the Inquiries tab,
   and the RFQ file(s) should be viewable / printable / downloadable.
