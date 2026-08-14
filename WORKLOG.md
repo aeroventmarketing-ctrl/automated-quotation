@@ -1,3 +1,10 @@
+## 2026-08-14 · RFQ ack email — full contact block
+- **Owner request:** include the complete contact details in the acknowledgement email.
+- **Change (`api/rfq/route.ts`):** the "We've received your request" email footer now lists all lines —
+  Landline (02) 85619413; Smart 0928-948-0600 / 0999-664-9997; Globe 0927-325-8887 / 0954-429-8999; Info/Technical
+  info@aeroventfbm.com; Sales sales@aeroventfbm.com (emails are mailto links) — in both the HTML and plain-text
+  bodies. Matches the `/rfq` page footer. Typecheck + lint clean.
+
 ## 2026-08-14 · RFQ — "Submit Request" + email & SMS acknowledgement to the client
 - **Owner request:** rename the button to **"Submit Request"**, and on submit notify the client (email **and** SMS)
   that we received their inquiry.
