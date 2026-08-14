@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getInboundQueue } from "@/lib/inbound-rfq";
+import { getSalespeople } from "@/lib/sales-personnel";
 import { InboundReviewQueue } from "./review-queue";
 import { createInquiryFromInbound, dismissInboundItem } from "./actions";
 
@@ -11,6 +12,7 @@ export default async function InboundRfqPage() {
   if (!user || !(isAdmin(user) || user.role === "SALES" || user.role === "ENGINEER")) redirect("/dashboard");
 
   const items = (await getInboundQueue()).slice().reverse(); // newest first
+  const salespeople = await getSalespeople();
   const configured = !!process.env.INBOUND_WEBHOOK_SECRET;
 
   return (
@@ -22,7 +24,7 @@ export default async function InboundRfqPage() {
           normal Inquiries → Quotations pipeline) or dismiss it.
         </p>
       </div>
-      <InboundReviewQueue items={items} configured={configured} onCreate={createInquiryFromInbound} onDismiss={dismissInboundItem} />
+      <InboundReviewQueue items={items} configured={configured} salespeople={salespeople} onCreate={createInquiryFromInbound} onDismiss={dismissInboundItem} />
     </div>
   );
 }

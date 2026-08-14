@@ -1,3 +1,14 @@
+## 2026-08-14 · Inbound RFQs — assign the converted inquiry to a salesperson
+- **Owner request:** add an option to assign an inbound RFQ to anyone in sales.
+- **Change:** each pending inbound-RFQ card now has an **"Assign to"** dropdown (default "Me (whoever converts)",
+  plus every salesperson from `getSalespeople()` — all SALES-role users + sales-flagged engineers). On **Create
+  inquiry** the chosen salesperson becomes the inquiry's owner (`createdById`), so it lands in their pipeline and
+  credits them in the sales reports; with no pick it stays owned by the converter (unchanged behaviour).
+- **Server (`createInquiryFromInbound`):** takes an optional `assigneeId`, validated against the salesperson list
+  (rejects anything else), sets `createdById` accordingly, and records `assignedToName` on the queue item; the
+  Handled view now shows "assigned to <name> · by <converter>". `getSalespeople` wired into the page.
+- Typecheck + lint clean; `next build` compiles.
+
 ## 2026-08-14 · Unsubscribe page — fix literal "You&rsquo;ve" heading
 - **Owner report:** the confirmation heading showed the raw entity `You&rsquo;ve been unsubscribed`.
 - **Cause:** the `shell()` **title** is a plain JS string, which React renders as text without decoding HTML
