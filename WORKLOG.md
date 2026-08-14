@@ -1,3 +1,10 @@
+## 2026-08-14 · RFQ ack email — plain-text emails (clear Resend link-domain insight)
+- **Owner note:** Resend's "Needs attention" insight flagged the body `mailto:` links (@aeroventfbm.com) as not
+  matching the sending domain (@aeroventfbm.shop) — a spam-filter heuristic (email still delivered fine).
+- **Change (`api/rfq/route.ts`):** dropped the `mailto:` anchors on Info/Technical + Sales in the ack email; the
+  addresses now render as plain text (still visible/copyable, and most clients auto-linkify). Reply-To (a header,
+  not a body link) is unchanged. Clears the only body-link mismatch. Typecheck + lint clean.
+
 ## 2026-08-14 · RFQ ack email — full contact block
 - **Owner request:** include the complete contact details in the acknowledgement email.
 - **Change (`api/rfq/route.ts`):** the "We've received your request" email footer now lists all lines —

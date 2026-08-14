@@ -184,8 +184,8 @@ async function sendAcknowledgements(to: { email: string; phone: string; contactN
 <div><strong style="color:#1f2933">Landline:</strong> (02) 85619413</div>
 <div><strong style="color:#1f2933">Smart:</strong> 0928-948-0600 / 0999-664-9997</div>
 <div><strong style="color:#1f2933">Globe:</strong> 0927-325-8887 / 0954-429-8999</div>
-<div style="margin-top:4px"><strong style="color:#1f2933">Info / Technical:</strong> <a href="mailto:info@aeroventfbm.com">info@aeroventfbm.com</a></div>
-<div><strong style="color:#1f2933">Sales:</strong> <a href="mailto:sales@aeroventfbm.com">sales@aeroventfbm.com</a></div>
+<div style="margin-top:4px"><strong style="color:#1f2933">Info / Technical:</strong> info@aeroventfbm.com</div>
+<div><strong style="color:#1f2933">Sales:</strong> sales@aeroventfbm.com</div>
 </td></tr></table>
 </div>`;
       await sendEmail({ from, to: to.email, subject: "We've received your request — Aerovent Fans & Blowers", text, html, replyTo: "sales@aeroventfbm.com" });
