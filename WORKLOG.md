@@ -1,3 +1,10 @@
+## 2026-08-14 · Inbound RFQs — fix misleading "not wired up / stays empty" banner
+- **Owner report:** the amber banner said the queue "stays empty" until the Resend webhook is set — misleading,
+  since the `/rfq` web form already feeds the queue (RFQs were arriving; several handled).
+- **Change (`review-queue.tsx`):** reworded to an informational (sky) note — the website **Request a Quotation**
+  form (`/rfq`) already feeds this queue; `INBOUND_WEBHOOK_SECRET` + the Resend inbound webhook are only needed to
+  **also** capture RFQs sent as email replies. Copy-only. Typecheck + lint clean.
+
 ## 2026-08-14 · Inbound RFQs — assign the converted inquiry to a salesperson
 - **Owner request:** add an option to assign an inbound RFQ to anyone in sales.
 - **Change:** each pending inbound-RFQ card now has an **"Assign to"** dropdown (default "Me (whoever converts)",
