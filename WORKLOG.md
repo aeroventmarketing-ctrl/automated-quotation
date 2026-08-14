@@ -1,3 +1,14 @@
+## 2026-08-14 · Website price list export (for the online store)
+- **Owner request:** get Name + price of all products **except fabricated Fans & Blowers** from AeroQuote, with a
+  website price = AeroQuote price ÷ 0.95 (rounded to nearest ₱1) to cover the 5% online processing fee.
+- **Change:** new `src/lib/website-price-list.ts` — queries active catalogue items with `family NOT IN`
+  {AXIAL, CENTRIFUGAL, PROPELLER, TUBULAR_INLINE, CABINET} (the fabricated fan/blower families), takes the latest
+  active price per variant, and computes `websiteSellingPrice = round(basePrice / 0.95)`. Admin CSV route
+  `GET /api/admin/website-price-list` (columns: Category, Model Code, Name, Variant, UoM, AeroQuote Selling Price,
+  Website Selling Price) + a **Download website price list (CSV)** button on Admin → Import.
+- (Data lives in the live Supabase DB, unreachable from the build sandbox — so this is delivered as an in-app
+  export the owner runs against real data.) Typecheck + lint clean; `next build` compiles.
+
 ## 2026-08-14 · Marketing builder — remove "personalized for …" label
 - **Owner request:** remove the "personalized for <company>" text next to the Live preview header.
 - **Change (`campaign-builder.tsx`):** dropped that `<span>` from the preview header. UI-only; typecheck + lint clean.
