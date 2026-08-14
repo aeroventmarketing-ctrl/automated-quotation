@@ -1,3 +1,14 @@
+## 2026-08-14 · Duplicate clients — export a report (Excel/CSV) before deleting
+- **Owner request:** after importing 1,000+ clients, check for duplicate emails and **report to an Excel file
+  first, before deleting**.
+- **Change:** the Admin → Duplicate clients page already groups by normalized email (and company/person/phone);
+  added a **Download Excel report** + **Download CSV** button (`duplicates-export.tsx`) that exports the
+  currently-listed duplicate groups. Columns: Group #, the shared value (e.g. the email), Company, Contact name,
+  Email, Phone, Inquiries, Salesperson(s), Client ID — one row per client record, blank line between groups, bold
+  header + auto-filter. **Read-only** — nothing is deleted/merged; it's the review step before using the existing
+  per-record Delete / Merge. Excel lazy-loads `exceljs`; client-side Blob download. Typecheck + lint clean;
+  `next build` compiles.
+
 ## 2026-08-14 · Bulk import — download a ready-to-fill template (Excel or CSV)
 - **Owner request:** on the Admin → Import page, add a way to download a template file to fill in.
 - **Change (`admin/import/page.tsx`):** added **Download Excel template** and **Download CSV template** buttons next
