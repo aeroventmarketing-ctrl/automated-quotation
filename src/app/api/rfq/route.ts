@@ -174,12 +174,19 @@ async function sendAcknowledgements(to: { email: string; phone: string; contactN
   if (emailConfigured() && config.followUpFromEmail) {
     try {
       const from = `${config.followUpFromName} <${config.followUpFromEmail}>`;
-      const text = `Dear ${who},\n\nThank you for your request. We've received it and our engineering team will review it shortly. We'll get back to you at this email address with a quotation or any follow-up questions.\n\nBest regards,\n${COMPANY.name}\n${COMPANY.tagline}\n\nSales: sales@aeroventfbm.com · Info/Technical: info@aeroventfbm.com\nLandline: (02) 85619413`;
+      const text = `Dear ${who},\n\nThank you for your request. We've received it and our engineering team will review it shortly. We'll get back to you at this email address with a quotation or any follow-up questions.\n\nBest regards,\n${COMPANY.name}\n${COMPANY.tagline}\n\nContact us:\nLandline: (02) 85619413\nSmart: 0928-948-0600 / 0999-664-9997\nGlobe: 0927-325-8887 / 0954-429-8999\nInfo / Technical: info@aeroventfbm.com\nSales: sales@aeroventfbm.com`;
       const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1f2933">
 <p>Dear ${esc(who)},</p>
 <p>Thank you for your request. We&rsquo;ve received it and our engineering team will review it shortly. We&rsquo;ll get back to you at this email address with a quotation or any follow-up questions.</p>
 <p style="margin-top:18px">Best regards,<br><strong>${esc(COMPANY.name)}</strong><br><span style="color:#607080;font-size:12px">${esc(COMPANY.tagline)}</span></p>
-<p style="color:#607080;font-size:12px">Sales: <a href="mailto:sales@aeroventfbm.com">sales@aeroventfbm.com</a> &middot; Info/Technical: <a href="mailto:info@aeroventfbm.com">info@aeroventfbm.com</a><br>Landline: (02) 85619413</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;border-top:1px solid #e2e8f0"><tr><td style="padding-top:12px;color:#607080;font-size:12px;line-height:1.7">
+<div style="font-weight:700;color:#1f2933;margin-bottom:2px">Contact us</div>
+<div><strong style="color:#1f2933">Landline:</strong> (02) 85619413</div>
+<div><strong style="color:#1f2933">Smart:</strong> 0928-948-0600 / 0999-664-9997</div>
+<div><strong style="color:#1f2933">Globe:</strong> 0927-325-8887 / 0954-429-8999</div>
+<div style="margin-top:4px"><strong style="color:#1f2933">Info / Technical:</strong> <a href="mailto:info@aeroventfbm.com">info@aeroventfbm.com</a></div>
+<div><strong style="color:#1f2933">Sales:</strong> <a href="mailto:sales@aeroventfbm.com">sales@aeroventfbm.com</a></div>
+</td></tr></table>
 </div>`;
       await sendEmail({ from, to: to.email, subject: "We've received your request — Aerovent Fans & Blowers", text, html, replyTo: "sales@aeroventfbm.com" });
     } catch (e) {
