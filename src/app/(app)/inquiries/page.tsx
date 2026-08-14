@@ -13,6 +13,9 @@ import { payableTotal, round2 } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { InquiriesTable } from "./inquiries-table";
 import { SalesReportPanel } from "./sales-report-panel";
+import { getInquiryAssignments } from "@/lib/inquiry-notifications";
+import { formatDate } from "@/lib/utils";
+import { BellRing } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +92,8 @@ export default async function InquiriesPage({
     getCurrentUser(),
   ]);
   const admin = isAdmin(user);
+  // New RFQ inquiries assigned to this salesperson — shown as a notification banner.
+  const assignments = user ? await getInquiryAssignments(user.id).catch(() => []) : [];
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const rows = inquiries.map((inq) => {
     // Won amount = the payable total of every confirmed (won) quotation on the
@@ -122,6 +127,23 @@ export default async function InquiriesPage({
 
       <TestModeBanner on={!!cutoff} />
 
+      {assignments.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-amber-900">
+            <BellRing className="h-4 w-4" />
+            {assignments.length} new RFQ{assignments.length === 1 ? "" : "s"} assigned to you
+          </div>
+          <ul className="space-y-1">
+            {assignments.map((a) => (
+              <li key={a.inquiryId} className="flex flex-wrap items-center gap-x-2 text-sm text-amber-900">
+                <Link href={`/inquiries/${a.inquiryId}`} className="font-medium underline hover:no-underline">{a.customer}</Link>
+                <span className="text-amber-700">— assigned by {a.fromName} · {formatDate(new Date(a.at))}</span>
+                <Link href={`/inquiries/${a.inquiryId}`} className="text-primary hover:underline">Open →</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {status && (
         <div className="flex items-center gap-2 text-sm">

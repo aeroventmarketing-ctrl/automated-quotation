@@ -1,3 +1,17 @@
+## 2026-08-14 · Assigned RFQ → salesperson notification + RFQ files become inquiry docs
+- **Owner request:** when an RFQ is assigned to a salesperson, they should get a notification in the Inquiries tab,
+  and the RFQ file(s) should be viewable / printable / downloadable.
+- **Files onto the inquiry (`createInquiryFromInbound`):** web-form attachments now carry a Storage `path`
+  (`InboundAttachment.path`, set by `/api/rfq`). On conversion each is **copied** into the inquiry's own storage
+  (`inquiries/<id>/…`, owner-scoped access) and recorded under the **RFQ / BOQ** document slot — so they render in
+  the existing inquiry doc viewer with **eye-view / download** (and print via the opened file). External email-only
+  links stay as note links. (Older queue items without a `path` fall back to note links.)
+- **Notification (`src/lib/inquiry-notifications.ts`, AppSetting-backed, no migration):** assigning to someone
+  other than the converter drops a per-user note. Surfaces as: a **blinking count** on the **Inquiries** nav tab
+  (`navCounts["/inquiries"]`) and an **amber banner** on the Inquiries list ("N new RFQs assigned to you — client ·
+  assigned by X · Open →"). Opening the inquiry **clears** that user's note.
+- Typecheck + lint clean; `next build` compiles.
+
 ## 2026-08-14 · Inbound RFQs — fix misleading "not wired up / stays empty" banner
 - **Owner report:** the amber banner said the queue "stays empty" until the Resend webhook is set — misleading,
   since the `/rfq` web form already feeds the queue (RFQs were arriving; several handled).

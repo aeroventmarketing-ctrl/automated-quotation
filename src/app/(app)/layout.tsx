@@ -12,6 +12,7 @@ import { getWorkflowRoles, userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type Workflo
 import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import { getDashboardAlerts } from "@/lib/dashboard-alerts";
 import { getInboundQueue } from "@/lib/inbound-rfq";
+import { getInquiryAssignments } from "@/lib/inquiry-notifications";
 import { getAlertGoLive, alertsSuppressedNow } from "@/lib/alert-golive";
 import { AlertSuppressionProvider } from "@/components/alert-golive-context";
 
@@ -88,6 +89,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const pending = (await getInboundQueue().catch(() => [])).filter((i) => i.status === "pending").length;
     if (pending > 0) navCounts["/inbound-rfq"] = pending;
   }
+  // New RFQ inquiries assigned to this salesperson — a blinking count on Inquiries.
+  const assigned = (await getInquiryAssignments(user.id).catch(() => [])).length;
+  if (assigned > 0) navCounts["/inquiries"] = assigned;
 
   const layout = (
     <div className="flex min-h-screen flex-col">
