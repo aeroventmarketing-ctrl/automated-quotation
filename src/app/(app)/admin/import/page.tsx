@@ -266,6 +266,20 @@ export default function ImportPage() {
       </Card>
 
       <Card>
+        <CardHeader><CardTitle>Website price list</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Download every active catalogue item <strong>except fabricated fans &amp; blowers</strong>, with the
+            AeroQuote price and the website price (= AeroQuote price ÷ 0.95, rounded to the nearest ₱1 — covering the
+            5% online processing fee). Use it to price the online store.
+          </p>
+          <Button asChild variant="outline">
+            <a href="/api/admin/website-price-list">Download website price list (CSV)</a>
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle>Bulk import (CSV)</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
