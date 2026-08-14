@@ -18,6 +18,7 @@ import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } fro
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
 import { longLivedImageUrl } from "@/lib/storage";
 import { unsubscribeUrl } from "@/lib/marketing-unsubscribe";
+import { rfqToken } from "@/lib/rfq-link";
 import {
   getMarketingConfig,
   getMarketingRecipients,
@@ -235,10 +236,12 @@ export async function renderCampaignPreview(draft: CampaignDraft): Promise<Campa
   const recipient = sample
     ? { company: sample.company, contactName: sample.contactName }
     : { company: "Sample Company Inc.", contactName: "Juan Dela Cruz" };
+  const sampleId = sample?.id ?? "sample";
   const mail = buildCampaignEmail(draft, {
     recipient,
     imageUrls,
-    unsubscribeUrl: unsubscribeUrl(sample?.id ?? "sample"),
+    unsubscribeUrl: unsubscribeUrl(sampleId),
+    rfqPrefill: { customerId: sampleId, token: rfqToken(sampleId) },
   });
   return { subject: mail.subject, html: mail.html, text: mail.text, sampleTo: sample?.company ?? "a sample client" };
 }
@@ -304,6 +307,7 @@ export async function deliverCampaign(opts: {
         imageUrls,
         unsubscribeUrl: unsubscribeUrl(r.id),
         tracking: { base: trackBase, sendId, customerId: r.id },
+        rfqPrefill: { customerId: r.id, token: rfqToken(r.id) },
       });
       subjectSample = mail.subject;
       await sendEmail({ from, to: r.email, subject: mail.subject, text: mail.text, html: mail.html });
