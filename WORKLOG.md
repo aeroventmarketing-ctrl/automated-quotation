@@ -1,3 +1,17 @@
+## 2026-08-14 · Purchasing — split (multi-supplier) kept the child's approval (frozen Phase 4)
+- **Owner report (frozen Phase 4):** splitting an approved requisition across two suppliers sent one PO to
+  Accounting correctly, but the **other split-off list dropped back to Pending** — re-demanding the Payment
+  Approver's purchase approval even though the requisition was already approved.
+- **Root cause (`splitPurchaseRequest`):** the new child request was created with `status: APPROVED` but **none of
+  the approval stamps** — no `chainLog` (which carries `approve_po`) and no `decidedBy…`. For a material/MRF
+  requisition, `statusBucket` treats `APPROVED` **without** `approve_po` as **"pending"** (`purchasing.ts:63`), so
+  the child fell back into the Pending bucket while its sibling (which kept the PO + `approve_po`) proceeded.
+- **Fix:** the split now carries the parent's approval onto the child — `decidedById/decidedByName/decidedAt/
+  decisionNote` and the `chainLog` (with `approve_po`). Splitting is only ever allowed once the purchase is
+  approved (the guard blocks it while pending), so this stamp always exists on the parent; the child now stays at
+  **"Approved — awaiting its own PO"**, the Purchaser prepares the second supplier's PO, and it flows to Accounting
+  like the first. Typecheck + lint clean; `next build` compiles & type-validates.
+
 ## 2026-08-13 · Receipt reader — VIS Industrial + Trade One sales invoices
 - **Owner lessons (2 sales invoices):** VIS Industrial Corp. (No. 119839 → 20,320.00) and Trade One Incorporated
   (No. 000964 → 116,178.00). Both confirm the standing rule — the **VAT-inclusive gross** ("Total Sales (VAT

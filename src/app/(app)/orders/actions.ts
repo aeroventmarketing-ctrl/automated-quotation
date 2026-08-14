@@ -2948,6 +2948,18 @@ export async function splitPurchaseRequest(purchaseRequestId: string, moveItems:
         createdById: pr.createdById,
         createdByName: pr.createdByName,
         status: pr.status, // same approval level; starts with no PO of its own
+        // Carry the parent's approval onto the split-off request so it keeps the
+        // SAME stage — "Approved, awaiting its own PO" — instead of dropping back
+        // to Pending for a second purchase approval. Splitting is only allowed
+        // once the purchase is approved (out of the pending bucket, so approve_po
+        // is already stamped for a material/MRF requisition); the child needs only
+        // its own supplier PO next. Without this, a split material requisition
+        // reverts to Pending while its sibling proceeds to accounting.
+        decidedById: pr.decidedById,
+        decidedByName: pr.decidedByName,
+        decidedAt: pr.decidedAt,
+        decisionNote: pr.decisionNote,
+        ...(pr.chainLog ? { chainLog: pr.chainLog as Prisma.InputJsonValue } : {}),
       },
     });
     await tx.purchaseRequest.update({
