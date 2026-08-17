@@ -1,3 +1,26 @@
+## 2026-08-17 · Public Fan Selector API (for the online store's HVAC Tools page)
+- **Goal.** The store's HVAC Tools page needs a real "Fan Selector" that sizes an AeroVent fan/blower for a visitor's
+  duty — **performance shown, prices NOT** (the standing rule).
+- **New route `src/app/api/public/fan-select/route.ts`** — an unauthenticated, CORS-open (`*`) POST endpoint that runs
+  the **same selection engine** the staff quotation builder uses (`selectFans` in `src/lib/selection`). It is
+  performance-only by construction: `SelectionResult` carries **no price field** (prices live in a separate price map
+  applied only inside the app), and `toPublicResult()` is a second guard that whitelists exactly the performance
+  fields exposed (model, size, rpm, motor HP/kW/pole, blade angle, delivered airflow, static pressure, BHP/kW,
+  efficiency, outlet velocity, confidence, warnings) — never the internal catalogue id or any cost.
+  - Takes `{ airflow, airflowUnit(cfm|m3hr), staticPressure, pressureUnit(inwg|pa), tag? }`; units resolved via
+    `lib/requirement.toDutyPoint` (same as the staff route).
+  - Only the curated families in `PUBLIC_FAMILIES` are reachable (CEB/CFAB/CIEB/DIDW, EWF/FAWF/PRV belt+direct,
+    TAF/VAF). An unknown tag is rejected; blank tag sweeps the centrifugal flagships. Propeller/roof families default
+    to 0.5" w.g. when no SP is given (matches the staff route). Direct-only families fix the drive server-side.
+  - Returns the recommended pick centred in a ±3-size window (same UX as the internal selector). `GET` returns the
+    family + unit lists for discovery. `OPTIONS` handles the CORS preflight.
+- **`middleware.ts`:** added `/api/public/` to `PUBLIC_PATHS` so the store (no login cookies, cross-origin) can reach
+  it. Scope is deliberately broad-but-safe: read-only public data APIs only.
+- **Store embed:** `hvac-tools-embed.html` gains a **Fan Selector** tab (now the flagship first tab) that POSTs to the
+  API and renders the ranked selections with a RECOMMENDED badge + confidence, and a "Request a Quotation" CTA. No
+  price is ever shown.
+- Typecheck + lint clean. (Selection engine is **not** a frozen area — only Order Phases 1–5 are.)
+
 ## 2026-08-17 · Marketing images — the actual root cause: auth middleware (make route public)
 - **The real reason images never showed.** DevTools Network revealed every `<img>` request to
   `/api/marketing-image/…` was being **302'd to `/login?next=…`** and failing (`ERR_BLOCKED`). The route was **not in
