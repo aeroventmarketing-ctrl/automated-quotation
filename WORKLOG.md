@@ -1,3 +1,13 @@
+## 2026-08-17 · Marketing images — fix broken images (query `&` → path URL)
+- **Follow-up to the entry below.** The first version put the token in a query string
+  (`/api/marketing-image?p=<path>&t=<token>`). In the email HTML the `&` is (correctly) escaped to `&amp;`, but
+  mail clients then parse the second param as **`amp;t`** — so `t` arrives empty, the token check fails, and every
+  image 404s ("Not found"). Confirmed live: the same URL with a literal `&` loaded the image fine.
+- **Fix:** the token + path now live in the URL **path** — `…/api/marketing-image/<token>/<storage-path>` — so there's
+  no `&` to escape. Route moved to `src/app/api/marketing-image/[token]/[...path]/route.ts`; `marketingImageUrl()`
+  builds the path form. Token scheme / redirect-to-signed-URL behaviour unchanged.
+- Typecheck + lint clean; `next build` compiles (pre-existing `/reset-password` prerender error only).
+
 ## 2026-08-17 · Marketing emails — serve images from our sending domain (deliverability)
 - **Owner report:** Resend's "Needs attention" insight flagged **"Host images on the sending domain"** — campaign
   emails embedded raw Supabase Storage URLs (`…supabase.co/storage/v1/object/sign/…`), which Gmail treats as a mild
