@@ -1,3 +1,14 @@
+## 2026-08-17 · Marketing images — stream bytes instead of redirecting
+- **Follow-up.** With the path-URL fix, opening an image URL directly worked (302 → signed Supabase URL → image),
+  but the image still rendered **broken when embedded** — in the in-app live preview *and* mail clients. Cause: an
+  embedded `<img>` (mail-client image proxy / sandboxed preview iframe) doesn't reliably follow a **cross-origin 302**
+  redirect, even though direct navigation does. (No CSP involved — confirmed none in the app.)
+- **Fix:** the proxy route now **streams the image bytes back directly** (a same-origin `200` with the image body +
+  `Content-Type` + long `Cache-Control`) instead of 302-redirecting to Supabase. New `downloadBytes()` in
+  `storage.ts`; the route downloads via the service client and returns the bytes. The raw signed URL never leaves the
+  server. Token scheme / path-URL shape unchanged.
+- Typecheck + lint clean; `next build` compiles (pre-existing `/reset-password` prerender error only).
+
 ## 2026-08-17 · Marketing images — fix broken images (query `&` → path URL)
 - **Follow-up to the entry below.** The first version put the token in a query string
   (`/api/marketing-image?p=<path>&t=<token>`). In the email HTML the `&` is (correctly) escaped to `&amp;`, but

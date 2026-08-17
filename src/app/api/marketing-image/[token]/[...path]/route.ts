@@ -1,20 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { signedUrl } from "@/lib/storage";
+import { downloadBytes } from "@/lib/storage";
 import { verifyMarketingImageToken } from "@/lib/marketing-image-link";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 /**
  * Public marketing-image proxy. Campaign emails embed
  * {appUrl}/api/marketing-image/<token>/<storage-path> (see marketing-image-link.ts)
  * so images load from our sending domain instead of a raw supabase.co URL — a
  * Resend / Gmail deliverability best practice ("Host images on the sending
- * domain"). The token + path live in the URL *path* (not the query string) so
- * HTML-escaping of "&" in the email can't split the token off. This verifies the
- * HMAC token (only the marketing/ scope is reachable, unforgeable) and
- * 302-redirects to a freshly-signed, short-lived Supabase URL. No auth — it's the
- * recipient's mail client fetching it.
+ * domain").
+ *
+ * It **streams the image bytes back directly** (a 200 response) rather than
+ * redirecting to a signed Supabase URL: an embedded `<img>` (in a mail client's
+ * image proxy, or a sandboxed preview iframe) doesn't reliably follow a
+ * cross-origin 302, so a redirect leaves the image broken even though the URL
+ * works on direct navigation. A same-origin 200 with the image body always loads.
+ *
+ * The token + path live in the URL path (not the query string) so HTML-escaping
+ * of "&" can't split the token off. Verifies the HMAC token (marketing/ scope
+ * only, unforgeable). No auth — it's the recipient's mail client fetching it.
  */
 export async function GET(
   _req: NextRequest,
@@ -26,12 +33,19 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
   try {
-    // Fresh signed URL, valid long enough for the mail proxy to follow the
-    // redirect and fetch/cache the image. The token above is permanent, so the
-    // image stays reachable via this route for emails opened weeks later.
-    return NextResponse.redirect(await signedUrl(path, 60 * 60), 302);
+    const { bytes, contentType } = await downloadBytes(path);
+    const body = new Uint8Array(bytes);
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType.startsWith("image/") ? contentType : "image/jpeg",
+        "Content-Length": String(body.byteLength),
+        // Uniquely-named objects never change, so let clients / mail proxies cache hard.
+        "Cache-Control": "public, max-age=604800, immutable",
+      },
+    });
   } catch (err) {
     console.error("marketing image proxy error", err);
-    return new NextResponse("Could not open the image.", { status: 502 });
+    return new NextResponse("Not found", { status: 404 });
   }
 }

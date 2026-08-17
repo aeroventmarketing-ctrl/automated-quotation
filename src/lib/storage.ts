@@ -36,6 +36,14 @@ export async function downloadFromStorage(path: string): Promise<{ base64: strin
   return { base64: buf.toString("base64"), contentType: data.type || "application/octet-stream" };
 }
 
+/** Download a stored object as raw bytes + content type (for streaming it back). */
+export async function downloadBytes(path: string): Promise<{ bytes: Buffer; contentType: string }> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.storage.from(config.storageBucket).download(path);
+  if (error || !data) throw error ?? new Error("Download failed");
+  return { bytes: Buffer.from(await data.arrayBuffer()), contentType: data.type || "application/octet-stream" };
+}
+
 /**
  * A short-lived signed URL for a stored object. Pass `download` to force a
  * download (a filename string sets the saved name; `true` uses the stored one);
