@@ -1,3 +1,16 @@
+## 2026-08-17 · Marketing images — the actual root cause: auth middleware (make route public)
+- **The real reason images never showed.** DevTools Network revealed every `<img>` request to
+  `/api/marketing-image/…` was being **302'd to `/login?next=…`** and failing (`ERR_BLOCKED`). The route was **not in
+  `middleware.ts`'s `PUBLIC_PATHS` allowlist**, so the auth middleware gated it. A logged-in browser opening the URL
+  directly passed (cookies present) — which is why direct opens always worked — but an embedded `<img>` (the
+  `about:srcdoc` preview iframe, and recipients' mail-client image proxies) sends **no login cookies**, so it was
+  redirected to the login page. The request never reached the route; none of the URL/streaming changes could matter.
+- **Fix:** add `/api/marketing-image` to `PUBLIC_PATHS` (same as `/api/marketing-track`, `/unsubscribe`, `/rfq`). Safe
+  — the route is already HMAC-token-checked and scoped to `marketing/` only.
+- The three prior changes remain correct and necessary (on-domain URL, path form to dodge `&amp;`, streaming bytes to
+  dodge the cross-origin redirect); this allowlist entry is what finally lets mail clients reach it.
+- Typecheck + lint clean.
+
 ## 2026-08-17 · Marketing images — stream bytes instead of redirecting
 - **Follow-up.** With the path-URL fix, opening an image URL directly worked (302 → signed Supabase URL → image),
   but the image still rendered **broken when embedded** — in the in-app live preview *and* mail clients. Cause: an

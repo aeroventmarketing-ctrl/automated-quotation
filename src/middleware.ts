@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth/signout", "/offline", "/q/", "/api/cron/", "/unsubscribe", "/api/marketing-track", "/rfq", "/api/rfq"]; // /q/ = public shared quote links; /api/cron/ = scheduler (secret-checked in the route); /unsubscribe = marketing opt-out (HMAC-token-checked); /api/marketing-track = email open/click pixel; /rfq + /api/rfq = public RFQ intake form (honeypot + rate-limited; a valid ?c/&t prefill token is HMAC-checked). NOTE: /api/rfq-uploads/view is deliberately NOT public — attachments are staff-only.
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth/signout", "/offline", "/q/", "/api/cron/", "/unsubscribe", "/api/marketing-track", "/api/marketing-image", "/rfq", "/api/rfq"]; // /q/ = public shared quote links; /api/cron/ = scheduler (secret-checked in the route); /unsubscribe = marketing opt-out (HMAC-token-checked); /api/marketing-track = email open/click pixel; /api/marketing-image = campaign image proxy (HMAC-token-checked, marketing/ scope only) — must be public so recipients' mail clients (no login cookies) can load it; /rfq + /api/rfq = public RFQ intake form (honeypot + rate-limited; a valid ?c/&t prefill token is HMAC-checked). NOTE: /api/rfq-uploads/view is deliberately NOT public — attachments are staff-only.
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
