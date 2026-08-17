@@ -10,11 +10,17 @@
  * unsubscribe links). The public route verifies the token and 302-redirects to a
  * freshly-signed URL — so the raw signed URL never appears in the email and the
  * images load from our own domain (a subdomain of the sending domain).
+ *
+ * The token and path go in the URL *path* (…/api/marketing-image/<token>/<path>),
+ * not the query string: an `&` between query params gets HTML-escaped to `&amp;`
+ * in the email body, which mail clients then mis-parse (the token param arrives as
+ * `amp;t`), so the token would be dropped and every image 404s. A path URL has no
+ * `&` to escape.
  */
 import { createHmac } from "crypto";
 import { config } from "@/lib/config";
 
-/** The public path the marketing image proxy lives at. */
+/** The public base path the marketing image proxy lives at. */
 export const MARKETING_IMAGE_PATH = "/api/marketing-image";
 
 function secret(): string {
@@ -38,11 +44,13 @@ export function verifyMarketingImageToken(path: string, token: string): boolean 
 
 /**
  * The absolute, on-our-domain URL a mail client loads to fetch a stored
- * marketing image. Points at the public proxy route (which redirects to a
- * short-lived signed Supabase URL at fetch time). The token is permanent, so the
- * link keeps working for emails opened weeks later.
+ * marketing image: …/api/marketing-image/<token>/<path> (path segments, no query
+ * string — see the note above). Redirects to a short-lived signed Supabase URL at
+ * fetch time; the token is permanent, so the link keeps working for emails opened
+ * weeks later.
  */
 export function marketingImageUrl(path: string): string {
   const base = config.appUrl.replace(/\/+$/, "");
-  return `${base}${MARKETING_IMAGE_PATH}?p=${encodeURIComponent(path)}&t=${marketingImageToken(path)}`;
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  return `${base}${MARKETING_IMAGE_PATH}/${marketingImageToken(path)}/${encodedPath}`;
 }

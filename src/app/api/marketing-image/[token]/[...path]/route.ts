@@ -7,16 +7,21 @@ export const dynamic = "force-dynamic";
 
 /**
  * Public marketing-image proxy. Campaign emails embed
- * {appUrl}/api/marketing-image?p=<path>&t=<token> (see marketing-image-link.ts)
+ * {appUrl}/api/marketing-image/<token>/<storage-path> (see marketing-image-link.ts)
  * so images load from our sending domain instead of a raw supabase.co URL — a
  * Resend / Gmail deliverability best practice ("Host images on the sending
- * domain"). This verifies the HMAC token, then 302-redirects to a freshly-signed,
- * short-lived Supabase URL. No auth — it's the recipient's mail client fetching
- * it — but the token can't be forged and only the marketing/ scope is reachable.
+ * domain"). The token + path live in the URL *path* (not the query string) so
+ * HTML-escaping of "&" in the email can't split the token off. This verifies the
+ * HMAC token (only the marketing/ scope is reachable, unforgeable) and
+ * 302-redirects to a freshly-signed, short-lived Supabase URL. No auth — it's the
+ * recipient's mail client fetching it.
  */
-export async function GET(req: NextRequest) {
-  const path = req.nextUrl.searchParams.get("p") ?? "";
-  const token = req.nextUrl.searchParams.get("t") ?? "";
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ token: string; path: string[] }> },
+) {
+  const { token, path: segments } = await params;
+  const path = (segments ?? []).join("/");
   if (!path.startsWith("marketing/") || !verifyMarketingImageToken(path, token)) {
     return new NextResponse("Not found", { status: 404 });
   }
