@@ -16,7 +16,7 @@ import { config as appConfig } from "@/lib/config";
 import { calendarDaysBetween } from "@/lib/follow-up";
 import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
-import { longLivedImageUrl } from "@/lib/storage";
+import { marketingImageUrl } from "@/lib/marketing-image-link";
 import { unsubscribeUrl } from "@/lib/marketing-unsubscribe";
 import { rfqToken } from "@/lib/rfq-link";
 import {
@@ -206,15 +206,14 @@ export async function sendMarketingCampaign(opts: {
 // Rich campaign builder — a structured, sectioned promotional email.
 // ===========================================================================
 
-/** Resolve every image path referenced by a draft to a long-lived signed URL. */
-async function resolveCampaignImageUrls(draft: CampaignDraft): Promise<Record<string, string>> {
-  const paths = campaignImagePaths(draft);
+/**
+ * Map every image path referenced by a draft to an on-our-domain image URL
+ * (the /api/marketing-image proxy). Emails load images from our sending domain
+ * rather than raw supabase.co URLs — a Resend/Gmail deliverability best practice.
+ */
+function resolveCampaignImageUrls(draft: CampaignDraft): Record<string, string> {
   const urls: Record<string, string> = {};
-  await Promise.all(
-    paths.map(async (p) => {
-      try { urls[p] = await longLivedImageUrl(p); } catch { /* drop broken image silently */ }
-    }),
-  );
+  for (const p of campaignImagePaths(draft)) urls[p] = marketingImageUrl(p);
   return urls;
 }
 
@@ -230,7 +229,7 @@ export interface CampaignPreview {
  * would be sent. Used by the builder's live preview. Sends nothing.
  */
 export async function renderCampaignPreview(draft: CampaignDraft): Promise<CampaignPreview> {
-  const imageUrls = await resolveCampaignImageUrls(draft);
+  const imageUrls = resolveCampaignImageUrls(draft);
   // Personalize against a real recipient when one exists, else a placeholder.
   const [sample] = await getMarketingRecipients("all");
   const recipient = sample
@@ -286,7 +285,7 @@ export async function deliverCampaign(opts: {
   const list = opts.recipients;
   const accounts = await getAccountsRegistry();
   const from = senderFrom(opts.draft.senderName);
-  const imageUrls = effectiveLive ? await resolveCampaignImageUrls(opts.draft) : {};
+  const imageUrls = effectiveLive ? resolveCampaignImageUrls(opts.draft) : {};
   const sendId = randomUUID();
   const trackBase = appConfig.appUrl.replace(/\/+$/, "");
 
@@ -380,7 +379,7 @@ export async function sendCampaignTest(opts: { draft: CampaignDraft; toEmail: st
   if (!emailConfigured() || !appConfig.followUpFromEmail) {
     return { ok: false, reason: !emailConfigured() ? "no Resend API key configured" : "no sender address configured (FOLLOW_UP_FROM_EMAIL)" };
   }
-  const imageUrls = await resolveCampaignImageUrls(opts.draft);
+  const imageUrls = resolveCampaignImageUrls(opts.draft);
   const mail = buildCampaignEmail(opts.draft, {
     recipient: { company: "Sample Company Inc.", contactName: "Juan Dela Cruz" },
     imageUrls,

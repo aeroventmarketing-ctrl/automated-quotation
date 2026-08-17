@@ -1,3 +1,23 @@
+## 2026-08-17 · Marketing emails — serve images from our sending domain (deliverability)
+- **Owner report:** Resend's "Needs attention" insight flagged **"Host images on the sending domain"** — campaign
+  emails embedded raw Supabase Storage URLs (`…supabase.co/storage/v1/object/sign/…`), which Gmail treats as a mild
+  spam signal since they don't match the sending domain (`aeroventfbm.shop`).
+- **Change:** campaign image `<img src>`s now point at our own domain instead of `supabase.co`.
+  - New `src/lib/marketing-image-link.ts` — `marketingImageUrl(path)` builds `{appUrl}/api/marketing-image?p=<path>&t=<token>`,
+    where `t` is an HMAC of the storage path (same scheme as the RFQ / unsubscribe links; permanent, so links keep
+    working for emails opened weeks later).
+  - New public route `src/app/api/marketing-image/route.ts` — verifies the token (only the `marketing/` scope is
+    reachable, token unforgeable) and **302-redirects to a freshly-signed, short-lived (1 h) Supabase URL**. Gmail's
+    image proxy follows the redirect, so images still load — but from our domain — and the raw signed URL never
+    appears in the email HTML.
+  - `resolveCampaignImageUrls()` (`marketing-runner.ts`) now emits `marketingImageUrl(p)` instead of
+    `longLivedImageUrl(p)` (the ~3-yr Supabase signed URL). Now synchronous; the three call sites drop their `await`.
+- Since the app runs on `quote.aeroventfbm.shop` — a **subdomain** of the `aeroventfbm.shop` sending domain — this
+  fully satisfies Resend's "sending domain or a subdomain" rule. No env changes needed. (Only the rich campaign
+  builder embeds Storage images; the plain follow-up emails are unaffected.)
+- Typecheck + lint clean; `next build` compiles (only the pre-existing `/reset-password` prerender error, from the
+  build sandbox lacking Supabase env, remains — unrelated).
+
 ## 2026-08-14 · Website price list export (for the online store)
 - **Owner request:** get Name + price of all products **except fabricated Fans & Blowers** from AeroQuote, with a
   website price = AeroQuote price ÷ 0.95 (rounded to nearest ₱1) to cover the 5% online processing fee.
