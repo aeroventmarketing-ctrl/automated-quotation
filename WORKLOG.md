@@ -1,3 +1,26 @@
+## 2026-08-19 · Bought-in / Office requisition — one approval moves it to the Approved tab
+- **Request (owner, frozen Phase 4).** Office requisitions still carried the department **two-stage** approval
+  (`approve` → `approve_po`): after one "Approve Purchase" the request was APPROVED but `poApproved` was still false, so
+  `statusBucket` kept it in **Pending** awaiting a second approval — it never moved to the Approved tab.
+- **Fix (minimal, no signature churn).** In `advancePurchaseRequest`, the `approve` step on a bought-in / Office
+  requisition (`isDept && !requisitionNeedsPlantApproval(pr)`) now **also stamps `approve_po`** in the same action.
+  So one Payment-Approver click makes it fully purchase-approved (`poApproved = true`) → `statusBucket` returns
+  **approved** → it moves straight to the **Approved / For-purchasing** tab with PO-prep enabled and no redundant
+  second approval. Production-dept / MRF requisitions keep the two-stage flow unchanged.
+- Chosen over rewiring `purchaseStepsFrom` / `statusBucket` across 11 call sites (where `isDept` is reused for other
+  purposes) — this is one targeted branch. Typecheck + lint clean.
+
+## 2026-08-19 · Purchasing badge — match "no Plant Manager" for bought-in / Office requisitions
+- **Request (owner, frozen Phase 4).** After bought-in/Office requisitions were set to skip the Plant Manager, the
+  orange status badge still read "Plant Manager approved — awaiting purchase approval" — inconsistent with the
+  Payment-Approver "Approve Purchase" button and the awaiting label.
+- **Fix (display only).** Added `needsPlantApproval` to the purchase-chain row (set via `requisitionNeedsPlantApproval`
+  in `purchase-chain-row.ts` and the order-page inline builder). In `purchasing-chain.tsx` the badge now reads
+  **"Awaiting purchase approval"** when `needsPlantApproval === false` (bought-in / Office), and keeps
+  **"Plant Manager approved — awaiting purchase approval"** for production-dept / MRF requisitions. Backward-compatible
+  (undefined → the PM label).
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Bought-in / Office requisitions skip Plant Manager approval
 - **Request (owner, frozen Phase 4).** A bought-in item follows the bought-in flow — **no Plant Manager approval**.
   But a bought-in/Office requisition that landed in `PENDING_APPROVAL` (e.g. via an admin roll-back) showed the
