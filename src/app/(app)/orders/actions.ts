@@ -46,7 +46,7 @@ import {
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
-import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, requisitionNeedsPlantApproval, isDeptRequisition, isCancellable, statusBucket, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
@@ -1219,10 +1219,7 @@ async function autoRaiseBoughtInRequisition(
   const boughtIn = orderBoughtInLines(items);
   if (boughtIn.length === 0) return;
   const lines = boughtIn.map((b) => {
-    // Keep the short supplier name as the line (for the summary + stock match) and
-    // attach the full quotation spec as the remark so the purchasing tab shows the
-    // item's details. The remark uses " / " (not " · ") so it survives PO parsing.
-    const line = mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit", remark: b.description || undefined });
+    const line = mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit" });
     return b.unitPrice != null ? `${line} · @${b.unitPrice}` : line;
   });
   await prisma.$transaction(async (tx) => {
@@ -2119,10 +2116,9 @@ export async function advancePurchaseRequest(
   if (!pr) throw new Error("Purchase request not found");
 
   const isDept = isDeptRequisition(pr);
-  // Production-dept / material requisitions: the Plant Manager approves (approve),
-  // then the Approver approves the raised PO (approve_po). Bought-in / Office
-  // requisitions skip the Plant Manager — their approval is the Payment Approver's.
-  const stepRole = effectiveStepRole(step, requisitionNeedsPlantApproval(pr));
+  // Department / material requisitions: the Plant Manager approves the MRF
+  // (approve), then the Approver approves the raised PO (approve_po).
+  const stepRole = effectiveStepRole(step, isDept);
   const roles = await getWorkflowRoles();
   const holdsStepRole = userHasWorkflowRole(roles, user.id, stepRole);
   // The Purchaser may also reject a still-pending purchase request (reject /
@@ -2171,12 +2167,6 @@ export async function advancePurchaseRequest(
       // the Purchaser — not the approving role — turns the request away.
       if (stepKey === "reject") {
         data.chainLog = { ...chainLogBase, reject: { byName: user.name, at: now.toISOString(), role: actorRoleLabel } } as Prisma.InputJsonValue;
-      } else if (stepKey === "approve" && isDept && !requisitionNeedsPlantApproval(pr)) {
-        // Bought-in / Office requisitions are single-stage: they skip the Plant
-        // Manager, so the Payment Approver's approval IS the purchase approval.
-        // Stamp approve_po in the same action so it moves straight to the Approved
-        // / For-purchasing tab — no redundant second approval.
-        data.chainLog = { ...chainLogBase, approve_po: { byName: user.name, at: now.toISOString(), role: actorRoleLabel } } as Prisma.InputJsonValue;
       }
       break;
     case "voucher":
@@ -3122,9 +3112,8 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
   if (!step) throw new Error("Unknown step");
   const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
   if (!anchor) throw new Error("Purchase request not found");
-  // Production-dept / material requisitions are approved/rejected by the Plant
-  // Manager (step 16); bought-in / Office ones skip it (Payment Approver approves).
-  const stepRole = effectiveStepRole(step, requisitionNeedsPlantApproval(anchor));
+  // Department / material requisitions are approved/rejected by the Plant Manager (step 16).
+  const stepRole = effectiveStepRole(step, isDeptRequisition(anchor));
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, stepRole))) {
     throw new Error(`Only ${workflowRoleLabel(stepRole)} or an admin can do this.`);
   }

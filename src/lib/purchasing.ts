@@ -158,15 +158,14 @@ export function isPoApproved(chainLog: unknown): boolean {
 }
 
 /**
- * The role that acts on a step for a given request. For a requisition that needs
- * Plant Manager approval (production-department / MRF-escalated), the initial
- * approval / rejection is done by the Plant Manager (workflow step 16) rather than
- * the Payment Approver. Bought-in / Office requisitions skip the Plant Manager —
- * their approval is the Payment Approver's purchase approval — so pass
- * `needsPlantApproval = false` for them. Every other step is unchanged.
+ * The role that acts on a step for a given request. For a department (warehouse)
+ * requisition — raised when supplies aren't available — the initial approval /
+ * rejection is done by the Plant Manager (workflow step 16) rather than the
+ * Payment Approver. Every other step, and all order-linked requests, are
+ * unchanged.
  */
-export function effectiveStepRole(step: PurchaseStepDef, needsPlantApproval: boolean): WorkflowRoleKey {
-  if (needsPlantApproval && (step.key === "approve" || step.key === "reject")) return "plant_manager";
+export function effectiveStepRole(step: PurchaseStepDef, isDepartment: boolean): WorkflowRoleKey {
+  if (isDepartment && (step.key === "approve" || step.key === "reject")) return "plant_manager";
   return step.role;
 }
 
@@ -179,17 +178,6 @@ export function effectiveStepRole(step: PurchaseStepDef, needsPlantApproval: boo
  */
 export function isDeptRequisition(pr: { kind?: string | null; mrfId?: string | null }): boolean {
   return pr.kind === "department" || pr.mrfId != null;
-}
-
-/**
- * Whether a requisition's initial approval is the Plant Manager's. TRUE for
- * production-department & MRF-escalated requisitions (materials that aren't on
- * hand). FALSE for **bought-in / Office** requisitions — those are resale/office
- * goods bought per order and skip the Plant Manager, going straight to the
- * Payment Approver's purchase approval. (OFFICE_DEPT_KEY = "office".)
- */
-export function requisitionNeedsPlantApproval(pr: { kind?: string | null; mrfId?: string | null; dept?: string | null }): boolean {
-  return isDeptRequisition(pr) && pr.dept !== "office";
 }
 
 export function purchaseStep(key: string): PurchaseStepDef | undefined {

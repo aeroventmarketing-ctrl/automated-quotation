@@ -19,7 +19,7 @@ import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notif
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { payableTotal } from "@/lib/quote";
-import { purchaseStepsFrom, effectiveStepRole, requisitionNeedsPlantApproval, isDeptRequisition, isPoApproved, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
@@ -328,7 +328,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         continue;
       }
       const steps = purchaseStepsFrom(pr.status as PRStatus, isDept, poApproved);
-      const roles = steps.map((s) => effectiveStepRole(s, requisitionNeedsPlantApproval(pr)));
+      const roles = steps.map((s) => effectiveStepRole(s, isDept));
       if (!roles.some((r) => has(r))) continue;
       tasks.push({
         key: `pr:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,

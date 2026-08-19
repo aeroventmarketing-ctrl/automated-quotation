@@ -177,7 +177,7 @@ export function isServiceLine(specs: Specs, description = ""): boolean {
  */
 export function orderBoughtInLines(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
-): { name: string; description: string; qty: number; unitPrice: number | null }[] {
+): { name: string; qty: number; unitPrice: number | null }[] {
   const lines = items
     .filter((it) => {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
@@ -208,25 +208,16 @@ export function orderBoughtInLines(
         const detail = [size ? `${size}"` : "", matLabel].filter(Boolean).join(" ");
         if (detail) name = `${name} — ${detail}`;
       }
-      // Full spec detail carried from the quotation line (multi-line description
-      // flattened with " / "), dropping any line already covered by the name so
-      // the requisition/PO shows the specs without redundancy.
-      const nameLower = name.toLowerCase();
-      const description = str(it.descriptionSnapshot)
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .filter((s) => s && !nameLower.includes(s.toLowerCase()))
-        .join(" / ");
       // Supplier unit price from the product's price grid (WDRV: size × material).
       const grid = windVentSupplierCost(specs);
-      return { name, description, qty: Number(it.qty) || 1, unitPrice: grid ? grid.unitCost : null };
+      return { name, qty: Number(it.qty) || 1, unitPrice: grid ? grid.unitCost : null };
     });
 
   // Combine identical products — same name means same product, size & material —
   // into one line, summing the quantity, so the requisition / PO shows a single
   // row per product (e.g. 4 + 8 + 5 → one line of 17) instead of a row per
   // quotation line.
-  const combined = new Map<string, { name: string; description: string; qty: number; unitPrice: number | null }>();
+  const combined = new Map<string, { name: string; qty: number; unitPrice: number | null }>();
   for (const l of lines) {
     const key = `${l.name}||${l.unitPrice ?? ""}`;
     const existing = combined.get(key);

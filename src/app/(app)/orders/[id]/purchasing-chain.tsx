@@ -60,9 +60,6 @@ interface PRRow {
   canOverride?: boolean;
   priorStatuses?: { key: string; label: string }[];
   isDept?: boolean;
-  // Whether this requisition's approval is the Plant Manager's (production-dept /
-  // MRF). False for bought-in / Office requisitions, which skip the Plant Manager.
-  needsPlantApproval?: boolean;
   poApproved?: boolean;
   canPurchaserReject?: boolean;
   canPreparePO?: boolean;
@@ -265,13 +262,9 @@ export function PurchasingChain({
   return (
     <div className="space-y-3">
       {requests.map((r) => {
-        // Order MATERIAL requests (escalated from an MRF — they carry an mrfNo and
-        // appear on the order's Phase 3 Materials tab) are approved there, so drop
-        // their approve/reject here to avoid doing it in two places. A DIRECT
-        // bought-in / department requisition has no MRF (no mrfNo) and never shows
-        // on the Materials tab, so its approval must stay available here — otherwise
-        // it has nowhere to be approved.
-        const hideApproval = hideRequisitionApproval && !!r.isDept && !!r.mrfNo;
+        // Order material requests are approved on the order's Phase 3 Materials
+        // tab — drop their approve/reject here so it isn't done in two places.
+        const hideApproval = hideRequisitionApproval && !!r.isDept;
         const shownActions = hideApproval ? r.actions.filter((a) => a.key !== "approve" && a.key !== "reject") : r.actions;
         const actionable = shownActions.filter((a) => a.canAct);
         const awaiting = shownActions.find((a) => !a.canAct);
@@ -288,9 +281,7 @@ export function PurchasingChain({
         const requisitionAwaitingPO =
           r.status === "APPROVED" && !r.po && (!r.isDept || r.poApproved);
         const statusLabel = requisitionAwaitingApproval
-          ? r.needsPlantApproval === false
-            ? "Awaiting purchase approval" // bought-in / Office — no Plant Manager stage
-            : "Plant Manager approved — awaiting purchase approval"
+          ? "Plant Manager approved — awaiting purchase approval"
           : requisitionAwaitingPO
           ? "Approved — awaiting Purchase Order"
           : r.statusLabel;
