@@ -95,7 +95,7 @@ function OfficeTransferRow({ t, admin }: { t: StockTransferView; admin: boolean 
           {!t.canApprove && t.status === "REQUESTED" && <span className="text-[11px] text-muted-foreground">Awaiting Plant Manager approval.</span>}
           {!t.canRelease && t.status === "APPROVED" && <span className="text-[11px] text-muted-foreground">Awaiting Warehouse release.</span>}
           {!t.canDeliver && t.status === "RELEASED" && <span className="text-[11px] text-muted-foreground">Awaiting Logistics delivery.</span>}
-          {!t.canReceive && t.status === "DELIVERING" && <span className="text-[11px] text-muted-foreground">Awaiting Office (Sales) receipt.</span>}
+          {!t.canReceive && t.status === "DELIVERING" && <span className="text-[11px] text-muted-foreground">Awaiting Office receipt (Sales or Purchaser).</span>}
         </div>
       )}
       {err && <p className="mt-1 text-xs text-destructive">{err}</p>}

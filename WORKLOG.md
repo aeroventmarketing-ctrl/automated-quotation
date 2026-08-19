@@ -1,3 +1,11 @@
+## 2026-08-19 · Office stock transfer — Purchaser can confirm "Office received"
+- **Request (owner).** Authorize the **Purchaser** to press **Office Received** on an office stock transfer (was
+  Sales / admin only).
+- **Change (inventory office-transfer, not frozen).** `receiveOfficeTransfer` now also accepts the **purchaser**
+  workflow role (`isAdmin || SALES || purchaser`), and the order page passes `canReceive = viewerIsSales ||
+  viewerIsPurchaser`, so the button shows for the Purchaser. The "awaiting" hint now reads "Sales or Purchaser".
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Inventory — read-only view for Sales (no unit cost)
 - **Request (owner).** Let the **Sales** role see Inventory, but **not the unit price** (supplier cost).
 - **Change (permissions/UI, not frozen).** Sales now pass `canView` on the Inventory page and get the **Inventory** nav
