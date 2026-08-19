@@ -181,7 +181,7 @@ export function FollowUpSetting({
         inquiryEnabled: next?.inquiryEnabled ?? inquiryEnabled,
         inquiryEveryDays: Number.isFinite(wantEvery) && wantEvery > 0 ? wantEvery : 30,
         inquiryMaxNudges: Number.isFinite(wantInqMax) && wantInqMax >= 1 ? wantInqMax : 6,
-        maxPerRun: Number.isFinite(wantPerRun) && wantPerRun >= 1 ? wantPerRun : 100,
+        maxPerRun: Number.isFinite(wantPerRun) && wantPerRun >= 0 ? wantPerRun : 100,
         campaignStartAt: campaignAt,
       });
       setDaysStr(saved.offsetsDays.join(", "));
@@ -332,7 +332,7 @@ export function FollowUpSetting({
             </div>
             <div className="space-y-1">
               <Label htmlFor="fu-perrun" className="text-xs">Max emails per run</Label>
-              <Input id="fu-perrun" type="number" min={1} max={100} value={maxPerRun} onChange={(e) => setMaxPerRun(e.target.value)} className="h-9 w-28" />
+              <Input id="fu-perrun" type="number" min={0} value={maxPerRun} onChange={(e) => setMaxPerRun(e.target.value)} className="h-9 w-28" />
             </div>
             <Button onClick={() => save()} disabled={busy} size="sm">
               {busy ? "Saving…" : "Save cadence"}
@@ -340,7 +340,9 @@ export function FollowUpSetting({
           </div>
           <p className="text-[11px] text-muted-foreground">
             <strong>Max emails per run</strong> throttles each send for domain warm-up — e.g. set it to
-            <strong> 24</strong> to email 24 clients per run; the rest stay due for the next run (max 100).
+            <strong> 24</strong> to email 24 clients per run; the rest stay due for the next run. Set it to
+            <strong> 0</strong> for no limit (email every due client in one run — watch deliverability &amp; your
+            Resend quota).
           </p>
 
           {/* Backlog campaign — make the whole open-sent-quote backlog due for its

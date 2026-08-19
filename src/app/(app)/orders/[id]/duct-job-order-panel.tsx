@@ -10,6 +10,7 @@ import {
   EMPTY_DUCT_SEGMENT,
   formatDuctJoNumber,
   formatSegmentDimensions,
+  ductUnitLabel,
   isReducingDuctType,
   DUCT_TYPES,
   DUCT_DAMPER_TYPES,
@@ -251,10 +252,10 @@ function DuctJobOrderForm({
                 <>
                   <SegField label="→ Horizontal" value={seg.toHorizontal} onChange={(v) => setSeg(i, { toHorizontal: v })} />
                   <SegField label="→ Vertical" value={seg.toVertical} onChange={(v) => setSeg(i, { toVertical: v })} />
-                  <SegField label="Length (mm)" value={seg.length} onChange={(v) => setSeg(i, { length: v })} />
+                  <SegField label={`Length (${ductUnitLabel(seg.unit)})`} value={seg.length} onChange={(v) => setSeg(i, { length: v })} />
                 </>
               ) : (
-                <SegField label="Length (mm)" value={seg.length} onChange={(v) => setSeg(i, { length: v })} />
+                <SegField label={`Length (${ductUnitLabel(seg.unit)})`} value={seg.length} onChange={(v) => setSeg(i, { length: v })} />
               )}
               <label className="space-y-0.5">
                 <span className="text-[10px] text-muted-foreground">Material</span>

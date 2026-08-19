@@ -111,8 +111,8 @@ export default async function FollowUpsPage() {
           <p className="text-emerald-800">
             <span className="font-medium">Live sending is ON.</span>{" "}
             The scheduler emails due clients automatically <strong>{scheduleLabel(settings)}</strong>,
-            up to <strong>{settings.maxPerRun}</strong> per run, on a day&nbsp;{cadence} cadence (max{" "}
-            {settings.maxNudges} nudges). You can also send some now with <em>Send to selected</em> below.
+            {settings.maxPerRun > 0 ? <> up to <strong>{settings.maxPerRun}</strong> per run,</> : <> with <strong>no per-run limit</strong>,</>}{" "}
+            on a day&nbsp;{cadence} cadence (max {settings.maxNudges} nudges). You can also send some now with <em>Send to selected</em> below.
           </p>
         </div>
       ) : (

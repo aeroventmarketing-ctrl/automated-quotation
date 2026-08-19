@@ -64,13 +64,16 @@ export interface DuctSegment {
   type: string; // one of DUCT_TYPES
   quantity: string; // how many of this product line
   uom: string; // unit of quantity, e.g. "pc"
-  horizontal: string; // mm — the first (Horizontal) dimension
-  vertical: string; // mm — the Vertical dimension
-  length: string; // mm — segment length (for a reducer, the reducing length)
+  horizontal: string; // the first (Horizontal) dimension, in `unit`
+  vertical: string; // the Vertical dimension, in `unit`
+  length: string; // segment length (for a reducer, the reducing length), in `unit`
   toHorizontal: string; // size-transition types only — Horizontal it reduces to
   toVertical: string; // size-transition types only — Vertical it reduces to
   material: string; // e.g. "G.I. Material"
   gauge: string; // e.g. "GA20"
+  // The size unit the dimensions above are expressed in ("inches" | "mm" | "cm"),
+  // carried over from the quotation so the printed JO labels them correctly.
+  unit: string;
 }
 
 export interface DuctJobOrder {
@@ -106,6 +109,7 @@ export const EMPTY_DUCT_SEGMENT: DuctSegment = {
   toVertical: "",
   material: "G.I. Material",
   gauge: "GA20",
+  unit: "inches",
 };
 
 export const EMPTY_DUCT_JO: DuctJobOrder = {
@@ -135,17 +139,26 @@ export function formatDuctJoNumber(baseSeq: number, year: number, index: number,
   return `DUCT-JO${yy}${seq}${suffix}`;
 }
 
+/** Short label for a segment's size unit, e.g. "inches" → "in". */
+export function ductUnitLabel(unit: string): string {
+  const u = unit.trim().toLowerCase();
+  if (u === "inches" || u === "inch" || u === "in") return "in";
+  if (u === "cm") return "cm";
+  return "mm";
+}
+
 /** The "(Horizontal x Vertical x Length)" descriptive text for one segment. */
 export function formatSegmentDimensions(seg: DuctSegment): string {
   const h = seg.horizontal.trim();
   const v = seg.vertical.trim();
   const l = seg.length.trim();
+  const u = ductUnitLabel(seg.unit);
   if (isReducingDuctType(seg.type)) {
     const th = seg.toHorizontal.trim();
     const tv = seg.toVertical.trim();
-    return `${h} x ${v} to ${th} x ${tv} mm - ${l} mm length`;
+    return `${h} x ${v} to ${th} x ${tv} ${u} - ${l} ${u} length`;
   }
-  return `${h} x ${v} x ${l} mm`;
+  return `${h} x ${v} x ${l} ${u}`;
 }
 
 /** The duct type label used on the printable job order. */
@@ -182,6 +195,9 @@ export function coerceDuctSegment(value: unknown): DuctSegment | null {
     toVertical: s("toVertical"),
     material: s("material") || "G.I. Material",
     gauge: s("gauge") || "GA20",
+    // Older segments predate the unit field; duct sizes were entered in inches,
+    // so that's the safe fallback (also corrects historical inch-as-mm labels).
+    unit: s("unit") || "inches",
   };
 }
 

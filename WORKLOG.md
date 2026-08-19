@@ -1,3 +1,31 @@
+## 2026-08-19 · Duct Job Order — label sizes in the quotation's real unit (was hardcoded "mm")
+- **Bug.** The Duct JO printed every segment size as **"mm"** (`formatSegmentDimensions` hardcoded the unit), but the
+  numbers are carried straight from the quotation, which enters duct sizes in **inches**. So a 14-inch duct printed as
+  "14 x 14 x 44 mm" — right number, wrong unit — mismatching the quotation's "14 in x 14 in".
+- **Fix (owner-approved this conversation — frozen Phase 2 area).** Carry the quotation's size unit onto the job order
+  instead of hardcoding one:
+  - `src/lib/duct-job-order.ts` — added `unit` to `DuctSegment` (+ `EMPTY_DUCT_SEGMENT`, coercion falls back to
+    "inches" so historical inch JOs read correctly). New `ductUnitLabel()` ("inches"→"in", mm, cm); `formatSegmentDimensions`
+    now uses it. This flows to both the on-screen preview and the **xlsx export** (both call the same helper).
+  - `src/lib/job-order-autogen.ts` — both duct-segment builders set `unit: str(s.sizeUnit) || "inches"`.
+  - `src/app/(app)/orders/actions.ts` — `ductSegmentSchema` gains `unit` (default "inches") and the save carries it.
+  - `duct-job-order-panel.tsx` — the "Length (mm)" edit labels now show the segment's actual unit.
+- No numbers changed — only the unit label; inch quotes now print "in", mm/cm quotes print their own unit.
+- Typecheck + lint clean.
+
+## 2026-08-19 · Follow-up "Max emails per run" — allow no limit (0 = unlimited)
+- **Goal.** The 100 email/run throttle was a genuine hard ceiling; the owner wants to be able to remove it and send
+  every due client in one run.
+- **`src/lib/follow-up-settings.ts`** — dropped the `Math.min(..., 100)` clamp on `maxPerRun`; now **0 = no limit** and
+  any positive value throttles (invalid falls back to the safe default 100, not unlimited). Split the constants:
+  `FOLLOW_UP_DEFAULT_PER_RUN = 100` (email default) vs `FOLLOW_UP_MAX_PER_RUN = 100` (**SMS** ceiling, kept — Semaphore
+  bills per text, so unlimited SMS was deliberately NOT enabled).
+- **`src/lib/follow-up-runner.ts`** — `sendCap` treats `maxPerRun <= 0` as `POSITIVE_INFINITY` (send all due).
+- **UI** — email input min changed `1 → 0`, removed `max={100}`; helper text documents `0 = no limit` with a
+  deliverability/Resend-quota caution. The "Follow-ups due" live banner now shows "no per-run limit" when set to 0.
+  SMS "max texts per run" stays capped at 100.
+- Typecheck + lint clean. (Follow-up/email is not a frozen area — frozen = Order Phases 1–5 only.)
+
 ## 2026-08-17 · Public Fan Selector API (for the online store's HVAC Tools page)
 - **Goal.** The store's HVAC Tools page needs a real "Fan Selector" that sizes an AeroVent fan/blower for a visitor's
   duty — **performance shown, prices NOT** (the standing rule).
