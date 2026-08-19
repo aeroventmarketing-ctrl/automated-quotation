@@ -1,3 +1,19 @@
+## 2026-08-19 · Counter sales now count in the Sales dashboard, Won & WON report
+- **Bug (owner-reported).** Completed **Counter Sales** (walk-in cash sales) weren't adding up in the Sales dashboard,
+  the Won tile, or the WON sales report. Cause: those aggregations only read `quotation` / `inquiry` — the separate
+  `CounterSale` table was never included.
+- **Fix (sales reporting, not frozen; owner-approved treatment).** A **completed** counter sale now books its full
+  amount, credited to its **salesperson** (else the recorder), dated by **completion**:
+  - **Sales dashboard** (`sales-dashboard-body.tsx`): folded into `salesMTD` (total sales this month), the
+    per-salesperson map + top-salesperson-of-month, and the **Won** count (so counter sales lift the Won tile and win
+    rate, per owner's choice). Quote-activity charts (daily/30-day quoted value, top *quoted* customers) stay
+    quotation-only by design.
+  - **WON sales report** (`sales-report.ts`): completed counter sales appear as rows (source "Counter Sale", credited
+    to the salesperson). "Quotation-date" basis dates them by completion; "Payment-date" basis by clearing (an
+    uncleared post-dated sale isn't booked as paid yet — mirrors orders). Row shape unchanged, so the view / xlsx /
+    pdf / email exports all render them.
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Office stock transfer — flashing "next approver" badge on each card
 - **Request (owner).** Replace the card's "Requested by …" header with the **name + designation of the next
   approver**, using the same **flashing** badge as the order flow.
