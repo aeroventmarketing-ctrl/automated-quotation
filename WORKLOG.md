@@ -1,3 +1,19 @@
+## 2026-08-19 · Inventory — settable Item Code (SKU) + catalogue-code export (enables the matcher)
+- **Context.** The stock matcher now keys on the SKU, but SKUs were **auto-generated numbers** with no way to set
+  them — so the matcher was inert. This makes the Item Code settable and gives a reference export to drive re-labeling.
+- **Editable Item Code (not frozen — inventory).**
+  - `createStockItem` / the "New stock item" form take an optional **Item Code / SKU** (blank still auto-generates the
+    next serial, so nothing changes for existing flows). `updateStockItemMeta` can also change it. Both normalise to
+    UPPERCASE and reject a code already used by another item.
+  - `importStockItems` reads an `sku` / `item code` / `code` column: it sets each matched item's code (match by name),
+    or uses it on create. The inventory export already emits an `SKU` column, so **export → fill codes → re-import**
+    is a clean bulk re-labeling round-trip.
+- **Catalogue-code export.** New `GET /api/catalogue/export` streams a CSV of active `CatalogueItem`s
+  (`sku,name,family,size,unit,store_listed`) — the worksheet of canonical Item Codes + standard names. A **"Export
+  catalogue codes (CSV)"** link on the Products page (management roles only) downloads it; its headers match the
+  inventory importer so it can be filled and re-imported directly. Non-sensitive (codes + names only).
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Stock matching — match a quoted line to stock by Item Code / SKU first
 - **Request (owner, approved — touches frozen Phase 3).** Availability was decided purely by **fuzzy name text**, so a
   quoted item whose description differs from the inventory item's name (e.g. "Induction Motor (TECO)" vs "TECO 1HP
