@@ -1,3 +1,16 @@
+## 2026-08-19 · Job Orders — add a blank "More Details" column (Duct, Accessories, Motor Controller)
+- **Request (owner-approved, frozen Phase 2 area).** Add a right-most **"More Details"** column to the printed job
+  orders — a blank column the engineer fills in by hand — sized the same as each sheet's main dimensions/description
+  column.
+- `src/lib/excel/duct-job-order-xlsx.ts` — new column H (width 32, = the dimensions column); `LAST` G→H, header +
+  blank cells, header/signature/date merges widened to the new edge.
+- `src/lib/excel/accessories-job-order-xlsx.ts` — new column G (width 34, = Dimensions); `LAST` F→G, date value merged
+  to the edge.
+- `src/lib/excel/motor-controller-job-order-xlsx.ts` — new column G (width 34, = the method column); `LAST` F→G, date
+  value merged to the edge.
+- The new column is left-aligned + wrapping and blank on every row (no data source — a write-in field).
+- Typecheck + lint clean; smoke-built all three workbooks (incl. a reducer row) with no ExcelJS merge errors.
+
 ## 2026-08-19 · Duct Job Order — label sizes in the quotation's real unit (was hardcoded "mm")
 - **Bug.** The Duct JO printed every segment size as **"mm"** (`formatSegmentDimensions` hardcoded the unit), but the
   numbers are carried straight from the quotation, which enters duct sizes in **inches**. So a 14-inch duct printed as

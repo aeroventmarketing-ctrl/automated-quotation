@@ -36,7 +36,7 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
     views: [{ showGridLines: false, style: "pageBreakPreview", zoomScale: 120, zoomScaleNormal: 120 }],
   });
 
-  // Column layout: # | Quantity | Unit | Dimensions | Duct type | Material | Gauge
+  // Column layout: # | Quantity | Unit | Dimensions | Duct type | Material | Gauge | More Details
   ws.columns = [
     { width: 5 },
     { width: 11 },
@@ -45,8 +45,9 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
     { width: 16 },
     { width: 16 },
     { width: 10 },
+    { width: 32 }, // More Details — same width as the dimensions column
   ];
-  const LAST = "G";
+  const LAST = "H";
 
   const thin = { style: "thin" as const, color: { argb: BORDER } };
   const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
@@ -85,7 +86,7 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
       ws.getCell(`E${r}`).value = label2;
       ws.getCell(`E${r}`).font = { bold: true, size: 10 };
       ws.getCell(`E${r}`).alignment = { horizontal: "right" };
-      ws.mergeCells(`F${r}:G${r}`);
+      ws.mergeCells(`F${r}:${LAST}${r}`);
       ws.getCell(`F${r}`).value = value2 ?? "";
       ws.getCell(`F${r}`).font = { size: 10 };
     }
@@ -104,15 +105,16 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
 
   // --- Segments table -----------------------------------------------------
   const headerRow = r;
-  // # | Quantity | Unit | Dimensions | Duct type | Material | Gauge
+  // # | Quantity | Unit | Dimensions | Duct type | Material | Gauge | More Details
   const DIM_COL = 3; // 0-based index of the dimensions column (left-aligned)
-  const headers = ["#", "Quantity", "Unit", "(Horizontal x Vertical x Length)", "Duct type", "Material", "Gauge"];
+  const MORE_COL = 7; // 0-based index of the "More Details" column (left-aligned)
+  const headers = ["#", "Quantity", "Unit", "(Horizontal x Vertical x Length)", "Duct type", "Material", "Gauge", "More Details"];
   headers.forEach((h, i) => {
     const cell = ws.getCell(headerRow, i + 1);
     cell.value = h;
     cell.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: RED } };
-    cell.alignment = { horizontal: i === DIM_COL ? "left" : "center", vertical: "middle", wrapText: true };
+    cell.alignment = { horizontal: i === DIM_COL || i === MORE_COL ? "left" : "center", vertical: "middle", wrapText: true };
     cell.border = allBorders;
   });
   ws.getRow(headerRow).height = 22;
@@ -138,10 +140,12 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
       ws.getCell(r, 5).value = segmentTypeLabel(seg);
       ws.getCell(r, 6).value = seg.material;
       ws.getCell(r, 7).value = seg.gauge;
-      for (let c = 1; c <= 7; c++) {
+      ws.getCell(r, 8).value = ""; // More Details — blank, for the engineer to fill in
+      for (let c = 1; c <= 8; c++) {
         const cell = ws.getCell(r, c);
+        const leftAligned = c === DIM_COL + 1 || c === MORE_COL + 1;
         cell.font = { size: 10 };
-        cell.alignment = { horizontal: c === DIM_COL + 1 ? "left" : "center", vertical: "middle", wrapText: c === DIM_COL + 1 };
+        cell.alignment = { horizontal: leftAligned ? "left" : "center", vertical: "middle", wrapText: leftAligned };
         cell.border = allBorders;
         if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
       }
@@ -180,11 +184,11 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
   ws.getCell(`B${r}`).font = { size: 9 };
   ws.getCell(`B${r}`).alignment = { horizontal: "center" };
   for (const col of ["B", "C", "D"]) ws.getCell(`${col}${r}`).border = sigTop;
-  ws.mergeCells(`E${r}:G${r}`);
+  ws.mergeCells(`E${r}:${LAST}${r}`);
   ws.getCell(`E${r}`).value = "Received by";
   ws.getCell(`E${r}`).font = { size: 9 };
   ws.getCell(`E${r}`).alignment = { horizontal: "center" };
-  for (const col of ["E", "F", "G"]) ws.getCell(`${col}${r}`).border = sigTop;
+  for (const col of ["E", "F", "G", "H"]) ws.getCell(`${col}${r}`).border = sigTop;
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);

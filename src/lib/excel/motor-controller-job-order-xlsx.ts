@@ -27,9 +27,9 @@ export async function buildMotorControllerJobOrderWorkbook(jo: MotorControllerJo
     views: [{ showGridLines: false, style: "pageBreakPreview", zoomScale: 120, zoomScaleNormal: 120 }],
   });
 
-  // # | Qty | Starter / control method | HP | Ph | Volts
-  ws.columns = [{ width: 5 }, { width: 8 }, { width: 34 }, { width: 9 }, { width: 7 }, { width: 9 }];
-  const LAST = "F";
+  // # | Qty | Starter / control method | HP | Ph | Volts | More Details
+  ws.columns = [{ width: 5 }, { width: 8 }, { width: 34 }, { width: 9 }, { width: 7 }, { width: 9 }, { width: 34 }];
+  const LAST = "G";
 
   const thin = { style: "thin" as const, color: { argb: BORDER } };
   const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
@@ -68,7 +68,7 @@ export async function buildMotorControllerJobOrderWorkbook(jo: MotorControllerJo
       ws.getCell(`D${r}`).value = label2;
       ws.getCell(`D${r}`).font = { bold: true, size: 10 };
       ws.getCell(`D${r}`).alignment = { horizontal: "right" };
-      ws.mergeCells(`E${r}:F${r}`);
+      ws.mergeCells(`E${r}:${LAST}${r}`);
       ws.getCell(`E${r}`).value = value2 ?? "";
       ws.getCell(`E${r}`).font = { size: 10 };
     }
@@ -84,13 +84,14 @@ export async function buildMotorControllerJobOrderWorkbook(jo: MotorControllerJo
 
   // --- Lines table --------------------------------------------------------
   const headerRow = r;
-  const headers = ["#", "Qty", "Starter / Control method", "HP", "Ph", "Volts"];
+  const MORE_COL = 6; // 0-based index of the "More Details" column (left-aligned)
+  const headers = ["#", "Qty", "Starter / Control method", "HP", "Ph", "Volts", "More Details"];
   headers.forEach((h, i) => {
     const cell = ws.getCell(headerRow, i + 1);
     cell.value = h;
     cell.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: RED } };
-    cell.alignment = { horizontal: i === 2 ? "left" : "center", vertical: "middle", wrapText: true };
+    cell.alignment = { horizontal: i === 2 || i === MORE_COL ? "left" : "center", vertical: "middle", wrapText: true };
     cell.border = allBorders;
   });
   ws.getRow(headerRow).height = 22;
@@ -113,10 +114,12 @@ export async function buildMotorControllerJobOrderWorkbook(jo: MotorControllerJo
       ws.getCell(r, 4).value = line.hp ? `${line.hp} Hp` : "";
       ws.getCell(r, 5).value = line.phase ? `${line.phase} Ph` : "";
       ws.getCell(r, 6).value = line.voltage ? `${line.voltage}v` : "";
-      for (let c = 1; c <= 6; c++) {
+      ws.getCell(r, 7).value = ""; // More Details — blank, for the engineer to fill in
+      for (let c = 1; c <= 7; c++) {
         const cell = ws.getCell(r, c);
+        const leftAligned = c === 3 || c === MORE_COL + 1;
         cell.font = { size: 10 };
-        cell.alignment = { horizontal: c === 3 ? "left" : "center", vertical: "middle", wrapText: c === 3 };
+        cell.alignment = { horizontal: leftAligned ? "left" : "center", vertical: "middle", wrapText: leftAligned };
         cell.border = allBorders;
         if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
       }
