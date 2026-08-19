@@ -366,12 +366,20 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
         <TableRow>
           <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-col items-start gap-1 py-1">
-              <div className="text-sm font-medium">{item.name}{item.sku ? ` · SKU ${item.sku}` : ""}{item.location ? ` · Loc ${item.location}` : ""}</div>
+              <div className="text-sm font-medium">{item.name}{item.sku ? ` · SKU ${item.sku}` : ""}{item.barcode ? ` · Barcode ${item.barcode}` : ""}{item.location ? ` · Loc ${item.location}` : ""}</div>
               <div className="flex items-center gap-4">
+                {/* Item Code (SKU) */}
                 {/* eslint-disable-next-line react/no-danger */}
                 <div dangerouslySetInnerHTML={{ __html: code128Svg(item.sku ?? item.id, { moduleWidth: 2, height: 48 }) }} />
                 {/* eslint-disable-next-line react/no-danger */}
                 <div dangerouslySetInnerHTML={{ __html: qrSvg(item.sku ?? item.id, { scale: 3 }) }} />
+                {item.barcode && (
+                  <div className="flex flex-col items-center">
+                    <span className="text-[9px] uppercase tracking-wide text-muted-foreground">Supplier barcode</span>
+                    {/* eslint-disable-next-line react/no-danger */}
+                    <div dangerouslySetInnerHTML={{ __html: code128Svg(item.barcode, { moduleWidth: 1.7, height: 40 }) }} />
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <Link href={`/inventory/labels?ids=${item.id}`} className="text-xs font-medium text-primary hover:underline">Print this label →</Link>

@@ -20,6 +20,7 @@ export default async function LabelsPage({ searchParams }: { searchParams: Promi
     id: i.id,
     code: i.sku ?? i.id,
     sku: i.sku,
+    barcode: i.barcode,
     name: i.name,
     location: i.location,
     unit: i.unit,

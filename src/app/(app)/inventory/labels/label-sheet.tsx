@@ -10,6 +10,7 @@ export interface LabelItem {
   id: string;
   code: string; // sku ?? id
   sku: string | null;
+  barcode?: string | null; // external supplier GTIN, if any (inventory items only)
   name: string;
   location: string | null;
   unit: string;
@@ -18,6 +19,12 @@ export interface LabelItem {
 function Label({ item }: { item: LabelItem }) {
   const bar = useMemo(() => code128Svg(item.code, { moduleWidth: 1.8, height: 46 }), [item.code]);
   const qr = useMemo(() => qrSvg(item.code, { scale: 3 }), [item.code]);
+  // A second Code 128 for the external supplier barcode (GTIN), when present, so
+  // the printed label carries both our Item Code and the supplier's barcode.
+  const extBar = useMemo(
+    () => (item.barcode ? code128Svg(item.barcode, { moduleWidth: 1.6, height: 34 }) : null),
+    [item.barcode],
+  );
   return (
     <>
       <div className="text-sm font-semibold leading-tight">{item.name}</div>
@@ -25,11 +32,19 @@ function Label({ item }: { item: LabelItem }) {
         {[item.sku ? `SKU ${item.sku}` : null, item.location ? `Loc ${item.location}` : null, item.unit].filter(Boolean).join(" · ")}
       </div>
       <div className="mt-1 flex items-center justify-center gap-3">
+        {/* Item Code (SKU) — Code 128 + QR, scannable by any scanner. */}
         {/* eslint-disable-next-line react/no-danger */}
         <div className="overflow-hidden" dangerouslySetInnerHTML={{ __html: bar }} />
         {/* eslint-disable-next-line react/no-danger */}
         <div dangerouslySetInnerHTML={{ __html: qr }} />
       </div>
+      {extBar && (
+        <div className="mt-1 flex flex-col items-center">
+          <div className="text-[9px] uppercase tracking-wide text-muted-foreground">Barcode {item.barcode}</div>
+          {/* eslint-disable-next-line react/no-danger */}
+          <div className="overflow-hidden" dangerouslySetInnerHTML={{ __html: extBar }} />
+        </div>
+      )}
     </>
   );
 }
@@ -54,7 +69,7 @@ export function LabelSheet({ items, initialSelected }: { items: LabelItem[]; ini
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <div>
           <h1 className="text-2xl font-bold">Stock labels</h1>
-          <p className="text-sm text-muted-foreground">Code 128 + QR — scannable by any barcode scanner. Tick items to print a subset, or print all.</p>
+          <p className="text-sm text-muted-foreground">Code 128 + QR of the Item Code, plus the supplier barcode when set — scannable by any barcode scanner. Tick items to print a subset, or print all.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/inventory" className="rounded-md border px-3 py-2 text-sm hover:bg-accent">← Inventory</Link>
