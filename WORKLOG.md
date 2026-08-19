@@ -1,3 +1,13 @@
+## 2026-08-19 · Email — split multi-address recipient fields (fix Resend 422)
+- **Bug.** A client record can hold several emails in one field (e.g. "a@x.com ; b@y.com ; c@z.com"). The mailer passed
+  that whole string as one recipient, so Resend rejected it: `422 validation_error — Invalid to field`. That client's
+  email (marketing/follow-up/etc.) silently failed to send.
+- **Fix (central, non-frozen).** New `splitRecipients()` in `src/lib/email/resend.ts` splits `to` on `; , \n`, trims,
+  and keeps address-looking tokens; `sendEmail` now sends the resulting **array** (throws a clear error if none are
+  valid, instead of a cryptic 422). Fixes every sender at once — marketing, follow-ups, thank-you, RFQ.
+- A single or "Name <email>" address passes through unchanged; a record with 3 addresses now emails all three.
+- Typecheck + lint clean; verified the exact failing input now yields a valid 3-address array.
+
 ## 2026-08-19 · Job Orders — make "More Details" an editable per-row field (Duct, Accessories, Motor)
 - **Request (owner-approved, frozen Phase 2 area).** The "More Details" column (added blank earlier) is now an
   **editable field the JO creator types per row**, saved with the JO and printed into that column.
