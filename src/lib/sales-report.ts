@@ -121,21 +121,20 @@ export async function buildSalesReport(from: string, to: string, basis: ReportBa
       where: { status: "COMPLETED" },
       select: {
         id: true, saleNumber: true, total: true, amountPaid: true,
-        completedAt: true, createdAt: true, clearedAt: true, paymentCleared: true,
+        completedAt: true, createdAt: true,
         salespersonName: true, soldByName: true,
         customer: { select: { company: true } },
       },
     })
     .catch(() => [] as never[]);
   for (const cs of counterSales) {
-    const cleared = cs.paymentCleared || cs.clearedAt != null;
-    const dateISO =
-      basis === "won"
-        ? cleared
-          ? (cs.clearedAt ?? cs.completedAt ?? cs.createdAt).toISOString()
-          : null
-        : (cs.completedAt ?? cs.createdAt).toISOString();
-    if (!dateISO) continue; // "won" with uncleared payment → not booked yet
+    // A completed counter sale is recognised (booked at full value) on
+    // completion — the same way a confirmed quotation books on its recognition
+    // date, with any unpaid balance shown in Collected/Balance. So it's dated by
+    // completion on BOTH bases (never dropped for an uncleared post-dated
+    // check), keeping the report's grand total in step with the dashboard's
+    // "Sales this month".
+    const dateISO = (cs.completedAt ?? cs.createdAt).toISOString();
     const ymd = manilaYMD(dateISO);
     if (ymd < lo || ymd > hi) continue;
     const value = round2(Number(cs.total));
