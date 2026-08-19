@@ -6,75 +6,16 @@
   unchanged, so submit logic is untouched.
 - Typecheck + lint clean.
 
-## 2026-08-19 · Bought-in / Office requisition — one approval moves it to the Approved tab
-- **Request (owner, frozen Phase 4).** Office requisitions still carried the department **two-stage** approval
-  (`approve` → `approve_po`): after one "Approve Purchase" the request was APPROVED but `poApproved` was still false, so
-  `statusBucket` kept it in **Pending** awaiting a second approval — it never moved to the Approved tab.
-- **Fix (minimal, no signature churn).** In `advancePurchaseRequest`, the `approve` step on a bought-in / Office
-  requisition (`isDept && !requisitionNeedsPlantApproval(pr)`) now **also stamps `approve_po`** in the same action.
-  So one Payment-Approver click makes it fully purchase-approved (`poApproved = true`) → `statusBucket` returns
-  **approved** → it moves straight to the **Approved / For-purchasing** tab with PO-prep enabled and no redundant
-  second approval. Production-dept / MRF requisitions keep the two-stage flow unchanged.
-- Chosen over rewiring `purchaseStepsFrom` / `statusBucket` across 11 call sites (where `isDept` is reused for other
-  purposes) — this is one targeted branch. Typecheck + lint clean.
-
-## 2026-08-19 · Purchasing badge — match "no Plant Manager" for bought-in / Office requisitions
-- **Request (owner, frozen Phase 4).** After bought-in/Office requisitions were set to skip the Plant Manager, the
-  orange status badge still read "Plant Manager approved — awaiting purchase approval" — inconsistent with the
-  Payment-Approver "Approve Purchase" button and the awaiting label.
-- **Fix (display only).** Added `needsPlantApproval` to the purchase-chain row (set via `requisitionNeedsPlantApproval`
-  in `purchase-chain-row.ts` and the order-page inline builder). In `purchasing-chain.tsx` the badge now reads
-  **"Awaiting purchase approval"** when `needsPlantApproval === false` (bought-in / Office), and keeps
-  **"Plant Manager approved — awaiting purchase approval"** for production-dept / MRF requisitions. Backward-compatible
-  (undefined → the PM label).
-- Typecheck + lint clean.
-
-## 2026-08-19 · Bought-in / Office requisitions skip Plant Manager approval
-- **Request (owner, frozen Phase 4).** A bought-in item follows the bought-in flow — **no Plant Manager approval**.
-  But a bought-in/Office requisition that landed in `PENDING_APPROVAL` (e.g. via an admin roll-back) showed the
-  `approve`/`reject` step elevated to the **Plant Manager** (`effectiveStepRole` elevates for any department
-  requisition), which is wrong for Office.
-- **Fix.** New `requisitionNeedsPlantApproval(pr)` in `purchasing.ts` = dept requisition **and dept ≠ "office"**.
-  `effectiveStepRole`'s flag renamed to `needsPlantApproval`; all 7 call sites (approve auth in `advancePurchaseRequest`
-  + `advanceCombinedPO`, the order page, purchasing workspace, `purchase-chain-row`, `my-dashboard`) now pass it. So a
-  production-dept / MRF requisition still needs PM, but a **bought-in / Office** one's approve/reject is the **Payment
-  Approver's purchase approval** — no PM stage, matching how they auto-raise as APPROVED.
-- Result: the stuck Office requisition now shows "Approve Purchase" by the **Payment Approver** (not Plant Manager);
-  future ones skip PM everywhere (display + auth). The normal APPROVED→approve_po flow is unchanged.
-- Typecheck + lint clean.
-
-## 2026-08-19 · Fix: direct bought-in requisition stuck in "Awaiting Plant Manager approval"
-- **Bug (owner-reported, frozen Phase 4).** A bought-in requisition that ended up in `PENDING_APPROVAL` (e.g. after a
-  Reject) was un-approvable: the Purchasing view defers dept-requisition approval to the order's Materials tab, but the
-  Materials-tab approve button only exists for **MRF-escalated** requests (they carry a linked material request). A
-  **direct** bought-in requisition has no MRF, never shows on the Materials tab → no approve button anywhere → stuck.
-- **Fix.** `purchasing-chain.tsx` — `hideApproval` now also requires `r.mrfNo`, so approval is deferred to the Materials
-  tab **only** for MRF-escalated requests. A direct bought-in / department requisition keeps its Approve/Reject in the
-  Purchasing view (`canAct = admin || role`, so the Plant Manager/admin can act). Unsticks the current one + prevents
-  recurrence. Editing item text never changed status (verified) — this was the real cause.
-- Typecheck + lint clean.
-
-## 2026-08-19 · Bought-in requisition — carry the full item spec (was name-only)
-- **Request (owner, frozen Phase 4).** A bought-in requisition showed only the short name ("1 unit · Induction Motor
-  (TECO)") with no details; the purchasing tab should show the quotation's full item description.
-- **`department-pnl.ts` `orderBoughtInLines`** now also returns `description` — the quotation line's multi-line spec
-  flattened with " / ", dropping any line already covered by the name (no redundancy).
-- **`autoRaiseBoughtInRequisition`** attaches that spec as the line's **remark**: the short name stays the line (for the
-  summary + stock matching), the full spec follows in `(...)`. Chosen " / " (not " · ") so the PO parser and the
-  stock-matcher (which strips a trailing `(...)`) both stay intact — verified by a round-trip test.
-- Details now flow to the requisition display **and** onto the PO line to the supplier. Applies to newly-raised
-  requisitions (on payment-clear); existing ones keep their terse line (editable via admin if needed).
-- Typecheck + lint clean.
-
-## 2026-08-19 · Order page — show read-only stock availability on the Purchasing card
-- **Context.** A bought-in requisition asks for a PO even when the item is in stock. The full "issue from stock"
-  feature already exists in the **Purchasing workspace** (`RequisitionStockCheck` + `issueRequisitionLineFromStock`);
-  the order-page Phase 4 card just never surfaced it (it omitted `showStockCheck`, so no availability showed).
-- **Change (one line, read-only).** `orders/[id]/page.tsx` passes `showStockCheck` to the (still `readOnly`)
-  `PurchasingChain`. With `readOnly` + no `canIssueStock`, the card renders the **read-only `StockAvailabilityLookup`**
-  per requisition (e.g. "6 available") — no issue action on the order page; issuing stays in `/purchasing`.
-- No workflow change (display only). Typecheck + lint clean. (Explored first: the issue-from-stock capability was
-  already built — a speculative duplicate migration/action was reverted before this.)
+## 2026-08-19 · Revert the bought-in / Office requisition changes + order-page stock view (user-error concern)
+- **Request (owner).** The concern that started these — "a bought-in motor in stock still asks for a PO" — was a
+  **user error**: the motor is genuinely **bought-in**, so raising a PO is correct. Owner asked to "return the settings
+  before I raise this concern." Reverted the five follow-on changes (A–E) and returned to the pre-concern state.
+- **Reverted:** the order-page read-only stock view (#368's `showStockCheck` on the Phase 4 card only — the rest of
+  Phase A unification stays); the full-item-spec requisition remark (#369); the direct-bought-in `hideApproval`/`mrfNo`
+  unstick (#370); the `requisitionNeedsPlantApproval` skip-Plant-Manager rework (#371); and the single-stage
+  approval + matching badge (#372). `requisitionNeedsPlantApproval` / `needsPlantApproval` are gone; `effectiveStepRole`
+  is back to its `isDepartment` flag. Bought-in / Office requisitions behave exactly as they did before the concern.
+- Kept: the searchable stock-transfer item picker (independent) and all of Phase A unification. Typecheck + lint clean.
 
 ## 2026-08-19 · Unification Phase A2/A3 — Store products admin (manage listing on the catalogue record)
 - **Goal.** The mockup's "Products" screen: manage each catalogue item's storefront listing on the same record that
