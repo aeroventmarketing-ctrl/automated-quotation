@@ -86,6 +86,35 @@ export interface StockTransferView {
   canReceive: boolean; // Office chain: Sales/Office confirms receipt (credits Office)
   canUpload: boolean; // attach / remove proof
   canCancel: boolean; // recall an in-transit transfer
+  /** Who must act next (designation + assigned names) — drives the flashing
+   *  "awaiting approval" badge. Null once RECEIVED / CANCELLED. */
+  nextApprover?: { role: string; names: string[] } | null;
+}
+
+/**
+ * Who must act next on an OFFICE transfer, by status — designation + the assigned
+ * people's names — for the flashing "awaiting approval" badge. Null once the
+ * transfer is RECEIVED / CANCELLED (no one left to act). `dir` is an
+ * ApproverDirectory-shaped lookup; `salesNames` are the base-role Sales users
+ * (the office-receipt step is Sales OR the Purchaser).
+ */
+export function nextOfficeTransferApprover(
+  status: StockTransferStatus,
+  dir: { namesFor: (r: string) => string[]; labelFor: (r: string) => string },
+  salesNames: string[],
+): { role: string; names: string[] } | null {
+  switch (status) {
+    case "REQUESTED":
+      return { role: dir.labelFor("plant_manager"), names: dir.namesFor("plant_manager") };
+    case "APPROVED":
+      return { role: dir.labelFor("warehouse"), names: dir.namesFor("warehouse") };
+    case "RELEASED":
+      return { role: dir.labelFor("logistics"), names: dir.namesFor("logistics") };
+    case "DELIVERING":
+      return { role: "Sales / Purchaser", names: Array.from(new Set([...salesNames, ...dir.namesFor("purchaser")])) };
+    default:
+      return null;
+  }
 }
 
 const PROD_HEAD_ROLES = PRODUCTION_DEPTS.map((d) => d.role) as WorkflowRoleKey[];

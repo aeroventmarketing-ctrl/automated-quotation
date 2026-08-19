@@ -1,3 +1,15 @@
+## 2026-08-19 · Office stock transfer — flashing "next approver" badge on each card
+- **Request (owner).** Replace the card's "Requested by …" header with the **name + designation of the next
+  approver**, using the same **flashing** badge as the order flow.
+- **Change (inventory office-transfer UI, not frozen).** Reused the order flow's `ApproverHighlight` (the blinking
+  amber "Awaiting approval · <role> <names>" badge). New `nextOfficeTransferApprover(status, dir, salesNames)` maps the
+  office chain to who acts next — REQUESTED→Plant Manager, APPROVED→Warehouse, RELEASED→Logistics,
+  DELIVERING→Sales / Purchaser (null once RECEIVED / CANCELLED). The page resolves assigned names via
+  `getApproverDirectory()` (+ base-role Sales users) and passes `nextApprover` per transfer; `OfficeTransferRow` shows
+  the flashing badge while active, falling back to the plain "Requested by" once done. The requester + time stay
+  visible in the timeline pill below, so nothing is lost.
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Office stock transfer — Purchaser can confirm "Office received"
 - **Request (owner).** Authorize the **Purchaser** to press **Office Received** on an office stock transfer (was
   Sales / admin only).
