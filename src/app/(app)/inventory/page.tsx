@@ -150,7 +150,7 @@ export default async function InventoryPage() {
       canApprove: viewerIsPlant,
       canRelease: viewerIsWarehouse,
       canDeliver: viewerIsLogistics,
-      canReceive: viewerIsSales,
+      canReceive: viewerIsSales || viewerIsPurchaser,
       canUpload: canManage || viewerIsProdHead || viewerIsPurchaser || viewerIsLogistics,
       canCancel: canManage,
     }));

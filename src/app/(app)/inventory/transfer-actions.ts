@@ -323,12 +323,13 @@ export async function deliverOfficeTransfer(transferId: string): Promise<void> {
   revalidatePath("/inventory");
 }
 
-/** Sales confirms the Office received the stock — credits the Office stock item. */
+/** Sales or the Purchaser confirms the Office received the stock — credits the Office stock item. */
 export async function receiveOfficeTransfer(transferId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || user.role === "SALES")) {
-    throw new Error("Only Sales or an admin can confirm the Office received the stock.");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || user.role === "SALES" || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey))) {
+    throw new Error("Only Sales, the Purchaser, or an admin can confirm the Office received the stock.");
   }
   let name = "";
   await prisma.$transaction(async (tx) => {
