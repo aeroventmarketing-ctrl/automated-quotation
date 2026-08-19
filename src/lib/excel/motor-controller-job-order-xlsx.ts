@@ -114,7 +114,7 @@ export async function buildMotorControllerJobOrderWorkbook(jo: MotorControllerJo
       ws.getCell(r, 4).value = line.hp ? `${line.hp} Hp` : "";
       ws.getCell(r, 5).value = line.phase ? `${line.phase} Ph` : "";
       ws.getCell(r, 6).value = line.voltage ? `${line.voltage}v` : "";
-      ws.getCell(r, 7).value = ""; // More Details — blank, for the engineer to fill in
+      ws.getCell(r, 7).value = line.moreDetails || ""; // More Details — typed by the JO creator
       for (let c = 1; c <= 7; c++) {
         const cell = ws.getCell(r, c);
         const leftAligned = c === 3 || c === MORE_COL + 1;

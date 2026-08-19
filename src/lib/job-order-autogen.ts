@@ -290,6 +290,7 @@ export function buildAutoJobOrders(
           hp: str(s.motorHp),
           phase: str(s.motorPh) || "3",
           voltage: str(s.motorVolts),
+          moreDetails: "",
         });
       }
     } else if (isAccessory(s)) {
@@ -302,6 +303,7 @@ export function buildAutoJobOrders(
         dimensions: accessoryDimensions(s),
         material: str(s.material),
         note: "",
+        moreDetails: "",
       });
     }
   }

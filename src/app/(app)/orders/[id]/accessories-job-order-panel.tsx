@@ -304,6 +304,11 @@ function AccessoriesJobOrderForm({
             </div>
 
             <label className="block space-y-0.5">
+              <span className="text-[10px] text-muted-foreground">More details</span>
+              <Input className="h-7 text-xs" value={line.moreDetails} onChange={(e) => setLine(i, { moreDetails: e.target.value })} placeholder="Additional details for this row (printed in the More Details column)…" />
+            </label>
+
+            <label className="block space-y-0.5">
               <span className="text-[10px] text-muted-foreground">Note / Remarks</span>
               <textarea
                 className="min-h-[38px] w-full rounded-md border bg-background px-2 py-1 text-xs"

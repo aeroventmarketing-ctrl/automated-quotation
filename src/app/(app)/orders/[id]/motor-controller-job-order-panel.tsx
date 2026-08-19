@@ -251,6 +251,11 @@ function MotorControllerJobOrderForm({
               </label>
             </div>
 
+            <label className="block space-y-0.5">
+              <span className="text-[10px] text-muted-foreground">More details</span>
+              <Input className="h-7 text-xs" value={line.moreDetails} onChange={(e) => setLine(i, { moreDetails: e.target.value })} placeholder="Additional details for this row (printed in the More Details column)…" />
+            </label>
+
             <p className="text-[11px] text-muted-foreground">{formatMotorControllerLine(line)}</p>
           </div>
         ))}

@@ -694,6 +694,7 @@ const ductSegmentSchema = z.object({
   material: z.string().trim().default(""),
   gauge: z.string().trim().default(""),
   unit: z.string().trim().default("inches"),
+  moreDetails: z.string().trim().default(""),
 });
 
 const ductJoSchema = z.object({
@@ -743,6 +744,7 @@ export async function saveDuctJobOrder(
         material: s.material || "G.I. Material",
         gauge: s.gauge || "GA20",
         unit: s.unit || "inches",
+        moreDetails: s.moreDetails,
       };
     })
     .filter((s) => s.horizontal !== "" || s.vertical !== "" || s.length !== "");
@@ -799,6 +801,7 @@ const accLineSchema = z.object({
   dimensions: z.array(accDimensionSchema).default([]),
   material: z.string().trim().default(""),
   note: z.string().trim().default(""),
+  moreDetails: z.string().trim().default(""),
 });
 const accJoSchema = z.object({
   date: z.string().trim().default(""),
@@ -838,6 +841,7 @@ export async function saveAccessoriesJobOrder(
       dimensions: l.dimensions.filter((dim) => dim.value !== "" || dim.label !== ""),
       material: l.material,
       note: l.note,
+      moreDetails: l.moreDetails,
     }))
     .filter((l) => l.type !== "" || l.dimensions.length > 0);
 
@@ -889,6 +893,7 @@ const mcLineSchema = z.object({
   hp: z.string().trim().default(""),
   phase: z.string().trim().default(""),
   voltage: z.string().trim().default(""),
+  moreDetails: z.string().trim().default(""),
 });
 const mcJoSchema = z.object({
   date: z.string().trim().default(""),
@@ -927,6 +932,7 @@ export async function saveMotorControllerJobOrder(
       hp: l.hp,
       phase: l.phase,
       voltage: l.voltage,
+      moreDetails: l.moreDetails,
     }))
     .filter((l) => l.starterType !== "" || l.hp !== "" || l.voltage !== "");
 

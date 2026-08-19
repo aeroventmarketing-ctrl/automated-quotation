@@ -74,6 +74,9 @@ export interface DuctSegment {
   // The size unit the dimensions above are expressed in ("inches" | "mm" | "cm"),
   // carried over from the quotation so the printed JO labels them correctly.
   unit: string;
+  // Free-text extra details the JO creator types for this row; printed in the
+  // "More Details" column.
+  moreDetails: string;
 }
 
 export interface DuctJobOrder {
@@ -110,6 +113,7 @@ export const EMPTY_DUCT_SEGMENT: DuctSegment = {
   material: "G.I. Material",
   gauge: "GA20",
   unit: "inches",
+  moreDetails: "",
 };
 
 export const EMPTY_DUCT_JO: DuctJobOrder = {
@@ -198,6 +202,7 @@ export function coerceDuctSegment(value: unknown): DuctSegment | null {
     // Older segments predate the unit field; duct sizes were entered in inches,
     // so that's the safe fallback (also corrects historical inch-as-mm labels).
     unit: s("unit") || "inches",
+    moreDetails: s("moreDetails"),
   };
 }
 

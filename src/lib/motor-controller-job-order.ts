@@ -27,6 +27,9 @@ export interface MotorControllerLine {
   hp: string; // e.g. "5"
   phase: string; // e.g. "3"
   voltage: string; // e.g. "400"
+  // Free-text extra details the JO creator types for this row; printed in the
+  // "More Details" column.
+  moreDetails: string;
 }
 
 export interface MotorControllerJobOrder {
@@ -52,6 +55,7 @@ export const EMPTY_MOTOR_CONTROLLER_LINE: MotorControllerLine = {
   hp: "",
   phase: "3",
   voltage: "",
+  moreDetails: "",
 };
 
 export const EMPTY_MOTOR_CONTROLLER_JO: MotorControllerJobOrder = {
@@ -109,6 +113,7 @@ export function coerceMotorControllerLine(value: unknown): MotorControllerLine |
     hp: s("hp"),
     phase: s("phase"),
     voltage: s("voltage"),
+    moreDetails: s("moreDetails"),
   };
 }
 
