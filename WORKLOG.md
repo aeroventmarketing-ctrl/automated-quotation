@@ -1,16 +1,15 @@
-## 2026-08-19 · Deploy — run `prisma migrate deploy` in the build (fix "column does not exist" outage)
-- **Root cause (production outage).** After the fan-selector hardening surfaced the real error, it read:
-  *"Invalid `prisma.catalogueItem.findMany()` invocation: The column `CatalogueItem.storeListed` does not exist in the
-  current database."* Phase A (PR #368) added the store columns to the Prisma schema + migration `0043`, but the DB
-  migration was **never applied** — the Vercel build ran only `prisma generate && next build`, so the client shipped
-  expecting columns the live DB didn't have. Every `CatalogueItem` query failed (all fan selection, products admin, …),
-  not just KDK.
-- **Fix.** Build command (both `package.json` and `vercel.json`) is now
-  `prisma generate && prisma migrate deploy && next build`, so **pending migrations apply automatically on every
-  deploy** — a merged schema change can never ship ahead of its migration again. `migrate deploy` uses `DIRECT_URL`
-  (already configured); migration `0043` is idempotent (`ADD COLUMN IF NOT EXISTS`), so applying it is safe.
-- Deploying this change applies `0043` and creates the missing columns → the selector (and all catalogue reads)
-  recover. README deploy notes updated. Typecheck + lint clean.
+## 2026-08-19 · Deploy — revert `migrate deploy` in the build (it blocked all deploys); fix schema via SQL
+- **Root cause (production outage).** The fan-selector hardening surfaced the real error:
+  *"The column `CatalogueItem.storeListed` does not exist in the current database."* Phase A (PR #368) added the store
+  columns to the Prisma schema + migration `0043`, but the DB migration was **never applied**.
+- **First attempt (reverted).** Adding `prisma migrate deploy` to the build command **failed the Vercel build**
+  (`… exited with 1`) — the production DB's Prisma migration history doesn't reconcile with `migrate deploy` (tables
+  0001–0042 exist but aren't cleanly recorded), so it errored and, via `&&`, **blocked every deploy**. Reverted the
+  build command back to `prisma generate && next build` so deploys work again.
+- **Actual fix.** Apply migration `0043` directly (it's additive + idempotent) via the Supabase SQL editor / manual
+  `prisma migrate deploy` — creates the missing `storeListed` / `storeSlug` / … columns and the selector recovers.
+  README updated to flag the manual migration step. (A proper fix for auto-migrations would first baseline the DB's
+  migration history; deferred.)
 
 ## 2026-08-19 · Fan selector — never crash on an empty response ("Unexpected end of JSON input")
 - **Bug (owner-reported).** Running the fan selector on KDK products showed **"Failed to execute 'json' on 'Response':
