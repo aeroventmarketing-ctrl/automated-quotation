@@ -1,3 +1,15 @@
+## 2026-08-19 · Bought-in requisition — carry the full item spec (was name-only)
+- **Request (owner, frozen Phase 4).** A bought-in requisition showed only the short name ("1 unit · Induction Motor
+  (TECO)") with no details; the purchasing tab should show the quotation's full item description.
+- **`department-pnl.ts` `orderBoughtInLines`** now also returns `description` — the quotation line's multi-line spec
+  flattened with " / ", dropping any line already covered by the name (no redundancy).
+- **`autoRaiseBoughtInRequisition`** attaches that spec as the line's **remark**: the short name stays the line (for the
+  summary + stock matching), the full spec follows in `(...)`. Chosen " / " (not " · ") so the PO parser and the
+  stock-matcher (which strips a trailing `(...)`) both stay intact — verified by a round-trip test.
+- Details now flow to the requisition display **and** onto the PO line to the supplier. Applies to newly-raised
+  requisitions (on payment-clear); existing ones keep their terse line (editable via admin if needed).
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Order page — show read-only stock availability on the Purchasing card
 - **Context.** A bought-in requisition asks for a PO even when the item is in stock. The full "issue from stock"
   feature already exists in the **Purchasing workspace** (`RequisitionStockCheck` + `issueRequisitionLineFromStock`);
