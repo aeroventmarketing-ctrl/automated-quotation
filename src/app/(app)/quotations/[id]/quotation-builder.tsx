@@ -3659,8 +3659,21 @@ export function QuotationBuilder({
           directDrive: /direct/i.test(line.specs.drive),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Selection failed");
+      // Read the body as text first so an empty / non-JSON response (e.g. a
+      // 500 with no body) surfaces the real HTTP status instead of the opaque
+      // "Unexpected end of JSON input" from res.json().
+      const raw = await res.text();
+      let data: { error?: string; results?: SelectionResult[] } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          throw new Error(
+            !res.ok ? `Selection failed (HTTP ${res.status}).` : "Selection returned an invalid response.",
+          );
+        }
+      }
+      if (!res.ok) throw new Error(data.error || `Selection failed (HTTP ${res.status}).`);
       setSel((s) => ({ ...s, [line.id]: { loading: false, error: null, results: data.results ?? [] } }));
     } catch (e) {
       setSel((s) => ({ ...s, [line.id]: { loading: false, error: e instanceof Error ? e.message : "Selection failed", results: null } }));

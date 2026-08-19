@@ -1,3 +1,15 @@
+## 2026-08-19 · Fan selector — never crash on an empty response ("Unexpected end of JSON input")
+- **Bug (owner-reported).** Running the fan selector on KDK products showed **"Failed to execute 'json' on 'Response':
+  Unexpected end of JSON input."** Cause: when `/api/selection` returns a **500 with an empty body** (an uncaught
+  throw in the route handler yields no body), the client called `res.json()` **before** checking `res.ok`, so the
+  empty-body parse error masked the real HTTP status — the user never saw what actually failed.
+- **Fix (server).** Wrapped the catalogue query + `selectFans` in a try/catch that always returns a **JSON** body
+  (`{ error }`, 500) and logs the failure server-side. The endpoint can no longer return an empty body.
+- **Fix (client).** All three callers (`quotation-builder.tsx`, `tools/selection-tool.tsx`,
+  `inquiries/[id]/inquiry-workspace.tsx`) now read the body as **text first**, parse defensively, and check `res.ok`,
+  surfacing the real error (or `HTTP <status>`) instead of the opaque JSON-parse message.
+- Not a frozen area (quotation/selection, upstream of the order workflow). Typecheck + lint clean.
+
 ## 2026-08-19 · Stock transfers — searchable item picker on "Request transfer to Office"
 - **Request.** The item picker was a plain `<select>` of all stock options; hard to find an item in a long list.
 - **Change (inventory UI, not frozen).** New `ItemPicker` combobox in `stock-transfers.tsx`: a text input that filters

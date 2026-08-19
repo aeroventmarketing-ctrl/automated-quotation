@@ -162,32 +162,53 @@ export async function POST(req: NextRequest) {
     duty = { ...duty, staticPressure_pa: 0.5 * 249.0889 };
   }
 
-  const models = await prisma.catalogueItem.findMany({
-    where: {
-      active: true,
-      ratingPoints: { some: {} },
-      ...(body.catalogueItemIds ? { id: { in: body.catalogueItemIds } } : {}),
-      ...(body.family ? { family: body.family as never } : {}),
-      ...catalogueWhere(body.tag, body.bladeType),
-    },
-    include: { ratingPoints: true },
-  });
+  // Query the catalogue and run the selection engine. Any failure here (DB
+  // error, unexpected model data, …) must still return a JSON body — an
+  // uncaught throw yields a 500 with an EMPTY body, which the client surfaces
+  // as the opaque "Unexpected end of JSON input". Catch it and report instead.
+  try {
+    const models = await prisma.catalogueItem.findMany({
+      where: {
+        active: true,
+        ratingPoints: { some: {} },
+        ...(body.catalogueItemIds ? { id: { in: body.catalogueItemIds } } : {}),
+        ...(body.family ? { family: body.family as never } : {}),
+        ...catalogueWhere(body.tag, body.bladeType),
+      },
+      include: { ratingPoints: true },
+    });
 
-  const inputs: FanModelInput[] = models.map((m) => ({
-    id: m.id,
-    modelCode: m.modelCode,
-    name: m.name,
-    sizeLabel: m.sizeLabel,
-    specs: m.specs as Record<string, unknown>,
-    ratingPoints: m.ratingPoints.map((r) => ({
-      rpm: r.rpm,
-      airflow_m3hr: r.airflow_m3hr,
-      staticPressure_pa: r.staticPressure_pa,
-      power_kw: r.power_kw,
-      efficiency: r.efficiency,
-    })),
-  }));
+    const inputs: FanModelInput[] = models.map((m) => ({
+      id: m.id,
+      modelCode: m.modelCode,
+      name: m.name,
+      sizeLabel: m.sizeLabel,
+      specs: m.specs as Record<string, unknown>,
+      ratingPoints: m.ratingPoints.map((r) => ({
+        rpm: r.rpm,
+        airflow_m3hr: r.airflow_m3hr,
+        staticPressure_pa: r.staticPressure_pa,
+        power_kw: r.power_kw,
+        efficiency: r.efficiency,
+      })),
+    }));
 
-  const results = selectFans(inputs, duty, { directDrive: body.directDrive });
-  return NextResponse.json({ duty, sourceUnits, results });
+    const results = selectFans(inputs, duty, { directDrive: body.directDrive });
+    return NextResponse.json({ duty, sourceUnits, results });
+  } catch (err) {
+    console.error("[/api/selection] selection failed", {
+      tag: body.tag,
+      bladeType: body.bladeType,
+      error: err,
+    });
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error
+            ? `Selection failed: ${err.message}`
+            : "Selection failed unexpectedly.",
+      },
+      { status: 500 },
+    );
+  }
 }
