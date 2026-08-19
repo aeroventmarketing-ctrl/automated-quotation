@@ -1,3 +1,13 @@
+## 2026-08-19 · Order page — show read-only stock availability on the Purchasing card
+- **Context.** A bought-in requisition asks for a PO even when the item is in stock. The full "issue from stock"
+  feature already exists in the **Purchasing workspace** (`RequisitionStockCheck` + `issueRequisitionLineFromStock`);
+  the order-page Phase 4 card just never surfaced it (it omitted `showStockCheck`, so no availability showed).
+- **Change (one line, read-only).** `orders/[id]/page.tsx` passes `showStockCheck` to the (still `readOnly`)
+  `PurchasingChain`. With `readOnly` + no `canIssueStock`, the card renders the **read-only `StockAvailabilityLookup`**
+  per requisition (e.g. "6 available") — no issue action on the order page; issuing stays in `/purchasing`.
+- No workflow change (display only). Typecheck + lint clean. (Explored first: the issue-from-stock capability was
+  already built — a speculative duplicate migration/action was reverted before this.)
+
 ## 2026-08-19 · Unification Phase A2/A3 — Store products admin (manage listing on the catalogue record)
 - **Goal.** The mockup's "Products" screen: manage each catalogue item's storefront listing on the same record that
   drives the ERP; derived website price shown read-only; fabricated fans = quote-only.
