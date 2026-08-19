@@ -64,6 +64,9 @@ export interface AccessoryLine {
   dimensions: AccessoryDimension[];
   material: string; // e.g. "Stainless Steel 304"
   note: string; // per-product remarks
+  // Free-text extra details the JO creator types for this row; printed in the
+  // "More Details" column (distinct from `note`, which feeds the remarks box).
+  moreDetails: string;
 }
 
 export interface AccessoriesJobOrder {
@@ -92,6 +95,7 @@ export const EMPTY_ACCESSORY_LINE: AccessoryLine = {
   dimensions: [{ value: "", label: "" }, { value: "", label: "" }],
   material: "",
   note: "",
+  moreDetails: "",
 };
 
 export const EMPTY_ACCESSORIES_JO: AccessoriesJobOrder = {
@@ -163,6 +167,7 @@ export function coerceAccessoryLine(value: unknown): AccessoryLine | null {
     dimensions: twoDims,
     material: s("material"),
     note: s("note"),
+    moreDetails: s("moreDetails"),
   };
 }
 

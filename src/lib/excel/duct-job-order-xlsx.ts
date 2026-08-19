@@ -140,7 +140,7 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
       ws.getCell(r, 5).value = segmentTypeLabel(seg);
       ws.getCell(r, 6).value = seg.material;
       ws.getCell(r, 7).value = seg.gauge;
-      ws.getCell(r, 8).value = ""; // More Details — blank, for the engineer to fill in
+      ws.getCell(r, 8).value = seg.moreDetails || ""; // More Details — typed by the JO creator
       for (let c = 1; c <= 8; c++) {
         const cell = ws.getCell(r, c);
         const leftAligned = c === DIM_COL + 1 || c === MORE_COL + 1;

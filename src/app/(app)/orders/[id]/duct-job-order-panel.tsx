@@ -270,6 +270,10 @@ function DuctJobOrderForm({
                 </select>
               </label>
             </div>
+            <label className="block space-y-0.5">
+              <span className="text-[10px] text-muted-foreground">More details</span>
+              <Input className="h-7 text-xs" value={seg.moreDetails} onChange={(e) => setSeg(i, { moreDetails: e.target.value })} placeholder="Additional details for this row (printed in the More Details column)…" />
+            </label>
           </div>
         ))}
         <div className="flex flex-wrap items-center gap-2">

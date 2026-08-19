@@ -1,3 +1,17 @@
+## 2026-08-19 · Job Orders — make "More Details" an editable per-row field (Duct, Accessories, Motor)
+- **Request (owner-approved, frozen Phase 2 area).** The "More Details" column (added blank earlier) is now an
+  **editable field the JO creator types per row**, saved with the JO and printed into that column.
+- **Data model** — added `moreDetails: string` to `DuctSegment`, `MotorControllerLine`, `AccessoryLine` (+ their
+  `EMPTY_*` blanks and coercion, so old JOs load with an empty value). Accessories keeps its existing per-line `note`
+  (feeds the remarks box); `moreDetails` is distinct and feeds the column.
+- **Editors** — a "More details" text input per row in `duct-job-order-panel.tsx`,
+  `motor-controller-job-order-panel.tsx`, `accessories-job-order-panel.tsx`.
+- **Save actions** — `ductSegmentSchema` / `accLineSchema` / `mcLineSchema` gain `moreDetails`, carried through each
+  save mapping. `job-order-autogen.ts` sets it to "" on auto-generated motor/accessory lines.
+- **Print** — the three xlsx exporters now write `moreDetails` into the More Details cell (col 8 duct, col 7 acc/motor)
+  instead of a blank.
+- Typecheck + lint clean; smoke test confirmed a typed value lands in the correct printed column for all three.
+
 ## 2026-08-19 · Job Orders — add a blank "More Details" column (Duct, Accessories, Motor Controller)
 - **Request (owner-approved, frozen Phase 2 area).** Add a right-most **"More Details"** column to the printed job
   orders — a blank column the engineer fills in by hand — sized the same as each sheet's main dimensions/description

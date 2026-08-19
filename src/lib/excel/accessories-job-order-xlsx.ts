@@ -116,7 +116,7 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
       ws.getCell(r, 4).value = formatAccessoryDimensions(line);
       ws.getCell(r, 5).value = line.type;
       ws.getCell(r, 6).value = formatMaterialText(line.material);
-      ws.getCell(r, 7).value = ""; // More Details — blank, for the engineer to fill in
+      ws.getCell(r, 7).value = line.moreDetails || ""; // More Details — typed by the JO creator
       for (let c = 1; c <= 7; c++) {
         const cell = ws.getCell(r, c);
         const leftAligned = c === DIM_COL + 1 || c === MORE_COL + 1;
