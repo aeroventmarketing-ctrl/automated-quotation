@@ -1,3 +1,14 @@
+## 2026-08-19 · Fix: direct bought-in requisition stuck in "Awaiting Plant Manager approval"
+- **Bug (owner-reported, frozen Phase 4).** A bought-in requisition that ended up in `PENDING_APPROVAL` (e.g. after a
+  Reject) was un-approvable: the Purchasing view defers dept-requisition approval to the order's Materials tab, but the
+  Materials-tab approve button only exists for **MRF-escalated** requests (they carry a linked material request). A
+  **direct** bought-in requisition has no MRF, never shows on the Materials tab → no approve button anywhere → stuck.
+- **Fix.** `purchasing-chain.tsx` — `hideApproval` now also requires `r.mrfNo`, so approval is deferred to the Materials
+  tab **only** for MRF-escalated requests. A direct bought-in / department requisition keeps its Approve/Reject in the
+  Purchasing view (`canAct = admin || role`, so the Plant Manager/admin can act). Unsticks the current one + prevents
+  recurrence. Editing item text never changed status (verified) — this was the real cause.
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Bought-in requisition — carry the full item spec (was name-only)
 - **Request (owner, frozen Phase 4).** A bought-in requisition showed only the short name ("1 unit · Induction Motor
   (TECO)") with no details; the purchasing tab should show the quotation's full item description.
