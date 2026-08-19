@@ -1,3 +1,14 @@
+## 2026-08-19 · Purchasing badge — match "no Plant Manager" for bought-in / Office requisitions
+- **Request (owner, frozen Phase 4).** After bought-in/Office requisitions were set to skip the Plant Manager, the
+  orange status badge still read "Plant Manager approved — awaiting purchase approval" — inconsistent with the
+  Payment-Approver "Approve Purchase" button and the awaiting label.
+- **Fix (display only).** Added `needsPlantApproval` to the purchase-chain row (set via `requisitionNeedsPlantApproval`
+  in `purchase-chain-row.ts` and the order-page inline builder). In `purchasing-chain.tsx` the badge now reads
+  **"Awaiting purchase approval"** when `needsPlantApproval === false` (bought-in / Office), and keeps
+  **"Plant Manager approved — awaiting purchase approval"** for production-dept / MRF requisitions. Backward-compatible
+  (undefined → the PM label).
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Bought-in / Office requisitions skip Plant Manager approval
 - **Request (owner, frozen Phase 4).** A bought-in item follows the bought-in flow — **no Plant Manager approval**.
   But a bought-in/Office requisition that landed in `PENDING_APPROVAL` (e.g. via an admin roll-back) showed the
