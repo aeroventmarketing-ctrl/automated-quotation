@@ -117,6 +117,16 @@ model CatalogueItem {
   uom         String  @default("unit")
   active      Boolean @default(true)
 
+  // Online store fields (Phase A of store ⇄ ERP unification). All additive &
+  // optional: an item is NOT on the storefront until storeListed is set. The
+  // website price is DERIVED from the AeroQuote price at read time (see
+  // websiteSellingPrice), never stored here.
+  storeListed      Boolean @default(false)
+  storeSlug        String? @unique
+  storeCategory    String?
+  storeDescription String?
+  storePhotos      Json    @default("[]")
+
   priceList       PriceListEntry[]
   ratingPoints    FanRatingPoint[]
   quotationItems  QuotationItem[]

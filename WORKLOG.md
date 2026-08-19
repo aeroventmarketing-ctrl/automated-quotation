@@ -1,3 +1,40 @@
+## 2026-08-19 · Order page — show read-only stock availability on the Purchasing card
+- **Context.** A bought-in requisition asks for a PO even when the item is in stock. The full "issue from stock"
+  feature already exists in the **Purchasing workspace** (`RequisitionStockCheck` + `issueRequisitionLineFromStock`);
+  the order-page Phase 4 card just never surfaced it (it omitted `showStockCheck`, so no availability showed).
+- **Change (one line, read-only).** `orders/[id]/page.tsx` passes `showStockCheck` to the (still `readOnly`)
+  `PurchasingChain`. With `readOnly` + no `canIssueStock`, the card renders the **read-only `StockAvailabilityLookup`**
+  per requisition (e.g. "6 available") — no issue action on the order page; issuing stays in `/purchasing`.
+- No workflow change (display only). Typecheck + lint clean. (Explored first: the issue-from-stock capability was
+  already built — a speculative duplicate migration/action was reverted before this.)
+
+## 2026-08-19 · Unification Phase A2/A3 — Store products admin (manage listing on the catalogue record)
+- **Goal.** The mockup's "Products" screen: manage each catalogue item's storefront listing on the same record that
+  drives the ERP; derived website price shown read-only; fabricated fans = quote-only.
+- **New Admin → Store products** (`/admin/products`): server page loads active catalogue items (+ latest active price
+  per variant → representative AeroQuote price → derived website price) and renders `StoreProductsManager` (client).
+  Filters (All / Listed / Draft / Quote-only), a per-row **Listed/Draft** quick toggle, and an inline editor for
+  **slug, category, description, photos**. Added the tab to the admin nav.
+- **Server actions** (`admin/actions.ts`): `saveStoreListing` (validates, ensures a unique slug — a listed item always
+  gets one, derived from the model code if blank) and `setStoreListed` (quick toggle). Both admin-gated.
+- **Photos**: new admin-only `src/app/api/store-uploads/route.ts` (POST upload under `store/…` via `uploadToStorage`,
+  GET signed-URL preview) — mirrors the marketing-uploads pattern. The editor uploads, previews, and removes photos;
+  paths are saved into `storePhotos`.
+- **A3 folded in**: website price is derived (÷ 0.95) and read-only; `isQuoteOnly()` marks fabricated fans with a
+  Quote-only badge and no list toggle / price.
+- Typecheck + lint clean. (No DB in sandbox — the 0043 migration + these screens exercise on deploy.)
+
+## 2026-08-19 · Unification Phase A1 — store fields on the catalogue item (foundation)
+- **Goal.** Start store ⇄ ERP unification: one catalogue record drives both the ERP/AeroQuote and the storefront.
+- **Schema + migration `0043_catalogue_store_fields`.** Additive, optional columns on `CatalogueItem`: `storeListed`
+  (default false — off the store until set), `storeSlug` (unique, nullable), `storeCategory`, `storeDescription`,
+  `storePhotos` (JSONB `[]`). Website price stays DERIVED (round(AeroQuote / 0.95)), never stored. RLS block kept per
+  convention.
+- **New `src/lib/store-product.ts`** — `storeFieldsOf()` reader, `deriveStoreSlug()`, `storeCategoryLabel()`,
+  `coerceStorePhotos()`, and `isQuoteOnly()` (fabricated fans = quote-only, mirroring the price-list exclusion set).
+- Nothing wired to UI yet (that's A2, the Products admin). `prisma generate` + typecheck + lint clean. Migration
+  applies on deploy (no DB in this sandbox).
+
 ## 2026-08-19 · Email — split multi-address recipient fields (fix Resend 422)
 - **Bug.** A client record can hold several emails in one field (e.g. "a@x.com ; b@y.com ; c@z.com"). The mailer passed
   that whole string as one recipient, so Resend rejected it: `422 validation_error — Invalid to field`. That client's
