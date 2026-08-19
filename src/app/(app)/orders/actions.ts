@@ -2171,12 +2171,6 @@ export async function advancePurchaseRequest(
       // the Purchaser — not the approving role — turns the request away.
       if (stepKey === "reject") {
         data.chainLog = { ...chainLogBase, reject: { byName: user.name, at: now.toISOString(), role: actorRoleLabel } } as Prisma.InputJsonValue;
-      } else if (stepKey === "approve" && isDept && !requisitionNeedsPlantApproval(pr)) {
-        // Bought-in / Office requisitions are single-stage: they skip the Plant
-        // Manager, so the Payment Approver's approval IS the purchase approval.
-        // Stamp approve_po in the same action so it moves straight to the Approved
-        // / For-purchasing tab — no redundant second approval.
-        data.chainLog = { ...chainLogBase, approve_po: { byName: user.name, at: now.toISOString(), role: actorRoleLabel } } as Prisma.InputJsonValue;
       }
       break;
     case "voucher":

@@ -175,9 +175,6 @@ export interface PurchaseChainRow {
   // A warehouse/material requisition — the Plant Manager approves the request
   // itself (step 16), so approve/reject don't wait for a Purchase Order.
   isDept: boolean;
-  // Whether the approval is the Plant Manager's (production-dept / MRF). False for
-  // bought-in / Office requisitions, which skip the Plant Manager.
-  needsPlantApproval: boolean;
   // The Purchaser may reject a still-pending request (in the pending bucket:
   // PENDING_APPROVAL, or a dept MRF approved by the Plant Manager but not yet
   // purchase-approved). Rendered as a Reject button on the interactive chain.
@@ -414,7 +411,6 @@ export function buildPurchaseChainRow(
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,
-    needsPlantApproval: requisitionNeedsPlantApproval(pr),
     canPurchaserReject: ctx.canAct("purchaser") && statusBucket(status, { isDept, poApproved }) === "pending",
     // PO prep opens once the request is approved (out of the pending bucket) and
     // still at APPROVED — before the voucher. Keeps Create-PO / Split off pending.

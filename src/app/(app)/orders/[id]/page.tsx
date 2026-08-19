@@ -797,7 +797,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       poDefaultLines: poLinesFromPRItems(prItems),
       canManagePO,
       isDept: isDeptRequisition(pr),
-      needsPlantApproval: requisitionNeedsPlantApproval(pr),
       returns: buildReturnViews(pr),
       canRaiseReturn: false,
       returnAdvanceRoles: [],
