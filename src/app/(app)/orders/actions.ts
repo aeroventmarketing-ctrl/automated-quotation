@@ -693,6 +693,7 @@ const ductSegmentSchema = z.object({
   toVertical: z.string().trim().default(""),
   material: z.string().trim().default(""),
   gauge: z.string().trim().default(""),
+  unit: z.string().trim().default("inches"),
 });
 
 const ductJoSchema = z.object({
@@ -741,6 +742,7 @@ export async function saveDuctJobOrder(
         toVertical: reducing ? s.toVertical : "",
         material: s.material || "G.I. Material",
         gauge: s.gauge || "GA20",
+        unit: s.unit || "inches",
       };
     })
     .filter((s) => s.horizontal !== "" || s.vertical !== "" || s.length !== "");

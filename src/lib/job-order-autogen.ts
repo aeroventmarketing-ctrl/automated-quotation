@@ -203,6 +203,7 @@ export function buildAutoJobOrders(
         horizontal: str(s.sizeL),
         vertical: str(s.sizeW),
         length: "",
+        unit: str(s.sizeUnit) || "inches",
         material: ductMaterial(s),
         gauge: ductGaugeLabel(s),
       });
@@ -229,6 +230,7 @@ export function buildAutoJobOrders(
         length: isStraight ? straightDuctLength(s) : type === "Offset Duct" ? str(s.ductCalcHeight) : "",
         toHorizontal: "",
         toVertical: "",
+        unit: str(s.sizeUnit) || "inches",
         material: ductMaterial(s),
         gauge: ductGaugeLabel(s),
       });
