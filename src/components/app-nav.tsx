@@ -21,7 +21,7 @@ export const NAV = [
   { href: "/calendar", label: "Team Calendar", icon: CalendarDays, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/orders", label: "Orders", icon: ClipboardList, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/counter-sales", label: "Counter Sales", icon: Store, roles: ["SALES", "ADMIN"] },
-  { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["ENGINEER", "ADMIN", "OTHER"] },
+  { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/products", label: "Products", icon: Package, roles: ["ENGINEER", "ADMIN", "OTHER"] },
   { href: "/requisitions", label: "Requisitions", icon: ClipboardCheck, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/purchasing", label: "Purchasing", icon: ShoppingCart, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
