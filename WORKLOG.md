@@ -1,3 +1,16 @@
+## 2026-08-19 · Follow-up "Max emails per run" — allow no limit (0 = unlimited)
+- **Goal.** The 100 email/run throttle was a genuine hard ceiling; the owner wants to be able to remove it and send
+  every due client in one run.
+- **`src/lib/follow-up-settings.ts`** — dropped the `Math.min(..., 100)` clamp on `maxPerRun`; now **0 = no limit** and
+  any positive value throttles (invalid falls back to the safe default 100, not unlimited). Split the constants:
+  `FOLLOW_UP_DEFAULT_PER_RUN = 100` (email default) vs `FOLLOW_UP_MAX_PER_RUN = 100` (**SMS** ceiling, kept — Semaphore
+  bills per text, so unlimited SMS was deliberately NOT enabled).
+- **`src/lib/follow-up-runner.ts`** — `sendCap` treats `maxPerRun <= 0` as `POSITIVE_INFINITY` (send all due).
+- **UI** — email input min changed `1 → 0`, removed `max={100}`; helper text documents `0 = no limit` with a
+  deliverability/Resend-quota caution. The "Follow-ups due" live banner now shows "no per-run limit" when set to 0.
+  SMS "max texts per run" stays capped at 100.
+- Typecheck + lint clean. (Follow-up/email is not a frozen area — frozen = Order Phases 1–5 only.)
+
 ## 2026-08-17 · Public Fan Selector API (for the online store's HVAC Tools page)
 - **Goal.** The store's HVAC Tools page needs a real "Fan Selector" that sizes an AeroVent fan/blower for a visitor's
   duty — **performance shown, prices NOT** (the standing rule).

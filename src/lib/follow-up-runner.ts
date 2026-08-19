@@ -86,7 +86,8 @@ export async function runFollowUps(opts: {
   const targeted = Array.isArray(opts.onlyQuoteIds);
   // Emails sent per run — quote follow-ups + inquiry check-ins share this budget.
   // A targeted manual send (admin hand-picked the recipients) ignores the cap.
-  const sendCap = targeted ? Number.POSITIVE_INFINITY : settings.maxPerRun;
+  // A targeted manual send ignores the cap; maxPerRun of 0 means "no limit".
+  const sendCap = targeted || settings.maxPerRun <= 0 ? Number.POSITIVE_INFINITY : settings.maxPerRun;
   const campaignStartAt = settings.campaignStartAt ? new Date(settings.campaignStartAt) : null;
 
   const canSend = emailConfigured() && !!config.followUpFromEmail;

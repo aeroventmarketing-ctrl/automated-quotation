@@ -29,7 +29,8 @@ export interface FollowUpConfig extends FollowUpSettings {
   /**
    * Max emails sent in a single run (across quote follow-ups + inquiry check-ins).
    * Lets you throttle for domain warm-up — set 24 to send 24 per run; the rest
-   * stay due for the next run. Default 100 (also the hard ceiling).
+   * stay due for the next run. **0 = no limit** (send every due client this run).
+   * Default 100.
    */
   maxPerRun: number;
   /**
@@ -66,7 +67,9 @@ export interface FollowUpConfig extends FollowUpSettings {
   smsTemplates: string[];
 }
 
-/** The hard ceiling on emails per run, regardless of the configured value. */
+/** Safe default emails-per-run when unset or invalid (0 = no limit is allowed). */
+export const FOLLOW_UP_DEFAULT_PER_RUN = 100;
+/** Hard ceiling on SMS per run — texts are billed per message, so this stays capped. */
 export const FOLLOW_UP_MAX_PER_RUN = 100;
 
 export function normalizeFollowUpConfig(
@@ -87,9 +90,11 @@ export function normalizeFollowUpConfig(
   const rawInqMax = Math.floor(Number(input?.inquiryMaxNudges));
   const inquiryMaxNudges = Number.isFinite(rawInqMax) && rawInqMax >= 1 ? rawInqMax : 6;
 
+  // Emails per run: 0 = no limit (send every due client this run); any positive
+  // number throttles. No hard ceiling — an invalid value falls back to the safe
+  // default, not unlimited.
   const rawPerRun = Math.floor(Number(input?.maxPerRun));
-  const wantPerRun = Number.isFinite(rawPerRun) && rawPerRun >= 1 ? rawPerRun : FOLLOW_UP_MAX_PER_RUN;
-  const maxPerRun = Math.min(wantPerRun, FOLLOW_UP_MAX_PER_RUN);
+  const maxPerRun = Number.isFinite(rawPerRun) && rawPerRun >= 0 ? rawPerRun : FOLLOW_UP_DEFAULT_PER_RUN;
 
   const rawCampaign = input?.campaignStartAt;
   const campaignStartAt =
