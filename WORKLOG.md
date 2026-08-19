@@ -1,3 +1,17 @@
+## 2026-08-19 · Bought-in / Office requisitions skip Plant Manager approval
+- **Request (owner, frozen Phase 4).** A bought-in item follows the bought-in flow — **no Plant Manager approval**.
+  But a bought-in/Office requisition that landed in `PENDING_APPROVAL` (e.g. via an admin roll-back) showed the
+  `approve`/`reject` step elevated to the **Plant Manager** (`effectiveStepRole` elevates for any department
+  requisition), which is wrong for Office.
+- **Fix.** New `requisitionNeedsPlantApproval(pr)` in `purchasing.ts` = dept requisition **and dept ≠ "office"**.
+  `effectiveStepRole`'s flag renamed to `needsPlantApproval`; all 7 call sites (approve auth in `advancePurchaseRequest`
+  + `advanceCombinedPO`, the order page, purchasing workspace, `purchase-chain-row`, `my-dashboard`) now pass it. So a
+  production-dept / MRF requisition still needs PM, but a **bought-in / Office** one's approve/reject is the **Payment
+  Approver's purchase approval** — no PM stage, matching how they auto-raise as APPROVED.
+- Result: the stuck Office requisition now shows "Approve Purchase" by the **Payment Approver** (not Plant Manager);
+  future ones skip PM everywhere (display + auth). The normal APPROVED→approve_po flow is unchanged.
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Fix: direct bought-in requisition stuck in "Awaiting Plant Manager approval"
 - **Bug (owner-reported, frozen Phase 4).** A bought-in requisition that ended up in `PENDING_APPROVAL` (e.g. after a
   Reject) was un-approvable: the Purchasing view defers dept-requisition approval to the order's Materials tab, but the
