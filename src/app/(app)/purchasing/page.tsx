@@ -6,7 +6,7 @@ import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
-import { purchaseStepsFrom, isPoApproved, effectiveStepRole, requisitionNeedsPlantApproval, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, requisitionDeptLabel, REQUISITION_DEPTS } from "@/lib/order-workflow";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
@@ -195,7 +195,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       const trail = buildPurchaseTrail(anchor);
       const bIsDept = isDeptRequisition(anchor);
       const actions = purchaseStepsFrom(status, bIsDept, isPoApproved(anchor.chainLog)).map((step) => {
-        const role = effectiveStepRole(step, requisitionNeedsPlantApproval(anchor));
+        const role = effectiveStepRole(step, bIsDept);
         const names = namesForRole(role);
         return { key: step.key, label: step.label, canAct: canAct(role), roleLabel: `${workflowRoleLabel(role)}${names.length ? ` (${names.join(", ")})` : ""}` };
       });

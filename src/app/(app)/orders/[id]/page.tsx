@@ -25,7 +25,7 @@ import {
   type ProductionDeptKey,
   type FulfillmentMode,
 } from "@/lib/order-workflow";
-import { purchaseStepsFrom, isPoApproved, effectiveStepRole, requisitionNeedsPlantApproval, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poLinesFromPRItems } from "@/lib/purchase-order";
@@ -693,7 +693,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     if (linkedPr && poStatus && poStatus !== "REJECTED" && poStatus !== "COMPLETED" && poStatus !== "CANCELLED") {
       const step = purchaseStepsFrom(poStatus, true, isPoApproved(linkedPr.chainLog))[0];
       if (step) {
-        const role = effectiveStepRole(step, requisitionNeedsPlantApproval(linkedPr));
+        const role = effectiveStepRole(step, true);
         const names = namesForRole(role);
         awaitingLabel = `${workflowRoleLabel(role)}${names.length ? ` (${names.join(", ")})` : ""}`;
       }
@@ -773,7 +773,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     const trail = buildPurchaseTrail(pr);
     const prIsDept = isDeptRequisition(pr);
     const actions = purchaseStepsFrom(status, prIsDept, isPoApproved(pr.chainLog)).map((step) => {
-      const role = effectiveStepRole(step, requisitionNeedsPlantApproval(pr));
+      const role = effectiveStepRole(step, prIsDept);
       const names = namesForRole(role);
       return {
         key: step.key,

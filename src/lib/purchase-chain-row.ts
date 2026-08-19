@@ -4,7 +4,7 @@
  * and the central Purchasing workspace (where the purchaser processes them).
  */
 import { coercePurchaseOrder, poLinesFromPRItems, poLineAmount, poHasEwt, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
-import { purchaseStepsFrom, isPoApproved, effectiveStepRole, requisitionNeedsPlantApproval, isDeptRequisition, statusBucket, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, statusBucket, PR_STATUS_LABEL, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import {
   coercePurchaseReturns,
   hasUnresolvedReturn,
@@ -373,7 +373,7 @@ export function buildPurchaseChainRow(
   const isDept = isDeptRequisition(pr);
   const poApproved = isPoApproved(pr.chainLog);
   const actions = purchaseStepsFrom(status, isDept, poApproved).map((step) => {
-    const role = effectiveStepRole(step, requisitionNeedsPlantApproval(pr));
+    const role = effectiveStepRole(step, isDept);
     const names = ctx.namesForRole(role);
     return {
       key: step.key,
