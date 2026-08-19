@@ -1,3 +1,11 @@
+## 2026-08-19 · Stock labels — print the supplier barcode alongside the Item Code
+- **Request (owner).** Show a **Barcode / SKU pair** on the printed labels.
+- **Change (inventory UI, not frozen, display only).** Each stock label already prints Code 128 + QR of the **Item
+  Code (SKU)**; when an item has an external **supplier barcode (GTIN)**, the label now also prints a second, labelled
+  Code 128 for it — on the `/inventory/labels` sheet and in the per-row Label popover. `LabelItem.barcode` is optional,
+  so the Products label page (no external barcode) is unaffected.
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Inventory — external barcode (GTIN) field on stock items
 - **Request (owner).** Add a barcode/GTIN field, separate from the internal SKU, for the future retail/e-commerce
   layer and for scanning a supplier's printed barcode. (The internal Code128/QR labels already encode the SKU.)
