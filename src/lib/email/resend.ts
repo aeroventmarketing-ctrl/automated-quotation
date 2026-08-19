@@ -24,10 +24,28 @@ export function emailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
+/**
+ * Split a recipient field into individual addresses. A single client record can
+ * hold several emails in one field (e.g. "a@x.com ; b@y.com , c@z.com"); Resend's
+ * `to` rejects such a string, so we split on ; , and newlines and keep the
+ * address-looking tokens. A normal single address passes through unchanged.
+ */
+export function splitRecipients(raw: string): string[] {
+  return raw
+    .split(/[;,\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.includes("@"));
+}
+
 /** Send one email via Resend. Throws on missing key or a non-2xx response. */
 export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> {
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error("RESEND_API_KEY is not set");
+
+  // A recipient field may hold several addresses in one string (e.g.
+  // "a@x.com ; b@y.com"). Split them so Resend gets a valid address array.
+  const to = splitRecipients(input.to);
+  if (to.length === 0) throw new Error(`No valid recipient address in "${input.to}"`);
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -37,7 +55,7 @@ export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> 
     },
     body: JSON.stringify({
       from: input.from,
-      to: [input.to],
+      to,
       subject: input.subject,
       text: input.text,
       ...(input.html ? { html: input.html } : {}),
