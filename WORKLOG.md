@@ -1,3 +1,11 @@
+## 2026-08-19 · Stock transfers — searchable item picker on "Request transfer to Office"
+- **Request.** The item picker was a plain `<select>` of all stock options; hard to find an item in a long list.
+- **Change (inventory UI, not frozen).** New `ItemPicker` combobox in `stock-transfers.tsx`: a text input that filters
+  stock options by **name / location** as you type, with a click-to-select dropdown (shows availability + unit, caps at
+  50 results). Replaces the `<select>` in the Request-to-Office form; each row uses its own picker. Value/onChange
+  unchanged, so submit logic is untouched.
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Bought-in / Office requisition — one approval moves it to the Approved tab
 - **Request (owner, frozen Phase 4).** Office requisitions still carried the department **two-stage** approval
   (`approve` → `approve_po`): after one "Approve Purchase" the request was APPROVED but `poApproved` was still false, so

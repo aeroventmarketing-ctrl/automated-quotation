@@ -180,6 +180,47 @@ function TransferRow({ t, admin }: { t: StockTransferView; admin: boolean }) {
   );
 }
 
+/** Searchable item picker — type to filter stock options by name / location. */
+function ItemPicker({ options, value, onChange }: { options: StockOption[]; value: string; onChange: (id: string) => void }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const picked = options.find((s) => s.id === value);
+  const label = (s: StockOption) => `${s.name}${s.location ? ` · ${s.location}` : ""} (avail ${fmtQty(s.available)} ${s.unit})`;
+  const term = q.trim().toLowerCase();
+  const filtered = (term ? options.filter((s) => `${s.name} ${s.location ?? ""}`.toLowerCase().includes(term)) : options).slice(0, 50);
+  return (
+    <div className="relative">
+      <input
+        className="mt-0.5 block h-8 min-w-[16rem] rounded-md border bg-background px-2 text-sm"
+        placeholder="Search an item by name…"
+        value={open ? q : picked ? label(picked) : ""}
+        onFocus={() => { setOpen(true); setQ(""); }}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <ul className="absolute z-20 mt-1 max-h-60 w-[min(28rem,80vw)] overflow-auto rounded-md border bg-background text-sm shadow-lg">
+          {filtered.length === 0 ? (
+            <li className="px-2 py-1.5 text-muted-foreground">No item matches &ldquo;{q.trim()}&rdquo;.</li>
+          ) : (
+            filtered.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  className={`block w-full px-2 py-1.5 text-left hover:bg-accent ${s.id === value ? "bg-accent/60" : ""}`}
+                  onMouseDown={(e) => { e.preventDefault(); onChange(s.id); setOpen(false); setQ(""); }}
+                >
+                  {s.name}{s.location ? ` · ${s.location}` : ""} <span className="text-muted-foreground">(avail {fmtQty(s.available)} {s.unit})</span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** Purchaser: request a transfer of one or more items into the Office. */
 function RequestOfficeForm({ stockOptions }: { stockOptions: StockOption[] }) {
   const router = useRouter();
@@ -218,12 +259,7 @@ function RequestOfficeForm({ stockOptions }: { stockOptions: StockOption[] }) {
             <div key={i} className="flex flex-wrap items-end gap-2">
               <label className="text-xs text-muted-foreground">
                 {i === 0 ? "Item" : <span className="invisible">Item</span>}
-                <select className="mt-0.5 block h-8 min-w-[16rem] rounded-md border bg-background px-2 text-sm" value={r.itemId} onChange={(e) => setRow(i, { itemId: e.target.value })}>
-                  <option value="">— pick an item —</option>
-                  {stockOptions.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}{s.location ? ` · ${s.location}` : ""} (avail {fmtQty(s.available)} {s.unit})</option>
-                  ))}
-                </select>
+                <ItemPicker options={stockOptions} value={r.itemId} onChange={(id) => setRow(i, { itemId: id })} />
               </label>
               <label className="text-xs text-muted-foreground">{i === 0 ? "Qty" : <span className="invisible">Qty</span>}<Input className="mt-0.5 h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={r.qty} onChange={(e) => setRow(i, { qty: e.target.value })} /></label>
               {picked && <span className="pb-1.5 text-[11px] text-muted-foreground">{picked.location || "—"} → Office</span>}
