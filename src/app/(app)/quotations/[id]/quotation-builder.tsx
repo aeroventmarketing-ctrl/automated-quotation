@@ -904,6 +904,24 @@ function selectionTag(type: string, bladeType: string, drive = "", category = ""
   return tag;
 }
 /**
+ * Why the fan selector can't run yet, or null when it can. Currently the only
+ * blocker is a Wall Mounted Fan whose **Series** isn't chosen — `selectionTag`
+ * then resolves to an empty tag, which would query every catalogue at once and
+ * return an irrelevant mixed list. Keep the selector disabled until it resolves
+ * a real catalogue.
+ */
+function selectionBlockedReason(specs: {
+  type: string;
+  bladeType: string;
+  drive?: string;
+  category?: string;
+}): string | null {
+  const tag = selectionTag(specs.type, specs.bladeType, specs.drive ?? "", specs.category ?? "");
+  if (tag) return null;
+  if (specs.type === "Wall Mounted Fan") return "Select a series first.";
+  return "Complete the product selection first.";
+}
+/**
  * Body-price factor by tag, applied to the body only (then × material):
  *  CEB ×1 (base) · CFAB ÷0.9 · CABSISW ÷0.54 · DIDWCEB ÷0.57 ·
  *  DIDWCFAB ÷0.9 ÷0.57 (forward × double-width) ·
@@ -3621,6 +3639,15 @@ export function QuotationBuilder({
   // in the quotation-header units; convert them to CFM / in-w.g. (the catalog's
   // units) before querying.
   async function runLineSelection(line: Line) {
+    // Guard: the product selection must resolve a real catalogue first (e.g. a
+    // Wall Mounted Fan needs its Series). Without it the query would return an
+    // irrelevant mixed list. The button is disabled in this state; this is the
+    // programmatic backstop.
+    const blocked = selectionBlockedReason(line.specs);
+    if (blocked) {
+      setSel((s) => ({ ...s, [line.id]: { loading: false, error: blocked, results: null } }));
+      return;
+    }
     const flow = line.specs.capacity_cfm;
     const spVal = line.specs.staticPressure_pa;
     // Propeller wall fans (EWF/EWFDD) may be selected on flow alone — static
@@ -5432,10 +5459,14 @@ export function QuotationBuilder({
                       Fan selector — uses {isFlowOnlyUnit(l.specs) ? "Capacity (volume flow only)" : "Capacity + S.P."} above
                     </span>
                     <Button size="sm" variant="outline" onClick={() => runLineSelection(l)}
-                      disabled={sel[l.id]?.loading || isSpBlocked(l.specs)}>
+                      title={selectionBlockedReason(l.specs) ?? undefined}
+                      disabled={sel[l.id]?.loading || isSpBlocked(l.specs) || !!selectionBlockedReason(l.specs)}>
                       <Gauge className="h-3.5 w-3.5" /> {sel[l.id]?.loading ? "Selecting…" : "Run selection"}
                     </Button>
                   </div>
+                  {selectionBlockedReason(l.specs) && !isSpBlocked(l.specs) && (
+                    <p className="mt-1 text-xs text-muted-foreground">{selectionBlockedReason(l.specs)}</p>
+                  )}
                   {/* Radial Blower blade-type application guide (sales reference). */}
                   {l.specs.type === "Radial Blower" && (
                     <div className="mt-1.5 rounded bg-muted/50 px-2 py-1 text-[11px] leading-snug text-muted-foreground">

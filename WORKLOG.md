@@ -1,3 +1,13 @@
+## 2026-08-19 · Fan selector — disable "Run selection" until the product selection resolves a catalogue
+- **Request (owner).** For KDK **Wall Mounted Fan**, pressing "Run selection" with the **Series** still unset returned
+  an irrelevant mixed list (CFAB/CIEB/…). Proper behaviour: the button can't be pressed until a Series is chosen.
+- **Cause.** A Wall Mounted Fan with no Series makes `selectionTag` resolve to an **empty tag**, so `/api/selection`'s
+  `catalogueWhere` returns `{}` and queries **every** catalogue at once.
+- **Fix (quotation builder, not frozen).** New `selectionBlockedReason(specs)` — returns a reason (e.g. *"Select a
+  series first."*) when `selectionTag` is empty, else null. The "Run selection" button is now **disabled** in that
+  state (with the reason as a tooltip + a hint line beneath it), and `runLineSelection` bails early as a programmatic
+  backstop. Every product that already resolved a real tag is unaffected. Typecheck + lint clean.
+
 ## 2026-08-19 · Deploy — revert `migrate deploy` in the build (it blocked all deploys); fix schema via SQL
 - **Root cause (production outage).** The fan-selector hardening surfaced the real error:
   *"The column `CatalogueItem.storeListed` does not exist in the current database."* Phase A (PR #368) added the store
