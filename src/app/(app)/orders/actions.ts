@@ -1219,10 +1219,7 @@ async function autoRaiseBoughtInRequisition(
   const boughtIn = orderBoughtInLines(items);
   if (boughtIn.length === 0) return;
   const lines = boughtIn.map((b) => {
-    // Keep the short supplier name as the line (for the summary + stock match) and
-    // attach the full quotation spec as the remark so the purchasing tab shows the
-    // item's details. The remark uses " / " (not " · ") so it survives PO parsing.
-    const line = mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit", remark: b.description || undefined });
+    const line = mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit" });
     return b.unitPrice != null ? `${line} · @${b.unitPrice}` : line;
   });
   await prisma.$transaction(async (tx) => {
