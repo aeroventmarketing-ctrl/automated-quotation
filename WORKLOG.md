@@ -1,3 +1,17 @@
+## 2026-08-19 · Deploy — run `prisma migrate deploy` in the build (fix "column does not exist" outage)
+- **Root cause (production outage).** After the fan-selector hardening surfaced the real error, it read:
+  *"Invalid `prisma.catalogueItem.findMany()` invocation: The column `CatalogueItem.storeListed` does not exist in the
+  current database."* Phase A (PR #368) added the store columns to the Prisma schema + migration `0043`, but the DB
+  migration was **never applied** — the Vercel build ran only `prisma generate && next build`, so the client shipped
+  expecting columns the live DB didn't have. Every `CatalogueItem` query failed (all fan selection, products admin, …),
+  not just KDK.
+- **Fix.** Build command (both `package.json` and `vercel.json`) is now
+  `prisma generate && prisma migrate deploy && next build`, so **pending migrations apply automatically on every
+  deploy** — a merged schema change can never ship ahead of its migration again. `migrate deploy` uses `DIRECT_URL`
+  (already configured); migration `0043` is idempotent (`ADD COLUMN IF NOT EXISTS`), so applying it is safe.
+- Deploying this change applies `0043` and creates the missing columns → the selector (and all catalogue reads)
+  recover. README deploy notes updated. Typecheck + lint clean.
+
 ## 2026-08-19 · Fan selector — never crash on an empty response ("Unexpected end of JSON input")
 - **Bug (owner-reported).** Running the fan selector on KDK products showed **"Failed to execute 'json' on 'Response':
   Unexpected end of JSON input."** Cause: when `/api/selection` returns a **500 with an empty body** (an uncaught

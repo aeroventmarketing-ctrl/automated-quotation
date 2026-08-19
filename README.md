@@ -87,10 +87,12 @@ users (Supabase dashboard → Authentication → Users → *Add user*, or invite
 
 1. Push this repo to GitHub and import it into Vercel.
 2. Add every variable from `.env.example` in **Project → Settings → Environment Variables**.
-3. Build command is `prisma generate && next build` (already in `package.json`).
-4. Run migrations against your Supabase DB (locally or via a one-off):
-   `npx prisma migrate deploy`.
-5. Deploy. The PWA installs from the deployed URL via the browser's "Install app" / "Add to Home
+3. Build command is `prisma generate && prisma migrate deploy && next build` (already in
+   `package.json` / `vercel.json`). **`prisma migrate deploy` runs on every deploy**, so any
+   pending migration is applied to the DB automatically before the app boots — a merged schema
+   change can never ship ahead of its migration. (`migrate deploy` uses `DIRECT_URL`, so make sure
+   both `DATABASE_URL` and `DIRECT_URL` are set in the Vercel environment.)
+4. Deploy. The PWA installs from the deployed URL via the browser's "Install app" / "Add to Home
    Screen".
 
 `@react-pdf/renderer` is configured as a server external package — PDF generation runs in the
