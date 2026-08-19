@@ -112,6 +112,48 @@ export async function buildSalesReport(from: string, to: string, basis: ReportBa
     (byPerson.get(key) ?? byPerson.set(key, []).get(key)!).push(row);
   }
 
+  // Completed counter (walk-in) cash sales — direct sales of stock, credited to
+  // the salesperson (or the recorder). Dated by completion on the "created"
+  // basis; by payment clearing on the "won" basis (an uncleared post-dated sale
+  // isn't booked as paid yet, mirroring how orders behave).
+  const counterSales = await prisma.counterSale
+    .findMany({
+      where: { status: "COMPLETED" },
+      select: {
+        id: true, saleNumber: true, total: true, amountPaid: true,
+        completedAt: true, createdAt: true, clearedAt: true, paymentCleared: true,
+        salespersonName: true, soldByName: true,
+        customer: { select: { company: true } },
+      },
+    })
+    .catch(() => [] as never[]);
+  for (const cs of counterSales) {
+    const cleared = cs.paymentCleared || cs.clearedAt != null;
+    const dateISO =
+      basis === "won"
+        ? cleared
+          ? (cs.clearedAt ?? cs.completedAt ?? cs.createdAt).toISOString()
+          : null
+        : (cs.completedAt ?? cs.createdAt).toISOString();
+    if (!dateISO) continue; // "won" with uncleared payment → not booked yet
+    const ymd = manilaYMD(dateISO);
+    if (ymd < lo || ymd > hi) continue;
+    const value = round2(Number(cs.total));
+    const collected = round2(Number(cs.amountPaid));
+    const row: SalesReportRow = {
+      quotationId: cs.id, // used only as a React key; counter sales aren't quotes
+      quoteNumber: cs.saleNumber ?? "—",
+      company: cs.customer?.company ?? "—",
+      source: "Counter Sale",
+      dateISO,
+      value,
+      collected,
+      balance: round2(Math.max(0, value - collected)),
+    };
+    const key = cs.salespersonName || cs.soldByName || "—";
+    (byPerson.get(key) ?? byPerson.set(key, []).get(key)!).push(row);
+  }
+
   const groups: SalesReportGroup[] = [...byPerson.entries()]
     .map(([salesperson, rows]) => ({
       salesperson,

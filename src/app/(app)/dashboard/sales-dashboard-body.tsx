@@ -98,7 +98,7 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
   const testMode = await getTestMode();
   const cutoff = testModeCreatedAtFilter(testMode);
 
-  const [byStatus, quotesToday, recentInquiries, quotes] = await Promise.all([
+  const [byStatus, quotesToday, recentInquiries, counterSales, quotes] = await Promise.all([
     prisma.inquiry.groupBy({ by: ["status"], _count: true, ...(cutoff ? { where: { createdAt: cutoff } } : {}) }),
     prisma.quotation.count({ where: { createdAt: { gte: startOfDay, ...(cutoff ?? {}) } } }),
     prisma.inquiry.findMany({
@@ -107,6 +107,15 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
       take: 8,
       include: { customer: true, _count: { select: { items: true } } },
     }),
+    // Completed counter (walk-in) cash sales — direct sales of stock, credited to
+    // the salesperson (or recorder), dated by completion. Folded into the sales
+    // figures + the Won count below.
+    prisma.counterSale
+      .findMany({
+        where: { status: "COMPLETED", ...(cutoff ? { createdAt: cutoff } : {}) },
+        select: { total: true, completedAt: true, createdAt: true, salespersonName: true, soldByName: true },
+      })
+      .catch(() => [] as { total: unknown; completedAt: Date | null; createdAt: Date; salespersonName: string | null; soldByName: string }[]),
     prisma.quotation.findMany({
       // Scan ALL quotations (not just the last 6 months) so a sale recognised
       // this month on an older quote still counts — matching the WON sales report,
@@ -197,6 +206,23 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
     }
   }
 
+  // Completed counter (walk-in) sales — book the full amount to the crediting
+  // salesperson (or recorder), dated by completion. Feeds the same MTD KPI,
+  // top-salesperson card and salesperson-month map as confirmed quotations, and
+  // counts as a Won deal (see `won` below).
+  for (const cs of counterSales) {
+    const deal = Number(cs.total) || 0;
+    const csName = cs.salespersonName || cs.soldByName || "—";
+    const sd = new Date(cs.completedAt ?? cs.createdAt);
+    const smk = monthKey(sd);
+    const sms = monthSales.get(smk);
+    if (sms) sms.set(csName, (sms.get(csName) ?? 0) + deal);
+    if (smk === currentMK) {
+      salesMap.set(csName, (salesMap.get(csName) ?? 0) + deal);
+      salesMTD += deal;
+    }
+  }
+
   // Top salesperson of the month — the winner of the most recently COMPLETED
   // calendar month, held unchanged for the whole current month and rolling over
   // only when the month ends. So all through August we show July's winner; on
@@ -256,7 +282,9 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
   const total14 = last14.length;
   const value14 = last14.reduce((a, q) => a + Number(q.total), 0);
   const quotes7 = quotes.filter((q) => new Date(q.createdAt) >= weekAgo).length;
-  const won = counts.WON ?? 0;
+  // Won = won quotations + every completed counter (walk-in) sale (a closed deal
+  // with no quote funnel). Counter sales lift the Won tile and the win rate.
+  const won = (counts.WON ?? 0) + counterSales.length;
   const lost = counts.LOST ?? 0;
   const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null;
   const maxStatus = Math.max(1, ...STATUSES.map((s) => counts[s] ?? 0));
