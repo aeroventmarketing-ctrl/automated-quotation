@@ -35,6 +35,7 @@ interface Reservation {
 interface Item {
   id: string;
   sku: string | null;
+  barcode: string | null;
   name: string;
   unit: string;
   category: string | null;
@@ -404,6 +405,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
+  const [newBarcode, setNewBarcode] = useState("");
   const [unit, setUnit] = useState("pcs");
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState("");
@@ -499,6 +501,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
     if (!code) return;
     const found =
       items.find((i) => i.sku === code) ??
+      items.find((i) => i.barcode === code) ??
       items.find((i) => i.id === code) ??
       items.find((i) => i.name.toLowerCase() === code.toLowerCase());
     if (!found) { setScanErr(true); setScanMsg(`No item matches “${code}”.`); return; }
@@ -591,11 +594,11 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
   function exportRows() {
     const statusLabel = (s: Item["status"]) => (s === "out" ? "Out" : s === "low" ? "Low" : "OK");
     const headers = [
-      "Name", "SKU", "Unit", "Category", "Location", "On hand", "Reserved", "Available", "Reorder at",
+      "Name", "SKU", "Barcode", "Unit", "Category", "Location", "On hand", "Reserved", "Available", "Reorder at",
       ...(showPrices ? ["Unit cost"] : []), ...(showSell ? ["Sell price"] : []), ...(showPrices ? ["Value"] : []), "Status",
     ];
     const rows = sorted.map((it) => [
-      it.name, it.sku ?? "", it.unit, it.category ?? "", it.location ?? "",
+      it.name, it.sku ?? "", it.barcode ?? "", it.unit, it.category ?? "", it.location ?? "",
       it.quantity, it.reserved, it.available, it.reorderLevel,
       ...(showPrices ? [it.unitCost] : []), ...(showSell ? [it.sellPrice] : []), ...(showPrices ? [it.value] : []),
       statusLabel(it.status),
@@ -628,10 +631,10 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
     setBusy(true); setErr(null);
     try {
       await createStockItem({
-        name, sku: sku.trim() || undefined, unit, category: category || undefined, location: location || undefined,
+        name, sku: sku.trim() || undefined, barcode: newBarcode.trim() || undefined, unit, category: category || undefined, location: location || undefined,
         quantity: Number(qty) || 0, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0,
       });
-      setName(""); setSku(""); setCategory(""); setLocation(""); setQty(""); setReorder(""); setUnitCost(""); setSellPrice(""); setUnit("pcs"); setShowAdd(false);
+      setName(""); setSku(""); setNewBarcode(""); setCategory(""); setLocation(""); setQty(""); setReorder(""); setUnitCost(""); setSellPrice(""); setUnit("pcs"); setShowAdd(false);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -679,6 +682,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
               <div className="flex flex-wrap items-end gap-2">
                 <Input className="h-8 w-56" placeholder="Name (e.g. GI sheet 24ga)" value={name} onChange={(e) => setName(e.target.value)} />
                 <Input className="h-8 w-40" placeholder="Item Code / SKU (optional)" value={sku} onChange={(e) => setSku(e.target.value)} title="Leave blank to auto-generate. Set it to the catalogue Item Code so quotes match this stock." />
+                <Input className="h-8 w-40" placeholder="Supplier barcode (optional)" value={newBarcode} onChange={(e) => setNewBarcode(e.target.value)} title="External GS1 / UPC / EAN barcode printed by the supplier — scan or type it. Separate from the Item Code." />
                 <Input className="h-8 w-24" placeholder="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} />
                 <Input className="h-8 w-40" placeholder="Category (optional)" value={category} onChange={(e) => setCategory(e.target.value)} />
                 <LocationField value={location} onChange={setLocation} locations={locations} className="h-8 w-40" />

@@ -279,6 +279,7 @@ async function loadItems() {
     return {
       id: i.id,
       sku: i.sku,
+      barcode: i.barcode,
       name: i.name,
       unit: i.unit,
       category: i.category,

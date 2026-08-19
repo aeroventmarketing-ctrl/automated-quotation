@@ -538,6 +538,7 @@ enum StockMovementKind {
 model StockItem {
   id           String   @id @default(cuid())
   sku          String?  @unique // short human/scan code, e.g. "10001"
+  barcode      String?  @unique // external supplier/manufacturer barcode (GS1 GTIN / UPC / EAN); separate from the internal SKU
   name         String
   unit         String   @default("pcs")
   category     String?

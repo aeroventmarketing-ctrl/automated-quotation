@@ -168,6 +168,7 @@ export async function importStockItems(
   const col = (names: string[]) => header.findIndex((h) => names.includes(h));
   const iName = col(["name", "item", "description"]);
   const iSku = col(["sku", "item code", "itemcode", "code"]);
+  const iBarcode = col(["barcode", "gtin", "upc", "ean"]);
   const iUnit = col(["unit", "uom"]);
   const iCat = col(["category"]);
   const iLoc = col(["location", "bin"]);
@@ -206,11 +207,19 @@ export async function importStockItems(
             throw new Error(`Item Code "${wantSku}" is already used by another item.`);
           }
         }
+        const wantBarcode = has(iBarcode) ? cell(iBarcode) : "";
+        if (wantBarcode) {
+          const bClash = await tx.stockItem.findUnique({ where: { barcode: wantBarcode }, select: { name: true } });
+          if (bClash && bClash.name.toLowerCase() !== name.toLowerCase()) {
+            throw new Error(`Barcode "${wantBarcode}" is already used by another item.`);
+          }
+        }
         const existing = await tx.stockItem.findFirst({ where: { active: true, name: { equals: name, mode: "insensitive" } } });
         if (existing) {
           // Overwrite only the fields whose column is present and non-empty.
           const data: Prisma.StockItemUpdateInput = {};
           if (wantSku) data.sku = wantSku;
+          if (wantBarcode) data.barcode = wantBarcode;
           if (has(iUnit)) data.unit = cell(iUnit);
           if (has(iCat)) data.category = cell(iCat);
           if (has(iLoc)) data.location = cell(iLoc);
@@ -238,6 +247,7 @@ export async function importStockItems(
           const item = await tx.stockItem.create({
             data: {
               sku,
+              barcode: wantBarcode || null,
               name,
               unit: cell(iUnit) || "pcs",
               category: cell(iCat) || null,
@@ -443,6 +453,9 @@ const createSchema = z.object({
   // existing flows are unchanged; set it to the catalogue Item Code to make the
   // quote↔stock match exact (see the Item Listing Standard).
   sku: z.string().trim().optional(),
+  // External supplier/manufacturer barcode (GS1 GTIN / UPC / EAN) — separate
+  // from the internal SKU. Optional.
+  barcode: z.string().trim().optional(),
   unit: z.string().trim().min(1),
   category: z.string().trim().optional(),
   location: z.string().trim().optional(),
@@ -457,6 +470,7 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
   const user = await requireItemCreator();
   const d = createSchema.parse(input);
   const wantSku = normalizeSku(d.sku);
+  const barcode = (d.barcode ?? "").trim() || null;
   await prisma.$transaction(async (tx) => {
     // Use the given Item Code when provided, else auto-generate the next serial.
     let sku = wantSku || (await nextSku(tx));
@@ -465,9 +479,14 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
       if (clash) throw new Error(`Item Code "${wantSku}" is already used by another stock item.`);
       sku = wantSku;
     }
+    if (barcode) {
+      const bClash = await tx.stockItem.findUnique({ where: { barcode }, select: { id: true } });
+      if (bClash) throw new Error(`Barcode "${barcode}" is already used by another stock item.`);
+    }
     const item = await tx.stockItem.create({
       data: {
         sku,
+        barcode,
         name: d.name,
         unit: d.unit,
         category: d.category || null,
@@ -492,6 +511,8 @@ const metaSchema = z.object({
   // Item Code (SKU). Optional — omit to leave it unchanged; set it to align an
   // existing item with the catalogue Item Code.
   sku: z.string().trim().optional(),
+  // External barcode (GTIN). Optional — omit to leave unchanged.
+  barcode: z.string().trim().optional(),
   category: z.string().trim().optional(),
   location: z.string().trim().optional(),
   reorderLevel: z.number().min(0),
@@ -511,10 +532,19 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
     });
     if (clash) throw new Error(`Item Code "${wantSku}" is already used by another stock item.`);
   }
+  const wantBarcode = d.barcode === undefined ? undefined : ((d.barcode ?? "").trim() || null);
+  if (wantBarcode) {
+    const bClash = await prisma.stockItem.findFirst({
+      where: { barcode: wantBarcode, id: { not: d.stockItemId } },
+      select: { id: true },
+    });
+    if (bClash) throw new Error(`Barcode "${wantBarcode}" is already used by another stock item.`);
+  }
   await prisma.stockItem.update({
     where: { id: d.stockItemId },
     data: {
       ...(wantSku ? { sku: wantSku } : {}),
+      ...(wantBarcode !== undefined ? { barcode: wantBarcode } : {}),
       category: d.category?.trim() || null,
       location: d.location?.trim() || null,
       reorderLevel: d.reorderLevel,
