@@ -1,3 +1,20 @@
+## 2026-08-19 · Stock matching — match a quoted line to stock by Item Code / SKU first
+- **Request (owner, approved — touches frozen Phase 3).** Availability was decided purely by **fuzzy name text**, so a
+  quoted item whose description differs from the inventory item's name (e.g. "Induction Motor (TECO)" vs "TECO 1HP
+  4-Pole Motor") was reported **not available** even when the stock existed. Implements the permanent fix behind the new
+  **Item Listing Standard**: match on the shared **Item Code / SKU** first.
+- **Change (additive, backward-compatible).**
+  - `lib/inventory.ts` `listStockItemsWithAvailability` now also returns `sku`.
+  - The order page's stock-items query (`orders/[id]/page.tsx`) selects + carries `sku` through to the panels (parents
+    pass the object wholesale, so no other call sites change).
+  - `stock-match-panel.tsx` `StockOpt` gains an optional `sku`, and `autoMatchId` gets a **top tier**: if a stock
+    item's SKU (canonicalised, length ≥ 4) appears in the line text, that's an exact identity and outranks every fuzzy
+    name score (the longest matching SKU wins). Length-gated so a short code can't collide inside an unrelated word.
+- **Effect.** When both the quote line and the inventory item carry the same Item Code (the Standard's rule), stock is
+  found regardless of wording. When no SKU is present the behaviour is exactly as before — nothing regresses.
+- Does not change who acts / step order / gating / stage progression — matching accuracy only. Typecheck + lint clean.
+  (Left unmerged for owner review, per the frozen-area rule.)
+
 ## 2026-08-19 · Fan selector — disable "Run selection" until the product selection resolves a catalogue
 - **Request (owner).** For KDK **Wall Mounted Fan**, pressing "Run selection" with the **Series** still unset returned
   an irrelevant mixed list (CFAB/CIEB/…). Proper behaviour: the button can't be pressed until a Series is chosen.

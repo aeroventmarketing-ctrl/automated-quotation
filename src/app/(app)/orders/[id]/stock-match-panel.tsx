@@ -12,6 +12,9 @@ export interface StockOpt {
   id: string;
   name: string;
   unit: string;
+  /** Short scan/item code. When present it's matched first — an exact Item-Code
+   *  hit beats any fuzzy name similarity (see the Item Listing Standard). */
+  sku?: string | null;
   /** Free to issue right now (on hand − active reservations); absent ⇒ unknown. */
   available?: number;
 }
@@ -63,6 +66,18 @@ export function StockMatchPanel({
     let best = "";
     let score = 0;
     for (const s of stockItems) {
+      // Deterministic Item-Code / SKU match (per the Item Listing Standard): when
+      // a stock item's SKU appears in the line, that's an exact identity — it
+      // outranks every fuzzy name score below, so differently-worded descriptions
+      // (e.g. "Induction Motor (TECO)" vs "TECO 1HP 4-Pole Motor") still match as
+      // long as both carry the same code. Length-gated to avoid a short code
+      // colliding inside an unrelated word; the longest matching SKU wins.
+      const skc = canon(s.sku ?? "");
+      if (skc.length >= 4 && dc.includes(skc)) {
+        const sc = 2000 + skc.length;
+        if (sc > score) { score = sc; best = s.id; }
+        continue;
+      }
       const nc = canon(s.name);
       if (!nc) continue;
       let sc = 0;

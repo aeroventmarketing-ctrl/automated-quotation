@@ -114,7 +114,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     getCurrentUser(),
     getWorkflowRoles(),
     prisma.purchaseRequest.findMany({ where: { quotationId: id }, orderBy: { createdAt: "asc" } }),
-    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true, quantity: true } }).catch(() => []),
+    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true } }).catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true } }),
     getSuppliers().catch(() => []),
     getPaymentTerms().catch(() => []),
@@ -132,6 +132,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const reservedById = new Map(stockResv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
   const stockItems = stockItemsRaw.map((s) => ({
     id: s.id,
+    sku: s.sku,
     name: s.name,
     unit: s.unit,
     available: Math.round((Number(s.quantity) - (reservedById.get(s.id) ?? 0)) * 1000) / 1000,
