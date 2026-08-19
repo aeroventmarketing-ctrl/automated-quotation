@@ -1,3 +1,18 @@
+## 2026-08-19 · Inventory — external barcode (GTIN) field on stock items
+- **Request (owner).** Add a barcode/GTIN field, separate from the internal SKU, for the future retail/e-commerce
+  layer and for scanning a supplier's printed barcode. (The internal Code128/QR labels already encode the SKU.)
+- **Change (inventory, not frozen).**
+  - Schema: `StockItem.barcode String? @unique` + **migration `0044_stock_barcode`** (additive `ADD COLUMN IF NOT
+    EXISTS` + unique index + the standard enable-RLS block).
+  - `createStockItem` + the New-item form take an optional **Supplier barcode**; `updateStockItemMeta` and the bulk
+    importer (`barcode`/`gtin`/`upc`/`ean` column) can set it. All reject a barcode already used by another item.
+  - The inventory **scan box** now resolves a scanned code by **barcode** as well as SKU/id/name — so scanning a
+    supplier's GTIN jumps to / receives / issues the item. Export gains a `Barcode` column (round-trips via import).
+- **⚠ Deploy note.** This adds a DB column, so migration `0044` MUST be applied to production **before** this code
+  deploys (Prisma selects the column on every StockItem query — an unmigrated DB would 500, like the `storeListed`
+  incident). Run the migration SQL in Supabase first, then merge. Kept **unmerged** pending that.
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Inventory — settable Item Code (SKU) + catalogue-code export (enables the matcher)
 - **Context.** The stock matcher now keys on the SKU, but SKUs were **auto-generated numbers** with no way to set
   them — so the matcher was inert. This makes the Item Code settable and gives a reference export to drive re-labeling.
