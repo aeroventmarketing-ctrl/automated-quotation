@@ -181,8 +181,20 @@ export function InquiryWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requirement: mergedReq(item) }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Selection failed");
+      // Read as text first so an empty / non-JSON response surfaces the HTTP
+      // status rather than the opaque "Unexpected end of JSON input".
+      const raw = await res.text();
+      let data: { error?: string; results?: SelectionResult[] } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          throw new Error(
+            !res.ok ? `Selection failed (HTTP ${res.status}).` : "Selection returned an invalid response.",
+          );
+        }
+      }
+      if (!res.ok) throw new Error(data.error || `Selection failed (HTTP ${res.status}).`);
       patch(item.id, { selectionResults: data.results ?? [] });
     } catch (e) {
       patch(item.id, { error: e instanceof Error ? e.message : "Selection failed" });
