@@ -1,3 +1,14 @@
+## 2026-08-19 · Unification Phase A1 — store fields on the catalogue item (foundation)
+- **Goal.** Start store ⇄ ERP unification: one catalogue record drives both the ERP/AeroQuote and the storefront.
+- **Schema + migration `0043_catalogue_store_fields`.** Additive, optional columns on `CatalogueItem`: `storeListed`
+  (default false — off the store until set), `storeSlug` (unique, nullable), `storeCategory`, `storeDescription`,
+  `storePhotos` (JSONB `[]`). Website price stays DERIVED (round(AeroQuote / 0.95)), never stored. RLS block kept per
+  convention.
+- **New `src/lib/store-product.ts`** — `storeFieldsOf()` reader, `deriveStoreSlug()`, `storeCategoryLabel()`,
+  `coerceStorePhotos()`, and `isQuoteOnly()` (fabricated fans = quote-only, mirroring the price-list exclusion set).
+- Nothing wired to UI yet (that's A2, the Products admin). `prisma generate` + typecheck + lint clean. Migration
+  applies on deploy (no DB in this sandbox).
+
 ## 2026-08-19 · Email — split multi-address recipient fields (fix Resend 422)
 - **Bug.** A client record can hold several emails in one field (e.g. "a@x.com ; b@y.com ; c@z.com"). The mailer passed
   that whole string as one recipient, so Resend rejected it: `422 validation_error — Invalid to field`. That client's
