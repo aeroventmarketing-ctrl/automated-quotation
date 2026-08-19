@@ -1,3 +1,13 @@
+## 2026-08-19 · WON report — book counter sales on completion (reconcile with the dashboard)
+- **Bug (owner-reported).** "Sales this month" (dashboard) and the WON report grand total didn't tally — off by exactly
+  the **uncleared** post-dated counter sales. Cause: the report's **Payment-date** basis dropped uncleared counter
+  sales, while the dashboard booked every completed one.
+- **Fix.** A completed counter sale is now **recognised (booked at full value) on completion on BOTH report bases** —
+  never dropped for an uncleared post-dated check — with its unpaid amount showing in Collected/Balance, exactly like a
+  confirmed quotation row that carries an outstanding balance. The report grand total now reconciles with the
+  dashboard's "Sales this month".
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Counter sales now count in the Sales dashboard, Won & WON report
 - **Bug (owner-reported).** Completed **Counter Sales** (walk-in cash sales) weren't adding up in the Sales dashboard,
   the Won tile, or the WON sales report. Cause: those aggregations only read `quotation` / `inquiry` — the separate
