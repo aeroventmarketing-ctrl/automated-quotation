@@ -1,3 +1,12 @@
+## 2026-08-19 · Inventory — read-only view for Sales (no unit cost)
+- **Request (owner).** Let the **Sales** role see Inventory, but **not the unit price** (supplier cost).
+- **Change (permissions/UI, not frozen).** Sales now pass `canView` on the Inventory page and get the **Inventory** nav
+  link. Their view is fully **read-only**: no add / import / edit / adjust / transfer / labels / reorder, and the
+  **Stock transfers** panel is hidden. `canViewPrices` already returns false for Sales, so **unit cost, stock value
+  and the value tile stay hidden**; `showSellPrice` stays true, so Sales see name / SKU / on-hand / available /
+  **selling price** / status — the same read-only shape the Plant Manager already gets. Header copy adjusts for Sales.
+- Typecheck + lint clean.
+
 ## 2026-08-19 · Stock labels — print the supplier barcode alongside the Item Code
 - **Request (owner).** Show a **Barcode / SKU pair** on the printed labels.
 - **Change (inventory UI, not frozen, display only).** Each stock label already prints Code 128 + QR of the **Item
