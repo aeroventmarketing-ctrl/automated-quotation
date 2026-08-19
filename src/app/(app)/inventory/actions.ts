@@ -167,6 +167,7 @@ export async function importStockItems(
   const header = rows[0].map((h) => h.trim().toLowerCase());
   const col = (names: string[]) => header.findIndex((h) => names.includes(h));
   const iName = col(["name", "item", "description"]);
+  const iSku = col(["sku", "item code", "itemcode", "code"]);
   const iUnit = col(["unit", "uom"]);
   const iCat = col(["category"]);
   const iLoc = col(["location", "bin"]);
@@ -175,7 +176,7 @@ export async function importStockItems(
   const iCost = col(["unitcost", "unit cost", "cost"]);
   const iSell = col(["sellprice", "sell price", "selling price", "price"]);
   if (iName < 0) {
-    return { created: 0, updated: 0, skipped: 0, errors: ['The first row must be headers with a "name" column (e.g. name, unit, category, location, quantity, reorderLevel, unitCost).'] };
+    return { created: 0, updated: 0, skipped: 0, errors: ['The first row must be headers with a "name" column (e.g. name, sku, unit, category, location, quantity, reorderLevel, unitCost). Add an "sku" (Item Code) column to set each item\'s code.'] };
   }
 
   const errors: string[] = [];
@@ -196,10 +197,20 @@ export async function importStockItems(
       // name (case-insensitive) and UPDATE it, so re-uploading a master list
       // refreshes items instead of creating duplicates.
       await prisma.$transaction(async (tx) => {
+        // Item Code (SKU): normalise and ensure no OTHER item already owns it,
+        // so a bulk re-label sets each item's code deterministically.
+        const wantSku = has(iSku) ? cell(iSku).toUpperCase() : "";
+        if (wantSku) {
+          const clash = await tx.stockItem.findUnique({ where: { sku: wantSku }, select: { name: true } });
+          if (clash && clash.name.toLowerCase() !== name.toLowerCase()) {
+            throw new Error(`Item Code "${wantSku}" is already used by another item.`);
+          }
+        }
         const existing = await tx.stockItem.findFirst({ where: { active: true, name: { equals: name, mode: "insensitive" } } });
         if (existing) {
           // Overwrite only the fields whose column is present and non-empty.
           const data: Prisma.StockItemUpdateInput = {};
+          if (wantSku) data.sku = wantSku;
           if (has(iUnit)) data.unit = cell(iUnit);
           if (has(iCat)) data.category = cell(iCat);
           if (has(iLoc)) data.location = cell(iLoc);
@@ -222,7 +233,7 @@ export async function importStockItems(
           }
           updated++;
         } else {
-          const sku = await nextSku(tx);
+          const sku = wantSku || (await nextSku(tx));
           const quantity = has(iQty) ? num(cell(iQty)) : 0;
           const item = await tx.stockItem.create({
             data: {
@@ -421,8 +432,17 @@ export async function assignMissingSkus(): Promise<void> {
   revalidatePath("/inventory/labels");
 }
 
+/** Normalise an Item Code / SKU: trim + UPPERCASE, per the Item Listing Standard. */
+function normalizeSku(raw: string | undefined | null): string {
+  return (raw ?? "").trim().toUpperCase();
+}
+
 const createSchema = z.object({
   name: z.string().trim().min(1),
+  // Item Code (SKU). Optional — a blank one auto-generates the next serial, so
+  // existing flows are unchanged; set it to the catalogue Item Code to make the
+  // quote↔stock match exact (see the Item Listing Standard).
+  sku: z.string().trim().optional(),
   unit: z.string().trim().min(1),
   category: z.string().trim().optional(),
   location: z.string().trim().optional(),
@@ -436,8 +456,15 @@ const createSchema = z.object({
 export async function createStockItem(input: z.infer<typeof createSchema>): Promise<void> {
   const user = await requireItemCreator();
   const d = createSchema.parse(input);
+  const wantSku = normalizeSku(d.sku);
   await prisma.$transaction(async (tx) => {
-    const sku = await nextSku(tx);
+    // Use the given Item Code when provided, else auto-generate the next serial.
+    let sku = wantSku || (await nextSku(tx));
+    if (wantSku) {
+      const clash = await tx.stockItem.findUnique({ where: { sku: wantSku }, select: { id: true } });
+      if (clash) throw new Error(`Item Code "${wantSku}" is already used by another stock item.`);
+      sku = wantSku;
+    }
     const item = await tx.stockItem.create({
       data: {
         sku,
@@ -462,6 +489,9 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
 
 const metaSchema = z.object({
   stockItemId: z.string().min(1),
+  // Item Code (SKU). Optional — omit to leave it unchanged; set it to align an
+  // existing item with the catalogue Item Code.
+  sku: z.string().trim().optional(),
   category: z.string().trim().optional(),
   location: z.string().trim().optional(),
   reorderLevel: z.number().min(0),
@@ -469,13 +499,22 @@ const metaSchema = z.object({
   sellPrice: z.number().min(0),
 });
 
-/** Edit an item's location, unit cost, selling price, category and reorder level (no movement). */
+/** Edit an item's Item Code, location, unit cost, selling price, category and reorder level (no movement). */
 export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Promise<void> {
   await requireInventoryManager();
   const d = metaSchema.parse(input);
+  const wantSku = normalizeSku(d.sku);
+  if (wantSku) {
+    const clash = await prisma.stockItem.findFirst({
+      where: { sku: wantSku, id: { not: d.stockItemId } },
+      select: { id: true },
+    });
+    if (clash) throw new Error(`Item Code "${wantSku}" is already used by another stock item.`);
+  }
   await prisma.stockItem.update({
     where: { id: d.stockItemId },
     data: {
+      ...(wantSku ? { sku: wantSku } : {}),
       category: d.category?.trim() || null,
       location: d.location?.trim() || null,
       reorderLevel: d.reorderLevel,

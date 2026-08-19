@@ -403,6 +403,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
   const searchParams = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
+  const [sku, setSku] = useState("");
   const [unit, setUnit] = useState("pcs");
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState("");
@@ -627,10 +628,10 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
     setBusy(true); setErr(null);
     try {
       await createStockItem({
-        name, unit, category: category || undefined, location: location || undefined,
+        name, sku: sku.trim() || undefined, unit, category: category || undefined, location: location || undefined,
         quantity: Number(qty) || 0, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0,
       });
-      setName(""); setCategory(""); setLocation(""); setQty(""); setReorder(""); setUnitCost(""); setSellPrice(""); setUnit("pcs"); setShowAdd(false);
+      setName(""); setSku(""); setCategory(""); setLocation(""); setQty(""); setReorder(""); setUnitCost(""); setSellPrice(""); setUnit("pcs"); setShowAdd(false);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -677,6 +678,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
               <div className="text-sm font-medium">New stock item</div>
               <div className="flex flex-wrap items-end gap-2">
                 <Input className="h-8 w-56" placeholder="Name (e.g. GI sheet 24ga)" value={name} onChange={(e) => setName(e.target.value)} />
+                <Input className="h-8 w-40" placeholder="Item Code / SKU (optional)" value={sku} onChange={(e) => setSku(e.target.value)} title="Leave blank to auto-generate. Set it to the catalogue Item Code so quotes match this stock." />
                 <Input className="h-8 w-24" placeholder="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} />
                 <Input className="h-8 w-40" placeholder="Category (optional)" value={category} onChange={(e) => setCategory(e.target.value)} />
                 <LocationField value={location} onChange={setLocation} locations={locations} className="h-8 w-40" />

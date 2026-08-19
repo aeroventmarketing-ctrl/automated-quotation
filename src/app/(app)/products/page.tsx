@@ -51,11 +51,22 @@ export default async function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Products</h1>
-        <p className="text-sm text-muted-foreground">
-          Purchasable items connected to their suppliers. Requests made against a product carry its supplier, so the purchaser can combine same-supplier orders. Each product has a SKU with barcode &amp; QR for easy encoding.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Products</h1>
+          <p className="text-sm text-muted-foreground">
+            Purchasable items connected to their suppliers. Requests made against a product carry its supplier, so the purchaser can combine same-supplier orders. Each product has a SKU with barcode &amp; QR for easy encoding.
+          </p>
+        </div>
+        {canManage && (
+          <a
+            href="/api/catalogue/export"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            title="Download the fan Catalogue's Item Codes + standard names (CSV) — the worksheet for aligning Products &amp; Inventory. Fill the sku column and re-import on the Inventory screen."
+          >
+            Export catalogue codes (CSV)
+          </a>
+        )}
       </div>
 
       {tableMissing ? (

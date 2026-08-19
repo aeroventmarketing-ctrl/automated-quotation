@@ -12,6 +12,8 @@ export type StockKind = "RECEIPT" | "ISSUE" | "ADJUSTMENT";
 
 export interface StockOptWithAvail {
   id: string;
+  /** Short scan/item code — the shared key used to match a quoted item to stock. */
+  sku: string | null;
   name: string;
   unit: string;
   /** Free to issue right now (on hand − active reservations). */
@@ -26,8 +28,8 @@ export interface StockOptWithAvail {
  */
 export async function listStockItemsWithAvailability(): Promise<StockOptWithAvail[]> {
   const items = await prisma.stockItem
-    .findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, unit: true, quantity: true } })
-    .catch(() => [] as { id: string; name: string; unit: string; quantity: unknown }[]);
+    .findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true } })
+    .catch(() => [] as { id: string; sku: string | null; name: string; unit: string; quantity: unknown }[]);
   if (items.length === 0) return [];
   const resv = await prisma.stockReservation
     .groupBy({ by: ["stockItemId"], where: { active: true, stockItemId: { in: items.map((i) => i.id) } }, _sum: { qty: true } })
@@ -35,6 +37,7 @@ export async function listStockItemsWithAvailability(): Promise<StockOptWithAvai
   const reservedById = new Map(resv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
   return items.map((i) => ({
     id: i.id,
+    sku: i.sku,
     name: i.name,
     unit: i.unit,
     available: Math.round((Number(i.quantity) - (reservedById.get(i.id) ?? 0)) * 1000) / 1000,
