@@ -1,3 +1,19 @@
+## 2026-08-19 · Unification Phase A2/A3 — Store products admin (manage listing on the catalogue record)
+- **Goal.** The mockup's "Products" screen: manage each catalogue item's storefront listing on the same record that
+  drives the ERP; derived website price shown read-only; fabricated fans = quote-only.
+- **New Admin → Store products** (`/admin/products`): server page loads active catalogue items (+ latest active price
+  per variant → representative AeroQuote price → derived website price) and renders `StoreProductsManager` (client).
+  Filters (All / Listed / Draft / Quote-only), a per-row **Listed/Draft** quick toggle, and an inline editor for
+  **slug, category, description, photos**. Added the tab to the admin nav.
+- **Server actions** (`admin/actions.ts`): `saveStoreListing` (validates, ensures a unique slug — a listed item always
+  gets one, derived from the model code if blank) and `setStoreListed` (quick toggle). Both admin-gated.
+- **Photos**: new admin-only `src/app/api/store-uploads/route.ts` (POST upload under `store/…` via `uploadToStorage`,
+  GET signed-URL preview) — mirrors the marketing-uploads pattern. The editor uploads, previews, and removes photos;
+  paths are saved into `storePhotos`.
+- **A3 folded in**: website price is derived (÷ 0.95) and read-only; `isQuoteOnly()` marks fabricated fans with a
+  Quote-only badge and no list toggle / price.
+- Typecheck + lint clean. (No DB in sandbox — the 0043 migration + these screens exercise on deploy.)
+
 ## 2026-08-19 · Unification Phase A1 — store fields on the catalogue item (foundation)
 - **Goal.** Start store ⇄ ERP unification: one catalogue record drives both the ERP/AeroQuote and the storefront.
 - **Schema + migration `0043_catalogue_store_fields`.** Additive, optional columns on `CatalogueItem`: `storeListed`

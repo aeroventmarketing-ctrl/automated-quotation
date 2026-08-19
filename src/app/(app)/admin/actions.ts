@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { deriveStoreSlug } from "@/lib/store-product";
 import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
 import { setUserSignatureValue } from "@/lib/signature";
 import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
@@ -1076,4 +1078,69 @@ export async function saveAiUsageLimitAction(input: { monthlyCalls: number; mont
   await saveAiUsageLimit({ monthlyCalls: input.monthlyCalls, monthlyTokens: input.monthlyTokens });
   revalidatePath("/admin/ai-usage");
   revalidatePath("/admin");
+}
+
+// --- Store listing (Phase A of store ⇄ ERP unification) -------------------
+
+const storePhotoSchema = z.object({ path: z.string().trim(), alt: z.string().trim().optional() });
+const storeListingSchema = z.object({
+  id: z.string().min(1),
+  storeListed: z.boolean().optional(),
+  storeSlug: z.string().trim().optional(),
+  storeCategory: z.string().trim().optional(),
+  storeDescription: z.string().trim().optional(),
+  storePhotos: z.array(storePhotoSchema).optional(),
+});
+
+/** Ensure a slug is unique across catalogue items (excluding `selfId`). */
+async function uniqueStoreSlug(base: string, selfId: string): Promise<string> {
+  let slug = deriveStoreSlug(base);
+  if (!slug) slug = deriveStoreSlug(selfId);
+  for (let i = 0; i < 50; i++) {
+    const candidate = i === 0 ? slug : `${slug}-${i + 1}`;
+    const clash = await prisma.catalogueItem.findFirst({ where: { storeSlug: candidate, id: { not: selfId } }, select: { id: true } });
+    if (!clash) return candidate;
+  }
+  return `${slug}-${selfId.slice(0, 6)}`;
+}
+
+/** Save a catalogue item's store-listing fields (Admin). A listed item always gets a slug. */
+export async function saveStoreListing(input: z.infer<typeof storeListingSchema>): Promise<void> {
+  await assertAdmin();
+  const d = storeListingSchema.parse(input);
+  const item = await prisma.catalogueItem.findUnique({ where: { id: d.id }, select: { modelCode: true } });
+  if (!item) throw new Error("Product not found");
+
+  const listed = d.storeListed === true;
+  // A listed product needs a slug — use the typed one, else derive from the model code.
+  const slug = listed
+    ? await uniqueStoreSlug(d.storeSlug || item.modelCode, d.id)
+    : d.storeSlug
+      ? await uniqueStoreSlug(d.storeSlug, d.id)
+      : null;
+
+  await prisma.catalogueItem.update({
+    where: { id: d.id },
+    data: {
+      ...(d.storeListed !== undefined ? { storeListed: listed } : {}),
+      storeSlug: slug,
+      storeCategory: d.storeCategory || null,
+      storeDescription: d.storeDescription || null,
+      ...(d.storePhotos ? { storePhotos: d.storePhotos as unknown as Prisma.InputJsonValue } : {}),
+    },
+  });
+  revalidatePath("/admin/products");
+}
+
+/** Quick toggle: list/unlist a product on the store (Admin), deriving a slug on first list. */
+export async function setStoreListed(input: { id: string; on: boolean }): Promise<void> {
+  await assertAdmin();
+  const item = await prisma.catalogueItem.findUnique({ where: { id: input.id }, select: { modelCode: true, storeSlug: true } });
+  if (!item) throw new Error("Product not found");
+  const slug = input.on ? item.storeSlug || (await uniqueStoreSlug(item.modelCode, input.id)) : item.storeSlug;
+  await prisma.catalogueItem.update({
+    where: { id: input.id },
+    data: { storeListed: input.on, ...(slug ? { storeSlug: slug } : {}) },
+  });
+  revalidatePath("/admin/products");
 }
