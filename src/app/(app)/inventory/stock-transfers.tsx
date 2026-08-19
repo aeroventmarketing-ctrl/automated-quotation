@@ -11,6 +11,7 @@ import {
   requestOfficeTransfer, approveOfficeTransfer, releaseOfficeTransfer, deliverOfficeTransfer, receiveOfficeTransfer,
 } from "./transfer-actions";
 import { STOCK_TRANSFER_STATUS_LABEL, type StockTransferView, type StockDoc } from "@/lib/stock-transfer";
+import { ApproverHighlight } from "@/components/approver-highlight";
 
 const fmtQty = (n: number) => n.toLocaleString("en-PH", { maximumFractionDigits: 3 });
 const fmtDT = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" }) : "");
@@ -59,7 +60,11 @@ function OfficeTransferRow({ t, admin }: { t: StockTransferView; admin: boolean 
         <span className="tabular-nums text-sm text-muted-foreground">{fmtQty(t.qty)} {t.unit}</span>
         <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">{t.fromLocation} <ArrowRight className="h-3.5 w-3.5" /> {t.toLocation}</span>
         {statusBadge(t)}
-        <span className="ml-auto text-xs text-muted-foreground">Requested by {t.initiatedByName} · {fmtDT(t.initiatedAt)}</span>
+        {active && t.nextApprover ? (
+          <ApproverHighlight role={t.nextApprover.role} names={t.nextApprover.names} className="ml-auto" />
+        ) : (
+          <span className="ml-auto text-xs text-muted-foreground">Requested by {t.initiatedByName} · {fmtDT(t.initiatedAt)}</span>
+        )}
       </div>
       {t.note && <p className="mt-1 text-xs text-muted-foreground">Note: {t.note}</p>}
 

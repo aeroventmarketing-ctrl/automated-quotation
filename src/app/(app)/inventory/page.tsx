@@ -10,7 +10,8 @@ import { InventoryManager } from "./inventory-manager";
 import { DuplicateItemsPanel } from "./duplicate-items-panel";
 import { STOCK_ACTION_LABEL, type StockActionView } from "@/lib/stock-action";
 import { StockTransfers } from "./stock-transfers";
-import { isProductionHead, isPurchaserRole, coerceStockDoc, isOfficeTransfer, type StockTransferView } from "@/lib/stock-transfer";
+import { isProductionHead, isPurchaserRole, coerceStockDoc, isOfficeTransfer, nextOfficeTransferApprover, type StockTransferView } from "@/lib/stock-transfer";
+import { getApproverDirectory } from "@/lib/approver-directory";
 import { ArrowLeftRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +115,15 @@ export default async function InventoryPage() {
   const viewerIsWarehouse = admin || has("warehouse");
   const viewerIsLogistics = admin || has("logistics");
   const viewerIsSales = admin || viewer?.role === "SALES";
+  // Who must act next on each office transfer — designation + assigned names —
+  // for the flashing "awaiting approval" badge (the office-receipt step is Sales
+  // OR the Purchaser, so pull both sets of names).
+  const [approverDir, salesUsers] = await Promise.all([
+    getApproverDirectory().catch(() => null),
+    prisma.user.findMany({ where: { role: "SALES" }, select: { name: true }, orderBy: { name: "asc" } }).catch(() => [] as { name: string }[]),
+  ]);
+  const salesNames = salesUsers.map((u) => u.name).filter(Boolean);
+
   let transfers: StockTransferView[] = [];
   let transfersMissing = false;
   try {
@@ -153,6 +163,10 @@ export default async function InventoryPage() {
       canReceive: viewerIsSales || viewerIsPurchaser,
       canUpload: canManage || viewerIsProdHead || viewerIsPurchaser || viewerIsLogistics,
       canCancel: canManage,
+      nextApprover:
+        approverDir && isOfficeTransfer(t.toLocation)
+          ? nextOfficeTransferApprover(t.status, approverDir, salesNames)
+          : null,
     }));
   } catch {
     transfersMissing = true;
