@@ -1,3 +1,19 @@
+## 2026-08-20 · Job Order "eye view" — show the logo, trim blanks, add Print / Save as PDF
+- **Request (owner).** The "eye" preview of a Job Order (the `?view=1` HTML render of the JO .xlsx) looked bare — no
+  company logo and a big empty grid. Owner wanted a **PDF**. A true xlsx→PDF isn't possible on the host (only
+  `@react-pdf/renderer`; no LibreOffice / headless browser), so the practical route: a faithful preview + one-click
+  Save-as-PDF.
+- **Change (`xlsx-to-html.ts`, shared preview renderer — not frozen; display only).**
+  - Renders the workbook's **embedded images** (the template's logo / reference diagrams) as a banner above the grid —
+    ExcelJS exposes them via `getImages()` / `getImage()` (verified: each fans template carries the logo PNG).
+  - **Trims** the leading/trailing all-empty rows and trailing all-empty columns (the printable templates carry many
+    blank spacer/header cells), so the preview shows the form, not a sea of blank cells. Merges are clamped to the
+    trimmed range.
+  - Adds print CSS (`@media print` hides the toolbar, `@page` margins) and a **Print / Save as PDF** button next to
+    Download — so the eye view yields a clean PDF with the logo via the browser's Save-as-PDF.
+- Applies to every JO type's preview (fans / duct / accessories / motor) and any other .xlsx preview. The JO .xlsx file
+  itself is unchanged (download/print in Excel was always correct). Typecheck + lint clean.
+
 ## 2026-08-20 · Orders list — Purchaser sees Job Order numbers instead of Value/Collected/Balance
 - **Request (owner).** For the **Purchaser** role, drop the Value / Collected / Balance columns on the Orders list and
   replace them with a single **Job Orders** column — the Engineer-generated JO numbers, all in one column, each
