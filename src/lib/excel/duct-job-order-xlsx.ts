@@ -15,7 +15,7 @@ import {
   isReducingDuctType,
   type DuctJobOrder,
 } from "@/lib/duct-job-order";
-import { wrapNote } from "@/lib/excel/xlsx-note";
+import { wrapNote, autoRowHeight } from "@/lib/excel/xlsx-note";
 
 const RED = "FFED1C24";
 const GREY = "FFF2F2F2";
@@ -136,22 +136,31 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
       // quantity on the first row for older job orders saved before per-row qty.
       ws.getCell(r, 2).value = seg.quantity || (i === 0 ? jo.quantity : "");
       ws.getCell(r, 3).value = seg.uom || (i === 0 ? jo.uom : "");
-      ws.getCell(r, 4).value = formatSegmentDimensions(seg);
-      ws.getCell(r, 5).value = segmentTypeLabel(seg);
+      const dims = formatSegmentDimensions(seg);
+      const type = segmentTypeLabel(seg);
+      const more = seg.moreDetails || ""; // More Details — typed by the JO creator
+      ws.getCell(r, 4).value = dims;
+      ws.getCell(r, 5).value = type;
       ws.getCell(r, 6).value = seg.material;
       ws.getCell(r, 7).value = seg.gauge;
-      ws.getCell(r, 8).value = seg.moreDetails || ""; // More Details — typed by the JO creator
+      ws.getCell(r, 8).value = more;
       for (let c = 1; c <= 8; c++) {
         const cell = ws.getCell(r, c);
         const leftAligned = c === DIM_COL + 1 || c === MORE_COL + 1;
         cell.font = { size: 10 };
-        cell.alignment = { horizontal: leftAligned ? "left" : "center", vertical: "middle", wrapText: leftAligned };
+        cell.alignment = { horizontal: leftAligned ? "left" : "center", vertical: "middle", wrapText: true };
         cell.border = allBorders;
         if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
       }
       // Size-transition rows get a subtle emphasis on the type cell.
       if (isReducingDuctType(seg.type)) ws.getCell(r, 5).font = { size: 10, bold: true, color: { argb: RED } };
-      row.height = 16;
+      // Grow the row to fit its tallest wrapped cell (dimensions / type / material / details).
+      row.height = autoRowHeight([
+        { text: dims, width: 32 },
+        { text: type, width: 16 },
+        { text: seg.material, width: 16 },
+        { text: more, width: 32 },
+      ]);
       r++;
     });
   }

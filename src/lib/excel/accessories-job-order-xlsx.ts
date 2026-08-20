@@ -6,7 +6,7 @@
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
 import { formatAccessoryDimensions, accessoriesJobRemarks, formatMaterialText, type AccessoriesJobOrder } from "@/lib/accessories-job-order";
-import { wrapNote } from "@/lib/excel/xlsx-note";
+import { wrapNote, autoRowHeight } from "@/lib/excel/xlsx-note";
 
 const RED = "FFED1C24";
 const GREY = "FFF2F2F2";
@@ -113,20 +113,29 @@ export async function buildAccessoriesJobOrderWorkbook(jo: AccessoriesJobOrder):
       ws.getCell(r, 1).value = i + 1;
       ws.getCell(r, 2).value = line.quantity;
       ws.getCell(r, 3).value = line.uom;
-      ws.getCell(r, 4).value = formatAccessoryDimensions(line);
+      const dims = formatAccessoryDimensions(line);
+      const material = formatMaterialText(line.material);
+      const more = line.moreDetails || ""; // More Details — typed by the JO creator
+      ws.getCell(r, 4).value = dims;
       ws.getCell(r, 5).value = line.type;
-      ws.getCell(r, 6).value = formatMaterialText(line.material);
-      ws.getCell(r, 7).value = line.moreDetails || ""; // More Details — typed by the JO creator
+      ws.getCell(r, 6).value = material;
+      ws.getCell(r, 7).value = more;
       for (let c = 1; c <= 7; c++) {
         const cell = ws.getCell(r, c);
         const leftAligned = c === DIM_COL + 1 || c === MORE_COL + 1;
         cell.font = { size: 10 };
-        cell.alignment = { horizontal: leftAligned ? "left" : "center", vertical: "middle", wrapText: leftAligned || c === DIM_COL + 2 };
+        cell.alignment = { horizontal: leftAligned ? "left" : "center", vertical: "middle", wrapText: true };
         cell.border = allBorders;
         if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
       }
       ws.getCell(r, 5).font = { size: 10, bold: true, color: { argb: RED } };
-      row.height = 18;
+      // Grow the row to fit its tallest wrapped cell (dimensions / type / material / details).
+      row.height = autoRowHeight([
+        { text: dims, width: 34 },
+        { text: line.type, width: 20 },
+        { text: material, width: 18 },
+        { text: more, width: 34 },
+      ]);
       r++;
     });
   }

@@ -6,7 +6,7 @@
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/lib/config";
 import { type MotorControllerJobOrder } from "@/lib/motor-controller-job-order";
-import { wrapNote } from "@/lib/excel/xlsx-note";
+import { wrapNote, autoRowHeight } from "@/lib/excel/xlsx-note";
 
 const RED = "FFED1C24";
 const GREY = "FFF2F2F2";
@@ -110,21 +110,27 @@ export async function buildMotorControllerJobOrderWorkbook(jo: MotorControllerJo
       const row = ws.getRow(r);
       ws.getCell(r, 1).value = i + 1;
       ws.getCell(r, 2).value = [line.quantity, line.uom].filter(Boolean).join(" ");
-      ws.getCell(r, 3).value = line.starterType;
+      const starter = line.starterType;
+      const more = line.moreDetails || ""; // More Details — typed by the JO creator
+      ws.getCell(r, 3).value = starter;
       ws.getCell(r, 4).value = line.hp ? `${line.hp} Hp` : "";
       ws.getCell(r, 5).value = line.phase ? `${line.phase} Ph` : "";
       ws.getCell(r, 6).value = line.voltage ? `${line.voltage}v` : "";
-      ws.getCell(r, 7).value = line.moreDetails || ""; // More Details — typed by the JO creator
+      ws.getCell(r, 7).value = more;
       for (let c = 1; c <= 7; c++) {
         const cell = ws.getCell(r, c);
         const leftAligned = c === 3 || c === MORE_COL + 1;
         cell.font = { size: 10 };
-        cell.alignment = { horizontal: leftAligned ? "left" : "center", vertical: "middle", wrapText: leftAligned };
+        cell.alignment = { horizontal: leftAligned ? "left" : "center", vertical: "middle", wrapText: true };
         cell.border = allBorders;
         if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREY } };
       }
       ws.getCell(r, 3).font = { size: 10, bold: true, color: { argb: RED } };
-      row.height = 18;
+      // Grow the row to fit its tallest wrapped cell (starter method / details).
+      row.height = autoRowHeight([
+        { text: starter, width: 34 },
+        { text: more, width: 34 },
+      ]);
       r++;
     });
   }
