@@ -13,7 +13,9 @@ import { convertXlsxToPdf } from "@/lib/xlsx-pdf";
 export async function joXlsxResponse(req: Request, buffer: Buffer, filename: string): Promise<Response> {
   const wantsView = new URL(req.url).searchParams.get("view") !== null;
   if (wantsView) {
-    const pdf = await convertXlsxToPdf(buffer, filename);
+    // Job Order forms are a single page; export only page 1 so the template's
+    // print area doesn't tack on a trailing blank page.
+    const pdf = await convertXlsxToPdf(buffer, filename, { pageRanges: "1-1" });
     if (pdf) {
       const pdfName = filename.replace(/\.xlsx$/i, ".pdf");
       return new Response(new Uint8Array(pdf), {
