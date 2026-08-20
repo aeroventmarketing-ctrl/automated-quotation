@@ -101,6 +101,12 @@ export function visibleNav(role: Role, workflowRoles: string[], salesPersonnel =
   // Admins keep the standalone Sales Dashboard even when they also hold a
   // dashboard-consolidated workflow role (e.g. Accounting / Plant Manager).
   if (role === "ADMIN") hide.delete("/dashboard");
+  // A Sales base-role user keeps the read-only Inventory tab (name / quantity /
+  // availability / selling price — never the unit cost) even when they also hold
+  // a workflow role that would hide it, e.g. a Sales rep who also runs the
+  // Sales-side 2nd QC (the QC role otherwise hides Inventory as a dead-end). The
+  // Inventory page already grants Sales the read-only, no-cost view.
+  if (role === "SALES") hide.delete("/inventory");
   const items = NAV.filter((n) => {
     const allowed = (n.roles as readonly string[]).includes(role) || show.has(n.href);
     return allowed && !(hide.has(n.href) && !show.has(n.href));
