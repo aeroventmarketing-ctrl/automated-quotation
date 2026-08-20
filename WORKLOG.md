@@ -1,3 +1,15 @@
+## 2026-08-20 · Job Order "eye view" — optional pixel-perfect PDF via a LibreOffice converter
+- **Request (owner).** Proceed with the server-side converter for a PDF that matches the Excel template exactly.
+- **Change (opt-in, feature-flagged; display path only).**
+  - New `src/lib/xlsx-pdf.ts` `convertXlsxToPdf(buffer, filename)` — POSTs the built .xlsx to an external
+    **Gotenberg-compatible LibreOffice** converter (`XLSX_PDF_CONVERTER_URL`, the full convert endpoint) and returns
+    the PDF bytes; returns `null` (→ HTML-preview fallback) when unset, non-PDF, timed out (25 s), or failed.
+  - `joXlsxResponse` (all four JO eye views) now: on `?view=1`, if the converter is configured, serve the
+    **pixel-perfect PDF inline**; otherwise the improved HTML preview. `?download=1` still returns the raw .xlsx.
+  - `.env.example` + README document the var and a self-host Gotenberg recipe. Vercel can't run LibreOffice, so the
+    converter is a separate container (Railway/Render/Fly/VPS); self-host so JO documents stay in-house.
+- Zero behaviour change until the owner deploys a converter and sets the env var. Typecheck + lint clean.
+
 ## 2026-08-20 · Job Order "eye view" — show the logo, trim blanks, add Print / Save as PDF
 - **Request (owner).** The "eye" preview of a Job Order (the `?view=1` HTML render of the JO .xlsx) looked bare — no
   company logo and a big empty grid. Owner wanted a **PDF**. A true xlsx→PDF isn't possible on the host (only
