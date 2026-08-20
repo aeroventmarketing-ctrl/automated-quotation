@@ -88,6 +88,26 @@ function parseAddr(addr: string): { col: number; row: number } {
   return { col, row: Number(m[2]) };
 }
 
+/** Embedded images on a sheet (e.g. the form's logo/header), as data URIs. */
+function sheetImages(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet): string[] {
+  const wsAny = ws as unknown as { getImages?: () => { imageId: number | string }[] };
+  const list = typeof wsAny.getImages === "function" ? wsAny.getImages() : [];
+  const media = ((wb.model as unknown as { media?: { buffer?: Buffer; extension?: string }[] }).media) ?? [];
+  const wbAny = wb as unknown as { getImage?: (id: number) => { buffer?: Buffer; extension?: string } };
+  const out: string[] = [];
+  for (const im of list) {
+    const id = Number(im.imageId);
+    let m: { buffer?: Buffer; extension?: string } | undefined;
+    try { m = typeof wbAny.getImage === "function" ? wbAny.getImage(id) : media[id]; } catch { m = media[id]; }
+    if (m?.buffer) {
+      const ext = (m.extension || "png").replace("jpeg", "jpg");
+      const mime = ext === "jpg" ? "jpeg" : ext === "svg" ? "svg+xml" : ext;
+      out.push(`data:image/${mime};base64,${Buffer.from(m.buffer).toString("base64")}`);
+    }
+  }
+  return out;
+}
+
 function renderSheet(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet): string {
   const rowCount = Math.min(ws.actualRowCount || ws.rowCount || 0, MAX_ROWS);
   const colCount = Math.min(ws.actualColumnCount || ws.columnCount || 0, MAX_COLS);
@@ -109,31 +129,53 @@ function renderSheet(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet): string {
     }
   }
 
-  const trs: string[] = [];
+  // Trim outer whitespace: the printable templates carry many empty header/spacer
+  // rows (where the logo image sits) and trailing empty columns. Drop the leading
+  // & trailing all-empty rows and the trailing all-empty columns so the preview
+  // shows the form, not a sea of blank cells. A merged master carrying text keeps
+  // its row/column non-empty (it has text at the master cell), so merges survive.
+  const rowText: string[][] = [];
   for (let r = 1; r <= rowCount; r++) {
+    const row: string[] = [];
+    for (let c = 1; c <= colCount; c++) row[c] = resolveCellText(wb, ws, ws.getCell(r, c));
+    rowText[r] = row;
+  }
+  const rowEmpty = (r: number) => rowText[r].every((t) => (t ?? "").trim() === "");
+  const colEmpty = (c: number) => { for (let r = 1; r <= rowCount; r++) if ((rowText[r][c] ?? "").trim() !== "") return false; return true; };
+  let firstRow = 1; while (firstRow < rowCount && rowEmpty(firstRow)) firstRow++;
+  let lastRow = rowCount; while (lastRow > firstRow && rowEmpty(lastRow)) lastRow--;
+  let lastCol = colCount; while (lastCol > 1 && colEmpty(lastCol)) lastCol--;
+
+  const trs: string[] = [];
+  for (let r = firstRow; r <= lastRow; r++) {
     const tds: string[] = [];
-    for (let c = 1; c <= colCount; c++) {
+    for (let c = 1; c <= lastCol; c++) {
       const key = `${c},${r}`;
       if (skip.has(key)) continue;
       const cell = ws.getCell(r, c);
-      const text = resolveCellText(wb, ws, cell);
+      const text = rowText[r][c] ?? "";
       const align = cell.alignment?.horizontal;
       const bold = cell.font?.bold ? " b" : "";
       // Cells set to wrap in the workbook (e.g. Note / Remarks) must wrap in the
       // preview too — otherwise a long note runs off to the right on one line.
       const wrap = cell.alignment?.wrapText ? " wrap" : "";
       const sp = span.get(key);
+      const colspan = sp ? Math.min(sp.colspan, lastCol - c + 1) : 1;
+      const rowspan = sp ? Math.min(sp.rowspan, lastRow - r + 1) : 1;
       const cls = `${align ? `a-${esc(align)}` : ""}${bold}${wrap}`.trim();
       const attrs = [
-        sp && sp.colspan > 1 ? `colspan="${sp.colspan}"` : "",
-        sp && sp.rowspan > 1 ? `rowspan="${sp.rowspan}"` : "",
+        colspan > 1 ? `colspan="${colspan}"` : "",
+        rowspan > 1 ? `rowspan="${rowspan}"` : "",
         cls ? `class="${cls}"` : "",
       ].filter(Boolean).join(" ");
       tds.push(`<td ${attrs}>${esc(text)}</td>`);
     }
     trs.push(`<tr>${tds.join("")}</tr>`);
   }
-  return `<table>${trs.join("")}</table>`;
+  // The template's logo/header images (which the cell grid can't show) go on top.
+  const imgs = sheetImages(wb, ws);
+  const banner = imgs.length ? `<div class="imgs">${imgs.map((u) => `<img src="${esc(u)}" alt="" />`).join("")}</div>` : "";
+  return `${banner}<table>${trs.join("")}</table>`;
 }
 
 export function renderXlsxAsHtml(wb: ExcelJS.Workbook, title: string): string {
@@ -156,9 +198,14 @@ export function renderXlsxAsHtml(wb: ExcelJS.Workbook, title: string): string {
   .bar { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #111827; color: #fff; padding: 8px 16px; }
   .bar .name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar a { background: #ED1C24; color: #fff; text-decoration: none; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .bar .actions { display: flex; gap: 8px; }
+  .bar button, .bar a { background: #ED1C24; color: #fff; text-decoration: none; border: 0; cursor: pointer; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .bar a.ghost { background: #374151; }
   .wrap { max-width: 1100px; margin: 14px auto; padding: 0 12px; }
   section { background: #fff; margin: 0 0 16px; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.12); overflow-x: auto; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #6b7280; margin: 0 0 10px; }
+  .imgs { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 12px; }
+  .imgs img { max-height: 90px; max-width: 100%; object-fit: contain; }
   table { border-collapse: collapse; font-size: 13px; }
   td { border: 1px solid #d1d5db; padding: 4px 8px; vertical-align: middle; white-space: nowrap; }
   td.wrap { white-space: pre-wrap; word-break: break-word; vertical-align: top; }
@@ -167,11 +214,22 @@ export function renderXlsxAsHtml(wb: ExcelJS.Workbook, title: string): string {
   td.a-right { text-align: right; }
   td.a-left { text-align: left; }
   .empty { color: #9ca3af; font-style: italic; }
+  @media print {
+    body { background: #fff; }
+    .bar { display: none; }
+    .wrap { max-width: none; margin: 0; padding: 0; }
+    section { box-shadow: none; border-radius: 0; margin: 0; padding: 0; break-inside: avoid; }
+    h2 { display: none; }
+  }
+  @page { margin: 12mm; }
 </style>
 </head><body>
   <div class="bar">
     <span class="name">${esc(title)}</span>
-    <a href="?download=1" title="Download the original file">Download</a>
+    <div class="actions">
+      <button type="button" onclick="window.print()" title="Print or save as PDF">Print / Save as PDF</button>
+      <a class="ghost" href="?download=1" title="Download the original .xlsx">Download</a>
+    </div>
   </div>
   <div class="wrap">${sheets || "<section><p class='empty'>(no sheets)</p></section>"}</div>
 </body></html>`;
