@@ -37,7 +37,16 @@ export async function convertXlsxToPdf(buffer: Buffer, filename: string): Promis
     form.append("files", new Blob([new Uint8Array(buffer)], { type: XLSX_MIME }), safe.endsWith(".xlsx") ? safe : `${safe}.xlsx`);
     // Gotenberg optionally accepts landscape / native page ranges here; the JO
     // templates set their own print area & page setup, so we let it use those.
-    const res = await fetch(url, { method: "POST", body: form, signal: controller.signal });
+    // Optional auth: when the converter sits behind a basic-auth / token proxy,
+    // set XLSX_PDF_CONVERTER_AUTH to the full header value (e.g. "Basic <b64>"
+    // or "Bearer <token>") and it's sent verbatim.
+    const auth = process.env.XLSX_PDF_CONVERTER_AUTH?.trim();
+    const res = await fetch(url, {
+      method: "POST",
+      body: form,
+      signal: controller.signal,
+      ...(auth ? { headers: { Authorization: auth } } : {}),
+    });
     if (!res.ok) {
       console.error("[xlsx-pdf] converter responded", res.status, res.statusText);
       return null;
