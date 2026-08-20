@@ -28,7 +28,10 @@ function fmtDate(iso: string): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "long", day: "numeric" }).format(d);
 }
 
-export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffer> {
+export async function buildDuctJobOrderWorkbook(
+  jo: DuctJobOrder,
+  opts?: { quotationNumber?: string },
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = COMPANY.name;
   const ws = wb.addWorksheet("Duct Job Order", {
@@ -100,6 +103,12 @@ export async function buildDuctJobOrderWorkbook(jo: DuctJobOrder): Promise<Buffe
   ws.getCell("B5").font = { bold: true, size: 11, color: { argb: RED } };
   // Make the due date stand out.
   ws.getCell("F6").font = { bold: true, size: 10, color: { argb: RED } };
+
+  // Service Order / Quotation number — bold-italic Calibri 11.
+  if (opts?.quotationNumber) {
+    infoRow("SO / Quotation No.:", opts.quotationNumber);
+    ws.getCell("B7").font = { name: "Calibri", size: 11, bold: true, italic: true };
+  }
 
   r++; // spacer
 

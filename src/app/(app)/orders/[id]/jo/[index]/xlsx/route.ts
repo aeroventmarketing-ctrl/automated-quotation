@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const quote = await prisma.quotation.findUnique({ where: { id }, select: { classification: true } });
+  const quote = await prisma.quotation.findUnique({ where: { id }, select: { classification: true, quoteNumber: true } });
   if (!quote) return new Response("Not found", { status: 404 });
   const wf = readOrderWorkflow(quote.classification);
 
@@ -35,7 +35,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
   const dir = path.join(process.cwd(), "public", "templates");
   const template = await fs.readFile(path.join(dir, def.template));
-  const buffer = await buildFansJobOrderWorkbook(template, { ...jo, joNumber });
+  const buffer = await buildFansJobOrderWorkbook(template, { ...jo, joNumber }, { quotationNumber: quote.quoteNumber });
 
   const filename = `${(joNumber || "Job-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
   return joXlsxResponse(req, buffer, filename);

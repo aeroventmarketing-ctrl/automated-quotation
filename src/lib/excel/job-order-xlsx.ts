@@ -77,6 +77,39 @@ function clearCellContent(xml: string, addr: string): string {
 }
 
 /**
+ * Stamp the Service Order / Quotation number into V19 (top-right of the form,
+ * just below the "Date Finished" line) as bold-italic Calibri 11. The template
+ * has no cell — nor even a row — there, so we insert an inline rich-text cell
+ * that carries its own font, keeping the styling independent of styles.xml.
+ */
+function writeQuotationNumberCell(xml: string, text: string): string {
+  const value = (text ?? "").trim();
+  if (value === "") return xml;
+  const cell =
+    `<c r="V19" t="inlineStr"><is><r>` +
+    `<rPr><b/><i/><sz val="11"/><rFont val="Calibri"/><family val="2"/></rPr>` +
+    `<t xml:space="preserve">${escapeXml(value)}</t>` +
+    `</r></is></c>`;
+  // Already present (e.g. re-run) → replace it.
+  const existing = /<c r="V19"[^>]*?(?:\/>|>[\s\S]*?<\/c>)/;
+  if (existing.test(xml)) return xml.replace(existing, cell);
+  // Row 19 exists but has no V19 → append the cell (single cell, order is fine).
+  const row19 = /<row r="19"([^>]*)>([\s\S]*?)<\/row>/;
+  if (row19.test(xml)) return xml.replace(row19, (_m, attrs, inner) => `<row r="19"${attrs}>${inner}${cell}</row>`);
+  // No row 19 → create it, inserted in ascending row order (right after row 18,
+  // else before the first later row, else before </sheetData>).
+  const newRow = `<row r="19">${cell}</row>`;
+  const after18 = /(<row r="18"[^>]*>[\s\S]*?<\/row>)/;
+  if (after18.test(xml)) return xml.replace(after18, `$1${newRow}`);
+  const later = /<row r="(\d+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = later.exec(xml))) {
+    if (Number(m[1]) > 19) return xml.slice(0, m.index) + newRow + xml.slice(m.index);
+  }
+  return xml.replace(/<\/sheetData>/, `${newRow}</sheetData>`);
+}
+
+/**
  * Whether a job order is direct-drive: the fan sits on the motor shaft, so there
  * is no pulley/shafting/belt/bearing and it turns at motor speed. Signalled by
  * the Direct checkbox, a "…DD" project code, or a Direct/Directly-Coupled drive.
@@ -185,6 +218,7 @@ async function printableSheetPath(zip: JSZip): Promise<string | null> {
 export async function buildFansJobOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   jo: FansJobOrder,
+  opts?: { quotationNumber?: string },
 ): Promise<Buffer> {
   const zip = await JSZip.loadAsync(templateBuffer as ArrayBuffer);
 
@@ -270,6 +304,9 @@ export async function buildFansJobOrderWorkbook(
         const hub = directDriveHubText(jo.motorHp);
         if (hub) cbXml = writeInlineCell(cbXml, "C50", hub);
       }
+
+      // Service Order / Quotation number, top-right below "Date Finished" (V19).
+      if (opts?.quotationNumber) cbXml = writeQuotationNumberCell(cbXml, opts.quotationNumber);
 
       zip.file(cbPath, cbXml);
     }

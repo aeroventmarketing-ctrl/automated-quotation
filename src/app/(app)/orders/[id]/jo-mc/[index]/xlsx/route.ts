@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const quote = await prisma.quotation.findUnique({ where: { id }, select: { classification: true } });
+  const quote = await prisma.quotation.findUnique({ where: { id }, select: { classification: true, quoteNumber: true } });
   if (!quote) return new Response("Not found", { status: 404 });
   const wf = readOrderWorkflow(quote.classification);
 
@@ -24,7 +24,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const year = wf.mcJoBaseYear ?? new Date().getFullYear();
   const joNumber = wf.mcJoBaseNo != null ? formatMotorControllerJoNumber(wf.mcJoBaseNo, year, i, wf.motorJobOrders.length) : "";
 
-  const buffer = await buildMotorControllerJobOrderWorkbook({ ...jo, joNumber });
+  const buffer = await buildMotorControllerJobOrderWorkbook({ ...jo, joNumber }, { quotationNumber: quote.quoteNumber });
 
   const filename = `${(joNumber || "Motor-Controller-Job-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
   return joXlsxResponse(req, buffer, filename);
