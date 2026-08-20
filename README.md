@@ -99,6 +99,26 @@ users (Supabase dashboard → Authentication → Users → *Add user*, or invite
 `@react-pdf/renderer` is configured as a server external package — PDF generation runs in the
 Node.js runtime on Vercel (no Chromium binary required).
 
+### Optional: pixel-perfect Job Order PDFs (LibreOffice converter)
+
+The Job Order "eye" view shows an in-app HTML preview by default. To make it render a
+**pixel-perfect PDF** (exactly like the Excel template — logo, fonts, layout), point the app at a
+small self-hosted **LibreOffice converter**. [Gotenberg](https://gotenberg.dev) is the reference:
+
+1. Run Gotenberg somewhere that allows a long-running container (Railway / Render / Fly.io / a VPS —
+   **not** Vercel serverless, which can't run LibreOffice):
+   ```bash
+   docker run --rm -p 3000:3000 gotenberg/gotenberg:8
+   ```
+2. Set `XLSX_PDF_CONVERTER_URL` in the Vercel env to its LibreOffice convert endpoint, e.g.
+   `https://your-gotenberg-host/forms/libreoffice/convert`.
+3. Redeploy. The eye view now returns a real PDF; if the converter is unset or unreachable it
+   silently falls back to the HTML preview, so nothing breaks.
+
+Host the converter yourself (don't use a public conversion API) so the job-order documents never
+leave your infrastructure. Lock the Gotenberg instance down to your app (private network / auth /
+IP allow-list) since its convert endpoint would otherwise be open.
+
 ---
 
 ## How it works (feature tour)
