@@ -77,7 +77,7 @@ function clearCellContent(xml: string, addr: string): string {
 }
 
 /**
- * Stamp the Service Order / Quotation number into V19 (top-right of the form,
+ * Stamp the Service Order / Quotation number into U19 (top-right of the form,
  * just below the "Date Finished" line) as bold-italic Calibri 11. The template
  * has no cell — nor even a row — there, so we insert an inline rich-text cell
  * that carries its own font, keeping the styling independent of styles.xml.
@@ -86,14 +86,14 @@ function writeQuotationNumberCell(xml: string, text: string): string {
   const value = (text ?? "").trim();
   if (value === "") return xml;
   const cell =
-    `<c r="V19" t="inlineStr"><is><r>` +
+    `<c r="U19" t="inlineStr"><is><r>` +
     `<rPr><b/><i/><sz val="11"/><rFont val="Calibri"/><family val="2"/></rPr>` +
     `<t xml:space="preserve">${escapeXml(value)}</t>` +
     `</r></is></c>`;
   // Already present (e.g. re-run) → replace it.
-  const existing = /<c r="V19"[^>]*?(?:\/>|>[\s\S]*?<\/c>)/;
+  const existing = /<c r="U19"[^>]*?(?:\/>|>[\s\S]*?<\/c>)/;
   if (existing.test(xml)) return xml.replace(existing, cell);
-  // Row 19 exists but has no V19 → append the cell (single cell, order is fine).
+  // Row 19 exists but has no U19 → append the cell (single cell, order is fine).
   const row19 = /<row r="19"([^>]*)>([\s\S]*?)<\/row>/;
   if (row19.test(xml)) return xml.replace(row19, (_m, attrs, inner) => `<row r="19"${attrs}>${inner}${cell}</row>`);
   // No row 19 → create it, inserted in ascending row order (right after row 18,
@@ -305,7 +305,7 @@ export async function buildFansJobOrderWorkbook(
         if (hub) cbXml = writeInlineCell(cbXml, "C50", hub);
       }
 
-      // Service Order / Quotation number, top-right below "Date Finished" (V19).
+      // Service Order / Quotation number, top-right below "Date Finished" (U19).
       if (opts?.quotationNumber) cbXml = writeQuotationNumberCell(cbXml, opts.quotationNumber);
 
       zip.file(cbPath, cbXml);
