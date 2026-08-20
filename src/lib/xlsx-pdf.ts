@@ -25,7 +25,11 @@ export function xlsxPdfConfigured(): boolean {
   return !!process.env.XLSX_PDF_CONVERTER_URL?.trim();
 }
 
-export async function convertXlsxToPdf(buffer: Buffer, filename: string): Promise<Buffer | null> {
+export async function convertXlsxToPdf(
+  buffer: Buffer,
+  filename: string,
+  opts?: { pageRanges?: string },
+): Promise<Buffer | null> {
   const url = process.env.XLSX_PDF_CONVERTER_URL?.trim();
   if (!url) return null;
 
@@ -35,8 +39,10 @@ export async function convertXlsxToPdf(buffer: Buffer, filename: string): Promis
   try {
     const form = new FormData();
     form.append("files", new Blob([new Uint8Array(buffer)], { type: XLSX_MIME }), safe.endsWith(".xlsx") ? safe : `${safe}.xlsx`);
-    // Gotenberg optionally accepts landscape / native page ranges here; the JO
-    // templates set their own print area & page setup, so we let it use those.
+    // Limit the output to specific pages (Gotenberg/LibreOffice `nativePageRanges`,
+    // e.g. "1-1"). The single-page forms otherwise emit a trailing blank page from
+    // the template's print area.
+    if (opts?.pageRanges) form.append("nativePageRanges", opts.pageRanges);
     // Optional auth: when the converter sits behind a basic-auth / token proxy,
     // set XLSX_PDF_CONVERTER_AUTH to the full header value (e.g. "Basic <b64>"
     // or "Bearer <token>") and it's sent verbatim.
