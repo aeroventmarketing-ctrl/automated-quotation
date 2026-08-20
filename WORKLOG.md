@@ -1,3 +1,15 @@
+## 2026-08-20 · Orders list — Purchaser sees Job Order numbers instead of Value/Collected/Balance
+- **Request (owner).** For the **Purchaser** role, drop the Value / Collected / Balance columns on the Orders list and
+  replace them with a single **Job Orders** column — the Engineer-generated JO numbers, all in one column, each
+  clickable and opening the JO workflow.
+- **Change (orders list, not frozen).** `orders/page.tsx` now derives each order's JO numbers per department (fans /
+  duct / accessories / motor) via the existing formatters (`formatJoNumber`, `formatDuctJoNumber`,
+  `formatAccessoriesJoNumber`, `formatMotorControllerJoNumber`) and passes an `isPurchaser` flag (holds the purchaser
+  role, non-admin). In `orders-table.tsx`, the Purchaser view collapses the three money columns into one **Job Orders**
+  column whose numbers are `Link`s to `/orders/<id>` (the JO workflow / Phase 2). Everyone else's view is unchanged;
+  admins keep the full financial columns. colSpans adjust (10 → 8).
+- Typecheck + lint clean.
+
 ## 2026-08-19 · WON report — book counter sales on completion (reconcile with the dashboard)
 - **Bug (owner-reported).** "Sales this month" (dashboard) and the WON report grand total didn't tally — off by exactly
   the **uncleared** post-dated counter sales. Cause: the report's **Payment-date** basis dropped uncleared counter
