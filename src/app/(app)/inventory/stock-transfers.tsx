@@ -38,9 +38,15 @@ function statusBadge(t: StockTransferView) {
 function useRowActions(refresh: () => void) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  async function run(fn: () => Promise<void>) {
+  async function run(fn: () => Promise<void | { error?: string }>) {
     setBusy(true); setErr(null);
-    try { await fn(); refresh(); }
+    try {
+      // Some actions return { error } for an expected business failure (e.g. out
+      // of stock) so the real reason survives Next's production error stripping.
+      const res = await fn();
+      if (res && typeof res === "object" && "error" in res && res.error) { setErr(res.error); return; }
+      refresh();
+    }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(false); }
   }
