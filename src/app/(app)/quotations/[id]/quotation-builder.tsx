@@ -5987,7 +5987,12 @@ export function QuotationBuilder({
                       ) : (
                         <span>Body only — pick HP &amp; phase to add a motor</span>
                       ))}
-                    <span className="ml-auto text-foreground">
+                    {isBlower && hp && ph && motor && (
+                      <span className="ml-auto">
+                        Body + Motor: <b className="text-foreground">{formatCurrency(round2((l.specs.bodyPrice ?? 0) + motorNetPrice(motor, exp)), quotation.currency)}</b>
+                      </span>
+                    )}
+                    <span className={`text-foreground${isBlower && hp && ph && motor ? "" : " ml-auto"}`}>
                       Amount: <b>{formatCurrency(lineGross(l), quotation.currency)}</b>
                     </span>
                   </div>
