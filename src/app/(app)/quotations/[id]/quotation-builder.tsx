@@ -3102,7 +3102,9 @@ export function QuotationBuilder({
         return {
           ...l,
           specs,
-          unitPrice: round2(entry.basePrice * (1 + vatRate)),
+          // KDK air-curtain catalogue prices are VAT-INCLUSIVE — use as-is (the
+          // quote's VAT-exclusive presentation divides by 1.12 for the net).
+          unitPrice: round2(entry.basePrice),
           descriptionSnapshot: buildAirCurtainDescription(entry.modelCode, entry.heightM, entry.lengthMm),
         };
       }),
@@ -3735,10 +3737,11 @@ export function QuotationBuilder({
           return {
             ...l,
             specs,
-            // KDK catalogue prices are the VAT-exclusive (net) price, like every
-            // other catalogue price; store gross so the exclusive display shows
-            // exactly the catalogue price (no ÷1.12 deduction).
-            unitPrice: round2(base * (1 + vatRate)),
+            // KDK / ceiling-cassette catalogue prices are VAT-INCLUSIVE — use
+            // them as-is as the gross unit price. The quote's VAT presentation
+            // then adds nothing (inclusive) or divides by 1.12 (exclusive), so
+            // the customer always pays the catalogue price.
+            unitPrice: round2(base),
             descriptionSnapshot: buildKdkDescription(specs.type, model, specs.bladeType, specs.brand),
           };
         }
@@ -5499,9 +5502,9 @@ export function QuotationBuilder({
                           const cat = catalog[r.modelId];
                           const motor = lookupMotor(r.motorHp, 3, r.motorPole ?? 4);
                           const estBody = bodyNetFrom(baseBodyOf(cat?.basePrice ?? 0, l.specs), l.specs);
-                          // KDK catalogue prices are VAT-exclusive (net); store gross (no motor add-on).
+                          // KDK / ceiling-cassette catalogue prices are VAT-INCLUSIVE — use as-is (no motor add-on).
                           const est = isPrebuiltUnit(l.specs)
-                            ? round2((cat?.basePrice ?? 0) * (1 + vatRate))
+                            ? round2(cat?.basePrice ?? 0)
                             : estBody > 0
                               ? round2(computeUnitPrice(estBody, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate))
                               : 0;
