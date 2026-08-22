@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { importProducts } from "./actions";
 
 const TEMPLATE =
-  "name,unit,category,note,supplier,code,price\n" +
-  "GI Sheet 24ga,sheet,Raw material,,ALLOY MASTER INDUSTRIAL SUPPLY,GI24,850\n" +
-  "GI Sheet 24ga,sheet,Raw material,,METRO STEEL SUPPLY,MS-24,865\n" +
-  "Bolt M8 x 25,pcs,Fasteners,,FASTENER HOUSE,,2.5\n" +
-  "Motor 5HP TECO,unit,Motors,,POWER MOTOR TRADING,TECO-5,18500\n";
+  "name,sku,unit,category,note,supplier,code,price\n" +
+  "GI Sheet 24ga,,sheet,Raw material,,ALLOY MASTER INDUSTRIAL SUPPLY,GI24,850\n" +
+  "GI Sheet 24ga,,sheet,Raw material,,METRO STEEL SUPPLY,MS-24,865\n" +
+  "Bolt M8 x 25,,pcs,Fasteners,,FASTENER HOUSE,,2.5\n" +
+  "Motor 5HP TECO,CAT00161,unit,Motors,,POWER MOTOR TRADING,TECO-5,18500\n";
 
 export function BulkImport() {
   const router = useRouter();
@@ -74,9 +74,9 @@ export function BulkImport() {
         <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>Close</button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Upload a CSV or Excel (.xlsx) file. Columns: <span className="font-mono">name, unit, category, note, supplier, code, price</span> —
+        Upload a CSV or Excel (.xlsx) file. Columns: <span className="font-mono">name, sku, unit, category, note, supplier, code, price</span> —
         only <b>name</b> is required. To give a product several suppliers, repeat the product on multiple rows with a different supplier each.
-        SKUs are generated automatically.
+        Set <b>sku</b> to give a product your own Item Code (e.g. CAT00001); leave it blank to auto-generate one. <b>code</b> is the supplier&apos;s own part code.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={downloadTemplate} className="text-xs font-medium text-primary hover:underline">Download template (CSV)</button>

@@ -182,6 +182,8 @@ interface ImportGroup {
   unit?: string;
   category?: string;
   note?: string;
+  /** Product's own Item Code / SKU from the file (blank → auto-generated). */
+  sku?: string;
   suppliers: ProductSupplierLink[];
 }
 
@@ -232,7 +234,11 @@ export async function importProducts(
     return -1;
   };
   const iSup = pick(["supplier", "supplier's name", "supplier name", "vendor", "company"]);
-  const iCode = pick(["code", "supplier code", "item code", "sku"]);
+  // The product's OWN Item Code / SKU (e.g. CAT00001) — claimed before the
+  // supplier code so a "sku" / "item code" column sets the product SKU, not the
+  // supplier's code. Blank → auto-generated as before.
+  const iSku = pick(["sku", "product sku", "product code", "itemcode", "item code"]);
+  const iCode = pick(["supplier code", "supplier's code", "code"]);
   const iPrice = pick(["price", "unit price", "unit cost", "cost"]);
   const iUnit = pick(["unit", "uom", "units"]);
   const iCat = pick(["category", "categories"]);
@@ -249,6 +255,7 @@ export async function importProducts(
     if (!name) { skipped++; continue; }
     const key = name.toLowerCase();
     const g = groups.get(key) ?? { name, suppliers: [] };
+    if (!g.sku && iSku >= 0 && row[iSku]?.trim()) g.sku = row[iSku].trim().toUpperCase();
     if (!g.unit && iUnit >= 0 && row[iUnit]?.trim()) g.unit = row[iUnit].trim();
     if (!g.category && iCat >= 0 && row[iCat]?.trim()) g.category = row[iCat].trim();
     if (!g.note && iNote >= 0 && row[iNote]?.trim()) g.note = row[iNote].trim();
@@ -285,6 +292,15 @@ export async function importProducts(
   let updated = 0;
   for (const g of groups.values()) {
     try {
+      // A file-provided SKU must be unique — reject it if another product owns it
+      // (an item keeping its own code is fine). Blank → auto-generated.
+      if (g.sku) {
+        const clash = await prisma.product.findUnique({ where: { sku: g.sku }, select: { name: true } });
+        if (clash && clash.name.toLowerCase() !== g.name.toLowerCase()) {
+          errors.push(`Product “${g.name}”: SKU ${g.sku} is already used by another product.`);
+          continue;
+        }
+      }
       const existing = await prisma.product.findFirst({ where: { active: true, name: { equals: g.name, mode: "insensitive" } } });
       if (existing) {
         // Merge new suppliers into the existing ones (dedup by company).
@@ -294,6 +310,8 @@ export async function importProducts(
         await prisma.product.update({
           where: { id: existing.id },
           data: {
+            // Set the SKU from the file when given; otherwise keep the existing one.
+            ...(g.sku ? { sku: g.sku } : {}),
             unit: g.unit || existing.unit,
             category: g.category ?? existing.category,
             note: g.note ?? existing.note,
@@ -303,7 +321,8 @@ export async function importProducts(
         updated++;
       } else {
         await prisma.$transaction(async (tx) => {
-          const sku = await nextProductSku(tx);
+          // Use the file's Item Code when provided, else auto-generate the next PRD serial.
+          const sku = g.sku || (await nextProductSku(tx));
           await tx.product.create({
             data: {
               name: g.name,
