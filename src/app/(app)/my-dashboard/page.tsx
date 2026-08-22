@@ -125,7 +125,7 @@ export default async function MyDashboardPage() {
   const manualReconCard = manualRecon ? <ManualReconcileCard rows={manualRecon} /> : null;
   // Outstanding reconciliation backlog — POs / vouchers that can be reconciled
   // but haven't been. Shown as its own tiles beside "Reconciled by hand".
-  const unrecon = canSeeManualRecon ? await getUnreconciledCounts().catch(() => ({ pos: 0, vouchers: 0 })) : null;
+  const unrecon = canSeeManualRecon ? await getUnreconciledCounts().catch(() => ({ pos: 0, vouchers: 0, firstPoId: null, firstVoucherId: null })) : null;
   const stockPending: StockActionView[] = (invWarehouse || invPurchaser)
     ? (await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" }, take: 50 }).catch(() => [])).map((a) => ({
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
@@ -172,7 +172,7 @@ export default async function MyDashboardPage() {
       {manualReconCard}
       {unrecon && (
         <>
-          <Link href="/purchasing" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+          <Link href={unrecon.firstPoId ? `/purchasing?req=${unrecon.firstPoId}` : "/purchasing"} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
             <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
               <CardContent className="flex items-center gap-3 py-4">
                 <ShoppingCart className="h-6 w-6 text-amber-600" />
@@ -183,7 +183,7 @@ export default async function MyDashboardPage() {
               </CardContent>
             </Card>
           </Link>
-          <Link href="/cash-requests" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+          <Link href={unrecon.firstVoucherId ? `/cash-requests?id=${unrecon.firstVoucherId}` : "/cash-requests"} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
             <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
               <CardContent className="flex items-center gap-3 py-4">
                 <Wallet className="h-6 w-6 text-amber-600" />
