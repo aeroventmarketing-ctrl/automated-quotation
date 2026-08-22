@@ -20,9 +20,9 @@
  */
 import { prisma } from "@/lib/db";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
-import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
-import { coerceLiquidation, isLiquidated } from "@/lib/cash-request";
-import { isDeptRequisition } from "@/lib/purchasing";
+import { coerceReconciliation, isReconciled, canReconcileAt } from "@/lib/purchase-reconcile";
+import { coerceLiquidation, isLiquidated, canLiquidateAt, type CashRequestStatus } from "@/lib/cash-request";
+import { isDeptRequisition, type PRStatus } from "@/lib/purchasing";
 import { formatDateTime } from "@/lib/utils";
 
 export type ManualReconKind = "PO" | "Requisition" | "Cash";
@@ -102,4 +102,36 @@ export async function getManualReconciliations(): Promise<ManualReconRow[]> {
 
   // Most recently recorded first.
   return rows.sort((a, b) => b.recordedAtISO.localeCompare(a.recordedAtISO));
+}
+
+/**
+ * Counts of items that CAN be reconciled but haven't been yet — the outstanding
+ * reconciliation backlog for the Production Dashboard, alongside "Reconciled by
+ * hand":
+ *   • pos      — purchase orders past receiving (`canReconcileAt`) with no
+ *                reconciliation lines yet.
+ *   • vouchers — cash vouchers whose cash was received (`canLiquidateAt`) but
+ *                which haven't been liquidated.
+ */
+export async function getUnreconciledCounts(): Promise<{ pos: number; vouchers: number }> {
+  const [prs, crs] = await Promise.all([
+    prisma.purchaseRequest.findMany({ select: { status: true, reconciliation: true } }).catch(() => []),
+    prisma.cashRequest.findMany({ select: { status: true, liquidation: true } }).catch(() => []),
+  ]);
+
+  let pos = 0;
+  for (const pr of prs) {
+    if (!canReconcileAt(pr.status as PRStatus)) continue;
+    if (isReconciled(coerceReconciliation(pr.reconciliation))) continue;
+    pos++;
+  }
+
+  let vouchers = 0;
+  for (const cr of crs) {
+    if (!canLiquidateAt(cr.status as CashRequestStatus)) continue;
+    if (isLiquidated(coerceLiquidation(cr.liquidation))) continue;
+    vouchers++;
+  }
+
+  return { pos, vouchers };
 }

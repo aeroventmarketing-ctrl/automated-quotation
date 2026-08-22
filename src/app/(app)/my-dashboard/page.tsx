@@ -20,7 +20,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
 import { getExpensesReport } from "../management/pnl-actions";
 import { ExpensesReport } from "./expenses-report";
-import { getManualReconciliations } from "@/lib/manual-reconciliations";
+import { getManualReconciliations, getUnreconciledCounts } from "@/lib/manual-reconciliations";
 import { ManualReconcileCard } from "./manual-reconcile-card";
 import { getLowStock } from "@/lib/low-stock";
 import { StockAlertsCards } from "./stock-alerts-cards";
@@ -123,6 +123,9 @@ export default async function MyDashboardPage() {
   const canSeeManualRecon = admin || isAccounting || userHasWorkflowRole(assignments, user.id, "payment_approver" as WorkflowRoleKey);
   const manualRecon = canSeeManualRecon ? await getManualReconciliations().catch(() => []) : null;
   const manualReconCard = manualRecon ? <ManualReconcileCard rows={manualRecon} /> : null;
+  // Outstanding reconciliation backlog — POs / vouchers that can be reconciled
+  // but haven't been. Shown as its own tiles beside "Reconciled by hand".
+  const unrecon = canSeeManualRecon ? await getUnreconciledCounts().catch(() => ({ pos: 0, vouchers: 0 })) : null;
   const stockPending: StockActionView[] = (invWarehouse || invPurchaser)
     ? (await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" }, take: 50 }).catch(() => [])).map((a) => ({
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
@@ -149,7 +152,7 @@ export default async function MyDashboardPage() {
   // "Reconciled by hand" tile (when shown) joins the same row; its list expands
   // full-width beneath the row (col-span-full).
   const ordersGrid = (data.byArea.length > 0 || manualReconCard) && (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
       {data.byArea.map((a) => {
         const Icon = AREA_ICON[a.area];
         return (
@@ -167,6 +170,32 @@ export default async function MyDashboardPage() {
         );
       })}
       {manualReconCard}
+      {unrecon && (
+        <>
+          <Link href="/purchasing" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+              <CardContent className="flex items-center gap-3 py-4">
+                <ShoppingCart className="h-6 w-6 text-amber-600" />
+                <div>
+                  <div className="text-2xl font-bold tabular-nums leading-none">{unrecon.pos}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Unreconciled PO</div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/cash-requests" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+              <CardContent className="flex items-center gap-3 py-4">
+                <Wallet className="h-6 w-6 text-amber-600" />
+                <div>
+                  <div className="text-2xl font-bold tabular-nums leading-none">{unrecon.vouchers}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Unreconciled Vouchers</div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        </>
+      )}
     </div>
   );
 
