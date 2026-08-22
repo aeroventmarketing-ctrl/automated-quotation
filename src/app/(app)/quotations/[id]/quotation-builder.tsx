@@ -14,7 +14,7 @@ import { LostQuotationToggle } from "./lost-quotation-toggle";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { formatCurrency } from "@/lib/utils";
 import { config } from "@/lib/config";
-import { applyPricing, pricingForVatMode, vatDisplayBasisIsGross, vatModeAddsVat, DEFAULT_PRICING, type PricingAdjust, type AdjustMode } from "@/lib/quote";
+import { applyPricing, pricingForVatMode, vatDisplayBasisIsGross, vatModeAddsVat, isFlatVatLine, DEFAULT_PRICING, type PricingAdjust, type AdjustMode } from "@/lib/quote";
 import {
   lookupMotor,
   motorModelCode,
@@ -2794,17 +2794,31 @@ export function QuotationBuilder({
   // than net-rounding to ₱3,998.40).
   const lineGross = (l: Line): number => round2(l.qty * l.unitPrice);
   const totals = useMemo(() => {
-    const gross = lines.reduce((a, l) => a + lineGross(l), 0); // VAT-inclusive
-    const net = gross / (1 + vatRate);
+    // Flat (VAT-inclusive) lines — KDK / Aerovent Jet Fan / Inline Duct Fan — are
+    // never divided by 1.12: they carry no VAT and sit at full value in both the
+    // net and the gross. Only the VATable lines have VAT stripped in exclusive mode.
+    let vatableGross = 0;
+    let exemptGross = 0;
+    for (const l of lines) {
+      const g = lineGross(l);
+      if (isFlatVatLine(l.specs)) exemptGross += g;
+      else vatableGross += g;
+    }
+    vatableGross = round2(vatableGross);
+    exemptGross = round2(exemptGross);
+    const gross = round2(vatableGross + exemptGross); // VAT-inclusive
+    const net = round2(vatableGross / (1 + vatRate) + exemptGross);
     const grossBasis = vatDisplayBasisIsGross(effectiveVatMode);
     const exclusive = !grossBasis;
     const zeroRated = effectiveVatMode === "ZERO_RATED";
     const displayedNet = grossBasis ? gross : net;
     const { markupAmt, afterMarkup, discountAmt, finalNet } = applyPricing(displayedNet, pricingForVatMode(pricing, effectiveVatMode, vatRate));
     const addVat = vatModeAddsVat(effectiveVatMode);
-    const vatAmt = addVat ? finalNet * vatRate : 0;
+    // VAT added on top (EXCLUSIVE_PLUS) applies to the VATable share only.
+    const vatableShare = displayedNet > 0 ? Math.max(0, (displayedNet - exemptGross) / displayedNet) : 0;
+    const vatAmt = addVat ? finalNet * vatableShare * vatRate : 0;
     const grandTotal = finalNet + vatAmt;
-    return { net, vat: gross - net, gross, exclusive, zeroRated, displayedNet, markupAmt, afterMarkup, discountAmt, finalNet, addVat, vatAmt, grandTotal };
+    return { net, vat: round2(gross - net), gross, exclusive, zeroRated, displayedNet, markupAmt, afterMarkup, discountAmt, finalNet, addVat, vatAmt, grandTotal };
   }, [lines, vatRate, effectiveVatMode, pricing]);
 
   // --- Auto-save ---------------------------------------------------------

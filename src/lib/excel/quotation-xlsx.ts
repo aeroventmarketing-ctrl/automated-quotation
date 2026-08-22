@@ -19,6 +19,8 @@ export interface XlsxLine {
   qty: number;
   unitPrice: number; // VAT-inclusive (as stored)
   lineTotal: number; // VAT-inclusive
+  /** Flat VAT-inclusive line (KDK etc.) — never divided by 1.12 in exclusive mode. */
+  vatExempt?: boolean;
   capacity_cfm?: number | null;
   staticPressure_inwg?: number | null;
   inches?: number | null;
@@ -247,7 +249,11 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   // still sums to the (marked-up) net and the client sees no mark-up row.
   const pricing: PricingAdjust =
     data.pricing ?? { markupMode: "percent", markupValue: 0, discountMode: "percent", discountValue: data.discountPct };
-  const baseNet = money(data.total * f);
+  // Flat (VAT-inclusive) lines are never divided by 1.12 — full value in the net.
+  const exemptTotal = money(data.items.reduce((a, it) => a + (it.vatExempt ? it.lineTotal : 0), 0));
+  const vatableBaseNet = money(money(data.total - exemptTotal) * f);
+  const baseNet = money(vatableBaseNet + exemptTotal);
+  const vatableShare = baseNet > 0 ? vatableBaseNet / baseNet : 0;
   const adj = applyPricing(baseNet, pricingForVatMode(pricing, data.vatMode, data.vatRate));
   const markedNet = money(adj.afterMarkup); // net incl. hidden mark-up
   const mFactor = baseNet > 0 ? markedNet / baseNet : 1;
@@ -317,9 +323,9 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     cellCfg(`L${r}`, dash(it.motorHp ?? null), 9);
     cellCfg(`M${r}`, dash(it.motorPh), 9);
     cellCfg(`N${r}`, dash(it.motorVolts), 9);
-    cellCfg(`O${r}`, money(it.unitPrice * f * mFactor), 9);
+    cellCfg(`O${r}`, money(it.unitPrice * (it.vatExempt ? 1 : f) * mFactor), 9);
     ws.getCell(`O${r}`).numFmt = "#,##0.00";
-    cellCfg(`P${r}`, money(it.lineTotal * f * mFactor), 9);
+    cellCfg(`P${r}`, money(it.lineTotal * (it.vatExempt ? 1 : f) * mFactor), 9);
     ws.getCell(`P${r}`).numFmt = "#,##0.00";
 
     ws.getRow(r).height = rowH;
@@ -367,7 +373,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
     totalRow("NET AMOUNT", finalNet, "BLACK");
   }
   if (data.vatMode === "EXCLUSIVE_PLUS") {
-    const vat = money(finalNet * data.vatRate);
+    const vat = money(finalNet * vatableShare * data.vatRate);
     totalRow(`ADD ${Math.round(data.vatRate * 100)}% VAT`, vat, "BLACK");
     totalRow("TOTAL AMOUNT", money(finalNet + vat), "BLACK");
   }

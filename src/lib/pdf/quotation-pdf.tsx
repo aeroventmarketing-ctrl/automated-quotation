@@ -17,6 +17,8 @@ export interface QuotationPdfLine {
   qty: number;
   unitPrice: number; // VAT-inclusive
   lineTotal: number; // VAT-inclusive
+  /** Flat VAT-inclusive line (KDK etc.) — never divided by 1.12 in exclusive mode. */
+  vatExempt?: boolean;
   capacity_cfm?: number | null;
   staticPressure_pa?: number | null;
   inches?: number | null;
@@ -172,14 +174,21 @@ export function QuotationPdf({ data }: { data: QuotationPdfData }) {
   // own line, mirroring the Excel export so the PDF total equals what the client
   // is billed (payableTotal).
   const pricing: PricingAdjust = data.pricing ?? { markupMode: "percent", markupValue: 0, discountMode: "percent", discountValue: data.discountPct ?? 0 };
-  const baseNet = round2(data.total * f);
+  // Flat (VAT-inclusive) lines are never divided by 1.12 — they contribute at
+  // full value to the net; only the VATable lines get ÷1.12 in exclusive mode.
+  const exemptTotal = round2(data.items.reduce((a, it) => a + (it.vatExempt ? it.lineTotal : 0), 0));
+  const vatableTotal = round2(data.total - exemptTotal);
+  const vatableBaseNet = round2(vatableTotal * f);
+  const baseNet = round2(vatableBaseNet + exemptTotal);
   const adj = applyPricing(baseNet, pricingForVatMode(pricing, data.vatMode, data.vatRate));
   const markedNet = round2(adj.afterMarkup); // net incl. hidden mark-up
   const mFactor = baseNet > 0 ? markedNet / baseNet : 1;
   const displayedNet = markedNet;
   const discountAmt = round2(adj.discountAmt);
   const finalNet = round2(adj.finalNet);
-  const vat = round2(finalNet * data.vatRate);
+  // VAT added on top (EXCLUSIVE_PLUS) applies to the VATable share only.
+  const vatableShare = baseNet > 0 ? vatableBaseNet / baseNet : 0;
+  const vat = round2(finalNet * vatableShare * data.vatRate);
   const hasDiscount = discountAmt > 0;
   const discountLabel = pricing.discountMode === "percent" && pricing.discountValue > 0 ? `LESS ${pricing.discountValue}% DISCOUNT =>` : "LESS DISCOUNT =>";
   const vatPct = Math.round(data.vatRate * 100);
@@ -220,8 +229,8 @@ export function QuotationPdf({ data }: { data: QuotationPdfData }) {
               <View style={[s.cell, s.cCenter, { width: W.hp }]}><Text>{dash(it.motorHp)}</Text></View>
               <View style={[s.cell, s.cCenter, { width: W.ph }]}><Text>{dash(it.motorPh)}</Text></View>
               <View style={[s.cell, s.cCenter, { width: W.volts }]}><Text>{dash(it.motorVolts)}</Text></View>
-              <View style={[s.cell, s.cRight, { width: W.unit }]}><Text>{money(it.unitPrice * f * mFactor)}</Text></View>
-              <View style={[s.cell, s.cRight, { width: W.total }]}><Text>{money(it.lineTotal * f * mFactor)}</Text></View>
+              <View style={[s.cell, s.cRight, { width: W.unit }]}><Text>{money(it.unitPrice * (it.vatExempt ? 1 : f) * mFactor)}</Text></View>
+              <View style={[s.cell, s.cRight, { width: W.total }]}><Text>{money(it.lineTotal * (it.vatExempt ? 1 : f) * mFactor)}</Text></View>
             </View>
           ))}
 

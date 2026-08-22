@@ -4,7 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
 import { buildQuotationXlsx, type XlsxLine, type XlsxData } from "@/lib/excel/quotation-xlsx";
 import { getUserSignature } from "@/lib/signature";
-import { readPricing } from "@/lib/quote";
+import { readPricing, isFlatVatLine } from "@/lib/quote";
 import { normalizePowerUnit, convertPower, roundPower } from "@/lib/units";
 
 export const runtime = "nodejs";
@@ -83,6 +83,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       qty: it.qty,
       unitPrice: Number(it.unitPrice),
       lineTotal: Number(it.lineTotal),
+      vatExempt: isFlatVatLine(s),
       capacity_cfm: isMotorCtrl(s) || isIso(s) || isAcc(s) ? null : n(s.capacity_cfm),
       // Air curtains / Motor Controllers / isolators / accessories — no S.P. ("--").
       staticPressure_inwg: s.type === "Air Curtain" || isMotorCtrl(s) || isIso(s) || isAcc(s) ? null : n(s.staticPressure_pa),
