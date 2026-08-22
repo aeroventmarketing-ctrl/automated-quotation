@@ -400,8 +400,11 @@ export function SuppliersManager({
                   </tr>
                   {openId === s.id && (
                     <tr className="border-b last:border-0 bg-muted/20">
-                      <td colSpan={selectable ? 13 : 12} className="px-4 py-3">
-                        <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+                      <td colSpan={selectable ? 13 : 12} className="p-0">
+                        {/* Pinned to the left of the scroll area and width-capped so
+                            every field stays visible without scrolling the wide table. */}
+                        <div className="sticky left-0 max-w-3xl px-4 py-3">
+                        <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
                           {([
                             ["Company Name", s.company],
                             ["Contact Person", s.contactPerson],
@@ -420,6 +423,7 @@ export function SuppliersManager({
                               <span className="text-sm">{value || "—"}</span>
                             </div>
                           ))}
+                        </div>
                         </div>
                       </td>
                     </tr>
