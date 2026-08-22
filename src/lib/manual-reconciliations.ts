@@ -119,14 +119,18 @@ export async function getUnreconciledCounts(): Promise<{
   firstVoucherId: string | null;
 }> {
   const [prs, crs] = await Promise.all([
-    prisma.purchaseRequest.findMany({ select: { id: true, status: true, reconciliation: true } }).catch(() => []),
-    prisma.cashRequest.findMany({ select: { id: true, status: true, liquidation: true } }).catch(() => []),
+    prisma.purchaseRequest.findMany({ select: { id: true, status: true, po: true, reconciliation: true } }).catch(() => []),
+    prisma.cashRequest.findMany({ select: { id: true, status: true, amount: true, liquidation: true } }).catch(() => []),
   ]);
 
   let pos = 0;
   let firstPoId: string | null = null;
   for (const pr of prs) {
     if (!canReconcileAt(pr.status as PRStatus)) continue;
+    // Nothing purchased from a supplier (e.g. every line issued from stock) →
+    // there's no PO spend to reconcile.
+    const po = coercePurchaseOrder(pr.po);
+    if (!po || poTotals(po).net <= 0) continue;
     const r = coerceReconciliation(pr.reconciliation);
     // Handled by ANY method → not part of the backlog.
     if (isReconciled(r) || r.recordedAt || r.aiVerified === true || r.approval || r.settled) continue;
@@ -138,6 +142,7 @@ export async function getUnreconciledCounts(): Promise<{
   let firstVoucherId: string | null = null;
   for (const cr of crs) {
     if (!canLiquidateAt(cr.status as CashRequestStatus)) continue;
+    if (Number(cr.amount) <= 0) continue; // no cash released → nothing to liquidate
     const l = coerceLiquidation(cr.liquidation);
     if (isLiquidated(l) || l.recordedAt || l.aiVerified === true || l.approval || l.settled || l.adminTally) continue;
     vouchers++;

@@ -281,6 +281,9 @@ export function PurchaseReconcilePanel({
   };
 
   if (readOnly && !recorded) return null;
+  // Nothing was purchased from a supplier (e.g. every line was issued from
+  // stock) → there's no voucher / PO spend to reconcile, so hide the panel.
+  if (reconcile.voucherAmount <= 0 && !recorded) return null;
 
   return (
     <div className="mt-2 space-y-2 rounded-md border p-2">
