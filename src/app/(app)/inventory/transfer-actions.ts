@@ -12,6 +12,14 @@ import { logActivity } from "@/lib/activity-log";
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
+/**
+ * A business-rule failure the user should SEE (e.g. out of stock). Thrown inside
+ * a transaction and converted to a returned `{ error }` — because Next.js strips
+ * the message from a thrown Server Action error in production (showing only a
+ * generic "Server Components render" digest), returning it keeps the real reason.
+ */
+class TransferError extends Error {}
+
 async function requireInventoryManager(): Promise<User> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -277,7 +285,7 @@ export async function approveOfficeTransfer(transferId: string): Promise<void> {
 }
 
 /** Warehouse releases the approved transfer — the source stock is deducted (in transit). */
-export async function releaseOfficeTransfer(transferId: string): Promise<void> {
+export async function releaseOfficeTransfer(transferId: string): Promise<{ error?: string }> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
@@ -285,26 +293,39 @@ export async function releaseOfficeTransfer(transferId: string): Promise<void> {
     throw new Error("Only the Warehouse or an admin can release the stock.");
   }
   let name = "";
-  await prisma.$transaction(async (tx) => {
-    const t = await tx.stockTransfer.findUnique({ where: { id: transferId } });
-    if (!t) throw new Error("Transfer not found");
-    if (t.status !== "APPROVED") throw new Error("This transfer isn't approved for release.");
-    if (!t.stockItemId) throw new Error("The source stock item is missing.");
-    const item = await tx.stockItem.findUnique({ where: { id: t.stockItemId } });
-    if (!item) throw new Error("Source stock item not found.");
-    const onHand = Number(item.quantity);
-    const agg = await tx.stockReservation.aggregate({ where: { stockItemId: item.id, active: true }, _sum: { qty: true } });
-    const available = onHand - Number(agg._sum.qty ?? 0);
-    const qty = Number(t.qty);
-    if (qty > available) throw new Error(`Only ${available} ${item.unit} available to release.`);
-    const bal = round3(onHand - qty);
-    await tx.stockItem.update({ where: { id: item.id }, data: { quantity: bal } });
-    await tx.stockMovement.create({ data: { stockItemId: item.id, kind: "ISSUE", delta: -qty, balanceAfter: bal, reason: `Office transfer released (in transit)`, byName: user.name } });
-    await tx.stockTransfer.update({ where: { id: transferId }, data: { status: "RELEASED", releasedById: user.id, releasedByName: user.name, releasedAt: new Date() } });
-    name = t.itemName;
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      const t = await tx.stockTransfer.findUnique({ where: { id: transferId } });
+      if (!t) throw new TransferError("This transfer no longer exists.");
+      if (t.status !== "APPROVED") throw new TransferError("This transfer isn't approved for release yet.");
+      if (!t.stockItemId) {
+        throw new TransferError(
+          `“${t.itemName}” isn't linked to an inventory item, so it can't be released from stock. Add it to Inventory (or set its code so it matches an existing item), then request the transfer again — or Cancel this one.`,
+        );
+      }
+      const item = await tx.stockItem.findUnique({ where: { id: t.stockItemId } });
+      if (!item) throw new TransferError("The source stock item no longer exists in Inventory.");
+      const onHand = Number(item.quantity);
+      const agg = await tx.stockReservation.aggregate({ where: { stockItemId: item.id, active: true }, _sum: { qty: true } });
+      const available = onHand - Number(agg._sum.qty ?? 0);
+      const qty = Number(t.qty);
+      if (qty > available) {
+        throw new TransferError(`Only ${available} ${item.unit} of “${item.name}” available to release — this transfer needs ${qty}. Receive/replenish stock first, then release.`);
+      }
+      const bal = round3(onHand - qty);
+      await tx.stockItem.update({ where: { id: item.id }, data: { quantity: bal } });
+      await tx.stockMovement.create({ data: { stockItemId: item.id, kind: "ISSUE", delta: -qty, balanceAfter: bal, reason: `Office transfer released (in transit)`, byName: user.name } });
+      await tx.stockTransfer.update({ where: { id: transferId }, data: { status: "RELEASED", releasedById: user.id, releasedByName: user.name, releasedAt: new Date() } });
+      name = t.itemName;
+    });
+  } catch (e) {
+    // Show the real reason to the warehouse; re-throw anything unexpected.
+    if (e instanceof TransferError) return { error: e.message };
+    throw e;
+  }
   await logActivity(user, { action: "inventory.transfer.release", category: "inventory", summary: `Office transfer released from stock: ${name}`, entity: "inventory", href: "/inventory" });
   revalidatePath("/inventory");
+  return {};
 }
 
 /** Logistics marks the released transfer out for delivery to the Office. */
