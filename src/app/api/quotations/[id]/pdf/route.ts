@@ -4,7 +4,7 @@ import React from "react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
-import { readPricing } from "@/lib/quote";
+import { readPricing, isFlatVatLine } from "@/lib/quote";
 import { getUserSignature } from "@/lib/signature";
 import { convertAirflow, normalizePowerUnit, convertPower, roundPower, type PowerUnit } from "@/lib/units";
 import {
@@ -101,6 +101,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       qty: it.qty,
       unitPrice: Number(it.unitPrice),
       lineTotal: Number(it.lineTotal),
+      vatExempt: isFlatVatLine(specs),
     };
   });
 

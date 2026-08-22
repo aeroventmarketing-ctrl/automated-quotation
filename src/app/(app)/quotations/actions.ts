@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
-import { nextQuoteNumber, computeTotals, round2 } from "@/lib/quote";
+import { nextQuoteNumber, computeTotals, round2, isFlatVatLine } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { sendThankYou } from "@/lib/thank-you";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
@@ -80,7 +80,9 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
     }),
   );
 
-  const totals = computeTotals(resolvedLines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })));
+  const totals = computeTotals(
+    resolvedLines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice, vatExempt: isFlatVatLine(l.specsSnapshot as { brand?: unknown; type?: unknown }) })),
+  );
 
   // Default validity: 1 week (matches AFBM standard terms).
   const validUntil = new Date();
@@ -105,7 +107,7 @@ export async function createQuotationFromInquiry(input: z.infer<typeof createSch
         inquiryId: data.inquiryId,
         quoteNumber,
         templateId: template.id,
-        classification: { sale: seededSale } as unknown as Prisma.InputJsonObject,
+        classification: { sale: seededSale, vatExemptTotal: totals.vatExemptTotal } as unknown as Prisma.InputJsonObject,
         status: "DRAFT",
         vatMode: data.vatMode,
         discountPct: data.discountPct,
@@ -188,18 +190,19 @@ export async function updateQuotationLines(
 
   // Merge the pricing adjustments into the existing classification blob so we
   // don't clobber sale/revision data that also lives there.
-  const mergedClassification =
-    meta?.pricing || meta?.classification
-      ? {
-          ...((quote.classification as Record<string, unknown> | null) ?? {}),
-          ...(meta?.classification ?? {}),
-          ...(meta?.pricing ? { pricing: meta.pricing } : {}),
-        }
-      : undefined;
-
   const totals = computeTotals(
-    parsed.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice, lineTotal: l.lineTotal })),
+    parsed.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice, lineTotal: l.lineTotal, vatExempt: isFlatVatLine(l.specsSnapshot) })),
   );
+
+  // Always persist the flat (VAT-inclusive) total so payableTotal / reports strip
+  // VAT from the VATable lines only; merge into the existing blob so sale /
+  // pricing / revision data is preserved.
+  const mergedClassification = {
+    ...((quote.classification as Record<string, unknown> | null) ?? {}),
+    ...(meta?.classification ?? {}),
+    ...(meta?.pricing ? { pricing: meta.pricing } : {}),
+    vatExemptTotal: totals.vatExemptTotal,
+  };
 
   // Sync the submitted lines against the DB: update existing, create new, delete removed.
   const existing = await prisma.quotationItem.findMany({
@@ -252,7 +255,7 @@ export async function updateQuotationLines(
         vatMode: meta?.vatMode,
         discountPct: meta?.discountPct,
         headerUnits: meta?.headerUnits as object | undefined,
-        classification: mergedClassification as object | undefined,
+        classification: mergedClassification as object,
         validUntil: meta?.validUntil ? new Date(meta.validUntil) : undefined,
       },
     }),
@@ -682,13 +685,14 @@ export async function duplicateQuotationToCustomer(quotationId: string, customer
   if (!customer) throw new Error("Customer not found");
 
   const totals = computeTotals(
-    src.items.map((it) => ({ qty: it.qty, unitPrice: Number(it.unitPrice), lineTotal: Number(it.lineTotal) })),
+    src.items.map((it) => ({ qty: it.qty, unitPrice: Number(it.unitPrice), lineTotal: Number(it.lineTotal), vatExempt: isFlatVatLine(it.specsSnapshot as Record<string, unknown>) })),
   );
   // Carry the product classification but not the sale state or revision history.
   const classification = { ...((src.classification as Record<string, unknown>) ?? {}) };
   delete classification.sale;
   delete classification.revision;
   delete classification.revisions;
+  classification.vatExemptTotal = totals.vatExemptTotal;
 
   const validUntil = new Date();
   validUntil.setDate(validUntil.getDate() + 7);
@@ -753,7 +757,7 @@ export async function checkDuplicateQuote(
 ): Promise<DuplicateMatch[]> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  const totals = computeTotals(items.map((i) => ({ qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal })));
+  const totals = computeTotals(items.map((i) => ({ qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal, vatExempt: isFlatVatLine(i.specsSnapshot) })));
   return findDuplicateQuotes({
     items: items.map((i) => ({ specsSnapshot: i.specsSnapshot, qty: i.qty, catalogueItemId: i.catalogueItemId })),
     subtotal: totals.subtotal,

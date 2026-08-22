@@ -32,33 +32,68 @@ export interface LineInput {
   unitPrice: number;
   /** Explicit gross line total; when omitted it's round2(qty × unitPrice). */
   lineTotal?: number;
+  /**
+   * A flat, VAT-INCLUSIVE line (KDK, Aerovent Jet Fan / Inline Duct Fan): its
+   * amount is charged as-is in every VAT mode — never ÷1.12 (exclusive) or with
+   * VAT added on top. It carries no VAT of its own, so it sits at full value in
+   * both the net and the gross total.
+   */
+  vatExempt?: boolean;
+}
+
+/**
+ * Products whose catalogue price is a FLAT, VAT-inclusive selling price that must
+ * never be scaled by the quote's VAT presentation (shown/charged as-is in every
+ * mode): all KDK products, plus the Aerovent Jet Fan and Inline Duct Fan. Every
+ * surface that adjusts prices by VAT mode uses this one rule.
+ */
+export function isFlatVatLine(specs: { brand?: unknown; type?: unknown } | null | undefined): boolean {
+  const brand = String(specs?.brand ?? "").trim();
+  const type = String(specs?.type ?? "").trim();
+  if (brand === "KDK") return true;
+  // Aerovent Jet Fan / Inline Duct Fan. Only AlphaAir also carries these types,
+  // and its versions are NOT flat, so exclude AlphaAir and treat the rest as
+  // Aerovent. ("Customized Jet Fan" is a different, fabricated type — not flat.)
+  if ((type === "Jet Fan" || type === "Inline Duct Fan") && brand !== "AlphaAir") return true;
+  return false;
 }
 
 export interface Totals {
-  /** Net of VAT (VAT-exclusive base). */
+  /** Net of VAT (VAT-exclusive base) — VATable net + the full flat-line amount. */
   subtotal: number;
-  /** VAT amount (12%). */
+  /** VAT amount (12%) — only on the VATable lines. */
   vat: number;
   /** Gross, VAT-inclusive total (= sum of line totals, since prices include VAT). */
   total: number;
+  /** The flat, VAT-inclusive portion (KDK etc.) — same in the net and the gross. */
+  vatExemptTotal: number;
 }
 
 /**
  * Deterministic totals. Catalogue/quote prices are entered VAT-INCLUSIVE, so the
- * gross total is simply the sum of line totals; the net and VAT are derived by
- * dividing out the rate (net = gross / (1 + rate)). Presentation (inclusive vs
- * exclusive) is decided per-quote at render time, not here.
+ * gross total is the sum of line totals; the net and VAT are derived by dividing
+ * the rate out of the VATABLE lines only. FLAT lines (`vatExempt`) carry no VAT,
+ * so they sit at full value in both the net (subtotal) and the gross (total).
+ * Presentation (inclusive vs exclusive) is decided per-quote at render time.
  */
 export function computeTotals(
   lines: LineInput[],
   vatRate = config.vatRate,
 ): Totals {
-  const total = round2(
-    lines.reduce((acc, l) => acc + (l.lineTotal ?? round2(l.qty * l.unitPrice)), 0),
-  );
-  const subtotal = round2(total / (1 + vatRate));
-  const vat = round2(total - subtotal);
-  return { subtotal, vat, total };
+  let vatableGross = 0;
+  let vatExemptTotal = 0;
+  for (const l of lines) {
+    const lt = l.lineTotal ?? round2(l.qty * l.unitPrice);
+    if (l.vatExempt) vatExemptTotal += lt;
+    else vatableGross += lt;
+  }
+  vatableGross = round2(vatableGross);
+  vatExemptTotal = round2(vatExemptTotal);
+  const total = round2(vatableGross + vatExemptTotal);
+  const vatableNet = round2(vatableGross / (1 + vatRate));
+  const vat = round2(vatableGross - vatableNet);
+  const subtotal = round2(vatableNet + vatExemptTotal);
+  return { subtotal, vat, total, vatExemptTotal };
 }
 
 export function round2(n: number): number {
@@ -185,6 +220,16 @@ export function pricingForVatMode(p: PricingAdjust, vatMode: string, vatRate = c
   };
 }
 
+/**
+ * The flat, VAT-inclusive portion of a quote (KDK etc.), stored on the quote's
+ * `classification.vatExemptTotal` at save time so downstream figures (payable
+ * total, reports) can strip VAT from the VATABLE lines only. 0 when absent.
+ */
+export function readVatExemptTotal(classification: unknown): number {
+  const v = (classification as Record<string, unknown> | null)?.vatExemptTotal;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
+}
+
 export function payableTotal(
   q: {
     total: number | Prisma.Decimal;
@@ -195,10 +240,15 @@ export function payableTotal(
   vatRate = config.vatRate,
 ): number {
   const gross = Number(q.total);
-  const net = gross / (1 + vatRate);
+  // Flat (VAT-inclusive) lines carry no VAT: keep them at full value in the net.
+  const flat = Math.min(readVatExemptTotal(q.classification), gross);
+  const net = round2((gross - flat) / (1 + vatRate) + flat);
   const displayedNet = vatDisplayBasisIsGross(q.vatMode) ? gross : net;
   const pricing = pricingForVatMode(readPricing(q.classification, Number(q.discountPct)), q.vatMode, vatRate);
   const { finalNet } = applyPricing(displayedNet, pricing);
-  const vatAmt = vatModeAddsVat(q.vatMode) ? finalNet * vatRate : 0;
+  // EXCLUSIVE_PLUS adds VAT on top — but only on the VATable share (flat lines
+  // never get VAT added), pro-rated through any mark-up / discount.
+  const vatableShare = displayedNet > 0 ? Math.max(0, (displayedNet - flat) / displayedNet) : 0;
+  const vatAmt = vatModeAddsVat(q.vatMode) ? finalNet * vatableShare * vatRate : 0;
   return round2(finalNet + vatAmt);
 }
