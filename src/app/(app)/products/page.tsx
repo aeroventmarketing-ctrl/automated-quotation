@@ -59,13 +59,22 @@ export default async function ProductsPage() {
           </p>
         </div>
         {canManage && (
-          <a
-            href="/api/catalogue/export"
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted"
-            title="Download the fan Catalogue's Item Codes + standard names (CSV) — the worksheet for aligning Products &amp; Inventory. Fill the sku column and re-import on the Inventory screen."
-          >
-            Export catalogue codes (CSV)
-          </a>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <a
+              href="/api/products/full-list"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              title="Download the complete product list — every Category → Brand/Group → Type from the quotation dropdowns, with Induction Motors expanded to model level and their selling prices. Fill the sku &amp; supplier_price columns; use it as the master SKU worksheet."
+            >
+              Export full product list (CSV)
+            </a>
+            <a
+              href="/api/catalogue/export"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              title="Download the fan Catalogue's Item Codes + standard names (CSV) — the worksheet for aligning Products &amp; Inventory. Fill the sku column and re-import on the Inventory screen."
+            >
+              Export catalogue codes (CSV)
+            </a>
+          </div>
         )}
       </div>
 
