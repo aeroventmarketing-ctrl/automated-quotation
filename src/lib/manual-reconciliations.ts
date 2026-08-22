@@ -105,33 +105,44 @@ export async function getManualReconciliations(): Promise<ManualReconRow[]> {
 }
 
 /**
- * Counts of items that CAN be reconciled but haven't been yet — the outstanding
- * reconciliation backlog for the Production Dashboard, alongside "Reconciled by
- * hand":
- *   • pos      — purchase orders past receiving (`canReconcileAt`) with no
- *                reconciliation lines yet.
- *   • vouchers — cash vouchers whose cash was received (`canLiquidateAt`) but
- *                which haven't been liquidated.
+ * Counts of items still awaiting reconciliation — the backlog shown beside
+ * "Reconciled by hand" on the Production Dashboard. An item is counted ONLY when
+ * it has had NO reconciliation of any kind: not reconciled by hand, by the AI
+ * receipt reader (`aiVerified`), or by an Admin / Payment Approver — nor had its
+ * discrepancy approved / settled. `firstPoId` / `firstVoucherId` are the ids the
+ * dashboard tiles deep-link to (`/purchasing?req=` / `/cash-requests?id=`).
  */
-export async function getUnreconciledCounts(): Promise<{ pos: number; vouchers: number }> {
+export async function getUnreconciledCounts(): Promise<{
+  pos: number;
+  vouchers: number;
+  firstPoId: string | null;
+  firstVoucherId: string | null;
+}> {
   const [prs, crs] = await Promise.all([
-    prisma.purchaseRequest.findMany({ select: { status: true, reconciliation: true } }).catch(() => []),
-    prisma.cashRequest.findMany({ select: { status: true, liquidation: true } }).catch(() => []),
+    prisma.purchaseRequest.findMany({ select: { id: true, status: true, reconciliation: true } }).catch(() => []),
+    prisma.cashRequest.findMany({ select: { id: true, status: true, liquidation: true } }).catch(() => []),
   ]);
 
   let pos = 0;
+  let firstPoId: string | null = null;
   for (const pr of prs) {
     if (!canReconcileAt(pr.status as PRStatus)) continue;
-    if (isReconciled(coerceReconciliation(pr.reconciliation))) continue;
+    const r = coerceReconciliation(pr.reconciliation);
+    // Handled by ANY method → not part of the backlog.
+    if (isReconciled(r) || r.recordedAt || r.aiVerified === true || r.approval || r.settled) continue;
     pos++;
+    if (!firstPoId) firstPoId = pr.id;
   }
 
   let vouchers = 0;
+  let firstVoucherId: string | null = null;
   for (const cr of crs) {
     if (!canLiquidateAt(cr.status as CashRequestStatus)) continue;
-    if (isLiquidated(coerceLiquidation(cr.liquidation))) continue;
+    const l = coerceLiquidation(cr.liquidation);
+    if (isLiquidated(l) || l.recordedAt || l.aiVerified === true || l.approval || l.settled || l.adminTally) continue;
     vouchers++;
+    if (!firstVoucherId) firstVoucherId = cr.id;
   }
 
-  return { pos, vouchers };
+  return { pos, vouchers, firstPoId, firstVoucherId };
 }
