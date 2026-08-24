@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { pickIssueRow } from "@/lib/stock-location";
 
 export interface MatchLine {
   label: string;
@@ -15,6 +16,8 @@ export interface StockOpt {
   /** Short scan/item code. When present it's matched first — an exact Item-Code
    *  hit beats any fuzzy name similarity (see the Item Listing Standard). */
   sku?: string | null;
+  /** Warehouse location — routes issuing (Plant Warehouse vs Office). */
+  location?: string | null;
   /** Free to issue right now (on hand − active reservations); absent ⇒ unknown. */
   available?: number;
 }
@@ -27,6 +30,7 @@ export function StockMatchPanel({
   onCancel,
   onSubmit,
   selectable = false,
+  dept,
 }: {
   lines: MatchLine[];
   stockItems: StockOpt[];
@@ -35,6 +39,8 @@ export function StockMatchPanel({
   onSubmit: (matches: { stockItemId: string; qty: number; lineIndex: number }[]) => Promise<void>;
   /** Show a per-line tick box; only ticked lines are submitted (for releasing). */
   selectable?: boolean;
+  /** Requesting department — routes the auto-match to Plant vs Office stock. */
+  dept?: string;
 }) {
   // Auto-match each line to an existing stock item (and quantity) so receiving
   // posts to inventory by default — the warehouse can still change or skip a row.
@@ -101,9 +107,17 @@ export function StockMatchPanel({
       }
       if (sc > score) { score = sc; best = s.id; }
     }
-    return best;
+    if (!best) return "";
+    // Route to the department's location: among the matched item's rows (same
+    // name or SKU), pick the Plant/Office row per policy. A single-location item
+    // is unchanged.
+    const bestRow = stockItems.find((s) => s.id === best);
+    if (!bestRow) return best;
+    const siblings = stockItems.filter((s) => canon(s.name) === canon(bestRow.name) || (!!bestRow.sku && s.sku === bestRow.sku));
+    return pickIssueRow(siblings, dept)?.id ?? best;
   };
   const nameOf = (id: string) => stockItems.find((s) => s.id === id)?.name ?? "";
+  const locOf = (id: string) => stockItems.find((s) => s.id === id)?.location ?? null;
   const verb = selectable ? "released from" : "received into"; // selectable = the release flow
   const [rows, setRows] = useState(() =>
     lines.map((l) => {
@@ -168,7 +182,7 @@ export function StockMatchPanel({
             >
               <option value="">— skip —</option>
               {stockItems.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>
+                <option key={s.id} value={s.id}>{s.name} ({s.unit}){s.location ? ` · ${s.location}` : ""}</option>
               ))}
             </select>
             <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={rows[i].qty} disabled={selectable && !rows[i].checked} onChange={(e) => set(i, "qty", e.target.value)} />
@@ -176,7 +190,7 @@ export function StockMatchPanel({
             {(!selectable || rows[i].checked) && (
               <span className="w-full pl-6 text-[11px]">
                 {rows[i].stockItemId && Number(rows[i].qty) > 0 ? (
-                  <span className="text-muted-foreground">→ {rows[i].qty} {verb} <span className="font-medium text-foreground">{nameOf(rows[i].stockItemId)}</span></span>
+                  <span className="text-muted-foreground">→ {rows[i].qty} {verb} <span className="font-medium text-foreground">{nameOf(rows[i].stockItemId)}</span>{locOf(rows[i].stockItemId) ? ` · ${locOf(rows[i].stockItemId)}` : ""}</span>
                 ) : (
                   <span className="text-amber-600">→ not matched to a stock item — nothing will be posted for this line</span>
                 )}

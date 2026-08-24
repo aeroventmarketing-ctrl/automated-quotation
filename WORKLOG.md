@@ -1,3 +1,28 @@
+## 2026-08-24 · Multi-location stock — Phase 2 (issue-from-stock location routing) · FROZEN Phase 3/4
+- **Request (owner, explicit).** When issuing materials from stock: **Fans & Blower / Duct / Accessories** deduct from
+  the **Plant Warehouse**; **Motor Controller / Office** may **choose** Plant or Office (**default Office**). Owner
+  confirmed the location names (Plant Warehouse / Office), to include requisitions (the Office path), and the Office
+  default. This modifies the frozen Phase 3 (MRF) / Phase 4 (requisition) stock pickers — approved in-conversation.
+- **Design.** The issue/release actions already deduct from a `stockItemId` the picker supplies, so the routing is done
+  by **which location row the picker selects**, backed by a server guard. New shared lib `src/lib/stock-location.ts`:
+  `stockLocationPolicy(dept)` (plant-only vs choose), `pickIssueRow(rows, dept, chosen)` (used by client + server so
+  they agree), and `isLocationAllowedForDept` (server guard). Single-location items are unaffected (one row → picked
+  for every dept).
+- **Change.**
+  - Stock lists now carry `location`: `orders/[id]/page.tsx`, `lib/inventory.ts` `listStockItemsWithAvailability`, and
+    the `StockOpt` types. Each MRF/requisition passes its **dept** to the pickers (`ReqRow.dept`,
+    `PurchaseChainRow.dept`).
+  - Pickers route by dept: `mrf-stock-check.tsx` + `requisition-stock-check.tsx` (per-line issue, with a Plant/Office
+    select for choose-depts, default Office), `mrf-triage-panel.tsx` (bulk process) and `stock-match-panel.tsx` (release)
+    default the match to the policy location and label each option with its location.
+  - Server guards (defense-in-depth) in `orders/actions.ts`: `issueMrfLineFromStock` / `issueRequisitionLineFromStock`
+    reject a plant-only dept pointed at Office stock; `processMaterialRequest` treats a disallowed-location pick as 0
+    available → routes it to purchasing. (The purchased-materials release path is not guarded — it releases whatever was
+    received into stock.)
+- **Not changed:** order-level "release from stock" keeps its behaviour (no requesting dept → prefers Plant). No schema
+  change (Phase 1 already added multi-location). Typecheck + lint clean; the only failing test is the pre-existing,
+  unrelated `selection.test.ts`.
+
 ## 2026-08-24 · Multi-location stock — Phase 1 (same SKU in more than one location)
 - **Request (owner).** Track the same item / SKU in more than one location (e.g. Plant Warehouse + Office). Owner chose
   **Phase 1 only** (non-frozen): allow the same SKU per location, fix the importer so a second-location row is added

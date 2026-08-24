@@ -34,6 +34,8 @@ interface ActionOpt {
 interface PRRow {
   id: string;
   kind?: string | null;
+  /** Requisition department key — routes stock issuing (Plant vs Office). */
+  dept?: string | null;
   deptLabel: string;
   mrfNo?: string | null;
   items: string[];
@@ -358,7 +360,7 @@ export function PurchasingChain({
               // The warehouse can release from stock only once the Plant Manager has
               // approved the requisition; before that it's a read-only stock lookup.
               canIssueStock && !r.po && r.status === "APPROVED"
-                ? <RequisitionStockCheck prId={r.id} items={r.items} stockItems={stockItems} canIssue />
+                ? <RequisitionStockCheck prId={r.id} dept={r.dept ?? undefined} items={r.items} stockItems={stockItems} canIssue />
                 : <StockAvailabilityLookup terms={r.items} />
             )}
             {r.note && <p className="mt-1 text-xs text-muted-foreground">Note: {r.note}</p>}

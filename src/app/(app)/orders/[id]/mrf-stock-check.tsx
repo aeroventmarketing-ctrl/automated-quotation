@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackageSearch, Search, X } from "lucide-react";
 import { issueMrfLineFromStock, sendMrfLineToPurchasing } from "../actions";
+import { stockLocationPolicy, pickIssueRow } from "@/lib/stock-location";
 
 interface Hit {
   id: string;
@@ -25,6 +26,8 @@ export interface MrfLine {
 interface StockOpt {
   id: string;
   name: string;
+  /** Warehouse location — routes issuing (Plant Warehouse vs Office). */
+  location?: string | null;
   /** Free to issue right now (on hand − active reservations). */
   available?: number;
 }
@@ -44,12 +47,15 @@ const normLabel = (s: string) => cleanTerm(s).toLowerCase();
 export function MrfStockCheck({
   orderId,
   requestId,
+  dept,
   lines,
   stockItems,
   canIssue,
 }: {
   orderId: string;
   requestId: string;
+  /** Requesting department — fans/duct/accessories pull Plant only; motor can choose. */
+  dept?: string;
   lines: MrfLine[];
   stockItems: StockOpt[];
   canIssue: boolean;
@@ -66,12 +72,21 @@ export function MrfStockCheck({
   const [err, setErr] = useState<string | null>(null);
   const acRef = useRef<AbortController | null>(null);
 
-  const stockByName = useMemo(() => {
-    const m = new Map<string, StockOpt>();
-    for (const s of stockItems) m.set(normLabel(s.name), s);
+  const policy = stockLocationPolicy(dept);
+  // A choose department (Motor Controller) may pick Plant or Office per line;
+  // default Office. Plant-only departments always use their Plant row.
+  const [lineLoc, setLineLoc] = useState<Record<number, string>>({});
+  const rowsByName = useMemo(() => {
+    const m = new Map<string, StockOpt[]>();
+    for (const s of stockItems) {
+      const k = normLabel(s.name);
+      (m.get(k) ?? m.set(k, []).get(k)!).push(s);
+    }
     return m;
   }, [stockItems]);
-  const matchStock = (desc: string) => stockByName.get(normLabel(desc));
+  // The stock row a line issues from, honouring the department's location policy.
+  const matchStock = (desc: string, lineIndex: number) =>
+    pickIssueRow(rowsByName.get(normLabel(desc)) ?? [], dept, lineLoc[lineIndex] ?? policy.default);
 
   const pending = lines.filter((l) => !l.disposition);
   const chips = Array.from(new Set(lines.map((l) => cleanTerm(l.description)).filter((t) => t.length >= 2)));
@@ -100,7 +115,7 @@ export function MrfStockCheck({
   }, [q]);
 
   async function issue(line: MrfLine) {
-    const m = matchStock(line.description);
+    const m = matchStock(line.description, line.index);
     if (!m) { setErr(`No stock item matches "${line.description}". Send it to purchasing or use "Check availability & process".`); return; }
     setBusy(line.index); setErr(null); setMsg(null);
     try {
@@ -156,18 +171,29 @@ export function MrfStockCheck({
       {canIssue && pending.length > 0 && (
         <div className="space-y-1 rounded-md border bg-background p-1.5">
           {pending.map((l) => {
-            const matched = matchStock(l.description);
+            const matched = matchStock(l.description, l.index);
             const inStock = !!matched && (matched.available ?? 0) > 0;
             return (
               <div key={l.index} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="min-w-0 flex-1 truncate">
                   {l.description} <span className="text-muted-foreground">· {l.qty} {l.unit}</span>
+                  {matched?.location ? <span className="ml-1 text-muted-foreground">· {matched.location}</span> : null}
                   {!matched ? (
                     <span className="ml-1 text-amber-600">· no stock match</span>
                   ) : !inStock ? (
                     <span className="ml-1 text-amber-600">· out of stock</span>
                   ) : null}
                 </span>
+                {policy.mode === "choose" && (
+                  <select
+                    value={lineLoc[l.index] ?? policy.default}
+                    onChange={(e) => setLineLoc((s) => ({ ...s, [l.index]: e.target.value }))}
+                    className="h-6 rounded border bg-background px-1 text-[11px]"
+                    aria-label="Issue from location"
+                  >
+                    {policy.choices.map((c) => (<option key={c} value={c}>{c}</option>))}
+                  </select>
+                )}
                 {inStock ? (
                   <button
                     type="button"

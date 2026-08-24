@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PackageSearch, Search, X } from "lucide-react";
 import { issueRequisitionLineFromStock, sendRequisitionLineToPurchasing } from "../orders/actions";
 import { parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix } from "@/lib/purchase-order";
+import { stockLocationPolicy, pickIssueRow } from "@/lib/stock-location";
 
 interface Hit {
   id: string;
@@ -16,7 +17,7 @@ interface Hit {
   onHand: number;
   available: number;
 }
-interface StockOpt { id: string; name: string; available?: number }
+interface StockOpt { id: string; name: string; location?: string | null; available?: number }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
 const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -41,11 +42,14 @@ function parseLine(label: string): { qty: number; unit: string; desc: string } {
  */
 export function RequisitionStockCheck({
   prId,
+  dept,
   items,
   stockItems,
   canIssue,
 }: {
   prId: string;
+  /** Requesting department — office/motor can pick Plant or Office; others use Plant. */
+  dept?: string;
   items: string[];
   stockItems: StockOpt[];
   canIssue: boolean;
@@ -62,11 +66,18 @@ export function RequisitionStockCheck({
   const [err, setErr] = useState<string | null>(null);
   const acRef = useRef<AbortController | null>(null);
 
-  const stockByName = useMemo(() => {
-    const m = new Map<string, StockOpt>();
-    for (const s of stockItems) m.set(normLabel(s.name), s);
+  const policy = stockLocationPolicy(dept);
+  const [lineLoc, setLineLoc] = useState<Record<number, string>>({});
+  const rowsByName = useMemo(() => {
+    const m = new Map<string, StockOpt[]>();
+    for (const s of stockItems) {
+      const k = normLabel(s.name);
+      (m.get(k) ?? m.set(k, []).get(k)!).push(s);
+    }
     return m;
   }, [stockItems]);
+  const matchStock = (desc: string, lineIndex: number) =>
+    pickIssueRow(rowsByName.get(normLabel(desc)) ?? [], dept, lineLoc[lineIndex] ?? policy.default);
 
   const lines = items.map((raw, index) => {
     const issued = parseIssuedFromStockLine(raw);
@@ -99,7 +110,7 @@ export function RequisitionStockCheck({
   }, [q]);
 
   async function issue(line: { index: number; desc: string; qty: number }) {
-    const m = stockByName.get(normLabel(line.desc));
+    const m = matchStock(line.desc, line.index);
     if (!m) { setErr(`No stock item matches "${line.desc}".`); return; }
     setBusy(line.index); setErr(null); setMsg(null);
     try {
@@ -168,18 +179,29 @@ export function RequisitionStockCheck({
                 </div>
               );
             }
-            const matched = stockByName.get(normLabel(l.desc));
+            const matched = matchStock(l.desc, l.index);
             const inStock = !!matched && (matched.available ?? 0) > 0;
             return (
               <div key={l.index} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="min-w-0 flex-1 truncate">
                   {l.desc} <span className="text-muted-foreground">· {l.qty || "?"} {l.unit}</span>
+                  {matched?.location ? <span className="ml-1 text-muted-foreground">· {matched.location}</span> : null}
                   {!matched ? (
                     <span className="ml-1 text-amber-600">· no stock match</span>
                   ) : !inStock ? (
                     <span className="ml-1 text-amber-600">· out of stock</span>
                   ) : null}
                 </span>
+                {policy.mode === "choose" && (
+                  <select
+                    value={lineLoc[l.index] ?? policy.default}
+                    onChange={(e) => setLineLoc((s) => ({ ...s, [l.index]: e.target.value }))}
+                    className="h-6 rounded border bg-background px-1 text-[11px]"
+                    aria-label="Issue from location"
+                  >
+                    {policy.choices.map((c) => (<option key={c} value={c}>{c}</option>))}
+                  </select>
+                )}
                 {inStock && l.qty > 0 && (
                   <button type="button" disabled={busy === l.index} onClick={() => issue(l)}
                     className="rounded border border-emerald-600/50 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-600/10 disabled:opacity-50">

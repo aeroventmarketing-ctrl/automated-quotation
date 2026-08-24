@@ -16,6 +16,8 @@ export interface StockOptWithAvail {
   sku: string | null;
   name: string;
   unit: string;
+  /** Warehouse location — routes issuing (Plant Warehouse vs Office). */
+  location: string | null;
   /** Free to issue right now (on hand − active reservations). */
   available: number;
 }
@@ -28,8 +30,8 @@ export interface StockOptWithAvail {
  */
 export async function listStockItemsWithAvailability(): Promise<StockOptWithAvail[]> {
   const items = await prisma.stockItem
-    .findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true } })
-    .catch(() => [] as { id: string; sku: string | null; name: string; unit: string; quantity: unknown }[]);
+    .findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true, location: true } })
+    .catch(() => [] as { id: string; sku: string | null; name: string; unit: string; quantity: unknown; location: string | null }[]);
   if (items.length === 0) return [];
   const resv = await prisma.stockReservation
     .groupBy({ by: ["stockItemId"], where: { active: true, stockItemId: { in: items.map((i) => i.id) } }, _sum: { qty: true } })
@@ -40,6 +42,7 @@ export async function listStockItemsWithAvailability(): Promise<StockOptWithAvai
     sku: i.sku,
     name: i.name,
     unit: i.unit,
+    location: i.location,
     available: Math.round((Number(i.quantity) - (reservedById.get(i.id) ?? 0)) * 1000) / 1000,
   }));
 }
