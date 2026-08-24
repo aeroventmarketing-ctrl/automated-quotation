@@ -146,6 +146,8 @@ function stampLabel(s: { byName: string; role: string; at: string; note?: string
 export interface PurchaseChainRow {
   id: string;
   kind?: string | null;
+  /** Requisition department key — routes stock issuing (Plant vs Office). */
+  dept?: string | null;
   deptLabel: string;
   mrfNo?: string | null;
   items: string[];
@@ -385,6 +387,7 @@ export function buildPurchaseChainRow(
   return {
     id: pr.id,
     kind: pr.kind ?? null,
+    dept: pr.dept ?? null,
     deptLabel: requisitionDeptLabel(pr.dept),
     mrfNo: ctx.mrfNo ?? null,
     items: prItems,

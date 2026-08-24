@@ -114,7 +114,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     getCurrentUser(),
     getWorkflowRoles(),
     prisma.purchaseRequest.findMany({ where: { quotationId: id }, orderBy: { createdAt: "asc" } }),
-    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true } }).catch(() => []),
+    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true, location: true } }).catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true } }),
     getSuppliers().catch(() => []),
     getPaymentTerms().catch(() => []),
@@ -135,6 +135,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     sku: s.sku,
     name: s.name,
     unit: s.unit,
+    location: s.location,
     available: Math.round((Number(s.quantity) - (reservedById.get(s.id) ?? 0)) * 1000) / 1000,
   }));
   // Catalogue of purchasable products (for the MRF autocomplete); may be empty
@@ -704,6 +705,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       id: m.id,
       formNo: m.formNo,
       orderId: quote.id,
+      dept: m.dept,
       deptLabel: deptLabel(m.dept),
       items: m.items,
       note: m.note,

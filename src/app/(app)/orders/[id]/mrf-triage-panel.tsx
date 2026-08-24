@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { StockOpt } from "./stock-match-panel";
+import { pickIssueRow } from "@/lib/stock-location";
 
 /** Normalise an item label for matching (drop parenthetical notes, fold case). */
 const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -32,21 +33,28 @@ export function MrfTriagePanel({
   stockItems,
   onCancel,
   onSubmit,
+  dept,
 }: {
   lines: TriageLine[];
   stockItems: StockOpt[];
   onCancel: () => void;
   onSubmit: (dispositions: { action: TriageAction; stockItemId?: string; qty?: number }[]) => Promise<void>;
+  /** Requesting department — routes the default stock row to Plant vs Office. */
+  dept?: string;
 }) {
   // Match each line to a stock item by name and find what's free to issue, so a
   // line with nothing in stock offers only "Purchase" (no "Issue from stock").
-  const stockByName = useMemo(() => {
-    const m = new Map<string, StockOpt>();
-    for (const s of stockItems) m.set(normLabel(s.name), s);
+  // Group rows by name so the department's location policy chooses which one.
+  const rowsByName = useMemo(() => {
+    const m = new Map<string, StockOpt[]>();
+    for (const s of stockItems) {
+      const k = normLabel(s.name);
+      (m.get(k) ?? m.set(k, []).get(k)!).push(s);
+    }
     return m;
   }, [stockItems]);
   const inStockFor = (desc: string) => {
-    const m = stockByName.get(normLabel(desc));
+    const m = pickIssueRow(rowsByName.get(normLabel(desc)) ?? [], dept);
     return m && (m.available ?? 0) > 0 ? m : undefined;
   };
 
@@ -130,7 +138,7 @@ export function MrfTriagePanel({
                     >
                       <option value="">— pick stock item —</option>
                       {stockItems.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>
+                        <option key={s.id} value={s.id}>{s.name} ({s.unit}){s.location ? ` · ${s.location}` : ""}</option>
                       ))}
                     </select>
                     <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty"

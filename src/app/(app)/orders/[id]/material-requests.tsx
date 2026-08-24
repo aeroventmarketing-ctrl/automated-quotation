@@ -20,6 +20,8 @@ interface ReqRow {
   id: string;
   formNo: string;
   orderId: string;
+  /** Requesting production department key (fans/duct/accessories/motor) — routes stock issuing by location. */
+  dept?: string;
   deptLabel: string;
   items: MRFItem[];
   note?: string | null;
@@ -404,6 +406,7 @@ export function MaterialRequests({
                 <MrfStockCheck
                   orderId={orderId}
                   requestId={r.id}
+                  dept={r.dept}
                   lines={r.items.map((it, i) => ({ index: i, description: it.description, qty: it.qty, unit: it.unit, disposition: it.disposition }))}
                   stockItems={stockItems}
                   canIssue={r.canHandle && r.status !== "cancelled" && r.status !== "completed"}
@@ -457,6 +460,7 @@ export function MaterialRequests({
                       return { label: `${[String(remaining), it.unit].filter(Boolean).join(" ")} · ${it.description}`, qtyDefault: String(remaining) };
                     })}
                     stockItems={stockItems}
+                    dept={r.dept}
                     selectable
                     submitLabel="Release & deduct from stock"
                     onCancel={() => setReleasingId(null)}
@@ -564,6 +568,7 @@ export function MaterialRequests({
                 <MrfTriagePanel
                   lines={r.items.map((it) => ({ description: it.description, qty: it.qty, unit: it.unit, remark: it.remark }))}
                   stockItems={stockItems}
+                  dept={r.dept}
                   onCancel={() => setIssuingId(null)}
                   onSubmit={async (dispositions) => {
                     await processMaterialRequest(orderId, r.id, dispositions);

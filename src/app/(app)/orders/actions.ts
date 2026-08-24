@@ -67,6 +67,7 @@ import {
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { applyStockChange } from "@/lib/inventory";
+import { isLocationAllowedForDept, PLANT_LOCATION } from "@/lib/stock-location";
 import { recordDeptStockTransfer, isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
 import { coerceDuctJobOrder, isReducingDuctType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
@@ -1750,11 +1751,17 @@ export async function processMaterialRequest(
   const availById = new Map<string, number>();
   if (stockIds.length) {
     const [stk, resv] = await Promise.all([
-      prisma.stockItem.findMany({ where: { id: { in: stockIds } }, select: { id: true, quantity: true } }),
+      prisma.stockItem.findMany({ where: { id: { in: stockIds } }, select: { id: true, quantity: true, location: true } }),
       prisma.stockReservation.groupBy({ by: ["stockItemId"], where: { active: true, stockItemId: { in: stockIds } }, _sum: { qty: true } }),
     ]);
     const resvBy = new Map(resv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
-    for (const s of stk) availById.set(s.id, Math.max(0, Number(s.quantity) - (resvBy.get(s.id) ?? 0)));
+    // Location routing: a row this department may not pull from (e.g. Office
+    // stock for fans/duct/accessories) counts as 0 available, so it routes to
+    // purchasing instead of deducting the wrong location.
+    for (const s of stk) {
+      const allowed = isLocationAllowedForDept(s.location, mrf.dept);
+      availById.set(s.id, allowed ? Math.max(0, Number(s.quantity) - (resvBy.get(s.id) ?? 0)) : 0);
+    }
   }
 
   // Plan each requested line: how much is issued/reserved from stock now (capped
@@ -1942,8 +1949,12 @@ export async function issueMrfLineFromStock(
   const req = Number(target.qty || 0);
 
   const result = await prisma.$transaction(async (tx) => {
-    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { id: true, quantity: true, name: true, unitCost: true } });
+    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { id: true, quantity: true, name: true, unitCost: true, location: true } });
     if (!item) throw new Error("Stock item not found.");
+    // Location routing: fans/duct/accessories issue from the Plant Warehouse only.
+    if (!isLocationAllowedForDept(item.location, mrf.dept)) {
+      throw new Error(`${deptLabel(mrf.dept)} issues from ${PLANT_LOCATION} only — pick the Plant Warehouse stock, or send this line to purchasing.`);
+    }
     const agg = await tx.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
     const avail = Math.max(0, Number(item.quantity) - Number(agg._sum.qty ?? 0));
     const want = qty != null && qty > 0 ? Math.min(qty, req || qty) : req;
@@ -2039,8 +2050,12 @@ export async function issueRequisitionLineFromStock(
   if (!(req > 0)) throw new Error("Couldn't read the quantity for this line.");
 
   const result = await prisma.$transaction(async (tx) => {
-    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { quantity: true, name: true, unitCost: true } });
+    const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { quantity: true, name: true, unitCost: true, location: true } });
     if (!item) throw new Error("Stock item not found.");
+    // Location routing: only Office / Motor requisitions may pull Office stock.
+    if (!isLocationAllowedForDept(item.location, pr.dept)) {
+      throw new Error(`${requisitionDeptLabel(pr.dept)} issues from ${PLANT_LOCATION} only — pick the Plant Warehouse stock, or leave the line to be purchased.`);
+    }
     const agg = await tx.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
     const avail = Math.max(0, Number(item.quantity) - Number(agg._sum.qty ?? 0));
     const issued = Math.max(0, Math.min(req, avail));
