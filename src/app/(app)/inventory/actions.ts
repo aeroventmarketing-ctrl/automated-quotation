@@ -216,20 +216,30 @@ export async function importStockItems(
             throw new Error(`Barcode "${wantBarcode}" is already used by another item.`);
           }
         }
-        // Match an existing active item by name AND location, so the same item in
-        // a different location becomes its OWN row instead of overwriting the
-        // first one. When the row carries no location, fall back to name-only
-        // (preserves single-location re-import behaviour).
-        const existing = await tx.stockItem.findFirst({
+        // Match an existing item by name AND location — INCLUDING an inactive one
+        // (a "Clear all" only deactivates, keeping the unique code), preferring an
+        // active match — and reactivate it, so a re-import reuses the same row
+        // instead of failing on the unique code or creating a duplicate. The same
+        // item in a DIFFERENT location becomes its own row. When the file gives a
+        // location but the only existing row is unassigned (no location), adopt it
+        // and set the location rather than creating a clashing new row.
+        let existing = await tx.stockItem.findFirst({
           where: {
-            active: true,
             name: { equals: name, mode: "insensitive" },
             ...(wantLoc ? { location: { equals: wantLoc, mode: "insensitive" } } : {}),
           },
+          orderBy: { active: "desc" },
         });
+        if (!existing && wantLoc) {
+          existing = await tx.stockItem.findFirst({
+            where: { name: { equals: name, mode: "insensitive" }, location: null },
+            orderBy: { active: "desc" },
+          });
+        }
         if (existing) {
           // Overwrite only the fields whose column is present and non-empty.
           const data: Prisma.StockItemUpdateInput = {};
+          if (!existing.active) data.active = true; // reactivate a previously-cleared item
           if (wantSku) data.sku = wantSku;
           if (wantBarcode) data.barcode = wantBarcode;
           if (has(iUnit)) data.unit = cell(iUnit);
