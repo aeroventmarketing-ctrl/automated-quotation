@@ -59,7 +59,7 @@ import { RevisionRestore } from "./revision-restore";
 import type { DuplicateMatch } from "@/lib/quote-duplicates";
 import { SimilarQuotes } from "./similar-quotes";
 import { SalePanel } from "./sale-panel";
-import { isSaleConfirmed, type SaleRecord } from "@/lib/sale";
+import { isSaleConfirmed, type SaleRecord, type SaleDocReadStamp } from "@/lib/sale";
 import { updateQuoteNumber } from "../../admin/actions";
 
 // --- Product search -----------------------------------------------------------
@@ -277,6 +277,12 @@ interface Quote {
   quoteNumber: string;
   status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "SENT";
   sale: SaleRecord | null;
+  /** AI reads of the closing documents, keyed by the file's storage path. */
+  docReads?: Record<string, SaleDocReadStamp>;
+  /** How many capped AI reads have been used on this order's closing documents. */
+  docReadCount?: number;
+  /** Admin / Payment Approver — no AI-read limit. */
+  docReadsUnlimited?: boolean;
   revision: number;
   currency: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
@@ -6068,6 +6074,9 @@ export function QuotationBuilder({
           clientTerms={clientTerms}
           vatInclusive={quotation.vatMode !== "EXCLUSIVE"}
           zeroRated={quotation.vatMode === "ZERO_RATED"}
+          initialDocReads={quotation.docReads}
+          docReadCount={quotation.docReadCount}
+          docReadsUnlimited={quotation.docReadsUnlimited}
         />
       )}
 

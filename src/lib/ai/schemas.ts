@@ -82,3 +82,23 @@ export const depositSlipReadSchema = z.object({
 });
 
 export type DepositSlipRead = z.infer<typeof depositSlipReadSchema>;
+
+// --- Closing-document reading (Sales Invoice / Collection Receipt / Delivery
+//     Receipt) -------------------------------------------------------------
+// Reads a signed closing document to (a) capture its document number so the same
+// number can't be reused on another order, and (b) verify its amount against the
+// order total. Applies to VAT-inclusive / zero-rated deals (the only ones that
+// carry a Sales Invoice + Collection Receipt).
+export const saleDocReadSchema = z.object({
+  documentKind: z.string().nullable().default(null), // e.g. "Sales Invoice", "Collection Receipt", "Delivery Receipt"
+  // The pre-printed serial number of the document (SI No. / CR No. / DR No.).
+  // This is the fingerprint used to block re-use across orders.
+  documentNumber: z.string().nullable().default(null),
+  date: z.string().nullable().default(null), // YYYY-MM-DD document date
+  amount: z.number().nullable().default(null), // peso total shown on the document (null if none is printed)
+  customer: z.string().nullable().default(null), // sold-to / customer name if shown
+  confidence: z.number().nullable().default(null), // 0..1 — how sure the exact number + amount were read
+  warnings: z.array(z.string()).default([]),
+});
+
+export type SaleDocRead = z.infer<typeof saleDocReadSchema>;

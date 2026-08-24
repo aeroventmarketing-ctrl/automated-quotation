@@ -36,6 +36,73 @@ export interface SaleRecord {
   note?: string; // additional information given by the client
 }
 
+/**
+ * The closing-document slots whose files can be AI-read: the Sales Invoice, the
+ * Collection Receipt (or_cr_af) and the Delivery Receipt. These carry a serial
+ * number worth capturing (to block re-use) and, for the first two, an amount to
+ * verify against the order total.
+ */
+export const AI_READABLE_SALE_DOC_KEYS = ["sales_invoice", "or_cr_af", "delivery_receipt"] as const;
+export type AiReadableSaleDocKey = (typeof AI_READABLE_SALE_DOC_KEYS)[number];
+export const isAiReadableSaleDocKey = (key: string): key is AiReadableSaleDocKey =>
+  (AI_READABLE_SALE_DOC_KEYS as readonly string[]).includes(key);
+
+/**
+ * Result of AI-reading one closing document, persisted on the quote's
+ * classification (keyed by the file's storage path — a sibling of `sale`, so it
+ * survives `recordSale`). Records the captured document number, the amount vs
+ * the order total, whether it validated, and who read it when.
+ */
+export interface SaleDocReadStamp {
+  path: string; // the file this read is for
+  docKey: string; // sale doc slot key (sales_invoice / or_cr_af / delivery_receipt)
+  documentNumber: string | null; // captured serial (SI / CR / DR No.)
+  date: string | null; // YYYY-MM-DD document date
+  amount: number | null; // peso total read off the document
+  expected: number | null; // order figure it was checked against (null if not checked)
+  amountMatches: boolean | null; // amount ≈ expected (null if no amount / not checked)
+  duplicateOf: string | null; // quote number where this document number is already used
+  validated: boolean; // number captured, amount tallies, no duplicate
+  readByName: string;
+  readAt: string; // ISO
+}
+
+/** Normalise a document number for comparison (case/spacing/punctuation-insensitive). */
+export const normalizeDocNumber = (n: string | null | undefined): string =>
+  (n ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+function coerceDocReadStamp(v: unknown): SaleDocReadStamp | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.path !== "string" || !o.path) return null;
+  return {
+    path: o.path,
+    docKey: typeof o.docKey === "string" ? o.docKey : "",
+    documentNumber: typeof o.documentNumber === "string" ? o.documentNumber : null,
+    date: typeof o.date === "string" ? o.date : null,
+    amount: typeof o.amount === "number" ? o.amount : null,
+    expected: typeof o.expected === "number" ? o.expected : null,
+    amountMatches: typeof o.amountMatches === "boolean" ? o.amountMatches : null,
+    duplicateOf: typeof o.duplicateOf === "string" ? o.duplicateOf : null,
+    validated: o.validated === true,
+    readByName: typeof o.readByName === "string" ? o.readByName : "",
+    readAt: typeof o.readAt === "string" ? o.readAt : "",
+  };
+}
+
+/** Read the persisted sale-doc AI reads off a quote classification (by file path). */
+export function saleDocReadsFromClassification(classification: unknown): Record<string, SaleDocReadStamp> {
+  const out: Record<string, SaleDocReadStamp> = {};
+  if (!classification || typeof classification !== "object") return out;
+  const raw = (classification as Record<string, unknown>).saleDocReads;
+  if (!raw || typeof raw !== "object") return out;
+  for (const [path, v] of Object.entries(raw as Record<string, unknown>)) {
+    const stamp = coerceDocReadStamp(v);
+    if (stamp) out[path] = stamp;
+  }
+  return out;
+}
+
 export interface SaleDocType {
   key: string;
   label: string;
