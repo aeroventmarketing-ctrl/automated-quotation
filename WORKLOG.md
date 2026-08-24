@@ -1,3 +1,17 @@
+## 2026-08-24 · Inventory import — reuse a cleared item; migration 0045 must be applied
+- **Bug (owner).** Inventory bulk import failed rows with `Unique constraint failed on the fields: (sku)`. Two causes:
+  1. **Migration `0045_stock_multi_location` was never applied to the DB.** The Vercel build runs `prisma generate &&
+     next build` only — migrations are applied by hand (`npx prisma migrate deploy` / Supabase SQL, per README). So the
+     DB still has the single-column `sku` unique index; the client expects `(sku, location)`. Same-code rows fail. **The
+     owner must run the `0045` SQL in Supabase.**
+  2. Like products, "Clear all" only deactivates stock items (they keep the unique code), and the importer matched only
+     ACTIVE items by name+location → it tried to create, hitting the code's unique constraint.
+- **Change (`inventory/actions.ts`, not frozen).** The importer now matches an existing item by name + location
+  **including inactive** (prefers active), and **reactivates** it — and when the file gives a location but the only
+  existing row is unassigned (no location), it **adopts** that row and sets the location, instead of creating a clashing
+  new one. Re-importing reuses rows instead of failing/duplicating. Typecheck + lint clean.
+- **Action still required:** apply migration `0045` to the database for the two-location items to save.
+
 ## 2026-08-24 · Products import — reuse a cleared product by its code (no duplicates)
 - **Bug (owner).** Re-importing the product list first failed every row ("could not be imported"), then — after the
   diagnostic below — created a **duplicate** of every product. Root cause: **"Clear all" only deactivates**
