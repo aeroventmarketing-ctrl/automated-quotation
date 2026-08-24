@@ -33,7 +33,7 @@ import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
-import { saleFromClassification, collectedTotal, closeDocsState, PAYMENT_KIND_LABEL } from "@/lib/sale";
+import { saleFromClassification, collectedTotal, closeDocsState, saleDocReadsFromClassification, PAYMENT_KIND_LABEL } from "@/lib/sale";
 import {
   mbSteps,
   mbProgress,
@@ -1119,7 +1119,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 {fTrail.map((s, i) => <div key={i}>{s}</div>)}
               </div>
             )}
-            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} fromStock={stockOnly} boughtIn={boughtInOnly} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} />
+            <FulfillmentActions orderId={quote.id} stage={wf.stage} perms={perms} officePickup={officePickup} plantPickup={plantPick} fromStock={stockOnly} boughtIn={boughtInOnly} closeDocs={saleForClose?.docs ?? {}} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} canEditCloseDocs={perms.canFile || isSalesViewer} recordedPayments={restricted ? [] : recordedPayments} admin={adminViewer} approvers={approvers} restricted={restricted} canRecordPayment={!restricted && (adminViewer || perms.canCheckPay || perms.canConfirmPay || viewer?.role === "ENGINEER")} currency={quote.currency} orderAmount={value} amountPaid={collectedTotal(saleForClose)} saleDocReads={saleDocReadsFromClassification(quote.classification)} saleDocReadCount={((v) => (typeof v === "number" ? v : 0))((quote.classification as Record<string, unknown> | null)?.saleDocReadCount)} saleDocReadsUnlimited={adminViewer || hasRole("payment_approver")} />
             {!restricted && saleForClose && <SaleDocumentList sale={saleForClose} vatInclusive={quote.vatMode !== "EXCLUSIVE"} zeroRated={quote.vatMode === "ZERO_RATED"} showFinalPayment={stageIndex(wf.stage) >= stageIndex("final_pay_cleared")} />}
           </CardContent>
         </Card>

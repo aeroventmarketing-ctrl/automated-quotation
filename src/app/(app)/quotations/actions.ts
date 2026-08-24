@@ -912,3 +912,67 @@ export async function clearSale(quotationId: string) {
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
 }
+
+/** Admin / Payment Approver — the only roles that may override a closing-doc read. */
+async function assertSaleDocApprover(): Promise<{ id: string; name: string }> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "payment_approver"))) {
+    throw new Error("Only an Admin or the Payment Approver can approve or unlock closing-document reads.");
+  }
+  return { id: user.id, name: user.name };
+}
+
+/**
+ * Approve a closing document's upload (Admin / Payment Approver override) — the
+ * document is accepted regardless of the AI read result (e.g. after Accounting
+ * hit the 3-read limit, or when the approver uploads it themselves).
+ */
+export async function approveSaleDoc(quotationId: string, path: string, docKey: string): Promise<void> {
+  const user = await assertSaleDocApprover();
+  if (!path.startsWith(`sales/${quotationId}/`)) throw new Error("That file doesn't belong to this order.");
+  const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { classification: true } });
+  if (!quote) throw new Error("Order not found.");
+  const cls = (quote.classification as Record<string, unknown> | null) ?? {};
+  const reads = { ...((cls.saleDocReads as Record<string, unknown>) ?? {}) };
+  const prev = (reads[path] as Record<string, unknown>) ?? {};
+  reads[path] = {
+    path,
+    docKey,
+    documentNumber: prev.documentNumber ?? null,
+    date: prev.date ?? null,
+    amount: prev.amount ?? null,
+    expected: prev.expected ?? null,
+    amountMatches: prev.amountMatches ?? null,
+    duplicateOf: prev.duplicateOf ?? null,
+    validated: prev.validated === true,
+    readByName: prev.readByName ?? "",
+    readAt: prev.readAt ?? new Date().toISOString(),
+    approved: { byName: user.name, at: new Date().toISOString() },
+  };
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, saleDocReads: reads } as unknown as Prisma.InputJsonObject },
+  });
+  revalidatePath(`/quotations/${quotationId}`);
+  revalidatePath(`/orders/${quotationId}`);
+}
+
+/**
+ * Unlock the closing-document AI reader for Accounting after the 3-read limit —
+ * resets the per-order read counter so they can try again (Admin / Payment
+ * Approver only).
+ */
+export async function resetSaleDocReadLimit(quotationId: string): Promise<void> {
+  await assertSaleDocApprover();
+  const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { classification: true } });
+  if (!quote) throw new Error("Order not found.");
+  const cls = (quote.classification as Record<string, unknown> | null) ?? {};
+  await prisma.quotation.update({
+    where: { id: quotationId },
+    data: { classification: { ...cls, saleDocReadCount: 0 } as unknown as Prisma.InputJsonObject },
+  });
+  revalidatePath(`/quotations/${quotationId}`);
+  revalidatePath(`/orders/${quotationId}`);
+}

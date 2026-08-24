@@ -6,7 +6,7 @@ import { FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import { workflowRoleLabel } from "@/lib/workflow-roles";
-import { closeDocsState, plantCloseState, deliveryUnsignedDocTypes, type SaleDoc } from "@/lib/sale";
+import { closeDocsState, plantCloseState, deliveryUnsignedDocTypes, type SaleDoc, type SaleDocReadStamp } from "@/lib/sale";
 import { CloseDocuments } from "./close-documents";
 import { DeliveryDocsForm } from "./delivery-docs-form";
 import { DeliveredForm } from "./delivered-form";
@@ -71,6 +71,9 @@ export function FulfillmentActions({
   currency = "PHP",
   orderAmount = 0,
   amountPaid = 0,
+  saleDocReads = {},
+  saleDocReadCount = 0,
+  saleDocReadsUnlimited = false,
 }: {
   orderId: string;
   stage: string;
@@ -99,6 +102,11 @@ export function FulfillmentActions({
   currency?: string;
   orderAmount?: number;
   amountPaid?: number;
+  /** Closing-document AI reads (SI / OR / DR), keyed by file path. */
+  saleDocReads?: Record<string, SaleDocReadStamp>;
+  saleDocReadCount?: number;
+  /** Admin / Payment Approver — no read limit; may approve / allow-more. */
+  saleDocReadsUnlimited?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -389,6 +397,12 @@ export function FulfillmentActions({
           canFile={perms.canFile}
           admin={admin}
           plantPickup={plantPickup}
+          currency={currency}
+          orderAmount={orderAmount}
+          docReads={saleDocReads}
+          docReadCount={saleDocReadCount}
+          docReadsUnlimited={saleDocReadsUnlimited}
+          canReadDocs={perms.canFile || saleDocReadsUnlimited}
         />
       )}
 
@@ -404,6 +418,12 @@ export function FulfillmentActions({
           canFile={perms.canFile}
           admin={admin}
           plantPickup={plantPickup}
+          currency={currency}
+          orderAmount={orderAmount}
+          docReads={saleDocReads}
+          docReadCount={saleDocReadCount}
+          docReadsUnlimited={saleDocReadsUnlimited}
+          canReadDocs={perms.canFile || saleDocReadsUnlimited}
           closed
         />
       )}

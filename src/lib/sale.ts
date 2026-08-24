@@ -65,7 +65,15 @@ export interface SaleDocReadStamp {
   validated: boolean; // number captured, amount tallies, no duplicate
   readByName: string;
   readAt: string; // ISO
+  // Admin / Payment Approver override — the upload is accepted regardless of the
+  // AI read result (e.g. after Accounting hit the read limit). Also set when they
+  // upload it themselves.
+  approved?: { byName: string; at: string } | null;
 }
+
+/** A closing document is "cleared" when the AI validated it OR an approver accepted it. */
+export const isSaleDocCleared = (s: SaleDocReadStamp | undefined | null): boolean =>
+  !!s && (s.validated || !!s.approved);
 
 /** Normalise a document number for comparison (case/spacing/punctuation-insensitive). */
 export const normalizeDocNumber = (n: string | null | undefined): string =>
@@ -87,6 +95,13 @@ function coerceDocReadStamp(v: unknown): SaleDocReadStamp | null {
     validated: o.validated === true,
     readByName: typeof o.readByName === "string" ? o.readByName : "",
     readAt: typeof o.readAt === "string" ? o.readAt : "",
+    approved:
+      o.approved && typeof o.approved === "object"
+        ? {
+            byName: typeof (o.approved as Record<string, unknown>).byName === "string" ? (o.approved as Record<string, unknown>).byName as string : "",
+            at: typeof (o.approved as Record<string, unknown>).at === "string" ? (o.approved as Record<string, unknown>).at as string : "",
+          }
+        : null,
   };
 }
 
