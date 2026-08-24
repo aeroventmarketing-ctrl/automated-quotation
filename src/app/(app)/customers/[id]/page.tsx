@@ -210,6 +210,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
             {detail("Contact person", customer.contactName)}
             {detail("Contact number", customer.phone)}
             {detail("Email", customer.email)}
+            {detail("TIN", accountData?.tin)}
             <div className="sm:col-span-2">{detail("Address", customer.address)}</div>
             {customer.notes && <div className="sm:col-span-2">{detail("Notes", customer.notes)}</div>}
           </CardContent>
