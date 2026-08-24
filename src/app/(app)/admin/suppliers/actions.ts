@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { saveSupplier, deleteSupplier, deleteSuppliers, clearSuppliers, bulkUpsertSuppliers, type Supplier, type BulkResult } from "@/lib/suppliers";
+import { prisma } from "@/lib/db";
+import { saveSupplier, deleteSupplier, deleteSuppliers, clearSuppliers, bulkUpsertSuppliers, removeInvalidSuppliers, isPricedSupplierName, type Supplier, type BulkResult } from "@/lib/suppliers";
+import { coerceProductSuppliers } from "@/lib/products";
 import { AEROVENT_SUPPLIERS } from "@/lib/supplier-seed";
 
 async function assertAdmin() {
@@ -94,4 +97,32 @@ export async function importBundledSuppliersAction(): Promise<BulkResult> {
   const result = await bulkUpsertSuppliers(AEROVENT_SUPPLIERS);
   revalidatePath("/admin/suppliers");
   return result;
+}
+
+/**
+ * Purge junk suppliers created by importing a product export's "Suppliers" cell
+ * (a company name with a price / semicolon, e.g. "RITE PRODUCTS INC. ₱8078.02")
+ * — from BOTH the supplier directory and every product's supplier links, so a PO
+ * no longer offers the priced duplicate. Admin only.
+ */
+export async function removeInvalidSuppliersAction(): Promise<{ removedSuppliers: number; cleanedProducts: number; list: Supplier[] }> {
+  await assertAdmin();
+  const { removed, list } = await removeInvalidSuppliers();
+  // Strip the same junk supplier links from every product.
+  const products = await prisma.product.findMany({ select: { id: true, suppliers: true } });
+  let cleanedProducts = 0;
+  for (const p of products) {
+    const links = coerceProductSuppliers(p.suppliers);
+    const kept = links.filter((l) => !isPricedSupplierName(l.company));
+    if (kept.length !== links.length) {
+      await prisma.product.update({
+        where: { id: p.id },
+        data: { suppliers: coerceProductSuppliers(kept) as unknown as Prisma.InputJsonValue },
+      });
+      cleanedProducts++;
+    }
+  }
+  revalidatePath("/admin/suppliers");
+  revalidatePath("/products");
+  return { removedSuppliers: removed, cleanedProducts, list };
 }

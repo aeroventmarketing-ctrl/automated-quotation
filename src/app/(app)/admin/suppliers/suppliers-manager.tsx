@@ -75,6 +75,7 @@ export function SuppliersManager({
   onClearAll,
   onBulkImport,
   onLoadMaster,
+  onRemoveInvalid,
 }: {
   suppliers: Supplier[];
   onSave: SaveFn;
@@ -83,6 +84,8 @@ export function SuppliersManager({
   onClearAll?: ClearAllFn;
   onBulkImport: BulkFn;
   onLoadMaster?: LoadMasterFn;
+  /** Purge junk "priced" suppliers (from a product export import). */
+  onRemoveInvalid?: () => Promise<{ removedSuppliers: number; cleanedProducts: number; list: Supplier[] }>;
 }) {
   const [list, setList] = useState<Supplier[]>(suppliers);
   const [add, setAdd] = useState<Fields>(blank);
@@ -247,7 +250,25 @@ export function SuppliersManager({
     }
   }
 
+  async function removeInvalidClick() {
+    if (!onRemoveInvalid) return;
+    if (!window.confirm("Remove invalid suppliers whose name contains a price or semicolon (created by importing a product export file)? This also strips those junk links from products.")) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const result = await onRemoveInvalid();
+      setList(result.list);
+      setMsg(`Removed ${result.removedSuppliers} invalid supplier${result.removedSuppliers === 1 ? "" : "s"}${result.cleanedProducts ? `, cleaned ${result.cleanedProducts} product${result.cleanedProducts === 1 ? "" : "s"}` : ""}.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not remove invalid suppliers");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const cell = (v: string) => (v ? v : "—");
+  const invalidCount = list.filter((s) => /[₱;]/.test(s.company)).length;
 
   return (
     <div className="space-y-4">
@@ -267,6 +288,11 @@ export function SuppliersManager({
         {onLoadMaster && (
           <Button size="sm" variant="secondary" className="h-8" disabled={busy} onClick={onLoadMasterClick} title="Load the built-in AEROVENT supplier list (with complete remarks)">
             Load AEROVENT supplier list
+          </Button>
+        )}
+        {onRemoveInvalid && invalidCount > 0 && (
+          <Button size="sm" variant="outline" className="h-8 text-amber-700 hover:text-amber-700" disabled={busy} onClick={removeInvalidClick} title="Remove suppliers whose name contains a price/semicolon (import junk) and strip them from products">
+            Remove invalid ({invalidCount})
           </Button>
         )}
         {onClearAll && list.length > 0 && (
