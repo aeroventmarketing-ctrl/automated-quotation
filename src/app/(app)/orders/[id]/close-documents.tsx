@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { Upload, Trash2, FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { afterPaymentDocTypes, closeDocsState, plantDocTypes, plantCloseState, type SaleDoc } from "@/lib/sale";
+import { afterPaymentDocTypes, closeDocsState, plantDocTypes, plantCloseState, isAiReadableSaleDocKey, type SaleDoc, type SaleDocReadStamp } from "@/lib/sale";
 import { uploadDocument } from "@/lib/client-upload";
 import { saveCloseDoc, removeCloseDoc, fileDocuments } from "../actions";
+import { SaleDocReader } from "../../quotations/[id]/sale-doc-reader";
 
 const docLink = (d: SaleDoc) => `/api/sale-uploads?path=${encodeURIComponent(d.path)}`;
 const docView = (d: SaleDoc) => `/api/sale-uploads/view?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
@@ -28,6 +29,12 @@ export function CloseDocuments({
   admin = false,
   closed = false,
   plantPickup = false,
+  currency = "PHP",
+  orderAmount = 0,
+  docReads = {},
+  docReadCount = 0,
+  docReadsUnlimited = false,
+  canReadDocs = false,
 }: {
   orderId: string;
   initialDocs: Record<string, SaleDoc[]>;
@@ -42,6 +49,15 @@ export function CloseDocuments({
   /** Plant pick up — the delivery form is made earlier by the Warehouseman; the
    *  Accounting closing docs (SI/OR/DR) are required only for VAT-inclusive. */
   plantPickup?: boolean;
+  /** Closing-document AI reader context (SI / OR / DR). */
+  currency?: string;
+  orderAmount?: number;
+  docReads?: Record<string, SaleDocReadStamp>;
+  docReadCount?: number;
+  /** Admin / Payment Approver — no read limit; may approve / allow-more. */
+  docReadsUnlimited?: boolean;
+  /** Accounting / Admin / Payment Approver — may run the AI reader. */
+  canReadDocs?: boolean;
 }) {
   const router = useRouter();
   const [docs, setDocs] = useState<Record<string, SaleDoc[]>>(initialDocs);
@@ -141,6 +157,20 @@ export function CloseDocuments({
                   <span className="text-sm text-muted-foreground">Not attached.</span>
                 ) : null}
               </div>
+              {vatInclusive && isAiReadableSaleDocKey(t.key) && files.length > 0 && (
+                <SaleDocReader
+                  quotationId={orderId}
+                  docKey={t.key}
+                  files={files}
+                  expectedTotal={t.key === "delivery_receipt" ? undefined : orderAmount}
+                  currency={currency}
+                  initialReads={docReads}
+                  readsUsed={docReadCount}
+                  unlimited={docReadsUnlimited}
+                  canApprove={docReadsUnlimited}
+                  canRead={canReadDocs}
+                />
+              )}
             </div>
           );
         })}

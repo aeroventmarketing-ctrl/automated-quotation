@@ -1,3 +1,19 @@
+## 2026-08-24 · Closing docs — role-based AI read / approve (SI / OR / DR) · FROZEN Phase 5
+- **Request (owner).** Accounting must always **AI-read** the Sales Invoice / Collection Receipt (OR) / Delivery
+  Receipt, with the **3-read limit** — on error show the message, on success notify success; after 3 errors **lock +
+  escalate**. **Admin / Payment Approver** upload → AI reads → they can **approve** the upload (override) and **allow
+  more** reads. Applies to **both** the Sale & payment panel and the order's Phase 5 closing-docs.
+- **Change.**
+  - New shared client `quotations/[id]/sale-doc-reader.tsx` — per closing-doc slot: **auto-reads** a freshly uploaded
+    file, shows ✓ success / ✗ error inline, tracks the per-order 3-read limit, and for Admin / Payment Approver renders
+    **Approve upload** (accept regardless of the AI result) and **Allow 3 more reads**.
+  - `lib/sale.ts` — `SaleDocReadStamp.approved` + `isSaleDocCleared`. Server actions `approveSaleDoc` /
+    `resetSaleDocReadLimit` (Admin / Payment Approver only) in `quotations/actions.ts`.
+  - `sale-panel.tsx` (non-frozen) now renders `<SaleDocReader>` per SI/OR/DR slot (replaces the inline #405 read UI).
+  - **Frozen Phase 5:** `close-documents.tsx` + `fulfillment-actions.tsx` thread the reader context (reads / count /
+    unlimited / order amount / currency) so the same reader appears on the order's closing-documents step. Owner-approved.
+- Typecheck + lint clean.
+
 ## 2026-08-24 · Suppliers — one-click purge of "priced" junk suppliers
 - **Bug (owner).** After the raw `products.xlsx` (export shape) was imported, its `Suppliers` cell values
   (`RITE PRODUCTS INC. ₱8078.02`, `A ₱1; B ₱2`) became **supplier company names** — so a PO offered a priced duplicate
