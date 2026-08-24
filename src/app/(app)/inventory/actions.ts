@@ -216,20 +216,32 @@ export async function importStockItems(
             throw new Error(`Barcode "${wantBarcode}" is already used by another item.`);
           }
         }
-        // Match an existing item by name AND location — INCLUDING an inactive one
-        // (a "Clear all" only deactivates, keeping the unique code), preferring an
-        // active match — and reactivate it, so a re-import reuses the same row
-        // instead of failing on the unique code or creating a duplicate. The same
-        // item in a DIFFERENT location becomes its own row. When the file gives a
-        // location but the only existing row is unassigned (no location), adopt it
-        // and set the location rather than creating a clashing new row.
-        let existing = await tx.stockItem.findFirst({
-          where: {
-            name: { equals: name, mode: "insensitive" },
-            ...(wantLoc ? { location: { equals: wantLoc, mode: "insensitive" } } : {}),
-          },
-          orderBy: { active: "desc" },
-        });
+        // Pick the row to update, in order — INCLUDING inactive ones (a "Clear
+        // all" only deactivates, keeping the unique code), preferring an active
+        // match, and reactivate it:
+        //  1. The row that ALREADY owns this (code, location) — updating it in
+        //     place is a no-op on those fields, so it can't collide with a
+        //     leftover duplicate that owns the code.
+        //  2. Else a same-name row at this location.
+        //  3. Else, when the file gives a location, a same-name row with no
+        //     location — adopt it and set the location instead of creating a
+        //     clashing new row.
+        // The same item in a genuinely new location becomes its own row.
+        let existing = wantSku
+          ? await tx.stockItem.findFirst({
+              where: { sku: wantSku, ...(wantLoc ? { location: { equals: wantLoc, mode: "insensitive" } } : {}) },
+              orderBy: { active: "desc" },
+            })
+          : null;
+        if (!existing) {
+          existing = await tx.stockItem.findFirst({
+            where: {
+              name: { equals: name, mode: "insensitive" },
+              ...(wantLoc ? { location: { equals: wantLoc, mode: "insensitive" } } : {}),
+            },
+            orderBy: { active: "desc" },
+          });
+        }
         if (!existing && wantLoc) {
           existing = await tx.stockItem.findFirst({
             where: { name: { equals: name, mode: "insensitive" }, location: null },
