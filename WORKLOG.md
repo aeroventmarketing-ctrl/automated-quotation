@@ -1,3 +1,12 @@
+## 2026-08-24 · Suppliers — one-click purge of "priced" junk suppliers
+- **Bug (owner).** After the raw `products.xlsx` (export shape) was imported, its `Suppliers` cell values
+  (`RITE PRODUCTS INC. ₱8078.02`, `A ₱1; B ₱2`) became **supplier company names** — so a PO offered a priced duplicate
+  supplier and the directory filled with ~1 junk entry per product row.
+- **Change (`admin/suppliers`, not frozen).** New admin action `removeInvalidSuppliersAction` + a **"Remove invalid (N)"**
+  button on the Suppliers page. It deletes every supplier whose name contains a peso sign or semicolon (a real name never
+  does) from **both** the directory and every product's supplier links, so POs stop offering the priced duplicate.
+  Helper `isPricedSupplierName` / `removeInvalidSuppliers` in `lib/suppliers.ts`. Typecheck + lint clean.
+
 ## 2026-08-24 · Inventory import — reuse a cleared item; migration 0045 must be applied
 - **Bug (owner).** Inventory bulk import failed rows with `Unique constraint failed on the fields: (sku)`. Two causes:
   1. **Migration `0045_stock_multi_location` was never applied to the DB.** The Vercel build runs `prisma generate &&

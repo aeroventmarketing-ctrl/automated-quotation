@@ -175,6 +175,22 @@ export async function clearSuppliers(): Promise<Supplier[]> {
   return [];
 }
 
+/**
+ * A junk supplier name produced by importing a product export's "Suppliers"
+ * cell (e.g. `RITE PRODUCTS INC. ₱8078.02` or `A ₱1; B ₱2`) as a company. A real
+ * company name never contains a peso sign or a semicolon, so those mark it junk.
+ */
+export const isPricedSupplierName = (company: string): boolean => /[₱;]/.test(company);
+
+/** Remove directory suppliers whose name carries a price / semicolon (import junk). */
+export async function removeInvalidSuppliers(): Promise<{ removed: number; list: Supplier[] }> {
+  const list = await getSuppliers();
+  const keep = list.filter((s) => !isPricedSupplierName(s.company));
+  const removed = list.length - keep.length;
+  if (removed > 0) await writeSuppliers(keep);
+  return { removed, list: coerceSuppliers({ list: keep }) };
+}
+
 export interface BulkResult {
   added: number;
   updated: number;
