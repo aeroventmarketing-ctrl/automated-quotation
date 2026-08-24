@@ -97,6 +97,7 @@ export const saleDocReadSchema = z.object({
   date: z.string().nullable().default(null), // YYYY-MM-DD document date
   amount: z.number().nullable().default(null), // peso total shown on the document (null if none is printed)
   customer: z.string().nullable().default(null), // sold-to / customer name if shown
+  customerTin: z.string().nullable().default(null), // sold-to / customer TIN if shown
   confidence: z.number().nullable().default(null), // 0..1 — how sure the exact number + amount were read
   warnings: z.array(z.string()).default([]),
 });

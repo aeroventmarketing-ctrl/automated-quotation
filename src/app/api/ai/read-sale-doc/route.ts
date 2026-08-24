@@ -9,6 +9,7 @@ import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { saleDocReadSchema } from "@/lib/ai/schemas";
 import { AI_SALE_DOC_READ_LIMIT } from "@/lib/ai/limits";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { getAccountsRegistry, saveAccountsRegistry } from "@/lib/account";
 import {
   isAiReadableSaleDocKey,
   normalizeDocNumber,
@@ -41,6 +42,7 @@ The document is one of: a SALES INVOICE, a COLLECTION RECEIPT (CR) / OFFICIAL RE
 
 CRITICAL RULES:
 - DOCUMENT NUMBER: read the pre-printed serial number of the form — labelled "No.", "SI No.", "Invoice No.", "CR No.", "OR No.", "DR No." or similar (often printed in red at the top-right). Return the exact digits/letters as printed. This is the document's fingerprint. If you cannot read it clearly, set documentNumber to null (do NOT guess).
+- CUSTOMER TIN: read the SOLD-TO / customer's Taxpayer Identification Number — the TIN printed next to the buyer's name / "Sold to" / "Registered name" block (a Philippine TIN looks like "000-000-000-000" or "000-000-000-00000"). Return the exact digits as printed (keep the dashes). This is the BUYER's TIN, NOT the seller/AeroVent's own TIN in the letterhead — ignore the pre-printed company TIN at the top. If none is shown or you can't read it clearly, set customerTin to null (do NOT guess).
 - AMOUNT: read the peso TOTAL of the document — the "Total", "Total Amount Due", "Amount" or grand-total figure. If the document shows a VATable Sales + VAT Amount split, the TOTAL is the sum (the gross). A Delivery Receipt often has NO amount — if none is printed, set amount to null. Never invent an amount.
 - DATE: the document date (the "Date" near the top). Return YYYY-MM-DD, or null if unsure.
 - Read only clearly PRINTED / typed / machine text. IGNORE handwritten annotations for the number and amount unless the whole form is handwritten on a pre-printed booklet — in which case read the handwritten total and the pre-printed serial number.
@@ -55,6 +57,7 @@ const userPrompt = (label: string) => `This document should be a ${label}. From 
   "date": string|null,              // YYYY-MM-DD document date (null if unsure)
   "amount": number|null,            // peso TOTAL shown on the document (null if none printed / unsure)
   "customer": string|null,          // sold-to / customer name if shown
+  "customerTin": string|null,       // sold-to / customer TIN if shown (the BUYER's TIN, not the seller's)
   "confidence": number,             // 0..1 — how sure you are of the EXACT document number + amount digits
   "warnings": [ string ]            // e.g. "image blurry", "serial number cut off", "no amount printed"
 }`;
@@ -79,7 +82,7 @@ export async function POST(req: NextRequest) {
 
   const quote = await prisma.quotation.findUnique({
     where: { id: body.quotationId },
-    select: { id: true, preparedById: true, classification: true },
+    select: { id: true, preparedById: true, classification: true, inquiry: { select: { customerId: true } } },
   });
   if (!quote) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
@@ -178,11 +181,13 @@ export async function POST(req: NextRequest) {
       documentNumber && clear && !duplicateOf && (amountMatches !== false),
     );
 
+    const customerTin = r.customerTin?.trim() || null;
     const stamp: SaleDocReadStamp = {
       path: body.path,
       docKey: body.docKey,
       documentNumber,
       date,
+      customerTin,
       amount,
       expected,
       amountMatches,
@@ -197,6 +202,23 @@ export async function POST(req: NextRequest) {
       where: { id: body.quotationId },
       data: { classification: { ...cls, saleDocReads, saleDocReadCount: usedReads } as unknown as Prisma.InputJsonValue },
     });
+
+    // Autofill the client's TIN from the document — the Customer table has no TIN
+    // column, so it rides in the account registry. Fill only when the client has
+    // none yet, so a value entered by hand is never overwritten by a read.
+    const customerId = quote.inquiry?.customerId;
+    if (customerTin && customerId) {
+      try {
+        const accounts = await getAccountsRegistry();
+        const existing = accounts[customerId] ?? { history: [], conversations: [] };
+        if (!(existing.tin ?? "").trim()) {
+          accounts[customerId] = { ...existing, tin: customerTin };
+          await saveAccountsRegistry(accounts);
+        }
+      } catch (e) {
+        console.error("read-sale-doc: TIN autofill failed", e);
+      }
+    }
 
     const warnings = [...(r.warnings ?? [])];
     if (!documentNumber) warnings.push("Couldn't read the document number — check the form and record it by hand.");
@@ -214,6 +236,7 @@ export async function POST(req: NextRequest) {
       date,
       amount,
       customer: r.customer ?? null,
+      customerTin,
       expected,
       amountMatches,
       duplicateOf,

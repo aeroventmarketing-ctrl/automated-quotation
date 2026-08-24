@@ -1,3 +1,16 @@
+## 2026-08-24 · Sales Summary (Vatable) — TIN autofilled from the closing documents
+- **Request (owner).** The report's TIN should **autofill from the TIN read on the Sales Invoice / Collection Receipt /
+  Delivery Receipt**, not only the hand-entered client TIN.
+- **Change.**
+  - The closing-doc AI reader now also captures the **buyer's TIN** (`saleDocReadSchema.customerTin`; a new
+    `customerTin` on `SaleDocReadStamp`). The prompt is explicit: read the sold-to / customer TIN, NOT the seller's
+    pre-printed TIN in the letterhead.
+  - On a successful read the client's registry TIN is **autofilled (fill-if-empty)** so the profile shows it, without
+    ever overwriting a TIN entered by hand.
+  - `buildSalesSummary` now prefers the TIN read off this order's documents (Sales Invoice → Collection Receipt →
+    Delivery Receipt, a cleared read first), falling back to the saved client TIN.
+- Typecheck + lint clean.
+
 ## 2026-08-24 · Sales Summary (Vatable) report + dashboard tiles
 - **Request (owner).** A **Sales Summary (Vatable)** tile on **Accounting My Dashboard** and the **Admin Production
   Dashboard** (right side, in the row with Unreconciled Vouchers). Clicking it opens a register in a **new sheet** with

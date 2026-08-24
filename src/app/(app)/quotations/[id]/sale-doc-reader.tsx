@@ -91,6 +91,7 @@ export function SaleDocReader({
           path, docKey,
           documentNumber: j.documentNumber ?? null,
           date: j.date ?? null,
+          customerTin: j.customerTin ?? null,
           amount: typeof j.amount === "number" ? j.amount : null,
           expected: typeof j.expected === "number" ? j.expected : null,
           amountMatches: typeof j.amountMatches === "boolean" ? j.amountMatches : null,

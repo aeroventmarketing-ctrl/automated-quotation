@@ -58,6 +58,7 @@ export interface SaleDocReadStamp {
   docKey: string; // sale doc slot key (sales_invoice / or_cr_af / delivery_receipt)
   documentNumber: string | null; // captured serial (SI / CR / DR No.)
   date: string | null; // YYYY-MM-DD document date
+  customerTin: string | null; // sold-to / customer TIN read off the document (autofills the Sales Summary)
   amount: number | null; // peso total read off the document
   expected: number | null; // order figure it was checked against (null if not checked)
   amountMatches: boolean | null; // amount ≈ expected (null if no amount / not checked)
@@ -88,6 +89,7 @@ function coerceDocReadStamp(v: unknown): SaleDocReadStamp | null {
     docKey: typeof o.docKey === "string" ? o.docKey : "",
     documentNumber: typeof o.documentNumber === "string" ? o.documentNumber : null,
     date: typeof o.date === "string" ? o.date : null,
+    customerTin: typeof o.customerTin === "string" ? o.customerTin : null,
     amount: typeof o.amount === "number" ? o.amount : null,
     expected: typeof o.expected === "number" ? o.expected : null,
     amountMatches: typeof o.amountMatches === "boolean" ? o.amountMatches : null,

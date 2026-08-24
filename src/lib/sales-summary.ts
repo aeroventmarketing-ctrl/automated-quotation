@@ -56,6 +56,22 @@ function docNumberFor(reads: Record<string, SaleDocReadStamp>, docKey: string): 
 }
 
 /**
+ * The client's TIN as read off the closing documents — the Sales Invoice wins,
+ * then the Collection Receipt, then the Delivery Receipt (a cleared read first).
+ * Returns "" when no document carried a TIN.
+ */
+function tinFromReads(reads: Record<string, SaleDocReadStamp>): string {
+  for (const docKey of ["sales_invoice", "or_cr_af", "delivery_receipt"]) {
+    const stamps = Object.values(reads).filter((s) => s.docKey === docKey && s.customerTin);
+    if (stamps.length === 0) continue;
+    const cleared = stamps.find((s) => isSaleDocCleared(s));
+    const tin = ((cleared ?? stamps[stamps.length - 1]).customerTin ?? "").trim();
+    if (tin) return tin;
+  }
+  return "";
+}
+
+/**
  * Build the Sales Summary (Vatable) for [from, to] (YYYY-MM-DD, Manila) — always
  * on the PAYMENT-date basis.
  */
@@ -107,7 +123,9 @@ export async function buildSalesSummary(from: string, to: string): Promise<Sales
       crNumber: docNumberFor(reads, "or_cr_af"),
       drNumber: docNumberFor(reads, "delivery_receipt"),
       company: q.inquiry?.customer?.company ?? "—",
-      tin: (customerId && accounts[customerId]?.tin) || "",
+      // Prefer the TIN read off this order's closing documents; fall back to the
+      // client's saved TIN.
+      tin: tinFromReads(reads) || (customerId && accounts[customerId]?.tin) || "",
       poAmount: round2(payableTotal(q)),
       ewt: round2(ewtWithheld(sale)),
       address: q.inquiry?.customer?.address ?? "",
