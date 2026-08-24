@@ -11,6 +11,12 @@
   existing row is unassigned (no location), it **adopts** that row and sets the location, instead of creating a clashing
   new one. Re-importing reuses rows instead of failing/duplicating. Typecheck + lint clean.
 - **Action still required:** apply migration `0045` to the database for the two-location items to save.
+- **Follow-up (after 0045 applied).** With the composite key live, updates then failed with
+  `Unique constraint failed on the fields: (sku, location)` — the importer matched an item by name+location but a
+  leftover duplicate row (from earlier failed imports) already owned that `(sku, location)`. Fixed: the importer now
+  picks the row that **already owns `(sku, location)` first** (updating it is a no-op on those fields, so it can't
+  collide), then falls back to same-name-at-location, then adopt-unassigned. Re-importing no longer collides; leftover
+  same-name duplicates can be cleaned with the location-aware merge tool.
 
 ## 2026-08-24 · Products import — reuse a cleared product by its code (no duplicates)
 - **Bug (owner).** Re-importing the product list first failed every row ("could not be imported"), then — after the
