@@ -1,5 +1,6 @@
-import { COMPANY } from "@/lib/config";
+import { COMPANY, config } from "@/lib/config";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { emailConfigured } from "@/lib/email/resend";
 import { buildSalesSummary } from "@/lib/sales-summary";
 import { SummaryControls } from "./summary-controls";
 
@@ -19,12 +20,13 @@ export default async function SalesSummaryPage({
   const from = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : `${today.slice(0, 7)}-01`;
   const to = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : today;
   const report = await buildSalesSummary(from, to).catch(() => null);
+  const emailReady = emailConfigured() && !!config.followUpFromEmail;
   const dash = (v: string) => (v.trim() ? v : "—");
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-2 print:p-0">
       <div className="flex items-center justify-end gap-2 print:hidden">
-        <SummaryControls from={from} to={to} />
+        <SummaryControls from={from} to={to} emailReady={emailReady} />
       </div>
 
       <div className="rounded-lg border bg-white p-6 text-black print:border-0 print:p-0">

@@ -1,3 +1,15 @@
+## 2026-08-24 · Sales Summary (Vatable) — Excel / PDF / Email exports (match WON report)
+- **Request (owner).** Give the Sales Summary the same export row as the WON Sales Report — add **Excel**, **PDF** and
+  **Email** beside **View** / **Print**.
+- **Change.**
+  - New export routes `reports/sales-summary/xlsx` and `reports/sales-summary/pdf`, plus `emailSalesSummary` in
+    `reports/sales-summary/actions.ts` (PDF attached), all built off `buildSalesSummary` so the four surfaces stay in
+    sync. New `lib/pdf/sales-summary-pdf.tsx` (landscape, all 9 columns).
+  - `summary-controls.tsx` now mirrors the WON panel's control row: From / To → **View · Print · Excel · PDF · Email**,
+    with the same collapsible email box (disabled + amber note when email isn't configured). `page.tsx` passes
+    `emailReady`.
+- Typecheck + lint clean.
+
 ## 2026-08-24 · Sales Summary (Vatable) — TIN autofilled from the closing documents
 - **Request (owner).** The report's TIN should **autofill from the TIN read on the Sales Invoice / Collection Receipt /
   Delivery Receipt**, not only the hand-entered client TIN.
