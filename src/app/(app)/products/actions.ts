@@ -292,16 +292,19 @@ export async function importProducts(
   let updated = 0;
   for (const g of groups.values()) {
     try {
-      // A file-provided SKU must be unique — reject it if another product owns it
-      // (an item keeping its own code is fine). Blank → auto-generated.
+      const existing = await prisma.product.findFirst({ where: { active: true, name: { equals: g.name, mode: "insensitive" } } });
+      // Resolve the file's Item Code (SKU). Apply it only when it's free or
+      // already this product's — never steal another product's code (that would
+      // fail the whole row on the unique constraint). A clash is reported, but
+      // the product still imports, keeping its existing/auto code.
+      let applySku = g.sku;
       if (g.sku) {
-        const clash = await prisma.product.findUnique({ where: { sku: g.sku }, select: { name: true } });
-        if (clash && clash.name.toLowerCase() !== g.name.toLowerCase()) {
-          errors.push(`Product “${g.name}”: SKU ${g.sku} is already used by another product.`);
-          continue;
+        const owner = await prisma.product.findUnique({ where: { sku: g.sku }, select: { id: true, name: true } });
+        if (owner && owner.id !== existing?.id) {
+          errors.push(`Product “${g.name}”: Item Code ${g.sku} is already used by “${owner.name}” — imported without changing its code.`);
+          applySku = undefined;
         }
       }
-      const existing = await prisma.product.findFirst({ where: { active: true, name: { equals: g.name, mode: "insensitive" } } });
       if (existing) {
         // Merge new suppliers into the existing ones (dedup by company).
         const cur = coerceProductSuppliers(existing.suppliers);
@@ -311,7 +314,7 @@ export async function importProducts(
           where: { id: existing.id },
           data: {
             // Set the SKU from the file when given; otherwise keep the existing one.
-            ...(g.sku ? { sku: g.sku } : {}),
+            ...(applySku ? { sku: applySku } : {}),
             unit: g.unit || existing.unit,
             category: g.category ?? existing.category,
             note: g.note ?? existing.note,
@@ -322,7 +325,7 @@ export async function importProducts(
       } else {
         await prisma.$transaction(async (tx) => {
           // Use the file's Item Code when provided, else auto-generate the next PRD serial.
-          const sku = g.sku || (await nextProductSku(tx));
+          const sku = applySku || (await nextProductSku(tx));
           await tx.product.create({
             data: {
               name: g.name,
@@ -336,8 +339,9 @@ export async function importProducts(
         });
         created++;
       }
-    } catch {
-      errors.push(`Product “${g.name}” could not be imported.`);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message.replace(/\s+/g, " ").slice(0, 160) : "";
+      errors.push(`Product “${g.name}” could not be imported${detail ? `: ${detail}` : "."}`);
     }
   }
   revalidatePath("/products");
