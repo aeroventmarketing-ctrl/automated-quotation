@@ -17,6 +17,7 @@ import {
   type SaleDocType,
   type SalePayment,
   type PaymentKind,
+  type SaleDocReadStamp,
   ARRANGEMENT_LABEL,
   PAYMENT_KIND_LABEL,
   SALE_DOCS_BEFORE_PAYMENTS,
@@ -24,7 +25,9 @@ import {
   collectedTotal,
   ewtWithheld,
   isSaleConfirmed,
+  isAiReadableSaleDocKey,
 } from "@/lib/sale";
+import { AI_SALE_DOC_READ_LIMIT } from "@/lib/ai/limits";
 import { uploadDocument } from "@/lib/client-upload";
 
 const ARRANGEMENTS: SaleArrangement[] = ["downpayment_full", "downpayment_progress", "terms"];
@@ -74,6 +77,9 @@ export function SalePanel({
   clientTerms = false,
   vatInclusive = true,
   zeroRated = false,
+  initialDocReads = {},
+  docReadCount = 0,
+  docReadsUnlimited = false,
 }: {
   quotationId: string;
   currency: string;
@@ -90,6 +96,12 @@ export function SalePanel({
   vatInclusive?: boolean;
   /** Zero-rated also requires the Certificate of VAT Exempt/Zero Rated. */
   zeroRated?: boolean;
+  /** Persisted AI reads of the closing documents, keyed by file path. */
+  initialDocReads?: Record<string, SaleDocReadStamp>;
+  /** Capped AI reads already used on this order's closing documents. */
+  docReadCount?: number;
+  /** Admin / Payment Approver — no AI-read limit. */
+  docReadsUnlimited?: boolean;
 }) {
   const router = useRouter();
   // A terms client is locked to the "Terms (PO)" arrangement so the PO alone
@@ -106,6 +118,77 @@ export function SalePanel({
   // Per-payment deposit-slip read status (shown inline next to each proof).
   const [slipStatus, setSlipStatus] = useState<Record<string, { tone: "muted" | "ok" | "bad"; text: string }>>({});
   const [readingId, setReadingId] = useState<string | null>(null);
+  // Closing-document AI reads (Sales Invoice / Collection Receipt / Delivery
+  // Receipt) — the captured number + amount check, keyed by the file's path.
+  const [docReads, setDocReads] = useState<Record<string, SaleDocReadStamp>>(initialDocReads);
+  const [docErr, setDocErr] = useState<Record<string, string>>({});
+  const [docReadsUsed, setDocReadsUsed] = useState<number>(docReadCount);
+  const [docReadingPath, setDocReadingPath] = useState<string | null>(null);
+  const docReadsLeft = Math.max(0, AI_SALE_DOC_READ_LIMIT - docReadsUsed);
+  // Accounting (canClear) and the Admin / Payment Approver (unlimited) may also
+  // run the reader, not just the sale editor.
+  const canReadDocs = canEdit || canClear || docReadsUnlimited;
+
+  // Turn a persisted read into an inline status line.
+  function stampStatus(s: SaleDocReadStamp): { tone: "ok" | "bad"; text: string } {
+    const numLabel = s.documentNumber ? `No. ${s.documentNumber}` : "number not read";
+    if (s.duplicateOf)
+      return { tone: "bad", text: `⚠ ${numLabel} — already used on order ${s.duplicateOf}. Check for a re-used document.` };
+    if (!s.documentNumber)
+      return { tone: "bad", text: "✗ Couldn't read the document number — check the form and record it by hand." };
+    const amt = s.amount != null ? formatCurrency(s.amount, currency) : null;
+    if (s.amountMatches === false && s.expected != null)
+      return { tone: "bad", text: `⚠ ${numLabel}${amt ? ` · reads ${amt}` : ""} but the order total is ${formatCurrency(s.expected, currency)}. Verify the figure.` };
+    const parts = [numLabel];
+    if (amt) parts.push(s.amountMatches ? `${amt} ✓ tallies with the order` : amt);
+    if (s.date) parts.push(s.date);
+    return { tone: "ok", text: `✓ ${parts.join(" · ")}` };
+  }
+
+  // AI-read a closing document (Sales Invoice / Collection Receipt / Delivery
+  // Receipt): capture its serial number, check the amount against the order
+  // total, and flag a number already used on another order.
+  async function readSaleDoc(docKey: string, path: string) {
+    setDocReadingPath(path);
+    setDocErr((e) => { const n = { ...e }; delete n[path]; return n; });
+    try {
+      // A Delivery Receipt usually carries no amount, so there's nothing to
+      // check it against; the Sales Invoice / Collection Receipt tally with the
+      // order total.
+      const expectedTotal = docKey === "delivery_receipt" ? undefined : dealTotal;
+      const res = await fetch("/api/ai/read-sale-doc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quotationId, path, docKey, expectedTotal }),
+      });
+      const j = await res.json();
+      if (typeof j.reads === "number") setDocReadsUsed(j.reads);
+      if (res.ok) {
+        setDocReads((m) => ({
+          ...m,
+          [path]: {
+            path,
+            docKey,
+            documentNumber: j.documentNumber ?? null,
+            date: j.date ?? null,
+            amount: typeof j.amount === "number" ? j.amount : null,
+            expected: typeof j.expected === "number" ? j.expected : null,
+            amountMatches: typeof j.amountMatches === "boolean" ? j.amountMatches : null,
+            duplicateOf: j.duplicateOf ?? null,
+            validated: j.validated === true,
+            readByName: "",
+            readAt: new Date().toISOString(),
+          },
+        }));
+      } else {
+        setDocErr((e) => ({ ...e, [path]: j.error ?? "Couldn't read the document. Record the figures manually." }));
+      }
+    } catch {
+      setDocErr((e) => ({ ...e, [path]: "Couldn't read the document. Record the figures manually." }));
+    } finally {
+      setDocReadingPath(null);
+    }
+  }
 
   const draft: SaleRecord = { arrangement, po, payments };
   const confirmed = isSaleConfirmed(draft);
@@ -285,14 +368,26 @@ export function SalePanel({
       ...(docs[type.key] ?? []).map((doc) => ({ doc, srcKey: type.key })),
       ...(type.mergeKeys ?? []).flatMap((k) => (docs[k] ?? []).map((doc) => ({ doc, srcKey: k }))),
     ];
+    // Sales Invoice / Collection Receipt / Delivery Receipt can be AI-read to
+    // capture their serial number and check the amount against the order — for
+    // VAT-inclusive / zero-rated deals (a pure VAT-exclusive deal issues an
+    // Acknowledgement / Delivery Form instead, which isn't read here).
+    const readable = vatInclusive && isAiReadableSaleDocKey(type.key);
+    const limitBlocked = !docReadsUnlimited && docReadsLeft <= 0;
     return (
       <div key={type.key} className="space-y-1">
         <Label className="text-xs">
           {type.label} <span className="text-muted-foreground">({type.required ? "required" : "optional"})</span>
         </Label>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {files.map(({ doc: f, srcKey }) => (
-            <div key={f.path} className="flex items-center gap-2">
+        <div className={readable ? "space-y-1.5" : "flex flex-wrap items-center gap-x-4 gap-y-1"}>
+          {files.map(({ doc: f, srcKey }) => {
+            const stamp = readable ? docReads[f.path] : undefined;
+            const err = readable ? docErr[f.path] : undefined;
+            const reading = docReadingPath === f.path;
+            const status = err ? { tone: "bad" as const, text: err } : stamp ? stampStatus(stamp) : null;
+            return (
+            <div key={f.path} className={readable ? "space-y-0.5" : "flex items-center gap-2"}>
+              <div className="flex flex-wrap items-center gap-2">
               <a href={docView(f)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">
                 <FileText className="h-4 w-4" /> {f.name}
               </a>
@@ -307,8 +402,28 @@ export function SalePanel({
                   <Trash2 className="h-4 w-4" />
                 </button>
               )}
+              {readable && canReadDocs && (
+                <button
+                  type="button"
+                  title="Read document with AI"
+                  aria-label="Read document with AI"
+                  disabled={reading || busy || limitBlocked}
+                  onClick={() => readSaleDoc(type.key, f.path)}
+                  className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary disabled:opacity-50"
+                >
+                  <ScanLine className="h-3.5 w-3.5" />
+                  <span className="text-[11px]">
+                    {reading ? "reading…" : limitBlocked ? "AI limit reached" : `read${!docReadsUnlimited && docReadsUsed > 0 ? ` (${docReadsLeft} left)` : ""}`}
+                  </span>
+                </button>
+              )}
+              </div>
+              {status && (
+                <p className={`text-[11px] ${status.tone === "ok" ? "text-emerald-600" : "text-destructive"}`}>{status.text}</p>
+              )}
             </div>
-          ))}
+            );
+          })}
           {canEdit ? (
             <label className={cn(
               "inline-flex cursor-pointer items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-accent",

@@ -15,3 +15,13 @@ export const AI_RECEIPT_READ_LIMIT = 3;
  * shared budget).
  */
 export const AI_DEPOSIT_SLIP_READ_LIMIT = 3;
+
+/**
+ * How many times the AI "Read document" may be run against a single order's
+ * closing documents (Sales Invoice / Collection Receipt / Delivery Receipt),
+ * for users other than an Admin or the Payment Approver. Persisted on the sale
+ * classification. Once reached, everyone else must check the document by hand;
+ * an Admin / Payment Approver has no limit (and their reads don't consume the
+ * shared budget) — they are the override for this rule.
+ */
+export const AI_SALE_DOC_READ_LIMIT = 3;

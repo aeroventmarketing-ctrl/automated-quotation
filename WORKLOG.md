@@ -1,3 +1,22 @@
+## 2026-08-24 · Closing documents — AI read + verify + capture doc number (Sales Invoice / Collection Receipt / Delivery Receipt)
+- **Request (owner).** Enable AI reading on the **Sales Invoice**, **Collection Receipt** and **Delivery Receipt** of a
+  **VAT-inclusive / zero-rated** sale — read the document, **verify** its amount against the order total, and **capture
+  its serial number** so the same document can't be re-used on another order. **Admin / Payment Approver override** the
+  3-read limit.
+- **Change (additive; no Phase 5 workflow logic touched).**
+  - New reader route `src/app/api/ai/read-sale-doc/route.ts` — reads the document, extracts the **serial number**, **date**
+    and **total**, checks the amount against the order total (advisory), and scans other quotes for the same number on a
+    same-kind document (**duplicate guard**). Persists a `SaleDocReadStamp` per file on `classification.saleDocReads`
+    (sibling of `sale`, so it survives `recordSale`) plus a per-order `saleDocReadCount`. Capped at
+    `AI_SALE_DOC_READ_LIMIT = 3`; **Admin / Payment Approver are unlimited** and their reads don't consume the budget.
+  - `src/lib/sale.ts` — `AI_READABLE_SALE_DOC_KEYS`, `SaleDocReadStamp`, `saleDocReadsFromClassification`,
+    `normalizeDocNumber`. `src/lib/ai/schemas.ts` — `saleDocReadSchema`. `src/lib/ai/limits.ts` — the new limit.
+  - `sale-panel.tsx` — a **"read"** button (ScanLine) beside each Sales Invoice / Collection Receipt / Delivery Receipt
+    file, with an inline ✓/⚠ status (captured No., amount-vs-order check, duplicate flag). Shown to the sale editor,
+    Accounting, and Admin / Payment Approver; the reader appears only for VAT-inclusive / zero-rated deals.
+  - Verify + duplicate flags are **advisory** (shown at read time) — the frozen Save/close-documents gates are unchanged.
+- Typecheck + lint clean.
+
 ## 2026-08-20 · Job Order "eye view" — optional pixel-perfect PDF via a LibreOffice converter
 - **Request (owner).** Proceed with the server-side converter for a PDF that matches the Excel template exactly.
 - **Change (opt-in, feature-flagged; display path only).**

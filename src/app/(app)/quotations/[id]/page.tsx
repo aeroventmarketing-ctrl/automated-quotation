@@ -11,7 +11,7 @@ import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { BatchDocumentList } from "./batch-document-list";
 import { SaleDocumentList } from "../../orders/[id]/sale-document-list";
 import { quoteApproverNames } from "@/lib/approver-directory";
-import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
+import { saleFromClassification, isSaleConfirmed, saleDocReadsFromClassification } from "@/lib/sale";
 import { readPricing } from "@/lib/quote";
 import { getAccountData, currentOwner } from "@/lib/account";
 import { DuplicateToClient } from "./duplicate-to-client";
@@ -136,6 +136,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         quoteNumber: quotation.quoteNumber,
         status: quotation.status,
         sale: saleFromClassification(quotation.classification),
+        // AI reads of the closing documents (Sales Invoice / Collection Receipt /
+        // Delivery Receipt) — captured numbers + amount checks, by file path.
+        docReads: saleDocReadsFromClassification(quotation.classification),
+        docReadCount: ((v) => (typeof v === "number" ? v : 0))((quotation.classification as Record<string, unknown> | null)?.saleDocReadCount),
+        // Admin / Payment Approver override the AI-read limit (no cap).
+        docReadsUnlimited: !!user && (isAdmin(user) || userHasWorkflowRole(assignments, user.id, "payment_approver")),
         revision: ((r) => (typeof r === "number" ? r : 0))((quotation.classification as Record<string, unknown> | null)?.revision),
         revisionRestore: ((v) => (v && typeof v === "object" ? (v as { targetRev: number; requestedByName: string; requestedAt: string }) : null))(
           (quotation.classification as Record<string, unknown> | null)?.revisionRestore,
