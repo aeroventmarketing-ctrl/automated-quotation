@@ -1,3 +1,35 @@
+## 2026-08-24 · Sales Summary (Vatable) — TIN autofilled from the closing documents
+- **Request (owner).** The report's TIN should **autofill from the TIN read on the Sales Invoice / Collection Receipt /
+  Delivery Receipt**, not only the hand-entered client TIN.
+- **Change.**
+  - The closing-doc AI reader now also captures the **buyer's TIN** (`saleDocReadSchema.customerTin`; a new
+    `customerTin` on `SaleDocReadStamp`). The prompt is explicit: read the sold-to / customer TIN, NOT the seller's
+    pre-printed TIN in the letterhead.
+  - On a successful read the client's registry TIN is **autofilled (fill-if-empty)** so the profile shows it, without
+    ever overwriting a TIN entered by hand.
+  - `buildSalesSummary` now prefers the TIN read off this order's documents (Sales Invoice → Collection Receipt →
+    Delivery Receipt, a cleared read first), falling back to the saved client TIN.
+- Typecheck + lint clean.
+
+## 2026-08-24 · Sales Summary (Vatable) report + dashboard tiles
+- **Request (owner).** A **Sales Summary (Vatable)** tile on **Accounting My Dashboard** and the **Admin Production
+  Dashboard** (right side, in the row with Unreconciled Vouchers). Clicking it opens a register in a **new sheet** with
+  columns **Date · SI Number · CR · DR · Company · TIN Number · P.O. Amount · EWT FP · Company Address** — same
+  view/print/from-to behaviour as the WON Sales Report, **dated by Payment date**.
+- **Change.**
+  - New `lib/sales-summary.ts` — `buildSalesSummary(from, to)`: one row per **confirmed VATABLE** order (sale confirmed
+    and `vatModeChargesOutputVat`), booked on the sale's **payment / recognition date**. SI / CR / DR numbers come from
+    the AI reads captured on each closing doc (`classification.saleDocReads`); PO Amount = `payableTotal`, EWT FP =
+    `ewtWithheld`; company + address from the customer.
+  - New route `reports/sales-summary` — a print-friendly register mirroring the WON report page, with an inline From/To
+    picker (`summary-controls.tsx`) and Print (payment-date basis is fixed).
+  - **Client TIN** — the `Customer` table has no TIN column, so (like `terms` / marketing flags) it rides in the account
+    registry: `AccountData.tin` (`lib/account.ts`), an editable **TIN** field on the client profile
+    (`customer-header.tsx` + `updateCustomer`), read into the report.
+  - **Tile** added to `my-dashboard/page.tsx` `ordersGrid` (after Unreconciled Vouchers), gated for Admin / Accounting /
+    Payment Approver, opening the register in a new tab.
+- Typecheck + lint clean.
+
 ## 2026-08-24 · Closing docs — role-based AI read / approve (SI / OR / DR) · FROZEN Phase 5
 - **Request (owner).** Accounting must always **AI-read** the Sales Invoice / Collection Receipt (OR) / Delivery
   Receipt, with the **3-read limit** — on error show the message, on success notify success; after 3 errors **lock +
