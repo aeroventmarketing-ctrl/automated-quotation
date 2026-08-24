@@ -537,8 +537,12 @@ enum StockMovementKind {
 
 model StockItem {
   id           String   @id @default(cuid())
-  sku          String?  @unique // short human/scan code, e.g. "10001"
-  barcode      String?  @unique // external supplier/manufacturer barcode (GS1 GTIN / UPC / EAN); separate from the internal SKU
+  // Multi-location: the same item (SKU / barcode) may be stocked in more than one
+  // location, so uniqueness is on the (SKU, location) / (barcode, location) pair,
+  // not the SKU / barcode alone. Postgres treats NULLs as distinct, so items with
+  // no SKU / barcode / location keep their prior freedom to repeat.
+  sku          String?  // short human/scan code, e.g. "10001"
+  barcode      String?  // external supplier/manufacturer barcode (GS1 GTIN / UPC / EAN); separate from the internal SKU
   name         String
   unit         String   @default("pcs")
   category     String?
@@ -554,6 +558,8 @@ model StockItem {
   movements    StockMovement[]
   reservations StockReservation[]
 
+  @@unique([sku, location])
+  @@unique([barcode, location])
   @@index([name])
 }
 

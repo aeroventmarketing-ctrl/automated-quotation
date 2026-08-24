@@ -1,3 +1,22 @@
+## 2026-08-24 · Multi-location stock — Phase 1 (same SKU in more than one location)
+- **Request (owner).** Track the same item / SKU in more than one location (e.g. Plant Warehouse + Office). Owner chose
+  **Phase 1 only** (non-frozen): allow the same SKU per location, fix the importer so a second-location row is added
+  rather than merged, and leave the **frozen Phase 3 / MRF** stock-deduction untouched (to be approved separately).
+- **Change (model + inventory import/CRUD only; no MRF / Phase 3 code touched).**
+  - `prisma/schema.prisma` — `StockItem`: `sku` / `barcode` are no longer unique on their own; uniqueness is now the
+    pair **`@@unique([sku, location])`** and **`@@unique([barcode, location])`**. Migration `0045_stock_multi_location`
+    drops `StockItem_sku_key` / `StockItem_barcode_key` and creates the composite indexes (existing one-per-SKU rows
+    satisfy them unchanged; Postgres keeps NULLs distinct).
+  - Importer (`inventory/actions.ts`) matches an existing item by **name + location** (falls back to name-only when a
+    row has no location), so the same item in a different location becomes its **own row** instead of overwriting the
+    first. SKU / barcode clash checks now reject only a *different-named* item (import) or the same code *at the same
+    location* (create / edit).
+  - Duplicate detection + `mergeDuplicateStockItems` now key on **name + location**, so an item stocked in two
+    locations is not flagged / merged as an accidental duplicate.
+  - Aggregate stock value already sums across all rows, so it stays correct with per-location rows.
+- **Not done (deferred, needs owner approval):** location-aware MRF/requisition deduction (which location to issue
+  from). The frozen MRF still matches whichever stock row it finds by name/SKU. Typecheck + lint clean.
+
 ## 2026-08-24 · Closing documents — AI read + verify + capture doc number (Sales Invoice / Collection Receipt / Delivery Receipt)
 - **Request (owner).** Enable AI reading on the **Sales Invoice**, **Collection Receipt** and **Delivery Receipt** of a
   **VAT-inclusive / zero-rated** sale — read the document, **verify** its amount against the order total, and **capture

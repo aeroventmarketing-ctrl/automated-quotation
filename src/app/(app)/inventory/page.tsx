@@ -181,11 +181,15 @@ export default async function InventoryPage() {
         const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
         const by = new Map<string, typeof items>();
         for (const it of items) {
+          // Key on name AND location: the same item stocked in two locations
+          // (multi-location) is not a duplicate — only same-name, same-location
+          // rows are flagged for merging.
           const k = canon(it.name);
           if (!k) continue;
-          const arr = by.get(k) ?? [];
+          const key = `${k}||${canon(it.location ?? "")}`;
+          const arr = by.get(key) ?? [];
           arr.push(it);
-          by.set(k, arr);
+          by.set(key, arr);
         }
         return [...by.values()]
           .filter((g) => g.length > 1)

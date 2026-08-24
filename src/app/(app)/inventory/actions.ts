@@ -197,24 +197,36 @@ export async function importStockItems(
       // the rest of the batch still imports. Match an existing active item by
       // name (case-insensitive) and UPDATE it, so re-uploading a master list
       // refreshes items instead of creating duplicates.
+      const wantLoc = has(iLoc) ? cell(iLoc) : "";
       await prisma.$transaction(async (tx) => {
-        // Item Code (SKU): normalise and ensure no OTHER item already owns it,
-        // so a bulk re-label sets each item's code deterministically.
+        // Item Code (SKU): normalise and ensure no OTHER item (a different NAME)
+        // already owns it. The SAME item may repeat across locations under one
+        // SKU (multi-location), so a same-name row is allowed to share the code.
         const wantSku = has(iSku) ? cell(iSku).toUpperCase() : "";
         if (wantSku) {
-          const clash = await tx.stockItem.findUnique({ where: { sku: wantSku }, select: { name: true } });
-          if (clash && clash.name.toLowerCase() !== name.toLowerCase()) {
+          const owners = await tx.stockItem.findMany({ where: { sku: wantSku }, select: { name: true } });
+          if (owners.some((o) => o.name.toLowerCase() !== name.toLowerCase())) {
             throw new Error(`Item Code "${wantSku}" is already used by another item.`);
           }
         }
         const wantBarcode = has(iBarcode) ? cell(iBarcode) : "";
         if (wantBarcode) {
-          const bClash = await tx.stockItem.findUnique({ where: { barcode: wantBarcode }, select: { name: true } });
-          if (bClash && bClash.name.toLowerCase() !== name.toLowerCase()) {
+          const bOwners = await tx.stockItem.findMany({ where: { barcode: wantBarcode }, select: { name: true } });
+          if (bOwners.some((o) => o.name.toLowerCase() !== name.toLowerCase())) {
             throw new Error(`Barcode "${wantBarcode}" is already used by another item.`);
           }
         }
-        const existing = await tx.stockItem.findFirst({ where: { active: true, name: { equals: name, mode: "insensitive" } } });
+        // Match an existing active item by name AND location, so the same item in
+        // a different location becomes its OWN row instead of overwriting the
+        // first one. When the row carries no location, fall back to name-only
+        // (preserves single-location re-import behaviour).
+        const existing = await tx.stockItem.findFirst({
+          where: {
+            active: true,
+            name: { equals: name, mode: "insensitive" },
+            ...(wantLoc ? { location: { equals: wantLoc, mode: "insensitive" } } : {}),
+          },
+        });
         if (existing) {
           // Overwrite only the fields whose column is present and non-empty.
           const data: Prisma.StockItemUpdateInput = {};
@@ -297,7 +309,10 @@ export async function mergeDuplicateStockItems(): Promise<{ groups: number; remo
   const list = await prisma.stockItem.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } });
   const byName = new Map<string, typeof list>();
   for (const it of list) {
-    const key = it.name.trim().toLowerCase();
+    // Group by name AND location: the same item held in two different locations
+    // (multi-location stock) is NOT a duplicate — only same-name, same-location
+    // rows are accidental copies to merge.
+    const key = `${it.name.trim().toLowerCase()}||${(it.location ?? "").trim().toLowerCase()}`;
     (byName.get(key) ?? byName.set(key, []).get(key)!).push(it);
   }
   let groups = 0;
@@ -473,15 +488,18 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
   const barcode = (d.barcode ?? "").trim() || null;
   await prisma.$transaction(async (tx) => {
     // Use the given Item Code when provided, else auto-generate the next serial.
+    // Uniqueness is per (SKU, location): the same code may sit in another
+    // location, but not twice in the same one.
+    const loc = d.location?.trim() || null;
     let sku = wantSku || (await nextSku(tx));
     if (wantSku) {
-      const clash = await tx.stockItem.findUnique({ where: { sku: wantSku }, select: { id: true } });
-      if (clash) throw new Error(`Item Code "${wantSku}" is already used by another stock item.`);
+      const clash = await tx.stockItem.findFirst({ where: { sku: wantSku, location: loc }, select: { id: true } });
+      if (clash) throw new Error(`Item Code "${wantSku}" is already used by another stock item at this location.`);
       sku = wantSku;
     }
     if (barcode) {
-      const bClash = await tx.stockItem.findUnique({ where: { barcode }, select: { id: true } });
-      if (bClash) throw new Error(`Barcode "${barcode}" is already used by another stock item.`);
+      const bClash = await tx.stockItem.findFirst({ where: { barcode, location: loc }, select: { id: true } });
+      if (bClash) throw new Error(`Barcode "${barcode}" is already used by another stock item at this location.`);
     }
     const item = await tx.stockItem.create({
       data: {
@@ -525,20 +543,23 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
   await requireInventoryManager();
   const d = metaSchema.parse(input);
   const wantSku = normalizeSku(d.sku);
+  // Uniqueness is per (SKU / barcode, location): the same code may sit in another
+  // location, but not twice in the location this item is being set to.
+  const loc = d.location?.trim() || null;
   if (wantSku) {
     const clash = await prisma.stockItem.findFirst({
-      where: { sku: wantSku, id: { not: d.stockItemId } },
+      where: { sku: wantSku, location: loc, id: { not: d.stockItemId } },
       select: { id: true },
     });
-    if (clash) throw new Error(`Item Code "${wantSku}" is already used by another stock item.`);
+    if (clash) throw new Error(`Item Code "${wantSku}" is already used by another stock item at this location.`);
   }
   const wantBarcode = d.barcode === undefined ? undefined : ((d.barcode ?? "").trim() || null);
   if (wantBarcode) {
     const bClash = await prisma.stockItem.findFirst({
-      where: { barcode: wantBarcode, id: { not: d.stockItemId } },
+      where: { barcode: wantBarcode, location: loc, id: { not: d.stockItemId } },
       select: { id: true },
     });
-    if (bClash) throw new Error(`Barcode "${wantBarcode}" is already used by another stock item.`);
+    if (bClash) throw new Error(`Barcode "${wantBarcode}" is already used by another stock item at this location.`);
   }
   await prisma.stockItem.update({
     where: { id: d.stockItemId },
