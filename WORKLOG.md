@@ -1,12 +1,15 @@
-## 2026-08-24 · Products import — resilient SKU + real error messages
-- **Bug (owner).** Uploading a product file failed with "Product X could not be imported" for **every** row — the
-  generic catch hid the real cause.
+## 2026-08-24 · Products import — reuse a cleared product by its code (no duplicates)
+- **Bug (owner).** Re-importing the product list first failed every row ("could not be imported"), then — after the
+  diagnostic below — created a **duplicate** of every product. Root cause: **"Clear all" only deactivates**
+  (`active:false`) products, which keep their unique Item Code; the import matched existing products by *active* name
+  only, so it never found the deactivated ones, and their code was already taken.
 - **Change (`products/actions.ts`, not frozen).**
-  - The per-row catch now appends the actual error detail (e.g. the DB message) so a failure is diagnosable instead of
-    a blanket "could not be imported".
-  - SKU handling made resilient: an Item Code owned by a **different** product no longer fails the whole row (which is
-    what a re-import with shifted codes hit) — the product still imports, keeping its existing/auto code, and the clash
-    is reported. The owner check is by product **id** (matched by name), not by name string.
+  - Import now matches an existing product by the file's **Item Code first (regardless of active state)**, else by
+    active name — and **reactivates** it on import. Re-importing (even after a Clear all) reuses the same product and
+    its code instead of creating a duplicate. The create path only runs for a genuinely new item, and a file code is
+    only auto-generated when blank (an owned code always matches above, so no unique-constraint failure).
+  - The per-row catch now appends the actual error detail, so any real failure is diagnosable instead of a blanket
+    "could not be imported".
 - Typecheck + lint clean.
 
 ## 2026-08-24 · Multi-location stock — Phase 2 (issue-from-stock location routing) · FROZEN Phase 3/4
