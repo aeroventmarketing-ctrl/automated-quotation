@@ -292,19 +292,12 @@ export async function importProducts(
   let updated = 0;
   for (const g of groups.values()) {
     try {
-      const existing = await prisma.product.findFirst({ where: { active: true, name: { equals: g.name, mode: "insensitive" } } });
-      // Resolve the file's Item Code (SKU). Apply it only when it's free or
-      // already this product's — never steal another product's code (that would
-      // fail the whole row on the unique constraint). A clash is reported, but
-      // the product still imports, keeping its existing/auto code.
-      let applySku = g.sku;
-      if (g.sku) {
-        const owner = await prisma.product.findUnique({ where: { sku: g.sku }, select: { id: true, name: true } });
-        if (owner && owner.id !== existing?.id) {
-          errors.push(`Product “${g.name}”: Item Code ${g.sku} is already used by “${owner.name}” — imported without changing its code.`);
-          applySku = undefined;
-        }
-      }
+      // Match the product to update by the file's Item Code FIRST — regardless of
+      // active state — so re-importing (even after a "Clear all", which only
+      // deactivates) reuses the SAME product and its code instead of creating a
+      // duplicate. Otherwise match an active product by name.
+      let existing = g.sku ? await prisma.product.findUnique({ where: { sku: g.sku } }) : null;
+      if (!existing) existing = await prisma.product.findFirst({ where: { active: true, name: { equals: g.name, mode: "insensitive" } } });
       if (existing) {
         // Merge new suppliers into the existing ones (dedup by company).
         const cur = coerceProductSuppliers(existing.suppliers);
@@ -313,8 +306,12 @@ export async function importProducts(
         await prisma.product.update({
           where: { id: existing.id },
           data: {
-            // Set the SKU from the file when given; otherwise keep the existing one.
-            ...(applySku ? { sku: applySku } : {}),
+            active: true, // reactivate a previously-cleared product on re-import
+            name: g.name,
+            // When matched by code this is a no-op; when matched by name it sets
+            // the file's (free) code. A code owned elsewhere can't reach here — it
+            // would have been matched as `existing` above.
+            ...(g.sku ? { sku: g.sku } : {}),
             unit: g.unit || existing.unit,
             category: g.category ?? existing.category,
             note: g.note ?? existing.note,
@@ -324,8 +321,9 @@ export async function importProducts(
         updated++;
       } else {
         await prisma.$transaction(async (tx) => {
-          // Use the file's Item Code when provided, else auto-generate the next PRD serial.
-          const sku = applySku || (await nextProductSku(tx));
+          // Use the file's Item Code when provided (it's free — an owned code
+          // would have matched above), else auto-generate the next PRD serial.
+          const sku = g.sku || (await nextProductSku(tx));
           await tx.product.create({
             data: {
               name: g.name,
