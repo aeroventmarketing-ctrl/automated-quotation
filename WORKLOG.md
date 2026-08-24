@@ -1,3 +1,14 @@
+## 2026-08-24 · Products import — resilient SKU + real error messages
+- **Bug (owner).** Uploading a product file failed with "Product X could not be imported" for **every** row — the
+  generic catch hid the real cause.
+- **Change (`products/actions.ts`, not frozen).**
+  - The per-row catch now appends the actual error detail (e.g. the DB message) so a failure is diagnosable instead of
+    a blanket "could not be imported".
+  - SKU handling made resilient: an Item Code owned by a **different** product no longer fails the whole row (which is
+    what a re-import with shifted codes hit) — the product still imports, keeping its existing/auto code, and the clash
+    is reported. The owner check is by product **id** (matched by name), not by name string.
+- Typecheck + lint clean.
+
 ## 2026-08-24 · Multi-location stock — Phase 2 (issue-from-stock location routing) · FROZEN Phase 3/4
 - **Request (owner, explicit).** When issuing materials from stock: **Fans & Blower / Duct / Accessories** deduct from
   the **Plant Warehouse**; **Motor Controller / Office** may **choose** Plant or Office (**default Office**). Owner
