@@ -318,6 +318,7 @@ const customerSchema = z.object({
   email: z.string().optional().default(""),
   phone: z.string().optional().default(""),
   address: z.string().optional().default(""),
+  tin: z.string().optional().default(""),
   notes: z.string().optional().default(""),
 });
 
@@ -337,6 +338,17 @@ export async function updateCustomer(customerId: string, input: z.infer<typeof c
       notes: d.notes.trim() || null,
     },
   });
+
+  // The Customer table has no TIN column, so — like the account's other extra
+  // client attributes (terms, marketing list) — it rides in the account registry.
+  const tin = d.tin.trim();
+  const accounts = await getAccountsRegistry();
+  const existing: AccountData = accounts[customerId] ?? { history: [], conversations: [] };
+  if ((existing.tin ?? "") !== tin) {
+    accounts[customerId] = { ...existing, tin: tin || undefined };
+    await saveAccountsRegistry(accounts);
+  }
+
   revalidatePath(`/customers/${customerId}`);
   revalidatePath("/quotations");
   revalidatePath("/inquiries");

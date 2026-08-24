@@ -19,6 +19,7 @@ export interface CustomerDetails {
   email: string;
   phone: string;
   address: string;
+  tin: string;
   notes: string;
 }
 
@@ -51,6 +52,7 @@ export function CustomerHeader({ customer }: { customer: CustomerDetails }) {
         email: form.email,
         phone: form.phone,
         address: form.address,
+        tin: form.tin,
         notes: form.notes,
       });
       setEditing(false);
@@ -108,6 +110,10 @@ export function CustomerHeader({ customer }: { customer: CustomerDetails }) {
             <div className="space-y-1 sm:col-span-2">
               <Label>Address</Label>
               <Input value={form.address} onChange={(e) => set({ address: e.target.value })} />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label>TIN (Taxpayer Identification No.)</Label>
+              <Input value={form.tin} onChange={(e) => set({ tin: e.target.value })} placeholder="e.g. 000-000-000-000" />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label>Notes</Label>

@@ -40,6 +40,7 @@ export interface AccountData {
   conversations?: ConversationEntry[]; // logged follow-ups, chronological
   optOutFollowUp?: boolean; // when true, this client is skipped by automated follow-ups
   terms?: boolean; // admin-set: a "terms" client — a PO alone can confirm the sale
+  tin?: string; // client's Taxpayer Identification Number (BIR) — used by the Sales Summary report
   // "Constant communication" nudges sent to a client who has an open inquiry but
   // no quotation sent yet — one entry per automated inquiry follow-up.
   inquiryFollowUp?: { sent: { at: string }[] };
@@ -86,19 +87,21 @@ function parseAccounts(config: unknown): Record<string, AccountData> {
     const mkt = rec?.marketingFollowUp as { sent?: unknown } | undefined;
     const mktSent = mkt && Array.isArray(mkt.sent) ? (mkt.sent as { at: string }[]) : null;
     const onMktList = rec?.marketingList === true;
+    const tin = typeof rec?.tin === "string" ? rec.tin.trim() : "";
     const ty =
       rec?.thankYou && typeof rec.thankYou === "object" && !Array.isArray(rec.thankYou)
         ? (rec.thankYou as Record<string, string>)
         : null;
     if (
       Array.isArray(hist) || Array.isArray(convs) || rec?.optOutFollowUp != null ||
-      rec?.terms != null || inqSent || mktSent || onMktList || ty
+      rec?.terms != null || inqSent || mktSent || onMktList || ty || tin
     ) {
       out[cid] = {
         history: Array.isArray(hist) ? (hist as AccountAssignment[]) : [],
         conversations: Array.isArray(convs) ? (convs as ConversationEntry[]) : [],
         optOutFollowUp: rec?.optOutFollowUp === true,
         terms: rec?.terms === true,
+        ...(tin ? { tin } : {}),
         ...(inqSent ? { inquiryFollowUp: { sent: inqSent } } : {}),
         ...(onMktList ? { marketingList: true } : {}),
         ...(mktSent ? { marketingFollowUp: { sent: mktSent } } : {}),

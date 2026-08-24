@@ -15,7 +15,7 @@ import { getFinanceMonitor } from "@/lib/finance-monitor";
 import { UnreconciledPaymentsCard, CashVouchersCard, FinanceStatsRow } from "@/components/finance-monitor-cards";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw } from "lucide-react";
+import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw, ReceiptText } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
 import { getExpensesReport } from "../management/pnl-actions";
@@ -194,6 +194,17 @@ export default async function MyDashboardPage() {
               </CardContent>
             </Card>
           </Link>
+          <a href="/reports/sales-summary" target="_blank" rel="noopener noreferrer" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+              <CardContent className="flex items-center gap-3 py-4">
+                <ReceiptText className="h-6 w-6 text-emerald-600" />
+                <div>
+                  <div className="text-sm font-bold leading-tight">Sales Summary</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Vatable</div>
+                </div>
+              </CardContent>
+            </Card>
+          </a>
         </>
       )}
     </div>

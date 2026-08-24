@@ -162,6 +162,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           email: customer.email ?? "",
           phone: customer.phone ?? "",
           address: customer.address ?? "",
+          tin: accountData?.tin ?? "",
           notes: customer.notes ?? "",
         }}
       />
