@@ -18,6 +18,10 @@ import { getFollowUpSettings, setFollowUpSettings, shouldRunScheduler } from "@/
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// The run sends real emails + SMS one by one; without this the function runs on
+// Vercel's default ~10s timeout and gets killed mid-send (only the first ~20
+// texts of a 100-cap run ever went out).
+export const maxDuration = 60;
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;

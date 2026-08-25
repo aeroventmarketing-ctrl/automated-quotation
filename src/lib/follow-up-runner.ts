@@ -323,6 +323,9 @@ export async function runFollowUps(opts: {
     const smsLive = opts.live && settings.smsEnabled && !settings.smsDryRun && smsConfigured();
     const smsCap = settings.smsMaxPerRun;
 
+    // Phase 1 — evaluate everyone first (no I/O): queue up who actually gets a
+    // text this run, up to the per-run cap.
+    const sendQueue: { q: (typeof quotes)[number]; phone: string; message: string; nudgeNumber: number; base: RunItem }[] = [];
     for (const q of quotes) {
       const sentIso = sentAtFrom(q.classification);
       const sentAt = sentIso ? new Date(sentIso) : q.createdAt;
@@ -372,50 +375,63 @@ export async function runFollowUps(opts: {
         items.push({ ...base, action: "preview" });
         continue;
       }
-      if (smsSent >= smsCap) {
+      if (sendQueue.length >= smsCap) {
         smsSkipped++;
         items.push({ ...base, reason: "per-run SMS cap reached" });
         continue;
       }
+      sendQueue.push({ q, phone, message, nudgeNumber: result.nudgeNumber, base });
+    }
 
-      try {
-        await sendSms({ to: phone, message });
+    // Phase 2 — send in small parallel batches. One-at-a-time sending couldn't
+    // finish a full run inside the serverless time budget (the function was
+    // killed mid-loop, so only the first ~20 texts of a 100-cap run went out).
+    // Each task still stamps its own quote immediately after its send, so a
+    // mid-run crash never repeats a nudge.
+    const SMS_CONCURRENCY = 8;
+    for (let i = 0; i < sendQueue.length; i += SMS_CONCURRENCY) {
+      const batch = sendQueue.slice(i, i + SMS_CONCURRENCY);
+      await Promise.all(batch.map(async ({ q, phone, message, nudgeNumber, base }) => {
+        const c = q.inquiry.customer;
+        try {
+          await sendSms({ to: phone, message });
 
-        // Record the SMS nudge on the quote (separate array) so it's never repeated.
-        const cls = (q.classification as Record<string, unknown>) ?? {};
-        const fu = (cls.followUp as Record<string, unknown> | undefined) ?? {};
-        const smsArr = Array.isArray(fu.smsSent) ? (fu.smsSent as unknown[]) : [];
-        smsArr.push({ nudge: result.nudgeNumber, at: now.toISOString(), channel: "SMS", to: phone });
-        await prisma.quotation.update({
-          where: { id: q.id },
-          data: { classification: { ...cls, followUp: { ...fu, smsSent: smsArr } } as Prisma.InputJsonObject },
-        });
+          // Record the SMS nudge on the quote (separate array) so it's never repeated.
+          const cls = (q.classification as Record<string, unknown>) ?? {};
+          const fu = (cls.followUp as Record<string, unknown> | undefined) ?? {};
+          const smsArr = Array.isArray(fu.smsSent) ? (fu.smsSent as unknown[]) : [];
+          smsArr.push({ nudge: nudgeNumber, at: now.toISOString(), channel: "SMS", to: phone });
+          await prisma.quotation.update({
+            where: { id: q.id },
+            data: { classification: { ...cls, followUp: { ...fu, smsSent: smsArr } } as Prisma.InputJsonObject },
+          });
 
-        // Log it into the client's conversation history.
-        const entry: ConversationEntry = {
-          id: randomUUID(),
-          date: now.toISOString(),
-          channel: "SMS",
-          contactPerson: c.contactName ?? c.company,
-          message: `Automated follow-up SMS sent (nudge #${result.nudgeNumber}) for quotation ${q.quoteNumber}.`,
-          quoteNumber: q.quoteNumber,
-          nextFollowUp: null,
-          loggedById: q.preparedById,
-          loggedByName: q.preparedBy.name,
-          createdAt: now.toISOString(),
-        };
-        const acct = accounts[c.id] ?? { history: [], conversations: [] };
-        acct.conversations = [...(acct.conversations ?? []), entry];
-        accounts[c.id] = acct;
-        accountsDirty = true;
+          // Log it into the client's conversation history.
+          const entry: ConversationEntry = {
+            id: randomUUID(),
+            date: now.toISOString(),
+            channel: "SMS",
+            contactPerson: c.contactName ?? c.company,
+            message: `Automated follow-up SMS sent (nudge #${nudgeNumber}) for quotation ${q.quoteNumber}.`,
+            quoteNumber: q.quoteNumber,
+            nextFollowUp: null,
+            loggedById: q.preparedById,
+            loggedByName: q.preparedBy.name,
+            createdAt: now.toISOString(),
+          };
+          const acct = accounts[c.id] ?? { history: [], conversations: [] };
+          acct.conversations = [...(acct.conversations ?? []), entry];
+          accounts[c.id] = acct;
+          accountsDirty = true;
 
-        smsSent++;
-        items.push({ ...base, action: "sent" });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "sms failed";
-        errors.push(`${q.quoteNumber} (SMS): ${msg}`);
-        items.push({ ...base, reason: "send failed" });
-      }
+          smsSent++;
+          items.push({ ...base, action: "sent" });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "sms failed";
+          errors.push(`${q.quoteNumber} (SMS): ${msg}`);
+          items.push({ ...base, reason: "send failed" });
+        }
+      }));
     }
   }
 

@@ -1,3 +1,16 @@
+## 2026-08-25 · Follow-up SMS — full 100-per-run cap actually sends (timeout fix)
+- **Bug (owner).** "Max texts per run" is 100 but Semaphore shows **<25 messages per run**. Root cause: the hourly cron
+  route (`api/cron/follow-ups`) never set `maxDuration`, so it ran on Vercel's **default ~10s timeout** — and the runner
+  sent texts **one at a time** (Semaphore call + a DB stamp each). The function was killed mid-loop after ~20 sends;
+  per-quote stamps survive, so each hourly retry sent another small batch.
+- **Change.**
+  - `api/cron/follow-ups`: `maxDuration = 60` (matches the app's other heavy routes).
+  - `follow-up-runner.ts` SMS pass split into **evaluate-then-send**: Phase 1 queues everyone due (cap applied, same
+    skip/preview items); Phase 2 sends in **parallel batches of 8** — 100 texts now finish in ~15–20s instead of
+    ~2 minutes. Each task still stamps its own quote right after its send, so a crash mid-run never repeats a nudge.
+  - Semantics note: cap slots are now claimed at queue time (a failed send consumes its slot for that run).
+- Typecheck + lint clean.
+
 ## 2026-08-25 · Collection Receipt read — capture the EWT row for the Sales Summary
 - **Request (owner).** Also read the **EWT withheld** row of the CR's settlement box (e.g. ₱100.00, the gross-minus-net
   difference) — it autofills the **EWT FP** column of the Sales Summary (Vatable).
