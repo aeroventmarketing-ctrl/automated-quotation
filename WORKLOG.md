@@ -1,3 +1,30 @@
+## 2026-08-25 · Storefront redesign — premium look, customizable theme, SEO + AI SEO, performance
+- **Request (owner).** The first storefront was "simple and not appealing". Wanted a **stunning, premium, elegant**
+  shop that is **SEO + AISEO**, **fast loading**, **easy to use**, and **customizable to fit the vibe**.
+- **Customizable (the architectural part).** New `lib/store-theme.ts` + **Admin → Storefront**: accent / hover / dark
+  ground colours, corner style, product-image fit, announcement bar, hero headline / subhead / CTA / background,
+  the three value-prop panels, and all SEO + AI copy. Stored in an `AppSetting` row (**no migration**), emitted as CSS
+  custom properties (`--store-accent` …) so Tailwind classes follow it. Saving revalidates `/store` — restyle the shop
+  with no deploy. Includes a live hero preview and "Reset to defaults".
+- **Design.** Self-hosted **Manrope + Inter** via `next/font` (no runtime request, no layout shift). Sticky blurred
+  header with search + category nav + mobile slide-over; dark hero with accent wash and dot-grid; value-prop band;
+  category chips; elevated product cards (fixed 4:3 frame, hover lift, stock/made-to-order badges); premium PDP with
+  thumbnail gallery, **sticky buy box**, trust rows, spec table and related products; redesigned cart / checkout /
+  order pages; rich 4-column footer.
+- **SEO.** Per-page `generateMetadata` with canonicals + OpenGraph/Twitter; `sitemap.ts` (home, categories, every
+  listed product); `robots.ts` allowing the shop while disallowing the whole signed-in ERP, `/q/` links and
+  cart/checkout/order; JSON-LD via `lib/store-seo.ts` — Organization, WebSite + **SearchAction**, Store, **Product with
+  Offer/AggregateOffer + availability**, BreadcrumbList, ItemList. Quote-only items deliberately publish **no price**.
+- **AI SEO.** New **`/llms.txt`** — a live Markdown brief for answer engines: what the business is, how buying works,
+  key pages, and the current catalogue with prices/stock, plus explicit notes ("direct fabricated enquiries to the
+  quote form, never quote a price"). Generated from the same catalogue, so an assistant can't state a stale figure.
+- **Performance.** `isPublicStorePhoto` was a **DB scan per image request** (the hottest path) → 60s in-process cache;
+  image redirects now carry `max-age=600, s-maxage=1800, stale-while-revalidate`. Fixed aspect ratios everywhere (no
+  CLS), first grid row eager + `fetchPriority=high`, rest lazy. Store home ships **1.4 kB** of page JS.
+- **Bug caught in review:** `/robots.txt`, `/sitemap.xml` and `/llms.txt` were **not** in `PUBLIC_PATHS`, so middleware
+  would have redirected every crawler to the login page — silently defeating the entire SEO effort. Added.
+- Typecheck + lint + build clean.
+
 ## 2026-08-25 · Store — a listed product can be sold whatever its family (price decides, not family)
 - **Bug (owner).** Listed the Östberg CK inline duct fans, saved slug/photo/description ("Saved."), but `/store` still
   said *"No products are listed yet."*
