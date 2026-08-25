@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Eye, Printer } from "lucide-react";
+import { Search, Eye, Printer, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { statusBucket, prMainIndex, type PRBucket, type PRStatus } from "@/lib/purchasing";
@@ -12,7 +12,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PurchaseChainRow } from "@/lib/purchase-chain-row";
-import { advancePurchaseRequest } from "../orders/actions";
+import { advancePurchaseRequest, deletePurchaseRequests } from "../orders/actions";
 import type { CatalogPrices, CatalogSuppliers } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
@@ -179,6 +179,7 @@ export function PurchasingWorkspace({
   // their PO amounts and approve them together.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [approving, setApproving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
@@ -304,6 +305,44 @@ export function PurchasingWorkspace({
 
   const nothing = filteredBatches.length === 0 && filteredGroups.length === 0 && !(showBuilder && combinable.length > 0 && !query.trim());
 
+  // Rows shown in the two standalone sections (hoisted so the bulk-delete bar
+  // below can count exactly what's on screen).
+  const shownDeptRows = deptRows
+    .filter((r) => inTab(rowBucket(r)))
+    .filter((r) => textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
+  const shownReplenRows = replenRows
+    .filter((r) => inTab(rowBucket(r)))
+    .filter((r) => textMatch([...r.items, r.note ?? "", r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
+
+  // Bulk clean-up: on the Rejected / Cancelled tabs an admin can tick closed
+  // requests and delete them together. Only those two tabs offer it, and the
+  // server re-checks each status before deleting anything.
+  const bulkDeleteTab = admin && (tab === "rejected" || tab === "cancelled");
+  const deletableIds = bulkDeleteTab
+    ? [...filteredGroups.flatMap((g) => g.rows), ...shownDeptRows, ...shownReplenRows]
+        .filter((r) => r.status === "REJECTED" || r.status === "CANCELLED")
+        .map((r) => r.id)
+    : [];
+  const selectedDeletable = deletableIds.filter((id) => selected.has(id));
+  const allDeletableSelected = deletableIds.length > 0 && selectedDeletable.length === deletableIds.length;
+
+  async function bulkDelete() {
+    if (selectedDeletable.length === 0) return;
+    if (!window.confirm(`Delete ${selectedDeletable.length} ${tab} request(s)? This cannot be undone.`)) return;
+    setDeleting(true);
+    setBulkMsg(null);
+    try {
+      const res = await deletePurchaseRequests(selectedDeletable);
+      setSelected(new Set());
+      setBulkMsg(`${res.deleted} deleted${res.skipped ? ` · ${res.skipped} skipped (no longer ${tab})` : ""}.`);
+      router.refresh();
+    } catch (e) {
+      setBulkMsg(e instanceof Error ? e.message : "Delete failed.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-1.5">
@@ -345,6 +384,32 @@ export function PurchasingWorkspace({
           </select>
         </label>
       </div>
+
+      {/* Bulk clean-up bar — Rejected / Cancelled tabs, admin only. Tick the
+          closed requests above (or Select all) and remove them together. */}
+      {bulkDeleteTab && deletableIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+          <button
+            type="button"
+            onClick={() => setSelected(allDeletableSelected ? new Set() : new Set(deletableIds))}
+            className="font-medium text-primary hover:underline"
+          >
+            {allDeletableSelected ? "Clear all" : "Select all"}
+          </button>
+          <span className="text-muted-foreground">
+            {selectedDeletable.length} of {deletableIds.length} {tab} request{deletableIds.length === 1 ? "" : "s"} selected
+          </span>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="ml-auto h-8"
+            disabled={deleting || selectedDeletable.length === 0}
+            onClick={bulkDelete}
+          >
+            <Trash2 className="h-4 w-4" /> {deleting ? "Deleting…" : `Delete selected${selectedDeletable.length ? ` (${selectedDeletable.length})` : ""}`}
+          </Button>
+        </div>
+      )}
 
       {/* Keep the combine workspace mounted while the builder tab is active (no
           search), even when `combinable` is momentarily empty — otherwise an
@@ -414,6 +479,7 @@ export function PurchasingWorkspace({
                       hideRequisitionApproval
                       selectedIds={selected}
                       onToggleSelect={toggleSelect}
+                      allowClosedSelection={bulkDeleteTab}
                       showAmounts={showAmounts}
                       showSupplier={showSupplier}
                       adminManage={admin}
@@ -434,9 +500,7 @@ export function PurchasingWorkspace({
       {/* Department requisitions — share the same tab filter as the order material
           requests, so switching to Rejected/Cancelled hides the open ones too. */}
       {(deptRows.length > 0 || admin) && (() => {
-        const shown = deptRows
-          .filter((r) => inTab(rowBucket(r)))
-          .filter((r) => textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
+        const shown = shownDeptRows;
         return (
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -457,6 +521,7 @@ export function PurchasingWorkspace({
                   canIssueStock={canIssueStock}
                   adminManage={admin}
                   highlightId={highlightId}
+                  {...(bulkDeleteTab ? { selectedIds: selected, onToggleSelect: toggleSelect, allowClosedSelection: true } : {})}
                 />
               </CardContent></Card>
             )}
@@ -468,9 +533,7 @@ export function PurchasingWorkspace({
           under the bucket matching its status (pending / approved / rejected /
           cancelled), never across all tabs. */}
       {(replenRows.length > 0 || admin) && (() => {
-        const shown = replenRows
-          .filter((r) => inTab(rowBucket(r)))
-          .filter((r) => textMatch([...r.items, r.note ?? "", r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
+        const shown = shownReplenRows;
         return (
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -492,6 +555,7 @@ export function PurchasingWorkspace({
                   canIssueStock={canIssueStock}
                   adminManage={admin}
                   highlightId={highlightId}
+                  {...(bulkDeleteTab ? { selectedIds: selected, onToggleSelect: toggleSelect, allowClosedSelection: true } : {})}
                 />
               </CardContent></Card>
             )}

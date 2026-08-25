@@ -117,6 +117,7 @@ export function PurchasingChain({
   hideRequisitionApproval = false,
   selectedIds,
   onToggleSelect,
+  allowClosedSelection = false,
   deptApprovalHere = false,
   admin = false,
   showAmounts = true,
@@ -161,6 +162,8 @@ export function PurchasingChain({
    */
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  /** Let rejected / cancelled rows be ticked (the workspace's bulk-delete tabs). */
+  allowClosedSelection?: boolean;
   /**
    * These are standalone department requisitions (raised from Requisitions, not
    * an order) — so the Plant Manager approves/rejects them right here rather than
@@ -303,8 +306,12 @@ export function PurchasingChain({
               <span className="flex items-center gap-2 text-sm font-medium">
                 {(() => {
                   // A completed / rejected / cancelled request is done — its tick
-                  // box is disabled so it can't be selected (for any role).
-                  const locked = r.status === "COMPLETED" || r.status === "REJECTED" || r.status === "CANCELLED";
+                  // box is disabled so it can't be selected (for any role). The
+                  // exception is `allowClosedSelection`: the Purchasing
+                  // workspace's Rejected / Cancelled tabs re-enable the closed
+                  // ones so an admin can tick them for bulk deletion.
+                  const closed = r.status === "REJECTED" || r.status === "CANCELLED";
+                  const locked = r.status === "COMPLETED" || (closed && !allowClosedSelection);
                   return (
                     <input
                       type="checkbox"
@@ -312,7 +319,7 @@ export function PurchasingChain({
                       checked={sel.has(r.id)}
                       disabled={locked}
                       onChange={() => !locked && toggleSel(r.id)}
-                      title={locked ? "This request is already completed" : "Select this material request"}
+                      title={locked ? "This request is already completed" : closed ? "Select this request to delete it" : "Select this material request"}
                       aria-label={`Select ${r.deptLabel}${r.mrfNo ? ` MRF #${r.mrfNo}` : ""}`}
                     />
                   );

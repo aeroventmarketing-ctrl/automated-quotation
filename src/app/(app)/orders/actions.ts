@@ -2760,6 +2760,39 @@ export async function deletePurchaseRequest(purchaseRequestId: string): Promise<
 }
 
 /**
+ * Delete several CLOSED purchase requests at once — the Purchasing workspace's
+ * bulk clean-up on the Rejected / Cancelled tabs. Admin only.
+ *
+ * Only requests whose status is REJECTED or CANCELLED are ever removed: each id
+ * is expanded through its combined-PO members (like the single delete), then the
+ * set is re-checked against the database, so a live request can never be deleted
+ * even if a stale page sends its id. Returns what was removed vs. left alone.
+ */
+export async function deletePurchaseRequests(purchaseRequestIds: string[]): Promise<{ deleted: number; skipped: number }> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can delete purchase orders.");
+  const ids = [...new Set((purchaseRequestIds ?? []).filter((x): x is string => typeof x === "string" && x.length > 0))];
+  if (ids.length === 0) return { deleted: 0, skipped: 0 };
+
+  // Expand each selected request to its combined-PO members (a combined PO is
+  // deleted as a whole, exactly as the single delete does).
+  const picked = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
+  const targetIds = [...new Set(picked.flatMap((pr) => { const m = poMemberIds(pr.po); return m.length ? m : [pr.id]; }))];
+
+  const members = await prisma.purchaseRequest.findMany({ where: { id: { in: targetIds } } });
+  const closed = members.filter((m) => m.status === "REJECTED" || m.status === "CANCELLED");
+  const deletableIds = closed.map((m) => m.id);
+  if (deletableIds.length > 0) await prisma.purchaseRequest.deleteMany({ where: { id: { in: deletableIds } } });
+
+  for (const qid of [...new Set(closed.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
+    revalidatePath(`/orders/${qid}`);
+  }
+  revalidatePath("/purchasing");
+  return { deleted: deletableIds.length, skipped: members.length - deletableIds.length };
+}
+
+/**
  * Admin: replace a purchase request's item lines (and note). Works on any
  * status/tab. Note: this edits the request lines only — a Purchase Order that
  * was already issued keeps its own priced lines (edit those in the PO editor).
