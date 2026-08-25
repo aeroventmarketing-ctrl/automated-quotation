@@ -20,6 +20,7 @@ import {
   websiteSellingPrice,
   type StorePhoto,
 } from "@/lib/store-product";
+import { stockForCatalogue, stockForCatalogueMany } from "@/lib/store-stock";
 
 /** One purchasable variant of a store product (a priced size / configuration). */
 export interface StoreVariant {
@@ -46,6 +47,17 @@ export interface StoreProduct {
   variants: StoreVariant[];
   /** Cheapest website price across variants ("from" price); null when quote-only/unpriced. */
   fromPrice: number | null;
+  /**
+   * Free-to-issue stock. `null` means the item isn't tracked in inventory at
+   * all, which counts as sellable — only a tracked item at 0 is out of stock.
+   */
+  available: number | null;
+}
+
+/** Sellable right now: quote-only items never are; untracked items always are. */
+export function inStock(p: Pick<StoreProduct, "quoteOnly" | "available">): boolean {
+  if (p.quoteOnly) return false;
+  return p.available == null || p.available > 0;
 }
 
 export interface StoreCategory {
@@ -75,8 +87,8 @@ type ItemWithPrices = {
   priceList: { variantKey: string; basePrice: unknown; effectiveDate: Date }[];
 };
 
-/** Shape one catalogue row into a storefront product. */
-function toStoreProduct(it: ItemWithPrices): StoreProduct {
+/** Shape one catalogue row into a storefront product. `available` is filled in by the caller. */
+function toStoreProduct(it: ItemWithPrices, available: number | null = null): StoreProduct {
   const fields = storeFieldsOf(it);
   const quoteOnly = isQuoteOnly(it.family);
   const label = storeCategoryLabel(it.family, fields.storeCategory);
@@ -115,6 +127,7 @@ function toStoreProduct(it: ItemWithPrices): StoreProduct {
     quoteOnly,
     variants,
     fromPrice: variants.length ? variants[0].websitePrice : null,
+    available,
   };
 }
 
@@ -129,16 +142,18 @@ const LISTED_SELECT = {
   },
 } as const;
 
-/** Every product currently listed on the storefront. */
+/** Every product currently listed on the storefront, with live availability. */
 export async function listStoreProducts(): Promise<StoreProduct[]> {
-  const items = await prisma.catalogueItem
+  const items = (await prisma.catalogueItem
     .findMany({
       where: { active: true, storeListed: true },
       orderBy: [{ family: "asc" }, { name: "asc" }],
       select: LISTED_SELECT,
     })
-    .catch(() => [] as ItemWithPrices[]);
-  return (items as ItemWithPrices[]).map(toStoreProduct);
+    .catch(() => [] as ItemWithPrices[])) as ItemWithPrices[];
+  // One inventory read for the whole list (not one per product).
+  const stock = await stockForCatalogueMany(items.map((it) => ({ modelCode: it.modelCode, name: it.name })));
+  return items.map((it) => toStoreProduct(it, stock.get(it.modelCode)?.available ?? null));
 }
 
 /** The storefront's categories, with how many products each holds. */
@@ -162,7 +177,11 @@ export async function storeProductBySlug(slug: string): Promise<StoreProduct | n
   const direct = await prisma.catalogueItem
     .findFirst({ where: { active: true, storeListed: true, storeSlug: clean }, select: LISTED_SELECT })
     .catch(() => null);
-  if (direct) return toStoreProduct(direct as ItemWithPrices);
+  if (direct) {
+    const it = direct as ItemWithPrices;
+    const info = await stockForCatalogue(it.modelCode, it.name);
+    return toStoreProduct(it, info?.available ?? null);
+  }
   // No explicit slug set — scan the listed items for a matching derived slug.
   const all = await listStoreProducts();
   return all.find((p) => p.slug === clean) ?? null;

@@ -85,19 +85,32 @@ export async function priceCart(lines: CartLine[]): Promise<PricedCart> {
     const variant = p.variants.find((v) => v.key === l.variantKey) ?? (p.variants.length === 1 ? p.variants[0] : undefined);
     if (!variant) { dropped.push({ slug: l.slug, reason: "that option is no longer priced" }); continue; }
 
+    // Stock gate. `available === null` means the item isn't tracked in inventory,
+    // which stays sellable; only a TRACKED item can be short. A line asking for
+    // more than we hold is trimmed to what's actually there rather than dropped,
+    // so the shopper keeps what we can ship.
+    let qty = l.qty;
+    if (p.available != null) {
+      if (p.available <= 0) { dropped.push({ slug: l.slug, reason: "out of stock" }); continue; }
+      if (qty > p.available) {
+        qty = p.available;
+        dropped.push({ slug: l.slug, reason: `only ${p.available} left — quantity reduced` });
+      }
+    }
+
     const unitPrice = variant.websitePrice;
     priced.push({
       slug: p.slug,
       variantKey: variant.key,
       variantLabel: variant.label,
-      qty: l.qty,
+      qty,
       modelCode: p.modelCode,
       name: p.name,
       unit: p.uom,
       photoPath: p.photos[0]?.path ?? null,
       catalogueItemId: p.id,
       unitPrice,
-      lineTotal: round2(unitPrice * l.qty),
+      lineTotal: round2(unitPrice * qty),
     });
   }
 

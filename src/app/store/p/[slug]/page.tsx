@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { storeProductBySlug } from "@/lib/store-catalog";
+import { inStock, storeProductBySlug } from "@/lib/store-catalog";
 import { peso } from "../../product-card";
 import { AddToCart } from "../../add-to-cart";
 
@@ -107,7 +107,25 @@ export default async function StoreProductPage({ params }: { params: Promise<{ s
                 </ul>
               )}
               <p className="text-xs text-gray-500">Price is VAT-inclusive and covers online processing.</p>
-              <AddToCart slug={p.slug} variants={p.variants} />
+              {inStock(p) ? (
+                <>
+                  {p.available != null && p.available <= 5 && (
+                    <p className="text-xs font-medium text-amber-700">Only {p.available} left in stock.</p>
+                  )}
+                  <AddToCart slug={p.slug} variants={p.variants} max={p.available ?? undefined} />
+                </>
+              ) : (
+                <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-sm font-semibold text-gray-700">Out of stock</div>
+                  <p className="text-sm text-gray-600">
+                    This item isn&rsquo;t available right now. Send us a request and we&rsquo;ll tell you when it&rsquo;s
+                    back, or quote you an alternative.
+                  </p>
+                  <Link href="/rfq" className="inline-block rounded-md border border-[#ED1C24] px-3 py-1.5 text-sm font-semibold text-[#ED1C24] hover:bg-[#ED1C24]/10">
+                    Enquire about this item
+                  </Link>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-3 rounded-lg border p-4">

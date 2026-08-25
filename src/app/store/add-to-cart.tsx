@@ -9,13 +9,18 @@ import { MAX_LINE_QTY } from "@/lib/store-cart";
 export function AddToCart({
   slug,
   variants,
+  max,
 }: {
   slug: string;
   variants: { key: string; label: string; websitePrice: number }[];
+  /** Free-to-issue stock, when the item is tracked in inventory. */
+  max?: number;
 }) {
   const [variantKey, setVariantKey] = useState(variants[0]?.key ?? "default");
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
+  // Never let the box offer more than we hold (the server enforces this too).
+  const cap = Math.max(1, Math.min(MAX_LINE_QTY, max ?? MAX_LINE_QTY));
 
   function add() {
     addToCart(slug, variantKey, qty);
@@ -48,9 +53,9 @@ export function AddToCart({
           <input
             type="number"
             min={1}
-            max={MAX_LINE_QTY}
+            max={cap}
             value={qty}
-            onChange={(e) => setQty(Math.max(1, Math.min(MAX_LINE_QTY, Math.floor(Number(e.target.value)) || 1)))}
+            onChange={(e) => setQty(Math.max(1, Math.min(cap, Math.floor(Number(e.target.value)) || 1)))}
             className="h-10 w-20 rounded-md border bg-white px-2 text-sm"
           />
         </label>

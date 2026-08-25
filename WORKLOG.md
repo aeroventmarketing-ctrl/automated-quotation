@@ -1,3 +1,31 @@
+## 2026-08-25 · Unification Phase B5 — stock gate, ERP handoff & order emails
+- **Request (owner).** Two decisions taken: a paid order becomes a **counter sale with stock issued by hand** (not
+  auto-deducted), and the store **blocks out-of-stock items** rather than accepting the order anyway.
+- **Gap this closes.** Before B5 the storefront sold with **no stock check at all** (you could buy what we don't have),
+  a paid order sat at `PAID` invisible to the ERP, and **nobody was notified** an order had arrived.
+- **Change.**
+  - `lib/store-stock.ts` — joins a store product to inventory on the shared **Item Code** (`modelCode` ↔ `sku`, the
+    same standard the MRF matcher uses), falling back to exact name. Multi-location rows are **summed**, with the
+    fullest row as the issue point. An untracked item is `null` = **sellable** (a drop-shipped resale item mustn't be
+    blocked by a missing ledger row); only a *tracked* item at 0 is out of stock.
+  - Storefront: `StoreProduct.available` + `inStock()`. Cards and the product page show **Out of stock** (with an
+    "Enquire" link to `/rfq`), a low-stock note under 5, and the qty box is capped at what's on hand.
+  - `priceCart()` enforces it **server-side** (the gate that matters): an out-of-stock line is dropped, and a line
+    asking for more than we hold is **trimmed to what's there** with a reason shown, rather than silently failing.
+  - `lib/store-erp.ts` — `handOffStoreOrderToErp`: a PAID order becomes a **DRAFT counter sale**, so a web sale is the
+    same record type as a walk-in and flows into sales reports / P&L. **Deliberately DRAFT** — completing a counter sale
+    is what issues stock, and that stays a human step, so an oversold or mis-matched line is caught before inventory
+    moves. Lines carry `stockItemId` where matched. Customer resolved **by email** (repeat buyers accumulate on one
+    client record). Idempotent, with an in-transaction re-check so racing webhooks can't double-create.
+    `soldById` uses an `"online-store"` sentinel — it has no FK and gates only "who may discard this draft", so a web
+    order's draft is admin-only to discard.
+  - `lib/store-notify.ts` — buyer receipt + a new-order alert to Accounting / Logistics / Admins (with a direct link to
+    the draft counter sale). Best-effort by design.
+  - Both hooked into `markStoreOrderPaid`, and **only on the call that actually flipped the row**, so a duplicate
+    webhook can't re-send emails or re-create the sale. Both are wrapped so a failure **never** un-pays a paid order —
+    it's logged and the order stays PAID for a human.
+- **Verified:** `next build` clean; typecheck + lint clean.
+
 ## 2026-08-25 · Unification Phase B4 — storefront payment (HitPay + PayPal)
 - **Request (owner).** Online payment via **HitPay** and **PayPal**. Migration `0046` confirmed applied (both tables
   RLS-on).

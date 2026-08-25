@@ -13,6 +13,8 @@
  *    request, so a forged callback can't lower the price.
  */
 import { prisma } from "@/lib/db";
+import { handOffStoreOrderToErp } from "@/lib/store-erp";
+import { notifyStoreOrderPaid } from "@/lib/store-notify";
 
 export type SettleResult =
   | { ok: true; alreadyPaid: boolean; orderNumber: string }
@@ -57,5 +59,26 @@ export async function markStoreOrderPaid(params: {
     where: { id: order.id, status: "PENDING_PAYMENT" },
     data: { status: "PAID", provider, providerRef, paidAt: new Date() },
   });
-  return { ok: true, alreadyPaid: res.count === 0, orderNumber: order.orderNumber };
+  const alreadyPaid = res.count === 0;
+
+  // Post-payment work: hand the order to the ERP as a DRAFT counter sale and
+  // tell the buyer + the sales team. Only the caller that actually flipped the
+  // row does this, so a duplicate webhook doesn't re-send emails.
+  //
+  // Both steps are best-effort ON PURPOSE: the money has already changed hands,
+  // so a failure here must never turn a paid order back into an unpaid one. It
+  // is logged, and the order stays PAID for a human to pick up.
+  if (!alreadyPaid) {
+    let counterSaleId: string | null = null;
+    try {
+      const handoff = await handOffStoreOrderToErp(order.orderNumber);
+      if (handoff.ok) counterSaleId = handoff.counterSaleId;
+      else console.error(`store ERP handoff skipped for ${order.orderNumber}: ${handoff.reason}`);
+    } catch (e) {
+      console.error(`store ERP handoff threw for ${order.orderNumber}`, e);
+    }
+    await notifyStoreOrderPaid(order.orderNumber, counterSaleId);
+  }
+
+  return { ok: true, alreadyPaid, orderNumber: order.orderNumber };
 }
