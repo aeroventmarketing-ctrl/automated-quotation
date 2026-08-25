@@ -52,8 +52,15 @@ export async function GET(req: NextRequest) {
       runMarketingRecurring({ live: true }),
     ]);
     // Stamp the run so the schedule gate advances (merge to preserve other fields).
-    await setFollowUpSettings({ ...settings, lastRunAt: now.toISOString() });
-    return NextResponse.json({ ran: true, forced: force, reason: gate.reason, followUps, marketing, scheduled, abTests });
+    //
+    // EXCEPT when the run was cut short by its time budget (`deferred` > 0): the
+    // remaining messages were due and within the user's per-run cap, so leaving
+    // the stamp alone lets the next hourly cron pick them up instead of waiting
+    // for the next scheduled slot. Cap throttling does NOT defer — a per-run cap
+    // (domain warm-up) still sends exactly once per scheduled run.
+    const deferred = followUps.deferred > 0;
+    if (!deferred) await setFollowUpSettings({ ...settings, lastRunAt: now.toISOString() });
+    return NextResponse.json({ ran: true, forced: force, reason: gate.reason, continuesNextHour: deferred, followUps, marketing, scheduled, abTests });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Follow-up run failed";
     return NextResponse.json({ error: message }, { status: 500 });

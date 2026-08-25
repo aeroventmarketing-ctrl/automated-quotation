@@ -1,3 +1,23 @@
+## 2026-08-25 · Follow-up email — "unlimited" per run stopped at ~25 (same timeout class as the SMS fix)
+- **Bug (owner).** **Max emails per run = 0 (unlimited)** but Resend's history shows only ~25 sent per run. Same root
+  cause as the SMS fix (#417), which only batched the SMS pass: the **email** pass still sent **one at a time**
+  (Resend call + a quote stamp + a registry write each), so the 60s cron function was killed after ~25 — and because
+  `lastRunAt` had already been stamped, the rest waited a whole day.
+- **Change.**
+  - `email/resend.ts` — `sendEmail` retries **429 / 5xx** with a short capped backoff (honours `Retry-After`), so
+    concurrent sends survive Resend's per-second rate limit instead of losing the message.
+  - `follow-up-runner.ts` — shared `runBatched(items, size, deadline, fn)` helper; the **quote-follow-up**,
+    **inquiry check-in** and **SMS** passes now all evaluate first, then send in bounded concurrent batches
+    (email 4, SMS 8) under a **45s send budget** (the 60s function ceiling minus headroom), so a run always stops
+    cleanly and reports what happened rather than being killed mid-write. Per-run cap semantics unchanged — the cap
+    counts what a run *attempts*, and email + inquiry check-ins still share one budget.
+  - New `FollowUpRunResult.deferred` — messages that were due and **within** the cap but not attempted because the
+    time budget ran out. `api/cron/follow-ups` **skips stamping `lastRunAt` when `deferred > 0`**, so the next hourly
+    tick drains the backlog instead of waiting for the next scheduled slot. **Cap throttling never defers**, so a
+    domain-warm-up cap (e.g. 24/run) still sends exactly once per scheduled run.
+- Typecheck + lint clean. (Resend's batch endpoint would be faster still, but resend.com is blocked from this
+  environment so its contract couldn't be verified — this uses only behaviour already exercised in production.)
+
 ## 2026-08-25 · Purchasing — bulk delete on the Rejected / Cancelled tabs · FROZEN Phase 4 (owner-approved)
 - **Request (owner).** Add a bulk-delete option to the **Rejected** and **Cancelled** purchasing tabs (42 + 5 rows to
   clear one at a time otherwise).
