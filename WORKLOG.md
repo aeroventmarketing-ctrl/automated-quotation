@@ -1,3 +1,48 @@
+## 2026-08-25 · Unification Phase B2/B3 — cart, checkout & the store-order model
+- **Providers chosen (owner): HitPay + PayPal.** Verified both are integrable from this environment: gateway *docs*
+  are egress-blocked (403), but **npm is reachable**, so HitPay's contract was read from a published client's source
+  — `POST {base}/payment-requests` (form-encoded, headers `X-BUSINESS-API-KEY` + `X-Requested-With`), base
+  `https://api.sandbox.hit-pay.com/v1` / `https://api.hit-pay.com/v1`, response carries the hosted-checkout `url`, and
+  the **webhook HMAC** is sorted-key `k+v` concatenation HMAC-SHA256'd with the API salt. PayPal has an official SDK
+  (`@paypal/paypal-server-sdk`). Payment itself lands in B4.
+- **Change.**
+  - **Schema + migration `0046_store_orders`** — `StoreOrder` / `StoreOrderItem` + `StoreOrderStatus`
+    (PENDING_PAYMENT / PAID / CANCELLED / FULFILLED). Item rows **snapshot** model code, name and website price, so a
+    later catalogue price change never rewrites a placed order. `provider` / `providerRef` / `paidAt` are ready for
+    B4; `counterSaleId` for the B5 ERP handoff. Ends with the mandatory enable-RLS block.
+  - `lib/store-cart.ts` — the browser stores **only slug + variant + qty**; `priceCart()` re-reads the catalogue and
+    recomputes every line server-side, so a tampered or stale cart can't buy at the wrong price. Unlisted / quote-only
+    / unpriced lines are dropped with a reason shown to the shopper.
+  - `store/cart-store.ts` — localStorage cart over `useSyncExternalStore` (header badge, product page and cart page
+    stay in step, including across tabs). `add-to-cart.tsx`, `cart-link.tsx`.
+  - Routes `/store/cart`, `/store/checkout`, `/store/order/[orderNumber]` (confirmation, reachable by order number).
+  - `store/actions.ts` — `priceCartAction` + `placeOrder`. Public actions, so both re-derive prices server-side;
+    `placeOrder` validates the buyer fields and claims a `WEB-#####` number in a transaction.
+- **Verified:** `next build` registers every store route; typecheck + lint clean.
+- **Next:** B4 payment (HitPay + PayPal + webhooks), B5 paid order → ERP counter sale + stock.
+- **Owner action:** apply migration `0046` in Supabase (the build does not run `migrate deploy`).
+
+## 2026-08-25 · Unification Phase B1 — the public storefront (catalogue, categories, product pages)
+- **Request (owner).** Proceed with unification + website creation; scope chosen: **full e-commerce** (cart + online
+  payment). B1 is the storefront foundation every later slice builds on.
+- **Change (all new, nothing existing touched except one middleware line).**
+  - `lib/store-catalog.ts` — storefront reads of the SAME `CatalogueItem` records the ERP uses, filtered to
+    `storeListed`: slug (explicit or derived), category label + slug, photos, priced **variants** and the DERIVED
+    website price (AeroQuote ÷ 0.95). `isQuoteOnly` families carry **no price and no cart**. Also
+    `isPublicStorePhoto()` — the gate below.
+  - Routes: `/store` (all listed products + category chips), `/store/c/[category]`, `/store/p/[slug]` (photos,
+    variants, description; quote-only items route to `/rfq` instead of a price). Shared `layout.tsx` shell +
+    `product-card.tsx`, in AeroVent red `#ED1C24`.
+  - `api/store-image` — **public** product photo. Deliberately not an open bucket proxy: the path must be under
+    `store/` AND be a photo of a **listed** item, so drafts and every other object stay unreachable. The admin
+    `api/store-uploads` (upload + draft preview) stays admin-only.
+  - `middleware.ts` — `/store` + `/api/store-image` added to `PUBLIC_PATHS` (shoppers aren't signed in).
+- **Verified:** `next build` registers all four routes; typecheck + lint clean. (The sandbox build's `/reset-password`
+  prerender error is pre-existing — that page needs Supabase env vars, absent here; the build passes once they're set.)
+- **Next:** B2 cart + checkout, B3 order model, B4 payment gateway (needs the provider decision — this environment's
+  egress blocks gateway docs, so the plan is to read a provider SDK's types from npm, which IS reachable), B5 ERP
+  handoff of a paid order.
+
 ## 2026-08-25 · Follow-up email — "unlimited" per run stopped at ~25 (same timeout class as the SMS fix)
 - **Bug (owner).** **Max emails per run = 0 (unlimited)** but Resend's history shows only ~25 sent per run. Same root
   cause as the SMS fix (#417), which only batched the SMS pass: the **email** pass still sent **one at a time**
