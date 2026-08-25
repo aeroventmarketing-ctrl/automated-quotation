@@ -8,6 +8,15 @@ import type { POLine } from "@/lib/purchase-order";
 export type CatalogPrices = Record<string, Record<string, number>>; // productNameLower → companyLower → price
 export type CatalogSuppliers = Record<string, string[]>; // productNameLower → supplier company[]
 
+/**
+ * Pseudo-company key inside a CatalogPrices entry holding the product's
+ * REFERENCE price — the lowest supplier price (products' "Lowest price"), or
+ * the stock item's unit cost (inventory) when no supplier price is saved. Used
+ * to autofill a PO line's unit price when the chosen supplier has no price of
+ * its own. Never collides with a real company name.
+ */
+export const REF_PRICE_KEY = "__ref__";
+
 // Compare on alphanumerics only, so punctuation / spacing differences don't block a
 // match (e.g. "KDK Ceiling Cassette · 32CHH" vs "CEILING CASSETTE - KDK - 32CHH").
 const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -81,8 +90,19 @@ export function catalogPriceFor(description: string, companyLower: string, catal
 export function catalogReferencePriceFor(description: string, catalog: CatalogPrices): number | undefined {
   const key = matchKey(description, Object.keys(catalog));
   if (!key) return undefined;
-  const prices = [...new Set(Object.values(catalog[key] ?? {}).filter((n) => n > 0))];
-  return prices.length === 1 ? prices[0] : undefined;
+  const entry = catalog[key] ?? {};
+  const prices = [...new Set(Object.entries(entry).filter(([co, n]) => co !== REF_PRICE_KEY && n > 0).map(([, n]) => n))];
+  if (prices.length === 1) return prices[0];
+  // No supplier price at all → the reference price (lowest price / unit cost).
+  if (prices.length === 0 && entry[REF_PRICE_KEY] > 0) return entry[REF_PRICE_KEY];
+  return undefined;
+}
+
+/** The reference (lowest price / unit cost) figure for a line description, if any. */
+export function fallbackPriceFor(description: string, catalog: CatalogPrices): number | undefined {
+  const key = matchKey(description, Object.keys(catalog));
+  const ref = key ? catalog[key]?.[REF_PRICE_KEY] : undefined;
+  return ref && ref > 0 ? ref : undefined;
 }
 
 /** Seed each blank line's unit price with its unambiguous catalogue reference price. */
@@ -101,7 +121,15 @@ export function withCatalogPrices(lines: POLine[], company: string, catalog: Cat
   return lines.map((l) => {
     if (l.unitPrice && !force) return l;
     const price = catalogPriceFor(l.description, co, catalog);
-    return price ? { ...l, unitPrice: String(price) } : l;
+    if (price) return { ...l, unitPrice: String(price) };
+    // The chosen supplier has no saved price — fill a blank line from the
+    // reference price (lowest supplier price / inventory unit cost) instead. A
+    // price the purchaser already typed is never overwritten by the fallback.
+    if (!l.unitPrice) {
+      const ref = fallbackPriceFor(l.description, catalog);
+      if (ref) return { ...l, unitPrice: String(ref) };
+    }
+    return l;
   });
 }
 

@@ -8,7 +8,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { nextProductSku } from "@/lib/product-catalog";
 import { coerceProductSuppliers, type ProductSupplierLink } from "@/lib/products";
-import { getSuppliers, rememberSupplier } from "@/lib/suppliers";
+import { getSuppliers, rememberSupplier, isPricedSupplierName } from "@/lib/suppliers";
 import { setOfficeResaleProduct } from "@/lib/office-resale";
 
 async function requireProductManager() {
@@ -188,6 +188,27 @@ interface ImportGroup {
 }
 
 /**
+ * Parse a products-export "Suppliers" cell into per-supplier links. The export
+ * packs everything into one cell — `NAME ₱price` pairs separated by ";", e.g.
+ * "SMARTPLUS PAINT CENTER ₱800; YALE HARDWARE CORPORATION ₱800" — so the embedded
+ * price attaches to its supplier instead of becoming part of a junk company name.
+ * A plain cell with no ₱ keeps working (one company; the row's price column, e.g.
+ * "Lowest price", supplies the price when the cell names a single supplier).
+ */
+function parseSupplierCell(raw: string, rowPrice?: number): { company: string; price?: number }[] {
+  const parts = raw.split(";").map((p) => p.trim()).filter(Boolean);
+  return parts
+    .map((part) => {
+      const m = part.match(/\s*(?:₱|PHP)\s*([\d,]+(?:\.\d+)?)\s*$/iu);
+      const company = (m ? part.slice(0, part.length - m[0].length) : part).trim();
+      const embedded = m ? Number(m[1].replace(/,/g, "")) : undefined;
+      const price = embedded && embedded > 0 ? embedded : parts.length === 1 && rowPrice && rowPrice > 0 ? rowPrice : undefined;
+      return { company, price };
+    })
+    .filter((s) => s.company);
+}
+
+/**
  * Import products from an uploaded CSV or .xlsx file. Columns: name, unit,
  * category, note, supplier, code, price — only "name" is required. Rows with the
  * same product name are merged (so a product can list several suppliers, one per
@@ -259,14 +280,18 @@ export async function importProducts(
     if (!g.unit && iUnit >= 0 && row[iUnit]?.trim()) g.unit = row[iUnit].trim();
     if (!g.category && iCat >= 0 && row[iCat]?.trim()) g.category = row[iCat].trim();
     if (!g.note && iNote >= 0 && row[iNote]?.trim()) g.note = row[iNote].trim();
-    const company = iSup >= 0 ? (row[iSup] ?? "").trim() : "";
-    if (company && !g.suppliers.some((s) => s.company.toLowerCase() === company.toLowerCase())) {
-      g.suppliers.push({
-        supplierId: "",
-        company,
-        code: iCode >= 0 ? row[iCode]?.trim() || undefined : undefined,
-        price: iPrice >= 0 ? importNum(row[iPrice]) : undefined,
-      });
+    const supCell = iSup >= 0 ? (row[iSup] ?? "").trim() : "";
+    if (supCell) {
+      const rowPrice = iPrice >= 0 ? importNum(row[iPrice]) : undefined;
+      const parsed = parseSupplierCell(supCell, rowPrice);
+      // A supplier code column describes a single supplier — only attach it when
+      // the cell names exactly one.
+      const code = parsed.length === 1 && iCode >= 0 ? row[iCode]?.trim() || undefined : undefined;
+      for (const s of parsed) {
+        if (!g.suppliers.some((x) => x.company.toLowerCase() === s.company.toLowerCase())) {
+          g.suppliers.push({ supplierId: "", company: s.company, code, price: s.price });
+        }
+      }
     }
     groups.set(key, g);
   }
@@ -299,10 +324,17 @@ export async function importProducts(
       let existing = g.sku ? await prisma.product.findUnique({ where: { sku: g.sku } }) : null;
       if (!existing) existing = await prisma.product.findFirst({ where: { active: true, name: { equals: g.name, mode: "insensitive" } } });
       if (existing) {
-        // Merge new suppliers into the existing ones (dedup by company).
-        const cur = coerceProductSuppliers(existing.suppliers);
+        // Merge new suppliers into the existing ones (dedup by company). Stale
+        // junk links from raw-export imports ("NAME ₱price" as a company) are
+        // dropped — the parsed clean link replaces them — and the file's price
+        // refreshes an existing link's price.
+        const cur = coerceProductSuppliers(existing.suppliers).filter((s) => !isPricedSupplierName(s.company));
         const merged = [...cur];
-        for (const s of g.suppliers) if (!merged.some((m) => m.company.toLowerCase() === s.company.toLowerCase())) merged.push(s);
+        for (const s of g.suppliers) {
+          const at = merged.findIndex((m) => m.company.toLowerCase() === s.company.toLowerCase());
+          if (at < 0) merged.push(s);
+          else merged[at] = { ...merged[at], price: s.price ?? merged[at].price, code: s.code ?? merged[at].code, supplierId: merged[at].supplierId || s.supplierId };
+        }
         await prisma.product.update({
           where: { id: existing.id },
           data: {

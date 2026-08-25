@@ -15,6 +15,7 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import { coercePurchaseOrder, poLineFromPRItem, isIssuedFromStockLine, stripToPurchasePrefix } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
+import { REF_PRICE_KEY } from "@/lib/po-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
@@ -107,6 +108,32 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     for (const s of p.suppliers) if (s.price && s.price > 0) m[s.company.toLowerCase()] = s.price;
     if (Object.keys(m).length) catalogPrices[p.name.trim().toLowerCase()] = m;
   }
+  // Reference price per item, keyed under REF_PRICE_KEY: the LOWEST supplier
+  // price (products' "Lowest price"), else the stock item's unit cost
+  // (inventory's "Unit cost"). Autofills a PO line's unit price when the chosen
+  // supplier has no saved price of its own.
+  const stockCosts = await prisma.stockItem
+    .findMany({ where: { active: true }, select: { name: true, unitCost: true } })
+    .catch(() => [] as { name: string; unitCost: unknown }[]);
+  const costByName = new Map<string, number>();
+  for (const si of stockCosts) {
+    const n = si.name.trim().toLowerCase();
+    const c = Number(si.unitCost);
+    if (c > 0 && !costByName.has(n)) costByName.set(n, c);
+  }
+  for (const p of products) {
+    const key = p.name.trim().toLowerCase();
+    const m = catalogPrices[key] ?? {};
+    const supplierPrices = Object.values(m).filter((n) => n > 0);
+    const ref = supplierPrices.length ? Math.min(...supplierPrices) : costByName.get(key) ?? 0;
+    if (ref > 0) {
+      m[REF_PRICE_KEY] = ref;
+      catalogPrices[key] = m;
+    }
+  }
+  // Inventory-only items (stocked but not in the product catalogue) still offer
+  // their unit cost as the reference price.
+  for (const [n, c] of costByName) if (!catalogPrices[n]) catalogPrices[n] = { [REF_PRICE_KEY]: c };
 
   try {
     const [orderPrs, deptPrs] = await Promise.all([
