@@ -1,3 +1,25 @@
+## 2026-08-25 · Store — a listed product can be sold whatever its family (price decides, not family)
+- **Bug (owner).** Listed the Östberg CK inline duct fans, saved slug/photo/description ("Saved."), but `/store` still
+  said *"No products are listed yet."*
+- **Root cause.** Östberg CK is family `TUBULAR_INLINE`, which is in `FABRICATED_FAN_FAMILIES` → `isQuoteOnly()` true →
+  the admin row rendered the **"Quote-only" badge INSTEAD of the Listed/Draft toggle**, and the edit panel **hid the
+  Listed checkbox**. So "Save Listing" stored the cosmetic fields but `storeListed` stayed `false` and the storefront
+  (which only reads listed items) showed nothing. There was **no way at all** to put a fabricated-family item on the
+  store.
+- **The real conflict.** `family` describes the *type* of fan; `isQuoteOnly` was using it to mean *"we fabricate this"*.
+  An **Östberg / KDK** inline fan is a TUBULAR_INLINE by type but a **bought-in resale product** commercially — so
+  family cannot decide sellability. Only ACCESSORY / SERVICE / OTHER were sellable, blocking every branded fan resold.
+- **Change (owner chose: admin decides per item).**
+  - Admin: the **Listed/Draft toggle now shows for every product**; the Quote-only badge is kept as *information* (with
+    a tooltip) beside it, and the edit panel's "Visible on storefront" checkbox is always available. The variant count
+    and both prices are now shown for every family — the price is what decides a cart, so it has to be visible.
+  - Storefront: `quoteOnly` is now **"has no catalogue price"**, not "is a fabricated family". A listed item with a
+    price gets a cart; without one it shows quote-on-request. Listing stays an explicit admin action, so nothing
+    reaches the store by accident.
+  - New `StoreProduct.fabricated` (from `isQuoteOnly(family)`) drives WORDING only: an unpriced fabricated fan still
+    reads *"Made to order — quoted by specification"*, while any other unpriced item reads *"Price on request"*.
+- Typecheck + lint + build clean.
+
 ## 2026-08-25 · Unification Phase B5 — stock gate, ERP handoff & order emails
 - **Request (owner).** Two decisions taken: a paid order becomes a **counter sale with stock issued by hand** (not
   auto-deducted), and the store **blocks out-of-stock items** rather than accepting the order anyway.

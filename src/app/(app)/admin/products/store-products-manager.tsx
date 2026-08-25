@@ -132,13 +132,19 @@ function RowView({
           <div className="font-mono text-[11px] text-muted-foreground">{row.modelCode}</div>
         </td>
         <td className="px-3 py-2"><span className="rounded border bg-muted px-2 py-0.5 text-[11px] font-semibold">{row.family}</span></td>
-        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{row.quoteOnly ? "—" : row.variants}</td>
-        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{row.quoteOnly ? "Quote" : peso(row.aeroquotePrice)}</td>
-        <td className="px-3 py-2 text-right font-semibold tabular-nums">{row.quoteOnly ? "Quote" : peso(row.websitePrice)}</td>
+        {/* Show the real figures for every family — the price is now what decides
+            whether a listed item gets a cart, so it must be visible here. "Quote"
+            means no catalogue price, i.e. listing it shows it as quote-on-request. */}
+        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{row.variants || "—"}</td>
+        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{row.aeroquotePrice != null ? peso(row.aeroquotePrice) : "Quote"}</td>
+        <td className="px-3 py-2 text-right font-semibold tabular-nums">{row.websitePrice != null ? peso(row.websitePrice) : "Quote"}</td>
+        {/* Every product can be listed, including the fabricated families — a
+            branded resale fan (Östberg, KDK…) is a fan by TYPE but bought in, so
+            family alone can't decide. The badge stays as information: a listed
+            item with no catalogue price shows on the store as "Quote on request"
+            rather than with a cart. */}
         <td className="px-3 py-2">
-          {row.quoteOnly ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">Quote-only</span>
-          ) : (
+          <div className="flex items-center gap-1.5">
             <button
               onClick={onToggle}
               disabled={busy}
@@ -147,7 +153,15 @@ function RowView({
               <span className={`h-1.5 w-1.5 rounded-full ${row.storeListed ? "bg-emerald-600" : "bg-muted-foreground"}`} />
               {busy ? "…" : row.storeListed ? "Listed" : "Draft"}
             </button>
-          )}
+            {row.quoteOnly && (
+              <span
+                title="Fabricated family — listing it shows it on the store as “Quote on request” unless it has a catalogue price."
+                className="inline-flex items-center rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700"
+              >
+                Quote-only
+              </span>
+            )}
+          </div>
         </td>
         <td className="px-3 py-2 text-right">
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onEdit}>{editing ? "Close" : "Edit listing"}</Button>
@@ -209,11 +223,15 @@ function StoreListingEditor({ row, onClose }: { row: StoreRow; onClose: () => vo
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="space-y-3">
-        {!row.quoteOnly && (
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={listed} onChange={(e) => setListed(e.target.checked)} />
-            <span className="font-medium">Visible on storefront</span>
-          </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={listed} onChange={(e) => setListed(e.target.checked)} />
+          <span className="font-medium">Visible on storefront</span>
+        </label>
+        {row.quoteOnly && (
+          <p className="text-[11px] text-violet-700">
+            This is a fabricated family. Listing it is fine — it shows with a cart if it has a catalogue price, and as
+            &ldquo;Quote on request&rdquo; if it doesn&rsquo;t.
+          </p>
         )}
         <label className="block space-y-1">
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">URL slug</span>
