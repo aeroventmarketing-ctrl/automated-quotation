@@ -1,3 +1,24 @@
+## 2026-08-25 · Unification Phase B1 — the public storefront (catalogue, categories, product pages)
+- **Request (owner).** Proceed with unification + website creation; scope chosen: **full e-commerce** (cart + online
+  payment). B1 is the storefront foundation every later slice builds on.
+- **Change (all new, nothing existing touched except one middleware line).**
+  - `lib/store-catalog.ts` — storefront reads of the SAME `CatalogueItem` records the ERP uses, filtered to
+    `storeListed`: slug (explicit or derived), category label + slug, photos, priced **variants** and the DERIVED
+    website price (AeroQuote ÷ 0.95). `isQuoteOnly` families carry **no price and no cart**. Also
+    `isPublicStorePhoto()` — the gate below.
+  - Routes: `/store` (all listed products + category chips), `/store/c/[category]`, `/store/p/[slug]` (photos,
+    variants, description; quote-only items route to `/rfq` instead of a price). Shared `layout.tsx` shell +
+    `product-card.tsx`, in AeroVent red `#ED1C24`.
+  - `api/store-image` — **public** product photo. Deliberately not an open bucket proxy: the path must be under
+    `store/` AND be a photo of a **listed** item, so drafts and every other object stay unreachable. The admin
+    `api/store-uploads` (upload + draft preview) stays admin-only.
+  - `middleware.ts` — `/store` + `/api/store-image` added to `PUBLIC_PATHS` (shoppers aren't signed in).
+- **Verified:** `next build` registers all four routes; typecheck + lint clean. (The sandbox build's `/reset-password`
+  prerender error is pre-existing — that page needs Supabase env vars, absent here; the build passes once they're set.)
+- **Next:** B2 cart + checkout, B3 order model, B4 payment gateway (needs the provider decision — this environment's
+  egress blocks gateway docs, so the plan is to read a provider SDK's types from npm, which IS reachable), B5 ERP
+  handoff of a paid order.
+
 ## 2026-08-25 · Follow-up email — "unlimited" per run stopped at ~25 (same timeout class as the SMS fix)
 - **Bug (owner).** **Max emails per run = 0 (unlimited)** but Resend's history shows only ~25 sent per run. Same root
   cause as the SMS fix (#417), which only batched the SMS pass: the **email** pass still sent **one at a time**
