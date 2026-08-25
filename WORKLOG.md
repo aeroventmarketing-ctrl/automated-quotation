@@ -1,3 +1,30 @@
+## 2026-08-25 · Unification Phase B4 — storefront payment (HitPay + PayPal)
+- **Request (owner).** Online payment via **HitPay** and **PayPal**. Migration `0046` confirmed applied (both tables
+  RLS-on).
+- **Change.** Hand-rolled fetch clients in the house style (no SDK dependency, like `resend.ts` / `semaphore.ts`);
+  contracts verified from published SDK source since gateway docs are egress-blocked.
+  - `lib/payments/hitpay.ts` — create / read a payment request (form-encoded, `X-BUSINESS-API-KEY`), and
+    `verifyHitpayHmac` (drop `hmac`, sort keys, concat `k+v`, HMAC-SHA256 with the API **salt**, **constant-time**
+    compare).
+  - `lib/payments/paypal.ts` — Orders v2: OAuth token → create order (intent CAPTURE, `approve` link) → capture.
+    An already-captured order (422 `ORDER_ALREADY_CAPTURED`) falls back to reading the order, so a double return is
+    harmless.
+  - `lib/store-payment.ts` — `markStoreOrderPaid`, the single settle path: **idempotent** (repeat webhooks / reloads),
+    **amount-verified** to the centavo against the order row, currency-checked, and applied with a conditional
+    `updateMany` on `PENDING_PAYMENT` so two concurrent webhooks can't both settle. A short payment is never accepted —
+    it's logged and left pending for a human.
+  - Routes `api/store/pay` (browser sends only the order number — the **amount comes from the order row**),
+    `api/store/hitpay-webhook` (rejects anything failing HMAC), `api/store/paypal-return` (captures against **our**
+    stored `providerRef`, not the query string, so a crafted URL can't attach someone else's payment).
+  - Order page gains pay buttons + paid / failed / cancelled states; options only appear for a configured provider.
+  - `middleware.ts` — `/api/store/` public (buyers have no session; gateways call server-to-server).
+- **Verified:** HMAC unit-tested — genuine callback passes; tampered amount, wrong salt, missing and short `hmac` all
+  rejected; key order irrelevant. `next build` registers every route; typecheck + lint clean.
+- **Owner action:** set `HITPAY_API_KEY`, `HITPAY_API_SALT`, `PAYPAL_CLIENT_ID`, `PAYPAL_SECRET` (+ optional
+  `HITPAY_ENV` / `PAYPAL_ENV`, default **sandbox**) in Vercel. Until then the buttons stay hidden and the order page
+  says payment isn't switched on. Point the HitPay webhook at `{appUrl}/api/store/hitpay-webhook`.
+- **Next:** B5 — paid order → ERP counter sale + stock deduction.
+
 ## 2026-08-25 · Unification Phase B2/B3 — cart, checkout & the store-order model
 - **Providers chosen (owner): HitPay + PayPal.** Verified both are integrable from this environment: gateway *docs*
   are egress-blocked (403), but **npm is reachable**, so HitPay's contract was read from a published client's source
