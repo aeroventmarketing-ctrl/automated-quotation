@@ -21,9 +21,10 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ id
   return (
     <div className="mx-auto max-w-3xl p-6">
       <div className="rounded-lg border bg-white p-8 shadow-sm">
-        <div className="mb-6 flex items-start justify-between border-b-2 border-primary pb-4">
+        {/* AeroVent's standard brand red (#ED1C24), matching the logo. */}
+        <div className="mb-6 flex items-start justify-between border-b-2 border-[#ED1C24] pb-4">
           <div>
-            <div className="text-xl font-bold text-primary">{COMPANY.name}</div>
+            <div className="text-xl font-bold text-[#ED1C24]">{COMPANY.name}</div>
             <div className="text-xs text-muted-foreground">{COMPANY.tagline}</div>
             <div className="text-xs text-muted-foreground">{COMPANY.email} · {COMPANY.website}</div>
           </div>
@@ -43,7 +44,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ id
 
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-primary text-primary-foreground">
+            <tr className="bg-[#ED1C24] text-white">
               <th className="p-2 text-left">#</th>
               <th className="p-2 text-left">Description</th>
               <th className="p-2 text-right">Qty</th>
