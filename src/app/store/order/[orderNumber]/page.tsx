@@ -34,18 +34,18 @@ export default async function StoreOrderPage({
   const paid = order.status === "PAID" || order.status === "FULFILLED";
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-2xl space-y-5 px-4 py-10 lg:px-8">
       {paid ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5">
-          <h1 className="text-lg font-bold text-emerald-900">Payment received — order {order.orderNumber}</h1>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-extrabold tracking-tight text-emerald-900">Payment received — order {order.orderNumber}</h1>
           <p className="mt-1 text-sm text-emerald-900/80">
             Thank you, {order.buyerName}. Your payment is confirmed and your order is with our sales team. We&rsquo;ll
             contact you at <strong>{order.buyerEmail}</strong> to arrange delivery.
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 p-5">
-          <h1 className="text-lg font-bold text-sky-900">Order {order.orderNumber} placed</h1>
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-6">
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-extrabold tracking-tight text-sky-900">Order {order.orderNumber} placed</h1>
           <p className="mt-1 text-sm text-sky-900/80">
             Thank you, {order.buyerName}. Your order is reserved — complete the payment below to confirm it. We&rsquo;ll
             email <strong>{order.buyerEmail}</strong> once it&rsquo;s through.
@@ -57,24 +57,24 @@ export default async function StoreOrderPage({
           banner: either the order shows PAID above, or the webhook is still in
           flight and a refresh will show it. */}
       {!paid && sp.payfailed && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-[13.5px] text-red-800">
           That payment didn&rsquo;t go through. Nothing has been charged — you can try again below.
         </div>
       )}
       {!paid && sp.cancelled && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-[13.5px] text-amber-900">
           Payment was cancelled. Your order is still reserved — you can pay whenever you&rsquo;re ready.
         </div>
       )}
       {!paid && sp.paid && (
-        <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-[13.5px] text-sky-900">
           We&rsquo;re confirming your payment with the provider. Refresh in a moment — if it stays like this, our team
           will follow it up with you.
         </div>
       )}
 
-      <div className="rounded-lg border">
-        <div className="border-b px-4 py-2 text-sm font-semibold">What you ordered</div>
+      <div className="overflow-hidden rounded-2xl border border-slate-200">
+        <div className="border-b border-slate-200 bg-slate-50/60 px-4 py-3 font-[family-name:var(--font-display)] text-[13.5px] font-bold text-slate-900">What you ordered</div>
         <ul className="divide-y text-sm">
           {order.items.map((it) => (
             <li key={it.id} className="flex justify-between gap-3 px-4 py-2">
@@ -87,26 +87,26 @@ export default async function StoreOrderPage({
             </li>
           ))}
         </ul>
-        <div className="flex justify-between border-t px-4 py-2 font-bold">
+        <div className="flex items-baseline justify-between border-t border-slate-200 bg-slate-50/60 px-4 py-3 font-bold">
           <span>Total</span>
-          <span className="tabular-nums text-[#ED1C24]">{peso(Number(order.total))}</span>
+          <span className="font-[family-name:var(--font-display)] text-[20px] font-extrabold tabular-nums tracking-tight text-slate-900">{peso(Number(order.total))}</span>
         </div>
       </div>
 
       {!paid && (
-        <div className="rounded-lg border p-4">
-          <div className="mb-2 text-sm font-semibold">Pay for this order</div>
+        <div className="rounded-2xl border border-slate-200 p-5">
+          <div className="mb-3 font-[family-name:var(--font-display)] text-[14px] font-bold text-slate-900">Pay for this order</div>
           <PayButtons orderNumber={order.orderNumber} hitpay={hitpayConfigured()} paypal={paypalConfigured()} />
         </div>
       )}
 
-      <div className="rounded-lg border p-4 text-sm">
-        <div className="font-semibold">Delivery to</div>
+      <div className="rounded-2xl border border-slate-200 p-5 text-sm">
+        <div className="font-[family-name:var(--font-display)] text-[13.5px] font-bold text-slate-900">Delivery to</div>
         <p className="whitespace-pre-line text-gray-700">{order.deliveryAddress}</p>
         <p className="mt-1 text-xs text-gray-500">{order.buyerPhone}</p>
       </div>
 
-      <Link href="/store" className="inline-block rounded-md border px-4 py-2 text-sm font-medium hover:bg-gray-50">
+      <Link href="/store" className="inline-block rounded-full border border-slate-200 px-5 py-2.5 text-[13.5px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50">
         ← Continue shopping
       </Link>
     </div>

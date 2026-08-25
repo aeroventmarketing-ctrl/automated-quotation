@@ -57,7 +57,7 @@ export function PayButtons({
             type="button"
             onClick={() => pay("hitpay")}
             disabled={busy !== null}
-            className="rounded-md bg-[#ED1C24] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#c2141a] disabled:opacity-60"
+            className="rounded-full bg-[var(--store-accent)] px-5 py-3 text-[14px] font-bold text-white transition-colors hover:bg-[var(--store-accent-dark)] disabled:opacity-60"
           >
             {busy === "hitpay" ? "Opening checkout…" : "Pay with card / GCash / Maya"}
           </button>
@@ -67,7 +67,7 @@ export function PayButtons({
             type="button"
             onClick={() => pay("paypal")}
             disabled={busy !== null}
-            className="rounded-md border-2 border-[#003087] px-4 py-2.5 text-sm font-semibold text-[#003087] transition-colors hover:bg-[#003087]/5 disabled:opacity-60"
+            className="rounded-full border-2 border-[#003087] px-5 py-3 text-[14px] font-bold text-[#003087] transition-colors hover:bg-[#003087]/5 disabled:opacity-60"
           >
             {busy === "paypal" ? "Opening PayPal…" : "Pay with PayPal"}
           </button>

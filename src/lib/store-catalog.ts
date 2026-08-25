@@ -208,13 +208,29 @@ export async function storeProductBySlug(slug: string): Promise<StoreProduct | n
 export async function isPublicStorePhoto(path: string): Promise<boolean> {
   const clean = (path ?? "").trim();
   if (!clean.startsWith("store/")) return false;
+  return (await publicPhotoPaths()).has(clean);
+}
+
+/**
+ * The set of photo paths belonging to listed products, cached briefly in-process.
+ * Every <img> on the storefront hits the image route, and without this each one
+ * costs its own database scan — the shop's hottest path. A short TTL means a
+ * newly-published photo appears within a minute.
+ */
+let photoCache: { at: number; paths: Set<string> } | null = null;
+const PHOTO_CACHE_MS = 60_000;
+
+async function publicPhotoPaths(): Promise<Set<string>> {
+  const now = Date.now();
+  if (photoCache && now - photoCache.at < PHOTO_CACHE_MS) return photoCache.paths;
+
   const items = await prisma.catalogueItem
     .findMany({ where: { active: true, storeListed: true }, select: { storePhotos: true } })
     .catch(() => [] as { storePhotos: unknown }[]);
+  const paths = new Set<string>();
   for (const it of items) {
-    for (const photo of storeFieldsOf({ storePhotos: it.storePhotos }).storePhotos) {
-      if (photo.path === clean) return true;
-    }
+    for (const photo of storeFieldsOf({ storePhotos: it.storePhotos }).storePhotos) paths.add(photo.path);
   }
-  return false;
+  photoCache = { at: now, paths };
+  return paths;
 }
