@@ -1,3 +1,16 @@
+## 2026-08-25 · Collection Receipt read — tally the GROSS settlement amount (not net cash)
+- **Request (owner, practice reading).** On a Collection Receipt the amount that must tally with the Sales Invoice is
+  the **gross settlement amount** in the left "IN SETTLEMENT OF THE FOLLOWING" box (e.g. ₱11,200.00) — the "( PHP )" /
+  bottom TOTAL is often the **net cash** after EWT withheld (₱11,100.00 = 11,200 − 100 EWT) and was being flagged as a
+  false mismatch.
+- **Change (`api/ai/read-sale-doc`).**
+  - Prompt: a Collection Receipt's `amount` is the gross settlement amount from the settlement box, never the net cash;
+    if both appear and differ, return the gross and note the net in warnings.
+  - Server-side safety net: if the read amount is short of the order total by exactly the order's recorded **EWT
+    withheld**, it still tallies (`amountMatches` true, with an explanatory note) — covers receipts that only print the
+    net cash figure.
+- Typecheck + lint clean.
+
 ## 2026-08-24 · Sales Summary (Vatable) — Excel / PDF / Email exports (match WON report)
 - **Request (owner).** Give the Sales Summary the same export row as the WON Sales Report — add **Excel**, **PDF** and
   **Email** beside **View** / **Print**.
