@@ -75,7 +75,7 @@ export default async function StoreProductPage({ params }: { params: Promise<{ s
             </div>
           </div>
 
-          {p.quoteOnly ? (
+          {p.quoteOnly && p.fabricated ? (
             <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
               <div className="text-sm font-semibold text-amber-900">Made to order — quoted by specification</div>
               <p className="text-sm text-amber-900/80">

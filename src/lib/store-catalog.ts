@@ -42,8 +42,14 @@ export interface StoreProduct {
   sizeLabel: string | null;
   uom: string;
   photos: StorePhoto[];
-  /** Made-to-order — no public price, no cart; RFQ instead. */
+  /** No public price and no cart — RFQ instead (true whenever the item is unpriced). */
   quoteOnly: boolean;
+  /**
+   * The item belongs to a fabricated-fan family. Used only for WORDING: an
+   * unpriced fabricated fan is "made to order, quoted by specification", while
+   * any other unpriced item is simply "price on request".
+   */
+  fabricated: boolean;
   variants: StoreVariant[];
   /** Cheapest website price across variants ("from" price); null when quote-only/unpriced. */
   fromPrice: number | null;
@@ -90,7 +96,6 @@ type ItemWithPrices = {
 /** Shape one catalogue row into a storefront product. `available` is filled in by the caller. */
 function toStoreProduct(it: ItemWithPrices, available: number | null = null): StoreProduct {
   const fields = storeFieldsOf(it);
-  const quoteOnly = isQuoteOnly(it.family);
   const label = storeCategoryLabel(it.family, fields.storeCategory);
 
   // Latest active price per variant (the query orders newest first, so the first
@@ -101,16 +106,23 @@ function toStoreProduct(it: ItemWithPrices, available: number | null = null): St
     const aq = Number(p.basePrice);
     if (Number.isFinite(aq) && aq > 0) byVariant.set(p.variantKey, aq);
   }
-  const variants: StoreVariant[] = quoteOnly
-    ? []
-    : [...byVariant.entries()]
-        .map(([key, aq]) => ({
-          key,
-          label: key === "default" || !key ? "" : key,
-          aeroquotePrice: aq,
-          websitePrice: websiteSellingPrice(aq),
-        }))
-        .sort((a, b) => a.websitePrice - b.websitePrice);
+  const variants: StoreVariant[] = [...byVariant.entries()]
+    .map(([key, aq]) => ({
+      key,
+      label: key === "default" || !key ? "" : key,
+      aeroquotePrice: aq,
+      websitePrice: websiteSellingPrice(aq),
+    }))
+    .sort((a, b) => a.websitePrice - b.websitePrice);
+
+  // Sellability follows the PRICE, not the family. `family` says what KIND of fan
+  // this is; it can't say whether we fabricate it or buy it in — a branded
+  // Östberg / KDK inline fan is a TUBULAR_INLINE by type but a resale product
+  // commercially. So a listed item with a catalogue price gets a cart, and one
+  // without shows "Quote on request". Listing is an explicit admin action, so
+  // nothing reaches the store by accident. `isQuoteOnly(family)` still decides
+  // the *default* wording for an unpriced fabricated fan.
+  const quoteOnly = variants.length === 0;
 
   return {
     id: it.id,
@@ -125,6 +137,7 @@ function toStoreProduct(it: ItemWithPrices, available: number | null = null): St
     uom: it.uom,
     photos: fields.storePhotos,
     quoteOnly,
+    fabricated: isQuoteOnly(it.family),
     variants,
     fromPrice: variants.length ? variants[0].websitePrice : null,
     available,

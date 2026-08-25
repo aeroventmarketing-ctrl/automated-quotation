@@ -31,7 +31,7 @@ export function ProductCard({ product }: { product: StoreProduct }) {
         <div className="mt-auto pt-1">
           {product.quoteOnly ? (
             <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-              Quote on request
+              {product.fabricated ? "Made to order" : "Quote on request"}
             </span>
           ) : !inStock(product) ? (
             <span className="inline-block rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-600">
