@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { StoreProduct } from "@/lib/store-catalog";
+import { inStock, type StoreProduct } from "@/lib/store-catalog";
 
 /** Peso formatting for storefront prices. */
 export const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -32,6 +32,10 @@ export function ProductCard({ product }: { product: StoreProduct }) {
           {product.quoteOnly ? (
             <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
               Quote on request
+            </span>
+          ) : !inStock(product) ? (
+            <span className="inline-block rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+              Out of stock
             </span>
           ) : product.fromPrice != null ? (
             <span className="text-sm font-bold text-[#ED1C24]">
