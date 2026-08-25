@@ -96,6 +96,9 @@ export const saleDocReadSchema = z.object({
   documentNumber: z.string().nullable().default(null),
   date: z.string().nullable().default(null), // YYYY-MM-DD document date
   amount: z.number().nullable().default(null), // peso total shown on the document (null if none is printed)
+  // EWT withheld (BIR 2307) shown on a Collection Receipt's settlement box —
+  // the gross-minus-net difference. Autofills the Sales Summary's EWT FP column.
+  ewtAmount: z.number().nullable().default(null),
   customer: z.string().nullable().default(null), // sold-to / customer name if shown
   customerTin: z.string().nullable().default(null), // sold-to / customer TIN if shown
   confidence: z.number().nullable().default(null), // 0..1 — how sure the exact number + amount were read

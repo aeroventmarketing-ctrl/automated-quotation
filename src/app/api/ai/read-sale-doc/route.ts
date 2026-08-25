@@ -47,6 +47,7 @@ CRITICAL RULES:
 - CUSTOMER TIN: read the SOLD-TO / customer's Taxpayer Identification Number — the TIN printed next to the buyer's name / "Sold to" / "Registered name" block (a Philippine TIN looks like "000-000-000-000" or "000-000-000-00000"). Return the exact digits as printed (keep the dashes). This is the BUYER's TIN, NOT the seller/AeroVent's own TIN in the letterhead — ignore the pre-printed company TIN at the top. If none is shown or you can't read it clearly, set customerTin to null (do NOT guess).
 - AMOUNT: read the peso TOTAL of the document — the "Total", "Total Amount Due", "Amount" or grand-total figure. If the document shows a VATable Sales + VAT Amount split, the TOTAL is the sum (the gross). A Delivery Receipt often has NO amount — if none is printed, set amount to null. Never invent an amount.
 - COLLECTION RECEIPT AMOUNT — use the SETTLEMENT amount, not the net cash: a Collection Receipt / Official Receipt usually has an "IN SETTLEMENT OF THE FOLLOWING" box (left side) listing the invoice being settled. The amount there (the GROSS invoice amount, e.g. 11,200.00) is what must tally with the Sales Invoice / order total — return THAT as the amount. The "( PHP ___ )" figure / bottom "TOTAL" / amount-in-words is often the NET CASH received after tax withheld (EWT / BIR 2307) was deducted (e.g. 11,100.00 = 11,200.00 gross − 100.00 EWT) — do NOT return the net cash as the amount when a gross settlement amount is shown. If only one amount appears on the receipt, return it. If both appear and they differ, return the gross settlement amount and add a warning noting the net cash figure (e.g. "net cash 11,100.00 after EWT").
+- COLLECTION RECEIPT EWT: in the same "IN SETTLEMENT OF THE FOLLOWING" box, the row below the gross amount often shows the TAX WITHHELD (EWT / BIR 2307) — the small amount deducted from the gross to reach the net cash (e.g. 100.00, where 11,200.00 gross − 100.00 EWT = 11,100.00 net). Return it as ewtAmount. Sanity check: gross − ewtAmount should equal the net cash figure. If no withholding is shown, set ewtAmount to null (do NOT guess and do NOT return 0 unless a 0 is printed).
 - DATE: the document date (the "Date" near the top). Return YYYY-MM-DD, or null if unsure.
 - Read only clearly PRINTED / typed / machine text. IGNORE handwritten annotations for the number and amount unless the whole form is handwritten on a pre-printed booklet — in which case read the handwritten total and the pre-printed serial number.
 - ACCURACY OVER COMPLETENESS. If the image is blurry, has glare, is cropped or low-resolution and you are not highly sure of the EXACT digits, set a LOW confidence, leave that field null, and add a warning. NEVER guess.
@@ -59,6 +60,7 @@ const userPrompt = (label: string) => `This document should be a ${label}. From 
   "documentNumber": string|null,    // the pre-printed serial number (SI/CR/OR/DR No.), exact digits (null if unsure)
   "date": string|null,              // YYYY-MM-DD document date (null if unsure)
   "amount": number|null,            // peso TOTAL — for a Collection Receipt, the GROSS settlement amount (not the net cash after EWT); null if none printed / unsure
+  "ewtAmount": number|null,         // Collection Receipt only: the tax withheld (EWT / BIR 2307) shown in the settlement box (null if none shown)
   "customer": string|null,          // sold-to / customer name if shown
   "customerTin": string|null,       // sold-to / customer TIN if shown (the BUYER's TIN, not the seller's)
   "confidence": number,             // 0..1 — how sure you are of the EXACT document number + amount digits
@@ -148,6 +150,7 @@ export async function POST(req: NextRequest) {
     const r = await callClaudeJson({ system: SYSTEM, content, schema: saleDocReadSchema, maxTokens: 1000 });
     const documentNumber = r.documentNumber?.trim() || null;
     const amount = r.amount ?? null;
+    const ewtAmount = typeof r.ewtAmount === "number" && r.ewtAmount > 0 ? r.ewtAmount : null;
     const date = r.date ?? null;
     const CONFIDENCE_MIN = 0.7;
     const confidence = typeof r.confidence === "number" ? r.confidence : 0;
@@ -159,14 +162,18 @@ export async function POST(req: NextRequest) {
     let amountMatches = amount != null && expected != null ? Math.abs(amount - expected) <= tolerance : null;
     // Net-of-EWT fallback: a Collection Receipt's cash figure can be the gross
     // minus the EWT withheld (BIR 2307) — e.g. gross 11,200 − 100 EWT = 11,100
-    // cash. If the read amount is short by exactly the order's recorded EWT, it
-    // still tallies with the Sales Invoice / order total.
+    // cash. If the read amount is short by exactly the EWT (as read off the
+    // receipt, or as recorded on the order), it still tallies with the Sales
+    // Invoice / order total.
     let netOfEwt = false;
     if (amountMatches === false && amount != null && expected != null) {
-      const ewt = ewtWithheld(saleFromClassification(quote.classification));
-      if (ewt > 0 && Math.abs(amount + ewt - expected) <= tolerance) {
-        amountMatches = true;
-        netOfEwt = true;
+      const recordedEwt = ewtWithheld(saleFromClassification(quote.classification));
+      for (const ewt of [ewtAmount, recordedEwt]) {
+        if (ewt != null && ewt > 0 && Math.abs(amount + ewt - expected) <= tolerance) {
+          amountMatches = true;
+          netOfEwt = true;
+          break;
+        }
       }
     }
 
@@ -204,6 +211,7 @@ export async function POST(req: NextRequest) {
       date,
       customerTin,
       amount,
+      ewtAmount,
       expected,
       amountMatches,
       duplicateOf,
@@ -253,6 +261,7 @@ export async function POST(req: NextRequest) {
       documentNumber,
       date,
       amount,
+      ewtAmount,
       customer: r.customer ?? null,
       customerTin,
       expected,

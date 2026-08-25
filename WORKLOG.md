@@ -1,3 +1,15 @@
+## 2026-08-25 · Collection Receipt read — capture the EWT row for the Sales Summary
+- **Request (owner).** Also read the **EWT withheld** row of the CR's settlement box (e.g. ₱100.00, the gross-minus-net
+  difference) — it autofills the **EWT FP** column of the Sales Summary (Vatable).
+- **Change.**
+  - `saleDocReadSchema.ewtAmount` + `SaleDocReadStamp.ewtAmount`; the read prompt now extracts the tax-withheld row
+    (sanity check: gross − EWT = net cash; null when no withholding is shown, never guessed).
+  - The net-of-EWT tally fallback now also accepts the EWT **as read off the receipt** (in addition to the order's
+    recorded EWT payment lines).
+  - `buildSalesSummary` EWT FP now prefers the EWT read off the CR (cleared read first), falling back to the recorded
+    EWT payment lines. `approveSaleDoc` preserves the field.
+- Typecheck + lint clean.
+
 ## 2026-08-25 · Collection Receipt read — tally the GROSS settlement amount (not net cash)
 - **Request (owner, practice reading).** On a Collection Receipt the amount that must tally with the Sales Invoice is
   the **gross settlement amount** in the left "IN SETTLEMENT OF THE FOLLOWING" box (e.g. ₱11,200.00) — the "( PHP )" /

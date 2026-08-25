@@ -944,6 +944,7 @@ export async function approveSaleDoc(quotationId: string, path: string, docKey: 
     date: prev.date ?? null,
     customerTin: prev.customerTin ?? null,
     amount: prev.amount ?? null,
+    ewtAmount: prev.ewtAmount ?? null,
     expected: prev.expected ?? null,
     amountMatches: prev.amountMatches ?? null,
     duplicateOf: prev.duplicateOf ?? null,

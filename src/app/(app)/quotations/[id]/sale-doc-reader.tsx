@@ -93,6 +93,7 @@ export function SaleDocReader({
           date: j.date ?? null,
           customerTin: j.customerTin ?? null,
           amount: typeof j.amount === "number" ? j.amount : null,
+          ewtAmount: typeof j.ewtAmount === "number" ? j.ewtAmount : null,
           expected: typeof j.expected === "number" ? j.expected : null,
           amountMatches: typeof j.amountMatches === "boolean" ? j.amountMatches : null,
           duplicateOf: j.duplicateOf ?? null,
