@@ -32,6 +32,37 @@ function money(total: number, currency: string): string {
   }
 }
 
+/**
+ * How long a scheduled run may spend sending before it stops and leaves the rest
+ * for the next hourly tick. The cron function's ceiling is 60s (`maxDuration`),
+ * so we stop well short of it — being killed mid-send loses the run's summary
+ * and can drop a stamp, whereas stopping cleanly always reports what happened.
+ */
+const SEND_BUDGET_MS = 45_000;
+/**
+ * Concurrent sends. Email is kept modest because Resend rate-limits per second
+ * (a 429 is retried with backoff inside `sendEmail`); SMS is a plain per-message
+ * HTTP call and tolerates more.
+ */
+const EMAIL_CONCURRENCY = 4;
+const SMS_CONCURRENCY = 8;
+
+/**
+ * Run `fn` over `items` in fixed-size concurrent batches, stopping before a new
+ * batch once `deadline` has passed. Returns how many items were attempted, so
+ * the caller can report the ones it deliberately left for the next run.
+ */
+async function runBatched<T>(items: T[], size: number, deadline: number, fn: (item: T) => Promise<void>): Promise<number> {
+  let attempted = 0;
+  for (let i = 0; i < items.length; i += size) {
+    if (Date.now() > deadline) break;
+    const batch = items.slice(i, i + size);
+    await Promise.all(batch.map(fn));
+    attempted += batch.length;
+  }
+  return attempted;
+}
+
 export type RunAction = "sent" | "preview" | "skipped";
 
 export interface RunItem {
@@ -61,6 +92,12 @@ export interface FollowUpRunResult {
   smsSent: number;
   smsPreviewed: number;
   smsSkipped: number;
+  /**
+   * Messages that were due and allowed by the per-run cap but NOT attempted
+   * because the run hit its time budget. These are NOT cap throttling — the
+   * scheduler re-runs on the next hourly tick to drain them (see the cron route).
+   */
+  deferred: number;
   items: RunItem[];
   errors: string[];
 }
@@ -123,10 +160,27 @@ export async function runFollowUps(opts: {
   let sent = 0;
   let previewed = 0;
   let skipped = 0;
+  // Messages left for the next hourly tick because the run ran out of time (as
+  // opposed to being held back by the user's per-run cap).
+  let deferred = 0;
+  const deadline = Date.now() + SEND_BUDGET_MS;
 
   const from = config.followUpFromEmail
     ? `${config.followUpFromName} <${config.followUpFromEmail}>`
     : "";
+
+  // Quote follow-ups due this run: everyone is evaluated first, then the sends
+  // run in concurrent batches below.
+  const queued: {
+    q: (typeof quotes)[number];
+    to: string;
+    customerId: string;
+    contactName: string | null;
+    company: string;
+    email: ReturnType<typeof buildFollowUpEmail>;
+    nudge: number;
+    base: RunItem;
+  }[] = [];
 
   for (const q of quotes) {
     const sentIso = sentAtFrom(q.classification);
@@ -181,16 +235,26 @@ export async function runFollowUps(opts: {
       continue;
     }
 
-    if (sent >= sendCap) {
+    // The cap counts what this run will ATTEMPT (queued below), so quote
+    // follow-ups and the inquiry check-ins that follow still share one budget.
+    if (queued.length >= sendCap) {
       skipped++;
       items.push({ ...base, action: "skipped", reason: "per-run send cap reached" });
       continue;
     }
+    queued.push({ q, to: c.email, customerId: c.id, contactName: c.contactName, company: c.company, email, nudge: result.nudgeNumber, base });
+  }
 
+  // Send the queued follow-ups in small concurrent batches. One-at-a-time
+  // sending could not finish a large run inside the serverless time budget (the
+  // function was killed after ~25 emails however high the cap was). Each task
+  // stamps its own quote right after its send, so a run cut short never repeats
+  // or loses a nudge.
+  const emailAttempted = await runBatched(queued, EMAIL_CONCURRENCY, deadline, async ({ q, to, customerId, contactName, company, email, nudge, base }) => {
     try {
       await sendEmail({
         from,
-        to: c.email,
+        to,
         subject: email.subject,
         text: email.text,
         html: email.html,
@@ -201,7 +265,7 @@ export async function runFollowUps(opts: {
       const cls = (q.classification as Record<string, unknown>) ?? {};
       const fu = (cls.followUp as Record<string, unknown> | undefined) ?? {};
       const sentArr = Array.isArray(fu.sent) ? (fu.sent as unknown[]) : [];
-      sentArr.push({ nudge: result.nudgeNumber, at: now.toISOString(), channel: "Email", to: c.email });
+      sentArr.push({ nudge, at: now.toISOString(), channel: "Email", to });
       await prisma.quotation.update({
         where: { id: q.id },
         data: { classification: { ...cls, followUp: { ...fu, sent: sentArr } } as Prisma.InputJsonObject },
@@ -212,17 +276,17 @@ export async function runFollowUps(opts: {
         id: randomUUID(),
         date: now.toISOString(),
         channel: "Email",
-        contactPerson: c.contactName ?? c.company,
-        message: `Automated follow-up sent (nudge #${result.nudgeNumber}) for quotation ${q.quoteNumber}.`,
+        contactPerson: contactName ?? company,
+        message: `Automated follow-up sent (nudge #${nudge}) for quotation ${q.quoteNumber}.`,
         quoteNumber: q.quoteNumber,
         nextFollowUp: null,
         loggedById: q.preparedById,
         loggedByName: q.preparedBy.name,
         createdAt: now.toISOString(),
       };
-      const acct = accounts[c.id] ?? { history: [], conversations: [] };
+      const acct = accounts[customerId] ?? { history: [], conversations: [] };
       acct.conversations = [...(acct.conversations ?? []), entry];
-      accounts[c.id] = acct;
+      accounts[customerId] = acct;
       accountsDirty = true;
 
       sent++;
@@ -232,7 +296,8 @@ export async function runFollowUps(opts: {
       errors.push(`${q.quoteNumber}: ${msg}`);
       items.push({ ...base, action: "skipped", reason: "send failed" });
     }
-  }
+  });
+  deferred += queued.length - emailAttempted;
 
   // --- Inquiry "constant communication" pass -------------------------------
   // Clients with an OPEN inquiry and no quotation ever sent get a periodic
@@ -263,6 +328,10 @@ export async function runFollowUps(opts: {
   }
   inquiryEvaluated = inquiryByCustomer.size;
 
+  // Evaluate first, then send in batches — same shape as the quote pass above.
+  // The per-run cap is shared with the quote follow-ups already sent, so this
+  // queue only fills what's left of the budget.
+  const inqQueue: { inq: (typeof openInquiries)[number]; email: ReturnType<typeof buildInquiryFollowUpEmail>; nudge: number; base: RunItem }[] = [];
   for (const inq of inquiryByCustomer.values()) {
     const c = inq.customer;
     const nudgesSent = accounts[c.id]?.inquiryFollowUp?.sent?.length ?? 0;
@@ -278,10 +347,14 @@ export async function runFollowUps(opts: {
     const email = buildInquiryFollowUpEmail({ company: c.company, contactName: c.contactName, salesName: inq.createdBy.name, projectName: inq.projectName ?? null });
 
     if (!inquiryLive) { previewed++; items.push({ ...base, action: "preview" }); continue; }
-    if (sent >= sendCap) { skipped++; items.push({ ...base, reason: "per-run send cap reached" }); continue; }
+    if (sent + inqQueue.length >= sendCap) { skipped++; items.push({ ...base, reason: "per-run send cap reached" }); continue; }
+    inqQueue.push({ inq, email, nudge: result.nudgeNumber, base });
+  }
 
+  const inqAttempted = await runBatched(inqQueue, EMAIL_CONCURRENCY, deadline, async ({ inq, email, nudge, base }) => {
+    const c = inq.customer;
     try {
-      await sendEmail({ from, to: c.email, subject: email.subject, text: email.text, html: email.html, replyTo: inq.createdBy.email ?? undefined });
+      await sendEmail({ from, to: c.email!, subject: email.subject, text: email.text, html: email.html, replyTo: inq.createdBy.email ?? undefined });
 
       const acct = accounts[c.id] ?? { history: [], conversations: [] };
       acct.inquiryFollowUp = { sent: [...(acct.inquiryFollowUp?.sent ?? []), { at: now.toISOString() }] };
@@ -290,7 +363,7 @@ export async function runFollowUps(opts: {
         date: now.toISOString(),
         channel: "Email",
         contactPerson: c.contactName ?? c.company,
-        message: `Automated check-in sent (constant communication #${result.nudgeNumber}).`,
+        message: `Automated check-in sent (constant communication #${nudge}).`,
         quoteNumber: null,
         nextFollowUp: null,
         loggedById: inq.createdById,
@@ -308,7 +381,8 @@ export async function runFollowUps(opts: {
       errors.push(`${c.company} (inquiry): ${msg}`);
       items.push({ ...base, reason: "send failed" });
     }
-  }
+  });
+  deferred += inqQueue.length - inqAttempted;
   } // end inquiry pass (skipped for targeted sends)
 
   // --- SMS follow-up pass (independent channel, same cadence) --------------
@@ -388,10 +462,7 @@ export async function runFollowUps(opts: {
     // killed mid-loop, so only the first ~20 texts of a 100-cap run went out).
     // Each task still stamps its own quote immediately after its send, so a
     // mid-run crash never repeats a nudge.
-    const SMS_CONCURRENCY = 8;
-    for (let i = 0; i < sendQueue.length; i += SMS_CONCURRENCY) {
-      const batch = sendQueue.slice(i, i + SMS_CONCURRENCY);
-      await Promise.all(batch.map(async ({ q, phone, message, nudgeNumber, base }) => {
+    const smsAttempted = await runBatched(sendQueue, SMS_CONCURRENCY, deadline, async ({ q, phone, message, nudgeNumber, base }) => {
         const c = q.inquiry.customer;
         try {
           await sendSms({ to: phone, message });
@@ -431,8 +502,8 @@ export async function runFollowUps(opts: {
           errors.push(`${q.quoteNumber} (SMS): ${msg}`);
           items.push({ ...base, reason: "send failed" });
         }
-      }));
-    }
+      });
+    deferred += sendQueue.length - smsAttempted;
   }
 
   if (accountsDirty) await saveAccountsRegistry(accounts);
@@ -451,6 +522,7 @@ export async function runFollowUps(opts: {
     smsSent,
     smsPreviewed,
     smsSkipped,
+    deferred,
     items,
     errors,
   };
