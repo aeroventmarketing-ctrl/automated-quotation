@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
+import { ProductPicker } from "@/components/product-picker";
 import type { ScanProduct } from "@/lib/product-scan";
 import { createDepartmentRequisition } from "../orders/actions";
 
@@ -59,6 +60,10 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
   const allRowsComplete = rows.every((r) => r.description.trim() === "" || (Number(r.qty) > 0 && normalizeUnit(r.unit).trim() !== ""));
   function setCell(i: number, key: keyof Row, value: string) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
+  }
+  /** Row product picked from the catalogue (null clears it) — fills a blank unit. */
+  function pickRowProduct(i: number, p: ScanProduct | { name: string; unit?: string } | null) {
+    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, description: p?.name ?? "", unit: normalizeUnit(r.unit || p?.unit || "") } : r)));
   }
   function flash(idx: number) {
     setHighlight(idx);
@@ -130,12 +135,9 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
             </ul>
           )}
           {pOpen && pq !== "" && matches.length === 0 && (
-            <div className="absolute z-20 mt-1 w-full rounded-md border bg-background px-2 py-1.5 text-xs text-muted-foreground shadow-md">No product matches &ldquo;{pquery}&rdquo; — type it into a row below.</div>
+            <div className="absolute z-20 mt-1 w-full rounded-md border bg-background px-2 py-1.5 text-xs text-muted-foreground shadow-md">No product matches &ldquo;{pquery}&rdquo; — add it in Products first.</div>
           )}
         </div>
-        <datalist id="requisition-products">
-          {products.map((p) => <option key={p.id} value={p.name} />)}
-        </datalist>
         <label className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-xs text-muted-foreground">Department</span>
           {selectableDepts && selectableDepts.length > 0 ? (
@@ -163,7 +165,7 @@ export function RequisitionForm({ fixedDept, selectableDepts, products }: { fixe
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i} className={`border-b last:border-0 transition-colors ${highlight === i ? "bg-amber-200/60" : ""}`}>
-                  <td className="py-1 pr-2"><input list="requisition-products" autoComplete="off" value={r.description} onChange={(e) => setCell(i, "description", e.target.value)} className="w-full rounded border bg-background px-2 py-1" placeholder="Type or pick a product" /></td>
+                  <td className="py-1 pr-2"><ProductPicker value={r.description} onPick={(p) => pickRowProduct(i, p)} products={products} /></td>
                   <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
                   <td className="py-1 px-1">
                     <select value={normalizeUnit(r.unit)} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">
