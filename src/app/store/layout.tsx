@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { COMPANY } from "@/lib/config";
 import { listStoreProducts, storeCategories } from "@/lib/store-catalog";
+import { CartLink } from "./cart-link";
 
 export const metadata: Metadata = {
   title: "Shop — Aerovent Fans & Blowers Manufacturing",
@@ -24,12 +25,15 @@ export default async function StoreLayout({ children }: { children: React.ReactN
             <div className="text-lg font-bold text-[#ED1C24] sm:text-xl">{COMPANY.name}</div>
             <div className="text-[10px] uppercase tracking-wide text-gray-500 sm:text-xs">{COMPANY.tagline}</div>
           </Link>
-          <Link
-            href="/rfq"
-            className="rounded-md border border-[#ED1C24] px-3 py-1.5 text-sm font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10"
-          >
-            Request a Quotation
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/rfq"
+              className="rounded-md border border-[#ED1C24] px-3 py-1.5 text-sm font-semibold text-[#ED1C24] transition-colors hover:bg-[#ED1C24]/10"
+            >
+              Request a Quotation
+            </Link>
+            <CartLink />
+          </div>
         </div>
         {categories.length > 0 && (
           <nav className="border-t bg-gray-50">

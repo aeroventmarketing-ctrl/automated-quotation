@@ -127,9 +127,9 @@ model CatalogueItem {
   storeDescription String?
   storePhotos      Json    @default("[]")
 
-  priceList       PriceListEntry[]
-  ratingPoints    FanRatingPoint[]
-  quotationItems  QuotationItem[]
+  priceList      PriceListEntry[]
+  ratingPoints   FanRatingPoint[]
+  quotationItems QuotationItem[]
 
   @@index([family])
 }
@@ -153,7 +153,7 @@ model PriceListEntry {
 
 // Fan selection / sizing data. Each model has several rating points along a curve.
 model FanRatingPoint {
-  id                String  @id @default(cuid())
+  id                String @id @default(cuid())
   catalogueItemId   String
   rpm               Int
   airflow_m3hr      Float
@@ -177,8 +177,8 @@ model Inquiry {
   docs        Json          @default("{}") // pre-quotation docs: { inquiry_form: SaleDoc[], rfq_boq: SaleDoc[] }
   createdAt   DateTime      @default(now())
 
-  customer    Customer       @relation(fields: [customerId], references: [id])
-  createdBy   User           @relation("InquiryCreatedBy", fields: [createdById], references: [id])
+  customer    Customer      @relation(fields: [customerId], references: [id])
+  createdBy   User          @relation("InquiryCreatedBy", fields: [createdById], references: [id])
   items       InquiryItem[]
   attachments Attachment[]
   quotations  Quotation[]
@@ -188,12 +188,12 @@ model Inquiry {
 }
 
 model InquiryItem {
-  id        String            @id @default(cuid())
-  inquiryId String
-  rawText   String // verbatim of what the client asked for
+  id         String            @id @default(cuid())
+  inquiryId  String
+  rawText    String // verbatim of what the client asked for
   // parsedJson: AI-extracted { airflow, airflowUnit, pressure, pressureUnit, qty, application, modelText, ... }
-  parsedJson Json             @default("{}")
-  qty        Int              @default(1)
+  parsedJson Json              @default("{}")
+  qty        Int               @default(1)
   status     InquiryItemStatus @default(PENDING)
 
   inquiry Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
@@ -202,55 +202,55 @@ model InquiryItem {
 }
 
 model Quotation {
-  id           String          @id @default(cuid())
-  inquiryId    String
-  quoteNumber  String          @unique // e.g. 2026 - AFBM00000041J
-  templateId   String
-  status       QuotationStatus @default(DRAFT)
+  id             String          @id @default(cuid())
+  inquiryId      String
+  quoteNumber    String          @unique // e.g. 2026 - AFBM00000041J
+  templateId     String
+  status         QuotationStatus @default(DRAFT)
   // VAT presentation: INCLUSIVE (prices already include 12% VAT) or EXCLUSIVE.
-  vatMode      String          @default("INCLUSIVE")
+  vatMode        String          @default("INCLUSIVE")
   // Optional discount percentage shown as a "LESS x% DISCOUNT" line.
-  discountPct  Decimal         @db.Decimal(5, 2) @default(0)
+  discountPct    Decimal         @default(0) @db.Decimal(5, 2)
   // Variable (red) table unit labels: { capacity, pressure, motor }. Defaults cfm / in-w.g. / Hp.
-  headerUnits  Json            @default("{}")
+  headerUnits    Json            @default("{}")
   // Product classification from the selection workflow: { category, type, bladeType, drive }.
-  classification Json          @default("{}")
-  projectName  String?
-  subtotal     Decimal         @db.Decimal(14, 2) @default(0)
-  vat          Decimal         @db.Decimal(14, 2) @default(0)
-  total        Decimal         @db.Decimal(14, 2) @default(0)
-  currency     String          @default("PHP")
-  validUntil   DateTime?
-  preparedById String
-  approvedById String?
-  notes        String?
-  terms        String?
-  createdAt    DateTime        @default(now())
+  classification Json            @default("{}")
+  projectName    String?
+  subtotal       Decimal         @default(0) @db.Decimal(14, 2)
+  vat            Decimal         @default(0) @db.Decimal(14, 2)
+  total          Decimal         @default(0) @db.Decimal(14, 2)
+  currency       String          @default("PHP")
+  validUntil     DateTime?
+  preparedById   String
+  approvedById   String?
+  notes          String?
+  terms          String?
+  createdAt      DateTime        @default(now())
 
-  inquiry    Inquiry           @relation(fields: [inquiryId], references: [id])
-  template   QuotationTemplate @relation(fields: [templateId], references: [id])
-  preparedBy User              @relation("QuotationPreparedBy", fields: [preparedById], references: [id])
-  approvedBy User?             @relation("QuotationApprovedBy", fields: [approvedById], references: [id])
-  items      QuotationItem[]
+  inquiry          Inquiry           @relation(fields: [inquiryId], references: [id])
+  template         QuotationTemplate @relation(fields: [templateId], references: [id])
+  preparedBy       User              @relation("QuotationPreparedBy", fields: [preparedById], references: [id])
+  approvedBy       User?             @relation("QuotationApprovedBy", fields: [approvedById], references: [id])
+  items            QuotationItem[]
   purchaseRequests PurchaseRequest[]
-  commission Commission?
+  commission       Commission?
 
   @@index([status])
   @@index([inquiryId])
 }
 
 model QuotationItem {
-  id                  String   @id @default(cuid())
+  id                  String  @id @default(cuid())
   quotationId         String
   catalogueItemId     String?
   descriptionSnapshot String
   // specsSnapshot: frozen specs so the quote never changes when the catalogue does
-  specsSnapshot       Json     @default("{}")
-  qty                 Int      @default(1)
-  unitPrice           Decimal  @db.Decimal(14, 2)
-  lineTotal           Decimal  @db.Decimal(14, 2)
+  specsSnapshot       Json    @default("{}")
+  qty                 Int     @default(1)
+  unitPrice           Decimal @db.Decimal(14, 2)
+  lineTotal           Decimal @db.Decimal(14, 2)
   selectionNote       String? // why this model/size was chosen
-  sortOrder           Int      @default(0)
+  sortOrder           Int     @default(0)
 
   quotation     Quotation      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   catalogueItem CatalogueItem? @relation(fields: [catalogueItemId], references: [id])
@@ -288,7 +288,9 @@ model QuoteCounter {
   lastValue Int @default(0)
 }
 
-/** Generic key/value app settings (e.g. the geofence/location access config). */
+/**
+ * Generic key/value app settings (e.g. the geofence/location access config).
+ */
 model AppSetting {
   key       String   @id
   value     Json
@@ -324,76 +326,76 @@ model ActivityLog {
  */
 enum PurchaseRequestStatus {
   PENDING_APPROVAL // purchaser prepared the list, awaiting approver
-  REJECTED         // approver rejected
-  APPROVED         // dept MRF: Plant-Manager-approved (awaits the Approver's PO approval, recorded in chainLog.approve_po); order-linked: approved, awaiting voucher
-  VOUCHER_READY    // accounting prepared voucher + checks, awaiting signing
-  VOUCHER_SIGNED   // approver signed check & voucher
-  CASH_RELEASED    // approver released cash
-  WITH_PURCHASER   // accounting handed cash & check to the purchaser
-  CASH_CONFIRMED   // purchaser confirmed receipt of the cash & check
-  TASKED           // purchaser handed to logistics head, tasks distributed
+  REJECTED // approver rejected
+  APPROVED // dept MRF: Plant-Manager-approved (awaits the Approver's PO approval, recorded in chainLog.approve_po); order-linked: approved, awaiting voucher
+  VOUCHER_READY // accounting prepared voucher + checks, awaiting signing
+  VOUCHER_SIGNED // approver signed check & voucher
+  CASH_RELEASED // approver released cash
+  WITH_PURCHASER // accounting handed cash & check to the purchaser
+  CASH_CONFIRMED // purchaser confirmed receipt of the cash & check
+  TASKED // purchaser handed to logistics head, tasks distributed
   LOGISTICS_CONFIRMED // logistics head confirmed receipt of the cash
-  PURCHASED        // bought, awaiting purchaser's item check
-  CHECKED          // items checked, awaiting delivery to warehouse
-  DELIVERED        // logistics delivered to warehouseman
-  RECEIVED         // warehouseman approved the delivery, awaiting plant manager
-  PLANT_APPROVED   // plant manager final approval, awaiting receiving into stock
-  COMPLETED        // warehouseman received & added to stock
-  CANCELLED        // withdrawn by the purchaser before receiving
+  PURCHASED // bought, awaiting purchaser's item check
+  CHECKED // items checked, awaiting delivery to warehouse
+  DELIVERED // logistics delivered to warehouseman
+  RECEIVED // warehouseman approved the delivery, awaiting plant manager
+  PLANT_APPROVED // plant manager final approval, awaiting receiving into stock
+  COMPLETED // warehouseman received & added to stock
+  CANCELLED // withdrawn by the purchaser before receiving
 }
 
 model PurchaseRequest {
-  id            String                @id @default(cuid())
-  quotationId   String? // null for replenishment (stock top-up, not tied to an order)
-  kind          String                @default("order") // "order" | "replenishment"
-  stockItemId   String? // for replenishment: the stock item to receive into
-  mrfId         String? // the JSON material-request id it was escalated from
-  dept          String? // production department key (null for replenishment)
-  items         Json                  @default("[]") // ["GI sheet 24ga x 4", ...]
-  note          String?
-  status        PurchaseRequestStatus @default(PENDING_APPROVAL)
+  id             String                @id @default(cuid())
+  quotationId    String? // null for replenishment (stock top-up, not tied to an order)
+  kind           String                @default("order") // "order" | "replenishment"
+  stockItemId    String? // for replenishment: the stock item to receive into
+  mrfId          String? // the JSON material-request id it was escalated from
+  dept           String? // production department key (null for replenishment)
+  items          Json                  @default("[]") // ["GI sheet 24ga x 4", ...]
+  note           String?
+  status         PurchaseRequestStatus @default(PENDING_APPROVAL)
   // Sign-off log for the extended chain steps (sign / release cash / hand to
   // purchaser / assign tasks / deliver) — { stepKey: { byName, at } }.
-  chainLog      Json                  @default("{}")
+  chainLog       Json                  @default("{}")
   // Supplier returns: items disapproved on inspection and sent back for
   // replacement — [{ id, items, reason, raisedByName, raisedRole, raisedAt,
   // resolvedByName, resolvedRole, resolvedAt, resolutionNote }]. A PO can't be
   // received into stock while any return is unresolved.
-  returns       Json                  @default("[]")
+  returns        Json                  @default("[]")
   // Voucher reconciliation: actual cash spent vs the issued voucher (PO total),
   // receipts attached — { voucherAmount, actualSpent, receipts[], recordedByName,
   // recordedAt, settled? }. Auto-tallies so change/overspend is flagged.
-  reconciliation Json                 @default("{}")
+  reconciliation Json                  @default("{}")
 
   createdById   String
   createdByName String
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // 8 — approver decision
-  decidedById   String?
-  decidedByName String?
-  decisionNote  String?
-  decidedAt     DateTime?
+  decidedById         String?
+  decidedByName       String?
+  decisionNote        String?
+  decidedAt           DateTime?
   // 9 — voucher / check
-  voucherRef    String?
-  voucherByName String?
-  voucherAt     DateTime?
+  voucherRef          String?
+  voucherByName       String?
+  voucherAt           DateTime?
   // 10 — buying
-  purchasedByName String?
-  purchasedAt   DateTime?
+  purchasedByName     String?
+  purchasedAt         DateTime?
   // 11 — purchaser item check
-  checkedByName String?
-  checkedAt     DateTime?
+  checkedByName       String?
+  checkedAt           DateTime?
   // 13 — warehouse receive + plant manager final approval
-  receivedByName String?
-  receivedAt    DateTime?
+  receivedByName      String?
+  receivedAt          DateTime?
   plantApprovedByName String?
-  plantApprovedAt DateTime?
+  plantApprovedAt     DateTime?
 
   // Purchase Order sent to the supplier (number, supplier, priced lines, EWT,
   // remarks). Null until the purchaser issues the PO.
-  po            Json?
+  po Json?
 
   quotation Quotation? @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
@@ -403,15 +405,15 @@ model PurchaseRequest {
 
 enum CashRequestStatus {
   PENDING_APPROVAL // requestor asked for cash, awaiting Accounting to approve/reject
-  SUBMITTED      // Accounting approved the request, awaiting accounting to prepare voucher
-  REJECTED       // rejected by Accounting (intake) or the approver (voucher)
-  VOUCHER_READY  // accounting prepared the voucher, awaiting the approver
-  CASH_RELEASED  // approver approved the voucher & released cash (held by accounting)
-  DISBURSED      // accounting handed the cash to the requestor
-  RECEIVED       // requestor confirmed the cash received
-  LIQUIDATED     // requestor liquidated (receipts + actual spend)
-  SETTLED        // change returned / overspend reimbursed
-  CANCELLED      // withdrawn before the voucher was prepared
+  SUBMITTED // Accounting approved the request, awaiting accounting to prepare voucher
+  REJECTED // rejected by Accounting (intake) or the approver (voucher)
+  VOUCHER_READY // accounting prepared the voucher, awaiting the approver
+  CASH_RELEASED // approver approved the voucher & released cash (held by accounting)
+  DISBURSED // accounting handed the cash to the requestor
+  RECEIVED // requestor confirmed the cash received
+  LIQUIDATED // requestor liquidated (receipts + actual spend)
+  SETTLED // change returned / overspend reimbursed
+  CANCELLED // withdrawn before the voucher was prepared
 }
 
 /**
@@ -422,39 +424,39 @@ enum CashRequestStatus {
  * liquidate. See src/lib/cash-request.ts.
  */
 model CashRequest {
-  id            String            @id @default(cuid())
-  number        String            @unique // CV-<year><seq>
-  purpose       String
-  category      String            @default("advance") // advance | reimbursement | expense | petty_cash | other
-  dept          String? // optional department the cash is for
-  amount        Decimal           @db.Decimal(14, 2) // requested / released amount
-  lines         Json              @default("[]") // optional breakdown [{ description, amount }]
-  status        CashRequestStatus @default(SUBMITTED)
+  id       String            @id @default(cuid())
+  number   String            @unique // CV-<year><seq>
+  purpose  String
+  category String            @default("advance") // advance | reimbursement | expense | petty_cash | other
+  dept     String? // optional department the cash is for
+  amount   Decimal           @db.Decimal(14, 2) // requested / released amount
+  lines    Json              @default("[]") // optional breakdown [{ description, amount }]
+  status   CashRequestStatus @default(SUBMITTED)
 
   requestedById   String
   requestedByName String
   note            String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Accounting prepares the voucher.
-  voucherRef    String?
-  voucherByName String?
-  voucherAt     DateTime?
+  voucherRef      String?
+  voucherByName   String?
+  voucherAt       DateTime?
   // Approver decision (approve & release, or reject).
-  decidedByName String?
-  decisionNote  String?
-  decidedAt     DateTime?
-  releasedByName String?
-  releasedAt    DateTime?
+  decidedByName   String?
+  decisionNote    String?
+  decidedAt       DateTime?
+  releasedByName  String?
+  releasedAt      DateTime?
   // Accounting hands the cash to the requestor.
   disbursedByName String?
-  disbursedAt   DateTime?
+  disbursedAt     DateTime?
   // Requestor confirms receipt.
-  receivedByName String?
-  receivedAt    DateTime?
+  receivedByName  String?
+  receivedAt      DateTime?
   // Liquidation: actual spend + receipts, change/overspend settlement.
-  liquidation   Json              @default("{}")
+  liquidation     Json      @default("{}")
 
   @@index([status])
   @@index([requestedById])
@@ -466,17 +468,17 @@ model CashRequest {
  * Paid 15 days after that month ends.
  */
 model Commission {
-  id              String   @id @default(cuid())
-  quotationId     String?  @unique // set for an order commission (null for a counter sale)
-  counterSaleId   String?  @unique // set for a walk-in counter-sale commission
+  id              String    @id @default(cuid())
+  quotationId     String?   @unique // set for an order commission (null for a counter sale)
+  counterSaleId   String?   @unique // set for a walk-in counter-sale commission
   salespersonId   String
   salespersonName String
-  orderValue      Decimal  @db.Decimal(14, 2)
-  ratePct         Decimal  @db.Decimal(5, 2) @default(1.5)
-  amount          Decimal  @db.Decimal(14, 2)
+  orderValue      Decimal   @db.Decimal(14, 2)
+  ratePct         Decimal   @default(1.5) @db.Decimal(5, 2)
+  amount          Decimal   @db.Decimal(14, 2)
   salesMonth      String // "YYYY-MM" (close month)
-  computedAt      DateTime @default(now())
-  paid            Boolean  @default(false)
+  computedAt      DateTime  @default(now())
+  paid            Boolean   @default(false)
   paidAt          DateTime?
   paidByName      String?
 
@@ -497,7 +499,7 @@ model Payroll {
   id            String   @id @default(cuid())
   dept          String
   month         String // YYYY-MM (Manila)
-  amount        Decimal  @db.Decimal(14, 2) @default(0)
+  amount        Decimal  @default(0) @db.Decimal(14, 2)
   note          String?
   createdByName String
   createdAt     DateTime @default(now())
@@ -518,7 +520,7 @@ model FanBodyCogs {
   modelCode     String? // exact-match override (e.g. a fan code); null for size/material rows
   size          String? // blade diameter (inches) as a string
   material      String?
-  cost          Decimal  @db.Decimal(14, 2) @default(0)
+  cost          Decimal  @default(0) @db.Decimal(14, 2)
   note          String?
   createdByName String
   createdAt     DateTime @default(now())
@@ -528,10 +530,12 @@ model FanBodyCogs {
   @@index([size, material])
 }
 
-/** Warehouse stock. Quantities are decimals so partial units (m, kg) work. */
+/**
+ * Warehouse stock. Quantities are decimals so partial units (m, kg) work.
+ */
 enum StockMovementKind {
-  RECEIPT    // stock in (e.g. purchased items received)
-  ISSUE      // stock out (e.g. issued to production)
+  RECEIPT // stock in (e.g. purchased items received)
+  ISSUE // stock out (e.g. issued to production)
   ADJUSTMENT // manual correction / opening balance
 }
 
@@ -541,16 +545,16 @@ model StockItem {
   // location, so uniqueness is on the (SKU, location) / (barcode, location) pair,
   // not the SKU / barcode alone. Postgres treats NULLs as distinct, so items with
   // no SKU / barcode / location keep their prior freedom to repeat.
-  sku          String?  // short human/scan code, e.g. "10001"
-  barcode      String?  // external supplier/manufacturer barcode (GS1 GTIN / UPC / EAN); separate from the internal SKU
+  sku          String? // short human/scan code, e.g. "10001"
+  barcode      String? // external supplier/manufacturer barcode (GS1 GTIN / UPC / EAN); separate from the internal SKU
   name         String
   unit         String   @default("pcs")
   category     String?
-  location     String?  // warehouse bin / shelf location
-  quantity     Decimal  @db.Decimal(14, 3) @default(0)
-  reorderLevel Decimal  @db.Decimal(14, 3) @default(0)
-  unitCost     Decimal  @db.Decimal(14, 2) @default(0) // for stock valuation
-  sellPrice    Decimal  @db.Decimal(14, 2) @default(0) // selling price shown to sales for quick quoting
+  location     String? // warehouse bin / shelf location
+  quantity     Decimal  @default(0) @db.Decimal(14, 3)
+  reorderLevel Decimal  @default(0) @db.Decimal(14, 3)
+  unitCost     Decimal  @default(0) @db.Decimal(14, 2) // for stock valuation
+  sellPrice    Decimal  @default(0) @db.Decimal(14, 2) // selling price shown to sales for quick quoting
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -633,14 +637,14 @@ model DeptStockTransfer {
  */
 enum StockTransferStatus {
   // Office chain (Fans → Office resale stock): a 5-step approval flow.
-  REQUESTED  // purchaser requested, awaiting Plant Manager approval
-  APPROVED   // Plant Manager approved, awaiting Warehouse release
-  RELEASED   // Warehouse released (source deducted), awaiting Logistics
+  REQUESTED // purchaser requested, awaiting Plant Manager approval
+  APPROVED // Plant Manager approved, awaiting Warehouse release
+  RELEASED // Warehouse released (source deducted), awaiting Logistics
   DELIVERING // Logistics delivering to Office, awaiting Office receipt
   // 2-party chain (any other location move).
   IN_TRANSIT // issued from source, awaiting both receipt confirmations
-  RECEIVED   // received into destination
-  CANCELLED  // recalled before receipt — quantity returned to source
+  RECEIVED // received into destination
+  CANCELLED // recalled before receipt — quantity returned to source
 }
 
 model StockTransfer {
@@ -708,28 +712,28 @@ enum StockActionStatus {
 }
 
 model StockAction {
-  id             String            @id @default(cuid())
-  stockItemId    String
-  itemName       String
-  kind           StockActionKind
-  payload        Json // the proposed change, shape depends on kind
-  summary        String // human snapshot of the proposed change (eye-view)
-  status         StockActionStatus @default(PENDING)
-  proposedById   String
-  proposedByName String
-  proposedRole   String // "warehouse" | "purchaser" | "admin"
-  proposedAt     DateTime          @default(now())
+  id              String            @id @default(cuid())
+  stockItemId     String
+  itemName        String
+  kind            StockActionKind
+  payload         Json // the proposed change, shape depends on kind
+  summary         String // human snapshot of the proposed change (eye-view)
+  status          StockActionStatus @default(PENDING)
+  proposedById    String
+  proposedByName  String
+  proposedRole    String // "warehouse" | "purchaser" | "admin"
+  proposedAt      DateTime          @default(now())
   // Double handshake — both required before the change applies.
   warehouseByName String?
   warehouseAt     DateTime?
   purchaserByName String?
   purchaserAt     DateTime?
-  appliedAt      DateTime?
-  rejectedByName String?
-  rejectedAt     DateTime?
-  rejectReason   String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  appliedAt       DateTime?
+  rejectedByName  String?
+  rejectedAt      DateTime?
+  rejectReason    String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   @@index([status])
   @@index([stockItemId])
@@ -768,21 +772,21 @@ enum ScheduleStatus {
  * an all-day entry uses startAt at 00:00 of the day.
  */
 model Schedule {
-  id            String         @id @default(cuid())
-  title         String
-  details       String?
-  category      String         @default("general") // general | meeting | delivery | production | payment | maintenance | other
-  startAt       DateTime
-  endAt         DateTime?
-  allDay        Boolean        @default(true)
-  location      String?
-  status        ScheduleStatus @default(PENDING)
-  createdById   String
-  createdByName String
-  decidedById   String?
-  decidedByName String?
-  decidedAt     DateTime?
-  decisionNote  String?
+  id              String         @id @default(cuid())
+  title           String
+  details         String?
+  category        String         @default("general") // general | meeting | delivery | production | payment | maintenance | other
+  startAt         DateTime
+  endAt           DateTime?
+  allDay          Boolean        @default(true)
+  location        String?
+  status          ScheduleStatus @default(PENDING)
+  createdById     String
+  createdByName   String
+  decidedById     String?
+  decidedByName   String?
+  decidedAt       DateTime?
+  decisionNote    String?
   // TimeTree-style extras (all optional):
   color           String? // per-event label colour (hex); falls back to the category colour
   url             String? // optional link attached to the event
@@ -794,8 +798,8 @@ model Schedule {
   attendees       Json? // [{ userId, name, rsvp: "going"|"maybe"|"no"|"invited" }]
   attachments     Json? // [{ path, name, uploadedAt }]
   comments        Json? // [{ id, byId, byName, text, at }]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([startAt])
   @@index([status])
@@ -809,9 +813,9 @@ model Schedule {
  * EXCLUSIVE: Delivery Form + Acknowledgement Form; BIR 2307 optional in both).
  */
 enum CounterSaleStatus {
-  DRAFT      // being built at the counter
-  COMPLETED  // paid, stock deducted, documents issued
-  VOID       // reversed (admin) — stock returned
+  DRAFT // being built at the counter
+  COMPLETED // paid, stock deducted, documents issued
+  VOID // reversed (admin) — stock returned
 }
 
 model CounterSale {
@@ -824,11 +828,11 @@ model CounterSale {
   soldByName      String
   salespersonId   String? // credited salesperson (for Phase B commission)
   salespersonName String?
-  subtotal        Decimal           @db.Decimal(14, 2) @default(0) // net of VAT
-  vat             Decimal           @db.Decimal(14, 2) @default(0)
-  total           Decimal           @db.Decimal(14, 2) @default(0) // amount due
+  subtotal        Decimal           @default(0) @db.Decimal(14, 2) // net of VAT
+  vat             Decimal           @default(0) @db.Decimal(14, 2)
+  total           Decimal           @default(0) @db.Decimal(14, 2) // amount due
   currency        String            @default("PHP")
-  amountPaid      Decimal           @db.Decimal(14, 2) @default(0)
+  amountPaid      Decimal           @default(0) @db.Decimal(14, 2)
   paymentMethod   String            @default("cash") // cash | gcash | dated_check | post_dated_check | credit_card | online
   paymentCleared  Boolean           @default(false) // non-cash: whether the money has landed
   paymentDueAt    DateTime? // post-dated check / expected clearing date
@@ -855,12 +859,76 @@ model CounterSaleItem {
   stockItemId String? // inventory reference (no FK — snapshot below keeps history stable)
   description String // item name snapshot
   unit        String  @default("pcs")
-  qty         Decimal @db.Decimal(14, 3) @default(1)
-  unitPrice   Decimal @db.Decimal(14, 2) @default(0) // VAT-inclusive unit price
-  lineTotal   Decimal @db.Decimal(14, 2) @default(0)
+  qty         Decimal @default(1) @db.Decimal(14, 3)
+  unitPrice   Decimal @default(0) @db.Decimal(14, 2) // VAT-inclusive unit price
+  lineTotal   Decimal @default(0) @db.Decimal(14, 2)
   sortOrder   Int     @default(0)
 
   sale CounterSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
+}
+
+// --- Online store orders (Phase B of store ⇄ ERP unification) ---------------
+// An order placed on the public storefront by a visitor with no account. Prices
+// are the DERIVED website prices (VAT-inclusive, AeroQuote ÷ 0.95) captured as a
+// snapshot at checkout, so a later catalogue price change never rewrites history.
+
+enum StoreOrderStatus {
+  PENDING_PAYMENT // created at checkout, awaiting the gateway
+  PAID // gateway confirmed (webhook / capture)
+  CANCELLED // abandoned, expired or cancelled before payment
+  FULFILLED // handed to the ERP / delivered
+}
+
+model StoreOrder {
+  id          String           @id @default(cuid())
+  orderNumber String           @unique // e.g. "WEB-10001"
+  status      StoreOrderStatus @default(PENDING_PAYMENT)
+
+  // Buyer — the storefront needs no account, so these are captured at checkout.
+  buyerName  String
+  buyerEmail String
+  buyerPhone String
+  company    String?
+
+  deliveryAddress String
+  notes           String?
+
+  currency String  @default("PHP")
+  subtotal Decimal @default(0) @db.Decimal(14, 2)
+  total    Decimal @default(0) @db.Decimal(14, 2)
+
+  // Payment — which gateway the buyer chose and its reference.
+  provider    String? // "hitpay" | "paypal"
+  providerRef String? // HitPay payment-request id / PayPal order id
+  paidAt      DateTime?
+
+  // ERP handoff: the counter sale created from this paid order (if any).
+  counterSaleId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items StoreOrderItem[]
+
+  @@index([status])
+  @@index([providerRef])
+}
+
+model StoreOrderItem {
+  id              String  @id @default(cuid())
+  storeOrderId    String
+  catalogueItemId String? // reference only — the snapshot below keeps history stable
+  modelCode       String
+  name            String
+  variantKey      String  @default("default")
+  unit            String  @default("unit")
+  qty             Int     @default(1)
+  unitPrice       Decimal @default(0) @db.Decimal(14, 2) // website price at checkout
+  lineTotal       Decimal @default(0) @db.Decimal(14, 2)
+
+  order StoreOrder @relation(fields: [storeOrderId], references: [id], onDelete: Cascade)
+
+  @@index([storeOrderId])
 }

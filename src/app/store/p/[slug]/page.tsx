@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { storeProductBySlug } from "@/lib/store-catalog";
 import { peso } from "../../product-card";
+import { AddToCart } from "../../add-to-cart";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,7 @@ export default async function StoreProductPage({ params }: { params: Promise<{ s
                 </ul>
               )}
               <p className="text-xs text-gray-500">Price is VAT-inclusive and covers online processing.</p>
+              <AddToCart slug={p.slug} variants={p.variants} />
             </div>
           ) : (
             <div className="space-y-3 rounded-lg border p-4">
