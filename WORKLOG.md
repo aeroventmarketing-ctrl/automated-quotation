@@ -1,3 +1,9 @@
+## 2026-08-25 · Public quotation view — AeroVent red branding
+- **Request (owner).** The shared client quotation page (`/q/[id]`) rendered in the app's blue theme — change it to
+  **AeroVent's standard red**.
+- **Change.** Company name, header underline and items-table header now use the brand red `#ED1C24` (the same hex used
+  across the JO panels / purchasing chain / approver alarm), table header text white. UI-only.
+
 ## 2026-08-25 · Follow-up SMS — full 100-per-run cap actually sends (timeout fix)
 - **Bug (owner).** "Max texts per run" is 100 but Semaphore shows **<25 messages per run**. Root cause: the hourly cron
   route (`api/cron/follow-ups`) never set `maxDuration`, so it ran on Vercel's **default ~10s timeout** — and the runner
