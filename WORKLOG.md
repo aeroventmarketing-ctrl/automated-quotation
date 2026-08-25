@@ -1,3 +1,28 @@
+## 2026-08-25 · Collection Receipt read — capture the EWT row for the Sales Summary
+- **Request (owner).** Also read the **EWT withheld** row of the CR's settlement box (e.g. ₱100.00, the gross-minus-net
+  difference) — it autofills the **EWT FP** column of the Sales Summary (Vatable).
+- **Change.**
+  - `saleDocReadSchema.ewtAmount` + `SaleDocReadStamp.ewtAmount`; the read prompt now extracts the tax-withheld row
+    (sanity check: gross − EWT = net cash; null when no withholding is shown, never guessed).
+  - The net-of-EWT tally fallback now also accepts the EWT **as read off the receipt** (in addition to the order's
+    recorded EWT payment lines).
+  - `buildSalesSummary` EWT FP now prefers the EWT read off the CR (cleared read first), falling back to the recorded
+    EWT payment lines. `approveSaleDoc` preserves the field.
+- Typecheck + lint clean.
+
+## 2026-08-25 · Collection Receipt read — tally the GROSS settlement amount (not net cash)
+- **Request (owner, practice reading).** On a Collection Receipt the amount that must tally with the Sales Invoice is
+  the **gross settlement amount** in the left "IN SETTLEMENT OF THE FOLLOWING" box (e.g. ₱11,200.00) — the "( PHP )" /
+  bottom TOTAL is often the **net cash** after EWT withheld (₱11,100.00 = 11,200 − 100 EWT) and was being flagged as a
+  false mismatch.
+- **Change (`api/ai/read-sale-doc`).**
+  - Prompt: a Collection Receipt's `amount` is the gross settlement amount from the settlement box, never the net cash;
+    if both appear and differ, return the gross and note the net in warnings.
+  - Server-side safety net: if the read amount is short of the order total by exactly the order's recorded **EWT
+    withheld**, it still tallies (`amountMatches` true, with an explanatory note) — covers receipts that only print the
+    net cash figure.
+- Typecheck + lint clean.
+
 ## 2026-08-24 · Sales Summary (Vatable) — Excel / PDF / Email exports (match WON report)
 - **Request (owner).** Give the Sales Summary the same export row as the WON Sales Report — add **Excel**, **PDF** and
   **Email** beside **View** / **Print**.

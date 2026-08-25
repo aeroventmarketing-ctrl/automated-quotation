@@ -72,6 +72,17 @@ function tinFromReads(reads: Record<string, SaleDocReadStamp>): string {
 }
 
 /**
+ * The EWT withheld as read off the Collection Receipt's settlement box (a
+ * cleared read wins). Null when no read carried an EWT amount.
+ */
+function ewtFromReads(reads: Record<string, SaleDocReadStamp>): number | null {
+  const stamps = Object.values(reads).filter((s) => s.docKey === "or_cr_af" && s.ewtAmount != null && s.ewtAmount > 0);
+  if (stamps.length === 0) return null;
+  const cleared = stamps.find((s) => isSaleDocCleared(s));
+  return (cleared ?? stamps[stamps.length - 1]).ewtAmount;
+}
+
+/**
  * Build the Sales Summary (Vatable) for [from, to] (YYYY-MM-DD, Manila) — always
  * on the PAYMENT-date basis.
  */
@@ -127,7 +138,9 @@ export async function buildSalesSummary(from: string, to: string): Promise<Sales
       // client's saved TIN.
       tin: tinFromReads(reads) || (customerId && accounts[customerId]?.tin) || "",
       poAmount: round2(payableTotal(q)),
-      ewt: round2(ewtWithheld(sale)),
+      // Prefer the EWT read off the Collection Receipt's settlement box; fall
+      // back to the EWT payment lines recorded on the order.
+      ewt: round2(ewtFromReads(reads) ?? ewtWithheld(sale)),
       address: q.inquiry?.customer?.address ?? "",
     });
   }

@@ -60,6 +60,7 @@ export interface SaleDocReadStamp {
   date: string | null; // YYYY-MM-DD document date
   customerTin: string | null; // sold-to / customer TIN read off the document (autofills the Sales Summary)
   amount: number | null; // peso total read off the document
+  ewtAmount: number | null; // EWT withheld read off a Collection Receipt (autofills the Sales Summary's EWT FP)
   expected: number | null; // order figure it was checked against (null if not checked)
   amountMatches: boolean | null; // amount ≈ expected (null if no amount / not checked)
   duplicateOf: string | null; // quote number where this document number is already used
@@ -91,6 +92,7 @@ function coerceDocReadStamp(v: unknown): SaleDocReadStamp | null {
     date: typeof o.date === "string" ? o.date : null,
     customerTin: typeof o.customerTin === "string" ? o.customerTin : null,
     amount: typeof o.amount === "number" ? o.amount : null,
+    ewtAmount: typeof o.ewtAmount === "number" ? o.ewtAmount : null,
     expected: typeof o.expected === "number" ? o.expected : null,
     amountMatches: typeof o.amountMatches === "boolean" ? o.amountMatches : null,
     duplicateOf: typeof o.duplicateOf === "string" ? o.duplicateOf : null,
