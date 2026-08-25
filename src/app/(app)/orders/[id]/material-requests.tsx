@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye } from "lucide-react";
@@ -14,6 +14,7 @@ import { MrfTriagePanel } from "./mrf-triage-panel";
 import { StockMatchPanel } from "./stock-match-panel";
 import { MrfStockCheck } from "./mrf-stock-check";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
+import { ProductPicker } from "@/components/product-picker";
 import type { ScanProduct } from "@/lib/product-scan";
 
 interface ReqRow {
@@ -74,59 +75,6 @@ const normalizeUnit = (u: string | undefined): string => {
   const t = (u ?? "").trim();
   return UNIT_OPTIONS.find((o) => o.toLowerCase() === t.toLowerCase()) ?? t.toLowerCase();
 };
-
-/**
- * Product autocomplete for the description field. Unlike a native <datalist>, it
- * keeps showing matches even when the value already equals a product (no need to
- * clear the field), and uses fixed positioning so the table's horizontal scroll
- * never clips it.
- */
-function ProductCombobox({ value, onChange, products }: { value: string; onChange: (v: string) => void; products: { name: string; unit: string }[] }) {
-  const ref = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
-  const q = value.trim().toLowerCase();
-  const matches = (q ? products.filter((p) => p.name.toLowerCase().includes(q)) : products).slice(0, 10);
-
-  function place() {
-    const r = ref.current?.getBoundingClientRect();
-    if (r) setPos({ left: r.left, top: r.bottom, width: r.width });
-  }
-
-  return (
-    <>
-      <input
-        ref={ref}
-        value={value}
-        onChange={(e) => { onChange(e.target.value); place(); setOpen(true); }}
-        onFocus={() => { place(); setOpen(true); }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Type or pick a product"
-        autoComplete="off"
-        className="w-full rounded border bg-background px-2 py-1"
-      />
-      {open && pos && products.length > 0 && matches.length > 0 && (
-        <ul
-          style={{ position: "fixed", left: pos.left, top: pos.top, width: pos.width, zIndex: 50 }}
-          className="mt-1 max-h-52 overflow-auto rounded-md border bg-background text-sm shadow-md"
-        >
-          {matches.map((p) => (
-            <li key={p.name}>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { onChange(p.name); setOpen(false); }}
-                className="block w-full px-2 py-1.5 text-left hover:bg-accent"
-              >
-                {p.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  );
-}
 
 /** Normalise an item label for matching (drop parenthetical notes + case/space). */
 const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -271,7 +219,7 @@ export function MaterialRequests({
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={i} className={`border-b last:border-0 transition-colors ${highlight === i ? "bg-amber-200/60" : ""}`}>
-                    <td className="py-1 pr-2"><ProductCombobox value={r.description} onChange={(v) => setCell(i, "description", v)} products={products} /></td>
+                    <td className="py-1 pr-2"><ProductPicker value={r.description} onPick={(p) => setCell(i, "description", p?.name ?? "")} products={products} /></td>
                     <td className="py-1 px-1"><input value={r.qty} onChange={(e) => setCell(i, "qty", e.target.value)} className="w-full rounded border bg-background px-1 py-1 text-right" /></td>
                     <td className="py-1 px-1">
                       <select value={normalizeUnit(r.unit)} onChange={(e) => setCell(i, "unit", e.target.value)} className="w-full rounded border bg-background px-1 py-1">

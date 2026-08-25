@@ -1,3 +1,20 @@
+## 2026-08-25 · Requisition / MRF — Articles / Description is selection-only · FROZEN Phase 3 (owner-approved)
+- **Request (owner).** Users must not be able to free-type into the **Articles / Description** box on the department
+  requisition and the Phase 3 Material Request Form — they may type to *search*, but can only **select** an existing
+  product.
+- **Change.** New shared `components/product-picker.tsx` (`<ProductPicker>`): typing filters the menu, but a value is
+  committed **only by picking a match** (click / Enter). On blur an empty box clears the row, an exact product name
+  commits, and anything else **snaps back** to the last pick — free text can never be submitted. Keyboard nav
+  (↑/↓/Enter/Esc), SKU search, fixed-position menu (table scroll never clips it), and a "no match — add it in Products
+  first" hint.
+  - `requisitions/requisition-form.tsx` — replaces the `<input list=…>` + `<datalist>`; picking also fills a blank unit.
+  - **Frozen Phase 3:** `orders/[id]/material-requests.tsx` — its local `ProductCombobox` (free-text) replaced by the
+    shared picker. UI input-validation only: no change to who acts, step order, gating or stage progression.
+  - **Escape hatch:** with an empty product catalogue the field stays plain free text (otherwise the forms would be
+    unusable before the first import) — mirroring the existing "unknown item" validation, which is likewise only
+    enforced when a catalogue exists. The unknown-item guard is kept as a server-side-of-the-form safety net.
+- Typecheck + lint clean.
+
 ## 2026-08-25 · PO creation — autofill from products / suppliers / inventory data
 - **Request (owner).** When the PO line's product is known: one supplier → autofill everything; 2+ suppliers → the
   dropdown shows only those; picking a supplier autofills Company / Attention / Address / EWT / Payment terms
