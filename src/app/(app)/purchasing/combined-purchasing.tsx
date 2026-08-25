@@ -546,6 +546,8 @@ function CombineForm({
     // Auto-set the EWT toggle from the supplier's EWT-capable flag.
     setWithEwt(s.ewt);
     if (s.ewt && !(Number(ewtPct) > 0)) setEwtPct("1");
+    // Auto-fill the payment terms from the supplier's saved remark (suppliers.xlsx Remarks).
+    if (s.remarks?.trim()) setRemarks(s.remarks.trim());
     setSupplierOpen(false);
     setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
   }

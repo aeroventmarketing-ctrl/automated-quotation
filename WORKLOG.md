@@ -1,3 +1,27 @@
+## 2026-08-25 · PO creation — autofill from products / suppliers / inventory data
+- **Request (owner).** When the PO line's product is known: one supplier → autofill everything; 2+ suppliers → the
+  dropdown shows only those; picking a supplier autofills Company / Attention / Address / EWT / Payment terms
+  (suppliers.xlsx); unit price from the supplier price / **Lowest price** (products.xlsx) and **Unit cost**
+  (inventory.xlsx).
+- **Root cause.** The autofill machinery (carrier filter, single-supplier auto-pick, `pickSupplier`, catalogue prices)
+  already existed but was **starved of data**: products.xlsx packs suppliers as one cell — `"NAME ₱price; NAME ₱price"`
+  — and the importer took the whole cell as ONE company name → junk "₱-priced" suppliers, no per-supplier price links.
+- **Change.**
+  - `products/actions.ts` — `parseSupplierCell`: splits on ";", strips a trailing `₱/PHP amount` into the link's
+    price (falls back to the row's price column for a single-supplier cell). Merge now drops stale junk-named links
+    (`isPricedSupplierName`) and lets the file's price refresh an existing link.
+  - `lib/po-catalog.ts` — `REF_PRICE_KEY` pseudo-company inside CatalogPrices: the item's reference price (lowest
+    supplier price, else inventory unit cost). `catalogReferencePriceFor` + new `fallbackPriceFor` +
+    `withCatalogPrices` use it to fill blank unit prices when the chosen supplier has no saved price (typed prices
+    never overwritten).
+  - `purchasing/page.tsx` — builds the reference prices server-side (lowest supplier price → stock `unitCost`;
+    inventory-only items included), no prop changes needed.
+  - `combined-purchasing.tsx` `pickSupplier` — now also autofills **Payment terms** from the supplier's saved remark
+    (the order-page panel already did).
+- **Owner action:** re-import `products.xlsx` (the parser now handles the raw export), then Admin → Suppliers →
+  **Remove invalid (N)** to purge the old junk entries.
+- Typecheck + lint clean; parser unit-tested against the real cell formats.
+
 ## 2026-08-25 · Public quotation view — AeroVent red branding
 - **Request (owner).** The shared client quotation page (`/q/[id]`) rendered in the app's blue theme — change it to
   **AeroVent's standard red**.
