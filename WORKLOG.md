@@ -1,3 +1,21 @@
+## 2026-08-25 · Purchasing — bulk delete on the Rejected / Cancelled tabs · FROZEN Phase 4 (owner-approved)
+- **Request (owner).** Add a bulk-delete option to the **Rejected** and **Cancelled** purchasing tabs (42 + 5 rows to
+  clear one at a time otherwise).
+- **Change.**
+  - New server action `deletePurchaseRequests(ids)` (`orders/actions.ts`) — **admin only**. Each id is expanded through
+    its combined-PO members (as the single delete does), then the set is **re-checked against the DB and filtered to
+    `REJECTED` / `CANCELLED`** — a live request can never be deleted even if a stale page sends its id. Returns
+    `{ deleted, skipped }`.
+  - `purchasing-chain.tsx` — new `allowClosedSelection` prop: closed rows' tick boxes (normally disabled) are re-enabled
+    so they can be selected for deletion. `COMPLETED` stays locked.
+  - `purchasing-workspace.tsx` — on the Rejected / Cancelled tabs (admin) a bulk bar appears: **Select all / Clear**,
+    "N of M selected", and a destructive **Delete selected (N)** with a confirm. Covers order material requests,
+    department requisitions and replenishments; the dept/replen chains only switch to the shared (controlled) selection
+    on those tabs, so every other tab behaves exactly as before.
+  - Known scope: rejected/cancelled **combined-PO cards** keep their existing per-card delete (their tick box lives in
+    `CombinedPurchasing`, outside the shared selection).
+- Typecheck + lint clean.
+
 ## 2026-08-25 · Requisition / MRF — Articles / Description is selection-only · FROZEN Phase 3 (owner-approved)
 - **Request (owner).** Users must not be able to free-type into the **Articles / Description** box on the department
   requisition and the Phase 3 Material Request Form — they may type to *search*, but can only **select** an existing
