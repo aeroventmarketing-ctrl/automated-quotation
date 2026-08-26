@@ -3,14 +3,26 @@
 - **Request (owner).** Make the hero's abstract rotor a rotating **5-blade propeller fan**.
 - **New `store/hero-fan.tsx`** — SVG, so it stays crisp at any size and costs no image request. One blade is drawn at
   12 o'clock and the other four are the same path rotated by 72°.
-- **Sweep 0° (owner).** The first cut raked the blade, its tip sitting further round than its root. Owner asked for
-  no sweep, so both edges now **mirror about the blade's own radial** — the leading edge's control points are
-  (113,62) and (116,45), the trailing edge's the same two reflected — and the tip sits square above the root.
-  That mirror *is* the zero sweep; break it and the blade starts to rake again.
-  - Measured off the **rendered** path rather than asserted: sampling 720 points, the centroid sits at
-    x = **100.006** (100 exactly = no rake), the worst mirror-partner error is **0.013** units, the tip midpoint is
-    **0.042** units off the root's, and the blade spans 86.18–113.82 — 13.82 either side of centre. All of that is
-    sampling noise on a 200-unit box.
+- **Sweep 0°, then a banana blade at the same 0° (owner).** The first cut raked the blade. Owner asked for no
+  sweep, then for a **banana** — a crescent — keeping the sweep.
+- **Those two only look like they fight.** A blade that curves to one side normally carries its tip round with it,
+  which *is* rake. They coexist because **sweep lives in the two end chords, not the curve between them**: root
+  (94,75)–(106,75) and tip (94,28)–(106,28) are both square to the radial and centred on x = 100, so the tip sits
+  directly above the root. The bow in between is **camber** — a different quantity, and free.
+- **A wrong turn worth recording.** Trying to force the ends' *tangents* parallel to the radial as well produced an
+  S, not a banana: a curve that leaves straight, bows, and arrives straight. Six candidate blades were rendered side
+  by side and every one looked like a worm. A single cubic per edge, with the chords doing the work, is correct.
+- **Measured off the rendered path, not asserted** — 6,000 samples:
+  | | |
+  |---|---|
+  | root centre | x = **99.999** |
+  | tip centre | x = **100.001** |
+  | **sweep** | **0.00°** |
+  | camber (the banana) | 21.8 units of bow |
+  | radius span | 19.0 – 78.0 (hub 24, throat 82) |
+- **One real bug the measurement caught**: the root cap's arc flag bulged it *into* the blade instead of down into
+  the hub. It read as 2.4° of phantom sweep until the flag was flipped — a defect no amount of looking at the
+  spinning fan would have surfaced.
 - **Only the rotor turns.** Blades and hub sit in a `<g>` that spins on a 7-second linear loop; the shroud, its
   dashed throat ring and the four mounting bosses stay put. That is what makes it read as *a fan running* rather than
   the whole assembly being spun.

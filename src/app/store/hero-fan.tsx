@@ -8,9 +8,14 @@
  * than the whole assembly spinning.
  *
  * Geometry note: one blade is drawn pointing up and the other four are the same
- * path rotated by 72°. Sweep is ZERO — the blade is symmetric about its own
- * radial, tip square above root, rather than raked round in the direction of
- * travel.
+ * path rotated by 72°. The blade is a BANANA — a crescent bowing to one side —
+ * and its sweep is still ZERO.
+ *
+ * Those two normally fight each other: a blade that curves to one side usually
+ * carries its tip round with it, which is rake. Here they coexist because both
+ * ENDS sit on the blade's own radial and only the body bows off it. The tip
+ * stays square above the root, so sweep is zero, while the belly gives the
+ * crescent its shape.
  */
 
 /**
@@ -19,14 +24,25 @@
  * the shroud's 82 throat, so the propeller turns within its housing instead of
  * cutting across it.
  *
- * Both edges mirror about x = 100: the leading edge's control points are
- * (113,62) and (116,45), the trailing edge's the same two reflected. That
- * mirror IS the zero sweep — break it and the blade starts to rake.
+ * Zero sweep lives in the two END CHORDS, not in the curve between them. Both
+ * are horizontal — square to the radial — and both are centred on x = 100:
+ * root (94,75)-(106,75), tip (94,28)-(106,28). The tip's centre therefore sits
+ * directly above the root's, which is what sweep measures, and the caps are
+ * exact semicircles across those chords.
+ *
+ * Everything the curve does in between is CAMBER, a different quantity, and it
+ * is free: the back bows out to x≈122 and the belly follows at x≈100, giving
+ * the crescent. Do not try to force the ends' TANGENTS parallel to the radial
+ * as well — a curve that leaves straight, bows, and arrives straight is an S,
+ * not a banana, and an attempt at it turned every blade into a worm.
+ *
+ * Move either chord off x = 100 and the blade rakes.
  */
 const BLADE =
-  "M 104.5 74.4 C 113 62 116 45 112.2 22.9 " + // leading edge, bowing out and back in
-  "A 13 13 0 0 0 87.8 22.9 " + //                 tip, just rounded off
-  "C 84 45 87 62 95.5 74.4 Z"; //                 trailing edge, the mirror of the leading
+  "M 106 75 C 126 64 128 37 106 28 " + // convex back, bowing out to the crescent
+  "A 6 6 0 0 0 94 28 " + //               tip cap — semicircle on a square chord
+  "C 104 42 101 64 94 75 " + //           concave belly, back down the inside
+  "A 6 6 0 0 0 106 75 Z"; //              root cap, bulging into the hub that hides it
 
 const ANGLES = [0, 72, 144, 216, 288];
 
