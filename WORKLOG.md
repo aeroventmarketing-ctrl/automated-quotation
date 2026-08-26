@@ -1,3 +1,26 @@
+## 2026-08-26 · Office MRF prefills from the order's own items
+- **Request (owner).** On **3236J**, autofill the Office Material Request Form from the order itself, so the requestor
+  reviews and presses **Submit request** rather than retyping.
+- **The constraint that shapes this.** Articles / Description is **selection-only** (#420): a row whose text isn't an
+  exact catalogue product name is rejected and blocks submission. So a prefill is only useful if it resolves to a real
+  product — filling in text that looks right and then refuses to submit would be worse than an empty form.
+- **New `lib/mrf-suggest.ts`.** Turns the order's bought-in lines into MRF rows, resolved against the catalogue:
+  exact name → name with any "(…)" qualifier dropped → containment, **but only when containment finds exactly one
+  candidate**. Qty comes from the order; unit from the matched product; the quotation's specification goes in the
+  **Remark**, which is free text — the warehouse needs "Foot Mounted · 80 kg" to pick the right item off the shelf,
+  and it can't live in the description without breaking the selection-only rule.
+- **It deliberately refuses to guess.** 3236J's line reads *Induction Motor (TECO)*. Against a catalogue holding
+  several ratings that's **ambiguous**, and silently picking one would put the wrong motor on a real material request.
+  Ambiguous lines keep the order's wording, are counted in a red hint, and the existing selection-only check blocks
+  submit until the requestor picks the exact item. Resolving it is their call, not a heuristic's.
+- **Form behaviour.** Rows seed on mount when Office is the first raisable department (the bought-in case, where it's
+  the only one), and on switching to Office **only while the form is untouched** — it can never overwrite typing. A
+  **Fill from order** button re-applies it on demand. A line above the table says where the rows came from.
+- **8 matcher checks, all passing**: the 3236J line resolving against a single-motor catalogue; the same line left
+  unmatched against three ratings; exact name beating containment; qualifier-dropped match; empty catalogue; catalogue
+  unit used; zero qty leaving the box blank rather than "0"; and no false positive on an unrelated product.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Office can raise an MRF in the order workflow
 - **Request (owner).** Let **Office** raise a Material Request inside the order workflow, "while still maintaining the
   workflow settings". Owner chose the requestors — **Purchaser, Sales, Engineer, Payment Approver, Admin** — and the

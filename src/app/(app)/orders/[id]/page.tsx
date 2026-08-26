@@ -71,6 +71,7 @@ import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { BoughtInProduction } from "./bought-in-production";
 import { orderBoughtInLines, isStockOnlyOrder, orderStockLines, isDuctHardwareStockOnly } from "@/lib/department-pnl";
+import { suggestOfficeMrfRows } from "@/lib/mrf-suggest";
 import { StockRelease } from "./stock-release";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
@@ -309,6 +310,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // A fully bought-in order (bought-in products, nothing fabricated) skips
   // production and its Office-side roles handle the Phase 5 quality steps.
   const boughtInProductLines = orderBoughtInLines(quote.items);
+  // Prefill for an Office MRF: the order's own bought-in lines, resolved against
+  // the product catalogue. A line the catalogue can't pin down keeps the order's
+  // wording and is flagged in the form rather than guessed at — the description
+  // field is selection-only, so a wrong guess would block submission anyway.
+  const mrfSuggestions = suggestOfficeMrfRows(boughtInProductLines, productOptions);
   const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
   // A from-stock order (in-house duct hardware — nothing fabricated or bought from
   // a supplier) is released from Fans & Blowers stock in Phase 2 instead of job
@@ -1078,7 +1084,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
-            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} showMrfDoc={!hideMrfDoc} admin={adminViewer} canCheckStock={canReleaseMaterials} />
+            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} suggestions={mrfSuggestions} suggestionDept={OFFICE_DEPT_KEY} showMrfDoc={!hideMrfDoc} admin={adminViewer} canCheckStock={canReleaseMaterials} />
           </CardContent>
         </Card>
       )}
