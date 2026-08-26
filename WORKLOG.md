@@ -1,3 +1,33 @@
+## 2026-08-26 · Attach a file for the storefront Logo and Hero photo
+
+- **Request (owner).** Add a file-attach option to the **Logo** and **Hero photo path** fields in
+  Admin → Storefront → Look, instead of typing a path.
+- **The hint was describing a workaround.** "Upload via a product photo, then paste its path" was literally the only
+  way it worked: `/api/store-image` serves a `store/…` object **only if it is a photo of a listed product**
+  (`isPublicStorePhoto`) — a deliberate guard so the endpoint can't be used to read the storage bucket. So an image
+  uploaded as branding belonged to no product and **404'd for shoppers**; the sole route in was to smuggle it in as
+  some listed item's photo.
+- **The allowlist now knows about branding.** `publicPhotoPaths` also admits the theme's own `logoUrl` /
+  `heroImagePath` when they are `store/…` uploads. Still an allowlist, not an open proxy — only those two exact
+  paths, and clearing a field revokes it. Saving the theme drops the cached set, so a just-attached image doesn't
+  spend a minute 404ing (which the image route asks browsers to cache, making the wait feel longer than it is).
+- **New `ImageField` in the editor** — thumbnail, the path (still hand-editable), **Attach file**, and **Clear**.
+  Attaching POSTs to the existing admin `/api/store-uploads` and writes the returned path back into the field.
+  Oversized files are caught client-side at 4 MB, because the serverless body cap rejects them with nothing worth
+  showing an admin. The thumbnail previews through the **admin** route, which needs no product listed — so a fresh
+  upload shows at once and a bad path is obvious here rather than on the live shop.
+  - It does **not** reuse the shared `Field`: that renders a `<label>`, and a file picker is itself a `<label>`.
+    Nested labels are invalid and make it unpredictable which control a click lands on. Caught on screenshot.
+- **Hero accepts what the logo accepts.** It was hardcoded to wrap the value in `/api/store-image?path=`, so a
+  public file or a full URL pasted into it silently broke. Both fields now resolve through `themeImageSrc`.
+- **Verified.** 9 checks against a real database on the allowlist: logo and hero reachable once attached, an
+  unrelated `store/…` path **not** reachable, a path outside `store/` **not** reachable, traversal **not**
+  reachable, a public-path logo adding nothing to the allowlist, and clearing a field revoking access. The control
+  itself was rendered in a browser and screenshotted.
+  - **Not verified end to end:** the upload itself needs Supabase Storage, which no local environment has. The route
+    it posts to is the one product photos already use unchanged.
+- Typecheck + lint + build clean. No migration, no workflow change.
+
 ## 2026-08-26 · MRF prefill matched against the REAL products / inventory catalogue
 
 - **Correction (owner).** On the deployed form every row still came back **unmatched** — "Induction Motor (TECO)"

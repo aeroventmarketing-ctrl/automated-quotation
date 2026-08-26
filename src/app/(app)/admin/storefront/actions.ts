@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { setStoreTheme, type StoreTheme } from "@/lib/store-theme";
+import { forgetPublicPhotoPaths } from "@/lib/store-catalog";
 
 /**
  * Save the storefront's look & copy. Admin only — this is the public face of the
@@ -12,6 +13,9 @@ export async function saveStoreTheme(input: Partial<StoreTheme>): Promise<StoreT
   const user = await getCurrentUser();
   if (!isAdmin(user)) throw new Error("Admin access required");
   const saved = await setStoreTheme(input);
+  // The logo and hero are served through the store's image allowlist, which is
+  // cached — without this a just-attached image 404s until the TTL expires.
+  forgetPublicPhotoPaths();
   // The shell and every store page read the theme, so refresh the whole subtree.
   revalidatePath("/store", "layout");
   revalidatePath("/admin/storefront");

@@ -21,6 +21,7 @@ import {
   type StorePhoto,
 } from "@/lib/store-product";
 import { stockForCatalogue, stockForCatalogueMany } from "@/lib/store-stock";
+import { getStoreTheme } from "@/lib/store-theme";
 
 /** One purchasable variant of a store product (a priced size / configuration). */
 export interface StoreVariant {
@@ -201,9 +202,16 @@ export async function storeProductBySlug(slug: string): Promise<StoreProduct | n
 }
 
 /**
- * Whether a storage path is a photo of a LISTED product — the gate the public
- * image route uses, so the store's image endpoint can never be used to read
- * arbitrary objects out of the storage bucket.
+ * Whether a storage path is one the public store is allowed to serve — the gate
+ * the public image route uses, so the store's image endpoint can never be used
+ * to read arbitrary objects out of the storage bucket.
+ *
+ * Two things qualify: a photo of a LISTED product, and the shop's own branding
+ * (the logo and the hero image an admin set in Admin → Storefront). The theme's
+ * images are as public as the shop itself — they are on every page — but they
+ * belong to no product, so without this an uploaded logo would 404 for
+ * shoppers and only an image smuggled in as some listed item's photo would
+ * display.
  */
 export async function isPublicStorePhoto(path: string): Promise<boolean> {
   const clean = (path ?? "").trim();
@@ -212,24 +220,42 @@ export async function isPublicStorePhoto(path: string): Promise<boolean> {
 }
 
 /**
- * The set of photo paths belonging to listed products, cached briefly in-process.
- * Every <img> on the storefront hits the image route, and without this each one
- * costs its own database scan — the shop's hottest path. A short TTL means a
- * newly-published photo appears within a minute.
+ * The set of paths the storefront may serve, cached briefly in-process. Every
+ * <img> on the storefront hits the image route, and without this each one costs
+ * its own database scan — the shop's hottest path. A short TTL means a newly
+ * published photo appears within a minute.
  */
 let photoCache: { at: number; paths: Set<string> } | null = null;
 const PHOTO_CACHE_MS = 60_000;
+
+/**
+ * Drop the cached allowlist — called when the theme's branding changes, so an
+ * admin who has just attached a logo sees it rather than a minute of 404s (which
+ * the image route asks browsers to cache, making the wait feel longer than it
+ * is). Only clears the instance that handled the save; elsewhere the TTL does
+ * it, exactly as for a newly published product photo.
+ */
+export function forgetPublicPhotoPaths(): void {
+  photoCache = null;
+}
 
 async function publicPhotoPaths(): Promise<Set<string>> {
   const now = Date.now();
   if (photoCache && now - photoCache.at < PHOTO_CACHE_MS) return photoCache.paths;
 
-  const items = await prisma.catalogueItem
-    .findMany({ where: { active: true, storeListed: true }, select: { storePhotos: true } })
-    .catch(() => [] as { storePhotos: unknown }[]);
+  const [items, theme] = await Promise.all([
+    prisma.catalogueItem
+      .findMany({ where: { active: true, storeListed: true }, select: { storePhotos: true } })
+      .catch(() => [] as { storePhotos: unknown }[]),
+    getStoreTheme().catch(() => null),
+  ]);
   const paths = new Set<string>();
   for (const it of items) {
     for (const photo of storeFieldsOf({ storePhotos: it.storePhotos }).storePhotos) paths.add(photo.path);
+  }
+  for (const branding of [theme?.logoUrl, theme?.heroImagePath]) {
+    const clean = (branding ?? "").trim();
+    if (clean.startsWith("store/")) paths.add(clean);
   }
   photoCache = { at: now, paths };
   return paths;
