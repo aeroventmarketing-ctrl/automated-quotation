@@ -58,7 +58,7 @@ export function ProductCard({
         ) : (
           <>
             <FanPlaceholder blower={isBlowerCategory(product.category)} />
-            <span className="absolute bottom-2.5 left-3 text-[9px] uppercase tracking-[0.1em] text-[#6e7d8b]">
+            <span className="absolute bottom-2.5 left-3 text-[9px] uppercase tracking-[0.1em] text-[var(--store-steel)]">
               {product.modelCode}
             </span>
           </>
@@ -71,15 +71,15 @@ export function ProductCard({
         <div className="text-[10px] font-black uppercase tracking-[0.1em] text-[var(--store-accent)]">
           {product.category}
         </div>
-        <h3 className="my-[7px] min-h-[43px] text-[14px] font-semibold leading-[1.5] text-[var(--store-ink)] transition-colors group-hover:text-[var(--store-accent)]">
+        <h3 className="my-[7px] min-h-[43px] text-[14px] font-semibold leading-[1.5] text-[var(--store-text)] transition-colors group-hover:text-[var(--store-accent)]">
           <Link href={`/store/p/${product.slug}`} className="after:absolute after:inset-0 after:content-['']">
             {product.name}
           </Link>
         </h3>
-        <div className="text-[10px] text-[#8a96a5]">MODEL {product.modelCode}</div>
+        <div className="text-[10px] text-[var(--store-steel)]">MODEL {product.modelCode}</div>
 
         <div className="mt-3.5 flex items-end justify-between gap-2 border-t border-[#edf0f2] pt-3.5">
-          <div className="font-[family-name:var(--font-display)] text-[24px] font-bold leading-none text-[var(--store-ink)]">
+          <div className="font-[family-name:var(--font-display)] text-[24px] font-bold leading-none text-[var(--store-text)]">
             {product.quoteOnly ? (
               <span className="text-[19px]">{product.fabricated ? "Custom quote" : "On request"}</span>
             ) : (

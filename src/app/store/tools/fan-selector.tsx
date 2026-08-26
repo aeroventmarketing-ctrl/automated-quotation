@@ -241,7 +241,7 @@ export function FanSelector() {
                               Recommended
                             </span>
                           )}
-                          <div className="mt-0.5 text-[11px] text-[#8a96a5]">{r.name}</div>
+                          <div className="mt-0.5 text-[11px] text-[var(--store-steel)]">{r.name}</div>
                         </td>
                         <td className="py-2.5 pr-3">{r.size ?? "—"}</td>
                         <td className="py-2.5 pr-3 text-right tabular-nums">{r.rpm != null ? Math.round(r.rpm) : "—"}</td>
@@ -266,10 +266,10 @@ export function FanSelector() {
 
               <div className="flex flex-wrap items-center justify-between gap-4 rounded border border-[var(--store-line)] bg-[#f8fafb] px-5 py-4">
                 <div className="max-w-xl">
-                  <p className="text-[13px] leading-relaxed text-[#536275]">
+                  <p className="text-[13px] leading-relaxed text-[var(--store-steel)]">
                     {chosen ? (
                       <>
-                        Quoting <b className="text-[var(--store-ink)]">{chosen.modelCode}</b> at{" "}
+                        Quoting <b className="text-[var(--store-text)]">{chosen.modelCode}</b> at{" "}
                         {dutyLabel(data.duty)} — pick another row to change it.
                       </>
                     ) : (

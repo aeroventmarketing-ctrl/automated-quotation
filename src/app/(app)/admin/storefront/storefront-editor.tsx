@@ -235,12 +235,16 @@ export function StorefrontEditor({ initial }: { initial: StoreTheme }) {
             style={{ background: `linear-gradient(115deg, ${t.ink} 0%, ${t.ink2} 58%, ${t.accentDark}33 100%)` }}
           >
             <div className="px-5 py-8">
-              <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/80">{t.heroEyebrow}</div>
-              <div className="mt-2 text-xl font-extrabold uppercase leading-tight text-white sm:text-2xl">
+              <div className="text-[10px] font-extrabold uppercase tracking-[0.16em]" style={{ color: t.textMutedOnDark }}>
+                {t.heroEyebrow}
+              </div>
+              <div className="mt-2 text-xl font-extrabold uppercase leading-tight sm:text-2xl" style={{ color: t.textOnDark }}>
                 {t.heroHeadline}{" "}
                 <span style={{ color: t.accent }}>{t.heroHeadlineAccent}</span>
               </div>
-              <p className="mt-2 max-w-lg text-xs leading-relaxed text-white/70">{t.heroSubhead}</p>
+              <p className="mt-2 max-w-lg text-xs leading-relaxed" style={{ color: t.textMutedOnDark }}>
+                {t.heroSubhead}
+              </p>
               <span
                 className="mt-4 inline-block rounded px-4 py-2 text-xs font-bold text-white"
                 style={{ background: t.accent }}
@@ -260,6 +264,15 @@ export function StorefrontEditor({ initial }: { initial: StoreTheme }) {
           <ColorField label="Dark ground" value={t.ink} onChange={(v) => set({ ink: v })} hint="Hero, footer, cart button" />
           <ColorField label="Dark ground (lighter)" value={t.ink2} onChange={(v) => set({ ink2: v })} hint="Category tiles" />
           <ColorField label="Page ground" value={t.paper} onChange={(v) => set({ paper: v })} hint="Behind the sections" />
+          <ColorField label="Text" value={t.text} onChange={(v) => set({ text: v })} hint="Headings & body on light sections" />
+          <ColorField label="Text — muted" value={t.textMuted} onChange={(v) => set({ textMuted: v })} hint="Captions, breadcrumbs, supporting copy" />
+          <ColorField label="Text on dark" value={t.textOnDark} onChange={(v) => set({ textOnDark: v })} hint="Hero, footer, category tiles" />
+          <ColorField
+            label="Text on dark — muted"
+            value={t.textMutedOnDark}
+            onChange={(v) => set({ textMutedOnDark: v })}
+            hint="Subheads & captions on those dark sections"
+          />
           <Field label="Corners">
             <select
               value={t.radius}

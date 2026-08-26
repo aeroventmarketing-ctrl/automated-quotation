@@ -5,6 +5,7 @@ import { getStoreTheme, themeImageSrc, type StoreTheme } from "@/lib/store-theme
 import { jsonLd, itemListLd, faqLd, storeUrl } from "@/lib/store-seo";
 import { WRAP, DISPLAY, KICKER } from "@/lib/store-ui";
 import { CatalogueBrowser } from "./catalogue-browser";
+import { HeroFan } from "./hero-fan";
 import { QuoteButton } from "./store-actions";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +70,7 @@ function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number
   const heroPhoto = themeImageSrc(theme.heroImagePath);
 
   return (
-    <section className="relative overflow-hidden bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-white">
+    <section className="relative overflow-hidden bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-[var(--store-on-dark)]">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
@@ -83,7 +84,7 @@ function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number
       <div className={`${WRAP} relative grid items-center gap-10 py-16 sm:py-20 lg:min-h-[610px] lg:grid-cols-[1.08fr_.92fr] lg:py-0`}>
         <div>
           {theme.heroEyebrow && (
-            <div className="inline-flex items-center gap-2.5 text-[12px] font-extrabold uppercase tracking-[0.16em] text-[#e5ebf2]">
+            <div className="inline-flex items-center gap-2.5 text-[12px] font-extrabold uppercase tracking-[0.16em] text-[var(--store-on-dark)]">
               <i className="block h-0.5 w-7 bg-[var(--store-accent)]" />
               {theme.heroEyebrow}
             </div>
@@ -99,7 +100,7 @@ function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number
             )}
           </h1>
 
-          <p className="max-w-[650px] text-[17px] leading-[1.75] text-[#b9c4d2]">{theme.heroSubhead}</p>
+          <p className="max-w-[650px] text-[17px] leading-[1.75] text-[var(--store-on-dark-muted)]">{theme.heroSubhead}</p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
@@ -120,7 +121,7 @@ function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number
               {theme.metrics.map((m) => (
                 <div key={m.value}>
                   <b className={`${DISPLAY} block text-[26px] leading-tight`}>{m.value}</b>
-                  <span className="text-[11px] uppercase tracking-[0.08em] text-[#8998aa]">{m.label}</span>
+                  <span className="text-[11px] uppercase tracking-[0.08em] text-[var(--store-on-dark-muted)]">{m.label}</span>
                 </div>
               ))}
             </div>
@@ -140,25 +141,12 @@ function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number
               fetchPriority="high"
             />
           ) : (
-            <>
-              <div
-                aria-hidden
-                className="h-[330px] w-[330px] animate-store-float rounded-full border border-[#516078] shadow-[0_0_0_28px_rgba(255,255,255,0.025),0_34px_70px_rgba(0,0,0,0.53)]"
-                style={{
-                  background:
-                    "radial-gradient(circle,#26364b 0 12%,#0a1425 13% 23%,#29374a 24% 25%,#111e32 26% 55%,#59667a 56% 57%,#0b1526 58%)",
-                }}
-              />
-              <div aria-hidden className="absolute h-[250px] w-[250px] animate-[spin_22s_linear_infinite] rounded-full border border-dashed border-[#69798e]">
-                <span className="absolute inset-[25px] rounded-full border-[18px] border-transparent border-y-[#6d7b8e]" />
-                <span className="absolute inset-[25px] rotate-[60deg] rounded-full border-[18px] border-transparent border-y-[#6d7b8e]" />
-              </div>
-            </>
+            <HeroFan />
           )}
 
           <div className="absolute right-0 top-11 w-[180px] border-l-2 border-[var(--store-accent)] bg-white/[0.05] px-4 py-3.5">
             <b className="text-[12px] tracking-[0.1em]">AIRFLOW, ENGINEERED.</b>
-            <span className="mt-1 block text-[11px] text-[#8795a7]">
+            <span className="mt-1 block text-[11px] text-[var(--store-on-dark-muted)]">
               {productCount > 0
                 ? `${productCount} product${productCount === 1 ? "" : "s"} listed · nationwide delivery`
                 : "Nationwide delivery across the Philippines"}
@@ -205,12 +193,12 @@ function TrustBand({ theme }: { theme: StoreTheme }) {
 
 function SolutionBand({ theme }: { theme: StoreTheme }) {
   return (
-    <section id="custom" className="scroll-mt-24 bg-[var(--store-ink)] text-white">
+    <section id="custom" className="scroll-mt-24 bg-[var(--store-ink)] text-[var(--store-on-dark)]">
       <div className="grid lg:min-h-[420px] lg:grid-cols-2">
         <div className="bg-[linear-gradient(145deg,#111d31,#07101f)] px-5 py-16 sm:px-8 lg:py-[70px] lg:pl-[max(20px,calc((100vw_-_1240px)/2))] lg:pr-[60px]">
           {theme.solutionKicker && <div className={KICKER}>{theme.solutionKicker}</div>}
           <h2 className={`${DISPLAY} my-4 text-[38px] leading-[1.02] sm:text-[48px]`}>{theme.solutionTitle}</h2>
-          <p className="leading-[1.75] text-[#aeb9c8]">{theme.solutionBody}</p>
+          <p className="leading-[1.75] text-[var(--store-on-dark-muted)]">{theme.solutionBody}</p>
 
           {theme.solutionBullets.length > 0 && (
             <ul className="my-6 grid gap-3 sm:grid-cols-2">
@@ -266,7 +254,7 @@ function ArticleBand({ theme }: { theme: StoreTheme }) {
         <div>
           {theme.articleKicker && <div className={KICKER}>{theme.articleKicker}</div>}
           <h2 className={`${DISPLAY} mb-4 mt-2.5 text-[38px] leading-none`}>{theme.articleTitle}</h2>
-          <div className="space-y-4 leading-[1.85] text-[#536275]">
+          <div className="space-y-4 leading-[1.85] text-[var(--store-steel)]">
             {paragraphs.map((p) => <p key={p.slice(0, 40)}>{p}</p>)}
           </div>
         </div>
@@ -279,7 +267,7 @@ function ArticleBand({ theme }: { theme: StoreTheme }) {
               className="mb-2.5 rounded-[5px] border border-[var(--store-line)] bg-white px-5 py-[18px]"
             >
               <summary className="cursor-pointer font-extrabold">{f.q}</summary>
-              <p className="mt-2.5 text-[13px] leading-[1.8] text-[#536275]">{f.a}</p>
+              <p className="mt-2.5 text-[13px] leading-[1.8] text-[var(--store-steel)]">{f.a}</p>
             </details>
           ))}
         </div>

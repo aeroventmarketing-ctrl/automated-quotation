@@ -69,16 +69,16 @@ export default async function StoreToolsPage({
         }}
       />
 
-      <div className="bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-white">
+      <div className="bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-[var(--store-on-dark)]">
         <div className={`${WRAP} py-14`}>
-          <nav aria-label="Breadcrumb" className="text-[12px] text-[#8998aa]">
-            <Link href="/store" className="transition-colors hover:text-white">Shop</Link>
+          <nav aria-label="Breadcrumb" className="text-[12px] text-[var(--store-on-dark-muted)]">
+            <Link href="/store" className="transition-colors hover:text-[var(--store-on-dark)]">Shop</Link>
             <span className="mx-2 text-white/25">/</span>
             <span className="text-white/80">HVAC Tools</span>
           </nav>
           <div className={`${KICKER} mt-4`}>Free engineering tools</div>
           <h1 className={`${DISPLAY} mt-2 text-[clamp(40px,5vw,60px)] leading-none tracking-[-0.02em]`}>HVAC Tools</h1>
-          <p className="mt-3 max-w-[640px] text-[15px] leading-[1.7] text-[#b9c4d2]">
+          <p className="mt-3 max-w-[640px] text-[15px] leading-[1.7] text-[var(--store-on-dark-muted)]">
             Size a fan, a duct or a drive in the browser. Built on the same selection engine we use to prepare
             quotations — so what you work out here is what our engineers see.
           </p>
@@ -92,7 +92,7 @@ export default async function StoreToolsPage({
           <div className="max-w-2xl">
             <div className={KICKER}>{theme.solutionKicker}</div>
             <h2 className={`${DISPLAY} mt-2 text-[34px] leading-none`}>Want this checked by an engineer?</h2>
-            <p className="mt-2.5 text-[14.5px] leading-relaxed text-[#536275]">
+            <p className="mt-2.5 text-[14.5px] leading-relaxed text-[var(--store-steel)]">
               These calculators get you to a working number. Send us the airflow, static pressure and site conditions
               and our technical team will confirm the selection, the accessories and the price.
             </p>

@@ -58,8 +58,8 @@ export function QuoteDialog({ subject, note }: { subject: string; note: string }
   }
 
   const field =
-    "rounded border border-[var(--store-line)] bg-white px-3 py-3 text-[14px] text-[var(--store-ink)] outline-none transition-colors focus:border-[var(--store-accent)]";
-  const label = "text-[11px] font-extrabold uppercase tracking-wide text-[#526173]";
+    "rounded border border-[var(--store-line)] bg-white px-3 py-3 text-[14px] text-[var(--store-text)] outline-none transition-colors focus:border-[var(--store-accent)]";
+  const label = "text-[11px] font-extrabold uppercase tracking-wide text-[var(--store-steel)]";
 
   return (
     <Overlay labelledBy="quote-dialog-title">
@@ -69,7 +69,7 @@ export function QuoteDialog({ subject, note }: { subject: string; note: string }
           <Kicker>Engineering support</Kicker>
           <h2
             id="quote-dialog-title"
-            className="mt-2 font-[family-name:var(--font-display)] text-[32px] font-bold uppercase leading-none text-[var(--store-ink)]"
+            className="mt-2 font-[family-name:var(--font-display)] text-[32px] font-bold uppercase leading-none text-[var(--store-text)]"
           >
             Request a quotation
           </h2>

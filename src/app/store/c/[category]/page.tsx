@@ -50,16 +50,16 @@ export default async function StoreCategoryPage({ params }: { params: Promise<{ 
       />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbLd(trail)) }} />
 
-      <div className="bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-white">
+      <div className="bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-[var(--store-on-dark)]">
         <div className={`${WRAP} py-14`}>
-          <nav aria-label="Breadcrumb" className="text-[12px] text-[#8998aa]">
-            <Link href="/store" className="transition-colors hover:text-white">Shop</Link>
+          <nav aria-label="Breadcrumb" className="text-[12px] text-[var(--store-on-dark-muted)]">
+            <Link href="/store" className="transition-colors hover:text-[var(--store-on-dark)]">Shop</Link>
             <span className="mx-2 text-white/25">/</span>
             <span className="text-white/80">{cat.label}</span>
           </nav>
           <div className={`${KICKER} mt-4`}>Industrial-grade equipment</div>
           <h1 className={`${DISPLAY} mt-2 text-[clamp(38px,5vw,56px)] leading-none tracking-[-0.02em]`}>{cat.label}</h1>
-          <p className="mt-3 text-[14px] text-[#b9c4d2]">
+          <p className="mt-3 text-[14px] text-[var(--store-on-dark-muted)]">
             {shown.length} product{shown.length === 1 ? "" : "s"} · ordered online or quoted to specification
           </p>
         </div>

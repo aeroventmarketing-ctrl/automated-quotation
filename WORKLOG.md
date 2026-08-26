@@ -1,3 +1,123 @@
+## 2026-08-26 · Hero propeller redrawn from the owner's reference photo
+
+- **Request (owner).** A photograph of a five-blade aircraft propeller: *copy this and make it rotate.*
+- **What was copied.** Matte black **paddle** blades — a narrow shank that stays slim well past halfway, then flares
+  into a broad squared tip with rounded corners — **twin white tip bands**, a **copper maker's decal** at 58% span
+  with a small painted index mark below it, and a **polished hub** carrying a retention collar per blade, an
+  eight-bolt circle and a centre boss. The shroud, dashed throat ring and mounting bosses of the previous artwork are
+  gone; the reference is a bare propeller.
+- **The backlight is from the photo and it is load-bearing.** Five near-black blades on a near-black hero would
+  vanish. The photo's cool halo behind the hub solves that without inventing anything — and it sits **outside** the
+  rotating group, because a lamp behind a propeller does not spin with it.
+- **Proportion was the thing that needed measuring, not eyeballing.** A first pass used a hub radius of 27 against a
+  tip radius of 86 — 31% of the diameter, which made the hub the subject and the blades an afterthought. The
+  reference hub is ~22%; it is now **20** (23%). The blades were re-cut narrower at the same time.
+- **Sweep is still 0.00°** — root centre and tip centre both land on x = 100.000, measured off the rendered path.
+  The reference blades *look* raked; that is twist and camera angle, not plan-form sweep.
+- **AFBM lettered across the blades (owner).** A bold white letter just inboard of the tip bands — **A, F, B, M** on
+  blades 1–4. Four letters across five blades, so the **fifth carries none**; that is the request, not an oversight.
+  - Each letter sits inside its own blade's rotated group, so it turns with the blade and goes upside down at the
+    bottom of the sweep — which is what painted lettering does on a real propeller.
+  - The decal and index mark shifted 2 units inboard to make room.
+- **Markings are painted on, not floated over.** They live in a `clipPath` of the blade in blade-local space, so one
+  definition serves all five, the letters included, and nothing can spill past an edge.
+  - Checked in the browser rather than assumed: the font resolves to real **Manrope 800** (not a silent fallback),
+    the fill is `rgb(255,255,255)`, and the glyph box spans x 96.2–103.8 against a blade half-width of ~9.9 at that
+    radius — comfortably inside the paint.
+- **Rotation reversed (owner).** Now **anticlockwise**. Tailwind's `spin` keyframe only counts up to 360°, so the
+  direction is set with `reverse` on the animation shorthand rather than by adding a second keyframe.
+- **Verified in a browser**, not by reading the markup:
+  - Direction measured off the rotor's **live transform matrix**, unwrapped across the ±180° seam: six samples fall
+    −63.4° → −110.6°, a net **−47.1°** over ~0.9 s. Negative is anticlockwise, and −47° in 0.9 s confirms the 7 s
+    period is untouched.
+  - Frames one second apart differ in **7.3%** of the fan's area (it turns), and under
+    `prefers-reduced-motion: reduce` two frames differ in **0 px** — so `motion-reduce:animate-none` still beats the
+    longer shorthand.
+- The preview page's "Highlight what rotates" control was replaced with **"Show one blade"** — with no shroud left,
+  almost everything rotates, so the old toggle had nothing to say; isolating one blade lets the plan-form be held
+  against the photo.
+- Typecheck + lint + build clean. No migration, no workflow change.
+
+## 2026-08-26 · The hero artwork is a rotating five-blade propeller
+
+- **Request (owner).** Make the hero's abstract rotor a rotating **5-blade propeller fan**.
+- **New `store/hero-fan.tsx`** — SVG, so it stays crisp at any size and costs no image request. One blade is drawn at
+  12 o'clock and the other four are the same path rotated by 72°.
+- **Sweep 0°, then a banana blade at the same 0° (owner).** The first cut raked the blade. Owner asked for no
+  sweep, then for a **banana** — a crescent — keeping the sweep.
+- **Those two only look like they fight.** A blade that curves to one side normally carries its tip round with it,
+  which *is* rake. They coexist because **sweep lives in the two end chords, not the curve between them**: root
+  (94,75)–(106,75) and tip (94,28)–(106,28) are both square to the radial and centred on x = 100, so the tip sits
+  directly above the root. The bow in between is **camber** — a different quantity, and free.
+- **A wrong turn worth recording.** Trying to force the ends' *tangents* parallel to the radial as well produced an
+  S, not a banana: a curve that leaves straight, bows, and arrives straight. Six candidate blades were rendered side
+  by side and every one looked like a worm. A single cubic per edge, with the chords doing the work, is correct.
+- **Measured off the rendered path, not asserted** — 6,000 samples:
+  | | |
+  |---|---|
+  | root centre | x = **99.999** |
+  | tip centre | x = **100.001** |
+  | **sweep** | **0.00°** |
+  | camber (the banana) | 21.8 units of bow |
+  | radius span | 19.0 – 78.0 (hub 24, throat 82) |
+- **One real bug the measurement caught**: the root cap's arc flag bulged it *into* the blade instead of down into
+  the hub. It read as 2.4° of phantom sweep until the flag was flipped — a defect no amount of looking at the
+  spinning fan would have surfaced.
+- **Only the rotor turns.** Blades and hub sit in a `<g>` that spins on a 7-second linear loop; the shroud, its
+  dashed throat ring and the four mounting bosses stay put. That is what makes it read as *a fan running* rather than
+  the whole assembly being spun.
+- **Geometry is bounded by the housing.** Blade root at radius 26 (under the hub, so the join never shows), tip at
+  **78** — inside the shroud's 82 throat. The first attempt used a fatter blade reaching past 90: it read as five
+  flower petals and the tips cut straight across the shroud. Caught on the first screenshot and re-cut.
+- **Respects `prefers-reduced-motion`.** Both the spin and the gentle float now stop. The float is pre-existing and
+  had **never** honoured the setting — worth fixing while the file was open, since a permanently drifting hero is
+  exactly what that preference exists to switch off.
+- **Verified in a browser**, not by reading the markup:
+  - Two frames one second apart differ in **16.8 %** of the fan's area — it genuinely turns. Zero would have meant a
+    static picture.
+  - The frame diff shows change confined to the blades and hub; the shroud ring and bosses register only the float's
+    drift, confirming they don't rotate with the rotor.
+  - Under `prefers-reduced-motion: reduce` two frames a second apart differ in **0 px** — it holds completely still.
+- Unchanged: the artwork is still only the fallback. Set a Hero photo in Admin → Storefront and it replaces this.
+- Typecheck + lint + build clean. No migration, no workflow change.
+
+## 2026-08-26 · Text colours are settable on the storefront
+
+- **Request (owner).** Add an option to change the website's text colours. The Look card had five colour pickers and
+  every one of them was a **ground or accent** — nothing controlled type.
+- **Four fields, not one.** The shop alternates light sections and dark ones (hero, footer, category tiles), and each
+  carries full-strength type plus a quieter tier for captions and breadcrumbs. So: **Text**, **Text — muted**,
+  **Text on dark**, **Text on dark — muted**. Defaults are the approved design's own values, so an untouched shop is
+  unchanged.
+- **Button labels are deliberately excluded.** Every remaining `text-white` sits on `bg-[var(--store-accent)]` or
+  `bg-[var(--store-ink)]` — a label belongs to its button, not to the page. Setting "Text on dark" to cream recolours
+  the hero headline and the footer and leaves *Get a Quote* white on red, which is the only sane behaviour.
+- **`--store-steel` was already the muted token** — 42 classes point at it — but it was **pinned in the layout**.
+  It now reads from the theme, so those 42 came along for free. Five near-identical hardcoded greys
+  (`#536275`, `#526173`, `#6e7d8b`, `#788795`, `#8a96a5`) were folded into it, and nine on-dark greys into the
+  on-dark muted token.
+- **Two bugs the sweep exposed.**
+  - A bulk replace put the product page's `/` and `·` separators — which sit on **white** — into the *on-dark*
+    bucket, where the default is a pale grey. They would have been near-invisible. Caught on screenshot; reverted to
+    their own neutral, since decorative punctuation isn't type the owner wants to steer.
+  - The hero eyebrow was `#e5ebf2`, essentially white, and the first pass demoted it to the *muted* tier — visibly
+    dimming the most prominent label on the page. It belongs to full-strength **Text on dark**.
+- **Verified against a real storefront** (13 seeded products, throwaway Postgres, Playwright), by pixel-diffing the
+  page before and after the change:
+  | | differing pixels |
+  |---|---|
+  | hero, after fixing the eyebrow | 0.25 % |
+  | footer | 0.58 % |
+  What remains is **one deliberate flattening**: the design carried a dimmer on-dark grey in three places (footer
+  prose `#9ba8b8`, hero metric labels `#8998aa`, the hero caption card `#8795a7`) which now share the single muted
+  token at `#b9c4d2`. Slightly brighter, better contrast, and inspected side by side before keeping it. Say the word
+  and it gets its own tier back.
+- Then re-tinted to a deliberately alien palette (green / olive / cream / gold) to prove each field reaches what it
+  claims: light headings, light body, dark-section headings and dark-section captions each moved independently, the
+  accent stayed red, and the buttons stayed white.
+- The editor's live Preview now paints itself in the chosen text colours instead of hardcoded whites.
+- Typecheck + lint + build clean. No migration, no workflow change.
+
 ## 2026-08-26 · Attach a file for the storefront Logo and Hero photo
 
 - **Request (owner).** Add a file-attach option to the **Logo** and **Hero photo path** fields in

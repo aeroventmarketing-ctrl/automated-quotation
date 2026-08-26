@@ -34,7 +34,7 @@ export function AddToCart({
     <div className="space-y-3">
       {variants.length > 1 && (
         <label className="block space-y-1.5">
-          <span className="text-[11px] font-extrabold uppercase tracking-wide text-[#526173]">Option</span>
+          <span className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--store-steel)]">Option</span>
           <select
             value={variantKey}
             onChange={(e) => setVariantKey(e.target.value)}
@@ -51,7 +51,7 @@ export function AddToCart({
 
       <div className="flex items-end gap-2.5">
         <label className="space-y-1.5">
-          <span className="block text-[11px] font-extrabold uppercase tracking-wide text-[#526173]">Qty</span>
+          <span className="block text-[11px] font-extrabold uppercase tracking-wide text-[var(--store-steel)]">Qty</span>
           <input
             type="number"
             min={1}

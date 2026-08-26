@@ -76,7 +76,7 @@ export function CloseButton() {
       type="button"
       onClick={closePanels}
       aria-label="Close"
-      className="absolute right-5 top-[18px] grid h-9 w-9 place-items-center rounded-full bg-[#edf1f4] text-[18px] leading-none text-[var(--store-ink)] transition-colors hover:bg-[#e2e8ee]"
+      className="absolute right-5 top-[18px] grid h-9 w-9 place-items-center rounded-full bg-[#edf1f4] text-[18px] leading-none text-[var(--store-text)] transition-colors hover:bg-[#e2e8ee]"
     >
       <span aria-hidden>×</span>
     </button>

@@ -48,7 +48,7 @@ export default async function StoreOrderPage({
         <div className="rounded-md border border-[var(--store-line)] bg-white p-6">
           <div className={KICKER}>Order reserved</div>
           <h1 className={`${DISPLAY} mt-2 text-[34px] leading-none`}>Order {order.orderNumber}</h1>
-          <p className="mt-2 text-[13.5px] leading-relaxed text-[#536275]">
+          <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--store-steel)]">
             Thank you, {order.buyerName}. Your order is reserved — complete the payment below to confirm it. We&rsquo;ll
             email <strong>{order.buyerEmail}</strong> once it&rsquo;s through.
           </p>
@@ -85,7 +85,7 @@ export default async function StoreOrderPage({
               <span>
                 {it.name}
                 {it.variantKey && it.variantKey !== "default" ? ` (${it.variantKey})` : ""} × {it.qty}
-                <span className="ml-1.5 text-[11px] text-[#8a96a5]">{it.modelCode}</span>
+                <span className="ml-1.5 text-[11px] text-[var(--store-steel)]">{it.modelCode}</span>
               </span>
               <span className="shrink-0 tabular-nums">{peso(Number(it.lineTotal))}</span>
             </li>
@@ -106,8 +106,8 @@ export default async function StoreOrderPage({
 
       <div className="rounded-md border border-[var(--store-line)] bg-white p-5 text-[13.5px]">
         <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[var(--store-steel)]">Delivery to</div>
-        <p className="mt-2 whitespace-pre-line text-[#536275]">{order.deliveryAddress}</p>
-        <p className="mt-1 text-[12px] text-[#8a96a5]">{order.buyerPhone}</p>
+        <p className="mt-2 whitespace-pre-line text-[var(--store-steel)]">{order.deliveryAddress}</p>
+        <p className="mt-1 text-[12px] text-[var(--store-steel)]">{order.buyerPhone}</p>
       </div>
 
       <Link

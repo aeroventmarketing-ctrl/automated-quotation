@@ -29,7 +29,7 @@ export function HeaderActions({ quoteLabel = "Get a Quote" }: { quoteLabel?: str
         type="button"
         onClick={focusSearch}
         aria-label="Search the catalogue"
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--store-line)] bg-white text-[17px] text-[var(--store-ink)] transition-colors hover:border-[var(--store-accent)] hover:text-[var(--store-accent)]"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--store-line)] bg-white text-[17px] text-[var(--store-text)] transition-colors hover:border-[var(--store-accent)] hover:text-[var(--store-accent)]"
       >
         <span aria-hidden>⌕</span>
       </button>
@@ -48,7 +48,7 @@ export function HeaderActions({ quoteLabel = "Get a Quote" }: { quoteLabel?: str
         className="inline-flex h-11 items-center justify-center gap-2.5 rounded-full bg-[var(--store-ink)] px-[17px] text-[13px] font-extrabold text-white transition-opacity hover:opacity-90"
       >
         Cart
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-white text-[11px] font-extrabold text-[var(--store-ink)]">
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-white text-[11px] font-extrabold text-[var(--store-text)]">
           {mounted ? count : 0}
         </span>
       </button>

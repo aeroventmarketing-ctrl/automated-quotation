@@ -39,7 +39,7 @@ export function ToolsWorkbench({ initial }: { initial: ToolKey }) {
             className={`rounded-[5px] px-5 py-3 text-[13.5px] font-extrabold transition-colors ${
               tool === t.key
                 ? "bg-[var(--store-accent)] text-white"
-                : "border border-[var(--store-line)] bg-white text-[var(--store-ink)] hover:border-[var(--store-accent)] hover:text-[var(--store-accent)]"
+                : "border border-[var(--store-line)] bg-white text-[var(--store-text)] hover:border-[var(--store-accent)] hover:text-[var(--store-accent)]"
             }`}
           >
             {t.label}
