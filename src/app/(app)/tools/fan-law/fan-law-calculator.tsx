@@ -5,67 +5,39 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { solveFanLaw, isFanLawError, type FanLawMode } from "@/lib/hvac/fan-law";
+import { positive as num, r1, r3 } from "@/lib/hvac/parse";
 
 /**
- * Fan affinity-law calculator for a fixed fan changing speed:
- *   Q ∝ N      (airflow ∝ speed)
- *   P ∝ N²     (static pressure ∝ speed²)
- *   W ∝ N³     (power ∝ speed³)
- * Enter a known operating point (speed + any of CFM / SP / BHP), then change by
- * a new speed, a target airflow, or a target pressure; the rest scale by the
- * resulting speed ratio. Units are passed through unchanged (ratios are unitless).
+ * Fan affinity-law calculator for a fixed fan changing speed. Enter a known
+ * operating point (speed + any of CFM / SP / BHP), then change by a new speed,
+ * a target airflow, or a target pressure; the rest scale by the resulting speed
+ * ratio.
+ *
+ * The maths lives in `lib/hvac/fan-law` — shared with the public HVAC Tools page
+ * on the storefront, so both stay in step.
  */
-
-const num = (s: string): number | null => {
-  if (!s.trim()) return null;
-  const n = Number(s);
-  return Number.isFinite(n) && n > 0 ? n : null;
-};
-const r1 = (n: number) => Math.round(n * 10) / 10;
-const r3 = (n: number) => Math.round(n * 1000) / 1000;
-
-type Mode = "rpm" | "cfm" | "sp" | "bhp";
 
 export function FanLawCalculator() {
   const [n1, setN1] = useState("");
   const [q1, setQ1] = useState("");
   const [p1, setP1] = useState("");
   const [w1, setW1] = useState("");
-  const [mode, setMode] = useState<Mode>("rpm");
+  const [mode, setMode] = useState<FanLawMode>("rpm");
   const [target, setTarget] = useState("");
 
-  const result = useMemo(() => {
-    const N1 = num(n1);
-    const Q1 = num(q1);
-    const P1 = num(p1);
-    const W1 = num(w1);
-    const T = num(target);
-    if (N1 == null) return { error: "Enter the known speed (RPM 1)." };
-    if (T == null) return null;
-
-    let r: number;
-    if (mode === "rpm") r = T / N1;
-    else if (mode === "cfm") {
-      if (Q1 == null) return { error: "Enter the known airflow (CFM 1) to solve by airflow." };
-      r = T / Q1;
-    } else if (mode === "sp") {
-      if (P1 == null) return { error: "Enter the known pressure (SP 1) to solve by pressure." };
-      r = Math.sqrt(T / P1);
-    } else {
-      if (W1 == null) return { error: "Enter the known power (BHP 1) to solve by power." };
-      r = Math.cbrt(T / W1);
-    }
-    if (!(r > 0) || !Number.isFinite(r)) return { error: "Check the values." };
-
-    const N2 = mode === "rpm" ? T : N1 * r;
-    return {
-      r,
-      N2,
-      Q2: Q1 != null ? Q1 * r : null,
-      P2: P1 != null ? P1 * r * r : null,
-      W2: W1 != null ? W1 * r ** 3 : null,
-    };
-  }, [n1, q1, p1, w1, mode, target]);
+  const result = useMemo(
+    () =>
+      solveFanLaw({
+        n1: num(n1),
+        q1: num(q1),
+        p1: num(p1),
+        w1: num(w1),
+        mode,
+        target: num(target),
+      }),
+    [n1, q1, p1, w1, mode, target],
+  );
 
   return (
     <Card>
@@ -89,7 +61,7 @@ export function FanLawCalculator() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label>Target</Label>
-              <Select className="w-44" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+              <Select className="w-44" value={mode} onChange={(e) => setMode(e.target.value as FanLawMode)}>
                 <option value="rpm">New speed (RPM)</option>
                 <option value="cfm">Target airflow (CFM)</option>
                 <option value="sp">Target pressure (SP)</option>
@@ -100,17 +72,15 @@ export function FanLawCalculator() {
           </div>
         </div>
 
-        {result && "error" in result && (
-          <p className="text-sm text-muted-foreground">{result.error}</p>
-        )}
+        {isFanLawError(result) && <p className="text-sm text-muted-foreground">{result.error}</p>}
 
-        {result && !("error" in result) && (
+        {result && !isFanLawError(result) && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Speed ratio" value={`${r3(result.r)}×`} />
-            <Stat label="New speed (RPM 2)" value={`${Math.round(result.N2)}`} />
-            {result.Q2 != null && <Stat label="Airflow (CFM 2)" value={`${Math.round(result.Q2)}`} />}
-            {result.P2 != null && <Stat label="Pressure (SP 2)" value={`${r1(result.P2)}`} />}
-            {result.W2 != null && <Stat label="Power (BHP 2)" value={`${r1(result.W2)}`} />}
+            <Stat label="Speed ratio" value={`${r3(result.ratio)}×`} />
+            <Stat label="New speed (RPM 2)" value={`${Math.round(result.n2)}`} />
+            {result.q2 != null && <Stat label="Airflow (CFM 2)" value={`${Math.round(result.q2)}`} />}
+            {result.p2 != null && <Stat label="Pressure (SP 2)" value={`${r1(result.p2)}`} />}
+            {result.w2 != null && <Stat label="Power (BHP 2)" value={`${r1(result.w2)}`} />}
           </div>
         )}
       </CardContent>

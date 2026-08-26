@@ -18,6 +18,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     { url: siteOrigin(), lastModified: now, changeFrequency: "weekly", priority: 0.8 },
     { url: storeUrl(), lastModified: now, changeFrequency: "daily", priority: 1 },
+    { url: storeUrl("/tools"), lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${siteOrigin()}/rfq`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     ...categories.map((c) => ({
       url: storeUrl(`/c/${c.slug}`),

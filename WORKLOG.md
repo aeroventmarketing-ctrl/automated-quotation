@@ -1,3 +1,34 @@
+## 2026-08-26 · Public HVAC Tools page on the storefront
+- **Request (owner).** Add **HVAC Tools** to the shop nav between *Why Aerovent* and *Main Website ↗*; clicking it opens
+  a page with **Fan Selector, Ductulator, Pulley and Fan Law**, in the storefront's own theme.
+- **What's public and what isn't.** The four requested tools only. **Duct Material** (a sheet-metal costing aid) and
+  **Job Order** (a production document) stay staff-only — both are internal, and one of them prices metal.
+- **Fan Selector runs the real engine, price-free.** It posts to **`/api/public/fan-select`**, the read-only CORS-open
+  route built for exactly this page: same selection engine as the staff quotation builder, but the response whitelists
+  performance fields only — no price, no body cost, no internal catalogue id. Verified by rendering the page with
+  results on screen and asserting the HTML contains **no `₱` anywhere**. The product dropdown is filled from that
+  route's own GET discovery endpoint, so a new family reaches the shop with no storefront deploy.
+- **One source of truth for the maths.** The other three calculators had their physics inline in the ERP components.
+  Extracted to **`lib/hvac/{ductulator,pulley,fan-law,parse}.ts`** (pure functions, no React); the staff tools now call
+  those, and the storefront renders the same functions with its own skin. A fix to a formula now reaches both.
+  - **Proved the extraction changed nothing**: re-implemented the original inline formulas from git history and diffed
+    them against the libs over a sweep of every mode / unit / shape combination — **1016 comparisons, 0 mismatches**.
+- **Nav placement that survives a saved theme.** `toolsNavLabel` is its own theme field (default "HVAC Tools", empty
+  hides it) rather than a `navLinks` entry — a shop whose nav was saved before this page existed would never have
+  contained it. The layout splices it in just before the first external link, so it lands between *Why Aerovent* and
+  *Main Website ↗* and stays sensible if the nav is reordered. Also in the footer's Support column and the mobile menu.
+- **SEO.** Own title/description/canonical, `BreadcrumbList` + `WebApplication` JSON-LD (free, four named tools), in the
+  sitemap, and described in `/llms.txt` — including an explicit note that the selector returns performance only and
+  cost questions go to the quotation form.
+- **Bug caught by rendering, not by the compiler:** `TOOL_KEYS` was exported from a `"use client"` module and imported
+  by the server page. Typecheck and build both passed, but at request time every export of a client module is a client
+  *reference*, so `TOOL_KEYS.includes(...)` threw and the page 500'd. Moved the constants to a plain `tools.ts`.
+- **Verified end to end**: nav order reads *Shop | Categories | Custom Solutions | Why Aerovent | HVAC Tools | Main
+  Website ↗*; selector returns ranked models with a Recommended badge; ductulator 2000 cfm @ 0.1 in.wg/100ft → 18.1″ Ø,
+  1123 fpm; pulley 1750 rpm / 4″ / 8″ → 875 rpm, 0.5:1, 1833 fpm; fan law 1000→1200 rpm → 1.2×, 6,000 cfm;
+  `?tool=pulley` deep-links; mobile stacks.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Storefront rebuilt to the approved prototype (payments untouched)
 - **Request (owner).** Rebuild `/store` to the **exact appearance and functionality** of the supplied HTML prototype,
   while keeping the HitPay / PayPal payment work already in place.

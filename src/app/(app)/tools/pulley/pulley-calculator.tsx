@@ -5,75 +5,39 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { solvePulley, isPulleyError, type DimUnit } from "@/lib/hvac/pulley";
+import { positive as num, r1, r2 } from "@/lib/hvac/parse";
 
 /**
- * Belt-drive pulley (sheave) calculator. The driver and driven sheaves share the
- * same belt speed, so:  motorRPM · motorØ = fanRPM · fanØ.
- * Enter any three of the four to solve the fourth; also reports the drive ratio,
- * belt speed, and (optionally) the belt pitch length from a centre distance.
+ * Belt-drive pulley (sheave) calculator. Enter any three of the four to solve
+ * the fourth; also reports the drive ratio, belt speed, and (optionally) the
+ * belt pitch length from a centre distance.
+ *
+ * The maths lives in `lib/hvac/pulley` — shared with the public HVAC Tools page
+ * on the storefront, so both stay in step.
  */
-
-const num = (s: string): number | null => {
-  if (!s.trim()) return null;
-  const n = Number(s);
-  return Number.isFinite(n) && n > 0 ? n : null;
-};
-const r1 = (n: number) => Math.round(n * 10) / 10;
-const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export function PulleyCalculator() {
   const [motorRpm, setMotorRpm] = useState("1750");
   const [motorDia, setMotorDia] = useState("");
   const [fanDia, setFanDia] = useState("");
   const [fanRpm, setFanRpm] = useState("");
-  const [dimUnit, setDimUnit] = useState("in");
+  const [dimUnit, setDimUnit] = useState<DimUnit>("in");
   const [center, setCenter] = useState("");
 
-  const result = useMemo(() => {
-    const vals = {
-      motorRpm: num(motorRpm),
-      motorDia: num(motorDia),
-      fanDia: num(fanDia),
-      fanRpm: num(fanRpm),
-    };
-    const provided = Object.values(vals).filter((v) => v != null).length;
-    if (provided < 3) return { error: "Enter any three of motor RPM, motor Ø, fan Ø, fan RPM." };
-    if (provided > 3) return { error: "Leave one field blank to solve for it." };
+  const result = useMemo(
+    () =>
+      solvePulley({
+        motorRpm: num(motorRpm),
+        motorDia: num(motorDia),
+        fanDia: num(fanDia),
+        fanRpm: num(fanRpm),
+        dimUnit,
+        center: num(center),
+      }),
+    [motorRpm, motorDia, fanDia, fanRpm, dimUnit, center],
+  );
 
-    let { motorRpm: mr, motorDia: md, fanDia: fd, fanRpm: fr } = vals;
-    if (mr == null) mr = (fr! * fd!) / md!;
-    else if (md == null) md = (fr! * fd!) / mr;
-    else if (fd == null) fd = (mr * md) / fr!;
-    else if (fr == null) fr = (mr * md) / fd;
-    if (![mr, md, fd, fr].every((x) => x != null && Number.isFinite(x) && x > 0))
-      return { error: "Check the values." };
-
-    const ratio = fr! / mr!; // driven / driver speed ratio
-    const toIn = (d: number) => (dimUnit === "mm" ? d / 25.4 : d);
-    const beltFpm = (Math.PI * toIn(md!) * mr!) / 12;
-
-    const c = num(center);
-    let beltLen: number | null = null;
-    if (c != null) {
-      const D = Math.max(md!, fd!);
-      const d = Math.min(md!, fd!);
-      beltLen = 2 * c + (Math.PI * (D + d)) / 2 + (D - d) ** 2 / (4 * c);
-    }
-
-    return {
-      mr: mr!,
-      md: md!,
-      fd: fd!,
-      fr: fr!,
-      ratio,
-      beltFpm,
-      beltMs: beltFpm * 0.00508,
-      beltLen,
-      unit: dimUnit,
-    };
-  }, [motorRpm, motorDia, fanDia, fanRpm, dimUnit, center]);
-
-  const ok = !("error" in result);
 
   return (
     <Card>
@@ -89,21 +53,21 @@ export function PulleyCalculator() {
           <Field label="Fan RPM" value={fanRpm} onChange={setFanRpm} placeholder="RPM" />
           <div className="space-y-1">
             <Label>Ø unit</Label>
-            <Select className="w-24" value={dimUnit} onChange={(e) => setDimUnit(e.target.value)}>
+            <Select className="w-24" value={dimUnit} onChange={(e) => setDimUnit(e.target.value as DimUnit)}>
               <option value="in">in</option>
               <option value="mm">mm</option>
             </Select>
           </div>
         </div>
 
-        {!ok && <p className="text-sm text-muted-foreground">{result.error}</p>}
+        {isPulleyError(result) && <p className="text-sm text-muted-foreground">{result.error}</p>}
 
-        {ok && (
+        {!isPulleyError(result) && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Motor RPM" value={`${Math.round(result.mr)}`} />
-            <Stat label={`Motor Ø`} value={`${r2(result.md)} ${result.unit}`} />
-            <Stat label={`Fan Ø`} value={`${r2(result.fd)} ${result.unit}`} />
-            <Stat label="Fan RPM" value={`${Math.round(result.fr)}`} />
+            <Stat label="Motor RPM" value={`${Math.round(result.motorRpm)}`} />
+            <Stat label={`Motor Ø`} value={`${r2(result.motorDia)} ${result.unit}`} />
+            <Stat label={`Fan Ø`} value={`${r2(result.fanDia)} ${result.unit}`} />
+            <Stat label="Fan RPM" value={`${Math.round(result.fanRpm)}`} />
             <Stat label="Drive ratio (fan:motor)" value={`${r2(result.ratio)} : 1`} />
             <Stat label="Belt speed" value={`${Math.round(result.beltFpm)} fpm`} sub={`${r1(result.beltMs)} m/s`} />
             {result.beltLen != null && (

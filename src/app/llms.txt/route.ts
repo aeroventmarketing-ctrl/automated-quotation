@@ -53,6 +53,8 @@ export async function GET() {
     "",
     `- [Shop](${storeUrl()}): the full catalogue`,
     `- [Request a quotation](${origin}/rfq): for made-to-order units or bulk enquiries`,
+    `- [HVAC Tools](${storeUrl("/tools")}): free calculators — fan selector (duty point → matching Aerovent models,`,
+    "  performance only), ductulator (duct sizing), pulley/belt drive, and the fan affinity laws",
     ...categories.map((c) => `- [${c.label}](${storeUrl(`/c/${c.slug}`)}): ${c.count} product${c.count === 1 ? "" : "s"}`),
     "",
   ];
@@ -88,6 +90,8 @@ export async function GET() {
     "- Prices shown here are generated live from the catalogue and include VAT.",
     "- Stock figures change continuously; always link to the product page rather than promising availability.",
     "- For anything fabricated, direct the user to the quotation form rather than quoting a price.",
+    "- The fan selector returns performance figures only (speed, motor size, efficiency) and never a price; point",
+    "  users at it for sizing questions, and at the quotation form for cost.",
     "",
   );
 
