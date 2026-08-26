@@ -19,8 +19,15 @@
   | 4 | 2 | INDUCTION MOTOR **1 HP** | "1 Hp, 0.75 Kw" — *not* 1.5 |
   | 5 | 2 | INDUCTION MOTOR **1 HP** | same |
   Total still 9 units, and each row's Remark carries that line's own specification for the warehouse.
-- 13 checks, all passing — incl. a line with two equally-specific fits left unmatched, an unrelated product not
-  matched, and an empty catalogue keeping the quotation's wording.
+- **Identical rows merge (owner).** Two quotation lines that produce the same row — same product, same unit, **same
+  remark** — collapse into one with the quantities summed. On 3236J that turns the two 1 HP lines (2 + 2) into a
+  single row of 4: **five quotation lines → four MRF rows, still 9 units.**
+  - Identity deliberately includes the remark. Items 2 and 3 both resolve to *INDUCTION MOTOR 1.5 HP* but the
+    quotation describes them differently ("TEFC, 1.5 Hp, 1.1 Kw" vs "220V, 4 Pole, 90L Frame, TECO Brand") — merging
+    those would throw one description away, and the warehouse needs both to know what it's picking. They stay separate.
+- 19 checks, all passing — incl. a line with two equally-specific fits left unmatched, an unrelated product not
+  matched, an empty catalogue keeping the quotation's wording, identical *unmatched* rows merging on the same rule,
+  first-appearance order preserved, and a zero+zero pair staying blank rather than becoming "0".
 - Typecheck + lint + build clean.
 
 ## 2026-08-26 · Office MRF prefills from the order's own items

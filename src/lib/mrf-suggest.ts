@@ -93,6 +93,37 @@ export function suggestOfficeMrfRows(
   lines: QuotationLineForMrf[],
   products: CatalogueProduct[],
 ): MrfSuggestion[] {
+  return mergeIdenticalRows(buildRows(lines, products));
+}
+
+/**
+ * Combine rows that are identical in every respect — same product, same unit,
+ * same remark — summing their quantities. Two quotation lines for the same
+ * 1 HP motor become one row of 4 rather than two of 2.
+ *
+ * Identity deliberately includes the REMARK. Two lines can resolve to the same
+ * catalogue product while the quotation describes them differently ("TEFC,
+ * 1.5 Hp, 1.1 Kw" vs "220V, 4 Pole, 90L Frame, TECO"); merging those would throw
+ * one description away, and the warehouse needs both to know what it's picking.
+ */
+function mergeIdenticalRows(rows: MrfSuggestion[]): MrfSuggestion[] {
+  const out: MrfSuggestion[] = [];
+  const at = new Map<string, number>();
+  for (const r of rows) {
+    const key = `${r.description}\u0000${r.unit}\u0000${r.remark ?? ""}`;
+    const seen = at.get(key);
+    if (seen === undefined) {
+      at.set(key, out.length);
+      out.push({ ...r });
+      continue;
+    }
+    const total = (Number(out[seen].qty) || 0) + (Number(r.qty) || 0);
+    out[seen] = { ...out[seen], qty: total > 0 ? String(total) : "" };
+  }
+  return out;
+}
+
+function buildRows(lines: QuotationLineForMrf[], products: CatalogueProduct[]): MrfSuggestion[] {
   return lines.map((l) => {
     const hit = matchCatalogueProduct(l, products);
     // Prefer the quotation's own description lines for the remark; fall back to
