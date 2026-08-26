@@ -110,6 +110,10 @@ export function QuoteDialog({ subject, note }: { subject: string; note: string }
                 <input
                   name="product"
                   defaultValue={subject}
+                  // A selection carried in from the Fan Selector is longer than
+                  // the field; the whole value is submitted either way, and the
+                  // tooltip lets the visitor read it back without scrolling.
+                  title={subject || undefined}
                   placeholder="Fan, blower or ventilation need"
                   className={field}
                 />

@@ -1,3 +1,22 @@
+## 2026-08-26 · Fan Selector — the visitor picks which model gets quoted
+- **Request (owner).** Make the selection results **selectable**, and have **Quote this selection** carry the model the
+  visitor picked into the quotation dialog's *Product / Application* field.
+- **Selection.** Every result row is now a radio choice: a real `<input type="radio">` in a new first column (so
+  keyboard and screen readers work) plus a click target on the whole row. The picked row gets an accent tint and a red
+  left bar. A run **starts on the engine's recommendation** — the common case needs no click — and the visitor can move
+  off it. Re-running resets the pick to the new recommendation.
+- **What reaches Sales.** `Quote this selection` now sends the *picked* row, not the recommended one, and the subject
+  line was rewritten to lead with the model code and read the way an engineer quotes:
+  `AV4025CEB — 20,000 CFM @ 2.00 in w.g. (555 rpm, 15 HP)` — previously `Fan selection: … 498 Pa`, which buried the
+  model behind a prefix and used Pa. The footer bar states which model is about to be quoted so there's no ambiguity
+  before the dialog opens, and the button disables when nothing is picked.
+- The no-match branch reuses the same helper, so an enquiry with no standard model still carries the duty point.
+- The dialog's Product field is narrower than the value; the full string is submitted regardless, and a `title` makes
+  it readable on hover.
+- **Verified end to end**: picking the last row then quoting put `AV5450CEB — … (787 rpm, 25 HP)` in the field;
+  re-picking a different row and re-opening put `AV4450CEB — … (1180 rpm, 40 HP)` — the field tracks the pick.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Public HVAC Tools page on the storefront
 - **Request (owner).** Add **HVAC Tools** to the shop nav between *Why Aerovent* and *Main Website ↗*; clicking it opens
   a page with **Fan Selector, Ductulator, Pulley and Fan Law**, in the storefront's own theme.

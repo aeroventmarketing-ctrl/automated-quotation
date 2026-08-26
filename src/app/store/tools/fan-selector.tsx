@@ -57,6 +57,23 @@ interface SelectResponse {
 
 const INWG_PER_PA = 1 / 249.0889;
 
+/** How the duty point reads in the enquiry — CFM and in w.g., as engineers quote it. */
+const dutyLabel = (duty: SelectResponse["duty"]) =>
+  `${duty.airflow_cfm.toLocaleString()} CFM @ ${(duty.staticPressure_pa * INWG_PER_PA).toFixed(2)} in w.g.`;
+
+/**
+ * The line dropped into the quotation dialog's Product / Application field, so
+ * Sales sees exactly which model the visitor was looking at and at what duty.
+ */
+function quoteSubject(duty: SelectResponse["duty"], fan: FanResult | null): string {
+  if (!fan) return `Fan selection — ${dutyLabel(duty)}`;
+  const spec = [
+    fan.rpm != null ? `${Math.round(fan.rpm)} rpm` : null,
+    fan.motorHp != null ? `${fan.motorHp} HP` : fan.motorKw != null ? `${fan.motorKw} kW` : null,
+  ].filter(Boolean);
+  return `${fan.modelCode} — ${dutyLabel(duty)}${spec.length ? ` (${spec.join(", ")})` : ""}`;
+}
+
 export function FanSelector() {
   const [families, setFamilies] = useState<Family[]>([]);
   const [airflow, setAirflow] = useState("5000");
@@ -67,6 +84,8 @@ export function FanSelector() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<SelectResponse | null>(null);
+  /** The model the visitor picked — what "Quote this selection" sends. */
+  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -92,15 +111,25 @@ export function FanSelector() {
         body: JSON.stringify({ airflow: q, airflowUnit, staticPressure: p, pressureUnit: spUnit, tag }),
       });
       const j = (await res.json()) as SelectResponse;
-      if (!res.ok) { setErr(j.error ?? "Selection failed. Please try again."); setData(null); }
-      else setData(j);
+      if (!res.ok) {
+        setErr(j.error ?? "Selection failed. Please try again.");
+        setData(null);
+        setSelected(null);
+      } else {
+        setData(j);
+        // Start on the engine's recommendation; the visitor can move off it.
+        setSelected(j.results.find((r) => r.recommended)?.modelCode ?? j.results[0]?.modelCode ?? null);
+      }
     } catch {
       setErr("Could not reach the selection service. Please try again.");
       setData(null);
+      setSelected(null);
     } finally {
       setBusy(false);
     }
   }
+
+  const chosen = data?.results.find((r) => r.modelCode === selected) ?? null;
 
   return (
     <ToolCard
@@ -145,9 +174,9 @@ export function FanSelector() {
       {data && (
         <div className="space-y-4">
           <Hint>
-            Duty point <b>{data.duty.airflow_cfm.toLocaleString()} CFM</b> at{" "}
-            <b>{(data.duty.staticPressure_pa * INWG_PER_PA).toFixed(2)} in w.g.</b> ({data.duty.staticPressure_pa} Pa) ·{" "}
-            {data.family.label} · {data.count} match{data.count === 1 ? "" : "es"}
+            Duty point <b>{dutyLabel(data.duty)}</b> ({data.duty.staticPressure_pa} Pa) · {data.family.label} ·{" "}
+            {data.count} match{data.count === 1 ? "" : "es"}
+            {data.results.length > 0 && " · pick a row to quote it"}
           </Hint>
 
           {data.results.length === 0 ? (
@@ -156,7 +185,7 @@ export function FanSelector() {
               engineers will size one.
               <button
                 type="button"
-                onClick={() => openQuotePanel(`Fan selection: ${data.duty.airflow_cfm} CFM @ ${data.duty.staticPressure_pa} Pa`)}
+                onClick={() => openQuotePanel(quoteSubject(data.duty, null))}
                 className="mx-auto mt-5 block rounded-[5px] bg-[var(--store-accent)] px-5 py-3 text-[13.5px] font-extrabold text-white transition-colors hover:bg-[var(--store-accent-dark)]"
               >
                 Request a quotation
@@ -168,6 +197,7 @@ export function FanSelector() {
                 <table className="w-full min-w-[760px] border-collapse text-[13px]">
                   <thead>
                     <tr className="border-b border-[var(--store-line)] text-left text-[10px] font-black uppercase tracking-[0.1em] text-[var(--store-steel)]">
+                      <th className="w-9 py-2.5 pr-2"><span className="sr-only">Select</span></th>
                       <th className="py-2.5 pr-3">Model</th>
                       <th className="py-2.5 pr-3">Size</th>
                       <th className="py-2.5 pr-3 text-right">RPM</th>
@@ -182,8 +212,28 @@ export function FanSelector() {
                     {data.results.map((r) => (
                       <tr
                         key={r.modelCode}
-                        className={`border-b border-[#edf0f2] ${r.recommended ? "bg-[var(--store-accent)]/[0.04]" : ""}`}
+                        onClick={() => setSelected(r.modelCode)}
+                        className={`cursor-pointer border-b border-[#edf0f2] transition-colors ${
+                          selected === r.modelCode
+                            ? "bg-[var(--store-accent)]/[0.08]"
+                            : "hover:bg-[#f8fafb]"
+                        }`}
                       >
+                        <td
+                          className={`py-2.5 pr-2 border-l-[3px] ${
+                            selected === r.modelCode ? "border-[var(--store-accent)]" : "border-transparent"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="fan-selection"
+                            value={r.modelCode}
+                            checked={selected === r.modelCode}
+                            onChange={() => setSelected(r.modelCode)}
+                            aria-label={`Select ${r.modelCode}`}
+                            className="h-4 w-4 accent-[var(--store-accent)]"
+                          />
+                        </td>
                         <td className="py-2.5 pr-3">
                           <span className={`${DISPLAY} text-[16px] leading-none`}>{r.modelCode}</span>
                           {r.recommended && (
@@ -215,18 +265,27 @@ export function FanSelector() {
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-4 rounded border border-[var(--store-line)] bg-[#f8fafb] px-5 py-4">
-                <p className="max-w-xl text-[13px] leading-relaxed text-[#536275]">
-                  Selections are indicative. Send us the application and site conditions and our engineers will confirm
-                  the model, accessories and price.
-                </p>
+                <div className="max-w-xl">
+                  <p className="text-[13px] leading-relaxed text-[#536275]">
+                    {chosen ? (
+                      <>
+                        Quoting <b className="text-[var(--store-ink)]">{chosen.modelCode}</b> at{" "}
+                        {dutyLabel(data.duty)} — pick another row to change it.
+                      </>
+                    ) : (
+                      <>Choose a model above to quote it.</>
+                    )}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-[var(--store-steel)]">
+                    Selections are indicative. Send us the application and site conditions and our engineers will
+                    confirm the model, accessories and price.
+                  </p>
+                </div>
                 <button
                   type="button"
-                  onClick={() =>
-                    openQuotePanel(
-                      `Fan selection: ${data.results.find((r) => r.recommended)?.modelCode ?? data.results[0].modelCode} — ${data.duty.airflow_cfm} CFM @ ${data.duty.staticPressure_pa} Pa`,
-                    )
-                  }
-                  className="shrink-0 rounded-[5px] bg-[var(--store-ink)] px-5 py-3 text-[13.5px] font-extrabold text-white transition-opacity hover:opacity-90"
+                  disabled={!chosen}
+                  onClick={() => openQuotePanel(quoteSubject(data.duty, chosen))}
+                  className="shrink-0 rounded-[5px] bg-[var(--store-ink)] px-5 py-3 text-[13.5px] font-extrabold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   Quote this selection →
                 </button>
