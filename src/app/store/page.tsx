@@ -5,6 +5,7 @@ import { getStoreTheme, themeImageSrc, type StoreTheme } from "@/lib/store-theme
 import { jsonLd, itemListLd, faqLd, storeUrl } from "@/lib/store-seo";
 import { WRAP, DISPLAY, KICKER } from "@/lib/store-ui";
 import { CatalogueBrowser } from "./catalogue-browser";
+import { HeroFan } from "./hero-fan";
 import { QuoteButton } from "./store-actions";
 
 export const dynamic = "force-dynamic";
@@ -140,20 +141,7 @@ function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number
               fetchPriority="high"
             />
           ) : (
-            <>
-              <div
-                aria-hidden
-                className="h-[330px] w-[330px] animate-store-float rounded-full border border-[#516078] shadow-[0_0_0_28px_rgba(255,255,255,0.025),0_34px_70px_rgba(0,0,0,0.53)]"
-                style={{
-                  background:
-                    "radial-gradient(circle,#26364b 0 12%,#0a1425 13% 23%,#29374a 24% 25%,#111e32 26% 55%,#59667a 56% 57%,#0b1526 58%)",
-                }}
-              />
-              <div aria-hidden className="absolute h-[250px] w-[250px] animate-[spin_22s_linear_infinite] rounded-full border border-dashed border-[#69798e]">
-                <span className="absolute inset-[25px] rounded-full border-[18px] border-transparent border-y-[#6d7b8e]" />
-                <span className="absolute inset-[25px] rotate-[60deg] rounded-full border-[18px] border-transparent border-y-[#6d7b8e]" />
-              </div>
-            </>
+            <HeroFan />
           )}
 
           <div className="absolute right-0 top-11 w-[180px] border-l-2 border-[var(--store-accent)] bg-white/[0.05] px-4 py-3.5">

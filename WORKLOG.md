@@ -1,3 +1,27 @@
+## 2026-08-26 · The hero artwork is a rotating five-blade propeller
+
+- **Request (owner).** Make the hero's abstract rotor a rotating **5-blade propeller fan**.
+- **New `store/hero-fan.tsx`** — SVG, so it stays crisp at any size and costs no image request. One blade is drawn at
+  12 o'clock and the other four are the same path rotated by 72°. The blade is **swept**, its tip further round than
+  its root, which is what gives an axial fan its aerofoil look instead of a flat paddle.
+- **Only the rotor turns.** Blades and hub sit in a `<g>` that spins on a 7-second linear loop; the shroud, its
+  dashed throat ring and the four mounting bosses stay put. That is what makes it read as *a fan running* rather than
+  the whole assembly being spun.
+- **Geometry is bounded by the housing.** Blade root at radius 26 (under the hub, so the join never shows), tip at
+  **78** — inside the shroud's 82 throat. The first attempt used a fatter blade reaching past 90: it read as five
+  flower petals and the tips cut straight across the shroud. Caught on the first screenshot and re-cut.
+- **Respects `prefers-reduced-motion`.** Both the spin and the gentle float now stop. The float is pre-existing and
+  had **never** honoured the setting — worth fixing while the file was open, since a permanently drifting hero is
+  exactly what that preference exists to switch off.
+- **Verified in a browser**, not by reading the markup:
+  - Two frames one second apart differ in **16.8 %** of the fan's area — it genuinely turns. Zero would have meant a
+    static picture.
+  - The frame diff shows change confined to the blades and hub; the shroud ring and bosses register only the float's
+    drift, confirming they don't rotate with the rotor.
+  - Under `prefers-reduced-motion: reduce` two frames a second apart differ in **0 px** — it holds completely still.
+- Unchanged: the artwork is still only the fallback. Set a Hero photo in Admin → Storefront and it replaces this.
+- Typecheck + lint + build clean. No migration, no workflow change.
+
 ## 2026-08-26 · Text colours are settable on the storefront
 
 - **Request (owner).** Add an option to change the website's text colours. The Look card had five colour pickers and
