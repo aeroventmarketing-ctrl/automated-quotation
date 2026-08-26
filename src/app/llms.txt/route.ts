@@ -35,8 +35,9 @@ export async function GET() {
     `- **Country**: Philippines`,
     `- **Manila office**: ${COMPANY.manilaOffice.replace(/^Manila Office:\s*/, "")}`,
     `- **Plant**: ${COMPANY.plantAddress.replace(/^Plant Address\s*:\s*/, "")}`,
-    `- **Phone**: (02) 85619413`,
-    `- **Sales**: sales@aeroventfbm.com`,
+    `- **Phone**: ${theme.phone}`,
+    `- **Sales**: ${theme.salesEmail}`,
+    `- **Main website**: ${theme.mainSiteUrl}`,
     `- **Currency**: PHP (all prices VAT-inclusive)`,
     `- **Delivery**: nationwide across the Philippines`,
     `- **Payment**: card, GCash, Maya, PayPal`,
@@ -74,6 +75,11 @@ export async function GET() {
       lines.push(`- [${p.name}](${storeUrl(`/p/${p.slug}`)}) — ${p.category}, model ${p.modelCode}, quoted per project`);
     }
     lines.push("");
+  }
+
+  if (theme.faq.length) {
+    lines.push("## Frequently asked questions", "");
+    for (const f of theme.faq) lines.push(`### ${f.q}`, "", f.a, "");
   }
 
   lines.push(

@@ -1,3 +1,37 @@
+## 2026-08-26 · Storefront rebuilt to the approved prototype (payments untouched)
+- **Request (owner).** Rebuild `/store` to the **exact appearance and functionality** of the supplied HTML prototype,
+  while keeping the HitPay / PayPal payment work already in place.
+- **What the prototype is.** Dark engineering hero with an animated rotor stage, condensed uppercase headings
+  (**Barlow Condensed**) over **Manrope** body, a red `#E5202B` accent, a four-up trust band, dark category tiles with
+  an active red gradient, a searchable/sortable four-column catalogue, a split made-to-order band, an
+  article + FAQ block, a dark four-column footer, plus a **cart drawer**, a **quotation dialog** and a **toast**.
+- **Built it for real, not as a mock.** The prototype's hard-coded product array is replaced by the live catalogue:
+  the server renders **every listed product** into the markup (so crawlers and answer engines still see the whole
+  shop) and the new `catalogue-browser.tsx` does category / search / sort **client-side and instantly**.
+  - The prototype's demo quote form now posts to the existing public **`/api/rfq`** intake — honeypot and all — so an
+    enquiry lands in the same Inbound RFQ queue Sales already works. A product card's "Request quote" prefills the
+    product; the dialog links to `/rfq` when drawings need attaching.
+  - The cart drawer is server-priced on every change (`priceCartAction`) and its "Proceed to checkout" goes to the
+    real `/store/checkout`. **Nothing in the payment path changed** — `placeOrder`, `/api/store/pay`, the HitPay HMAC
+    webhook and the PayPal return are byte-for-byte the same; only button shapes on the order page were restyled.
+- **Still fully customizable.** `lib/store-theme.ts` grew from 16 fields to ~35 — top bar, logo, nav links, hero
+  eyebrow / two-line headline / both CTAs / metrics, the four trust panels, every section's kicker+heading+blurb,
+  the made-to-order bullets, the article body, the FAQ, and contact details — all in the same `AppSetting` row
+  (**no migration**), all editable in **Admin → Storefront**, all with the prototype's copy as the default. A new
+  `safeHref()` keeps a hand-edited link from injecting `javascript:` into the page.
+- **SEO / AI SEO kept and extended.** Same JSON-LD, sitemap, robots and `/llms.txt` as before, **plus** the FAQ is now
+  published as `FAQPage` structured data and repeated in `llms.txt` — the block an answer engine quotes verbatim.
+- **Two bugs caught by actually rendering it** (throwaway Postgres + seeded catalogue + Playwright, not by eye):
+  1. Tailwind arbitrary values can't contain bare spaces — `w-[min(1240px,calc(100%-28px))]` is invalid CSS and was
+     dropped, so **every section rendered full-bleed** with no gutter. Needs `calc(100%_-_28px)`.
+  2. `src/lib` was **not in Tailwind's `content` globs**, so the shared `WRAP` / `DISPLAY` / `KICKER` constants
+     generated **no CSS at all** — the markup shipped class names that didn't exist. Added the glob (with a comment
+     saying why), which is the general fix for any class string living in `lib/`.
+- **Verified end to end** against a seeded 13-product catalogue: live search (4 hits for "curtain"), price sort both
+  ways, category filter, quote-dialog prefill, add-to-cart → drawer → checkout carrying the right server-priced total,
+  the product page, category page and mobile layout.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Products import — a multi-supplier row keeps its price (and prices are editable)
 - **Bug (owner).** The Products tab showed supplier chips with an empty price placeholder, so the Purchasing tab's
   **Unit Price** never auto-filled — even though `products.xlsx` carries a **Lowest price** column for the row.

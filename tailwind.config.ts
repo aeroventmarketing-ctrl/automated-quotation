@@ -6,6 +6,10 @@ const config: Config = {
     "./src/pages/**/*.{ts,tsx}",
     "./src/components/**/*.{ts,tsx}",
     "./src/app/**/*.{ts,tsx}",
+    // Shared class-name constants live here too (e.g. the storefront's WRAP /
+    // DISPLAY in lib/store-ui.ts). Without this glob those classes are silently
+    // never generated — the markup ships with class names that don't exist.
+    "./src/lib/**/*.{ts,tsx}",
   ],
   theme: {
     container: {
@@ -49,6 +53,17 @@ const config: Config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        // The storefront hero's rotor art: a slow drift so the stage isn't
+        // static, paired with the dashed blade ring's `animate-spin`.
+        "store-float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
+      },
+      animation: {
+        "store-float": "store-float 5s ease-in-out infinite",
       },
     },
   },

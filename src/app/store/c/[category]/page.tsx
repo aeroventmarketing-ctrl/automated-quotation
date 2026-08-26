@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 import { listStoreProducts, storeCategories, inStock, type StoreProduct } from "@/lib/store-catalog";
 import { getStoreTheme } from "@/lib/store-theme";
 import { jsonLd, itemListLd, breadcrumbLd, storeUrl } from "@/lib/store-seo";
+import { WRAP, DISPLAY, KICKER } from "@/lib/store-ui";
 import { COMPANY } from "@/lib/config";
 import { ProductGrid } from "../../product-grid";
 
@@ -50,24 +50,25 @@ export default async function StoreCategoryPage({ params }: { params: Promise<{ 
       />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbLd(trail)) }} />
 
-      <div className="border-b border-slate-200 bg-slate-50/60">
-        <div className="mx-auto max-w-7xl px-4 py-10 lg:px-8">
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px] text-slate-500">
-            <Link href="/store" className="transition-colors hover:text-[var(--store-accent)]">Shop</Link>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-            <span className="text-slate-700">{cat.label}</span>
+      <div className="bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-white">
+        <div className={`${WRAP} py-14`}>
+          <nav aria-label="Breadcrumb" className="text-[12px] text-[#8998aa]">
+            <Link href="/store" className="transition-colors hover:text-white">Shop</Link>
+            <span className="mx-2 text-white/25">/</span>
+            <span className="text-white/80">{cat.label}</span>
           </nav>
-          <h1 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-            {cat.label}
-          </h1>
-          <p className="mt-2 text-[14.5px] text-slate-600">
+          <div className={`${KICKER} mt-4`}>Industrial-grade equipment</div>
+          <h1 className={`${DISPLAY} mt-2 text-[clamp(38px,5vw,56px)] leading-none tracking-[-0.02em]`}>{cat.label}</h1>
+          <p className="mt-3 text-[14px] text-[#b9c4d2]">
             {shown.length} product{shown.length === 1 ? "" : "s"} · ordered online or quoted to specification
           </p>
         </div>
       </div>
 
-      <section className="mx-auto max-w-7xl px-4 py-12 lg:px-8">
-        <ProductGrid products={shown} theme={theme} />
+      <section className="bg-white py-[60px]">
+        <div className={WRAP}>
+          <ProductGrid products={shown} theme={theme} />
+        </div>
       </section>
     </>
   );

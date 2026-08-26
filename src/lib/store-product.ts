@@ -12,6 +12,14 @@ import { FABRICATED_FAN_FAMILIES, websiteSellingPrice } from "@/lib/website-pric
 
 export { websiteSellingPrice };
 
+/**
+ * Peso formatting for every storefront price. Lives here rather than beside a
+ * component so server pages, client components and the RFQ/AI copy all format
+ * the same way.
+ */
+export const peso = (n: number): string =>
+  `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 /** Human display label for a family, used as the default store category. */
 const FAMILY_LABEL: Partial<Record<Family, string>> = {
   AXIAL: "Axial Fans",
