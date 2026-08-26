@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { listStoreProducts, storeCategories, inStock, type StoreProduct } from "@/lib/store-catalog";
-import { getStoreTheme, type StoreTheme } from "@/lib/store-theme";
+import { getStoreTheme, themeImageSrc, type StoreTheme } from "@/lib/store-theme";
 import { jsonLd, itemListLd, faqLd, storeUrl } from "@/lib/store-seo";
 import { WRAP, DISPLAY, KICKER } from "@/lib/store-ui";
 import { CatalogueBrowser } from "./catalogue-browser";
@@ -64,7 +64,9 @@ export default async function StoreHome({ searchParams }: { searchParams: Promis
 /* ---------------------------------------------------------------- sections */
 
 function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number }) {
-  const heroPhoto = theme.heroImagePath.trim();
+  // Resolved the same way as the logo, so the hero accepts an uploaded
+  // `store/…` path, a public file, or a full URL — not only the first.
+  const heroPhoto = themeImageSrc(theme.heroImagePath);
 
   return (
     <section className="relative overflow-hidden bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-white">
@@ -131,7 +133,7 @@ function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number
           {heroPhoto ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={`/api/store-image?path=${encodeURIComponent(heroPhoto)}`}
+              src={heroPhoto}
               alt=""
               aria-hidden
               className="h-[380px] w-full object-contain drop-shadow-[0_34px_70px_rgba(0,0,0,0.5)]"

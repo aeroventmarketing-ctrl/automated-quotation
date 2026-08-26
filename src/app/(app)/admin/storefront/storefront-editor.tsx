@@ -11,6 +11,9 @@ import { saveStoreTheme } from "./actions";
 
 const ICON_KEYS = ["factory", "truck", "wrench", "shield", "support", "check"] as const;
 
+/** Comfortably under the serverless request-body cap. A logo is far smaller. */
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
 /** Colour field — a swatch picker beside the hex, so either can be used. */
 function ColorField({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
   return (
@@ -38,6 +41,127 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="block text-[11px] text-muted-foreground">{hint}</span>}
     </label>
+  );
+}
+
+/**
+ * An image setting — the logo, the hero photo — with the file picker beside it.
+ *
+ * The path is still editable by hand (a public file like `/aerovent-logo.jpg`,
+ * or a full URL, neither of which is an upload), but attaching a file is the
+ * normal way in: it POSTs to the admin upload route and writes the returned
+ * `store/…` path into the field. Before this, setting a logo meant uploading the
+ * image as some listed product's photo and copying its path back out.
+ *
+ * The thumbnail previews through the ADMIN route, which needs no product to be
+ * listed — so a freshly attached image shows immediately, and a broken path is
+ * obvious here rather than on the live shop.
+ */
+function ImageField({
+  label,
+  hint,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function attach(file: File | undefined) {
+    if (!file) return;
+    // Caught here rather than at the route: the serverless request body cap
+    // rejects an oversized upload with nothing worth showing the admin.
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setErr(`That file is ${(file.size / 1_048_576).toFixed(1)} MB — keep branding images under 4 MB.`);
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const res = await fetch("/api/store-uploads", { method: "POST", body });
+      const json = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
+      if (!res.ok || !json.path) {
+        setErr(json.error || "Upload failed.");
+        return;
+      }
+      onChange(json.path);
+    } catch {
+      setErr("Upload failed — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const preview = value.trim().startsWith("store/")
+    ? `/api/store-uploads?path=${encodeURIComponent(value.trim())}`
+    : value.trim().startsWith("/") || /^https?:\/\//i.test(value.trim())
+      ? value.trim()
+      : "";
+
+  // Deliberately NOT the shared `Field`: that wraps its children in a <label>,
+  // and the file picker is itself a <label>. Nesting them is invalid, and which
+  // control a click lands on stops being predictable.
+  return (
+    <div className="block space-y-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-2">
+        {preview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview} alt="" className="h-9 w-9 shrink-0 rounded border bg-muted object-contain" />
+        ) : (
+          <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded border bg-muted text-[10px] text-muted-foreground">
+            —
+          </span>
+        )}
+        <Input
+          className="h-9 font-mono text-xs"
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+      <div className="flex items-center gap-2 pt-1">
+        <label className="cursor-pointer">
+          <span
+            className={`inline-flex h-7 items-center rounded-md border px-2.5 text-[11px] font-medium ${
+              busy ? "opacity-60" : "hover:bg-accent"
+            }`}
+          >
+            {busy ? "Uploading…" : "Attach file"}
+          </span>
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => {
+              void attach(e.target.files?.[0]);
+              // Let the same file be picked again after a failed attempt.
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {value.trim() && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="inline-flex h-7 items-center rounded-md border px-2.5 text-[11px] font-medium hover:bg-accent"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {err && <span className="block text-[11px] text-destructive">{err}</span>}
+      {hint && <span className="block text-[11px] text-muted-foreground">{hint}</span>}
+    </div>
   );
 }
 
@@ -157,12 +281,20 @@ export function StorefrontEditor({ initial }: { initial: StoreTheme }) {
               <option value="contain">Fit whole image — cut-out product shots</option>
             </select>
           </Field>
-          <Field label="Logo" hint="A public path (/aerovent-logo.jpg), a store/… upload path, or a full URL.">
-            <Input className="h-9 font-mono text-xs" value={t.logoUrl} onChange={(e) => set({ logoUrl: e.target.value })} />
-          </Field>
-          <Field label="Hero photo path (optional)" hint="Replaces the rotor artwork. Upload via a product photo, then paste its path.">
-            <Input className="h-9 font-mono text-xs" value={t.heroImagePath} placeholder="store/…" onChange={(e) => set({ heroImagePath: e.target.value })} />
-          </Field>
+          <ImageField
+            label="Logo"
+            hint="Attach an image, or type a public path (/aerovent-logo.jpg) or a full URL."
+            value={t.logoUrl}
+            onChange={(v) => set({ logoUrl: v })}
+            placeholder="/aerovent-logo.jpg"
+          />
+          <ImageField
+            label="Hero photo (optional)"
+            hint="Replaces the rotor artwork in the hero. Attach an image, or type a path or URL."
+            value={t.heroImagePath}
+            onChange={(v) => set({ heroImagePath: v })}
+            placeholder="store/…"
+          />
         </CardContent>
       </Card>
 
