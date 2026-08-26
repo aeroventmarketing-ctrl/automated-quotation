@@ -72,6 +72,11 @@ function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplier
   function remove(company: string) {
     onChange(value.filter((v) => v.company !== company));
   }
+  /** Edit one supplier's unit price in place (blank clears it). */
+  function setPriceFor(company: string, raw: string) {
+    const n = Number(raw);
+    onChange(value.map((v) => (v.company === company ? { ...v, price: raw.trim() && n > 0 ? n : undefined } : v)));
+  }
 
   return (
     <div className="space-y-2">
@@ -79,7 +84,23 @@ function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplier
         <div className="flex flex-wrap gap-1.5">
           {value.map((v) => (
             <span key={v.company} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2.5 py-1 text-xs">
-              {v.company}{v.code ? ` · ${v.code}` : ""}{v.price ? ` · ${peso(v.price)}` : ""}
+              {v.company}{v.code ? ` · ${v.code}` : ""}
+              {/* The price is editable in place — a multi-supplier import gives
+                  every supplier the row's price, so correcting one shouldn't
+                  mean removing and re-adding the supplier. */}
+              <span className="inline-flex items-center text-muted-foreground">
+                ₱
+                <input
+                  type="number"
+                  step="any"
+                  min={0}
+                  value={v.price ?? ""}
+                  placeholder="—"
+                  aria-label={`Unit price for ${v.company}`}
+                  onChange={(e) => setPriceFor(v.company, e.target.value)}
+                  className="w-16 bg-transparent px-0.5 text-xs tabular-nums text-foreground outline-none placeholder:text-muted-foreground/60 focus:underline"
+                />
+              </span>
               <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(v.company)} aria-label={`Remove ${v.company}`}>
                 <X className="h-3 w-3" />
               </button>

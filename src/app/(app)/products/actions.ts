@@ -197,12 +197,19 @@ interface ImportGroup {
  */
 function parseSupplierCell(raw: string, rowPrice?: number): { company: string; price?: number }[] {
   const parts = raw.split(";").map((p) => p.trim()).filter(Boolean);
+  const fallback = rowPrice && rowPrice > 0 ? rowPrice : undefined;
   return parts
     .map((part) => {
       const m = part.match(/\s*(?:₱|PHP)\s*([\d,]+(?:\.\d+)?)\s*$/iu);
       const company = (m ? part.slice(0, part.length - m[0].length) : part).trim();
       const embedded = m ? Number(m[1].replace(/,/g, "")) : undefined;
-      const price = embedded && embedded > 0 ? embedded : parts.length === 1 && rowPrice && rowPrice > 0 ? rowPrice : undefined;
+      // An embedded "₱price" always wins. Otherwise fall back to the row's price
+      // column ("Lowest price" in the export) — INCLUDING for multi-supplier
+      // cells, where the file often names several suppliers with one price for
+      // the product. Leaving those blank meant ~40% of the catalogue carried no
+      // price at all, so a PO could never auto-fill. Approximate for the dearer
+      // supplier, but a figure the purchaser can see and correct beats nothing.
+      const price = embedded && embedded > 0 ? embedded : fallback;
       return { company, price };
     })
     .filter((s) => s.company);
