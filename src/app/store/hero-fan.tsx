@@ -126,7 +126,10 @@ export function HeroFan() {
       {/* Backlight. Outside the rotor: a light behind the prop does not spin. */}
       <circle cx="100" cy="100" r="100" fill="url(#hf-glow)" />
 
-      <g className="origin-center animate-[spin_7s_linear_infinite] motion-reduce:animate-none">
+      {/* `reverse` on the shorthand turns the propeller anticlockwise. Tailwind's
+          `spin` keyframe only counts up to 360°, so the direction is set here
+          rather than by a second keyframe. */}
+      <g className="origin-center animate-[spin_7s_linear_infinite_reverse] motion-reduce:animate-none">
         {/* Hub barrel and the collar each blade root seats into. */}
         <circle cx="100" cy="100" r={HUB_R} fill="url(#hf-metal)" stroke="#20252c" strokeWidth="0.8" />
         {ANGLES.map((a) => (

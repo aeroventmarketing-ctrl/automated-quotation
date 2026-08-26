@@ -24,8 +24,15 @@
   - Checked in the browser rather than assumed: the font resolves to real **Manrope 800** (not a silent fallback),
     the fill is `rgb(255,255,255)`, and the glyph box spans x 96.2–103.8 against a blade half-width of ~9.9 at that
     radius — comfortably inside the paint.
-- **Verified in a browser**, not by reading the markup: frames one second apart differ in **6.6%** of the fan's area
-  (it turns), and under `prefers-reduced-motion: reduce` two frames differ in **0 px** (it holds still).
+- **Rotation reversed (owner).** Now **anticlockwise**. Tailwind's `spin` keyframe only counts up to 360°, so the
+  direction is set with `reverse` on the animation shorthand rather than by adding a second keyframe.
+- **Verified in a browser**, not by reading the markup:
+  - Direction measured off the rotor's **live transform matrix**, unwrapped across the ±180° seam: six samples fall
+    −63.4° → −110.6°, a net **−47.1°** over ~0.9 s. Negative is anticlockwise, and −47° in 0.9 s confirms the 7 s
+    period is untouched.
+  - Frames one second apart differ in **7.3%** of the fan's area (it turns), and under
+    `prefers-reduced-motion: reduce` two frames differ in **0 px** — so `motion-reduce:animate-none` still beats the
+    longer shorthand.
 - The preview page's "Highlight what rotates" control was replaced with **"Show one blade"** — with no shroud left,
   almost everything rotates, so the old toggle had nothing to say; isolating one blade lets the plan-form be held
   against the photo.
