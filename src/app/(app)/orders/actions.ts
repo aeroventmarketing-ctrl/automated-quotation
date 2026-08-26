@@ -1220,7 +1220,13 @@ async function autoRaiseBoughtInRequisition(
   const boughtIn = orderBoughtInLines(items);
   if (boughtIn.length === 0) return;
   const lines = boughtIn.map((b) => {
-    const line = mrfItemLine({ description: b.name, qty: String(b.qty), unit: "unit" });
+    // Carry the quotation's specification through to the requisition (and so to
+    // the PO): a supplier can't ship the right isolator from "Spring Vibration
+    // Isolator" alone — it needs the mounting and the rated capacity. Kept on ONE
+    // line, joined with "·", because every downstream parser of this string
+    // (stock matching, returns, "to purchase" prefixes) is line-oriented.
+    const description = [b.name, ...b.detail].join(" · ");
+    const line = mrfItemLine({ description, qty: String(b.qty), unit: "unit" });
     return b.unitPrice != null ? `${line} · @${b.unitPrice}` : line;
   });
   await prisma.$transaction(async (tx) => {
