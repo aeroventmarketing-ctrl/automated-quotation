@@ -1,113 +1,155 @@
 /**
- * The hero's fan artwork — a five-blade axial propeller turning inside its
- * shroud, drawn as SVG so it stays crisp at any size and costs no image
- * request. Shown when no flagship hero photo is set.
+ * The hero's fan artwork — a five-blade aircraft propeller, drawn as SVG so it
+ * stays crisp at any size and costs no image request. Shown when no flagship
+ * hero photo is set.
  *
- * Only the blades and hub rotate; the shroud, the mounting bosses and the
- * struts behind stay put, which is what makes it read as a fan running rather
- * than the whole assembly spinning.
+ * Modelled on the propeller photo the owner supplied: matte black paddle
+ * blades, twin white tip bands, a copper maker's decal partway up each blade,
+ * and a polished hub with a retention collar per blade. The soft backlight
+ * behind the hub is from that photo too, and it earns its place here — five
+ * near-black blades on a near-black hero would otherwise vanish.
  *
- * Geometry note: one blade is drawn pointing up and the other four are the same
- * path rotated by 72°. The blade is a BANANA — a crescent bowing to one side —
- * and its sweep is still ZERO.
+ * Only the propeller turns. The glow stays put, which is what keeps it reading
+ * as a light behind the prop rather than part of it.
  *
- * Those two normally fight each other: a blade that curves to one side usually
- * carries its tip round with it, which is rake. Here they coexist because both
- * ENDS sit on the blade's own radial and only the body bows off it. The tip
- * stays square above the root, so sweep is zero, while the belly gives the
- * crescent its shape.
+ * Sweep is still zero, as asked for earlier: the blade is symmetric about its
+ * own radial, tip square above root. The reference blades look raked, but that
+ * is the twist and the camera, not plan-form sweep.
  */
 
 /**
- * The blade, drawn once at 12 o'clock in a 200×200 box centred on (100,100).
- * Root at radius 26 (where the hub covers the join), tip at radius 78 — inside
- * the shroud's 82 throat, so the propeller turns within its housing instead of
- * cutting across it.
+ * One blade, drawn at 12 o'clock in a 200×200 box centred on (100,100).
  *
- * Zero sweep lives in the two END CHORDS, not in the curve between them. Both
- * are horizontal — square to the radial — and both are centred on x = 100:
- * root (94,75)-(106,75), tip (94,28)-(106,28). The tip's centre therefore sits
- * directly above the root's, which is what sweep measures, and the caps are
- * exact semicircles across those chords.
+ * The plan-form is the photo's: a narrow shank leaving the hub, widening
+ * through the middle third to a broad paddle, then a squared tip with rounded
+ * corners. Root at radius 22 (under the hub, so the join never shows), tip at
+ * radius 86.
  *
- * Everything the curve does in between is CAMBER, a different quantity, and it
- * is free: the back bows out to x≈122 and the belly follows at x≈100, giving
- * the crescent. Do not try to force the ends' TANGENTS parallel to the radial
- * as well — a curve that leaves straight, bows, and arrives straight is an S,
- * not a banana, and an attempt at it turned every blade into a worm.
- *
- * Move either chord off x = 100 and the blade rakes.
+ * Both edges mirror about x = 100 — that mirror is the zero sweep.
  */
 const BLADE =
-  "M 106 75 C 126 64 128 37 106 28 " + // convex back, bowing out to the crescent
-  "A 6 6 0 0 0 94 28 " + //               tip cap — semicircle on a square chord
-  "C 104 42 101 64 94 75 " + //           concave belly, back down the inside
-  "A 6 6 0 0 0 106 75 Z"; //              root cap, bulging into the hub that hides it
+  "M 103.8 78 C 104.2 66 105.2 54 107.5 42 " + // shank, staying narrow well past halfway
+  "C 109.8 32 110.5 22 110 17 " + //              then flaring into the paddle
+  "C 108 12.8 92 12.8 90 17 " + //                broad squared tip, corners rounded
+  "C 89.5 22 90.2 32 92.5 42 " + //               trailing edge, the mirror of the leading
+  "C 94.8 54 95.8 66 96.2 78 " +
+  "A 3.8 3.8 0 0 0 103.8 78 Z"; //                root cap, tucked into the hub
 
 const ANGLES = [0, 72, 144, 216, 288];
+
+/**
+ * Hub radius. The reference photo's hub is about 22% of the propeller's
+ * diameter; at a tip radius of 86 that is 19-20 here. An earlier 27 made the
+ * hub the subject and the blades an afterthought.
+ */
+const HUB_R = 20;
+
+/** Where each blade's retention collar sits, straddling the blade root. */
+const COLLAR_R = 80;
 
 export function HeroFan() {
   return (
     <svg
       viewBox="0 0 200 200"
       aria-hidden
-      className="h-[330px] w-[330px] animate-store-float drop-shadow-[0_34px_70px_rgba(0,0,0,0.53)] motion-reduce:animate-none"
+      className="h-[340px] w-[340px] animate-store-float drop-shadow-[0_34px_70px_rgba(0,0,0,0.6)] motion-reduce:animate-none"
     >
       <defs>
-        {/* Light falling from the upper left, so the blades read as solid. */}
-        <linearGradient id="hf-blade" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#8492a6" />
-          <stop offset="55%" stopColor="#6d7b8e" />
-          <stop offset="100%" stopColor="#4a5769" />
+        {/* The photo's backlight — a cool halo behind the hub. */}
+        <radialGradient id="hf-glow">
+          <stop offset="0%" stopColor="#cfc6da" stopOpacity="0.30" />
+          <stop offset="35%" stopColor="#8f93b4" stopOpacity="0.14" />
+          <stop offset="70%" stopColor="#2b2f45" stopOpacity="0.05" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+        </radialGradient>
+
+        {/* Matte black, lit from the leading edge so the paddle reads as solid. */}
+        <linearGradient id="hf-blade" x1="0" y1="0" x2="1" y2="0.35">
+          <stop offset="0%" stopColor="#05070a" />
+          <stop offset="42%" stopColor="#12161c" />
+          <stop offset="72%" stopColor="#242a33" />
+          <stop offset="100%" stopColor="#0b0e13" />
         </linearGradient>
-        <radialGradient id="hf-ground">
-          <stop offset="0%" stopColor="#25344a" />
-          <stop offset="55%" stopColor="#111e32" />
-          <stop offset="100%" stopColor="#0a1425" />
+
+        {/* Polished aluminium: hard bands rather than a smooth ramp, which is
+            what makes a surface read as metal instead of plastic. */}
+        <linearGradient id="hf-metal" x1="0.1" y1="0" x2="0.9" y2="1">
+          <stop offset="0%" stopColor="#e8ecf1" />
+          <stop offset="22%" stopColor="#9aa4b1" />
+          <stop offset="38%" stopColor="#d6dce3" />
+          <stop offset="58%" stopColor="#6f7987" />
+          <stop offset="78%" stopColor="#aab3bf" />
+          <stop offset="100%" stopColor="#454d59" />
+        </linearGradient>
+        <linearGradient id="hf-metal2" x1="0.9" y1="0" x2="0.1" y2="1">
+          <stop offset="0%" stopColor="#cdd4dc" />
+          <stop offset="45%" stopColor="#79838f" />
+          <stop offset="100%" stopColor="#39404a" />
+        </linearGradient>
+        <radialGradient id="hf-boss">
+          <stop offset="0%" stopColor="#dfe4ea" />
+          <stop offset="55%" stopColor="#8d97a3" />
+          <stop offset="100%" stopColor="#3d434d" />
         </radialGradient>
-        <radialGradient id="hf-hub">
-          <stop offset="0%" stopColor="#3a4a5c" />
-          <stop offset="100%" stopColor="#222f42" />
-        </radialGradient>
+
+        {/* The copper maker's decal. */}
+        <linearGradient id="hf-decal" x1="0" y1="0" x2="0.6" y2="1">
+          <stop offset="0%" stopColor="#e08a4e" />
+          <stop offset="55%" stopColor="#b85c26" />
+          <stop offset="100%" stopColor="#7d3a14" />
+        </linearGradient>
+
+        {/* Markings are painted ON the blade, so they get clipped to it. The
+            clip is in blade-local space, so one definition serves all five. */}
+        <clipPath id="hf-clip">
+          <path d={BLADE} />
+        </clipPath>
       </defs>
 
-      {/* Shroud: the outer ring and the throat the propeller sits in. */}
-      <circle cx="100" cy="100" r="99" fill="url(#hf-ground)" stroke="#516078" strokeWidth="1" />
-      <circle cx="100" cy="100" r="88" fill="none" stroke="#59667a" strokeWidth="1.5" opacity="0.65" />
-      <circle cx="100" cy="100" r="82" fill="none" stroke="#69798e" strokeWidth="0.75" strokeDasharray="2 4" opacity="0.7" />
+      {/* Backlight. Outside the rotor: a light behind the prop does not spin. */}
+      <circle cx="100" cy="100" r="100" fill="url(#hf-glow)" />
 
-      {/* Four mounting bosses on the shroud face, at the diagonals. */}
-      {[45, 135, 225, 315].map((a) => (
-        <circle
-          key={a}
-          cx={100 + 93 * Math.cos((a * Math.PI) / 180)}
-          cy={100 + 93 * Math.sin((a * Math.PI) / 180)}
-          r="3"
-          fill="#2b3a4f"
-          stroke="#59667a"
-          strokeWidth="0.75"
-        />
-      ))}
-
-      {/* The rotating assembly. `origin-center` keeps it turning about the hub
-          rather than the top-left of the box. */}
       <g className="origin-center animate-[spin_7s_linear_infinite] motion-reduce:animate-none">
+        {/* Hub barrel and the collar each blade root seats into. */}
+        <circle cx="100" cy="100" r={HUB_R} fill="url(#hf-metal)" stroke="#20252c" strokeWidth="0.8" />
         {ANGLES.map((a) => (
-          <path
-            key={a}
-            d={BLADE}
-            transform={`rotate(${a} 100 100)`}
-            fill="url(#hf-blade)"
-            stroke="#8b99ad"
-            strokeWidth="0.6"
-            strokeLinejoin="round"
-            opacity="0.92"
+          <g key={`c${a}`} transform={`rotate(${a} 100 100)`}>
+            <rect x="93.5" y={COLLAR_R - 7} width="13" height="15" rx="3.5" fill="url(#hf-metal2)" stroke="#232830" strokeWidth="0.7" />
+            <rect x="95.8" y={COLLAR_R - 4.5} width="8.4" height="10" rx="2.2" fill="#333a44" opacity="0.6" />
+          </g>
+        ))}
+
+        {/* Blades, each with its own painted markings. */}
+        {ANGLES.map((a) => (
+          <g key={`b${a}`} transform={`rotate(${a} 100 100)`}>
+            <path d={BLADE} fill="url(#hf-blade)" stroke="#39424f" strokeWidth="0.5" strokeLinejoin="round" />
+            <g clipPath="url(#hf-clip)">
+              {/* Twin tip bands. */}
+              <rect x="80" y="16.6" width="40" height="3.6" fill="#f2f5f8" opacity="0.93" />
+              <rect x="80" y="23" width="40" height="3.6" fill="#f2f5f8" opacity="0.93" />
+              {/* Maker's decal, and the small painted index mark below it. */}
+              <ellipse cx="100" cy="47" rx="2.5" ry="4" fill="url(#hf-decal)" />
+              <ellipse cx="100" cy="47" rx="2.5" ry="4" fill="none" stroke="#f0d3b8" strokeWidth="0.35" opacity="0.5" />
+              <rect x="98.9" y="60" width="2.2" height="4.4" rx="0.7" fill="#e8edf2" opacity="0.85" />
+            </g>
+          </g>
+        ))}
+
+        {/* Centre boss, its bolt circle, and the spinner cap. */}
+        <circle cx="100" cy="100" r="12" fill="url(#hf-metal2)" stroke="#232830" strokeWidth="0.7" />
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => (
+          <circle
+            key={`bolt${a}`}
+            cx={100 + 8.6 * Math.cos((a * Math.PI) / 180)}
+            cy={100 + 8.6 * Math.sin((a * Math.PI) / 180)}
+            r="1.15"
+            fill="#4c545f"
+            stroke="#cfd6de"
+            strokeWidth="0.35"
           />
         ))}
-        {/* Hub, and a spinner mark so the rotation is legible at a glance. */}
-        <circle cx="100" cy="100" r="24" fill="url(#hf-hub)" stroke="#6d7b8e" strokeWidth="1.25" />
-        <circle cx="100" cy="100" r="11" fill="#1a2637" stroke="#59667a" strokeWidth="1" />
-        <path d="M 100 92 L 100 87" stroke="#8b99ad" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="100" cy="100" r="6" fill="url(#hf-boss)" stroke="#242a32" strokeWidth="0.6" />
+        <circle cx="100" cy="100" r="2.4" fill="#1c2129" />
       </g>
     </svg>
   );

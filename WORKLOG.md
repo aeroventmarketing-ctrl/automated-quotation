@@ -1,3 +1,28 @@
+## 2026-08-26 · Hero propeller redrawn from the owner's reference photo
+
+- **Request (owner).** A photograph of a five-blade aircraft propeller: *copy this and make it rotate.*
+- **What was copied.** Matte black **paddle** blades — a narrow shank that stays slim well past halfway, then flares
+  into a broad squared tip with rounded corners — **twin white tip bands**, a **copper maker's decal** at 58% span
+  with a small painted index mark below it, and a **polished hub** carrying a retention collar per blade, an
+  eight-bolt circle and a centre boss. The shroud, dashed throat ring and mounting bosses of the previous artwork are
+  gone; the reference is a bare propeller.
+- **The backlight is from the photo and it is load-bearing.** Five near-black blades on a near-black hero would
+  vanish. The photo's cool halo behind the hub solves that without inventing anything — and it sits **outside** the
+  rotating group, because a lamp behind a propeller does not spin with it.
+- **Proportion was the thing that needed measuring, not eyeballing.** A first pass used a hub radius of 27 against a
+  tip radius of 86 — 31% of the diameter, which made the hub the subject and the blades an afterthought. The
+  reference hub is ~22%; it is now **20** (23%). The blades were re-cut narrower at the same time.
+- **Sweep is still 0.00°** — root centre and tip centre both land on x = 100.000, measured off the rendered path.
+  The reference blades *look* raked; that is twist and camera angle, not plan-form sweep.
+- **Markings are painted on, not floated over.** They live in a `clipPath` of the blade in blade-local space, so one
+  definition serves all five and nothing can spill past an edge.
+- **Verified in a browser**, not by reading the markup: frames one second apart differ in **6.6%** of the fan's area
+  (it turns), and under `prefers-reduced-motion: reduce` two frames differ in **0 px** (it holds still).
+- The preview page's "Highlight what rotates" control was replaced with **"Show one blade"** — with no shroud left,
+  almost everything rotates, so the old toggle had nothing to say; isolating one blade lets the plan-form be held
+  against the photo.
+- Typecheck + lint + build clean. No migration, no workflow change.
+
 ## 2026-08-26 · The hero artwork is a rotating five-blade propeller
 
 - **Request (owner).** Make the hero's abstract rotor a rotating **5-blade propeller fan**.
