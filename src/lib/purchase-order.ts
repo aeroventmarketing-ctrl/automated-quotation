@@ -6,6 +6,7 @@
  */
 import { config, COMPANY } from "@/lib/config";
 import { round2 } from "@/lib/quote";
+import { specDetailFor } from "@/lib/department-pnl";
 
 export interface POLine {
   description: string;
@@ -209,6 +210,30 @@ export function poLinesFromPRItems(items: string[]): POLine[] {
 const PO_PRICE_MARKER = /\s*·\s*@\s*([\d,]+(?:\.\d+)?)\s*$/;
 export function stripPoPriceMarker(item: string): string {
   return String(item ?? "").replace(PO_PRICE_MARKER, "").trim();
+}
+
+/**
+ * Requisition item lines with the quotation's specification folded in.
+ *
+ * Applied when READING a purchase request, so an order raised before the
+ * generator carried the spec still reads — and prints on its PO — the way the
+ * quotation does. Deriving it here rather than migrating stored rows covers
+ * every existing order at once, and the PO's default lines (built from these
+ * same strings) pick the spec up too.
+ *
+ * The spec goes in BEFORE any trailing " · @<price>" marker, which is anchored
+ * to the end of the string — appending after it would strand the supplier grid
+ * price and the PO would stop auto-filling.
+ */
+export function withSpecDetail(items: string[], specs: { name: string; detail: string[] }[]): string[] {
+  if (specs.length === 0) return items;
+  return items.map((it) => {
+    const missing = specDetailFor(it, specs);
+    if (missing.length === 0) return it;
+    const pm = it.match(PO_PRICE_MARKER);
+    const body = pm ? it.replace(PO_PRICE_MARKER, "") : it;
+    return [body, ...missing].join(" · ") + (pm ? pm[0] : "");
+  });
 }
 
 /** Clean PR item lines for a text preview: drop issued records, strip the "to purchase" + price markers. */

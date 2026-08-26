@@ -28,7 +28,7 @@ import {
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
-import { coercePurchaseOrder, poLinesFromPRItems } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLinesFromPRItems, withSpecDetail } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getProducts } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
@@ -772,7 +772,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
   const purchaseRows = purchaseRequests.map((pr) => {
     const status = pr.status as PRStatus;
-    const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
+    // Fold the quotation's specification into the stored lines. Requisitions
+    // raised before the generator carried it only hold the product name, and the
+    // PO's default lines are built from these same strings — so this is what puts
+    // "Foot Mounted · Rated capacity 80 kg" on both the card and the supplier PO.
+    const prItems = withSpecDetail(Array.isArray(pr.items) ? (pr.items as string[]) : [], boughtInProductLines);
     const trail = buildPurchaseTrail(pr);
     const prIsDept = isDeptRequisition(pr);
     const actions = purchaseStepsFrom(status, prIsDept, isPoApproved(pr.chainLog)).map((step) => {

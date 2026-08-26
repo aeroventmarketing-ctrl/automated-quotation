@@ -1,3 +1,59 @@
+## 2026-08-26 · Phase 4 spec — extended to every order, and to the PO the supplier gets
+- **Report (owner).** Order **3236J** had the same short description as 3032S; asked to check every affected order.
+- **Answer: it isn't a per-order data problem.** The generator never carried the spec until today, so **every**
+  bought-in requisition ever raised holds only the product name. There's no list to hunt — one systemic cause.
+- **So the fix derives the spec on READ, not on write.** New helper `withSpecDetail(items, specs)` folds the
+  quotation's specification into the stored lines whenever a purchase request is loaded. Every existing order is
+  covered at once, with no data migration and no stored row touched.
+- **Two gaps closed vs the first pass** (which only decorated the Phase 4 card):
+  1. **The Purchasing workspace** — where the Purchaser actually builds the PO — showed the bare name, so a PO
+     prepared there would still have gone to the supplier without the mounting or rated capacity. It now enriches
+     once at load, so the cards, the combine picker **and the PO's default lines** all see the same full description.
+  2. **The trailing `· @<price>` marker** is anchored to the end of the line, so appending the spec after it would
+     have stranded the supplier grid price and stopped the PO auto-filling. The spec is spliced in *before* it.
+- **Also hardened:** `specDetailFor` now picks the **longest** matching product name. With "Spring Vibration Isolator"
+  and "Spring Vibration Isolator Heavy Duty" on one order, first-match would have given the heavy-duty line the plain
+  product's rated capacity.
+- **What the fix can't reach:** a PO **already prepared and saved** keeps its own stored line text — rewriting a
+  document already sent to a supplier isn't something to do silently. `docs/sql/boughtin-spec-affected-orders.sql` lists exactly
+  those requisitions so the Purchaser can re-apply the default lines on each.
+- **12 end-to-end checks, all passing**: old line with and without a price, the PO's qty/unit/price/description after
+  enrichment, no double-up on a new line, the `to purchase` and `issued from stock` prefixes, unrelated items, empty
+  spec lists, longest-name-wins both ways, and the text preview.
+- Typecheck + lint + build clean.
+
+## 2026-08-26 · Phase 4 shows the quotation's full specification (display + PO text)
+- **Request (owner).** Phase 4 showed only *"6 unit · Accessories Spring Vibration Isolator"* while the quotation maker
+  held the full detail (*Foot Mounted*, *Rated capacity 80 kg*). Wire the quotation through so Phase 4 shows what the
+  quotation says — checked against order **2026 - AFBM00003032S**.
+- **Frozen-area note.** Phase 4 is locked; the owner requested this specific change in-conversation. It is also
+  **display + document text only** — no change to who acts, the step order, the gating or the stage progression.
+- **Where the detail was lost.** `autoRaiseBoughtInRequisition` built each requisition line from `orderBoughtInLines`,
+  which returns only the supplier-facing **name** (`productLabel`). The quotation's multi-line `descriptionSnapshot`
+  never left the quotation — so the requisition, the Phase 4 card **and the PO** all had a bare product name. A
+  supplier can't ship the right isolator from "Spring Vibration Isolator" alone; it needs the mounting and the rated
+  capacity, which is the part that actually mattered here.
+- **Fix, in two halves.**
+  1. **New requisitions carry the spec.** `orderBoughtInLines` now also returns `detail[]` — the quotation's
+     description lines minus anything the name already says (new `productDetailLines`). The generated line becomes
+     `6 unit · Accessories Spring Vibration Isolator · Foot Mounted · Rated capacity 80 kg`, kept on **one** line
+     because every downstream parser of that string is line-oriented. This flows to the Phase 4 card, the Purchasing
+     workspace **and the PO**, whose unit price still auto-fills.
+  2. **Existing requisitions are filled in at render.** Order 3032S was raised before this, so its stored line has no
+     spec — the order page now hands the quotation's bought-in lines to `PurchasingChain`, which shows any spec line
+     the stored item doesn't already contain (`specDetailFor`). No re-raising needed, and a new line that carries its
+     own spec never doubles up.
+- **De-duplication of combined lines fixed too.** Identical products were merged on `name` alone; the key now includes
+  the spec, so two isolators differing only in rated capacity stay on separate lines instead of silently merging.
+- **Verified with the real strings from the screenshots:**
+  - `productDetailLines` → `["Foot Mounted","Rated capacity 80 kg"]`; 6 cases incl. the WDRV line whose size/material
+    is already folded into the name (correctly yields no duplicate detail).
+  - `specDetailFor` → fills the old line, returns nothing for the new one, and still matches through the `@price` and
+    `To purchase:` prefixes; 6 cases, 0 failures.
+  - `poLineFromPRItem` on the longer line → qty `6`, unit `unit`, price `1779.68`, description carrying all three
+    parts — the extra `·` separators don't disturb the qty/unit split or the trailing price marker.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Fan Selector — the visitor picks which model gets quoted
 - **Request (owner).** Make the selection results **selectable**, and have **Quote this selection** carry the model the
   visitor picked into the quotation dialog's *Product / Application* field.

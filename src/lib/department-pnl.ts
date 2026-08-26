@@ -175,9 +175,59 @@ export function isServiceLine(specs: Specs, description = ""): boolean {
  * service / charge lines (Mobilization, Delivery, Installation), keeping only the
  * resale goods (KDK, WDRV, VFD, Vent Cap …).
  */
+/**
+ * The specification lines a quotation carries for a product, minus whatever the
+ * supplier-facing name already says.
+ *
+ * The quotation maker writes a multi-line description — the product, then one
+ * detail per line ("Foot Mounted", "Rated capacity 80 kg"). The requisition and
+ * the PO were only ever given the product NAME, so a supplier saw "Spring
+ * Vibration Isolator" with no mounting or rated capacity — not enough to ship
+ * the right part. These are the lines worth carrying through.
+ */
+export function productDetailLines(description: string, name: string): string[] {
+  const norm = (v: string) => v.toLowerCase().replace(/\s+/g, " ").trim();
+  const label = norm(name);
+  return (description ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    // Drop the line that merely repeats the product name (the description's
+    // first line usually does), and any line already folded into the label.
+    .filter((l) => {
+      const n = norm(l);
+      return n !== "" && !label.includes(n);
+    });
+}
+
+/**
+ * The specification lines missing from a requisition item, given the quotation's
+ * bought-in lines.
+ *
+ * Requisitions raised from an order now carry the spec in the line itself, but
+ * every one raised before that doesn't — so the spec is derived from the
+ * quotation at read time instead. Anything the stored line already says is
+ * dropped, so a line that carries its own spec never doubles up.
+ */
+export function specDetailFor(item: string, specs: { name: string; detail: string[] }[]): string[] {
+  if (specs.length === 0) return [];
+  const norm = (v: string) => v.toLowerCase().replace(/\s+/g, " ").trim();
+  const line = norm(item);
+  // Longest name wins: with "Spring Vibration Isolator" and "Spring Vibration
+  // Isolator Heavy Duty" both on the order, first-match would give the heavy-duty
+  // line the plain product's spec.
+  let hit: { name: string; detail: string[] } | null = null;
+  for (const s of specs) {
+    if (!s.name || !line.includes(norm(s.name))) continue;
+    if (!hit || s.name.length > hit.name.length) hit = s;
+  }
+  if (!hit) return [];
+  return hit.detail.filter((d) => d && !line.includes(norm(d)));
+}
+
 export function orderBoughtInLines(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
-): { name: string; qty: number; unitPrice: number | null }[] {
+): { name: string; qty: number; unitPrice: number | null; detail: string[] }[] {
   const lines = items
     .filter((it) => {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
@@ -210,16 +260,23 @@ export function orderBoughtInLines(
       }
       // Supplier unit price from the product's price grid (WDRV: size × material).
       const grid = windVentSupplierCost(specs);
-      return { name, qty: Number(it.qty) || 1, unitPrice: grid ? grid.unitCost : null };
+      return {
+        name,
+        qty: Number(it.qty) || 1,
+        unitPrice: grid ? grid.unitCost : null,
+        detail: productDetailLines(it.descriptionSnapshot, name),
+      };
     });
 
-  // Combine identical products — same name means same product, size & material —
+  // Combine identical products — same name AND same specification —
   // into one line, summing the quantity, so the requisition / PO shows a single
   // row per product (e.g. 4 + 8 + 5 → one line of 17) instead of a row per
   // quotation line.
-  const combined = new Map<string, { name: string; qty: number; unitPrice: number | null }>();
+  const combined = new Map<string, { name: string; qty: number; unitPrice: number | null; detail: string[] }>();
   for (const l of lines) {
-    const key = `${l.name}||${l.unitPrice ?? ""}`;
+    // The spec is part of the identity: two isolators that differ only in rated
+    // capacity are different products and must stay on separate lines.
+    const key = `${l.name}||${l.detail.join("|")}||${l.unitPrice ?? ""}`;
     const existing = combined.get(key);
     if (existing) existing.qty += l.qty;
     else combined.set(key, { ...l });
