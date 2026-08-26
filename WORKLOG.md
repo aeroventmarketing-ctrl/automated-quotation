@@ -1,3 +1,27 @@
+## 2026-08-26 · Products import — a multi-supplier row keeps its price (and prices are editable)
+- **Bug (owner).** The Products tab showed supplier chips with an empty price placeholder, so the Purchasing tab's
+  **Unit Price** never auto-filled — even though `products.xlsx` carries a **Lowest price** column for the row.
+- **Root cause — the importer, not the display.** `products.xlsx` packs every supplier for a product into ONE
+  `Suppliers` cell (`"TRADE ONE INC.; POWERLINK MERCHANDISE TRADING CORP."`) and puts the figure in the separate
+  **Lowest price** column. `parseSupplierCell` only applied that row price when the cell named **exactly one**
+  supplier (`parts.length === 1 && rowPrice`). Of the 1015 rows in the file, **410 name two or more suppliers with no
+  embedded `₱`** — every one of them imported with **no price at all**, i.e. ~40% of the catalogue was priceless. The
+  screenshot's INDUCTION MOTOR 1.5 HP (3 suppliers, Lowest price 21015) was one of them.
+- **Fix.** The row-price fallback now applies **regardless of supplier count**. An embedded `₱1,234` in the cell still
+  wins per supplier; otherwise every supplier on the row takes the row's price. Approximate for the dearer supplier,
+  but a visible, correctable figure beats a blank that blocks PO autofill entirely.
+- **Editable in place.** Because a multi-supplier import now gives each supplier the same figure, the product editor's
+  supplier chips carry an **inline unit-price input** — correct one supplier without removing and re-adding it. Blank
+  clears the price.
+- **Purchasing needs no change.** `purchasing/page.tsx` already builds `catalogPrices` from `product.suppliers[].price`
+  and a `REF_PRICE_KEY` = lowest supplier price (else the stock item's unit cost), which `withCatalogPrices` /
+  `catalogPriceFor` use to fill a PO line's Unit Price (#419). It was starved of data, not broken — **re-import
+  `products.xlsx` and the prices appear**.
+- **Verified** against all 7 real cell shapes in the file (single/multi, with and without `₱`, thousands separators,
+  `&`/apostrophe in names, no-price rows). One data-quality caveat surfaced: a row whose Lowest price is `1` with a
+  `₱3130` supplier gives the two unpriced suppliers **₱1** — bad source data, now visible and editable.
+- Typecheck + lint + build clean.
+
 ## 2026-08-25 · Storefront redesign — premium look, customizable theme, SEO + AI SEO, performance
 - **Request (owner).** The first storefront was "simple and not appealing". Wanted a **stunning, premium, elegant**
   shop that is **SEO + AISEO**, **fast loading**, **easy to use**, and **customizable to fit the vibe**.
