@@ -316,7 +316,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // motors of different ratings into a single row and lose every spec. A line
   // the catalogue can't pin down keeps the quotation's wording and is flagged in
   // the form rather than guessed at.
-  const mrfSuggestions = suggestOfficeMrfRows(orderBoughtInLinesRaw(quote.items), productOptions);
+  const mrfSuggestions = suggestOfficeMrfRows(
+    orderBoughtInLinesRaw(quote.items),
+    productOptions,
+    stockItems.map((s) => ({ name: s.name, unit: s.unit })),
+  );
   const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
   // A from-stock order (in-house duct hardware — nothing fabricated or bought from
   // a supplier) is released from Fans & Blowers stock in Phase 2 instead of job

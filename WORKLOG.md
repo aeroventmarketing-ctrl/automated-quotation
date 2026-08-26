@@ -1,3 +1,46 @@
+## 2026-08-26 · MRF prefill matched against the REAL products / inventory catalogue
+
+- **Correction (owner).** On the deployed form every row still came back **unmatched** — "Induction Motor (TECO)"
+  in Articles / Description, the whole specification stranded in Remarks. Owner: match the quotation's lines to
+  `products.xlsx` / `inventory.xlsx` so **every** row autofills.
+- **Root cause: the matcher had never seen the real catalogue.** It was built against a plausible one. The real
+  `products.xlsx` (1,014 products, in the repo) names motors like
+  `INDUCTION MOTOR 1 HP , 3PH 0.75 KW, 4 POLE, FOOT MOUNTED (TECO)` — and stocks the **same rating twice**, once
+  TECO and once HYUNDAI. Three separate things were breaking:
+  - `.75KW` tokenised as **75 kW** (the regex ignored a leading dot), so correct products were hard-rejected.
+  - `1/2"` split into `1` and `2`, making `5/16"Ø x 1/2"` and `5/16"Ø x 1 1/2"` indistinguishable.
+  - Ranking on *matched token count* let a long name win on incidental hits — `PULLEY 3"Ø x 2B BIG HUB` resolved to
+    `PULLEY 9 1/2"Ø x 3B x ATLEAST 1/2 MM HUB…`, whose repeated `1/2` scored twice over.
+- **Rewritten around what actually distinguishes these products.**
+  - **Dimension safety (hard reject).** HP, kW, **phase** and **pole** are each read as the number before the unit
+    ("Three Phase" → 3). A product stating a figure the line contradicts is out, whatever it scores — a 1 HP
+    *single-phase* motor can never fill a 1 HP *three-phase* line. Silence on a dimension is never a rejection.
+  - **Brand safety (hard reject).** Brands are learned from the catalogue — a parenthesised word more than one
+    product carries — which finds TECO, HYUNDAI, IDEC. A line naming TECO can no longer be filled with the HYUNDAI
+    equivalent, which it otherwise **would have been**: the HYUNDAI name shares more words.
+  - **Fit (the ranking).** Harmonic mean of how much of the product name the line accounts for and how much of the
+    line the product accounts for, over **distinct** tokens. Both halves are load-bearing: one alone lets long names
+    swallow short ones, the other lets a bare `INDUCTION MOTOR` beat the 15 HP three-phase one being described.
+  - **It still refuses to guess.** If close-scoring products differ on a dimension the line never states, nothing in
+    the quotation picked the winner — its name was merely shorter. That resolves to *unmatched* and the requestor
+    chooses. A bare "Induction Motor" with no rating matches nothing, by design.
+- **Verified against the real 1,014-product catalogue, not a sample.** Every product name fed back as a quotation
+  line:
+
+  | | |
+  |---|---|
+  | resolved to **itself** | **1,006** |
+  | ambiguous → unmatched (safe) | 8 |
+  | resolved to a **different** product | **0** |
+
+  The 8 are genuine collisions the tokeniser cannot separate (`1/2"Ø x 1"` vs `1/2"Ø x 1 1/2"`, `5"Ø x 6C` vs
+  `6"Ø x 5C`) and fail safe.
+- **3236J now fills completely** — five quotation lines → four rows, still 9 units, every one a real product:
+  `15 HP`, `1.5 HP` ×2 (separate rows, different remarks), `1 HP` ×4 — all TECO, all 3PH, unit `pc` from the
+  catalogue. Each row's Remark still carries that line's own specification for the warehouse.
+- Catalogue is tokenised **once** per prefill rather than per line. 13 checks + the full round trip, all passing.
+  Typecheck + lint + build clean.
+
 ## 2026-08-26 · Office MRF prefills from the WON QUOTATION's line items
 - **Correction (owner).** The first pass sourced the prefill from `orderBoughtInLines`, which **combines identical
   products** — right for a PO, wrong here. On **3236J** that collapsed five separate motor lines into one
