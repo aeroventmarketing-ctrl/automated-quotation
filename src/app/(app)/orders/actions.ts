@@ -28,6 +28,9 @@ import {
   deptRole,
   deptLabel,
   OFFICE_DEPT_KEY,
+  MRF_DEPT_KEYS,
+  isOfficeDept,
+  isMrfRequestorFor,
   REQUISITION_DEPT_KEYS,
   requisitionDeptLabel,
   requestorDeptKey,
@@ -37,6 +40,7 @@ import {
   type OrderWorkflow,
   type FulfillmentMode,
   type ProductionDeptKey,
+  type MrfDeptKey,
   type JobOrder,
   type JobOrderProof,
   type MaterialRequest,
@@ -77,6 +81,34 @@ import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type Motor
 interface StockMatch { stockItemId: string; qty: number }
 
 const DEPT_KEY_SET = new Set(PRODUCTION_DEPTS.map((d) => d.key));
+
+/**
+ * May this user act as the **Office** requestor on an order's material requests?
+ *
+ * Office is not a production department: it has no job order and no single head
+ * role, so it can't be gated by `deptRole` like Fans / Duct / Accessories /
+ * Motor. Per the owner, the Office side of an order is run by Sales and
+ * Engineering with Purchasing and the Payment Approver — so those are the roles
+ * that may raise an Office MRF and confirm its receipt. Everything after the
+ * raise is the standard MRF flow, untouched.
+ *
+ * Sales / Engineer are ACCOUNT roles; Purchaser / Payment Approver are WORKFLOW
+ * roles assigned in Admin → Workflow roles, so who holds them stays a setting
+ * rather than something hard-coded here.
+ */
+/**
+ * May this user act as the requesting side of an MRF — raising it, chasing it,
+ * confirming receipt? For a production line that's its head; for Office it's the
+ * Office-side roles. The definition lives in `lib/order-workflow` so the server
+ * and My Dashboard can't drift apart.
+ */
+async function isMrfRequestor(user: { id: string; role: string }, dept: MrfDeptKey): Promise<boolean> {
+  const roles = await getWorkflowRoles();
+  return isMrfRequestorFor(dept, user.role, isAdmin(user as Parameters<typeof isAdmin>[0]), (r) =>
+    userHasWorkflowRole(roles, user.id, r as WorkflowRoleKey),
+  );
+}
+
 const COMMISSION_RATE_PCT = 1.5;
 
 /**
@@ -1013,20 +1045,29 @@ export async function raiseMaterialRequest(
 ): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!DEPT_KEY_SET.has(dept as ProductionDeptKey)) throw new Error("Unknown department");
-  const deptKey = dept as ProductionDeptKey;
+  if (!MRF_DEPT_KEYS.has(dept)) throw new Error("Unknown department");
+  const deptKey = dept as MrfDeptKey;
+  const office = isOfficeDept(deptKey);
 
   const mrfRoles = await getWorkflowRoles();
-  // The department head raises their own line's MRF; the Plant Manager (who
-  // oversees all lines) or an admin may raise it for any department.
-  if (
-    !(
-      isAdmin(user) ||
-      userHasWorkflowRole(mrfRoles, user.id, "plant_manager" as WorkflowRoleKey) ||
-      userHasWorkflowRole(mrfRoles, user.id, deptRole(deptKey) as WorkflowRoleKey)
-    )
-  ) {
-    throw new Error(`Only the ${deptLabel(deptKey)} head, the Plant Manager or an admin can raise its material request.`);
+  if (office) {
+    // Office has no production head — Sales / Engineering, Purchasing and the
+    // Payment Approver run its side of an order.
+    if (!isMrfRequestorFor(deptKey, user.role, isAdmin(user), (r) => userHasWorkflowRole(mrfRoles, user.id, r as WorkflowRoleKey))) {
+      throw new Error("Only Sales, an Engineer, the Purchaser, the Payment Approver or an admin can raise an Office material request.");
+    }
+  } else {
+    // The department head raises their own line's MRF; the Plant Manager (who
+    // oversees all lines) or an admin may raise it for any department.
+    if (
+      !(
+        isAdmin(user) ||
+        userHasWorkflowRole(mrfRoles, user.id, "plant_manager" as WorkflowRoleKey) ||
+        userHasWorkflowRole(mrfRoles, user.id, deptRole(deptKey as ProductionDeptKey) as WorkflowRoleKey)
+      )
+    ) {
+      throw new Error(`Only the ${deptLabel(deptKey as ProductionDeptKey)} head, the Plant Manager or an admin can raise its material request.`);
+    }
   }
 
   const cleanItems: MRFItem[] = (items ?? [])
@@ -1040,16 +1081,28 @@ export async function raiseMaterialRequest(
   if (cleanItems.length === 0) throw new Error("List at least one item.");
 
   const { cls, wf } = await loadWorkflow(quotationId);
-  const deptJo = wf.jobOrders[deptKey];
-  if (!deptJo) throw new Error("This department has no job order on this order.");
-  // Phase 3 is open to any authorized department head throughout production —
-  // from when the job orders are released until production is finished. It no
-  // longer waits for this department's own job order to be individually started.
-  if (stageIndex(wf.stage) < stageIndex("in_production")) {
-    throw new Error("Job orders haven't been released for production yet.");
-  }
-  if (stageIndex(wf.stage) >= stageIndex("production_finished") || deptJo.status === "finished") {
-    throw new Error("Production is finished — material requests are closed.");
+  if (office) {
+    // Office isn't gated on production: a bought-in or from-stock order never
+    // enters production at all, and those are exactly the orders Office runs.
+    // Its window is the whole live order — released until closed.
+    if (stageIndex(wf.stage) < stageIndex("released")) {
+      throw new Error("The order hasn't been released yet.");
+    }
+    if (stageIndex(wf.stage) >= stageIndex("closed")) {
+      throw new Error("The order is closed — material requests are closed.");
+    }
+  } else {
+    const deptJo = wf.jobOrders[deptKey as ProductionDeptKey];
+    if (!deptJo) throw new Error("This department has no job order on this order.");
+    // Phase 3 is open to any authorized department head throughout production —
+    // from when the job orders are released until production is finished. It no
+    // longer waits for this department's own job order to be individually started.
+    if (stageIndex(wf.stage) < stageIndex("in_production")) {
+      throw new Error("Job orders haven't been released for production yet.");
+    }
+    if (stageIndex(wf.stage) >= stageIndex("production_finished") || deptJo.status === "finished") {
+      throw new Error("Production is finished — material requests are closed.");
+    }
   }
 
   const req: MaterialRequest = {
@@ -1443,14 +1496,14 @@ export async function cancelMaterialRequest(quotationId: string, requestId: stri
   const mrf = wf.materialRequests[idx];
   if (mrf.status === "cancelled" || mrf.status === "completed") throw new Error("This material request is already closed.");
   const admin = isAdmin(user);
-  const isDeptHead = userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(mrf.dept) as WorkflowRoleKey);
+  const isDeptHead = await isMrfRequestor(user, mrf.dept);
   // The requesting dept head may cancel only while it's still 'requested' (before
   // the warehouse handles it); an admin may cancel a material request at ANY stage.
   if (mrf.status !== "requested" && !admin) {
     throw new Error("Only an admin can cancel a material request the warehouse has already handled.");
   }
   if (!(admin || isDeptHead)) {
-    throw new Error(`Only the ${deptLabel(mrf.dept)} head or an admin can cancel this material request.`);
+    throw new Error(`Only the ${requisitionDeptLabel(mrf.dept)} requestor or an admin can cancel this material request.`);
   }
   // Release any active soft-reservations held for this MRF (safe cleanup). Issued
   // stock isn't reversed (it's already been taken) and a linked purchase request,
@@ -1475,8 +1528,8 @@ async function loadMrfForDeptHead(quotationId: string, requestId: string) {
   const idx = wf.materialRequests.findIndex((m) => m.id === requestId);
   if (idx < 0) throw new Error("Material request not found.");
   const mrf = wf.materialRequests[idx];
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, deptRole(mrf.dept) as WorkflowRoleKey))) {
-    throw new Error(`Only the ${deptLabel(mrf.dept)} head or an admin can do this.`);
+  if (!(isAdmin(user) || (await isMrfRequestor(user, mrf.dept)))) {
+    throw new Error(`Only the ${requisitionDeptLabel(mrf.dept)} requestor or an admin can do this.`);
   }
   return { user, cls, wf, idx, mrf };
 }
@@ -1510,8 +1563,8 @@ export async function confirmMaterialReceipt(quotationId: string, requestId: str
   await logActivity(user, {
     action: "mrf.confirmed", category: "order",
     summary: hasShortfall
-      ? `MRF #${mrf.formNo} received (partial — balance still owing) — ${deptLabel(mrf.dept)} confirmed · ${await orderRefLabel(quotationId)}`
-      : `MRF #${mrf.formNo} completed — ${deptLabel(mrf.dept)} confirmed receipt · ${await orderRefLabel(quotationId)}`,
+      ? `MRF #${mrf.formNo} received (partial — balance still owing) — ${requisitionDeptLabel(mrf.dept)} confirmed · ${await orderRefLabel(quotationId)}`
+      : `MRF #${mrf.formNo} completed — ${requisitionDeptLabel(mrf.dept)} confirmed receipt · ${await orderRefLabel(quotationId)}`,
     entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
@@ -1525,7 +1578,7 @@ export async function followUpMaterialRequest(quotationId: string, requestId: st
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
   await logActivity(user, {
     action: "mrf.followup", category: "order",
-    summary: `${deptLabel(mrf.dept)} followed up MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
+    summary: `${requisitionDeptLabel(mrf.dept)} followed up MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
     entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
@@ -1546,7 +1599,7 @@ export async function informMaterialAvailable(quotationId: string, requestId: st
   await saveWorkflow(quotationId, cls, { ...wf, materialRequests });
   await logActivity(user, {
     action: "mrf.informed", category: "order",
-    summary: `Warehouse told ${deptLabel(mrf.dept)}: MRF #${mrf.formNo} materials are available — ${await orderRefLabel(quotationId)}`,
+    summary: `Warehouse told ${requisitionDeptLabel(mrf.dept)}: MRF #${mrf.formNo} materials are available — ${await orderRefLabel(quotationId)}`,
     entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
@@ -1617,7 +1670,7 @@ export async function releaseMaterialToRequestor(
       if (deduct > 0) {
         await applyStockChange(
           tx,
-          { stockItemId: m.stockItemId, kind: "ISSUE", qty: deduct, reason: `MRF #${mrf.formNo} released to ${deptLabel(mrf.dept)}` },
+          { stockItemId: m.stockItemId, kind: "ISSUE", qty: deduct, reason: `MRF #${mrf.formNo} released to ${requisitionDeptLabel(mrf.dept)}` },
           user.name,
         );
       }
@@ -1632,7 +1685,7 @@ export async function releaseMaterialToRequestor(
   revalidatePath("/inventory");
   await logActivity(user, {
     action: "mrf.released", category: "order",
-    summary: `Released MRF #${mrf.formNo} materials to ${deptLabel(mrf.dept)} — ${await orderRefLabel(quotationId)}`,
+    summary: `Released MRF #${mrf.formNo} materials to ${requisitionDeptLabel(mrf.dept)} — ${await orderRefLabel(quotationId)}`,
     entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
 }
@@ -1959,7 +2012,7 @@ export async function issueMrfLineFromStock(
     if (!item) throw new Error("Stock item not found.");
     // Location routing: fans/duct/accessories issue from the Plant Warehouse only.
     if (!isLocationAllowedForDept(item.location, mrf.dept)) {
-      throw new Error(`${deptLabel(mrf.dept)} issues from ${PLANT_LOCATION} only — pick the Plant Warehouse stock, or send this line to purchasing.`);
+      throw new Error(`${requisitionDeptLabel(mrf.dept)} issues from ${PLANT_LOCATION} only — pick the Plant Warehouse stock, or send this line to purchasing.`);
     }
     const agg = await tx.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
     const avail = Math.max(0, Number(item.quantity) - Number(agg._sum.qty ?? 0));

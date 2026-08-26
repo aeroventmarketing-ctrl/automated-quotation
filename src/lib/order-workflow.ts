@@ -82,6 +82,22 @@ export type JobOrderStatus = "issued" | "in_production" | "finished";
  * office/admin requisitions that still walk the normal purchasing chain.
  */
 export const OFFICE_DEPT_KEY = "office";
+
+/**
+ * The departments that can raise a MATERIAL REQUEST on an order: the four
+ * production lines, plus Office.
+ *
+ * Office is not a production department — it has no job order and no single
+ * head role — so its MRF is gated by the Office-side roles instead (see
+ * `isOfficeMrfRequestor` in the order actions). Everything after the raise is
+ * identical: the same triage, the same statuses, the same release handshake.
+ */
+export type MrfDeptKey = ProductionDeptKey | typeof OFFICE_DEPT_KEY;
+export const isOfficeDept = (dept: string): boolean => dept === OFFICE_DEPT_KEY;
+export const MRF_DEPT_KEYS: ReadonlySet<string> = new Set<string>([
+  ...PRODUCTION_DEPTS.map((d) => d.key),
+  OFFICE_DEPT_KEY,
+]);
 export const REQUISITION_DEPTS: { key: string; label: string }[] = [
   ...PRODUCTION_DEPTS.map((d) => ({ key: d.key, label: d.label })),
   { key: OFFICE_DEPT_KEY, label: "Office" },
@@ -153,7 +169,7 @@ export interface MRFItem {
 export interface MaterialRequest {
   id: string;
   formNo: string; // running form number, e.g. "0173"
-  dept: ProductionDeptKey;
+  dept: MrfDeptKey;
   items: MRFItem[];
   note?: string;
   status: MaterialRequestStatus;
@@ -322,6 +338,53 @@ export function deptLabel(dept: ProductionDeptKey): string {
   return PRODUCTION_DEPTS.find((d) => d.key === dept)?.label ?? dept;
 }
 
+/**
+ * The workflow role that heads an MRF's department — `null` for Office, which
+ * has no single head. Callers must fall back to the Office-requestor check.
+ */
+export function mrfDeptRole(dept: MrfDeptKey): string | null {
+  return isOfficeDept(dept) ? null : deptRole(dept as ProductionDeptKey);
+}
+
+/**
+ * Who counts as the **Office** requestor on an order's material requests.
+ *
+ * Office has no production head, so it can't be gated by `deptRole`. Per the
+ * owner, the Office side of an order is run by Sales and Engineering together
+ * with Purchasing and the Payment Approver. Sales / Engineer are ACCOUNT roles;
+ * Purchaser / Payment Approver are WORKFLOW roles assigned in Admin → Workflow
+ * roles, so who holds them stays a setting rather than something hard-coded.
+ *
+ * Takes primitives so the server actions and My Dashboard share ONE definition —
+ * two copies of this list would drift the moment either was edited.
+ */
+export function isOfficeMrfRequestor(
+  accountRole: string,
+  admin: boolean,
+  hasWorkflowRole: (role: string) => boolean,
+): boolean {
+  return (
+    admin ||
+    accountRole === "SALES" ||
+    accountRole === "ENGINEER" ||
+    hasWorkflowRole("purchaser") ||
+    hasWorkflowRole("payment_approver")
+  );
+}
+
+/** Whether a user may act as the requesting side of an MRF (raise / chase / confirm). */
+export function isMrfRequestorFor(
+  dept: MrfDeptKey,
+  accountRole: string,
+  admin: boolean,
+  hasWorkflowRole: (role: string) => boolean,
+): boolean {
+  const role = mrfDeptRole(dept);
+  return role === null
+    ? isOfficeMrfRequestor(accountRole, admin, hasWorkflowRole)
+    : admin || hasWorkflowRole(role);
+}
+
 /** True when every issued job order is finished (and at least one was issued). */
 export function allJobOrdersFinished(wf: OrderWorkflow): boolean {
   const jobs = Object.values(wf.jobOrders).filter(Boolean) as JobOrder[];
@@ -415,11 +478,14 @@ export function readOrderWorkflow(classification: unknown): OrderWorkflow {
 
   const materialRequests: MaterialRequest[] = Array.isArray(wf?.materialRequests)
     ? (wf.materialRequests as unknown[])
-        .filter((m): m is Record<string, unknown> => !!m && typeof m === "object" && DEPT_KEYS.has((m as MaterialRequest).dept))
+        // Office counts here as well as the four production lines — filtering on
+        // the production set alone would silently DROP every Office MRF on the
+        // next read, losing it from the order.
+        .filter((m): m is Record<string, unknown> => !!m && typeof m === "object" && MRF_DEPT_KEYS.has((m as MaterialRequest).dept))
         .map((m) => ({
           id: String(m.id ?? ""),
           formNo: String(m.formNo ?? ""),
-          dept: m.dept as ProductionDeptKey,
+          dept: m.dept as MrfDeptKey,
           items: coerceMrfItems(m.items),
           note: m.note ? String(m.note) : undefined,
           status: (m.status as MaterialRequestStatus) ?? "requested",

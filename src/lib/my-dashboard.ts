@@ -13,7 +13,7 @@ import type { User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
-import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole } from "@/lib/order-workflow";
+import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole, isMrfRequestorFor } from "@/lib/order-workflow";
 import { isStockOnlyOrder, isBoughtInOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
@@ -129,6 +129,10 @@ const AREA_LABEL: Record<TaskArea, string> = {
 export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   const assignments = await getWorkflowRoles();
   const has = (r: WorkflowRoleKey) => isAdmin(user) || userHasWorkflowRole(assignments, user.id, r);
+  // "Am I this MRF's requestor?" — the production head for a line, the Office
+  // roles for an Office request. Same definition the server gate uses.
+  const isMrfRequestor = (dept: Parameters<typeof isMrfRequestorFor>[0]) =>
+    isMrfRequestorFor(dept, user.role, isAdmin(user), (r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
   const holdsAnyRole = WORKFLOW_ROLE_KEYS.some((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey));
   const restricted = await isClientRestricted(user, assignments);
   const maskClient = (name: string | null | undefined): string | null => (restricted ? CLIENT_HIDDEN : name ?? null);
@@ -206,7 +210,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           });
         }
         // The requesting department confirms receipt of the released materials.
-        if ((m.status === "issued" || m.status === "partial") && !m.confirmedAt && has(deptRole(m.dept) as WorkflowRoleKey)) {
+        if ((m.status === "issued" || m.status === "partial") && !m.confirmedAt && isMrfRequestor(m.dept)) {
           tasks.push({
             key: `mrf-confirm:${q.id}:${m.id}`, area: "order", areaLabel: AREA_LABEL.order,
             title: q.quoteNumber, action: `Confirm materials received · MRF #${m.formNo}`,
@@ -221,7 +225,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         // their requested items — from "Requested" through purchasing to release
         // and completion.
         const note = mrfNote(m);
-        if (note && (seesMaterialsFeed || has(deptRole(m.dept) as WorkflowRoleKey))) {
+        if (note && (seesMaterialsFeed || isMrfRequestor(m.dept))) {
           materialsFeed.push({
             key: `mfeed:${q.id}:${m.id}`,
             orderRef: q.quoteNumber,
