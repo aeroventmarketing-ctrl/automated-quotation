@@ -9,7 +9,7 @@
  */
 import { COMPANY, config } from "@/lib/config";
 import type { StoreProduct } from "@/lib/store-catalog";
-import type { StoreTheme } from "@/lib/store-theme";
+import type { StoreTheme, StoreFaq } from "@/lib/store-theme";
 
 /** Absolute site origin, no trailing slash — schema.org wants absolute URLs. */
 export const siteOrigin = (): string => config.appUrl.replace(/\/+$/, "");
@@ -142,6 +142,23 @@ export function productLd(p: StoreProduct) {
         };
 
   return { ...base, offers: offer };
+}
+
+/**
+ * The shop's FAQ accordion as `FAQPage`. Worth its own block: it's the entry an
+ * answer engine quotes verbatim when someone asks "how do I choose a fan?", and
+ * it can earn an FAQ rich result on the shop home.
+ */
+export function faqLd(faq: StoreFaq[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((f) => ({
+      "@type": "Question",
+      name: f.q,
+      acceptedAnswer: { "@type": "Answer", text: f.a },
+    })),
+  };
 }
 
 /** A category / listing page as an ItemList, so crawlers see the set at once. */

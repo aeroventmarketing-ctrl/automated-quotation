@@ -43,7 +43,7 @@ export function PayButtons({
 
   if (!hitpay && !paypal) {
     return (
-      <p className="text-sm text-gray-600">
+      <p className="text-[13.5px] text-[var(--store-steel)]">
         Online payment isn&rsquo;t switched on yet — our team will contact you to arrange payment and delivery.
       </p>
     );
@@ -57,7 +57,7 @@ export function PayButtons({
             type="button"
             onClick={() => pay("hitpay")}
             disabled={busy !== null}
-            className="rounded-full bg-[var(--store-accent)] px-5 py-3 text-[14px] font-bold text-white transition-colors hover:bg-[var(--store-accent-dark)] disabled:opacity-60"
+            className="rounded-[5px] bg-[var(--store-accent)] px-5 py-3.5 text-[14px] font-extrabold text-white transition-colors hover:bg-[var(--store-accent-dark)] disabled:opacity-60"
           >
             {busy === "hitpay" ? "Opening checkout…" : "Pay with card / GCash / Maya"}
           </button>
@@ -67,14 +67,14 @@ export function PayButtons({
             type="button"
             onClick={() => pay("paypal")}
             disabled={busy !== null}
-            className="rounded-full border-2 border-[#003087] px-5 py-3 text-[14px] font-bold text-[#003087] transition-colors hover:bg-[#003087]/5 disabled:opacity-60"
+            className="rounded-[5px] border-2 border-[#003087] px-5 py-3.5 text-[14px] font-extrabold text-[#003087] transition-colors hover:bg-[#003087]/5 disabled:opacity-60"
           >
             {busy === "paypal" ? "Opening PayPal…" : "Pay with PayPal"}
           </button>
         )}
       </div>
-      {err && <p className="text-sm text-red-600">{err}</p>}
-      <p className="text-xs text-gray-500">You&rsquo;ll be taken to a secure checkout page to complete the payment.</p>
+      {err && <p className="text-[13px] font-semibold text-[var(--store-accent)]">{err}</p>}
+      <p className="text-[11.5px] text-[var(--store-steel)]">You&rsquo;ll be taken to a secure checkout page to complete the payment.</p>
     </div>
   );
 }

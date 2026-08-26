@@ -1,20 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Manrope, Inter } from "next/font/google";
+import { Barlow_Condensed, Manrope } from "next/font/google";
 import { COMPANY } from "@/lib/config";
 import { listStoreProducts, storeCategories } from "@/lib/store-catalog";
-import { getStoreTheme } from "@/lib/store-theme";
+import { getStoreTheme, themeImageSrc } from "@/lib/store-theme";
 import { siteOrigin, storeUrl, jsonLd, storeHomeLd } from "@/lib/store-seo";
-import { CartLink } from "./cart-link";
-import { StoreSearch } from "./store-search";
+import { WRAP, DISPLAY } from "@/lib/store-ui";
+import { HeaderActions } from "./store-actions";
+import { StoreChrome } from "./store-chrome";
 import { MobileNav } from "./mobile-nav";
 
 /**
  * Self-hosted at build time — no runtime request to Google, no layout shift.
- * Manrope carries the headings (geometric, confident); Inter does the reading.
+ * Barlow Condensed carries the headings (tall, industrial, uppercase); Manrope
+ * does the reading.
  */
-const display = Manrope({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-display", display: "swap" });
-const body = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-body", display: "swap" });
+const display = Barlow_Condensed({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display", display: "swap" });
+const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-body", display: "swap" });
 
 export async function generateMetadata(): Promise<Metadata> {
   const theme = await getStoreTheme();
@@ -45,118 +47,136 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function StoreLayout({ children }: { children: React.ReactNode }) {
   const [theme, products] = await Promise.all([getStoreTheme(), listStoreProducts()]);
   const categories = storeCategories(products);
+  const logo = themeImageSrc(theme.logoUrl);
 
   const themeVars = {
     "--store-accent": theme.accent,
     "--store-accent-dark": theme.accentDark,
     "--store-ink": theme.ink,
+    "--store-ink2": theme.ink2,
+    "--store-paper": theme.paper,
+    "--store-line": "#dce2e8",
+    "--store-steel": "#607084",
   } as React.CSSProperties;
 
   return (
     <div
       style={themeVars}
-      className={`${display.variable} ${body.variable} flex min-h-screen flex-col bg-white font-[family-name:var(--font-body)] text-slate-900 antialiased selection:bg-[var(--store-accent)] selection:text-white`}
+      className={`${display.variable} ${body.variable} flex min-h-screen scroll-smooth flex-col bg-[var(--store-paper)] font-[family-name:var(--font-body)] text-[15px] text-[var(--store-ink)] antialiased selection:bg-[var(--store-accent)] selection:text-white`}
     >
       {/* Site-wide structured data — org, website + search action, store. */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(storeHomeLd(theme)) }} />
 
       {theme.announcement && (
-        <div className="bg-[var(--store-ink)] px-4 py-2 text-center text-[12px] font-medium tracking-wide text-white/90">
-          {theme.announcement}
+        <div className="hidden bg-[#07101f] text-[12px] tracking-[0.04em] text-[#c7d0dc] sm:block">
+          <div className={`${WRAP} flex h-[34px] items-center justify-between`}>
+            <span>
+              <strong className="text-white">{theme.announcement}</strong>
+              {theme.announcementNote && ` · ${theme.announcementNote}`}
+            </span>
+            <div className="hidden gap-[22px] lg:flex">
+              {theme.topLinks.map((t) => <span key={t}>{t}</span>)}
+            </div>
+          </div>
         </div>
       )}
 
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-md supports-[backdrop-filter]:bg-white/70">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3.5 lg:px-8">
-          <Link href="/store" className="shrink-0 leading-none">
-            <div className="font-[family-name:var(--font-display)] text-[15px] font-extrabold uppercase leading-tight tracking-tight text-[var(--store-accent)] sm:text-base">
-              Aerovent
-            </div>
-            <div className="mt-0.5 hidden text-[9.5px] font-medium uppercase tracking-[0.18em] text-slate-500 sm:block">
-              Fans &amp; Blowers
-            </div>
+      <header className="sticky top-0 z-20 border-b border-[var(--store-line)] bg-white/95 backdrop-blur-[16px]">
+        <div className={`${WRAP} grid h-[72px] grid-cols-[1fr_auto] items-center gap-7 sm:h-[86px] lg:grid-cols-[290px_1fr_auto]`}>
+          <Link href="/store" className="flex items-center" aria-label={`${COMPANY.name} — shop home`}>
+            {logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logo}
+                alt={COMPANY.name}
+                width={230}
+                height={66}
+                className="h-[46px] w-[170px] object-contain object-left sm:h-[66px] sm:w-[230px]"
+                fetchPriority="high"
+              />
+            ) : (
+              <span className={`${DISPLAY} text-[26px] leading-none text-[var(--store-accent)]`}>Aerovent</span>
+            )}
           </Link>
 
-          <nav className="ml-2 hidden items-center gap-1 lg:flex" aria-label="Product categories">
-            <Link href="/store" className="rounded-full px-3 py-2 text-[13.5px] font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900">
-              All products
-            </Link>
-            {categories.slice(0, 5).map((c) => (
-              <Link
-                key={c.slug}
-                href={`/store/c/${c.slug}`}
-                className="rounded-full px-3 py-2 text-[13.5px] font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
-              >
-                {c.label}
-              </Link>
-            ))}
+          <nav className="hidden justify-center gap-[25px] text-[13px] font-bold lg:flex" aria-label="Main">
+            {theme.navLinks.map((l) =>
+              /^https?:/i.test(l.href) ? (
+                <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--store-accent)]">
+                  {l.label}
+                </a>
+              ) : (
+                <Link key={l.label} href={l.href} className="transition-colors hover:text-[var(--store-accent)]">
+                  {l.label}
+                </Link>
+              ),
+            )}
           </nav>
 
-          <div className="ml-auto flex items-center gap-2">
-            <div className="hidden md:block md:w-52 lg:w-64">
-              <StoreSearch />
-            </div>
-            <Link
-              href="/rfq"
-              className="hidden rounded-full border border-slate-300 px-3.5 py-2 text-[13px] font-semibold text-slate-700 transition-colors hover:border-[var(--store-accent)] hover:text-[var(--store-accent)] sm:inline-block"
-            >
-              Get a quote
-            </Link>
-            <CartLink />
-            <MobileNav categories={categories} />
+          <div className="flex items-center gap-2.5 justify-self-end">
+            <HeaderActions />
+            <MobileNav categories={categories} links={theme.navLinks} />
           </div>
         </div>
       </header>
 
       <main className="flex-1">{children}</main>
 
-      <footer className="mt-20 border-t border-slate-200 bg-slate-50">
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:grid-cols-2 lg:grid-cols-4 lg:px-8">
-          <div className="sm:col-span-2 lg:col-span-1">
-            <div className="font-[family-name:var(--font-display)] text-base font-extrabold uppercase tracking-tight text-[var(--store-accent)]">
-              Aerovent
+      <footer className="bg-[#070e1b] pb-7 pt-14 text-[#9ba8b8]">
+        <div className={WRAP}>
+          <div className="grid gap-11 sm:grid-cols-2 lg:grid-cols-[1.5fr_.7fr_.7fr_1fr]">
+            <div>
+              <div className={`${DISPLAY} text-[28px] leading-tight text-white`}>
+                <span className="text-[var(--store-accent)]">Aerovent</span> Fans and Blowers Manufacturing
+              </div>
+              <p className="mt-3 text-[12px] leading-[1.8]">{theme.aiSummary}</p>
             </div>
-            <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-slate-600">{theme.aiSummary}</p>
+
+            <div>
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-white">Shop</h2>
+              <ul className="mt-3 space-y-1 text-[12px] leading-[1.8]">
+                <li><Link href="/store#products" className="transition-colors hover:text-white">All products</Link></li>
+                {categories.slice(0, 4).map((c) => (
+                  <li key={c.slug}>
+                    <Link href={`/store/c/${c.slug}`} className="transition-colors hover:text-white">{c.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-white">Support</h2>
+              <ul className="mt-3 space-y-1 text-[12px] leading-[1.8]">
+                <li><Link href="/rfq" className="transition-colors hover:text-white">Request a quotation</Link></li>
+                {theme.mainSiteUrl && (
+                  <li><a href={theme.mainSiteUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white">Main website</a></li>
+                )}
+                {theme.facebookUrl && (
+                  <li><a href={theme.facebookUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white">Facebook page</a></li>
+                )}
+              </ul>
+            </div>
+
+            <div>
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-white">Contact</h2>
+              <address className="mt-3 space-y-3 text-[12px] not-italic leading-[1.8]">
+                <div>{COMPANY.manilaOffice.replace(/^Manila Office:\s*/, "")}</div>
+                <div>
+                  {theme.salesEmail && <>{theme.salesEmail}<br /></>}
+                  {theme.phone}
+                </div>
+              </address>
+            </div>
           </div>
 
-          <div>
-            <h2 className="font-[family-name:var(--font-display)] text-[11px] font-bold uppercase tracking-[0.14em] text-slate-900">Shop</h2>
-            <ul className="mt-4 space-y-2.5 text-[13px] text-slate-600">
-              <li><Link href="/store" className="transition-colors hover:text-[var(--store-accent)]">All products</Link></li>
-              {categories.slice(0, 5).map((c) => (
-                <li key={c.slug}>
-                  <Link href={`/store/c/${c.slug}`} className="transition-colors hover:text-[var(--store-accent)]">{c.label}</Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h2 className="font-[family-name:var(--font-display)] text-[11px] font-bold uppercase tracking-[0.14em] text-slate-900">Company</h2>
-            <ul className="mt-4 space-y-2.5 text-[13px] text-slate-600">
-              <li><Link href="/rfq" className="transition-colors hover:text-[var(--store-accent)]">Request a quotation</Link></li>
-              <li><a href={`mailto:${COMPANY.email}`} className="transition-colors hover:text-[var(--store-accent)]">{COMPANY.email}</a></li>
-              <li><a href="mailto:sales@aeroventfbm.com" className="transition-colors hover:text-[var(--store-accent)]">sales@aeroventfbm.com</a></li>
-            </ul>
-          </div>
-
-          <div>
-            <h2 className="font-[family-name:var(--font-display)] text-[11px] font-bold uppercase tracking-[0.14em] text-slate-900">Visit</h2>
-            <address className="mt-4 space-y-3 text-[13px] not-italic leading-relaxed text-slate-600">
-              <div>{COMPANY.manilaOffice.replace(/^Manila Office:\s*/, "")}</div>
-              <div>{COMPANY.plantAddress.replace(/^Plant Address\s*:\s*/, "")}</div>
-              <div className="font-medium text-slate-900">(02) 85619413</div>
-            </address>
-          </div>
-        </div>
-
-        <div className="border-t border-slate-200">
-          <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-6 text-[12px] text-slate-500 sm:flex-row sm:items-center sm:justify-between lg:px-8">
+          <div className="mt-9 flex flex-col gap-2 border-t border-white/[0.07] pt-5 text-[11px] sm:flex-row sm:justify-between">
             <span>© {new Date().getFullYear()} {COMPANY.name}. All rights reserved.</span>
             <span>Fabricated fans &amp; blowers are made to order and quoted by specification.</span>
           </div>
         </div>
       </footer>
+
+      <StoreChrome quoteNote="Your enquiry goes straight to the Aerovent sales desk." />
     </div>
   );
 }

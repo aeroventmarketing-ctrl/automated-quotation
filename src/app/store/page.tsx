@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Factory, Truck, Wrench, ShieldCheck, Headset, Check, PackageSearch } from "lucide-react";
 import { listStoreProducts, storeCategories, inStock, type StoreProduct } from "@/lib/store-catalog";
 import { getStoreTheme, type StoreTheme } from "@/lib/store-theme";
-import { jsonLd, itemListLd, storeUrl } from "@/lib/store-seo";
-import { ProductGrid } from "./product-grid";
-import { StoreSearch } from "./store-search";
+import { jsonLd, itemListLd, faqLd, storeUrl } from "@/lib/store-seo";
+import { WRAP, DISPLAY, KICKER } from "@/lib/store-ui";
+import { CatalogueBrowser } from "./catalogue-browser";
+import { QuoteButton } from "./store-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,31 +27,18 @@ export async function generateMetadata({
   return { title: theme.seoTitle, description: theme.seoDescription, alternates: { canonical: storeUrl() } };
 }
 
-const FEATURE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  factory: Factory, truck: Truck, wrench: Wrench, shield: ShieldCheck, support: Headset, check: Check,
-};
-
-/** Match a product against a free-text query (name, model code, category). */
-function matches(p: StoreProduct, q: string): boolean {
-  const hay = `${p.name} ${p.modelCode} ${p.category} ${p.description ?? ""}`.toLowerCase();
-  return q.toLowerCase().split(/\s+/).filter(Boolean).every((t) => hay.includes(t));
-}
-
 export default async function StoreHome({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q = "" } = await searchParams;
-  const query = q.trim();
   const [theme, all] = await Promise.all([getStoreTheme(), listStoreProducts()]);
   const categories = storeCategories(all);
-  const products = query ? all.filter((p) => matches(p, query)) : all;
 
   // Buyable items lead the grid — a shopper should meet something they can
-  // actually put in a basket before the made-to-order units.
-  const sorted = [...products].sort((a, b) => {
+  // actually put in a basket before the made-to-order units. This is the
+  // "Featured" order the browser's sort falls back to.
+  const sorted = [...all].sort((a, b) => {
     const rank = (p: StoreProduct) => (p.quoteOnly ? 2 : inStock(p) ? 0 : 1);
     return rank(a) - rank(b);
   });
-
-  if (query) return <SearchResults theme={theme} query={query} results={sorted} />;
 
   return (
     <>
@@ -59,31 +46,17 @@ export default async function StoreHome({ searchParams }: { searchParams: Promis
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(itemListLd(sorted, storeUrl(), "Aerovent product catalogue")) }}
       />
+      {theme.faq.length > 0 && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(faqLd(theme.faq)) }} />
+      )}
 
       <Hero theme={theme} productCount={all.length} />
-      <Features theme={theme} />
+      <TrustBand theme={theme} />
 
-      {categories.length > 1 && <CategoryStrip categories={categories} />}
+      <CatalogueBrowser products={sorted} categories={categories} theme={theme} initialQuery={q.trim()} />
 
-      <section id="products" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-16 lg:px-8">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 className="font-[family-name:var(--font-display)] text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-              The catalogue
-            </h2>
-            <p className="mt-1.5 text-[14px] text-slate-600">
-              {all.length > 0
-                ? `${all.length} product${all.length === 1 ? "" : "s"} available to order or quote.`
-                : "Products appear here as soon as they're listed."}
-            </p>
-          </div>
-          <div className="w-full sm:w-72 md:hidden"><StoreSearch /></div>
-        </div>
-
-        {sorted.length === 0 ? <EmptyCatalogue /> : <ProductGrid products={sorted} theme={theme} />}
-      </section>
-
-      <QuoteBanner />
+      <SolutionBand theme={theme} />
+      <ArticleBand theme={theme} />
     </>
   );
 }
@@ -91,210 +64,223 @@ export default async function StoreHome({ searchParams }: { searchParams: Promis
 /* ---------------------------------------------------------------- sections */
 
 function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number }) {
-  const hasImage = theme.heroImagePath.trim() !== "";
+  const heroPhoto = theme.heroImagePath.trim();
+
   return (
-    <section className="relative overflow-hidden bg-[var(--store-ink)]">
-      {hasImage && (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/store-image?path=${encodeURIComponent(theme.heroImagePath)}`}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover opacity-30"
-            fetchPriority="high"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-[var(--store-ink)] via-[var(--store-ink)]/85 to-transparent" />
-        </>
-      )}
-      {!hasImage && (
-        <div
-          aria-hidden
-          className="absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, white 1px, transparent 0)",
-            backgroundSize: "28px 28px",
-          }}
-        />
-      )}
-      {/* Accent wash, so the brand colour is present without shouting. */}
+    <section className="relative overflow-hidden bg-[linear-gradient(115deg,#07101f_0%,#101c30_58%,#26111b_100%)] text-white">
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full opacity-25 blur-3xl"
-        style={{ background: "var(--store-accent)" }}
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px)",
+          backgroundSize: "34px 34px",
+        }}
       />
 
-      <div className="relative mx-auto max-w-7xl px-4 py-20 sm:py-28 lg:px-8">
-        <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--store-accent)]" />
-            Philippine manufacturer since 1994
-          </span>
+      <div className={`${WRAP} relative grid items-center gap-10 py-16 sm:py-20 lg:min-h-[610px] lg:grid-cols-[1.08fr_.92fr] lg:py-0`}>
+        <div>
+          {theme.heroEyebrow && (
+            <div className="inline-flex items-center gap-2.5 text-[12px] font-extrabold uppercase tracking-[0.16em] text-[#e5ebf2]">
+              <i className="block h-0.5 w-7 bg-[var(--store-accent)]" />
+              {theme.heroEyebrow}
+            </div>
+          )}
 
-          <h1 className="mt-6 font-[family-name:var(--font-display)] text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
+          <h1 className={`${DISPLAY} my-6 max-w-[740px] text-[clamp(48px,6vw,78px)] leading-[0.97] tracking-[-0.025em]`}>
             {theme.heroHeadline}
+            {theme.heroHeadlineAccent && (
+              <>
+                <br />
+                <span className="text-[#ff3d45]">{theme.heroHeadlineAccent}</span>
+              </>
+            )}
           </h1>
 
-          <p className="mt-6 max-w-xl text-[16px] leading-relaxed text-white/70 sm:text-[17px]">{theme.heroSubhead}</p>
+          <p className="max-w-[650px] text-[17px] leading-[1.75] text-[#b9c4d2]">{theme.heroSubhead}</p>
 
-          <div className="mt-9 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
               href={theme.heroCtaHref}
-              className="group inline-flex items-center gap-2 rounded-full bg-[var(--store-accent)] px-6 py-3.5 text-[14.5px] font-bold text-white shadow-lg shadow-[var(--store-accent)]/25 transition-all hover:bg-[var(--store-accent-dark)] hover:shadow-xl"
+              className="inline-flex items-center justify-center gap-2.5 rounded-[5px] bg-[var(--store-accent)] px-5 py-4 text-[15px] font-extrabold text-white shadow-[0_12px_32px_rgba(229,32,43,0.28)] transition-colors hover:bg-[var(--store-accent-dark)]"
             >
-              {theme.heroCtaLabel}
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              {theme.heroCtaLabel} →
             </Link>
-            <Link
-              href="/rfq"
-              className="inline-flex items-center gap-2 rounded-full border border-white/25 px-6 py-3.5 text-[14.5px] font-semibold text-white transition-colors hover:bg-white/10"
-            >
-              Request a quotation
-            </Link>
+            {theme.heroCta2Label && (
+              <QuoteButton className="inline-flex items-center justify-center rounded-[5px] border border-[#536074] px-5 py-4 text-[15px] font-extrabold text-white transition-colors hover:bg-white/5">
+                {theme.heroCta2Label}
+              </QuoteButton>
+            )}
           </div>
 
-          {productCount > 0 && (
-            <p className="mt-7 text-[12.5px] text-white/45">
-              {productCount} product{productCount === 1 ? "" : "s"} listed · Nationwide delivery · VAT-inclusive pricing
-            </p>
+          {theme.metrics.length > 0 && (
+            <div className="mt-11 flex flex-col gap-4 sm:flex-row sm:gap-[30px]">
+              {theme.metrics.map((m) => (
+                <div key={m.value}>
+                  <b className={`${DISPLAY} block text-[26px] leading-tight`}>{m.value}</b>
+                  <span className="text-[11px] uppercase tracking-[0.08em] text-[#8998aa]">{m.label}</span>
+                </div>
+              ))}
+            </div>
           )}
+        </div>
+
+        {/* The stage: an approved flagship photo when one is set, otherwise the
+            rotor artwork so the hero is never a half-empty column. */}
+        <div className="relative hidden h-[430px] place-items-center lg:grid">
+          {heroPhoto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/store-image?path=${encodeURIComponent(heroPhoto)}`}
+              alt=""
+              aria-hidden
+              className="h-[380px] w-full object-contain drop-shadow-[0_34px_70px_rgba(0,0,0,0.5)]"
+              fetchPriority="high"
+            />
+          ) : (
+            <>
+              <div
+                aria-hidden
+                className="h-[330px] w-[330px] animate-store-float rounded-full border border-[#516078] shadow-[0_0_0_28px_rgba(255,255,255,0.025),0_34px_70px_rgba(0,0,0,0.53)]"
+                style={{
+                  background:
+                    "radial-gradient(circle,#26364b 0 12%,#0a1425 13% 23%,#29374a 24% 25%,#111e32 26% 55%,#59667a 56% 57%,#0b1526 58%)",
+                }}
+              />
+              <div aria-hidden className="absolute h-[250px] w-[250px] animate-[spin_22s_linear_infinite] rounded-full border border-dashed border-[#69798e]">
+                <span className="absolute inset-[25px] rounded-full border-[18px] border-transparent border-y-[#6d7b8e]" />
+                <span className="absolute inset-[25px] rotate-[60deg] rounded-full border-[18px] border-transparent border-y-[#6d7b8e]" />
+              </div>
+            </>
+          )}
+
+          <div className="absolute right-0 top-11 w-[180px] border-l-2 border-[var(--store-accent)] bg-white/[0.05] px-4 py-3.5">
+            <b className="text-[12px] tracking-[0.1em]">AIRFLOW, ENGINEERED.</b>
+            <span className="mt-1 block text-[11px] text-[#8795a7]">
+              {productCount > 0
+                ? `${productCount} product${productCount === 1 ? "" : "s"} listed · nationwide delivery`
+                : "Nationwide delivery across the Philippines"}
+            </span>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function Features({ theme }: { theme: StoreTheme }) {
-  return (
-    <section className="border-b border-slate-200 bg-slate-50/60">
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-14 sm:grid-cols-2 lg:grid-cols-3 lg:px-8">
-        {theme.features.map((f) => {
-          const Icon = FEATURE_ICONS[f.icon] ?? Check;
-          return (
-            <div key={f.title} className="flex gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[var(--store-accent)] shadow-sm ring-1 ring-slate-200">
-                <Icon className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-[family-name:var(--font-display)] text-[15px] font-bold text-slate-900">{f.title}</h3>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed text-slate-600">{f.body}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
+/** Glyphs matching the design's bordered icon squares. */
+const TRUST_GLYPH: Record<string, string> = {
+  factory: "⌂", check: "✓", wrench: "⚙", truck: "→", shield: "✦", support: "☎", settings: "⚙",
+};
 
-function CategoryStrip({ categories }: { categories: { slug: string; label: string; count: number }[] }) {
+function TrustBand({ theme }: { theme: StoreTheme }) {
   return (
-    <section className="mx-auto max-w-7xl px-4 pt-14 lg:px-8">
-      <h2 className="font-[family-name:var(--font-display)] text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-        Browse by category
-      </h2>
-      <div className="mt-4 flex flex-wrap gap-2.5">
-        {categories.map((c) => (
-          <Link
-            key={c.slug}
-            href={`/store/c/${c.slug}`}
-            className="group inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-[13.5px] font-semibold text-slate-700 transition-all hover:-translate-y-0.5 hover:border-[var(--store-accent)] hover:text-[var(--store-accent)] hover:shadow-sm"
+    <div id="about" className="scroll-mt-24 border-b border-[var(--store-line)] bg-white">
+      <div className={`${WRAP} grid grid-cols-1 min-[620px]:grid-cols-2 lg:grid-cols-4`}>
+        {theme.features.map((f, i) => (
+          <div
+            key={f.title}
+            className={`flex items-center gap-3.5 px-6 py-6 ${
+              i < theme.features.length - 1 ? "border-b border-[var(--store-line)] lg:border-b-0 lg:border-r" : ""
+            }`}
           >
-            {c.label}
-            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 transition-colors group-hover:bg-[var(--store-accent)]/10 group-hover:text-[var(--store-accent)]">
-              {c.count}
-            </span>
-          </Link>
+            <div
+              aria-hidden
+              className="grid h-[39px] w-[39px] shrink-0 place-items-center rounded border border-[#f1bcc0] text-[17px] font-black text-[var(--store-accent)]"
+            >
+              {TRUST_GLYPH[f.icon] ?? "✓"}
+            </div>
+            <div>
+              <b className="block text-[13px]">{f.title}</b>
+              <span className="text-[11px] text-[var(--store-steel)]">{f.body}</span>
+            </div>
+          </div>
         ))}
       </div>
-    </section>
-  );
-}
-
-function EmptyCatalogue() {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 py-20 text-center">
-      <PackageSearch className="mx-auto h-9 w-9 text-slate-300" />
-      <p className="mt-4 font-[family-name:var(--font-display)] text-[15px] font-bold text-slate-900">
-        No products are listed yet
-      </p>
-      <p className="mx-auto mt-1.5 max-w-sm text-[13.5px] text-slate-500">
-        List them in Admin → Store products and they appear here automatically.
-      </p>
-      <Link
-        href="/rfq"
-        className="mt-6 inline-flex items-center gap-2 rounded-full bg-[var(--store-accent)] px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-[var(--store-accent-dark)]"
-      >
-        Request a quotation instead
-      </Link>
     </div>
   );
 }
 
-function SearchResults({ theme, query, results }: { theme: StoreTheme; query: string; results: StoreProduct[] }) {
+function SolutionBand({ theme }: { theme: StoreTheme }) {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12 lg:px-8">
-      <nav aria-label="Breadcrumb" className="text-[12.5px] text-slate-500">
-        <Link href="/store" className="transition-colors hover:text-[var(--store-accent)]">Shop</Link>
-        <span className="mx-1.5 text-slate-300">/</span>
-        <span className="text-slate-700">Search</span>
-      </nav>
+    <section id="custom" className="scroll-mt-24 bg-[var(--store-ink)] text-white">
+      <div className="grid lg:min-h-[420px] lg:grid-cols-2">
+        <div className="bg-[linear-gradient(145deg,#111d31,#07101f)] px-5 py-16 sm:px-8 lg:py-[70px] lg:pl-[max(20px,calc((100vw_-_1240px)/2))] lg:pr-[60px]">
+          {theme.solutionKicker && <div className={KICKER}>{theme.solutionKicker}</div>}
+          <h2 className={`${DISPLAY} my-4 text-[38px] leading-[1.02] sm:text-[48px]`}>{theme.solutionTitle}</h2>
+          <p className="leading-[1.75] text-[#aeb9c8]">{theme.solutionBody}</p>
 
-      <h1 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-        “{query}”
-      </h1>
-      <p className="mt-1.5 text-[14px] text-slate-600">
-        {results.length} result{results.length === 1 ? "" : "s"}
-      </p>
+          {theme.solutionBullets.length > 0 && (
+            <ul className="my-6 grid gap-3 sm:grid-cols-2">
+              {theme.solutionBullets.map((b) => (
+                <li key={b} className="text-[14px]">
+                  <span aria-hidden className="mr-2 text-[#ff444d]">✓</span>
+                  {b}
+                </li>
+              ))}
+            </ul>
+          )}
 
-      <div className="mt-6 max-w-md"><StoreSearch autoFocus /></div>
+          <QuoteButton className="inline-flex items-center gap-2.5 rounded-[5px] bg-[var(--store-accent)] px-5 py-4 text-[15px] font-extrabold text-white shadow-[0_12px_32px_rgba(229,32,43,0.28)] transition-colors hover:bg-[var(--store-accent-dark)]">
+            {theme.solutionCtaLabel} →
+          </QuoteButton>
+        </div>
 
-      <div className="mt-8">
-        {results.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 py-16 text-center">
-            <PackageSearch className="mx-auto h-9 w-9 text-slate-300" />
-            <p className="mt-4 font-[family-name:var(--font-display)] text-[15px] font-bold text-slate-900">
-              Nothing matched “{query}”
-            </p>
-            <p className="mx-auto mt-1.5 max-w-sm text-[13.5px] text-slate-500">
-              Try a model code or a broader term — or tell us what you need and we&rsquo;ll quote it.
-            </p>
-            <Link
-              href="/rfq"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[var(--store-accent)] px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-[var(--store-accent-dark)]"
-            >
-              Request a quotation
-            </Link>
+        <div className="relative grid min-h-[260px] place-items-center overflow-hidden bg-[linear-gradient(135deg,#28101b,#151725)]">
+          <span
+            aria-hidden
+            className={`${DISPLAY} absolute -right-20 whitespace-nowrap text-[16px] tracking-[0.2em] text-white/10`}
+            style={{ transform: "rotate(-90deg)" }}
+          >
+            AIRFLOW / STATIC PRESSURE / APPLICATION
+          </span>
+          <div aria-hidden className="flex items-center gap-3.5">
+            <FlowArrow />
+            <FlowArrow />
+            <div className="h-[125px] w-[125px] rounded-full border-[22px] border-[#8c1e29] shadow-[0_0_80px_rgba(229,32,43,0.33)]" />
+            <FlowArrow />
+            <FlowArrow />
           </div>
-        ) : (
-          <ProductGrid products={results} theme={theme} />
-        )}
+        </div>
       </div>
     </section>
   );
 }
 
-function QuoteBanner() {
+function FlowArrow() {
   return (
-    <section className="border-t border-slate-200 bg-slate-50">
-      <div className="mx-auto flex max-w-7xl flex-col items-start gap-6 px-4 py-16 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-        <div className="max-w-2xl">
-          <h2 className="font-[family-name:var(--font-display)] text-2xl font-extrabold tracking-tight text-slate-900">
-            Can&rsquo;t find the exact unit?
-          </h2>
-          <p className="mt-2 text-[15px] leading-relaxed text-slate-600">
-            Most of what we build doesn&rsquo;t sit on a shelf. Send us the airflow, static pressure and application, and
-            our engineers will size it and quote it — usually within the working day.
-          </p>
+    <i className="relative block h-0.5 w-[70px] bg-[linear-gradient(90deg,transparent,#ff414a)]">
+      <span className="absolute -top-1 right-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-[#ff414a]" />
+    </i>
+  );
+}
+
+function ArticleBand({ theme }: { theme: StoreTheme }) {
+  const paragraphs = theme.articleBody.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+
+  return (
+    <section className="bg-[#eef2f5] py-[78px]">
+      <div className={`${WRAP} grid gap-14 lg:grid-cols-[1.1fr_.9fr]`}>
+        <div>
+          {theme.articleKicker && <div className={KICKER}>{theme.articleKicker}</div>}
+          <h2 className={`${DISPLAY} mb-4 mt-2.5 text-[38px] leading-none`}>{theme.articleTitle}</h2>
+          <div className="space-y-4 leading-[1.85] text-[#536275]">
+            {paragraphs.map((p) => <p key={p.slice(0, 40)}>{p}</p>)}
+          </div>
         </div>
-        <Link
-          href="/rfq"
-          className="group inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--store-ink)] px-6 py-3.5 text-[14.5px] font-bold text-white transition-all hover:bg-slate-800"
-        >
-          Request a quotation
-          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-        </Link>
+
+        <div>
+          {theme.faq.map((f, i) => (
+            <details
+              key={f.q}
+              open={i === 0}
+              className="mb-2.5 rounded-[5px] border border-[var(--store-line)] bg-white px-5 py-[18px]"
+            >
+              <summary className="cursor-pointer font-extrabold">{f.q}</summary>
+              <p className="mt-2.5 text-[13px] leading-[1.8] text-[#536275]">{f.a}</p>
+            </details>
+          ))}
+        </div>
       </div>
     </section>
   );
