@@ -48,6 +48,15 @@ export default async function StoreLayout({ children }: { children: React.ReactN
   const [theme, products] = await Promise.all([getStoreTheme(), listStoreProducts()]);
   const categories = storeCategories(products);
   const logo = themeImageSrc(theme.logoUrl);
+  // HVAC Tools sits just before the first external link — after the in-shop
+  // sections, ahead of "Main Website ↗". It's a theme field of its own so it
+  // shows up for shops whose nav was saved before the tools page existed.
+  const nav = [...theme.navLinks];
+  if (theme.toolsNavLabel) {
+    const firstExternal = nav.findIndex((l) => /^https?:/i.test(l.href));
+    const entry = { label: theme.toolsNavLabel, href: "/store/tools" };
+    nav.splice(firstExternal === -1 ? nav.length : firstExternal, 0, entry);
+  }
 
   const themeVars = {
     "--store-accent": theme.accent,
@@ -100,7 +109,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
           </Link>
 
           <nav className="hidden justify-center gap-[25px] text-[13px] font-bold lg:flex" aria-label="Main">
-            {theme.navLinks.map((l) =>
+            {nav.map((l) =>
               /^https?:/i.test(l.href) ? (
                 <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--store-accent)]">
                   {l.label}
@@ -115,7 +124,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
 
           <div className="flex items-center gap-2.5 justify-self-end">
             <HeaderActions />
-            <MobileNav categories={categories} links={theme.navLinks} />
+            <MobileNav categories={categories} links={nav} />
           </div>
         </div>
       </header>
@@ -148,6 +157,9 @@ export default async function StoreLayout({ children }: { children: React.ReactN
               <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-white">Support</h2>
               <ul className="mt-3 space-y-1 text-[12px] leading-[1.8]">
                 <li><Link href="/rfq" className="transition-colors hover:text-white">Request a quotation</Link></li>
+                {theme.toolsNavLabel && (
+                  <li><Link href="/store/tools" className="transition-colors hover:text-white">{theme.toolsNavLabel}</Link></li>
+                )}
                 {theme.mainSiteUrl && (
                   <li><a href={theme.mainSiteUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white">Main website</a></li>
                 )}

@@ -195,6 +195,12 @@ export function StorefrontEditor({ initial }: { initial: StoreTheme }) {
               Links starting with <code>http</code> open in a new tab. Clearing a label removes the entry on save.
             </span>
           </div>
+          <Field
+            label="HVAC Tools link label (empty hides it)"
+            hint="Shown in the nav just before the first external link, and in the footer. Points at /store/tools."
+          >
+            <Input className="h-9" value={t.toolsNavLabel} onChange={(e) => set({ toolsNavLabel: e.target.value })} />
+          </Field>
         </CardContent>
       </Card>
 

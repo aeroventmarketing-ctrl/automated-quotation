@@ -74,6 +74,13 @@ export interface StoreTheme {
   logoUrl: string;
   /** Main navigation. External links (http…) open in a new tab. */
   navLinks: StoreLink[];
+  /**
+   * Label for the public HVAC Tools page, shown in the nav just before the
+   * first external link. Empty hides it. It's a field of its own rather than a
+   * `navLinks` entry so it appears for shops whose theme was saved before the
+   * tools page existed — a stored `navLinks` array would not have contained it.
+   */
+  toolsNavLabel: string;
 
   // --- Hero -------------------------------------------------------------
   heroEyebrow: string;
@@ -151,6 +158,7 @@ export const DEFAULT_STORE_THEME: StoreTheme = {
     { label: "Why Aerovent", href: "/store#about" },
     { label: "Main Website ↗", href: "https://www.aeroventfbm.com/" },
   ],
+  toolsNavLabel: "HVAC Tools",
 
   heroEyebrow: "Industrial ventilation equipment Philippines",
   heroHeadline: "Engineered airflow.",
@@ -314,6 +322,7 @@ export function normalizeStoreTheme(input: Partial<StoreTheme> | null | undefine
       const label = str(l.label, "");
       return label ? { label, href: safeHref(l.href) } : null;
     }),
+    toolsNavLabel: optional(i.toolsNavLabel, d.toolsNavLabel),
 
     heroEyebrow: optional(i.heroEyebrow, d.heroEyebrow),
     heroHeadline: str(i.heroHeadline, d.heroHeadline),
