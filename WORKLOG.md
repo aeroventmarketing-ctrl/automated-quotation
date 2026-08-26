@@ -1,3 +1,27 @@
+## 2026-08-26 · Phase 4 spec — extended to every order, and to the PO the supplier gets
+- **Report (owner).** Order **3236J** had the same short description as 3032S; asked to check every affected order.
+- **Answer: it isn't a per-order data problem.** The generator never carried the spec until today, so **every**
+  bought-in requisition ever raised holds only the product name. There's no list to hunt — one systemic cause.
+- **So the fix derives the spec on READ, not on write.** New helper `withSpecDetail(items, specs)` folds the
+  quotation's specification into the stored lines whenever a purchase request is loaded. Every existing order is
+  covered at once, with no data migration and no stored row touched.
+- **Two gaps closed vs the first pass** (which only decorated the Phase 4 card):
+  1. **The Purchasing workspace** — where the Purchaser actually builds the PO — showed the bare name, so a PO
+     prepared there would still have gone to the supplier without the mounting or rated capacity. It now enriches
+     once at load, so the cards, the combine picker **and the PO's default lines** all see the same full description.
+  2. **The trailing `· @<price>` marker** is anchored to the end of the line, so appending the spec after it would
+     have stranded the supplier grid price and stopped the PO auto-filling. The spec is spliced in *before* it.
+- **Also hardened:** `specDetailFor` now picks the **longest** matching product name. With "Spring Vibration Isolator"
+  and "Spring Vibration Isolator Heavy Duty" on one order, first-match would have given the heavy-duty line the plain
+  product's rated capacity.
+- **What the fix can't reach:** a PO **already prepared and saved** keeps its own stored line text — rewriting a
+  document already sent to a supplier isn't something to do silently. `docs/sql/boughtin-spec-affected-orders.sql` lists exactly
+  those requisitions so the Purchaser can re-apply the default lines on each.
+- **12 end-to-end checks, all passing**: old line with and without a price, the PO's qty/unit/price/description after
+  enrichment, no double-up on a new line, the `to purchase` and `issued from stock` prefixes, unrelated items, empty
+  spec lists, longest-name-wins both ways, and the text preview.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Phase 4 shows the quotation's full specification (display + PO text)
 - **Request (owner).** Phase 4 showed only *"6 unit · Accessories Spring Vibration Isolator"* while the quotation maker
   held the full detail (*Foot Mounted*, *Rated capacity 80 kg*). Wire the quotation through so Phase 4 shows what the

@@ -201,19 +201,26 @@ export function productDetailLines(description: string, name: string): string[] 
 }
 
 /**
- * The specification lines to show under a requisition item, given the
- * quotation's bought-in lines.
+ * The specification lines missing from a requisition item, given the quotation's
+ * bought-in lines.
  *
  * Requisitions raised from an order now carry the spec in the line itself, but
- * ones raised before that don't — so the order page hands over the quotation's
- * lines and the gap is filled at render time. Anything the stored line already
- * says is dropped, so a line that carries its own spec never doubles up.
+ * every one raised before that doesn't — so the spec is derived from the
+ * quotation at read time instead. Anything the stored line already says is
+ * dropped, so a line that carries its own spec never doubles up.
  */
 export function specDetailFor(item: string, specs: { name: string; detail: string[] }[]): string[] {
   if (specs.length === 0) return [];
   const norm = (v: string) => v.toLowerCase().replace(/\s+/g, " ").trim();
   const line = norm(item);
-  const hit = specs.find((s) => s.name && line.includes(norm(s.name)));
+  // Longest name wins: with "Spring Vibration Isolator" and "Spring Vibration
+  // Isolator Heavy Duty" both on the order, first-match would give the heavy-duty
+  // line the plain product's spec.
+  let hit: { name: string; detail: string[] } | null = null;
+  for (const s of specs) {
+    if (!s.name || !line.includes(norm(s.name))) continue;
+    if (!hit || s.name.length > hit.name.length) hit = s;
+  }
   if (!hit) return [];
   return hit.detail.filter((d) => d && !line.includes(norm(d)));
 }

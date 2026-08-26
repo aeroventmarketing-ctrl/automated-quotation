@@ -24,7 +24,6 @@ import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { CatalogSuppliers, CatalogPrices } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
-import { specDetailFor } from "@/lib/department-pnl";
 
 interface ActionOpt {
   key: string;
@@ -127,7 +126,6 @@ export function PurchasingChain({
   canIssueStock = false,
   adminManage = false,
   highlightId,
-  specDetail = [],
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -143,12 +141,6 @@ export function PurchasingChain({
   scanProducts?: ScanProduct[];
   /** Monitoring only — hide every action/PO editor (used on the order page). */
   readOnly?: boolean;
-  /**
-   * The quotation's bought-in product lines, so an item raised before the
-   * requisition carried its specification still shows the full detail from the
-   * quotation. Order page only.
-   */
-  specDetail?: { name: string; detail: string[] }[];
   /**
    * Which PO print route to build. "order" uses the order-scoped route (needs
    * orderId); "purchasing" uses the generic route (department requisitions /
@@ -339,14 +331,6 @@ export function PurchasingChain({
             </div>
             <ul className="ml-4 list-disc text-sm text-muted-foreground">
               {r.items.map((it, i) => {
-                // The quotation's specification, shown under the item so the
-                // requisition reads the same as the quotation it came from.
-                const detail = specDetailFor(it, specDetail);
-                const spec = detail.length > 0 && (
-                  <span className="mt-0.5 block text-xs text-muted-foreground/80">
-                    {detail.join(" · ")}
-                  </span>
-                );
                 const issued = parseIssuedFromStockLine(it);
                 if (issued) {
                   return (
@@ -355,7 +339,6 @@ export function PurchasingChain({
                       <span className="ml-2 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] text-emerald-700">
                         Issued {issued.qty}{issued.unit ? ` ${issued.unit}` : ""} from stock
                       </span>
-                      {spec}
                     </li>
                   );
                 }
@@ -364,11 +347,10 @@ export function PurchasingChain({
                     <li key={i} className="marker:text-amber-600">
                       {stripToPurchasePrefix(it)}
                       <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">To purchase</span>
-                      {spec}
                     </li>
                   );
                 }
-                return <li key={i}>{it}{spec}</li>;
+                return <li key={i}>{it}</li>;
               })}
             </ul>
             {/* Admin: edit the item lines in place (delete lives in the actions row). */}

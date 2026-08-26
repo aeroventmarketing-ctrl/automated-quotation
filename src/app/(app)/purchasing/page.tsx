@@ -12,7 +12,8 @@ import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildRecon
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
-import { coercePurchaseOrder, poLineFromPRItem, isIssuedFromStockLine, stripToPurchasePrefix } from "@/lib/purchase-order";
+import { coercePurchaseOrder, poLineFromPRItem, isIssuedFromStockLine, stripToPurchasePrefix, withSpecDetail } from "@/lib/purchase-order";
+import { orderBoughtInLines } from "@/lib/department-pnl";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
 import { REF_PRICE_KEY } from "@/lib/po-catalog";
@@ -146,16 +147,34 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         orderBy: { createdAt: "desc" },
       }),
     ]);
+    const quotationIds = [...new Set(orderPrs.map((p) => p.quotationId).filter((q): q is string => !!q))];
+    const quotations = quotationIds.length
+      ? await prisma.quotation.findMany({
+          where: { id: { in: quotationIds } },
+          include: { inquiry: { include: { customer: true } }, items: true },
+        })
+      : [];
+    const quoteById = new Map(quotations.map((q) => [q.id, q]));
+    // The quotation's specification per order, so a requisition raised before the
+    // generator carried it still reads — and prints on its PO — the way the
+    // quotation does.
+    const specsByQuote = new Map(
+      quotations.map((q) => [q.id, orderBoughtInLines(q.items).map((b) => ({ name: b.name, detail: b.detail }))]),
+    );
+
     // Department requisitions share the same combine-by-supplier workspace as
     // order material requests. A bought-in supplier requisition is BOTH a
     // department requisition AND order-linked (has a quotationId), so it matches
     // both queries — dedupe by id so it renders once, not twice.
-    const allPrs = [...new Map([...orderPrs, ...deptPrs].map((pr) => [pr.id, pr])).values()];
-    const quotationIds = [...new Set(orderPrs.map((p) => p.quotationId).filter((q): q is string => !!q))];
-    const quotations = quotationIds.length
-      ? await prisma.quotation.findMany({ where: { id: { in: quotationIds } }, include: { inquiry: { include: { customer: true } } } })
-      : [];
-    const quoteById = new Map(quotations.map((q) => [q.id, q]));
+    const allPrs = [...new Map([...orderPrs, ...deptPrs].map((pr) => [pr.id, pr])).values()].map((pr) => {
+      const specs = pr.quotationId ? specsByQuote.get(pr.quotationId) ?? [] : [];
+      if (specs.length === 0) return pr;
+      const items = Array.isArray(pr.items) ? (pr.items as string[]) : [];
+      const enriched = withSpecDetail(items, specs);
+      // Enrich once here so everything downstream — the cards, the combine
+      // picker and the PO's default lines — sees the same full description.
+      return enriched.some((l, i) => l !== items[i]) ? { ...pr, items: enriched as unknown as typeof pr.items } : pr;
+    });
     const mrfMapByQuote = new Map<string, Map<string, string>>();
     for (const q of quotations) {
       const wf = readOrderWorkflow(q.classification);
