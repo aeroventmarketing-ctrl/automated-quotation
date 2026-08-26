@@ -163,7 +163,7 @@ function CategoryTile({
       type="button"
       onClick={onSelect}
       aria-pressed={active}
-      className={`relative min-h-[190px] overflow-hidden rounded-[5px] p-6 text-left text-white transition-all duration-[250ms] hover:-translate-y-1 hover:shadow-[0_18px_60px_rgba(9,20,38,0.12)] ${
+      className={`relative min-h-[190px] overflow-hidden rounded-[5px] p-6 text-left text-[var(--store-on-dark)] transition-all duration-[250ms] hover:-translate-y-1 hover:shadow-[0_18px_60px_rgba(9,20,38,0.12)] ${
         active
           ? "bg-gradient-to-br from-[var(--store-accent)] to-[var(--store-accent-dark)]"
           : "bg-[var(--store-ink2)]"
@@ -173,11 +173,11 @@ function CategoryTile({
         aria-hidden
         className="pointer-events-none absolute -bottom-9 -right-9 h-[135px] w-[135px] rounded-full border-[28px] border-white/[0.04]"
       />
-      <span className={`block text-[12px] uppercase tracking-[0.13em] ${active ? "text-[#ffe2e4]" : "text-[#8d9bad]"}`}>
+      <span className={`block text-[12px] uppercase tracking-[0.13em] ${active ? "text-[#ffe2e4]" : "text-[var(--store-on-dark-muted)]"}`}>
         {eyebrow}
       </span>
       <span className={`${DISPLAY} mt-14 block text-[27px] leading-tight`}>{title}</span>
-      <span className={`mt-1 block text-[12px] ${active ? "text-[#ffe2e4]" : "text-[#aeb9c8]"}`}>
+      <span className={`mt-1 block text-[12px] ${active ? "text-[#ffe2e4]" : "text-[var(--store-on-dark-muted)]"}`}>
         {count} product{count === 1 ? "" : "s"} →
       </span>
     </button>

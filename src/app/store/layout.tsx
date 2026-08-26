@@ -65,22 +65,28 @@ export default async function StoreLayout({ children }: { children: React.ReactN
     "--store-ink2": theme.ink2,
     "--store-paper": theme.paper,
     "--store-line": "#dce2e8",
-    "--store-steel": "#607084",
+    // Text, per surface. `--store-steel` keeps its name — 40-odd classes across
+    // the shop already point at it — but it now reads from the theme instead of
+    // being pinned here.
+    "--store-text": theme.text,
+    "--store-steel": theme.textMuted,
+    "--store-on-dark": theme.textOnDark,
+    "--store-on-dark-muted": theme.textMutedOnDark,
   } as React.CSSProperties;
 
   return (
     <div
       style={themeVars}
-      className={`${display.variable} ${body.variable} flex min-h-screen scroll-smooth flex-col bg-[var(--store-paper)] font-[family-name:var(--font-body)] text-[15px] text-[var(--store-ink)] antialiased selection:bg-[var(--store-accent)] selection:text-white`}
+      className={`${display.variable} ${body.variable} flex min-h-screen scroll-smooth flex-col bg-[var(--store-paper)] font-[family-name:var(--font-body)] text-[15px] text-[var(--store-text)] antialiased selection:bg-[var(--store-accent)] selection:text-white`}
     >
       {/* Site-wide structured data — org, website + search action, store. */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(storeHomeLd(theme)) }} />
 
       {theme.announcement && (
-        <div className="hidden bg-[#07101f] text-[12px] tracking-[0.04em] text-[#c7d0dc] sm:block">
+        <div className="hidden bg-[#07101f] text-[12px] tracking-[0.04em] text-[var(--store-on-dark-muted)] sm:block">
           <div className={`${WRAP} flex h-[34px] items-center justify-between`}>
             <span>
-              <strong className="text-white">{theme.announcement}</strong>
+              <strong className="text-[var(--store-on-dark)]">{theme.announcement}</strong>
               {theme.announcementNote && ` · ${theme.announcementNote}`}
             </span>
             <div className="hidden gap-[22px] lg:flex">
@@ -131,46 +137,46 @@ export default async function StoreLayout({ children }: { children: React.ReactN
 
       <main className="flex-1">{children}</main>
 
-      <footer className="bg-[#070e1b] pb-7 pt-14 text-[#9ba8b8]">
+      <footer className="bg-[#070e1b] pb-7 pt-14 text-[var(--store-on-dark-muted)]">
         <div className={WRAP}>
           <div className="grid gap-11 sm:grid-cols-2 lg:grid-cols-[1.5fr_.7fr_.7fr_1fr]">
             <div>
-              <div className={`${DISPLAY} text-[28px] leading-tight text-white`}>
+              <div className={`${DISPLAY} text-[28px] leading-tight text-[var(--store-on-dark)]`}>
                 <span className="text-[var(--store-accent)]">Aerovent</span> Fans and Blowers Manufacturing
               </div>
               <p className="mt-3 text-[12px] leading-[1.8]">{theme.aiSummary}</p>
             </div>
 
             <div>
-              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-white">Shop</h2>
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--store-on-dark)]">Shop</h2>
               <ul className="mt-3 space-y-1 text-[12px] leading-[1.8]">
-                <li><Link href="/store#products" className="transition-colors hover:text-white">All products</Link></li>
+                <li><Link href="/store#products" className="transition-colors hover:text-[var(--store-on-dark)]">All products</Link></li>
                 {categories.slice(0, 4).map((c) => (
                   <li key={c.slug}>
-                    <Link href={`/store/c/${c.slug}`} className="transition-colors hover:text-white">{c.label}</Link>
+                    <Link href={`/store/c/${c.slug}`} className="transition-colors hover:text-[var(--store-on-dark)]">{c.label}</Link>
                   </li>
                 ))}
               </ul>
             </div>
 
             <div>
-              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-white">Support</h2>
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--store-on-dark)]">Support</h2>
               <ul className="mt-3 space-y-1 text-[12px] leading-[1.8]">
-                <li><Link href="/rfq" className="transition-colors hover:text-white">Request a quotation</Link></li>
+                <li><Link href="/rfq" className="transition-colors hover:text-[var(--store-on-dark)]">Request a quotation</Link></li>
                 {theme.toolsNavLabel && (
-                  <li><Link href="/store/tools" className="transition-colors hover:text-white">{theme.toolsNavLabel}</Link></li>
+                  <li><Link href="/store/tools" className="transition-colors hover:text-[var(--store-on-dark)]">{theme.toolsNavLabel}</Link></li>
                 )}
                 {theme.mainSiteUrl && (
-                  <li><a href={theme.mainSiteUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white">Main website</a></li>
+                  <li><a href={theme.mainSiteUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--store-on-dark)]">Main website</a></li>
                 )}
                 {theme.facebookUrl && (
-                  <li><a href={theme.facebookUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white">Facebook page</a></li>
+                  <li><a href={theme.facebookUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--store-on-dark)]">Facebook page</a></li>
                 )}
               </ul>
             </div>
 
             <div>
-              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-white">Contact</h2>
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--store-on-dark)]">Contact</h2>
               <address className="mt-3 space-y-3 text-[12px] not-italic leading-[1.8]">
                 <div>{COMPANY.manilaOffice.replace(/^Manila Office:\s*/, "")}</div>
                 <div>

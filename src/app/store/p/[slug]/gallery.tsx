@@ -39,7 +39,7 @@ export function Gallery({
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-5">
             <FanPlaceholder blower={isBlowerCategory(category)} scale={1.6} />
-            <span className="text-[10px] uppercase tracking-[0.1em] text-[#6e7d8b]">Photo coming soon</span>
+            <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--store-steel)]">Photo coming soon</span>
           </div>
         )}
       </div>

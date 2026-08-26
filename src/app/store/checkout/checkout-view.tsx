@@ -11,7 +11,7 @@ import { WRAP, DISPLAY, KICKER } from "@/lib/store-ui";
 
 const FIELD =
   "h-12 w-full rounded border border-[var(--store-line)] bg-white px-3 text-[14px] outline-none transition-colors focus:border-[var(--store-accent)]";
-const LABEL = "text-[11px] font-extrabold uppercase tracking-wide text-[#526173]";
+const LABEL = "text-[11px] font-extrabold uppercase tracking-wide text-[var(--store-steel)]";
 
 /**
  * Checkout — buyer details + delivery address, with the server-priced order
@@ -127,7 +127,7 @@ export function CheckoutView() {
           <ul className="space-y-2 text-[13px]">
             {cart.lines.map((l) => (
               <li key={`${l.slug}::${l.variantKey}`} className="flex justify-between gap-2">
-                <span className="text-[#536275]">
+                <span className="text-[var(--store-steel)]">
                   {l.name}
                   {l.variantLabel ? ` (${l.variantLabel})` : ""} × {l.qty}
                 </span>

@@ -68,7 +68,7 @@ export default async function StoreProductPage({ params }: { params: Promise<{ s
               {p.category}
             </Link>
             <span className="mx-2 text-[#c3ccd6]">/</span>
-            <span className="text-[var(--store-ink)]">{p.name}</span>
+            <span className="text-[var(--store-text)]">{p.name}</span>
           </nav>
 
           <div className="mt-7 grid gap-10 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-14">
@@ -78,7 +78,7 @@ export default async function StoreProductPage({ params }: { params: Promise<{ s
             <div className="lg:sticky lg:top-28 lg:self-start">
               <div className={KICKER}>{p.category}</div>
               <h1 className={`${DISPLAY} mt-2 text-[34px] leading-none tracking-[-0.02em] sm:text-[42px]`}>{p.name}</h1>
-              <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 text-[12px] text-[#8a96a5]">
+              <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 text-[12px] text-[var(--store-steel)]">
                 <span>MODEL {p.modelCode}</span>
                 {p.sizeLabel && <><span className="text-[#c3ccd6]">·</span><span>{p.sizeLabel}</span></>}
                 <span className="text-[#c3ccd6]">·</span>
@@ -128,7 +128,7 @@ export default async function StoreProductPage({ params }: { params: Promise<{ s
                 )}
               </div>
 
-              <ul className="mt-6 space-y-2.5 text-[13px] text-[#536275]">
+              <ul className="mt-6 space-y-2.5 text-[13px] text-[var(--store-steel)]">
                 <li><span aria-hidden className="mr-2 font-black text-[var(--store-accent)]">→</span>Nationwide delivery — scheduled once your order is confirmed</li>
                 <li><span aria-hidden className="mr-2 font-black text-[var(--store-accent)]">✦</span>Secure checkout via card, GCash, Maya or PayPal</li>
                 <li><span aria-hidden className="mr-2 font-black text-[var(--store-accent)]">⚙</span>Engineering support before and after you buy</li>
@@ -139,7 +139,7 @@ export default async function StoreProductPage({ params }: { params: Promise<{ s
           {p.description && (
             <section className="mt-16 max-w-3xl border-t border-[var(--store-line)] pt-10">
               <h2 className={`${DISPLAY} text-[28px] leading-none`}>About this product</h2>
-              <p className="mt-3.5 whitespace-pre-line leading-[1.85] text-[#536275]">{p.description}</p>
+              <p className="mt-3.5 whitespace-pre-line leading-[1.85] text-[var(--store-steel)]">{p.description}</p>
             </section>
           )}
 
@@ -197,7 +197,7 @@ function QuoteBox({ fabricated, subject }: { fabricated: boolean; subject: strin
       <h2 className={`${DISPLAY} mt-2 text-[26px] leading-none`}>
         {fabricated ? "Built to your specification" : "Price on request"}
       </h2>
-      <p className="mt-2.5 text-[13.5px] leading-relaxed text-[#536275]">
+      <p className="mt-2.5 text-[13.5px] leading-relaxed text-[var(--store-steel)]">
         {fabricated
           ? "This unit is fabricated to your airflow, static pressure and configuration, so it's priced per project rather than sold at a list price. Send us the requirement and our engineers will size and quote it."
           : "Tell us the quantity and delivery point and we'll come back with a price."}
@@ -216,7 +216,7 @@ function OutOfStockBox({ subject }: { subject: string }) {
   return (
     <div className="rounded border border-[var(--store-line)] bg-[#f3f6f8] p-4">
       <div className="text-[13.5px] font-extrabold">Out of stock</div>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-[#536275]">
+      <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--store-steel)]">
         We can tell you when it&rsquo;s back, or quote an equivalent unit that&rsquo;s available now.
       </p>
       <QuoteButton

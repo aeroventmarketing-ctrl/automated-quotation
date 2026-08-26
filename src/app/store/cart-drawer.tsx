@@ -39,7 +39,7 @@ export function CartDrawer() {
         <Kicker>Your selection</Kicker>
         <h2
           id="cart-drawer-title"
-          className="mt-2 font-[family-name:var(--font-display)] text-[32px] font-bold uppercase leading-none text-[var(--store-ink)]"
+          className="mt-2 font-[family-name:var(--font-display)] text-[32px] font-bold uppercase leading-none text-[var(--store-text)]"
         >
           Shopping Cart
         </h2>
@@ -76,7 +76,7 @@ export function CartDrawer() {
                     <Link
                       href={`/store/p/${l.slug}`}
                       onClick={closePanels}
-                      className="grid h-[55px] place-items-center overflow-hidden rounded bg-[#dce3e8] font-black text-[#788795]"
+                      className="grid h-[55px] place-items-center overflow-hidden rounded bg-[#dce3e8] font-black text-[var(--store-steel)]"
                     >
                       {l.photoPath ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -95,11 +95,11 @@ export function CartDrawer() {
                       <Link
                         href={`/store/p/${l.slug}`}
                         onClick={closePanels}
-                        className="block text-[12px] font-bold leading-snug text-[var(--store-ink)] hover:text-[var(--store-accent)]"
+                        className="block text-[12px] font-bold leading-snug text-[var(--store-text)] hover:text-[var(--store-accent)]"
                       >
                         {l.name}
                       </Link>
-                      <div className="mt-0.5 text-[10px] text-[#8a96a5]">
+                      <div className="mt-0.5 text-[10px] text-[var(--store-steel)]">
                         {l.modelCode}
                         {l.variantLabel ? ` · ${l.variantLabel}` : ""} · {peso(l.unitPrice)}
                       </div>
@@ -122,19 +122,19 @@ export function CartDrawer() {
                         <button
                           type="button"
                           onClick={() => removeFromCart(l.slug, l.variantKey)}
-                          className="text-[11px] font-semibold text-[#8a96a5] transition-colors hover:text-[var(--store-accent)]"
+                          className="text-[11px] font-semibold text-[var(--store-steel)] transition-colors hover:text-[var(--store-accent)]"
                         >
                           Remove
                         </button>
                       </div>
                     </div>
 
-                    <b className="self-start text-[13px] tabular-nums text-[var(--store-ink)]">{peso(l.lineTotal)}</b>
+                    <b className="self-start text-[13px] tabular-nums text-[var(--store-text)]">{peso(l.lineTotal)}</b>
                   </div>
                 ))}
               </div>
 
-              <div className="my-6 flex justify-between text-[18px] font-black text-[var(--store-ink)]">
+              <div className="my-6 flex justify-between text-[18px] font-black text-[var(--store-text)]">
                 <span>Total</span>
                 <span className="tabular-nums">{peso(cart.total)}</span>
               </div>

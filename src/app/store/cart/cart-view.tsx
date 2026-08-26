@@ -93,7 +93,7 @@ export function CartView() {
                     loading="lazy"
                   />
                 ) : (
-                  <span className="px-1 text-center text-[9px] text-[#8a96a5]">{l.modelCode}</span>
+                  <span className="px-1 text-center text-[9px] text-[var(--store-steel)]">{l.modelCode}</span>
                 )}
               </Link>
 
@@ -101,7 +101,7 @@ export function CartView() {
                 <Link href={`/store/p/${l.slug}`} className="text-[14px] font-bold transition-colors hover:text-[var(--store-accent)]">
                   {l.name}
                 </Link>
-                <div className="mt-1 text-[11px] text-[#8a96a5]">
+                <div className="mt-1 text-[11px] text-[var(--store-steel)]">
                   MODEL {l.modelCode}
                   {l.variantLabel && <> · {l.variantLabel}</>} · {peso(l.unitPrice)} per {l.unit}
                 </div>
@@ -124,7 +124,7 @@ export function CartView() {
                   type="button"
                   onClick={() => removeFromCart(l.slug, l.variantKey)}
                   aria-label={`Remove ${l.name}`}
-                  className="rounded p-2 text-[16px] leading-none text-[#8a96a5] transition-colors hover:text-[var(--store-accent)]"
+                  className="rounded p-2 text-[16px] leading-none text-[var(--store-steel)] transition-colors hover:text-[var(--store-accent)]"
                 >
                   ×
                 </button>

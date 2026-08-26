@@ -11,9 +11,9 @@ import { DISPLAY } from "@/lib/store-ui";
  * rather than a bolted-on admin screen.
  */
 
-export const LABEL = "text-[11px] font-extrabold uppercase tracking-wide text-[#526173]";
+export const LABEL = "text-[11px] font-extrabold uppercase tracking-wide text-[var(--store-steel)]";
 export const CONTROL =
-  "h-12 w-full rounded border border-[var(--store-line)] bg-white px-3 text-[14px] text-[var(--store-ink)] outline-none transition-colors focus:border-[var(--store-accent)]";
+  "h-12 w-full rounded border border-[var(--store-line)] bg-white px-3 text-[14px] text-[var(--store-text)] outline-none transition-colors focus:border-[var(--store-accent)]";
 
 /** A numeric input with its label. */
 export function NumField({
@@ -99,7 +99,7 @@ export function ToolCard({
   return (
     <section className="rounded-md border border-[var(--store-line)] bg-white p-6 sm:p-8">
       <h2 className={`${DISPLAY} text-[28px] leading-none`}>{title}</h2>
-      <p className="mt-2.5 max-w-3xl text-[13.5px] leading-relaxed text-[#536275]">{intro}</p>
+      <p className="mt-2.5 max-w-3xl text-[13.5px] leading-relaxed text-[var(--store-steel)]">{intro}</p>
       <div className="mt-6 space-y-5">{children}</div>
     </section>
   );

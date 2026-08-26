@@ -56,6 +56,23 @@ export interface StoreTheme {
   ink2: string;
   /** Page ground behind the sections (hex). */
   paper: string;
+  /**
+   * Text colours, one per surface-and-emphasis pair. The storefront alternates
+   * between light sections and dark ones (hero, footer, category tiles), and
+   * each carries a full-strength colour for headings and body plus a quieter
+   * one for captions, breadcrumbs and supporting copy.
+   *
+   * Button labels are deliberately NOT these: they sit on the accent or on
+   * `ink`, so they follow the button, not the page.
+   */
+  /** Headings and body on light sections (hex). */
+  text: string;
+  /** Captions and supporting copy on light sections (hex). */
+  textMuted: string;
+  /** Headings and body on the dark sections (hex). */
+  textOnDark: string;
+  /** Captions and supporting copy on the dark sections (hex). */
+  textMutedOnDark: string;
   /** Corner rounding for cards & buttons. */
   radius: "sharp" | "soft" | "round";
   /** Product image framing — "contain" suits cut-out product shots. */
@@ -143,6 +160,12 @@ export const DEFAULT_STORE_THEME: StoreTheme = {
   ink: "#0B1424",
   ink2: "#111D31",
   paper: "#F5F7F9",
+  // The approved design's own values: `text` matches `ink`, and the two muted
+  // shades are the ones its light and dark sections already used.
+  text: "#0B1424",
+  textMuted: "#607084",
+  textOnDark: "#FFFFFF",
+  textMutedOnDark: "#B9C4D2",
   radius: "soft",
   imageFit: "cover",
 
@@ -309,6 +332,10 @@ export function normalizeStoreTheme(input: Partial<StoreTheme> | null | undefine
     ink: hex(i.ink, d.ink),
     ink2: hex(i.ink2, d.ink2),
     paper: hex(i.paper, d.paper),
+    text: hex(i.text, d.text),
+    textMuted: hex(i.textMuted, d.textMuted),
+    textOnDark: hex(i.textOnDark, d.textOnDark),
+    textMutedOnDark: hex(i.textMutedOnDark, d.textMutedOnDark),
     radius,
     imageFit,
 

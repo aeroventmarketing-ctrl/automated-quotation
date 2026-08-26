@@ -21,7 +21,7 @@ export function MobileNav({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--store-line)] bg-white text-[var(--store-ink)] lg:hidden"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--store-line)] bg-white text-[var(--store-text)] lg:hidden"
       >
         <span aria-hidden className="text-[17px] leading-none">☰</span>
       </button>
@@ -82,7 +82,7 @@ export function MobileNav({
                       className="flex items-center justify-between rounded px-3 py-2.5 text-[15px] hover:bg-slate-50"
                     >
                       {c.label}
-                      <span className="text-xs text-[#8a96a5]">{c.count}</span>
+                      <span className="text-xs text-[var(--store-steel)]">{c.count}</span>
                     </Link>
                   ))}
                 </>

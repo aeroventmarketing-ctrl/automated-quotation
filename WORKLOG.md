@@ -1,3 +1,40 @@
+## 2026-08-26 · Text colours are settable on the storefront
+
+- **Request (owner).** Add an option to change the website's text colours. The Look card had five colour pickers and
+  every one of them was a **ground or accent** — nothing controlled type.
+- **Four fields, not one.** The shop alternates light sections and dark ones (hero, footer, category tiles), and each
+  carries full-strength type plus a quieter tier for captions and breadcrumbs. So: **Text**, **Text — muted**,
+  **Text on dark**, **Text on dark — muted**. Defaults are the approved design's own values, so an untouched shop is
+  unchanged.
+- **Button labels are deliberately excluded.** Every remaining `text-white` sits on `bg-[var(--store-accent)]` or
+  `bg-[var(--store-ink)]` — a label belongs to its button, not to the page. Setting "Text on dark" to cream recolours
+  the hero headline and the footer and leaves *Get a Quote* white on red, which is the only sane behaviour.
+- **`--store-steel` was already the muted token** — 42 classes point at it — but it was **pinned in the layout**.
+  It now reads from the theme, so those 42 came along for free. Five near-identical hardcoded greys
+  (`#536275`, `#526173`, `#6e7d8b`, `#788795`, `#8a96a5`) were folded into it, and nine on-dark greys into the
+  on-dark muted token.
+- **Two bugs the sweep exposed.**
+  - A bulk replace put the product page's `/` and `·` separators — which sit on **white** — into the *on-dark*
+    bucket, where the default is a pale grey. They would have been near-invisible. Caught on screenshot; reverted to
+    their own neutral, since decorative punctuation isn't type the owner wants to steer.
+  - The hero eyebrow was `#e5ebf2`, essentially white, and the first pass demoted it to the *muted* tier — visibly
+    dimming the most prominent label on the page. It belongs to full-strength **Text on dark**.
+- **Verified against a real storefront** (13 seeded products, throwaway Postgres, Playwright), by pixel-diffing the
+  page before and after the change:
+  | | differing pixels |
+  |---|---|
+  | hero, after fixing the eyebrow | 0.25 % |
+  | footer | 0.58 % |
+  What remains is **one deliberate flattening**: the design carried a dimmer on-dark grey in three places (footer
+  prose `#9ba8b8`, hero metric labels `#8998aa`, the hero caption card `#8795a7`) which now share the single muted
+  token at `#b9c4d2`. Slightly brighter, better contrast, and inspected side by side before keeping it. Say the word
+  and it gets its own tier back.
+- Then re-tinted to a deliberately alien palette (green / olive / cream / gold) to prove each field reaches what it
+  claims: light headings, light body, dark-section headings and dark-section captions each moved independently, the
+  accent stayed red, and the buttons stayed white.
+- The editor's live Preview now paints itself in the chosen text colours instead of hardcoded whites.
+- Typecheck + lint + build clean. No migration, no workflow change.
+
 ## 2026-08-26 · Attach a file for the storefront Logo and Hero photo
 
 - **Request (owner).** Add a file-attach option to the **Logo** and **Hero photo path** fields in
