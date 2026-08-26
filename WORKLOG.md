@@ -14,8 +14,16 @@
   reference hub is ~22%; it is now **20** (23%). The blades were re-cut narrower at the same time.
 - **Sweep is still 0.00°** — root centre and tip centre both land on x = 100.000, measured off the rendered path.
   The reference blades *look* raked; that is twist and camera angle, not plan-form sweep.
+- **AFBM lettered across the blades (owner).** A bold white letter just inboard of the tip bands — **A, F, B, M** on
+  blades 1–4. Four letters across five blades, so the **fifth carries none**; that is the request, not an oversight.
+  - Each letter sits inside its own blade's rotated group, so it turns with the blade and goes upside down at the
+    bottom of the sweep — which is what painted lettering does on a real propeller.
+  - The decal and index mark shifted 2 units inboard to make room.
 - **Markings are painted on, not floated over.** They live in a `clipPath` of the blade in blade-local space, so one
-  definition serves all five and nothing can spill past an edge.
+  definition serves all five, the letters included, and nothing can spill past an edge.
+  - Checked in the browser rather than assumed: the font resolves to real **Manrope 800** (not a silent fallback),
+    the fill is `rgb(255,255,255)`, and the glyph box spans x 96.2–103.8 against a blade half-width of ~9.9 at that
+    radius — comfortably inside the paint.
 - **Verified in a browser**, not by reading the markup: frames one second apart differ in **6.6%** of the fan's area
   (it turns), and under `prefers-reduced-motion: reduce` two frames differ in **0 px** (it holds still).
 - The preview page's "Highlight what rotates" control was replaced with **"Show one blade"** — with no shroud left,

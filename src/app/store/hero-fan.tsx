@@ -38,6 +38,23 @@ const BLADE =
 const ANGLES = [0, 72, 144, 216, 288];
 
 /**
+ * The blades, in order round the hub, each with the letter painted on it just
+ * inboard of the tip bands. AFBM is four letters across five blades, so the
+ * last one carries none — deliberate, not an oversight.
+ *
+ * A letter sits inside its blade's rotated group, so it turns with the blade
+ * and goes upside down at the bottom of the sweep. That is what painted-on
+ * lettering does on a real propeller.
+ */
+const BLADES: { angle: number; letter: string }[] = [
+  { angle: 0, letter: "A" },
+  { angle: 72, letter: "F" },
+  { angle: 144, letter: "B" },
+  { angle: 216, letter: "M" },
+  { angle: 288, letter: "" },
+];
+
+/**
  * Hub radius. The reference photo's hub is about 22% of the propeller's
  * diameter; at a tip radius of 86 that is 19-20 here. An earlier 27 made the
  * hub the subject and the blades an afterthought.
@@ -120,17 +137,34 @@ export function HeroFan() {
         ))}
 
         {/* Blades, each with its own painted markings. */}
-        {ANGLES.map((a) => (
-          <g key={`b${a}`} transform={`rotate(${a} 100 100)`}>
+        {BLADES.map(({ angle, letter }) => (
+          <g key={`b${angle}`} transform={`rotate(${angle} 100 100)`}>
             <path d={BLADE} fill="url(#hf-blade)" stroke="#39424f" strokeWidth="0.5" strokeLinejoin="round" />
             <g clipPath="url(#hf-clip)">
               {/* Twin tip bands. */}
               <rect x="80" y="16.6" width="40" height="3.6" fill="#f2f5f8" opacity="0.93" />
               <rect x="80" y="23" width="40" height="3.6" fill="#f2f5f8" opacity="0.93" />
+              {/* The letter, just inboard of the bands where the paddle is still
+                  near full width. Clipped with the rest of the markings, so it
+                  can never spill past an edge. */}
+              {letter && (
+                <text
+                  x="100"
+                  y="34.5"
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="#ffffff"
+                  fontSize="11"
+                  fontWeight="800"
+                  style={{ fontFamily: "var(--font-body), ui-sans-serif, system-ui, sans-serif" }}
+                >
+                  {letter}
+                </text>
+              )}
               {/* Maker's decal, and the small painted index mark below it. */}
-              <ellipse cx="100" cy="47" rx="2.5" ry="4" fill="url(#hf-decal)" />
-              <ellipse cx="100" cy="47" rx="2.5" ry="4" fill="none" stroke="#f0d3b8" strokeWidth="0.35" opacity="0.5" />
-              <rect x="98.9" y="60" width="2.2" height="4.4" rx="0.7" fill="#e8edf2" opacity="0.85" />
+              <ellipse cx="100" cy="50" rx="2.5" ry="4" fill="url(#hf-decal)" />
+              <ellipse cx="100" cy="50" rx="2.5" ry="4" fill="none" stroke="#f0d3b8" strokeWidth="0.35" opacity="0.5" />
+              <rect x="98.9" y="62" width="2.2" height="4.4" rx="0.7" fill="#e8edf2" opacity="0.85" />
             </g>
           </g>
         ))}
