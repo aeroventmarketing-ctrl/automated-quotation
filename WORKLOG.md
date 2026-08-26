@@ -1,3 +1,28 @@
+## 2026-08-26 · Office MRF prefills from the WON QUOTATION's line items
+- **Correction (owner).** The first pass sourced the prefill from `orderBoughtInLines`, which **combines identical
+  products** — right for a PO, wrong here. On **3236J** that collapsed five separate motor lines into one
+  `9 unit · Induction Motor (TECO)` row and threw away every rating. Owner: wire the MRF to the won quotation's own
+  line items.
+- **Split the combining out.** New `orderBoughtInLinesRaw` returns **one entry per quotation line** (name, qty,
+  the verbatim description, and the spec values as text); `orderBoughtInLines` is now that plus the existing combine
+  step, so **Phase 4 and the PO are byte-for-byte unchanged**. The MRF reads the raw lines.
+- **Matching rewritten to use everything the quotation knows.** A catalogue product is a candidate when **every token
+  of its name** appears in the line's text (label + description + specs); the most specific candidate wins; a tie is
+  genuine ambiguity and resolves to *unmatched*. Tokenising keeps decimals whole — **"1.5" never matches "15"**, which
+  is exactly what separates a 1.5 HP motor from a 15 HP one.
+- **Verified against all five real 3236J lines** and a catalogue holding 1 / 1.5 / 3 / 15 HP:
+  | # | qty | resolves to | from |
+  |---|---|---|---|
+  | 1 | 1 | INDUCTION MOTOR **15 HP** | "15 Hp, 11 Kw, Three Phase" |
+  | 2 | 2 | INDUCTION MOTOR **1.5 HP** | specs — its description never says HP |
+  | 3 | 2 | INDUCTION MOTOR **1.5 HP** | "1.5 Hp, 1.1 Kw" — *not* 15 HP |
+  | 4 | 2 | INDUCTION MOTOR **1 HP** | "1 Hp, 0.75 Kw" — *not* 1.5 |
+  | 5 | 2 | INDUCTION MOTOR **1 HP** | same |
+  Total still 9 units, and each row's Remark carries that line's own specification for the warehouse.
+- 13 checks, all passing — incl. a line with two equally-specific fits left unmatched, an unrelated product not
+  matched, and an empty catalogue keeping the quotation's wording.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Office MRF prefills from the order's own items
 - **Request (owner).** On **3236J**, autofill the Office Material Request Form from the order itself, so the requestor
   reviews and presses **Submit request** rather than retyping.

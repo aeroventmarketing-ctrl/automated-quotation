@@ -1,9 +1,11 @@
 /**
- * Prefilling an Office Material Request from the order it belongs to.
+ * Prefilling an Office Material Request from the won quotation behind the order.
  *
- * An Office MRF on a bought-in order is asking the warehouse for the very items
- * the order sells, so retyping them is busywork. These helpers turn the order's
- * bought-in product lines into MRF rows.
+ * An Office MRF on a bought-in order asks the warehouse for the very items the
+ * quotation sells, so the form is seeded from the quotation's OWN line items —
+ * one MRF row per quotation line, with that line's quantity and specification.
+ * (The Phase 4 requisition combines identical products, which is right for a PO
+ * but would collapse five motors of different ratings into a single row.)
  *
  * The catch: the MRF's Articles / Description field is **selection-only** — a
  * row whose text isn't an exact catalogue product name is rejected and blocks
@@ -11,14 +13,12 @@
  * and when it can't we say so rather than prefilling something that looks right
  * and then refuses to submit.
  *
- * Matching deliberately refuses to guess. An order line naming "Induction Motor
- * (TECO)" against a catalogue holding several ratings ("… 1.5 HP", "… 3 HP")
- * is AMBIGUOUS, and silently picking one would put the wrong motor on a real
- * material request. Ambiguity is left for the requestor to resolve.
+ * Matching deliberately refuses to guess. Putting the wrong motor on a real
+ * material request is far worse than asking the requestor to pick one.
  */
 
 export interface MrfSuggestion {
-  /** Catalogue product name when resolved, else the order's own wording. */
+  /** Catalogue product name when resolved, else the quotation's own wording. */
   description: string;
   qty: string;
   unit: string;
@@ -32,58 +32,81 @@ interface CatalogueProduct {
   unit: string;
 }
 
-const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
-/** Normalised with any "(…)" qualifier dropped — "Induction Motor (TECO)" → "induction motor". */
-const bare = (s: string) => norm(s.replace(/\([^)]*\)/g, " "));
-
-/**
- * Resolve one order line to a catalogue product.
- *
- * Exact name, then name-without-qualifier, then a containment match — but only
- * when containment finds exactly ONE candidate. Several candidates means the
- * order's wording isn't specific enough to choose from, which is the requestor's
- * call, not ours.
- */
-export function matchCatalogueProduct(name: string, products: CatalogueProduct[]): CatalogueProduct | null {
-  const n = norm(name);
-  if (!n) return null;
-
-  const exact = products.find((p) => norm(p.name) === n);
-  if (exact) return exact;
-
-  const b = bare(name);
-  if (b) {
-    const byBare = products.filter((p) => bare(p.name) === b);
-    if (byBare.length === 1) return byBare[0];
-    if (byBare.length > 1) return null; // several products share the bare name
-  }
-
-  const contains = products.filter((p) => {
-    const pn = norm(p.name);
-    return b !== "" && (pn.includes(b) || b.includes(pn));
-  });
-  return contains.length === 1 ? contains[0] : null;
+/** One quotation line, as much of it as matching can use. */
+export interface QuotationLineForMrf {
+  name: string;
+  qty: number;
+  detail?: string[];
+  /** The quotation's multi-line description, verbatim. */
+  description?: string;
+  /** The line's spec values flattened to text (HP, phase, pole, frame …). */
+  specText?: string;
 }
 
 /**
- * MRF rows for an Office request, built from the order's bought-in lines.
+ * Words and numbers, with decimals kept whole — "1.5 Hp, 11 Kw" →
+ * ["1.5","hp","11","kw"]. Keeping "1.5" intact is the whole point: it's what
+ * separates a 1.5 HP motor from a 15 HP one.
+ */
+function tokens(s: string): string[] {
+  return (s ?? "").toLowerCase().match(/[a-z]+|\d+(?:\.\d+)?/g) ?? [];
+}
+
+/**
+ * Resolve one quotation line to a catalogue product.
  *
- * `detail` (the quotation's specification — "Foot Mounted", "Rated capacity
- * 80 kg") goes in the Remark, where it's free text: it can't go in the
- * description without breaking the selection-only rule, but the warehouse needs
- * to see it to pick the right item off the shelf.
+ * A product is a candidate when EVERY token of its name appears somewhere in
+ * the line's text (label + description + specs). The most specific candidate —
+ * the one with the most tokens — wins, because "Induction Motor 1.5 HP" beats a
+ * bare "Induction Motor" when both fit. A tie at the top is genuine ambiguity
+ * and resolves to null: the requestor decides, not a heuristic.
+ */
+export function matchCatalogueProduct(line: QuotationLineForMrf, products: CatalogueProduct[]): CatalogueProduct | null {
+  const haystack = new Set(tokens([line.name, line.description ?? "", line.specText ?? ""].join(" ")));
+  if (haystack.size === 0) return null;
+
+  let best: CatalogueProduct | null = null;
+  let bestLen = 0;
+  let tied = false;
+  for (const p of products) {
+    const t = tokens(p.name);
+    if (t.length === 0 || !t.every((tok) => haystack.has(tok))) continue;
+    if (t.length > bestLen) {
+      best = p;
+      bestLen = t.length;
+      tied = false;
+    } else if (t.length === bestLen && p.name !== best?.name) {
+      tied = true;
+    }
+  }
+  return tied ? null : best;
+}
+
+/**
+ * MRF rows for an Office request, built from the quotation's bought-in lines.
+ *
+ * The quotation's description goes in the Remark, where it's free text: it
+ * can't go in the description field without breaking the selection-only rule,
+ * but the warehouse needs it to pick the right item off the shelf.
  */
 export function suggestOfficeMrfRows(
-  lines: { name: string; qty: number; detail?: string[] }[],
+  lines: QuotationLineForMrf[],
   products: CatalogueProduct[],
 ): MrfSuggestion[] {
   return lines.map((l) => {
-    const hit = matchCatalogueProduct(l.name, products);
+    const hit = matchCatalogueProduct(l, products);
+    // Prefer the quotation's own description lines for the remark; fall back to
+    // the derived detail when a line carried nothing extra.
+    const spec = (l.description ?? "")
+      .split(/\r?\n/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const remark = (spec.length > 0 ? spec : (l.detail ?? [])).join(" · ");
     return {
       description: hit ? hit.name : l.name,
       qty: l.qty > 0 ? String(l.qty) : "",
       unit: (hit?.unit ?? "unit").trim().toLowerCase(),
-      remark: (l.detail ?? []).join(" · ") || undefined,
+      remark: remark || undefined,
       matched: hit !== null,
     };
   });
