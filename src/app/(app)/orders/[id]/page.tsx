@@ -70,7 +70,8 @@ import { AdminWorkflowOverride } from "./admin-workflow-override";
 import { MaterialRequests } from "./material-requests";
 import { PurchasingChain } from "./purchasing-chain";
 import { BoughtInProduction } from "./bought-in-production";
-import { orderBoughtInLines, isStockOnlyOrder, orderStockLines, isDuctHardwareStockOnly } from "@/lib/department-pnl";
+import { orderBoughtInLines, orderBoughtInLinesRaw, isStockOnlyOrder, orderStockLines, isDuctHardwareStockOnly } from "@/lib/department-pnl";
+import { suggestOfficeMrfRows } from "@/lib/mrf-suggest";
 import { StockRelease } from "./stock-release";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
@@ -309,6 +310,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // A fully bought-in order (bought-in products, nothing fabricated) skips
   // production and its Office-side roles handle the Phase 5 quality steps.
   const boughtInProductLines = orderBoughtInLines(quote.items);
+  // Prefill for an Office MRF: ONE row per quotation line, resolved against the
+  // product catalogue. Deliberately the raw lines, not `boughtInProductLines` —
+  // that combines identical products for the PO, which would collapse five
+  // motors of different ratings into a single row and lose every spec. A line
+  // the catalogue can't pin down keeps the quotation's wording and is flagged in
+  // the form rather than guessed at.
+  const mrfSuggestions = suggestOfficeMrfRows(orderBoughtInLinesRaw(quote.items), productOptions);
   const boughtInOnly = boughtInProductLines.length > 0 && !PRODUCTION_DEPTS.some((d) => deptHasContent(d.key));
   // A from-stock order (in-house duct hardware — nothing fabricated or bought from
   // a supplier) is released from Fans & Blowers stock in Phase 2 instead of job
@@ -1078,7 +1086,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
           <CardContent>
-            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} showMrfDoc={!hideMrfDoc} admin={adminViewer} canCheckStock={canReleaseMaterials} />
+            <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} suggestions={mrfSuggestions} suggestionDept={OFFICE_DEPT_KEY} showMrfDoc={!hideMrfDoc} admin={adminViewer} canCheckStock={canReleaseMaterials} />
           </CardContent>
         </Card>
       )}

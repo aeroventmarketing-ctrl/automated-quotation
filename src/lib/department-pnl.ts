@@ -225,9 +225,43 @@ export function specDetailFor(item: string, specs: { name: string; detail: strin
   return hit.detail.filter((d) => d && !line.includes(norm(d)));
 }
 
-export function orderBoughtInLines(
+/**
+ * A line's spec values as searchable text — "1.5 HP 4 Single Phase 90L".
+ * Only strings and numbers: booleans and ids describe nothing a warehouse would
+ * recognise, and every extra token risks a false match.
+ */
+function specValuesText(specs: Specs): string {
+  const out: string[] = [];
+  for (const v of Object.values(specs ?? {})) {
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+    else if (typeof v === "number" && Number.isFinite(v)) out.push(String(v));
+  }
+  return out.join(" ");
+}
+
+/** One bought-in quotation line, before identical products are combined. */
+export interface BoughtInLine {
+  name: string;
+  qty: number;
+  unitPrice: number | null;
+  detail: string[];
+  /** The quotation's own multi-line description, verbatim. */
+  description: string;
+  /** The line's spec values flattened to text (HP, phase, pole, frame …). */
+  specText: string;
+}
+
+/**
+ * The order's bought-in lines, ONE PER QUOTATION LINE — nothing combined.
+ *
+ * `orderBoughtInLines` merges identical products, which is right for a PO (one
+ * row per product) but wrong anywhere the quotation's own lines matter: five
+ * motors of different ratings collapse to a single row and every specification
+ * is lost. The Office MRF prefill reads this instead.
+ */
+export function orderBoughtInLinesRaw(
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
-): { name: string; qty: number; unitPrice: number | null; detail: string[] }[] {
+): BoughtInLine[] {
   const lines = items
     .filter((it) => {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Specs;
@@ -265,8 +299,17 @@ export function orderBoughtInLines(
         qty: Number(it.qty) || 1,
         unitPrice: grid ? grid.unitCost : null,
         detail: productDetailLines(it.descriptionSnapshot, name),
+        description: it.descriptionSnapshot ?? "",
+        specText: specValuesText(specs),
       };
     });
+  return lines;
+}
+
+export function orderBoughtInLines(
+  items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
+): { name: string; qty: number; unitPrice: number | null; detail: string[] }[] {
+  const lines = orderBoughtInLinesRaw(items);
 
   // Combine identical products — same name AND same specification —
   // into one line, summing the quantity, so the requisition / PO shows a single

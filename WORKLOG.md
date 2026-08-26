@@ -1,3 +1,58 @@
+## 2026-08-26 · Office MRF prefills from the WON QUOTATION's line items
+- **Correction (owner).** The first pass sourced the prefill from `orderBoughtInLines`, which **combines identical
+  products** — right for a PO, wrong here. On **3236J** that collapsed five separate motor lines into one
+  `9 unit · Induction Motor (TECO)` row and threw away every rating. Owner: wire the MRF to the won quotation's own
+  line items.
+- **Split the combining out.** New `orderBoughtInLinesRaw` returns **one entry per quotation line** (name, qty,
+  the verbatim description, and the spec values as text); `orderBoughtInLines` is now that plus the existing combine
+  step, so **Phase 4 and the PO are byte-for-byte unchanged**. The MRF reads the raw lines.
+- **Matching rewritten to use everything the quotation knows.** A catalogue product is a candidate when **every token
+  of its name** appears in the line's text (label + description + specs); the most specific candidate wins; a tie is
+  genuine ambiguity and resolves to *unmatched*. Tokenising keeps decimals whole — **"1.5" never matches "15"**, which
+  is exactly what separates a 1.5 HP motor from a 15 HP one.
+- **Verified against all five real 3236J lines** and a catalogue holding 1 / 1.5 / 3 / 15 HP:
+  | # | qty | resolves to | from |
+  |---|---|---|---|
+  | 1 | 1 | INDUCTION MOTOR **15 HP** | "15 Hp, 11 Kw, Three Phase" |
+  | 2 | 2 | INDUCTION MOTOR **1.5 HP** | specs — its description never says HP |
+  | 3 | 2 | INDUCTION MOTOR **1.5 HP** | "1.5 Hp, 1.1 Kw" — *not* 15 HP |
+  | 4 | 2 | INDUCTION MOTOR **1 HP** | "1 Hp, 0.75 Kw" — *not* 1.5 |
+  | 5 | 2 | INDUCTION MOTOR **1 HP** | same |
+  Total still 9 units, and each row's Remark carries that line's own specification for the warehouse.
+- **Identical rows merge (owner).** Two quotation lines that produce the same row — same product, same unit, **same
+  remark** — collapse into one with the quantities summed. On 3236J that turns the two 1 HP lines (2 + 2) into a
+  single row of 4: **five quotation lines → four MRF rows, still 9 units.**
+  - Identity deliberately includes the remark. Items 2 and 3 both resolve to *INDUCTION MOTOR 1.5 HP* but the
+    quotation describes them differently ("TEFC, 1.5 Hp, 1.1 Kw" vs "220V, 4 Pole, 90L Frame, TECO Brand") — merging
+    those would throw one description away, and the warehouse needs both to know what it's picking. They stay separate.
+- 19 checks, all passing — incl. a line with two equally-specific fits left unmatched, an unrelated product not
+  matched, an empty catalogue keeping the quotation's wording, identical *unmatched* rows merging on the same rule,
+  first-appearance order preserved, and a zero+zero pair staying blank rather than becoming "0".
+- Typecheck + lint + build clean.
+
+## 2026-08-26 · Office MRF prefills from the order's own items
+- **Request (owner).** On **3236J**, autofill the Office Material Request Form from the order itself, so the requestor
+  reviews and presses **Submit request** rather than retyping.
+- **The constraint that shapes this.** Articles / Description is **selection-only** (#420): a row whose text isn't an
+  exact catalogue product name is rejected and blocks submission. So a prefill is only useful if it resolves to a real
+  product — filling in text that looks right and then refuses to submit would be worse than an empty form.
+- **New `lib/mrf-suggest.ts`.** Turns the order's bought-in lines into MRF rows, resolved against the catalogue:
+  exact name → name with any "(…)" qualifier dropped → containment, **but only when containment finds exactly one
+  candidate**. Qty comes from the order; unit from the matched product; the quotation's specification goes in the
+  **Remark**, which is free text — the warehouse needs "Foot Mounted · 80 kg" to pick the right item off the shelf,
+  and it can't live in the description without breaking the selection-only rule.
+- **It deliberately refuses to guess.** 3236J's line reads *Induction Motor (TECO)*. Against a catalogue holding
+  several ratings that's **ambiguous**, and silently picking one would put the wrong motor on a real material request.
+  Ambiguous lines keep the order's wording, are counted in a red hint, and the existing selection-only check blocks
+  submit until the requestor picks the exact item. Resolving it is their call, not a heuristic's.
+- **Form behaviour.** Rows seed on mount when Office is the first raisable department (the bought-in case, where it's
+  the only one), and on switching to Office **only while the form is untouched** — it can never overwrite typing. A
+  **Fill from order** button re-applies it on demand. A line above the table says where the rows came from.
+- **8 matcher checks, all passing**: the 3236J line resolving against a single-motor catalogue; the same line left
+  unmatched against three ratings; exact name beating containment; qualifier-dropped match; empty catalogue; catalogue
+  unit used; zero qty leaving the box blank rather than "0"; and no false positive on an unrelated product.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Office can raise an MRF in the order workflow
 - **Request (owner).** Let **Office** raise a Material Request inside the order workflow, "while still maintaining the
   workflow settings". Owner chose the requestors — **Purchaser, Sales, Engineer, Payment Approver, Admin** — and the

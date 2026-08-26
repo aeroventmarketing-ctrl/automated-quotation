@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
+import type { MrfSuggestion } from "@/lib/mrf-suggest";
 import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, releaseMaterialToRequestor, setMrfReleasedQuantities, resetMaterialReceipt } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
@@ -91,6 +92,8 @@ export function MaterialRequests({
   requests,
   stockItems,
   products = [],
+  suggestions = [],
+  suggestionDept = "",
   showMrfDoc = true,
   admin = false,
   canCheckStock = false,
@@ -101,6 +104,15 @@ export function MaterialRequests({
   requests: ReqRow[];
   stockItems: StockOpt[];
   products?: ScanProduct[];
+  /**
+   * Rows prefilled from the order's own bought-in lines, so an Office request
+   * doesn't retype what the order already says. Resolved against the product
+   * catalogue server-side; an unresolved one keeps the order's wording and is
+   * flagged, because the description field is selection-only.
+   */
+  suggestions?: MrfSuggestion[];
+  /** The department those suggestions belong to (Office). */
+  suggestionDept?: string;
   /** Whether to show the MRF View / Print document links. */
   showMrfDoc?: boolean;
   /** Admin — may correct the recorded released quantities. */
@@ -114,8 +126,31 @@ export function MaterialRequests({
   const [correctingId, setCorrectingId] = useState<string | null>(null);
   const [correctQty, setCorrectQty] = useState<Record<string, string>>({});
   const [dept, setDept] = useState(raisableDepts[0]?.key ?? "");
-  const [rows, setRows] = useState<MRFItem[]>([emptyRow(), emptyRow(), emptyRow()]);
+  // Rows the order can prefill, as MRFItems. Padded to three so the form still
+  // has room to add to the list.
+  const seededRows = useMemo<MRFItem[]>(() => {
+    const seed: MRFItem[] = suggestions.map((sg) => ({
+      description: sg.description,
+      qty: sg.qty,
+      unit: sg.unit,
+      remark: sg.remark ?? "",
+    }));
+    while (seed.length < 3) seed.push(emptyRow());
+    return seed;
+  }, [suggestions]);
+  const canSeed = suggestions.length > 0 && dept === suggestionDept;
+  const [rows, setRows] = useState<MRFItem[]>(
+    suggestions.length > 0 && (raisableDepts[0]?.key ?? "") === suggestionDept
+      ? seededRows
+      : [emptyRow(), emptyRow(), emptyRow()],
+  );
   const [note, setNote] = useState("");
+  // Switching to the department the order can prefill seeds the rows — but only
+  // while the form is untouched, so it can never overwrite something typed.
+  useEffect(() => {
+    if (!canSeed) return;
+    setRows((rs) => (rs.every((r) => r.description.trim() === "" && r.qty.trim() === "") ? seededRows : rs));
+  }, [canSeed, seededRows]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const productByName = useMemo(() => new Map(products.map((p) => [p.name.trim().toLowerCase(), p])), [products]);
@@ -204,6 +239,22 @@ export function MaterialRequests({
             <div className="text-sm text-muted-foreground">{raisableDepts[0].label}</div>
           )}
 
+          {canSeed && (
+            <p className="text-xs text-muted-foreground">
+              Prefilled from this order&rsquo;s items — check the quantities and units, then submit.
+              {suggestions.some((sg) => !sg.matched) && (
+                <>
+                  {" "}
+                  <span className="text-destructive">
+                    {suggestions.filter((sg) => !sg.matched).length} line
+                    {suggestions.filter((sg) => !sg.matched).length === 1 ? "" : "s"} matched more than one product (or
+                    none) — pick the exact item for those.
+                  </span>
+                </>
+              )}
+            </p>
+          )}
+
           {products.length > 0 && <ProductScanBox products={products} modes={ADD_JUMP_MODES("add item")} onScan={handleScan} className="rounded-md border bg-muted/20 p-2" />}
 
           <div className="overflow-x-auto">
@@ -238,6 +289,11 @@ export function MaterialRequests({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setRows((rs) => [...rs, emptyRow()])}>+ Add row</Button>
+            {canSeed && (
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setRows(seededRows)}>
+                Fill from order
+              </Button>
+            )}
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-8 flex-1 min-w-[10rem] rounded-md border bg-background px-2 text-sm" />
           </div>
           {unknownItems.length > 0 && (
