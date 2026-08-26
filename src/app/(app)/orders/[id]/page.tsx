@@ -18,6 +18,10 @@ import {
   PRODUCTION_DEPTS,
   deptRole,
   deptLabel,
+  requisitionDeptLabel,
+  isMrfRequestorFor,
+  OFFICE_DEPT_KEY,
+  type MrfDeptKey,
   stageLabel,
   stagePhase,
   pendingStep,
@@ -671,11 +675,24 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // The Plant Manager oversees every production line, so they may raise an MRF
   // for any department; a department head raises only their own.
   const isPlantMgrViewer = viewer != null && userHasWorkflowRole(assignments, viewer.id, "plant_manager" as WorkflowRoleKey);
-  const raisableDepts = productionUnderway
+  // One viewer-side answer to "may I act as this MRF's requestor?", shared by the
+  // cancel button and the receipt-confirmation handshake. Mirrors the server gate.
+  const mrfRequestorViewer = (dept: MrfDeptKey): boolean =>
+    adminViewer ||
+    (viewer != null &&
+      isMrfRequestorFor(dept, viewer.role, adminViewer, (r) => userHasWorkflowRole(assignments, viewer.id, r as WorkflowRoleKey)));
+
+  const raisableDepts: { key: string; label: string }[] = productionUnderway
     ? PRODUCTION_DEPTS.filter(
         (d) => adminViewer || isPlantMgrViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(d.key) as WorkflowRoleKey)),
-      ).map((d) => ({ key: d.key, label: d.label }))
+      ).map((d) => ({ key: d.key as string, label: d.label as string }))
     : [];
+  // Office runs the bought-in / from-stock side of an order, which never enters
+  // production — so its window is the whole live order (released → closed)
+  // rather than the production window the four lines use.
+  const orderLive = stageIndex(wf.stage) >= stageIndex("released") && stageIndex(wf.stage) < stageIndex("closed");
+  const canRaiseOfficeMrf = orderLive && mrfRequestorViewer(OFFICE_DEPT_KEY);
+  if (canRaiseOfficeMrf) raisableDepts.push({ key: OFFICE_DEPT_KEY, label: "Office" });
   // Link each MRF to the purchase request it was escalated into, so the MRF card
   // reflects the live purchasing-chain stage (approved → voucher → purchased → …).
   const prByMrf = new Map<string, (typeof purchaseRequests)[number]>();
@@ -706,7 +723,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       formNo: m.formNo,
       orderId: quote.id,
       dept: m.dept,
-      deptLabel: deptLabel(m.dept),
+      deptLabel: requisitionDeptLabel(m.dept),
       items: m.items,
       note: m.note,
       status: m.status,
@@ -732,13 +749,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       canHandle: canWarehouse && (m.status === "requested" || m.status === "partial"),
       // The requesting department head (or an admin) can withdraw it before the
       // warehouse handles it.
-      canCancel:
-        m.status === "requested" &&
-        (adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey))),
+      canCancel: m.status === "requested" && mrfRequestorViewer(m.dept),
       // Fulfillment handshake: the requesting department head confirms receipt
       // and can follow up; the Warehouse can inform the requestor of availability.
       receivedByName: m.receivedByName ?? null,
-      isDeptHead: adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, deptRole(m.dept) as WorkflowRoleKey)),
+      isDeptHead: mrfRequestorViewer(m.dept),
       canInform: canWarehouse,
       canRelease: canReleaseMaterials,
       releasedByName: m.releasedByName ?? null,
@@ -753,7 +768,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Phase 3 (Materials + Purchasing) opens once the job orders are released
   // (production phase entered) and stays visible afterwards — including after
   // production is finished — so the MRFs and purchasing history remain readable.
-  const showMaterials = stageIndex(wf.stage) >= stageIndex("in_production");
+  // Phase 3 opens for production once job orders are running — unchanged. It also
+  // opens for whoever may raise an Office MRF, and stays visible for anyone once
+  // the order actually has material requests on it (a bought-in order reaches
+  // neither `in_production` nor a job order, so those two are the only ways an
+  // Office MRF would ever be seen).
+  const showMaterials =
+    stageIndex(wf.stage) >= stageIndex("in_production") || canRaiseOfficeMrf || wf.materialRequests.length > 0;
   // Hide the MRF View / Print document links from the production heads and the
   // Plant Manager (they raise/monitor requests but don't need the printable MRF).
   const hideMrfDoc =

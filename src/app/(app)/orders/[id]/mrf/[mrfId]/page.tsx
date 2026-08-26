@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { formatDate } from "@/lib/utils";
-import { readOrderWorkflow, deptLabel } from "@/lib/order-workflow";
+import { readOrderWorkflow, requisitionDeptLabel } from "@/lib/order-workflow";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -75,7 +75,7 @@ export default async function MrfPrintPage({ params }: { params: Promise<{ id: s
         </div>
 
         <div className="mt-2 text-[11px] text-gray-600">
-          Department: <b>{deptLabel(mrf.dept)}</b> · Order: <b>{quote.quoteNumber}</b> · {quote.inquiry.customer.company}
+          Department: <b>{requisitionDeptLabel(mrf.dept)}</b> · Order: <b>{quote.quoteNumber}</b> · {quote.inquiry.customer.company}
         </div>
 
         {/* Items table */}

@@ -1,3 +1,36 @@
+## 2026-08-26 · Office can raise an MRF in the order workflow
+- **Request (owner).** Let **Office** raise a Material Request inside the order workflow, "while still maintaining the
+  workflow settings". Owner chose the requestors — **Purchaser, Sales, Engineer, Payment Approver, Admin** — and the
+  window: **any time the order is live**.
+- **Frozen-area note.** Phase 3 is locked and this *does* change who can act, so it was confirmed in-conversation
+  before any edit. Nothing about the existing production gating moved (tests below).
+- **Why Office couldn't before.** An MRF's department was typed `ProductionDeptKey`, and `raiseMaterialRequest`
+  validated against the four production lines. Office is deliberately *not* a production department: no job order, no
+  single head role. Three separate gates blocked it — the dept whitelist, `deptRole()`, and the
+  `wf.jobOrders[dept]` + `in_production` requirement.
+- **What changed.**
+  - `MaterialRequest.dept` widens to `MrfDeptKey` (the four lines **plus** Office).
+  - **Office branch in the raise**: gated by the five roles above; skips the job-order requirement; window is
+    `released → closed` instead of `in_production → production_finished`. **The production branch is untouched** —
+    same roles, same job-order check, same production window.
+  - Requestor-side actions (cancel, follow up, confirm receipt) route through one `isMrfRequestorFor` gate.
+  - Phase 3 card opens for whoever may raise an Office MRF, and stays visible once an order has any MRF on it —
+    a bought-in order reaches neither `in_production` nor a job order, so otherwise an Office MRF could never be seen.
+- **One definition of "who is Office".** `isOfficeMrfRequestor` lives in `lib/order-workflow` and takes primitives, so
+  the server gate and the My Dashboard feed share it. Two copies of that role list would drift the moment either was
+  edited. Sales / Engineer are ACCOUNT roles; Purchaser / Payment Approver stay **workflow roles assigned in
+  Admin → Workflow roles**, so who holds them remains a setting — that's the "maintain the workflow settings" part.
+- **Bug the compiler caught, worth calling out:** the workflow JSON coercion filtered material requests through the
+  *production* dept set. Left alone it would have **silently dropped every Office MRF on the next read**, losing it
+  from the order entirely. Widening the type surfaced this and 18 other call sites that assumed a production line.
+- **Already correct, verified not broken:** `stockLocationPolicy("office")` lets Office issue from Office *or* Plant
+  stock, and `recordDeptStockTransfer` deliberately excludes Office from `VALID_TO_DEPTS` (booking a Fans→Office move
+  would double-credit Fans, since the resale already credits it).
+- **24 gate checks, all passing**: each of the five Office roles admitted; Warehouse, Logistics, Plant Manager, a
+  production head and a plain user all denied; and every production case unchanged — own head yes, another line's head
+  no, Sales no, Purchaser no, admin yes.
+- Typecheck + lint + build clean.
+
 ## 2026-08-26 · Phase 4 spec — extended to every order, and to the PO the supplier gets
 - **Report (owner).** Order **3236J** had the same short description as 3032S; asked to check every affected order.
 - **Answer: it isn't a per-order data problem.** The generator never carried the spec until today, so **every**
