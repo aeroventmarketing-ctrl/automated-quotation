@@ -2,8 +2,15 @@
 
 - **Request (owner).** Make the hero's abstract rotor a rotating **5-blade propeller fan**.
 - **New `store/hero-fan.tsx`** — SVG, so it stays crisp at any size and costs no image request. One blade is drawn at
-  12 o'clock and the other four are the same path rotated by 72°. The blade is **swept**, its tip further round than
-  its root, which is what gives an axial fan its aerofoil look instead of a flat paddle.
+  12 o'clock and the other four are the same path rotated by 72°.
+- **Sweep 0° (owner).** The first cut raked the blade, its tip sitting further round than its root. Owner asked for
+  no sweep, so both edges now **mirror about the blade's own radial** — the leading edge's control points are
+  (113,62) and (116,45), the trailing edge's the same two reflected — and the tip sits square above the root.
+  That mirror *is* the zero sweep; break it and the blade starts to rake again.
+  - Measured off the **rendered** path rather than asserted: sampling 720 points, the centroid sits at
+    x = **100.006** (100 exactly = no rake), the worst mirror-partner error is **0.013** units, the tip midpoint is
+    **0.042** units off the root's, and the blade spans 86.18–113.82 — 13.82 either side of centre. All of that is
+    sampling noise on a 200-unit box.
 - **Only the rotor turns.** Blades and hub sit in a `<g>` that spins on a 7-second linear loop; the shroud, its
   dashed throat ring and the four mounting bosses stay put. That is what makes it read as *a fan running* rather than
   the whole assembly being spun.

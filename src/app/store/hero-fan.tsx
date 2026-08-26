@@ -8,9 +8,9 @@
  * than the whole assembly spinning.
  *
  * Geometry note: one blade is drawn pointing up and the other four are the same
- * path rotated by 72°. The blade is SWEPT — its tip sits further round than its
- * root — which is what gives an axial fan its curved, aerofoil look instead of
- * a flat paddle.
+ * path rotated by 72°. Sweep is ZERO — the blade is symmetric about its own
+ * radial, tip square above root, rather than raked round in the direction of
+ * travel.
  */
 
 /**
@@ -18,11 +18,15 @@
  * Root at radius 26 (where the hub covers the join), tip at radius 78 — inside
  * the shroud's 82 throat, so the propeller turns within its housing instead of
  * cutting across it.
+ *
+ * Both edges mirror about x = 100: the leading edge's control points are
+ * (113,62) and (116,45), the trailing edge's the same two reflected. That
+ * mirror IS the zero sweep — break it and the blade starts to rake.
  */
 const BLADE =
-  "M 104.5 74.4 C 120 63 131.5 49 136.6 31.1 " + // leading edge, bowing into the sweep
-  "A 13 13 0 0 0 113.5 23.2 " + //                  tip, just rounded off
-  "C 101.5 41 92.5 58 95.5 74.4 Z"; //              trailing edge back to the root
+  "M 104.5 74.4 C 113 62 116 45 112.2 22.9 " + // leading edge, bowing out and back in
+  "A 13 13 0 0 0 87.8 22.9 " + //                 tip, just rounded off
+  "C 84 45 87 62 95.5 74.4 Z"; //                 trailing edge, the mirror of the leading
 
 const ANGLES = [0, 72, 144, 216, 288];
 
