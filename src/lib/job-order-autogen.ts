@@ -119,10 +119,21 @@ const isFan = (s: Record<string, unknown>) => {
 
 /** Map a quotation fan type/category to one of the Fans & Blowers JO templates. */
 function fanJoType(s: Record<string, unknown>): string {
-  const t = (str(s.type) + " " + str(s.category)).toLowerCase();
+  const type = str(s.type).toLowerCase();
+  const t = (type + " " + str(s.category)).toLowerCase();
   if (t.includes("didw")) return "centrifugal_blower_didw";
   if (t.includes("inline")) return "centrifugal_inline_blower";
-  if (t.includes("panel")) return "panel_fan";
+  // A propeller-type wall fan is a propeller in a wall panel, so it is built on
+  // the Panel Fan sheet — EWF / EWFDD and FAF / FAFDD alike, belt or direct
+  // drive. Owner-confirmed: they get no template of their own.
+  //
+  // Matched on the TYPE, not the category. "Propeller Type" also holds Power
+  // Roof Ventilator, which must keep falling through to Power Roof below — so
+  // the category must not be what triggers this.
+  //
+  // Without it these dropped to the `centrifugal_blower` fallback and an
+  // exhaust wall fan came out of autofill as a Centrifugal Blower.
+  if (t.includes("panel") || type.includes("wall fan")) return "panel_fan";
   if (t.includes("roof")) return "power_roof";
   if (t.includes("axial")) return "tubeaxial_vaneaxial";
   return "centrifugal_blower";
