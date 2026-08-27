@@ -3,7 +3,7 @@
  * Each importer validates per-row and reports errors without aborting the batch.
  *
  * Column specs (header row required):
- *  catalogue:  modelCode, family, name, description, sizeLabel, uom, basePrice, currency, specsJson
+ *  catalogue:  modelCode, family, name, description, sizeLabel, uom, basePrice, currency, specsJson, active?
  *  pricelist:  modelCode, variantKey, currency, basePrice, optionsJson, effectiveDate
  *  ratings:    modelCode, rpm, airflow_m3hr, staticPressure_pa, power_kw, efficiency
  */
@@ -37,23 +37,55 @@ function parse(csv: string): Record<string, string>[] {
 
 const FAMILIES = new Set(Object.values(Family));
 
+const TRUTHY = new Set(["true", "yes", "y", "1", "active"]);
+const FALSY = new Set(["false", "no", "n", "0", "inactive"]);
+
+/**
+ * Read an optional `active` column.
+ *
+ * Returns `undefined` when the column is missing or the cell is blank, and that
+ * distinction matters: a partial spreadsheet that simply has no `active` column
+ * must not switch every item it touches back on. `undefined` means "leave it as
+ * it is" on an update, and falls back to the schema default on an insert.
+ */
+function readActive(raw: string | undefined): boolean | undefined {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return undefined;
+  if (TRUTHY.has(v)) return true;
+  if (FALSY.has(v)) return false;
+  throw new Error(`active "${raw}" is not true/false`);
+}
+
 export async function importCatalogue(csv: string): Promise<ImportResult> {
   const rows = parse(csv);
   const res: ImportResult = { inserted: 0, updated: 0, errors: [] };
 
+  /**
+   * The fields a row actually carried.
+   *
+   * A COLUMN THAT IS NOT IN THE SHEET IS LEFT ALONE on an existing item; only a
+   * column that is present and empty clears the value. Without that distinction
+   * a three-column sheet of corrected names would silently wipe every
+   * description, size and spec on the items it touched — the sheet never
+   * mentioned them, so it cannot have meant to blank them. `family` and `name`
+   * stay mandatory, so a sheet must still say what it is editing.
+   */
   interface Valid {
     modelCode: string;
     data: {
       family: Family;
       name: string;
-      description: string | null;
-      sizeLabel: string | null;
-      uom: string;
-      specs: object;
+      description?: string | null;
+      sizeLabel?: string | null;
+      uom?: string;
+      specs?: object;
+      active?: boolean;
     };
     basePrice: number | null;
     currency: string;
   }
+  /** Defaults for a brand-new item, for the columns the sheet left out. */
+  const CREATE_DEFAULTS = { description: null, sizeLabel: null, uom: "unit", specs: {} };
 
   // 1) Validate every row in memory (no DB) and collect per-row errors.
   const valid: Valid[] = [];
@@ -64,33 +96,33 @@ export async function importCatalogue(csv: string): Promise<ImportResult> {
       const family = (r.family || "").toUpperCase();
       if (!FAMILIES.has(family as Family)) throw new Error(`family "${r.family}" is invalid`);
       if (!r.name) throw new Error("name is required");
-      let specs: object = {};
-      if (r.specsJson) {
-        try {
-          specs = JSON.parse(r.specsJson);
-        } catch {
-          throw new Error("specsJson is not valid JSON");
+
+      const data: Valid["data"] = { family: family as Family, name: r.name };
+      // `undefined` means the sheet has no such column; "" means it has one and
+      // the cell was left empty, which is a deliberate clear.
+      if (r.description !== undefined) data.description = r.description || null;
+      if (r.sizeLabel !== undefined) data.sizeLabel = r.sizeLabel || null;
+      if (r.uom !== undefined) data.uom = r.uom || "unit";
+      if (r.specsJson !== undefined) {
+        if (!r.specsJson) data.specs = {};
+        else {
+          try {
+            data.specs = JSON.parse(r.specsJson);
+          } catch {
+            throw new Error("specsJson is not valid JSON");
+          }
         }
       }
+      const active = readActive(r.active);
+      if (active !== undefined) data.active = active;
+
       let basePrice: number | null = null;
       if (r.basePrice) {
         const p = Number(r.basePrice);
         if (Number.isNaN(p)) throw new Error("basePrice is not a number");
         basePrice = p;
       }
-      valid.push({
-        modelCode: r.modelCode,
-        data: {
-          family: family as Family,
-          name: r.name,
-          description: r.description || null,
-          sizeLabel: r.sizeLabel || null,
-          uom: r.uom || "unit",
-          specs,
-        },
-        basePrice,
-        currency: r.currency || "PHP",
-      });
+      valid.push({ modelCode: r.modelCode, data, basePrice, currency: r.currency || "PHP" });
     } catch (e) {
       res.errors.push({ row: line, message: e instanceof Error ? e.message : "Unknown error" });
     }
@@ -110,11 +142,15 @@ export async function importCatalogue(csv: string): Promise<ImportResult> {
   // 3) Bulk insert; update the (usually few) existing ones individually.
   if (toCreate.length) {
     await prisma.catalogueItem.createMany({
-      data: toCreate.map((v) => ({ modelCode: v.modelCode, ...v.data })),
+      // A new item has nothing to preserve, so the columns the sheet left out
+      // fall back to their defaults. `active` is not defaulted here — the schema
+      // already makes a new item active.
+      data: toCreate.map((v) => ({ modelCode: v.modelCode, ...CREATE_DEFAULTS, ...v.data })),
       skipDuplicates: true,
     });
   }
   for (const v of toUpdate) {
+    // Only the columns the sheet carried; the rest keep their current values.
     await prisma.catalogueItem.update({ where: { modelCode: v.modelCode }, data: v.data });
   }
   res.inserted = toCreate.length;

@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { upsertCatalogueItem, deleteCatalogueItem } from "../actions";
+import { CatalogueTransfer } from "./catalogue-transfer";
 
 const FAMILIES = ["AXIAL", "CENTRIFUGAL", "PROPELLER", "TUBULAR_INLINE", "CABINET", "ACCESSORY", "SERVICE", "OTHER"];
 
@@ -84,6 +85,8 @@ export function CatalogueManager({ items }: { items: Item[] }) {
       <div className="flex justify-end">
         <Button onClick={() => setEditing({ ...blank })}>+ New catalogue item</Button>
       </div>
+
+      <CatalogueTransfer count={items.length} />
 
       {editing && (
         <Card className="border-primary/40">
