@@ -1,3 +1,21 @@
+## 2026-08-27 · The hero propeller's backlight widens
+
+- **The artwork is the five-blade black propeller again**, exactly as it was signed off — same plan-form, matte-black
+  gradient, twin tip bands, copper decal, hub, collars, bolt circle, AFBM letters, zero sweep, 7s anticlockwise spin.
+- **The one change: the backlight halo is 30% wider.** `r="100"` → `r="130"` on the glow circle behind the rotor. The
+  gradient fades to nothing well before its own edge, so nothing visible is clipped by the 200×200 viewBox; the halo
+  simply reaches out past the blade tips instead of hugging the hub.
+- **Everything explored in between was dropped, on the owner's word.** In order: the six-blade **blue impeller**
+  reproduced from the reference photo (`eaf7295`), a six-blade **black** propeller from an intermediate reading of
+  *"do not change the propeller blade"* (`db947e2`), and a zero-pitch impeller that was never committed. All
+  superseded — *"revert to this design"*, with the original five-blade propeller attached. Both commits stay in the
+  branch history as the steps they were; the diff that actually lands against `main` is the four-line halo change
+  above.
+- **The mock-up at `claude.ai/code/artifact/305c0b4b-2e5d-49a0-90ed-2a17b7196496` documents the abandoned impeller**,
+  not what ships. Left as a record.
+- Verified on a running store page at the hero's own size. Typecheck + lint + build clean. UI-only, no migration,
+  no workflow touched.
+
 ## 2026-08-27 · The blue impeller takes the hero
 
 - **The artwork is now the owner's impeller photo**, replacing the black five-blade aircraft propeller: six blue
