@@ -117,26 +117,39 @@ const isFan = (s: Record<string, unknown>) => {
   return /centrifugal|axial|propeller|tubular|cabinet|panel|roof|blower|fan/.test(cat + " " + str(s.type).toLowerCase());
 };
 
-/** Map a quotation fan type/category to one of the Fans & Blowers JO templates. */
+/**
+ * Which Fans & Blowers JO template one piece of text describes, or null when it
+ * says nothing useful. Owner-confirmed pairings:
+ *
+ *   axial   → TAF / VAF      (Tubeaxial / Vaneaxial)
+ *   inline  → CIEB           (Centrifugal Inline Blower)
+ *   wall fan→ EWF / EWFDD, FAF / FAFDD — built on the Panel Fan sheet
+ *   roof    → PRV / PRVDD
+ *
+ * `axial` is tested before `inline` so a *Tubeaxial* keeps its own template
+ * even where both words are in play.
+ */
+function joTypeFromText(text: string): string | null {
+  if (text.includes("didw")) return "centrifugal_blower_didw";
+  if (text.includes("axial")) return "tubeaxial_vaneaxial";
+  if (text.includes("inline")) return "centrifugal_inline_blower";
+  if (text.includes("panel") || text.includes("wall fan")) return "panel_fan";
+  if (text.includes("roof")) return "power_roof";
+  return null;
+}
+
+/**
+ * Map a quotation fan line to one of the Fans & Blowers JO templates.
+ *
+ * The **type** decides; the category is only consulted when the type says
+ * nothing (e.g. "Customized Jet Fan" under "Axial Type"). Reading both at once
+ * let a category outvote the product it contains: "Tubular Inline Type" +
+ * *Tubeaxial* produced a Centrifugal Inline Blower — a CIEB sheet for a TAF.
+ */
 function fanJoType(s: Record<string, unknown>): string {
-  const type = str(s.type).toLowerCase();
-  const t = (type + " " + str(s.category)).toLowerCase();
-  if (t.includes("didw")) return "centrifugal_blower_didw";
-  if (t.includes("inline")) return "centrifugal_inline_blower";
-  // A propeller-type wall fan is a propeller in a wall panel, so it is built on
-  // the Panel Fan sheet — EWF / EWFDD and FAF / FAFDD alike, belt or direct
-  // drive. Owner-confirmed: they get no template of their own.
-  //
-  // Matched on the TYPE, not the category. "Propeller Type" also holds Power
-  // Roof Ventilator, which must keep falling through to Power Roof below — so
-  // the category must not be what triggers this.
-  //
-  // Without it these dropped to the `centrifugal_blower` fallback and an
-  // exhaust wall fan came out of autofill as a Centrifugal Blower.
-  if (t.includes("panel") || type.includes("wall fan")) return "panel_fan";
-  if (t.includes("roof")) return "power_roof";
-  if (t.includes("axial")) return "tubeaxial_vaneaxial";
-  return "centrifugal_blower";
+  const fromType = joTypeFromText(str(s.type).toLowerCase());
+  if (fromType) return fromType;
+  return joTypeFromText(str(s.category).toLowerCase()) ?? "centrifugal_blower";
 }
 
 // Fans JO "Project" is a fan-code dropdown; the code is embedded in the model

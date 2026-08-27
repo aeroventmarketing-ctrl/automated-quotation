@@ -1,3 +1,28 @@
+## 2026-08-27 · Autofill: the product type decides the job order, not its category
+
+- **Owner-confirmed pairing.** *Tubeaxial / Vaneaxial* is the **TAF / VAF** template; *Centrifugal Inline Blower* is
+  **CIEB**. That is exactly what the old code got wrong.
+- **The bug.** `fanJoType` searched `type + " " + category` as **one string**, so a category could outvote the
+  product inside it. A **Tubeaxial** or **Vaneaxial** filed under *Tubular Inline Type* matched `"inline"` before
+  `"axial"` and came out as a **Centrifugal Inline Blower** — a CIEB sheet issued for a TAF.
+- **Fix: precedence, not more keywords.** `joTypeFromText` classifies one string; `fanJoType` asks the **type**
+  first and only consults the **category** when the type says nothing (which is what "Customized Jet Fan" under
+  *Axial Type* relies on). `axial` is also tested before `inline` so a Tubeaxial keeps its own template wherever
+  both words appear.
+- **Verified by diffing the mapping before and after** across all 25 fan lines: **exactly two rows changed** —
+  Tubular Inline Type → Tubeaxial and → Vaneaxial. Everything else, EWF/FAWF and PRV/PRVDD included, is
+  byte-identical. All 25 are now correct.
+- **Still open — the JO's `Project` field.** `fanProjectCode` matches the model code against `FAN_PROJECT_CODES`,
+  which is *only* the Centrifugal Blower list (`CFABCAB, CABSISW, CEBCAB, CFAB, CEB, CAB`). It was never extended
+  when the other five templates arrived, so every non-centrifugal job order gets a **blank** Project.
+  - The valid codes already exist, per template, in `src/components/fans-job-order-form.tsx` — taken from each
+    template's own data validations: Inline `CIEB`; Panel `EWF, FAWF`; Power Roof `PRV`; Axial
+    `TAF, VAF, TAFDD, VAFDD`; DIDW `DIDWCEB, DIDWCFAB, CEBCAB, CFABCAB`.
+  - So the fix is to pick the code from **the chosen template's own list**, longest-first, rather than from one
+    hardcoded centrifugal list. Not a one-liner: those lists live in a component and would need to move somewhere
+    both it and the lib can read. Left for owner approval.
+- Typecheck + lint + build clean. No migration.
+
 ## 2026-08-27 · Autofill: propeller wall fans get the Panel Fan job order
 
 - **Reported (owner).** On order **2026 - AFBM00002821S** the quotation sells an **Exhaust Wall Fan** (Propeller
