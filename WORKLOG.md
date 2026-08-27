@@ -1,3 +1,27 @@
+## 2026-08-27 · The logo takes the navbar's colour
+
+- **The complaint reproduced, on the scrolled store header.** The sticky header is `bg-white/95` over a
+  `backdrop-blur`, so once it slides over the dark hero it composites to **242,243,244** — while the logo's own
+  baked-in white stayed **255,255,255**. That 13-level gap is the white rectangle. At the top of the page there is
+  nothing dark behind the bar yet, both are 255, and nothing looks wrong — which is why it only shows on scroll.
+- **`public/aerovent-logo.jpg` is not a JPEG.** It is a 455×103 **PNG with no alpha** — an opaque white rectangle
+  with the artwork sitting on it. It can only ever blend on a surface that is exactly `#ffffff`.
+- **Fixed on the logo side, which is what was asked**: the white is keyed out, so the logo's background *is* the
+  navbar, in every scroll state and on any future navbar colour. The alternative — forcing the header opaque
+  (`bg-white`) — would have papered over it by throwing away the frosted-glass header.
+- **The key is feathered and un-premultiplied**, not a hard threshold. Alpha ramps over distance-from-white 3→70, and
+  each partial pixel's colour is recovered with `F = (C − (1−a)·255) / a`, so anti-aliased edges carry the right
+  colour on *any* background instead of a white halo.
+- **Verified it changes nothing on white.** Composited back over `#ffffff` and diffed against the original:
+  **mean 0.19, max 3** across 140,595 samples. Every other surface that shows this logo — app sidebar, mobile top
+  bar, login / forgot / reset cards, the disabled-role card, the MRF and PO print sheets — is pure white, so all of
+  them render as they did. Then measured on the page: scrolled, the logo's background and the bar beside it are both
+  **242,243,244**; at the top, both **255,255,255**.
+- **The filename stays `/aerovent-logo.jpg`** even though the bytes are a PNG, exactly as before. `src/middleware.ts`
+  allowlists that literal filename, so renaming it would 307 signed-out visitors to `/login` and the logo would
+  vanish from the storefront and the login page.
+- Typecheck + build clean. Asset-only, no code change, no migration, no workflow touched.
+
 ## 2026-08-27 · The hero halo grows another 50%
 
 - **`r="130"` → `r="195"`** on the backlight circle behind the propeller — half again what it was, so the light
