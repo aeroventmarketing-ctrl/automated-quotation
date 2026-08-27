@@ -17,9 +17,13 @@
   sheet's **base** code is used for those, since it is the only thing an engineer could pick anyway. Owner-confirmed:
   **JF → TAF/VAF sheet, SIEB → CIEB, and HPB / CMH / CMA / CMB / CPF → CEB.** (`CMB` is the third Radial Blower —
   Backplate Paddle Wheel, alongside CMH Paddle Wheel and CMA Ring Paddle Wheel.)
-- **Direct drive.** The `DD` suffix is added only for families that actually have one. `tagExists` reads the same
-  register that knows `EWFDD`, `FAWFDD`, `PRVDD`, `TAFDD`, `VAFDD` exist and **`CEBDD` does not** — so a direct-drive
-  Plug Fan stays `CEB` rather than inventing `CEBDD`.
+- **Direct drive — corrected by the owner.** A first pass gated the `DD` suffix on `TAG_FACTORS`, which lists only
+  `EWFDD`, `FAWFDD`, `PRVDD`, `TAFDD` and `VAFDD`, and concluded `CEBDD` was not real. **It is** — owner-stated:
+  direct-drive CEB is CEBDD. That table is a register of pricing *factors*, not of codes, and reading it as the
+  latter was over-reaching. `DD` now applies to **every** family, which is also exactly what the edit form does when
+  Direct is ticked, so autofill and a hand-edited job order agree.
+  - Verified belt vs direct across all 14 families: `CEB→CEBDD`, `CFAB→CFABDD`, `CABSISW→CABSISWDD`,
+    `DIDWCEB→DIDWCEBDD`, `CIEB→CIEBDD`, `TAF→TAFDD`, `VAF→VAFDD`, `EWF→EWFDD`, `FAWF→FAWFDD`, `PRV→PRVDD`.
 - **One source of truth for the dropdowns.** The six per-template code lists moved from the form component into
   `lib/job-order.ts` (`JO_PROJECT_CODES`, `joProjectCodes`), which the form now imports. The generator could not
   reach them before, and two copies would have drifted.

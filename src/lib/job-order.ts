@@ -57,14 +57,6 @@ export function joProjectCodes(type: string): string[] {
   return JO_PROJECT_CODES[type] ?? JO_PROJECT_CODES[DEFAULT_JO_TYPE];
 }
 
-/**
- * Does this template accept `code` as its Project? Direct-drive units carry a
- * "DD" suffix, which some lists spell out and some don't, so both forms count.
- */
-export function joAcceptsProject(type: string, code: string): boolean {
-  const base = joProjectCodes(type);
-  return base.includes(code) || base.some((c) => `${c}DD` === code);
-}
 
 export function joTypeDef(key: string): JoTypeDef | undefined {
   return JO_TYPES.find((t) => t.key === key);

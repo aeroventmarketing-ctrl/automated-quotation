@@ -13,7 +13,7 @@ import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
 import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, isDamperType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceFansJobOrder, joProjectCodes, type FansJobOrder } from "@/lib/job-order";
-import { fanTagOf, tagExists } from "@/lib/fan-body-factors";
+import { fanTagOf } from "@/lib/fan-body-factors";
 import { findFanMotorHp } from "@/lib/fan-motor-table";
 
 /** Air Duct quotation types — they map 1:1 to the Duct JO segment types. */
@@ -169,17 +169,15 @@ function fanJoType(s: Record<string, unknown>): string {
  * owner-confirmed, JF sits on the TAF/VAF sheet, SIEB on CIEB, and HPB, CMH,
  * CMA, CMB and CPF on CEB.
  *
- * The "DD" suffix is added only for the families that actually have a
- * direct-drive variant — `tagExists` knows EWFDD and TAFDD are real and CEBDD
- * is not.
+ * A direct-drive unit carries a "DD" suffix on its code — CEB → CEBDD — for
+ * every family, which is exactly what the edit form does when Direct is ticked.
  */
 function fanProjectCode(s: Record<string, unknown>, joType: string, isDirect: boolean): string {
   const tag = fanTagOf(s);
   if (!tag) return "";
   const offered = joProjectCodes(joType);
   const chosen = offered.includes(tag) ? tag : offered[0];
-  const dd = `${chosen}DD`;
-  return isDirect && tagExists(dd) ? dd : chosen;
+  return isDirect ? `${chosen}DD` : chosen;
 }
 
 /** The four mappable production departments. */

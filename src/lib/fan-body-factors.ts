@@ -61,14 +61,6 @@ const TAG_FACTORS: Record<string, number> = {
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 
-/**
- * Is this a fan code the business actually uses? This table is the register of
- * them, so it also answers which families have a direct-drive "DD" variant —
- * EWFDD, FAWFDD, PRVDD, TAFDD and VAFDD exist; there is no CEBDD or CIEBDD.
- */
-export function tagExists(tag: string): boolean {
-  return Object.prototype.hasOwnProperty.call(TAG_FACTORS, tag);
-}
 
 const MATERIAL_FACTORS: Record<string, number> = {
   "Black Iron Sheet": 1, "Heavy Gauge Material": 1.25, "Aluminum Material": 3,
