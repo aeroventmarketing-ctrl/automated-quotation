@@ -1,3 +1,25 @@
+## 2026-08-27 · The blue impeller takes the hero
+
+- **The artwork is now the owner's impeller photo**, replacing the black five-blade aircraft propeller: six blue
+  stamped-steel paddles at 60°, each on a short neck off a six-arm spider, under a plain domed hub.
+- **The blade is reproduced, not restyled** — owner-instructed: *"do not change the appearance or construction of
+  the propeller blade in the 1st picture"*. So it is a flat rectangle of near-constant width with generously
+  rounded corners, and the real daylight between neighbouring blades is kept. An intermediate pass had tapered the
+  paddles into wedges to close those gaps; that was wrong and was undone.
+- **Pitch is what makes it a fan.** Each paddle is rotated 21° about its own centre. Drawn square it would be a
+  daisy of rectangles; the lean is what the real blade does and what gives the photo its pinwheel read.
+- **AFBM lettering is gone**, because the photo carries no markings and painting letters on would change the blade's
+  appearance. This is the one open question — the mock-up has a *Paint AFBM on* toggle so the owner can compare and
+  say. Everything else about the hero (size, float, 7s anticlockwise spin, reduced-motion guard, and the rule that
+  an uploaded flagship hero photo still replaces the artwork) is untouched.
+- **Two earlier readings, both superseded.** *"Change the propeller with the propeller from the photo"* first
+  produced the impeller; *"do not change the propeller blade"* was then read as keep-the-approved-blade, which gave
+  a six-blade **black** propeller (commit `db947e2`). The third message settled it: the blade to leave alone is the
+  one in the photo. `db947e2` stays in the branch history as the step it was.
+- Verified on a running store page at the hero's own size, and in a before/after mock-up with spin, lettering and
+  theme toggles: `claude.ai/code/artifact/305c0b4b-2e5d-49a0-90ed-2a17b7196496`.
+- Typecheck + lint + build clean. UI-only, no migration, no workflow touched.
+
 ## 2026-08-27 · The hero propeller gains a sixth blade
 
 - **The blade itself does not change.** Owner-instructed, mid-change: *"do not change the appearance or
