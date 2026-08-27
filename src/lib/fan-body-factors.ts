@@ -61,7 +61,6 @@ const TAG_FACTORS: Record<string, number> = {
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 
-
 const MATERIAL_FACTORS: Record<string, number> = {
   "Black Iron Sheet": 1, "Heavy Gauge Material": 1.25, "Aluminum Material": 3,
   "Fiberglas Reinforced Metal": 5.5, "Stainless 304 Material": 4, "Stainless 316 Material": 6, "Boiler Plate": 8,
