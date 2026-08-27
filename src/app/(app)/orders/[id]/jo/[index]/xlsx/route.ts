@@ -1,7 +1,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { readOrderWorkflow } from "@/lib/order-workflow";
 import { formatJoNumber, joTypeDef, joTypeLabel } from "@/lib/job-order";
 import { buildFansJobOrderWorkbook } from "@/lib/excel/job-order-xlsx";
@@ -33,9 +34,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!def?.template) {
     return new Response(`The "${joTypeLabel(jo.type)}" job order template is not set up yet.`, { status: 409 });
   }
+  // The Panel Fan and Power Roof templates ship password-protected, so their
+  // downloads can't be corrected in Excel by anyone. Admins and the payment
+  // approver get an unprotected copy; production still receives the locked form,
+  // which is what keeps the printed sheet from being edited on the floor.
+  const unlock =
+    isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "payment_approver");
+
   const dir = path.join(process.cwd(), "public", "templates");
   const template = await fs.readFile(path.join(dir, def.template));
-  const buffer = await buildFansJobOrderWorkbook(template, { ...jo, joNumber }, { quotationNumber: quote.quoteNumber });
+  const buffer = await buildFansJobOrderWorkbook(
+    template,
+    { ...jo, joNumber },
+    { quotationNumber: quote.quoteNumber, unlock },
+  );
 
   const filename = `${(joNumber || "Job-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
   return joXlsxResponse(req, buffer, filename);

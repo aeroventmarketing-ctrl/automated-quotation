@@ -215,10 +215,42 @@ async function printableSheetPath(zip: JSZip): Promise<string | null> {
   return null;
 }
 
+/**
+ * Strip Excel's sheet and workbook protection from a job-order workbook.
+ *
+ * Two of the six templates — Panel Fan and Power Roof — ship with protection
+ * switched on, and it is **password**-protected (SHA-512 hash + salt), so the
+ * recipient cannot lift it in Excel even if they want to; the password is not
+ * ours to hand out. The other four templates carry the element but leave it
+ * off, so their downloads have always been editable.
+ *
+ * Removing the XML removes the protection outright, password or not, because we
+ * are writing the file rather than asking Excel to unlock it. `lockStructure`
+ * on the workbook goes too — otherwise the sheets are editable but can't be
+ * added, renamed or unhidden.
+ */
+async function unlockWorkbook(zip: JSZip): Promise<void> {
+  const sheetProtection = /<sheetProtection\b[^>]*\/>|<sheetProtection\b[^>]*>[\s\S]*?<\/sheetProtection>/g;
+  for (const name of Object.keys(zip.files)) {
+    if (!/^xl\/worksheets\/sheet\d+\.xml$/.test(name)) continue;
+    const xml = await zip.file(name)!.async("string");
+    zip.file(name, xml.replace(sheetProtection, ""));
+  }
+  const wbFile = zip.file("xl/workbook.xml");
+  if (wbFile) {
+    const xml = await wbFile.async("string");
+    zip.file("xl/workbook.xml", xml.replace(/<workbookProtection\b[^>]*\/>/g, ""));
+  }
+}
+
 export async function buildFansJobOrderWorkbook(
   templateBuffer: ArrayBuffer | Buffer,
   jo: FansJobOrder,
-  opts?: { quotationNumber?: string },
+  opts?: {
+    quotationNumber?: string;
+    /** Hand back an unprotected workbook — see `unlockWorkbook`. Role-gated by the caller. */
+    unlock?: boolean;
+  },
 ): Promise<Buffer> {
   const zip = await JSZip.loadAsync(templateBuffer as ArrayBuffer);
 
@@ -311,6 +343,9 @@ export async function buildFansJobOrderWorkbook(
       zip.file(cbPath, cbXml);
     }
   }
+
+  // Last, so it also clears protection on sheets rewritten above.
+  if (opts?.unlock) await unlockWorkbook(zip);
 
   return await zip.generateAsync({ type: "nodebuffer" });
 }

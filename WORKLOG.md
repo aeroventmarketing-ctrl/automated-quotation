@@ -1,3 +1,32 @@
+## 2026-08-27 · Admin / Payment Approver get an editable Panel Fan job order
+
+- **Request (owner).** On the Panel Fan JO, let the **admin / payment approver** edit the Excel that
+  *Print Job Order* produces.
+- **It was not the code — the templates ship protected.** Nothing in the route or the builder ever added
+  protection. Auditing all six Fans & Blowers templates:
+  | Template | Protection |
+  |---|---|
+  | Centrifugal Blower, DIDW, Inline, Tubeaxial/Vaneaxial | element present but **off** — always been editable |
+  | **Panel Fan** | **on** |
+  | **Power Roof** | **on** |
+  So the owner hit the one they use; **Power Roof has the identical problem** and was fixed with it.
+- **And it is password protection.** `sheetProtection` carries an SHA-512 `hashValue` + `saltValue` +
+  `spinCount`, and `workbookProtection` adds `lockStructure="1"`. Excel's *Unprotect Sheet* asks for a password
+  nobody has, so the recipient could not lift it themselves — this was a hard block, not an inconvenience.
+- **Fix.** `buildFansJobOrderWorkbook` takes an `unlock` option that strips `<sheetProtection>` from every worksheet
+  and `<workbookProtection>` from the workbook. Because we *write* the file rather than ask Excel to unlock it, the
+  password is irrelevant. `lockStructure` goes too — without it the cells are editable but sheets still cannot be
+  added, renamed or unhidden.
+  - Applied **last**, after the printable sheet has been rewritten, so nothing re-introduces it.
+  - Gated in the route: `isAdmin(user) || userHasWorkflowRole(…, "payment_approver")`. **Production still gets the
+    locked form**, which is the point of the protection — the printed sheet shouldn't be edited on the floor.
+- **Verified against the real templates**, 9 checks: for Panel Fan, Power Roof and Centrifugal Blower the unlocked
+  copy has **no** sheet protection and **no** workbook protection, and the production copy's protection state is
+  unchanged.
+- **Checked the file isn't quietly corrupted** — the risk with hand-edited XML. Reopened through ExcelJS: same two
+  sheets, `Source` still hidden, and **312 non-empty cells on both copies**. Identical in structure and content.
+- Typecheck + lint + build clean. No migration.
+
 ## 2026-08-27 · Autofill: the product type decides the job order, not its category
 
 - **Owner-confirmed pairing.** *Tubeaxial / Vaneaxial* is the **TAF / VAF** template; *Centrifugal Inline Blower* is
