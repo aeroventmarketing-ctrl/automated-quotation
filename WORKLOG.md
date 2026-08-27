@@ -1,3 +1,45 @@
+## 2026-08-27 · Catalogue backup: download the lot, edit it, upload it back
+
+- **New on Admin → Catalogue: a "Backup & bulk edit" card** with *Download Excel*, *Download CSV* and *Upload
+  Excel / CSV*. The download is the upload format, so a backup is a restore and a spreadsheet edit is a bulk update.
+- **Upload reuses the existing catalogue importer** (`/api/admin/import`, type `catalogue`) rather than growing a
+  second one. It already validates every row in memory before touching the database, reports failures per row
+  without aborting the batch, and matches on `modelCode` — which is what makes a re-upload an *update* instead of a
+  pile of duplicates. Nothing is ever deleted by uploading.
+- **Export is a new admin-only route** `/api/admin/catalogue/backup?format=csv|xlsx` (`src/lib/catalogue-backup.ts`
+  + `src/app/api/admin/catalogue/backup/route.ts`). Deliberately **not** the existing `/api/catalogue/export`, which
+  is a short SKU list for pickers and drops price, description and specs — fine for looking things up, useless for
+  putting things back.
+- **Two things a backup must get right, and neither was free:**
+  - **`active` had to survive.** The importer ignored the column, so restoring a backup would have quietly switched
+    every disabled item back on. It now reads `active` (`true/yes/y/1` / `false/no/n/0`, case-insensitive).
+  - **Excel must not "helpfully" retype model codes.** Every column in the workbook is forced to text (`numFmt
+    "@"`), or `25GSC` survives but something like `1E5` comes back as `100000`. The CSV leads with a BOM and uses
+    CRLF so Excel opens it as UTF-8 — otherwise `₱` and `Ø` arrive mangled.
+- **A real footgun in the shipped feature, found by testing rather than reading, and fixed.** The importer treated a
+  *missing column* the same as an *empty cell*, so uploading a three-column sheet of corrected names would have
+  silently wiped every description, size and spec on the rows it touched. Missing column now means **leave it
+  alone**; a column that is present but blank still clears. `modelCode`, `family` and `name` stay required. This is
+  a behaviour change to shared import code and it can only prevent data loss, never cause it — the Import CSV tab
+  supplies the full column spec, so its behaviour is unchanged.
+- **Verified against a real Postgres, 15 assertions**, on data picked to break naive CSV: embedded commas, escaped
+  quotes, a newline *inside* a product name, `₱`/`Ø`/`—`, an inactive item and one with no price row at all.
+  - export → wipe the whole catalogue → import → **snapshot identical**;
+  - re-upload the same file → 4 updated, 0 inserted, still 4 items, still identical (idempotent);
+  - narrow sheet renames without touching description / sizeLabel / specs / price, and does not reactivate the
+    disabled item; a present-but-blank cell does clear;
+  - bad family, bad `active` and a missing `modelCode` are reported as rows 3, 4, 5 while the good row still lands;
+  - the xlsx re-read through the uploader's own path returns every model code as text.
+  - (One assertion failed first time and was **my test's fault, not the code's** — Postgres `jsonb` reorders object
+    keys, so `{"drive":…,"hp":…}` comes back `{"hp":…,"drive":…}`. Compared as parsed objects, the specs were intact.)
+- **Auth is checked twice.** The `/admin` layout guard does not cover `/api/*`, so the route re-checks `isAdmin`
+  itself; signed out, middleware turns it away at the edge first (both confirmed, 307 and 403 paths).
+- Typecheck + lint + build clean; the only lint warning is the pre-existing `alt-text` pair in `quotation-pdf.tsx`.
+  No migration — no schema change, `active` was already on the model.
+- **Not done, deliberately:** the xlsx→CSV conversion now exists in three places (the Import CSV tab, the suppliers
+  manager, and this card). Folding them into one helper is a refactor of two working screens and belongs in its own
+  change, not smuggled into this one.
+
 ## 2026-08-27 · The trust band's icon squares grow 20%, and finally match
 
 - **Box `39px` → `47px`, icon `17px` → `20px`** — the requested 20%, on both.
