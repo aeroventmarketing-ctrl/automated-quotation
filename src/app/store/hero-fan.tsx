@@ -69,7 +69,7 @@ export function HeroFan() {
     <svg
       viewBox="0 0 200 200"
       aria-hidden
-      className="h-[340px] w-[340px] animate-store-float drop-shadow-[0_34px_70px_rgba(0,0,0,0.6)] motion-reduce:animate-none"
+      className="h-[340px] w-[340px] overflow-visible animate-store-float drop-shadow-[0_34px_70px_rgba(0,0,0,0.6)] motion-reduce:animate-none"
     >
       <defs>
         {/* The photo's backlight — a cool halo behind the hub. */}
@@ -124,11 +124,12 @@ export function HeroFan() {
       </defs>
 
       {/* Backlight. Outside the rotor: a light behind the prop does not spin.
-          Radius 130 rather than 100 — the halo is 30% wider than the box, which
-          is what carries it out past the blade tips. The gradient has already
-          faded to nothing well before that, so nothing visible is clipped by
-          the viewBox. */}
-      <circle cx="100" cy="100" r="130" fill="url(#hf-glow)" />
+          Radius 195 — half again the 130 it was, so the light spreads well past
+          the blade tips. At this size the glow runs past the viewBox, which is
+          why the svg carries `overflow-visible`: without it the box would cut
+          the halo off square, and a faint rectangle edge is worse than no halo
+          at all. The section around the hero clips it in the end. */}
+      <circle cx="100" cy="100" r="195" fill="url(#hf-glow)" />
 
       {/* `reverse` on the shorthand turns the propeller anticlockwise. Tailwind's
           `spin` keyframe only counts up to 360°, so the direction is set here
