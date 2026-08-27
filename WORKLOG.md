@@ -1,3 +1,37 @@
+## 2026-08-27 · The job order's Project code fills itself
+
+- **Where the earlier EWF came from.** Traced, because it looked like it contradicted the "Project is blank" finding.
+  It did not: autofill wrote `""`, and the edit form's Project `<select>` carries an explicit `— select —` empty
+  option, so a blank value stays blank and never silently adopts the first entry. **A person picked EWF.** The wiring
+  the owner remembered is `resolveTag` in `lib/fan-body-factors.ts` — a complete product-type → fan-code map that
+  builds the model code (`AV4800`**`EWF`**`3K3F3T`) and keys the body-cost table. It was simply never used here.
+- **The old code scanned the model STRING** against a hardcoded list of six *centrifugal* codes
+  (`CFABCAB, CABSISW, CEBCAB, CFAB, CEB, CAB`), so every non-centrifugal job order came out blank.
+- **Now it asks `resolveTag`**, the same function the quotation uses, so the job order and the quotation cannot
+  disagree about what the unit is.
+- **A third bug this exposed.** `DIDWCEB` was not in that list at all, so `AV1225`**`DIDWCEB`**`15K3F2T` matched the
+  shorter `CEB` — and **CEB is not an option on the DIDW sheet** (its dropdown is DIDWCEB / DIDWCFAB / CEBCAB /
+  CFABCAB). The old code was writing a value that would fail the sheet's own data validation. Now `DIDWCEB` /
+  `DIDWCFAB`.
+- **Codes no sheet lists.** Seven products carry a code no dropdown offers — JF, SIEB, HPB, CMH, CMA, CMB, CPF. The
+  sheet's **base** code is used for those, since it is the only thing an engineer could pick anyway. Owner-confirmed:
+  **JF → TAF/VAF sheet, SIEB → CIEB, and HPB / CMH / CMA / CMB / CPF → CEB.** (`CMB` is the third Radial Blower —
+  Backplate Paddle Wheel, alongside CMH Paddle Wheel and CMA Ring Paddle Wheel.)
+- **Direct drive — corrected by the owner.** A first pass gated the `DD` suffix on `TAG_FACTORS`, which lists only
+  `EWFDD`, `FAWFDD`, `PRVDD`, `TAFDD` and `VAFDD`, and concluded `CEBDD` was not real. **It is** — owner-stated:
+  direct-drive CEB is CEBDD. That table is a register of pricing *factors*, not of codes, and reading it as the
+  latter was over-reaching. `DD` now applies to **every** family, which is also exactly what the edit form does when
+  Direct is ticked, so autofill and a hand-edited job order agree.
+  - Verified belt vs direct across all 14 families: `CEB→CEBDD`, `CFAB→CFABDD`, `CABSISW→CABSISWDD`,
+    `DIDWCEB→DIDWCEBDD`, `CIEB→CIEBDD`, `TAF→TAFDD`, `VAF→VAFDD`, `EWF→EWFDD`, `FAWF→FAWFDD`, `PRV→PRVDD`.
+- **One source of truth for the dropdowns.** The six per-template code lists moved from the form component into
+  `lib/job-order.ts` (`JO_PROJECT_CODES`, `joProjectCodes`), which the form now imports. The generator could not
+  reach them before, and two copies would have drifted.
+- **Verified across every fan type — 26 lines, 26 filled, 0 blank**, each with its template beside it, and a
+  before/after diff on real centrifugal model codes: five rows byte-identical, and only the two DIDW rows changed —
+  the correction above.
+- Typecheck + lint + build clean. No migration.
+
 ## 2026-08-27 · CANCELLED and REJECTED behave like the terminal states they are
 
 - **Owner-approved.** Both are terminal and both mean *not live*, so anything asking "is there work in flight?" must

@@ -36,6 +36,28 @@ export const JO_TYPES: JoTypeDef[] = [
 
 export const DEFAULT_JO_TYPE = "centrifugal_blower";
 
+/**
+ * The fan codes each template's "Project" dropdown offers — lifted from the
+ * templates' own data validations, so a value outside this list would fail
+ * Excel's validation on the sheet.
+ *
+ * Lives here rather than in the form because the autofill generator needs the
+ * same lists: it can only pre-select a Project the sheet will actually accept.
+ */
+export const JO_PROJECT_CODES: Record<string, string[]> = {
+  centrifugal_blower: ["CEB", "CFAB", "CAB", "CEBCAB", "CFABCAB", "CABSISW"],
+  centrifugal_inline_blower: ["CIEB"],
+  panel_fan: ["EWF", "FAWF"],
+  power_roof: ["PRV"],
+  tubeaxial_vaneaxial: ["TAF", "VAF", "TAFDD", "VAFDD"],
+  centrifugal_blower_didw: ["DIDWCEB", "DIDWCFAB", "CEBCAB", "CFABCAB"],
+};
+
+export function joProjectCodes(type: string): string[] {
+  return JO_PROJECT_CODES[type] ?? JO_PROJECT_CODES[DEFAULT_JO_TYPE];
+}
+
+
 export function joTypeDef(key: string): JoTypeDef | undefined {
   return JO_TYPES.find((t) => t.key === key);
 }

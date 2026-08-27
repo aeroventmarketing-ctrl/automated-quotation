@@ -12,7 +12,8 @@
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine, type AccessoryDimension } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
 import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, isDamperType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
-import { coerceFansJobOrder, type FansJobOrder } from "@/lib/job-order";
+import { coerceFansJobOrder, joProjectCodes, type FansJobOrder } from "@/lib/job-order";
+import { fanTagOf } from "@/lib/fan-body-factors";
 import { findFanMotorHp } from "@/lib/fan-motor-table";
 
 /** Air Duct quotation types — they map 1:1 to the Duct JO segment types. */
@@ -152,12 +153,31 @@ function fanJoType(s: Record<string, unknown>): string {
   return joTypeFromText(str(s.category).toLowerCase()) ?? "centrifugal_blower";
 }
 
-// Fans JO "Project" is a fan-code dropdown; the code is embedded in the model
-// (e.g. AV4025**CEB**15K3F2T → "CEB"). Longest first so combos win over prefixes.
-const FAN_PROJECT_CODES = ["CFABCAB", "CABSISW", "CEBCAB", "CFAB", "CEB", "CAB"];
-function fanProjectCode(s: Record<string, unknown>, description: string): string {
-  const model = (str(s.model) || (/model:\s*([A-Za-z0-9]+)/i.exec(description)?.[1] ?? "")).toUpperCase();
-  return FAN_PROJECT_CODES.find((c) => model.includes(c)) ?? "";
+/**
+ * The Fans JO "Project" cell — a fan-code dropdown on the sheet.
+ *
+ * The code comes from `resolveTag`, the same function that builds the model
+ * code (AV4800**EWF**3K3F3T) and keys the body-cost table, so the job order and
+ * the quotation can't disagree about what the unit is. It used to be scanned
+ * out of the model *string* against a hardcoded list of six centrifugal codes,
+ * which left every non-centrifugal job order blank.
+ *
+ * The value must be one the sheet's dropdown offers, or it fails Excel's data
+ * validation. Seven products have a code no sheet lists — JF, SIEB, HPB, CMH,
+ * CMA, CMB and CPF — and for those the sheet's **base** code is used, because
+ * that is the only thing an engineer could pick from the dropdown anyway:
+ * owner-confirmed, JF sits on the TAF/VAF sheet, SIEB on CIEB, and HPB, CMH,
+ * CMA, CMB and CPF on CEB.
+ *
+ * A direct-drive unit carries a "DD" suffix on its code — CEB → CEBDD — for
+ * every family, which is exactly what the edit form does when Direct is ticked.
+ */
+function fanProjectCode(s: Record<string, unknown>, joType: string, isDirect: boolean): string {
+  const tag = fanTagOf(s);
+  if (!tag) return "";
+  const offered = joProjectCodes(joType);
+  const chosen = offered.includes(tag) ? tag : offered[0];
+  return isDirect ? `${chosen}DD` : chosen;
 }
 
 /** The four mappable production departments. */
@@ -277,7 +297,7 @@ export function buildAutoJobOrders(
         type: joType,
         date: opts.date,
         // Project = fan code from the model (matches the JO's Project dropdown).
-        project: fanProjectCode(s, it.descriptionSnapshot),
+        project: fanProjectCode(s, joType, isDirect),
         make: str(s.make) || "Standard",
         quantity: qty,
         // UOM option values differ by template (centrifugal uses "pcs", the

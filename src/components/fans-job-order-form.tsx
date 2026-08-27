@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { JO_TYPES, joTypeLabel, joTypeReady, type FansJobOrder } from "@/lib/job-order";
+import { JO_TYPES, joProjectCodes, joTypeLabel, joTypeReady, type FansJobOrder } from "@/lib/job-order";
 
 // The Fans & Blowers job-order form + type chooser. Shared by the order's
 // Phase-2 job-order panel and the standalone HVAC Tools "Job Order" tab so both
@@ -22,12 +22,14 @@ const MOUNTINGS = ["Foot Mounted", "Flange Mounted"];
 const ENCLOSURES = ["TEFC", "Explosion Proof"];
 const VOLTAGES = ["220", "380", "440"];
 const FREQUENCIES = ["60", "50"];
-const PROJECTS = ["CEB", "CFAB", "CAB", "CEBCAB", "CFABCAB", "CABSISW"];
+// Project codes come from lib/job-order so the autofill generator and this
+// form cannot drift apart on what each sheet will accept.
+const PROJECTS = joProjectCodes("centrifugal_blower");
 const MAKES = ["Standard", "Customized", "Client Design"];
 const MOTOR_BRANDS = ["TECO", "Hyundai"];
 
 // Centrifugal Inline option lists (from the Inline template's data validations).
-const INLINE_PROJECTS = ["CIEB"];
+const INLINE_PROJECTS = joProjectCodes("centrifugal_inline_blower");
 const INLINE_ORIENTATIONS = ["Foot Mounted", "Ceiling Hung", "Dual Mounted", "Flange Mounted", "With Stand"];
 const MOTOR_LOCATIONS = ["12 o'clock facing discharge", "9 o'clock facing discharge", "6 o'clock facing discharge", "3 o'clock facing discharge"];
 const INLINE_BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Airfoil"];
@@ -35,7 +37,7 @@ const INLINE_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
 const INLINE_ENCLOSURES = ["TEFC", "Exproof"];
 
 // Panel Fan option lists (from the Panel Fan template's data validations).
-const PANEL_PROJECTS = ["EWF", "FAWF"];
+const PANEL_PROJECTS = joProjectCodes("panel_fan");
 const PANEL_BLADE_DIAMETERS = ["10", "12", "14", "16", "18", "20", "24", "30", "36", "42", "48", "54", "60"];
 const PANEL_ORIENTATIONS = ["Exhaust 1", "Exhaust 2", "Supply 1", "Supply 2", "Exhaust 1 & Supply 1", "Exhaust 2 & Supply 2"];
 const PANEL_MOUNTINGS = ["Wall Mounted", "Ceiling Mounted", "With Stand", "Ceiling Hang"];
@@ -43,13 +45,13 @@ const PANEL_BLADE_TYPES = ["Kidney Type", "Paddle Type", "Airfoil"];
 const PANEL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
 
 // Power Roof option lists (from the Power Roof template's data validations).
-const POWERROOF_PROJECTS = ["PRV"];
+const POWERROOF_PROJECTS = joProjectCodes("power_roof");
 const POWERROOF_BLADE_DIAMETERS = ["12", "16", "18", "20", "22", "24", "30", "36", "40", "42", "48", "50", "54", "58", "60"];
 const POWERROOF_ORIENTATIONS = ["Exhaust", "Fresh Air"];
 const POWERROOF_MOUNTINGS = ["Roof Mounted", "Wall Mounted"];
 
 // Tubeaxial / Vaneaxial option lists (from its template's data validations).
-const AXIAL_PROJECTS = ["TAF", "VAF", "TAFDD", "VAFDD"];
+const AXIAL_PROJECTS = joProjectCodes("tubeaxial_vaneaxial");
 const AXIAL_BLADE_DIAMETERS = ["10", "12", "14", "16", "18", "20", "24", "30", "36", "42", "48", "54", "60"];
 const AXIAL_ORIENTATIONS = ["Foot Mounted", "Ceiling Hung", "Dual Mounted", "Flange Mounted", "With Stand"];
 const AXIAL_MOTOR_LOCATIONS = ["12 o'clock facing discharge", "9 o'clock facing discharge", "6 o'clock facing discharge", "3 o'clock facing discharge", "N/A"];
@@ -57,7 +59,7 @@ const AXIAL_BLADE_TYPES = ["Axial", "Airfoil", "Semi-airfoil"];
 const AXIAL_DRIVE_TYPES = ["Direct", "Belt", "Directly Coupled"];
 
 // Centrifugal Blower DIDW option lists (same family as the Centrifugal Blower).
-const DIDW_PROJECTS = ["DIDWCEB", "DIDWCFAB", "CEBCAB", "CFABCAB"];
+const DIDW_PROJECTS = joProjectCodes("centrifugal_blower_didw");
 const DIDW_BLADE_TYPES = ["Backwardly Inclined", "Backward Curved", "Forward Curved"];
 
 // A belt-drive JO form is driven by a per-type config so the Centrifugal Blower
