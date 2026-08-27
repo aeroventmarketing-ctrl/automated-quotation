@@ -1,13 +1,16 @@
 /**
- * The hero's fan artwork — a five-blade aircraft propeller, drawn as SVG so it
+ * The hero's fan artwork — a six-blade aircraft propeller, drawn as SVG so it
  * stays crisp at any size and costs no image request. Shown when no flagship
  * hero photo is set.
  *
  * Modelled on the propeller photo the owner supplied: matte black paddle
  * blades, twin white tip bands, a copper maker's decal partway up each blade,
  * and a polished hub with a retention collar per blade. The soft backlight
- * behind the hub is from that photo too, and it earns its place here — five
+ * behind the hub is from that photo too, and it earns its place here — six
  * near-black blades on a near-black hero would otherwise vanish.
+ *
+ * The blade count is the impeller's (six at 60°), the blade itself is the
+ * propeller's: nothing about its plan-form, finish or markings changes.
  *
  * Only the propeller turns. The glow stays put, which is what keeps it reading
  * as a light behind the prop rather than part of it.
@@ -35,12 +38,12 @@ const BLADE =
   "C 94.8 54 95.8 66 96.2 78 " +
   "A 3.8 3.8 0 0 0 103.8 78 Z"; //                root cap, tucked into the hub
 
-const ANGLES = [0, 72, 144, 216, 288];
+const ANGLES = [0, 60, 120, 180, 240, 300];
 
 /**
  * The blades, in order round the hub, each with the letter painted on it just
- * inboard of the tip bands. AFBM is four letters across five blades, so the
- * last one carries none — deliberate, not an oversight.
+ * inboard of the tip bands. AFBM is four letters across six blades, so the last
+ * two carry none — deliberate, not an oversight.
  *
  * A letter sits inside its blade's rotated group, so it turns with the blade
  * and goes upside down at the bottom of the sweep. That is what painted-on
@@ -48,10 +51,11 @@ const ANGLES = [0, 72, 144, 216, 288];
  */
 const BLADES: { angle: number; letter: string }[] = [
   { angle: 0, letter: "A" },
-  { angle: 72, letter: "F" },
-  { angle: 144, letter: "B" },
-  { angle: 216, letter: "M" },
-  { angle: 288, letter: "" },
+  { angle: 60, letter: "F" },
+  { angle: 120, letter: "B" },
+  { angle: 180, letter: "M" },
+  { angle: 240, letter: "" },
+  { angle: 300, letter: "" },
 ];
 
 /**

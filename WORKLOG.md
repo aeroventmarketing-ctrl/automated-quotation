@@ -1,3 +1,23 @@
+## 2026-08-27 · The hero propeller gains a sixth blade
+
+- **The blade itself does not change.** Owner-instructed, mid-change: *"do not change the appearance or
+  construction of the propeller blade"*, then *"maintain the 6 blade construction"*. So the blade count comes from
+  the impeller photo and everything else stays the propeller that was already approved — same plan-form path, same
+  matte-black gradient, same twin tip bands, same copper decal, same hub, collars and bolt circle, same zero sweep,
+  same 7s anticlockwise spin, same reduced-motion guard.
+- **The whole diff is two lists**: `ANGLES` `[0, 72, 144, 216, 288]` → `[0, 60, 120, 180, 240, 300]`, and the
+  matching `BLADES` entries. A collar is drawn per angle, so the sixth collar comes for free.
+- **AFBM still lands on the first four blades.** Four letters over six blades leaves the last two plain, the way the
+  fifth was plain before.
+- **A first pass went too far and was reverted.** Read literally, "change the propeller with the propeller from the
+  photo" meant redrawing the artwork as the blue stamped-steel impeller — six blue paddles, pitched 19°, on a plain
+  disc hub. That necessarily replaced the blade, which is exactly what the owner then ruled out. The working tree was
+  restored to `origin/main` before anything was committed, so none of it is in history. Mock-up of that abandoned
+  direction, kept only as a record: `claude.ai/code/artifact/305c0b4b-2e5d-49a0-90ed-2a17b7196496`.
+- Verified on a running store page at the hero's own size, and in a five-vs-six mock-up with spin and lettering
+  toggles: `claude.ai/code/artifact/f0d185aa-2430-4d83-a9ac-fe651eba3c6c`.
+- Typecheck + lint + build clean. UI-only, no migration, no workflow touched.
+
 ## 2026-08-27 · The job order's Project code fills itself
 
 - **Where the earlier EWF came from.** Traced, because it looked like it contradicted the "Project is blank" finding.
