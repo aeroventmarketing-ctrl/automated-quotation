@@ -1,3 +1,23 @@
+## 2026-08-27 · The trust band's icon squares grow 20%, and finally match
+
+- **Box `39px` → `47px`, icon `17px` → `20px`** — the requested 20%, on both.
+- **"Identical" needed more than a size.** The four squares were the same box all along; what differed was what sat
+  inside. They were **text characters** — `⌂ ✓ ⚙ →` — so each glyph came from whatever font the browser substituted
+  for that codepoint, arriving at its own weight, size and baseline, and differing again from machine to machine.
+  No amount of `text-[17px]` fixes that. They are now `lucide-react` icons drawn on one 24×24 grid at one stroke
+  weight (2.25), so the four are identical **by construction** rather than by coincidence.
+- **The symbols do not change.** Each key maps to the icon its character was already producing — house, tick, gear,
+  arrow — so nothing on the page changes shape, only weight and alignment. (`factory → Home`, `check → Check`,
+  `wrench → Settings`, `truck → ArrowRight`, plus `shield`, `support`, `settings` for themes that set them.)
+- **The bigger box broke the fourth card, and that was caught by measuring rather than looking.** At 1440 the extra
+  8px squeezed "Serving clients across the Philippines" onto two lines and pushed the band from **91px to 114px**.
+  Card padding `px-6` → `px-5` gives back exactly the 8px the box took, and all four bodies are back on one line;
+  the band settles at **96px**, the 5px being the taller box and nothing else.
+- **Checked against `main` at three widths** so the fix was not confused with a pre-existing wrap: 1440 and 1280 are
+  one line before and after; **1024 wraps identically in both** (band 133px, three-line bodies) — that is the
+  `lg:grid-cols-4` breakpoint being tight at exactly four columns, and it is untouched here.
+- Typecheck + lint + build clean. UI-only, no migration, no workflow touched.
+
 ## 2026-08-27 · The logo takes the navbar's colour
 
 - **The complaint reproduced, on the scrolled store header.** The sticky header is `bg-white/95` over a
