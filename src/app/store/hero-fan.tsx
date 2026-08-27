@@ -123,8 +123,12 @@ export function HeroFan() {
         </clipPath>
       </defs>
 
-      {/* Backlight. Outside the rotor: a light behind the prop does not spin. */}
-      <circle cx="100" cy="100" r="100" fill="url(#hf-glow)" />
+      {/* Backlight. Outside the rotor: a light behind the prop does not spin.
+          Radius 130 rather than 100 — the halo is 30% wider than the box, which
+          is what carries it out past the blade tips. The gradient has already
+          faded to nothing well before that, so nothing visible is clipped by
+          the viewBox. */}
+      <circle cx="100" cy="100" r="130" fill="url(#hf-glow)" />
 
       {/* `reverse` on the shorthand turns the propeller anticlockwise. Tailwind's
           `spin` keyframe only counts up to 360°, so the direction is set here

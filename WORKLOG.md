@@ -1,3 +1,63 @@
+## 2026-08-27 · The hero propeller's backlight widens
+
+- **The artwork is the five-blade black propeller again**, exactly as it was signed off — same plan-form, matte-black
+  gradient, twin tip bands, copper decal, hub, collars, bolt circle, AFBM letters, zero sweep, 7s anticlockwise spin.
+- **The one change: the backlight halo is 30% wider.** `r="100"` → `r="130"` on the glow circle behind the rotor. The
+  gradient fades to nothing well before its own edge, so nothing visible is clipped by the 200×200 viewBox; the halo
+  simply reaches out past the blade tips instead of hugging the hub.
+- **Everything explored in between was dropped, on the owner's word.** In order: the six-blade **blue impeller**
+  reproduced from the reference photo (`eaf7295`), a six-blade **black** propeller from an intermediate reading of
+  *"do not change the propeller blade"* (`db947e2`), and a zero-pitch impeller that was never committed. All
+  superseded — *"revert to this design"*, with the original five-blade propeller attached. Both commits stay in the
+  branch history as the steps they were; the diff that actually lands against `main` is the four-line halo change
+  above.
+- **The mock-up at `claude.ai/code/artifact/305c0b4b-2e5d-49a0-90ed-2a17b7196496` documents the abandoned impeller**,
+  not what ships. Left as a record.
+- Verified on a running store page at the hero's own size. Typecheck + lint + build clean. UI-only, no migration,
+  no workflow touched.
+
+## 2026-08-27 · The blue impeller takes the hero
+
+- **The artwork is now the owner's impeller photo**, replacing the black five-blade aircraft propeller: six blue
+  stamped-steel paddles at 60°, each on a short neck off a six-arm spider, under a plain domed hub.
+- **The blade is reproduced, not restyled** — owner-instructed: *"do not change the appearance or construction of
+  the propeller blade in the 1st picture"*. So it is a flat rectangle of near-constant width with generously
+  rounded corners, and the real daylight between neighbouring blades is kept. An intermediate pass had tapered the
+  paddles into wedges to close those gaps; that was wrong and was undone.
+- **Pitch is what makes it a fan.** Each paddle is rotated 21° about its own centre. Drawn square it would be a
+  daisy of rectangles; the lean is what the real blade does and what gives the photo its pinwheel read.
+- **AFBM lettering is gone**, because the photo carries no markings and painting letters on would change the blade's
+  appearance. This is the one open question — the mock-up has a *Paint AFBM on* toggle so the owner can compare and
+  say. Everything else about the hero (size, float, 7s anticlockwise spin, reduced-motion guard, and the rule that
+  an uploaded flagship hero photo still replaces the artwork) is untouched.
+- **Two earlier readings, both superseded.** *"Change the propeller with the propeller from the photo"* first
+  produced the impeller; *"do not change the propeller blade"* was then read as keep-the-approved-blade, which gave
+  a six-blade **black** propeller (commit `db947e2`). The third message settled it: the blade to leave alone is the
+  one in the photo. `db947e2` stays in the branch history as the step it was.
+- Verified on a running store page at the hero's own size, and in a before/after mock-up with spin, lettering and
+  theme toggles: `claude.ai/code/artifact/305c0b4b-2e5d-49a0-90ed-2a17b7196496`.
+- Typecheck + lint + build clean. UI-only, no migration, no workflow touched.
+
+## 2026-08-27 · The hero propeller gains a sixth blade
+
+- **The blade itself does not change.** Owner-instructed, mid-change: *"do not change the appearance or
+  construction of the propeller blade"*, then *"maintain the 6 blade construction"*. So the blade count comes from
+  the impeller photo and everything else stays the propeller that was already approved — same plan-form path, same
+  matte-black gradient, same twin tip bands, same copper decal, same hub, collars and bolt circle, same zero sweep,
+  same 7s anticlockwise spin, same reduced-motion guard.
+- **The whole diff is two lists**: `ANGLES` `[0, 72, 144, 216, 288]` → `[0, 60, 120, 180, 240, 300]`, and the
+  matching `BLADES` entries. A collar is drawn per angle, so the sixth collar comes for free.
+- **AFBM still lands on the first four blades.** Four letters over six blades leaves the last two plain, the way the
+  fifth was plain before.
+- **A first pass went too far and was reverted.** Read literally, "change the propeller with the propeller from the
+  photo" meant redrawing the artwork as the blue stamped-steel impeller — six blue paddles, pitched 19°, on a plain
+  disc hub. That necessarily replaced the blade, which is exactly what the owner then ruled out. The working tree was
+  restored to `origin/main` before anything was committed, so none of it is in history. Mock-up of that abandoned
+  direction, kept only as a record: `claude.ai/code/artifact/305c0b4b-2e5d-49a0-90ed-2a17b7196496`.
+- Verified on a running store page at the hero's own size, and in a five-vs-six mock-up with spin and lettering
+  toggles: `claude.ai/code/artifact/f0d185aa-2430-4d83-a9ac-fe651eba3c6c`.
+- Typecheck + lint + build clean. UI-only, no migration, no workflow touched.
+
 ## 2026-08-27 · The job order's Project code fills itself
 
 - **Where the earlier EWF came from.** Traced, because it looked like it contradicted the "Project is blank" finding.
