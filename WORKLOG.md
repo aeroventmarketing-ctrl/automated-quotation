@@ -1,3 +1,37 @@
+## 2026-08-27 · Autofill: propeller wall fans get the Panel Fan job order
+
+- **Reported (owner).** On order **2026 - AFBM00002821S** the quotation sells an **Exhaust Wall Fan** (Propeller
+  Type / Belt, 48"Ø, model `AV4800EWF3K3F3T`), but *Auto-fill job orders from quotation* produced a
+  **Centrifugal Blower** job order.
+- **Cause.** `fanJoType` picks a template by searching for keywords in `type + category` —
+  `didw → inline → panel → roof → axial` — and falls back to `centrifugal_blower`. There was **no keyword for a
+  propeller or wall fan at all**, so those lines dropped to the fallback. Power Roof Ventilator only ever escaped
+  because "roof" happens to be in its own name.
+- **Swept the whole taxonomy through the real function** rather than reading it — every fan type it offers, with
+  both drives. Three mappings were wrong; the reported one was not alone:
+  | Category | Type | Was | Should be |
+  |---|---|---|---|
+  | Propeller Type | Exhaust Wall Fan | Centrifugal Blower | **Panel Fan** |
+  | Propeller Type | Fresh Air Wall Fan | Centrifugal Blower | **Panel Fan** |
+  | Tubular Inline Type | Tubeaxial / Vaneaxial | Centrifugal Inline Blower | Tubeaxial / Vaneaxial |
+- **Fixed the first two, owner-approved** (Phase 2 is frozen; the owner confirmed in-conversation that
+  **EWF / EWFDD and FAF / FAFDD all use Panel Fan** and need no template of their own). A propeller in a wall panel
+  is a panel fan, and it is the only one of the six templates that fits a 48" propeller.
+  - Matched on the **type**, not the category. "Propeller Type" also holds **Power Roof Ventilator**, which must keep
+    falling through to Power Roof — so the category must not be the trigger.
+  - Bought-in goods are unaffected: `isFan` already excludes the whole `Other Products` category, so
+    "Wall Mounted Fan" there never reaches this function.
+- **Verified by diffing the mapping before and after** across 25 lines: **exactly four rows changed** — EWF and FAF,
+  belt and direct — and every other row, PRV/PRVDD included, is byte-identical.
+- **Left alone, unapproved and still open:**
+  - **Tubular Inline Type → Tubeaxial / Vaneaxial** still yields Centrifugal Inline Blower. Different flavour of the
+    same bug: `"inline"` is tested before `"axial"` *and* the category is folded in with the type, so the category
+    "Tubular Inline Type" beats the product type "Tubeaxial".
+  - The job order's **Project** field comes out blank for these. `FAN_PROJECT_CODES` lists only centrifugal codes
+    (`CFABCAB, CABSISW, CEBCAB, CFAB, CEB, CAB`); `EWF`, `PRV`, `TAF`, `VAF`, `HPB` are all missing despite having
+    catalogues of their own.
+- Typecheck + lint + build clean. No migration.
+
 ## 2026-08-26 · Hero propeller redrawn from the owner's reference photo
 
 - **Request (owner).** A photograph of a five-blade aircraft propeller: *copy this and make it rotate.*
