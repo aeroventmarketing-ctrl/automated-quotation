@@ -1284,8 +1284,17 @@ async function autoRaiseBoughtInRequisition(
   });
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${quotationId}))`;
+    // Only a CANCELLED requisition lets a fresh one be raised. A cancellation is
+    // a withdrawal — nobody judged the request, so re-raising is the normal
+    // recovery path. Every other state must block:
+    //   REJECTED  — an approver said no. Re-clearing payment must not quietly
+    //               overturn that decision by raising an identical request.
+    //   COMPLETED — the items were bought and received; raising again re-buys.
+    //   anything else — still in flight.
+    // Previously this excluded REJECTED and COMPLETED and counted CANCELLED,
+    // i.e. exactly backwards on all three.
     const existing = await tx.purchaseRequest.count({
-      where: { quotationId, kind: "department", status: { notIn: ["REJECTED", "COMPLETED"] } },
+      where: { quotationId, kind: "department", status: { not: "CANCELLED" } },
     });
     if (existing > 0) return; // already raised — don't duplicate on a re-clear
     await tx.purchaseRequest.create({
