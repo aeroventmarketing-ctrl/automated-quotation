@@ -1,3 +1,30 @@
+## 2026-08-27 · CANCELLED and REJECTED behave like the terminal states they are
+
+- **Owner-approved.** Both are terminal and both mean *not live*, so anything asking "is there work in flight?" must
+  exclude both. They differ in one place only: **re-raising**. A cancellation is a *withdrawal* — nobody judged it,
+  so raising again is the normal recovery path. A rejection is an approver's **decision**, and a side effect must not
+  overturn it. Owner settled the policy: after a rejection, autofill does **not** raise a fresh one.
+- **`autoRaiseBoughtInRequisition` had all three backwards.** The dedupe guard counted anything *not* REJECTED and
+  *not* COMPLETED, so:
+  | Existing requisition | Was | Now |
+  |---|---|---|
+  | **CANCELLED** | blocked — re-clearing payment silently created **nothing** | **raises** |
+  | **REJECTED** | raised a fresh one, quietly reversing the approver | **blocks** |
+  | **COMPLETED** | raised a fresh one — the items were already bought and received | **blocks** |
+  The rule collapses to one line: **only a cancellation lets a fresh one be raised** —
+  `status: { not: "CANCELLED" }`.
+- **The CANCELLED case was the worst of the three**, because it failed *silently*: no duplicate, no error, just
+  nothing created.
+- **`finance-monitor` made the same slip**, counting CANCELLED requests as pending purchases and inflating the
+  figure on the management dashboard. `notIn` now covers all three terminal states.
+- **Verified against a real database**, seeding one requisition in **every** `PurchaseRequestStatus` and running the
+  old and new predicates side by side — 19 checks:
+  - The three rows above changed, and **only** those three.
+  - All **14** in-flight states (PENDING_APPROVAL through PLANT_APPROVED) still block, unchanged.
+  - No prior requisition at all still raises.
+  - Finance monitor: pending 15 → 14, dropping exactly the one CANCELLED row it had been counting.
+- Typecheck + lint + build clean. No migration.
+
 ## 2026-08-27 · Admin / Payment Approver get an editable Panel Fan job order
 
 - **Request (owner).** On the Panel Fan JO, let the **admin / payment approver** edit the Excel that

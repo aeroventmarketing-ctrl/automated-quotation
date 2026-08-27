@@ -73,7 +73,9 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
     }),
     prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),
     prisma.commission.findMany({ where: { paid: false, ...createdFilter }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } }, counterSale: { select: { paymentCleared: true } } } }).catch(() => []),
-    prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...createdFilter }, select: { id: true } }).catch(() => []),
+    // CANCELLED is terminal too — a withdrawn request is not money in flight,
+    // and counting it inflated the pending-purchase figure.
+    prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED", "CANCELLED"] }, ...createdFilter }, select: { id: true } }).catch(() => []),
   ]);
 
   // Receivables + unreconciled — confirmed orders recognised after go-live.
