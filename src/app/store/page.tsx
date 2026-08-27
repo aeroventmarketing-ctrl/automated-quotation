@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight, Check, Home, Phone, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
 import { listStoreProducts, storeCategories, inStock, type StoreProduct } from "@/lib/store-catalog";
 import { getStoreTheme, themeImageSrc, type StoreTheme } from "@/lib/store-theme";
 import { jsonLd, itemListLd, faqLd, storeUrl } from "@/lib/store-seo";
@@ -158,9 +159,21 @@ function Hero({ theme, productCount }: { theme: StoreTheme; productCount: number
   );
 }
 
-/** Glyphs matching the design's bordered icon squares. */
-const TRUST_GLYPH: Record<string, string> = {
-  factory: "⌂", check: "✓", wrench: "⚙", truck: "→", shield: "✦", support: "☎", settings: "⚙",
+/**
+ * Icons for the bordered squares in the trust band.
+ *
+ * These were text characters (⌂ ✓ ⚙ →) before, which is why the four squares
+ * never matched: each glyph came from whatever font the browser substituted for
+ * it, so they arrived at different weights, sizes and baselines — and differed
+ * again between machines. Drawn instead on one 24×24 grid at one stroke weight,
+ * the four are identical by construction.
+ *
+ * The symbols are the ones the characters were already producing, so nothing on
+ * screen changes shape: house, tick, gear, arrow.
+ */
+const TRUST_ICON: Record<string, LucideIcon> = {
+  factory: Home, check: Check, wrench: Settings, truck: ArrowRight,
+  shield: ShieldCheck, support: Phone, settings: Settings,
 };
 
 function TrustBand({ theme }: { theme: StoreTheme }) {
@@ -170,15 +183,19 @@ function TrustBand({ theme }: { theme: StoreTheme }) {
         {theme.features.map((f, i) => (
           <div
             key={f.title}
-            className={`flex items-center gap-3.5 px-6 py-6 ${
+            className={`flex items-center gap-3.5 px-5 py-6 ${
               i < theme.features.length - 1 ? "border-b border-[var(--store-line)] lg:border-b-0 lg:border-r" : ""
             }`}
           >
+            {/* 47px square, 20px icon — the 39px / 17px pair, up 20%. */}
             <div
               aria-hidden
-              className="grid h-[39px] w-[39px] shrink-0 place-items-center rounded border border-[#f1bcc0] text-[17px] font-black text-[var(--store-accent)]"
+              className="grid h-[47px] w-[47px] shrink-0 place-items-center rounded border border-[#f1bcc0] text-[var(--store-accent)]"
             >
-              {TRUST_GLYPH[f.icon] ?? "✓"}
+              {(() => {
+                const Icon = TRUST_ICON[f.icon] ?? Check;
+                return <Icon size={20} strokeWidth={2.25} />;
+              })()}
             </div>
             <div>
               <b className="block text-[13px]">{f.title}</b>
