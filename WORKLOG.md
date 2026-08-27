@@ -1,3 +1,19 @@
+## 2026-08-27 · The hero halo grows another 50%
+
+- **`r="130"` → `r="195"`** on the backlight circle behind the propeller — half again what it was, so the light
+  spreads well past the blade tips instead of stopping just outside them.
+- **This is the size at which the halo stops fitting**, and that needed fixing rather than flagging. An `<svg>` clips
+  to its own viewport by default, so at r=195 the glow — still around 10% opaque where it meets the 200×200 box —
+  would have been sliced off square, painting a faint **rectangle** into the hero. The svg now carries
+  `overflow-visible`, so the light spills past the 340&nbsp;px box and fades out on its own; the hero `<section>`
+  (which is `overflow-hidden`) is what finally bounds it.
+- Verified on a running store page across the full-width hero, and the applied style probed rather than eyeballed —
+  computed `overflow: visible`, glow `r=195`, box still 340×340 — because a Tailwind utility that silently fails to
+  compile is exactly the kind of thing that would leave the rectangle in place.
+- Nothing else about the artwork changes: blade path, tip bands, decal, hub, collars, AFBM letters, zero sweep, 7s
+  anticlockwise spin, reduced-motion guard.
+- Typecheck + lint + build clean. UI-only, no migration, no workflow touched.
+
 ## 2026-08-27 · The hero propeller's backlight widens
 
 - **The artwork is the five-blade black propeller again**, exactly as it was signed off — same plan-form, matte-black
