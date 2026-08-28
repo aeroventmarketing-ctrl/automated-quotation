@@ -1,11 +1,21 @@
+import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { canViewPrices, canViewSupplier, canEditPrices } from "@/lib/price-visibility";
+import { isCataloguePriceOwner } from "@/lib/price-authority";
 import { Card, CardContent } from "@/components/ui/card";
 import { getProducts, type ProductRow } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { getOfficeResaleProductIds } from "@/lib/office-resale";
+import {
+  PRODUCT_CHANGE_LABEL,
+  productChangeDiff,
+  productChangeTouchesPrice,
+  type ProductChangePayload,
+  type ProductChangeView,
+} from "@/lib/product-change";
 import { ProductManager } from "./product-manager";
+import { PendingProductChanges } from "./pending-product-changes";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +63,38 @@ export default async function ProductsPage() {
   }
   const resaleIds = await getOfficeResaleProductIds().catch(() => []);
 
+  // Product adds / saves / removals parked for the price owner. Everyone who can
+  // manage products sees the queue — the proposer has to know their save is
+  // waiting, not lost — but only the Admin / Payment Approver may decide one.
+  const priceOwner = isCataloguePriceOwner(viewer, assignments);
+  let pendingChanges: ProductChangeView[] = [];
+  if (canManage || priceOwner) {
+    try {
+      const rows = await prisma.productChange.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" }, take: 50 });
+      pendingChanges = rows.map((c) => {
+        const after = c.payload as unknown as ProductChangePayload;
+        const before = (c.before as unknown as ProductChangePayload | null) ?? null;
+        return {
+          id: c.id,
+          productId: c.productId,
+          productName: c.productName,
+          kind: c.kind,
+          kindLabel: PRODUCT_CHANGE_LABEL[c.kind],
+          status: c.status,
+          summary: c.summary,
+          diff: c.kind === "UPDATE" ? productChangeDiff(before, after) : [],
+          touchesPrice: c.kind !== "DELETE" && productChangeTouchesPrice(before, after),
+          proposedByName: c.proposedByName,
+          proposedAt: c.proposedAt.toISOString(),
+          canDecide: priceOwner,
+          mine: viewer != null && c.proposedById === viewer.id,
+        };
+      });
+    } catch {
+      // ProductChange table not migrated yet — nothing parked.
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -81,6 +123,8 @@ export default async function ProductsPage() {
           </div>
         )}
       </div>
+
+      <PendingProductChanges changes={pendingChanges} />
 
       {tableMissing ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">

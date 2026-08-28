@@ -25,7 +25,7 @@ import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
-import { STOCK_ACTION_LABEL } from "@/lib/stock-action";
+import { STOCK_ACTION_LABEL, needsPriceOwner } from "@/lib/stock-action";
 import { listActivityForActor, type ActivityView } from "@/lib/activity-log";
 
 export type TaskArea = "order" | "purchase" | "cash" | "schedule" | "commission" | "quotation" | "inventory";
@@ -487,7 +487,9 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   //    Purchaser are parties to every action, so surface all pending ones to
   //    both — the action text reflects whose sign-off is next (or "Awaiting …"
   //    when the viewer has already signed and it's the other party's turn).
-  if (has("warehouse") || has("purchaser")) {
+  //    An EDIT adds a third party — the Admin / Payment Approver who owns the
+  //    catalogue price, since an edit carries the unit cost and selling price.
+  if (has("warehouse") || has("purchaser") || has("payment_approver")) {
     try {
       const actions = await prisma.stockAction.findMany({
         where: { status: "PENDING" },
@@ -495,10 +497,14 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         take: 100,
       });
       for (const a of actions) {
-        // Whose sign-off is still outstanding (Warehouse fills first, then Purchaser).
-        const nextRole: "warehouse" | "purchaser" | null =
-          a.warehouseAt == null ? "warehouse" : a.purchaserAt == null ? "purchaser" : null;
-        if (nextRole == null) continue; // both in — shouldn't still be PENDING
+        // Whose sign-off is still outstanding (Warehouse first, then Purchaser,
+        // then — on an Edit — the price approver).
+        const nextRole: "warehouse" | "purchaser" | "payment_approver" | null =
+          a.warehouseAt == null ? "warehouse"
+          : a.purchaserAt == null ? "purchaser"
+          : needsPriceOwner(a.kind) && a.approverAt == null ? "payment_approver"
+          : null;
+        if (nextRole == null) continue; // every slot in — shouldn't still be PENDING
         const myTurn = has(nextRole);
         const label = STOCK_ACTION_LABEL[a.kind];
         tasks.push({

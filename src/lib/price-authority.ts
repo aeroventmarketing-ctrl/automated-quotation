@@ -16,17 +16,38 @@
  * carries a recorded override (see the purchase-order panel), so purchasing
  * keeps moving and every deviation is stamped with who, when and why.
  */
+import type { User } from "@prisma/client";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleAssignments, type WorkflowRoleKey } from "@/lib/workflow-roles";
+
+/**
+ * The rule itself, on a user + role map the caller already has.
+ *
+ * Several places now need it while holding the assignments for other reasons
+ * (the stock-action handshake, the Products approval queue), and re-deriving it
+ * there is how two copies of a policy drift apart.
+ */
+export function isCataloguePriceOwner(user: User | null | undefined, assignments: WorkflowRoleAssignments): boolean {
+  if (!user) return false;
+  if (isAdmin(user)) return true;
+  return userHasWorkflowRole(assignments, user.id, "payment_approver" as WorkflowRoleKey);
+}
 
 /** True when this user may write catalogue prices. */
 export async function canSetCataloguePrice(): Promise<boolean> {
   const user = await getCurrentUser();
   if (!user) return false;
   if (isAdmin(user)) return true;
-  const roles = await getWorkflowRoles();
-  return userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey);
+  return isCataloguePriceOwner(user, await getWorkflowRoles());
 }
+
+/**
+ * What the screens say when a change is parked for the price owner. The Inventory
+ * edit and the Products save are not refused — they are *held*, because the
+ * proposer is doing legitimate work and only the price owner may release it.
+ */
+export const PRICE_OWNER_CONFIRMS =
+  "Sent to the Admin / Payment Approver for approval. The change takes effect once they confirm it.";
 
 export const PRICE_OWNER_MESSAGE =
   "Only an Admin or the Payment Approver can set prices. Ask them to update the price in Products / Inventory — or put the price on the purchase order line with a reason.";

@@ -13,7 +13,7 @@ import { qrSvg } from "@/lib/qr";
 import type { Supplier } from "@/lib/suppliers";
 import type { ProductSupplierLink } from "@/lib/products";
 import type { ProductRow } from "@/lib/product-catalog";
-import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts, deleteProducts, clearAllProducts, setProductOfficeResaleAction } from "./actions";
+import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts, deleteProducts, clearAllProducts, setProductOfficeResaleAction, type ProductSaveResult } from "./actions";
 import { BulkImport } from "./bulk-import";
 import { ProductScanBox } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -56,15 +56,30 @@ const isUnsourced = (p: ProductRow) =>
   !p.suppliers.some((s) => typeof s.price === "number" && s.price > 0);
 
 const PRICE_LOCK_HINT =
-  "Prices are set by an Admin or the Payment Approver. You can still add suppliers and codes here.";
+  "Prices are set by an Admin or the Payment Approver. Type the price you want here — the change is sent to them to confirm.";
+
+/**
+ * A Save / Add / Delete either lands or is parked for the price owner.
+ *
+ * The distinction has to reach the screen. A save that quietly queues looks
+ * exactly like a save that worked until someone reopens the row and finds their
+ * change missing — so the failure and the "waiting" case are separated here,
+ * and only the failure is red.
+ */
+type Notice = { kind: "error" | "held"; text: string } | null;
+const noticeFor = (r: ProductSaveResult): Notice =>
+  !r.ok ? { kind: "error", text: r.error } : r.applied ? null : { kind: "held", text: r.message };
 
 /**
  * Add/remove the suppliers a product can be bought from, each with code + price.
  *
- * `canEditPrices` is the Payment Approver / admin gate. Everyone else still sees
- * every price — they just cannot change one, so the price inputs go read-only
- * rather than disappearing. The server enforces the same rule regardless (see
- * lib/price-authority); this only keeps the screen honest about it.
+ * `canEditPrices` is the Payment Approver / admin gate, and it now changes the
+ * WORDING rather than the boxes. The price fields were read-only while a
+ * non-owner's save wrote straight through with the prices stripped out; now the
+ * whole save is parked for the owner's confirmation, so typing a price here is a
+ * proposal — locking the box would leave a Purchaser who spots a wrong price
+ * with no way to say so. The owner's click is still the only thing that writes
+ * one (see lib/price-authority).
  */
 function SupplierEditor({ value, onChange, suppliers, canEditPrices }: { value: ProductSupplierLink[]; onChange: (v: ProductSupplierLink[]) => void; suppliers: Supplier[]; canEditPrices: boolean }) {
   const [pick, setPick] = useState("");
@@ -108,9 +123,8 @@ function SupplierEditor({ value, onChange, suppliers, canEditPrices }: { value: 
                   placeholder="—"
                   aria-label={`Unit price for ${v.company}`}
                   onChange={(e) => setPriceFor(v.company, e.target.value)}
-                  readOnly={!canEditPrices}
                   title={canEditPrices ? undefined : PRICE_LOCK_HINT}
-                  className={`w-16 bg-transparent px-0.5 text-xs tabular-nums outline-none placeholder:text-muted-foreground/60 ${canEditPrices ? "text-foreground focus:underline" : "cursor-not-allowed text-muted-foreground"}`}
+                  className="w-16 bg-transparent px-0.5 text-xs tabular-nums text-foreground outline-none placeholder:text-muted-foreground/60 focus:underline"
                 />
               </span>
               <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(v.company)} aria-label={`Remove ${v.company}`}>
@@ -126,7 +140,7 @@ function SupplierEditor({ value, onChange, suppliers, canEditPrices }: { value: 
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.company}</option>)}
         </select>
         <Input className="h-8 w-28" placeholder="Supplier code" value={code} onChange={(e) => setCode(e.target.value)} />
-        <Input className="h-8 w-24" type="number" step="any" min={0} placeholder={canEditPrices ? "Price ₱" : "—"} value={canEditPrices ? price : ""} onChange={(e) => setPrice(e.target.value)} readOnly={!canEditPrices} title={canEditPrices ? undefined : PRICE_LOCK_HINT} />
+        <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Price ₱" value={price} onChange={(e) => setPrice(e.target.value)} title={canEditPrices ? undefined : PRICE_LOCK_HINT} />
         <Button size="sm" variant="outline" className="h-8" disabled={!pick} onClick={add}>Add</Button>
       </div>
       {!canEditPrices && <p className="text-[11px] text-muted-foreground">{PRICE_LOCK_HINT}</p>}
@@ -145,13 +159,13 @@ function ProductRowView({ product, canManage, canEditPrices, showPrices, showSup
   const [note, setNote] = useState(product.note ?? "");
   const [sups, setSups] = useState<ProductSupplierLink[]>(product.suppliers);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<Notice>(null);
   const [resale, setResale] = useState(officeResale);
   const [resaleBusy, setResaleBusy] = useState(false);
   async function toggleResale() {
     setResaleBusy(true); setErr(null);
     try { setResale(await setProductOfficeResaleAction(product.id, !resale)); router.refresh(); }
-    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    catch (e) { setErr({ kind: "error", text: e instanceof Error ? e.message : "Failed" }); }
     finally { setResaleBusy(false); }
   }
 
@@ -167,10 +181,19 @@ function ProductRowView({ product, canManage, canEditPrices, showPrices, showSup
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanNonce]);
 
-  async function run(fn: () => Promise<void>) {
+  /**
+   * A save that was PARKED keeps the panel open with its notice showing —
+   * closing it would look like the change had gone through.
+   */
+  async function run(fn: () => Promise<ProductSaveResult>) {
     setBusy(true); setErr(null);
-    try { await fn(); setPanel("none"); router.refresh(); }
-    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    try {
+      const n = noticeFor(await fn());
+      setErr(n);
+      if (n === null) setPanel("none");
+      router.refresh();
+    }
+    catch (e) { setErr({ kind: "error", text: e instanceof Error ? e.message : "Failed" }); }
     finally { setBusy(false); }
   }
 
@@ -234,8 +257,13 @@ function ProductRowView({ product, canManage, canEditPrices, showPrices, showSup
               <div className="flex items-center gap-2">
                 <Button size="sm" className="h-8" disabled={busy} onClick={() => run(() => updateProduct({ id: product.id, name, unit, category, note, suppliers: sups }))}>{busy ? "…" : "Save"}</Button>
                 <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={() => run(() => deleteProduct(product.id))}>Delete</Button>
-                {err && <span className="text-xs text-destructive">{err}</span>}
+                {err && <span className={`text-xs ${err.kind === "error" ? "text-destructive" : "font-medium text-amber-700 dark:text-amber-400"}`}>{err.text}</span>}
               </div>
+              {!canEditPrices && (
+                <p className="text-[11px] text-muted-foreground">
+                  Saving sends this change to an Admin / the Payment Approver to confirm — including any price you set.
+                </p>
+              )}
             </div>
           </TableCell>
         </TableRow>
@@ -276,7 +304,7 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
   const [note, setNote] = useState("");
   const [sups, setSups] = useState<ProductSupplierLink[]>([]);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<Notice>(null);
 
   const [scanTarget, setScanTarget] = useState<string | null>(null);
   const [scanNonce, setScanNonce] = useState(0);
@@ -337,14 +365,22 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
   }
 
   async function add() {
-    if (name.trim() === "") { setErr("Enter a product name."); return; }
+    if (name.trim() === "") { setErr({ kind: "error", text: "Enter a product name." }); return; }
     setBusy(true); setErr(null);
     try {
-      await createProduct({ name, unit, category, note, suppliers: sups });
-      setName(""); setUnit("pcs"); setCategory(""); setNote(""); setSups([]); setShowAdd(false);
+      const r = await createProduct({ name, unit, category, note, suppliers: sups });
+      const n = noticeFor(r);
+      setErr(n);
+      // Clear the form on either outcome — the product was either created or
+      // handed over — but keep the panel open when it was parked, so the
+      // "waiting for approval" line is actually read.
+      if (r.ok) {
+        setName(""); setUnit("pcs"); setCategory(""); setNote(""); setSups([]);
+        if (n === null) setShowAdd(false);
+      }
       router.refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
+      setErr({ kind: "error", text: e instanceof Error ? e.message : "Failed" });
     } finally { setBusy(false); }
   }
 
@@ -376,7 +412,7 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
       setSelected(new Set());
       router.refresh();
       window.alert(`${removed} product${removed === 1 ? "" : "s"} removed.`);
-    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    } catch (e) { setErr({ kind: "error", text: e instanceof Error ? e.message : "Failed" }); }
     finally { setBusy(false); }
   }
   async function clearAll() {
@@ -388,7 +424,7 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
       setSelected(new Set());
       router.refresh();
       window.alert(`${removed} product${removed === 1 ? "" : "s"} removed. You can now import a fresh file.`);
-    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    } catch (e) { setErr({ kind: "error", text: e instanceof Error ? e.message : "Failed" }); }
     finally { setBusy(false); }
   }
 
@@ -419,7 +455,7 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
       ws.columns.forEach((c) => (c.width = 24));
       const buf = await wb.xlsx.writeBuffer();
       triggerDownload("products.xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-    } catch (e) { setErr(e instanceof Error ? e.message : "Export failed"); }
+    } catch (e) { setErr({ kind: "error", text: e instanceof Error ? e.message : "Export failed" }); }
     finally { setBusy(false); }
   }
 
@@ -431,7 +467,7 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
       router.refresh();
       window.alert(`${removed} item${removed === 1 ? "" : "s"} removed.`);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
+      setErr({ kind: "error", text: e instanceof Error ? e.message : "Failed" });
     } finally { setBusy(false); }
   }
 
@@ -470,7 +506,7 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
               <div className="flex items-center gap-2">
                 <Button size="sm" className="h-8" disabled={busy} onClick={add}>{busy ? "Saving…" : "Add product"}</Button>
                 <Button size="sm" variant="outline" className="h-8" onClick={() => setShowAdd(false)}>Cancel</Button>
-                {err && <span className="text-xs text-destructive">{err}</span>}
+                {err && <span className={`text-xs ${err.kind === "error" ? "text-destructive" : "font-medium text-amber-700 dark:text-amber-400"}`}>{err.text}</span>}
               </div>
             </div>
           ) : (

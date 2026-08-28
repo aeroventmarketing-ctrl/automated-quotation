@@ -1,3 +1,60 @@
+## 2026-08-28 · The price owner confirms an Inventory edit and a Products save
+
+- **Owner's instruction:** *"when propose edit button in inventory and save button in products is pressed let the
+  admin/payment approver confirms/approves first before allowing to save."*
+
+### ⚠️ Run migration `0047_price_owner_confirmation` in Supabase
+
+Both halves need it (a third sign-off column on `StockAction`, and the new `ProductChange` table). Until it runs,
+the Products queue reads as empty and a non-owner's save answers *"The product-approval table isn't set up yet."*
+The migration also back-fills the price-owner slot on EDIT stock actions that were already fully approved under the
+old two-party rule, so nothing in flight is stranded.
+
+### Inventory — a third signature on "Propose edit"
+
+- `StockAction` gains `approverByName` / `approverAt`. **EDIT only**: it carries the unit cost and selling price, so
+  Warehouse + Purchaser is no longer enough. `ADJUST` / `RESERVE` / `TRANSFER` move stock, not money, and are
+  untouched — the rule lives in one place, `stockActionComplete()` in `lib/stock-action.ts`.
+- **This closes a live hole.** The A+B work reserved the price on `updateStockItemMeta`, but the edit panel does not
+  go through it — it proposes a `StockAction`, and that path wrote the cost with two non-owner signatures. A
+  Purchaser could set any unit cost by proposing an edit and having the Warehouseman approve it.
+- The proposer still fills exactly **one** slot, the one their designation answers for. Filling every slot they
+  could sign would let an admin (who holds all three) push a change through alone — the opposite of the control.
+- The panel now says so before you click, and the pending card names *Admin / Payment Approver* among the awaiting
+  parties and shows the third line. The dashboard task list routes an edit to them once the other two are in.
+
+### Products — Save / Add / Delete are parked, not stripped
+
+- A new `ProductChange` row holds the proposal **whole, prices included**, until an Admin / the Payment Approver
+  confirms it. Their own Save still writes straight through — they are the confirmer.
+- **A deliberate reversal of one detail from the A+B work.** The supplier-price inputs went read-only there; they
+  are editable again. With the whole save now parked, a locked box would leave a Purchaser who
+  spots a wrong price with no way to say so — and the price still only reaches the catalogue on the owner's click.
+  The rule "only the owner SETS a price" is intact; what changed is that a non-owner may now **propose** one.
+- The screen distinguishes *held* from *failed*: a parked save keeps its panel open with an amber line, because a
+  save that quietly queues looks exactly like one that worked until someone reopens the row and finds it unchanged.
+- The queue sits at the top of Products, visible to everyone who can manage products (the proposer has to see their
+  save is waiting, not lost) with Approve / Reject for the owner and **Withdraw** for the proposer. Each row shows a
+  field-by-field before → after and a **Price change** flag, so the owner confirms a change, not a name.
+- **Scope, said plainly:** the per-product Save / Add / Delete go through the queue. The bulk tools — Delete
+  selected, Remove no-supplier items, Clear all, and the CSV/Excel import — do **not**; they are list maintenance
+  taken deliberately, and parking hundreds of rows one at a time would make the queue useless. The import still
+  drops a non-owner's prices outright, as before.
+
+### Verified — 13 new tests against a real Postgres
+
+- **Inventory (5):** the edit is held after Warehouse + Purchaser and the item does not move; it applies on the
+  owner's sign-off and only then; an early click is told who is still missing; a quantity adjustment still applies
+  on the old two-party rule; and the owner's own proposal does not skip the other two.
+- **Products (8):** a parked change applies **verbatim** (the proposed price included); a rejection leaves the old
+  price with the reason on record; the Purchaser cannot approve their own; a change cannot be decided twice; only
+  the proposer withdraws their own; a removal is parked too; an approval does not resurrect a product deleted while
+  it waited; and the owner's own Add/Save park nothing.
+- Two existing price-authority tests were **rewritten, not patched**: the Purchaser's product save used to half-land
+  with the price silently dropped, and now waits whole. That is the behaviour change, stated rather than hidden.
+- Full suite **108 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. DB-backed suites need `--no-file-parallelism`: they share one database.
+
 ## 2026-08-28 · Part B — a PO price off the catalogue needs a reason
 
 - **Owner's instruction, completing A+B:** *"purchaser, warehouse and anyone who can access purchasing tab and

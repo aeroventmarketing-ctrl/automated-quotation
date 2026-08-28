@@ -53,6 +53,7 @@ run("who may set a catalogue price", () => {
   beforeEach(async () => {
     await prisma.stockMovement.deleteMany({});
     await prisma.stockItem.deleteMany({});
+    await prisma.productChange.deleteMany({});
     await prisma.product.deleteMany({});
   });
 
@@ -64,38 +65,43 @@ run("who may set a catalogue price", () => {
   });
 
   describe("Products — the supplier price a PO defaults to", () => {
-    it("lets the Payment Approver set it", async () => {
+    it("lets the Payment Approver set it, straight through", async () => {
       be("payment_approver");
-      await createProduct({ name: "BELT B-50", unit: "pc", suppliers: [{ supplierId: "", company: "WINGS", price: 210 }] });
+      const r = await createProduct({ name: "BELT B-50", unit: "pc", suppliers: [{ supplierId: "", company: "WINGS", price: 210 }] });
+      expect(r).toEqual({ ok: true, applied: true });
       const p = await prisma.product.findFirst({ where: { name: "BELT B-50" } });
       expect((p!.suppliers as { price?: number }[])[0].price).toBe(210);
     });
 
-    it("ignores a price from the Purchaser, but still creates the product", async () => {
+    // The Purchaser's save no longer half-lands with the price quietly dropped:
+    // the whole proposal is parked until the price owner confirms it.
+    it("parks the Purchaser's new product instead of creating it", async () => {
       be("purchaser");
-      await createProduct({ name: "BELT B-50", unit: "pc", suppliers: [{ supplierId: "", company: "WINGS", price: 128 }] });
-      const p = await prisma.product.findFirst({ where: { name: "BELT B-50" } });
-      expect(p).toBeTruthy();
-      expect((p!.suppliers as { price?: number }[])[0].price).toBeUndefined();
-      expect((p!.suppliers as { company: string }[])[0].company).toBe("WINGS");
+      const r = await createProduct({ name: "BELT B-50", unit: "pc", suppliers: [{ supplierId: "", company: "WINGS", price: 128 }] });
+      expect(r.ok).toBe(true);
+      expect(r.ok && r.applied).toBe(false);
+      expect(await prisma.product.findFirst({ where: { name: "BELT B-50" } })).toBeNull();
+      const parked = await prisma.productChange.findFirst({ where: { status: "PENDING" } });
+      expect(parked!.kind).toBe("CREATE");
+      // Parked WHOLE — the price they typed is what the owner will be shown.
+      expect(((parked!.payload as { suppliers: { price?: number }[] }).suppliers)[0].price).toBe(128);
     });
 
-    it("keeps the approved price when the Purchaser edits something else", async () => {
+    it("leaves the live product untouched while the Purchaser's edit waits", async () => {
       be("payment_approver");
       await createProduct({ name: "BELT B-50", unit: "pc", suppliers: [{ supplierId: "", company: "WINGS", price: 210 }] });
       const p = await prisma.product.findFirst({ where: { name: "BELT B-50" } });
 
       be("purchaser");
-      // The Purchaser renames it and adds a supplier code, and tries a new price.
+      // The Purchaser renames it, adds a supplier code, and proposes a new price.
       await updateProduct({
         id: p!.id, name: "BELT B-50 (V-belt)", unit: "pc", note: "for JO 2600080",
         suppliers: [{ supplierId: "", company: "WINGS", code: "WB-50", price: 128 }],
       });
       const after = await prisma.product.findUnique({ where: { id: p!.id } });
-      const link = (after!.suppliers as { price?: number; code?: string }[])[0];
-      expect(after!.name).toBe("BELT B-50 (V-belt)");   // their edit lands
-      expect(link.code).toBe("WB-50");                   // and their code
-      expect(link.price).toBe(210);                      // but the price is untouched
+      expect(after!.name).toBe("BELT B-50");                            // nothing has moved
+      expect((after!.suppliers as { price?: number }[])[0].price).toBe(210);
+      expect(await prisma.productChange.count({ where: { status: "PENDING" } })).toBe(1);
     });
   });
 

@@ -153,7 +153,11 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
     finally { setBusy(false); }
   }
   // Edit / Adjust / Reserve / Transfer are PROPOSED — they only take effect once
-  // both a Warehouseman and a Purchaser approve (double handshake).
+  // both a Warehouseman and a Purchaser approve (double handshake), plus, for an
+  // EDIT, the Admin / Payment Approver who owns the unit cost and selling price
+  // it carries. That third sign-off is why the edit panel may still offer the
+  // price boxes to someone who cannot set a price outright: here they PROPOSE
+  // one, and the owner is the person who makes it real.
   function apply() {
     const n = Number(qty);
     if (!Number.isFinite(n) || n < 0) { setErr("Enter a quantity."); return; }
@@ -279,6 +283,13 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
               <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Propose edit"}</Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
+            {/* An edit carries the money columns, so it is the one stock action
+                that also waits on the price owner. Said here rather than only in
+                the pending card, so nobody expects the change to be live. */}
+            <p className="pb-1 text-[11px] text-muted-foreground">
+              Proposed, not saved — an edit applies once the Warehouseman, the Purchaser
+              {canEditPrices ? " and you" : " and an Admin / the Payment Approver"} have approved it.
+            </p>
           </TableCell>
         </TableRow>
       )}
