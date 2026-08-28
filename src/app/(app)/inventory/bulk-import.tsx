@@ -61,9 +61,11 @@ export function BulkImport() {
         <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>Close</button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Upload a CSV or Excel (.xlsx) file. Columns: <span className="font-mono">name, unit, category, location, quantity, reorderLevel, unitCost, sellPrice</span> —
-        only <b>name</b> is required. SKUs are generated automatically. Re-uploading an item with the
-        same <b>name</b> <b>updates</b> that item (matched fields only) instead of creating a duplicate.
+        Upload a CSV or Excel (.xlsx) file. Columns: <span className="font-mono">name, sku, unit, category, location, quantity, reorderLevel, unitCost, sellPrice</span> —
+        only <b>name</b> is required, and SKUs are generated when you leave them out. Re-uploading
+        <b> updates</b> matching items (filled-in fields only) instead of creating duplicates: a row is
+        matched by its <b>Item Code</b> when it has one, otherwise by <b>name</b>. Because the code
+        identifies the item, you can correct a <b>name</b> in the sheet and re-import to rename it.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={downloadTemplate} className="text-xs font-medium text-primary hover:underline">Download template (CSV)</button>

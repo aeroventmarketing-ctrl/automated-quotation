@@ -199,14 +199,62 @@ export async function importStockItems(
       // refreshes items instead of creating duplicates.
       const wantLoc = has(iLoc) ? cell(iLoc) : "";
       await prisma.$transaction(async (tx) => {
-        // Item Code (SKU): normalise and ensure no OTHER item (a different NAME)
-        // already owns it. The SAME item may repeat across locations under one
-        // SKU (multi-location), so a same-name row is allowed to share the code.
+        // Item Code (SKU) identifies the item.
+        //
+        // This used to reject any row whose code was held under a different
+        // NAME, which made a RENAME impossible: the round trip this panel
+        // advertises — Download Excel, edit, re-import — could change every
+        // field except the one people most often fix, the name. Worse, "Clear
+        // all" and "Merge duplicates" only DEACTIVATE, and the old check
+        // ignored `active`, so a merged-away ghost kept its code and blocked
+        // the live item forever with a message that never said which item was
+        // in the way.
+        //
+        // The code now decides: when exactly one item holds it, that IS this
+        // row's item and the name may change. An error is raised only when the
+        // code is genuinely ambiguous, or when renaming would collide with a
+        // different item that already answers to the new name — and it names
+        // the offender either way.
         const wantSku = has(iSku) ? cell(iSku).toUpperCase() : "";
+        let skuOwnerId: string | null = null;
         if (wantSku) {
-          const owners = await tx.stockItem.findMany({ where: { sku: wantSku }, select: { name: true } });
-          if (owners.some((o) => o.name.toLowerCase() !== name.toLowerCase())) {
-            throw new Error(`Item Code "${wantSku}" is already used by another item.`);
+          const owners = await tx.stockItem.findMany({
+            where: { sku: wantSku },
+            select: { id: true, name: true, active: true },
+            orderBy: [{ active: "desc" }, { createdAt: "asc" }],
+          });
+          const sameName = (o: { name: string }) => o.name.toLowerCase() === name.toLowerCase();
+          const live = owners.filter((o) => o.active);
+          // Only LIVE items can compete for a code. A deactivated row is a ghost
+          // left by "Clear all" or "Merge duplicates", and treating it as a rival
+          // is what made a merged-away duplicate block its own live item forever.
+          const rivals = live.filter((o) => !sameName(o));
+          if (rivals.length > 0 || (live.length === 0 && owners.length > 0 && !owners.some(sameName))) {
+            const pool = rivals.length > 0 ? rivals : owners;
+            const distinct = [...new Set(pool.map((o) => o.name.toLowerCase()))];
+            if (distinct.length > 1 || live.some(sameName)) {
+              // Either the code is spread across several live items, or one of
+              // them already answers to this row's name — which of them the row
+              // means would be a guess.
+              throw new Error(
+                `Item Code "${wantSku}" is shared by more than one item (${pool
+                  .slice(0, 3)
+                  .map((o) => `“${o.name}”`)
+                  .join(", ")}). Merge or re-code them first.`,
+              );
+            }
+            // A single item holds the code under a different name — a rename.
+            // Refuse only if some OTHER item already answers to the new name.
+            const nameTaken = await tx.stockItem.findFirst({
+              where: { name: { equals: name, mode: "insensitive" }, id: { notIn: owners.map((o) => o.id) } },
+              select: { sku: true },
+            });
+            if (nameTaken) {
+              throw new Error(
+                `Renaming Item Code "${wantSku}" (currently “${pool[0].name}”) to “${name}” clashes with the existing item ${nameTaken.sku ?? ""}. Merge them first.`,
+              );
+            }
+            skuOwnerId = pool[0].id;
           }
         }
         const wantBarcode = has(iBarcode) ? cell(iBarcode) : "";
@@ -227,12 +275,16 @@ export async function importStockItems(
         //     location — adopt it and set the location instead of creating a
         //     clashing new row.
         // The same item in a genuinely new location becomes its own row.
-        let existing = wantSku
-          ? await tx.stockItem.findFirst({
-              where: { sku: wantSku, ...(wantLoc ? { location: { equals: wantLoc, mode: "insensitive" } } : {}) },
-              orderBy: { active: "desc" },
-            })
-          : null;
+        // A rename resolved above already knows its target, and must use it —
+        // looking it up by the NEW name would find nothing and create a
+        // duplicate under the code that is about to move.
+        let existing = skuOwnerId ? await tx.stockItem.findUnique({ where: { id: skuOwnerId } }) : null;
+        if (!existing && wantSku) {
+          existing = await tx.stockItem.findFirst({
+            where: { sku: wantSku, ...(wantLoc ? { location: { equals: wantLoc, mode: "insensitive" } } : {}) },
+            orderBy: { active: "desc" },
+          });
+        }
         if (!existing) {
           existing = await tx.stockItem.findFirst({
             where: {
@@ -252,6 +304,10 @@ export async function importStockItems(
           // Overwrite only the fields whose column is present and non-empty.
           const data: Prisma.StockItemUpdateInput = {};
           if (!existing.active) data.active = true; // reactivate a previously-cleared item
+          // The name is editable too, so correcting one in the spreadsheet and
+          // re-importing actually corrects it. Only written when it really
+          // changed, so a re-upload of an unedited file is still a no-op.
+          if (existing.name !== name) data.name = name;
           if (wantSku) data.sku = wantSku;
           if (wantBarcode) data.barcode = wantBarcode;
           if (has(iUnit)) data.unit = cell(iUnit);

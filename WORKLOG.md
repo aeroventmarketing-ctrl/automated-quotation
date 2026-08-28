@@ -1,3 +1,44 @@
+## 2026-08-28 · Inventory import can rename an item, and a ghost stops blocking it
+
+- **Reported:** re-importing the stock list returned *"Item Code CAT00100 is already used by another item"* on three
+  rows, while three others updated fine.
+- **Two defects, both certain from the code:**
+  1. **Renaming was impossible.** The update path wrote sku, barcode, unit, category, location, reorder level, unit
+     cost, sell price and quantity — **never `name`**. So the round trip this panel advertises (Download Excel →
+     edit → Import) could change every field except the one people most often fix.
+  2. **The guard counted deactivated rows.** It rejected a row whenever *any* item held the code under a different
+     name, with **no `active` filter** — yet "Clear all" and "Merge duplicates" only DEACTIVATE, keeping the code.
+     A merged-away ghost therefore blocked its own live item permanently. The page in the screenshot shows
+     *"Merge duplicates (4)"* and *"Possible duplicate items (5 groups)"*, so ghosts exist in this data.
+  Either defect alone produces the reported error.
+- **The Item Code now identifies the item.** When exactly one live item holds it, that IS the row's item and its
+  name may change. Errors remain for the cases that are genuinely ambiguous, and **name the offender** — the old
+  message never said which item was in the way, so it could not be acted on:
+  - the code is spread over several live items → *"…is shared by more than one item (“ITEM ONE”, “ITEM TWO”). Merge
+    or re-code them first."*
+  - the new name already belongs to a different item → *"Renaming Item Code … (currently “…150mmØ SS201”) to “TAKEN
+    NAME” clashes with the existing item CAT00300."*
+- **A rename must target the row it resolved**, not re-look-up by the new name — that would find nothing and create
+  a duplicate under the code that is about to move. The lookup now starts from the resolved id.
+- **My first rule was wrong and the tests caught it.** It treated any differing owner as a rival, so the inactive
+  ghost still blocked CAT00102 — the very case the change exists to fix. Only *live* items compete for a code now.
+- **Six tests, `src/app/(app)/inventory/import-stock-items.test.ts`**, against a real Postgres (skipped unless
+  `TEST_DATABASE_URL` is set, so `npm test` stays green without one):
+  - renames three items in place — 3 updated, 0 created, no errors, and the 100mm item keeps its **quantity 3** and
+    its row identity, so stock and ledger history survive;
+  - a deactivated duplicate holding the same code no longer blocks;
+  - a code shared by two **live** items is still refused, and the message names both;
+  - a rename onto a taken name is refused, naming the current name and the clashing code;
+  - re-importing an unedited file changes no values (only `updatedAt` moves — the import rewrites identical values,
+    which is pre-existing);
+  - a genuinely new item is still created with a generated code.
+- Panel copy corrected: it claimed matching was by **name** when the code already took precedence, and never
+  mentioned the `sku` column that Download Excel emits — which is what makes the round trip work at all.
+- Typecheck + lint + build clean. No migration.
+- **Pre-existing failure, untouched:** `selection.test.ts > selectFan — direct drive (CEBDD) … 4-pole band` fails on
+  `main` too (expected 2 to be 4). Unrelated to this change; flagging rather than fixing, since it is fan-selection
+  logic.
+
 ## 2026-08-28 · Correction: the ₱128 did not come from inventory cost
 
 - **My earlier diagnosis was wrong, and the page shipped saying so.** I claimed PO 615's ₱128 came from the seeding
