@@ -13,6 +13,7 @@ const TABS = [
   { href: "/admin/duplicates", label: "Duplicates" },
   { href: "/admin/location", label: "Location" },
   { href: "/admin/import", label: "Import CSV" },
+  { href: "/admin/data-check", label: "Data check" },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
