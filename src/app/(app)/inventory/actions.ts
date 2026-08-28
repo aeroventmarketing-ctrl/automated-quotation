@@ -1,7 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertCataloguePriceOwner, canSetCataloguePrice, PRICE_OWNER_MESSAGE } from "@/lib/price-authority";
+import {
+  assertCataloguePriceOwner,
+  canSetCataloguePrice,
+  canTransferCatalogueFiles,
+  CATALOGUE_FILE_MESSAGE,
+} from "@/lib/price-authority";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -40,7 +45,9 @@ async function requireStockMover() {
   return user;
 }
 
-/** Adding / importing / merging catalogue items — the Purchaser, Warehouse or an admin. */
+/** Adding / merging catalogue items — the Purchaser, Warehouse or an admin.
+ *  (Importing from a file is NOT here: that is the price owner's — see
+ *  `importStockItems` and lib/price-authority.) */
 async function requireItemCreator() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
@@ -149,7 +156,18 @@ const num = (s: string | undefined) => {
 export async function importStockItems(
   formData: FormData,
 ): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
-  const user = await requireItemCreator();
+  // A spreadsheet writes the whole stock list at once — unit costs and selling
+  // prices included — so it is the price owner's to upload (lib/price-authority).
+  // The screen hides the panel; this is the control, because a Server Action can
+  // be called without the screen.
+  //
+  // This REPLACES `requireItemCreator` rather than adding to it. That guard is
+  // Purchaser / Warehouse / admin, which is both too wide (it lets a Purchaser
+  // upload prices) and too narrow (it turns away a Payment Approver who holds no
+  // other role) — running both would leave the owner's own rule unenforceable.
+  const user = await getCurrentUser();
+  if (!user) return { created: 0, updated: 0, skipped: 0, errors: ["Unauthorized"] };
+  if (!(await canTransferCatalogueFiles())) return { created: 0, updated: 0, skipped: 0, errors: [CATALOGUE_FILE_MESSAGE] };
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { created: 0, updated: 0, skipped: 0, errors: ["Choose a CSV or Excel file."] };
 
@@ -179,12 +197,12 @@ export async function importStockItems(
     return { created: 0, updated: 0, skipped: 0, errors: ['The first row must be headers with a "name" column (e.g. name, sku, unit, category, location, quantity, reorderLevel, unitCost). Add an "sku" (Item Code) column to set each item\'s code.'] };
   }
 
-  // The bulk import must not be a way round the price rule: for anyone but the
-  // Admin / Payment Approver the cost / price columns are ignored. Said out loud
-  // in the result, because a silently skipped column looks like a broken import.
+  // The cost / price columns are always honoured now: the gate at the top means
+  // only the Admin / Payment Approver ever reaches this line, so the file's
+  // prices are theirs. `mayPrice` stays as the single expression of the rule
+  // rather than a hard-coded `true`, so the two can't drift apart.
   const mayPrice = await canSetCataloguePrice();
   const errors: string[] = [];
-  if (!mayPrice && (iCost >= 0 || iSell >= 0)) errors.push(`Unit cost / sell price columns ignored — ${PRICE_OWNER_MESSAGE}`);
   let created = 0;
   let updated = 0;
   let skipped = 0;

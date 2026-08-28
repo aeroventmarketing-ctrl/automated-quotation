@@ -39,8 +39,15 @@ process.env.DIRECT_URL = TEST_DB;
 const { PrismaClient } = await import("@prisma/client");
 const prisma = new (PrismaClient as unknown as new () => import("@prisma/client").PrismaClient)();
 const { canSetCataloguePrice } = await import("./price-authority");
-const { createProduct, updateProduct } = await import("@/app/(app)/products/actions");
-const { createStockItem, updateStockItemMeta } = await import("@/app/(app)/inventory/actions");
+const { createProduct, updateProduct, importProducts } = await import("@/app/(app)/products/actions");
+const { createStockItem, updateStockItemMeta, importStockItems } = await import("@/app/(app)/inventory/actions");
+
+/** A CSV upload, as the import panel submits it. */
+function upload(csv: string): FormData {
+  const f = new FormData();
+  f.set("file", new File([csv], "catalogue.csv", { type: "text/csv" }));
+  return f;
+}
 
 function be(role: "admin" | "payment_approver" | "purchaser" | "warehouse") {
   for (const k of Object.keys(who)) (who as Record<string, boolean>)[k] = false;
@@ -140,6 +147,45 @@ run("who may set a catalogue price", () => {
       expect(Number(after!.reorderLevel)).toBe(4);
       expect(Number(after!.unitCost)).toBe(210);       // the price is untouched
       expect(Number(after!.sellPrice)).toBe(300);
+    });
+  });
+
+  // A spreadsheet is the catalogue in bulk: one upload writes every price at
+  // once. Hiding the button is not the control — these call the action directly,
+  // which is what a replayed request does.
+  describe("Files — the catalogue as a CSV / Excel upload", () => {
+    const STOCK_CSV = "name,unit,quantity,unitCost,sellPrice\nBELT B-50,pc,4,210,300\n";
+    const PRODUCT_CSV = "name,unit,supplier,price\nBELT B-50,pc,WINGS,210\n";
+
+    it("refuses the Purchaser's upload on both screens, and says why", async () => {
+      be("purchaser");
+      const inv = await importStockItems(upload(STOCK_CSV));
+      expect(inv).toMatchObject({ created: 0, updated: 0 });
+      expect(inv.errors[0]).toMatch(/Admin or the Payment Approver/i);
+      expect(await prisma.stockItem.count()).toBe(0);
+
+      const prod = await importProducts(upload(PRODUCT_CSV));
+      expect(prod).toMatchObject({ created: 0, updated: 0 });
+      expect(prod.errors[0]).toMatch(/Admin or the Payment Approver/i);
+      expect(await prisma.product.count()).toBe(0);
+    });
+
+    it("refuses the Warehouse's upload too", async () => {
+      be("warehouse");
+      expect((await importStockItems(upload(STOCK_CSV))).errors[0]).toMatch(/Admin or the Payment Approver/i);
+      expect(await prisma.stockItem.count()).toBe(0);
+    });
+
+    it("lets the Payment Approver upload, prices and all", async () => {
+      be("payment_approver");
+      expect(await importStockItems(upload(STOCK_CSV))).toMatchObject({ created: 1, errors: [] });
+      const i = await prisma.stockItem.findFirst({ where: { name: "BELT B-50" } });
+      expect(Number(i!.unitCost)).toBe(210);
+      expect(Number(i!.sellPrice)).toBe(300);
+
+      expect(await importProducts(upload(PRODUCT_CSV))).toMatchObject({ created: 1 });
+      const p = await prisma.product.findFirst({ where: { name: "BELT B-50" } });
+      expect((p!.suppliers as { price?: number }[])[0].price).toBe(210);
     });
   });
 });

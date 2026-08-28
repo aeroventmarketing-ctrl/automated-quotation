@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/lib/auth";
+import { canTransferCatalogueFiles, CATALOGUE_FILE_MESSAGE } from "@/lib/price-authority";
 import { buildProductListCsv } from "@/lib/product-list-export";
 
 export const dynamic = "force-dynamic";
@@ -9,13 +9,16 @@ export const dynamic = "force-dynamic";
  * row per sellable item, with Induction Motors expanded to model level and their
  * known net selling prices. The `sku` / `supplier_price` columns are blank for
  * the owner to fill; use it as the master worksheet for assigning SKUs and to
- * seed the Catalogue. Non-sensitive (no cost); Sales are excluded like the other
- * admin exports.
+ * seed the Catalogue.
+ *
+ * Admin / Payment Approver only. It carries selling prices and is the worksheet
+ * the catalogue is seeded from, so it goes the way of every other catalogue
+ * spreadsheet (see lib/price-authority). Checked here and not only on the page:
+ * the button can be bypassed, the URL cannot.
  */
 export async function GET() {
-  const user = await getCurrentUser();
-  if (!user || user.role === "SALES") {
-    return new Response("Unauthorized", { status: 401 });
+  if (!(await canTransferCatalogueFiles())) {
+    return new Response(CATALOGUE_FILE_MESSAGE, { status: 403 });
   }
   const csv = buildProductListCsv();
   return new Response(csv, {

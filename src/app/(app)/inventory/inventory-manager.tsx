@@ -413,7 +413,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   );
 }
 
-export function InventoryManager({ items, canManage, admin = false, canDelete = admin, canScan = canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
   // Multi-select for bulk delete (the Purchaser or an admin — the removeStockItems
@@ -717,8 +717,10 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add stock item</Button>
-              <BulkImport />
-              {items.length > 0 && (
+              {/* Import / download are the price owner's: the file carries every
+                  unit cost and selling price, in and out (lib/price-authority). */}
+              {canTransferFiles && <BulkImport />}
+              {canTransferFiles && items.length > 0 && (
                 <>
                   <Button size="sm" variant="outline" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={exportCsv}>Download CSV</Button>
@@ -794,8 +796,9 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
             {statusFilter === "out" ? "Out of stock" : "Low stock"} ({filtered.length}) <X className="h-3.5 w-3.5" />
           </button>
         )}
-        {/* Download stays available to view-only roles (who don't get the action row above). */}
-        {!canCreate && items.length > 0 && (
+        {/* The view-only download row, for a price owner who cannot add items.
+            Everyone else no longer gets one at all. */}
+        {!canCreate && canTransferFiles && items.length > 0 && (
           <div className="flex items-center gap-1.5">
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>

@@ -104,7 +104,9 @@ export default async function ProductsPage() {
             Purchasable items connected to their suppliers. Requests made against a product carry its supplier, so the purchaser can combine same-supplier orders. Each product has a SKU with barcode &amp; QR for easy encoding.
           </p>
         </div>
-        {canManage && (
+        {/* Catalogue spreadsheets are the price owner's — a download carries the
+            whole price list out, an upload writes it back (lib/price-authority). */}
+        {priceOwner && (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <a
               href="/api/products/full-list"
@@ -133,7 +135,7 @@ export default async function ProductsPage() {
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <ProductManager products={products} suppliers={suppliers} canManage={canManage} canEditPrices={editPrices} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
+            <ProductManager products={products} suppliers={suppliers} canManage={canManage} canEditPrices={editPrices} canTransferFiles={priceOwner} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
           </CardContent>
         </Card>
       )}

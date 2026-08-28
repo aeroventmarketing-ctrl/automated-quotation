@@ -56,3 +56,25 @@ export const PRICE_OWNER_MESSAGE =
 export async function assertCataloguePriceOwner(): Promise<void> {
   if (!(await canSetCataloguePrice())) throw new Error(PRICE_OWNER_MESSAGE);
 }
+
+/**
+ * Downloading and uploading the catalogue as a file is the same authority.
+ *
+ * Owner's decision: *"only the admin/payment approver can download or upload csv
+ * or excel file."* A spreadsheet is the catalogue in bulk — an upload writes
+ * every price at once, and a download carries the whole price list out of the
+ * system — so the file is reserved for the people who own what is in it. Same
+ * set of people as `canSetCataloguePrice`; a separate name and message because
+ * they are a separate question, and one may be relaxed without the other.
+ */
+export const CATALOGUE_FILE_MESSAGE =
+  "Only an Admin or the Payment Approver can download or upload the catalogue as a CSV / Excel file.";
+
+export async function canTransferCatalogueFiles(): Promise<boolean> {
+  return canSetCataloguePrice();
+}
+
+/** Throw unless this user may download / upload catalogue spreadsheets. */
+export async function assertCatalogueFileOwner(): Promise<void> {
+  if (!(await canTransferCatalogueFiles())) throw new Error(CATALOGUE_FILE_MESSAGE);
+}

@@ -1,7 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { canSetCataloguePrice, PRICE_OWNER_CONFIRMS, PRICE_OWNER_MESSAGE } from "@/lib/price-authority";
+import {
+  canSetCataloguePrice,
+  canTransferCatalogueFiles,
+  CATALOGUE_FILE_MESSAGE,
+  PRICE_OWNER_CONFIRMS,
+  PRICE_OWNER_MESSAGE,
+} from "@/lib/price-authority";
 import { z } from "zod";
 import { Prisma, type ProductChangeKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -449,11 +455,18 @@ function parseSupplierCell(raw: string, rowPrice?: number): { company: string; p
 export async function importProducts(
   formData: FormData,
 ): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
-  await requireProductManager();
   // Validation problems are returned (not thrown) so the real reason reaches the
   // user — production redacts every error thrown from a Server Action to a
   // generic "Server Components render" message.
   const fail = (message: string) => ({ created: 0, updated: 0, skipped: 0, errors: [message] });
+
+  // A spreadsheet writes the whole catalogue at once, so it is the price owner's
+  // to upload (see lib/price-authority). The screen hides the panel; this is the
+  // control, because a Server Action can be called without the screen.
+  //
+  // This stands in for `requireProductManager`, which it is strictly stricter
+  // than — the Purchaser it would admit is exactly who must not upload prices.
+  if (!(await canTransferCatalogueFiles())) return fail(CATALOGUE_FILE_MESSAGE);
 
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return fail("Choose a CSV or Excel file.");
@@ -544,21 +557,10 @@ export async function importProducts(
     for (const s of g.suppliers) s.supplierId = idByCompany.get(s.company.toLowerCase()) ?? "";
   }
 
-  // The import must not be a way round the price rule. For anyone but the Admin
-  // / Payment Approver the file's prices are dropped here, before either the
-  // create or the merge path can read them — and it is said out loud, because a
-  // silently ignored column looks like a broken import.
+  // No price-stripping pass here any more: the gate at the top means only the
+  // Admin / Payment Approver ever reaches this line, so the file's prices are
+  // theirs and are written as given.
   const errors: string[] = [];
-  if (!(await canSetCataloguePrice())) {
-    let hadPrice = false;
-    for (const g of groups.values()) {
-      for (const s of g.suppliers) {
-        if (s.price !== undefined) hadPrice = true;
-        s.price = undefined;
-      }
-    }
-    if (hadPrice || iPrice >= 0) errors.push(`Prices in the file were ignored — ${PRICE_OWNER_MESSAGE}`);
-  }
   let created = 0;
   let updated = 0;
   for (const g of groups.values()) {

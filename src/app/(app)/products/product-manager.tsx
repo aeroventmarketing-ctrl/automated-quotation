@@ -291,7 +291,7 @@ function ProductRowView({ product, canManage, canEditPrices, showPrices, showSup
   );
 }
 
-export function ProductManager({ products, suppliers, canManage, canEditPrices = false, admin = false, showPrices, showSuppliers = true, resaleIds = [] }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; canEditPrices?: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean; resaleIds?: string[] }) {
+export function ProductManager({ products, suppliers, canManage, canEditPrices = false, canTransferFiles = false, admin = false, showPrices, showSuppliers = true, resaleIds = [] }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; canEditPrices?: boolean; canTransferFiles?: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean; resaleIds?: string[] }) {
   const router = useRouter();
   const resaleSet = useMemo(() => new Set(resaleIds), [resaleIds]);
   const [showAdd, setShowAdd] = useState(false);
@@ -512,8 +512,10 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add product</Button>
-              <BulkImport />
-              {products.length > 0 && (
+              {/* Import / download are the price owner's: the file carries every
+                  supplier price, in and out (lib/price-authority). */}
+              {canTransferFiles && <BulkImport />}
+              {canTransferFiles && products.length > 0 && (
                 <>
                   <Button size="sm" variant="outline" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={exportCsv}>Download CSV</Button>
@@ -562,8 +564,9 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
           className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-sm hover:bg-accent" title={dir === "asc" ? "Ascending" : "Descending"}>
           {dir === "asc" ? "↑ Asc" : "↓ Desc"}
         </button>
-        {/* Download stays available to view-only roles (who don't get the action row above). */}
-        {!canManage && products.length > 0 && (
+        {/* The view-only download row, for a price owner who is not a product
+            manager. Everyone else no longer gets one at all. */}
+        {!canManage && canTransferFiles && products.length > 0 && (
           <div className="flex items-center gap-1.5">
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>

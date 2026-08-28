@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/lib/auth";
+import { canTransferCatalogueFiles, CATALOGUE_FILE_MESSAGE } from "@/lib/price-authority";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,11 @@ export const dynamic = "force-dynamic";
  * Standard). Non-sensitive: codes + names only, never prices or suppliers.
  *
  * The columns mirror the Inventory import headers (`sku`, `name`, …) so this
- * file can be filled in and re-imported on the Inventory screen directly.
+ * file can be filled in and re-imported on the Inventory screen directly — and
+ * that is exactly why it is Admin / Payment Approver only despite carrying no
+ * prices itself: it is the upload half of the catalogue file rule in disguise
+ * (see lib/price-authority). Checked here and not only on the page, because the
+ * URL can be opened without it.
  */
 function csvCell(v: unknown): string {
   const s = v == null ? "" : String(v);
@@ -18,10 +22,8 @@ function csvCell(v: unknown): string {
 }
 
 export async function GET() {
-  const user = await getCurrentUser();
-  // Sales don't manage product codes (they use the availability lookup).
-  if (!user || user.role === "SALES") {
-    return new Response("Unauthorized", { status: 401 });
+  if (!(await canTransferCatalogueFiles())) {
+    return new Response(CATALOGUE_FILE_MESSAGE, { status: 403 });
   }
 
   let items: {

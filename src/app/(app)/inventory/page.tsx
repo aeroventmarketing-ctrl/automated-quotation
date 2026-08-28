@@ -91,7 +91,8 @@ export default async function InventoryPage() {
   const viewerWarehouse = admin || has("warehouse");
   const viewerPurchaser = admin || has("purchaser");
   // An Edit carries the unit cost / selling price, so it also waits on the
-  // catalogue price owner (see lib/price-authority).
+  // catalogue price owner (see lib/price-authority) — who is likewise the only
+  // person who may take the stock list out as a file or put one back in.
   const viewerPriceOwner = isCataloguePriceOwner(viewer, assignments);
   const pendingByItem: Record<string, StockActionView[]> = {};
   try {
@@ -255,7 +256,7 @@ export default async function InventoryPage() {
 
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 

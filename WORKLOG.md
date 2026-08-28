@@ -1,3 +1,54 @@
+## 2026-08-28 · Catalogue spreadsheets belong to the price owner
+
+- **Owner's instruction:** *"only the admin/payment approver can download or upload csv or excel file."*
+- A spreadsheet is the catalogue in bulk: an upload writes every price at once, a download carries the whole price
+  list out. Same authority as the price itself, so it lives beside it — `canTransferCatalogueFiles()` in
+  `lib/price-authority.ts`, a separate name and message from `canSetCataloguePrice` because it is a separate
+  question and one may be relaxed later without the other.
+
+### What is now Admin / Payment Approver only
+
+| Surface | Was |
+| --- | --- |
+| Products → Import from file | Purchaser / Payment Approver / admin |
+| Products → Download Excel / CSV | **anyone who could open the page**, view-only roles included |
+| Products → Export full product list (CSV) | any non-Sales user, by URL |
+| Products → Export catalogue codes (CSV) | any non-Sales user, by URL |
+| Inventory → Import from file | Purchaser / Warehouse / admin |
+| Inventory → Download Excel / CSV | **anyone who could open the page**, view-only roles included |
+
+- **Enforced on the server, not just hidden.** Both imports return the refusal (a thrown Server Action message is
+  redacted in production) and both `/api/` exports answer **403**. A hidden button is not a control — the URL and
+  the action can both be called without the screen.
+- **The import gate REPLACES the old role guard rather than stacking on it.** `requireItemCreator` (Purchaser /
+  Warehouse / admin) and `requireProductManager` (Purchaser / Payment Approver / admin) are each wrong here in a
+  different direction — one lets a Purchaser upload prices, the other turns away a Payment Approver who holds no
+  second role. Running both would have made the owner's rule unenforceable for a plain Payment Approver, which the
+  new tests caught.
+- Two now-dead price-stripping passes went with it: the imports used to drop a non-owner's price columns and say so.
+  Only the owner reaches that code now, so the file's prices are written as given.
+
+### One honest limitation
+
+The **Download Excel / CSV** buttons build the file in the browser from rows already rendered on the page. Removing
+them takes away the convenience, not the data — anyone who can still open Products or Inventory can read what is on
+screen. Closing that properly means narrowing who may open the pages at all, which is a different decision and not
+one to make silently. Say the word if it was meant.
+
+### Left alone, deliberately
+
+- The **Catalogue backup** (Admin → Catalogue) was already admin-only — stricter than asked, so untouched.
+- Every other CSV/Excel in the app: quotations, job orders, purchase orders, sales and expense reports, the
+  duplicates and suppliers exports. They carry order and quotation data, not the catalogue price list, and locking a
+  Sales user out of their own quotation export is not what was asked. **Say the word if it was.**
+
+### Verified — 3 new tests
+
+- The Purchaser's upload is refused on **both** screens, with the reason, and nothing is written; the Warehouse's is
+  refused too; the Payment Approver's lands **with its prices** on both.
+- Full suite **111 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
 ## 2026-08-28 · The price owner confirms an Inventory edit and a Products save
 
 - **Owner's instruction:** *"when propose edit button in inventory and save button in products is pressed let the
