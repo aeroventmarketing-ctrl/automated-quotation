@@ -24,8 +24,10 @@ const PRICE_ROLES: WorkflowRoleKey[] = ["purchaser", "accounting"];
  * control. See `src/lib/price-authority.ts`, which enforces the same rule on the
  * server; this list is the UI half, and the two must agree.
  *
- * VIEWING is untouched. The Purchaser, Warehouse and everyone else who can open
- * Inventory and Products still see every price — they simply cannot change one.
+ * VIEWING is untouched — `PRICE_ROLES` above is deliberately not widened. Whoever
+ * could see a price before still sees it (Purchaser, Accounting, Engineer,
+ * admin) and whoever could not still cannot (Warehouse, Plant Manager,
+ * Logistics, Sales). This list only decides who may CHANGE one.
  */
 const PRICE_EDIT_ROLES: WorkflowRoleKey[] = ["payment_approver"];
 
