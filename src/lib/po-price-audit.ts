@@ -40,7 +40,31 @@ import { getProducts } from "@/lib/product-catalog";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { catalogPriceFor, matchKey, REF_PRICE_KEY, type CatalogPrices } from "@/lib/po-catalog";
 
-export type PriceIssueKind = "inventory_cost" | "differs";
+export type PriceIssueKind = "inventory_cost" | "differs" | "unit_mismatch";
+
+/**
+ * Units that mean the same thing, so "pc" vs "pcs" is not treated as a
+ * different unit of measure. Anything outside this table is compared literally.
+ */
+const UNIT_ALIASES: Record<string, string> = {
+  pc: "pc", pcs: "pc", piece: "pc", pieces: "pc", ea: "pc", each: "pc", unit: "pc", units: "pc",
+  set: "set", sets: "set",
+  box: "box", boxes: "box", bx: "box",
+  pack: "pack", packs: "pack", pk: "pack",
+  roll: "roll", rolls: "roll",
+  length: "length", lengths: "length", len: "length", pcslength: "length",
+  kg: "kg", kgs: "kg", kilo: "kg", kilos: "kg",
+  m: "m", meter: "m", meters: "m", metre: "m", metres: "m",
+  ft: "ft", foot: "ft", feet: "ft",
+  l: "l", liter: "l", liters: "l", litre: "l", litres: "l",
+  gal: "gal", gallon: "gal", gallons: "gal",
+  sheet: "sheet", sheets: "sheet",
+  can: "can", cans: "can",
+};
+const normUnit = (u: string): string => {
+  const k = u.trim().toLowerCase().replace(/[^a-z]/g, "");
+  return k ? UNIT_ALIASES[k] ?? k : "";
+};
 
 export interface PriceIssue {
   requestId: string;
@@ -56,6 +80,9 @@ export interface PriceIssue {
   allSupplierPrices: number[];
   /** The stock item's unit cost, when there is one. */
   stockCost: number | null;
+  /** The unit on the PO line, and the catalogue's unit for the product. */
+  poUnit: string;
+  productUnit: string;
   kind: PriceIssueKind;
   /** Line value at the PO price vs at the supplier's price. */
   poLineTotal: number;
@@ -141,6 +168,13 @@ export async function auditPoPrices(): Promise<PriceAudit> {
     const key = matchKey(description, stockKeys);
     return key ? costByName.get(key) ?? null : null;
   };
+  /** The catalogue's unit for a description, for the unit-of-measure check. */
+  const unitByName = new Map(products.map((p) => [p.name.trim().toLowerCase(), p.unit ?? ""]));
+  const productKeys = [...unitByName.keys()];
+  const productUnitFor = (description: string): string => {
+    const key = matchKey(description, productKeys);
+    return key ? unitByName.get(key) ?? "" : "";
+  };
 
   const issues: PriceIssue[] = [];
   let lineCount = 0;
@@ -174,7 +208,16 @@ export async function auditPoPrices(): Promise<PriceAudit> {
       const fromInventory =
         stockCost !== null && same(poPrice, stockCost) && !all.some((p) => same(p, stockCost));
 
-      const corrected = supplierPrice ?? (all.length ? all[0] : null);
+      // Different units of measure make the two figures incomparable — a price
+      // per piece against a price per box is not a discrepancy, and reporting it
+      // as one buries the real ones. Called out separately rather than hidden,
+      // because a PO priced in the wrong unit is its own kind of problem.
+      const poUnit = line.unit ?? "";
+      const productUnit = productUnitFor(line.description);
+      const bothUnitsKnown = normUnit(poUnit) !== "" && normUnit(productUnit) !== "";
+      const unitsDiffer = bothUnitsKnown && normUnit(poUnit) !== normUnit(productUnit);
+
+      const corrected = unitsDiffer ? null : supplierPrice ?? (all.length ? all[0] : null);
       issues.push({
         requestId: pr.id,
         poNumber: po.poNumber,
@@ -185,16 +228,20 @@ export async function auditPoPrices(): Promise<PriceAudit> {
         supplierPrice,
         allSupplierPrices: all,
         stockCost,
-        kind: fromInventory ? "inventory_cost" : "differs",
+        poUnit,
+        productUnit,
+        kind: unitsDiffer ? "unit_mismatch" : fromInventory ? "inventory_cost" : "differs",
         poLineTotal: Math.round(poPrice * qty * 100) / 100,
         correctedLineTotal: corrected === null ? null : Math.round(corrected * qty * 100) / 100,
       });
     }
   }
 
-  // Worst first: the inventory-cost signature, then by how much money is at stake.
+  // Worst first: the inventory-cost signature, then plain differences, then the
+  // unit mismatches — which are the least likely to be errors at all.
+  const rank: Record<PriceIssueKind, number> = { inventory_cost: 0, differs: 1, unit_mismatch: 2 };
   issues.sort((a, b) => {
-    if (a.kind !== b.kind) return a.kind === "inventory_cost" ? -1 : 1;
+    if (a.kind !== b.kind) return rank[a.kind] - rank[b.kind];
     const av = Math.abs((a.correctedLineTotal ?? a.poLineTotal) - a.poLineTotal);
     const bv = Math.abs((b.correctedLineTotal ?? b.poLineTotal) - b.poLineTotal);
     return bv - av;

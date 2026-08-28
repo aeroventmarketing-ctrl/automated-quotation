@@ -24,7 +24,24 @@ const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 // digit (a model / part number, e.g. "32chh", "25nfb", "24") — these disambiguate
 // otherwise-similar items, so a fuzzy match must agree on ALL of them and two
 // different models never cross-match.
-const tokenize = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 2);
+//
+// Two rules here exist because of a real mispricing, and both matter:
+//
+//  1. NEVER DROP A DIGIT TOKEN. This used to filter out everything shorter than
+//     two characters, which erased the rating from a whole family of products:
+//     "INDUCTION MOTOR 2 HP, 1PH, 4 POLE …", the 1.5 HP and the 1 HP all reduced
+//     to the SAME token set, so the cross-model guard had nothing to guard with
+//     and a 2 HP line matched the 1 HP product's price. "G.I. BOLT 5/16 X 3/4"
+//     likewise matched "… 5/16 X 1".
+//
+//  2. KEEP ALPHANUMERIC RUNS AND DECIMALS WHOLE. "1ph" must not become "1"+"ph",
+//     or that stray "1" satisfies the 1 HP product's guard and the confusion
+//     comes straight back; "1.5" must stay one token rather than "1" and "5".
+//
+// A trailing ".<digits>" is what keeps decimals together; "g.i." still splits,
+// which is harmless — those pieces are letters and drop out below.
+const tokenize = (s: string) =>
+  (s.toLowerCase().match(/[a-z0-9]+(?:\.\d+)?/g) ?? []).filter((t) => t.length >= 2 || /\d/.test(t));
 const hasDigit = (t: string) => /\d/.test(t);
 
 /**
