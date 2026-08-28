@@ -27,7 +27,8 @@ async function main() {
     console.log(`  created      ${fmt(f.createdAt)}${f.duplicatedFrom ? `   (duplicated from ${f.duplicatedFrom})` : ""}`);
     console.log(`  stage now    ${f.stage}`);
     if (f.stamps.length) {
-      console.log(`  INHERITED    ${f.stamps.length} stamp(s) predate this quotation — earliest ${fmt(f.stamps[0].at)} at "${f.stamps[0].where}"`);
+      console.log(`  INHERITED    ${f.stamps.length} of ${f.totalStamps} recorded step(s) predate this quotation — earliest ${fmt(f.stamps[0].at)} at "${f.stamps[0].where}"`);
+      console.log(`               ${f.stamps.length === f.totalStamps ? "ALL of them — this order has done none of its own work." : `the other ${f.totalStamps - f.stamps.length} are its own.`}`);
       for (const s of f.stamps.slice(0, 6)) console.log(`                 ${fmt(s.at)}  ${s.where}`);
       if (f.stamps.length > 6) console.log(`                 …and ${f.stamps.length - 6} more`);
     }

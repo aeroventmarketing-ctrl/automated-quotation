@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
 import { scanInheritedWorkflows } from "@/lib/inherited-workflow-scan";
+import { ResetInheritedButton } from "./reset-button";
 
 // Always the live picture — a cached one would be worse than none.
 export const dynamic = "force-dynamic";
@@ -86,8 +87,16 @@ export default async function DataCheckPage() {
                 {f.stamps.length > 0 && (
                   <div>
                     <p className="font-medium">
-                      {f.stamps.length} approval stamp{f.stamps.length === 1 ? "" : "s"} predate this
-                      quotation
+                      {f.stamps.length} of {f.totalStamps} recorded step
+                      {f.totalStamps === 1 ? "" : "s"} predate this quotation
+                    </p>
+                    {/* The whole diagnosis in one line: everything inherited means
+                        the order never ran its own workflow; a few inherited out
+                        of many means it was worked properly but started ahead. */}
+                    <p className="text-xs text-muted-foreground">
+                      {f.stamps.length === f.totalStamps
+                        ? "Every recorded step came from the other order — this order has done none of its own."
+                        : `The remaining ${f.totalStamps - f.stamps.length} happened after this order was created, so they are its own work.`}
                     </p>
                     <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                       {f.stamps.slice(0, 10).map((s) => (
@@ -103,8 +112,9 @@ export default async function DataCheckPage() {
                 {f.foreignPaths.length > 0 && (
                   <div>
                     <p className="font-medium">
-                      {f.foreignPaths.length} document read
-                      {f.foreignPaths.length === 1 ? "" : "s"} point at another order&apos;s files
+                      {f.foreignPaths.length === 1
+                        ? "1 document read points at another order's files"
+                        : `${f.foreignPaths.length} document reads point at another order's files`}
                     </p>
                     <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                       {f.foreignPaths.slice(0, 10).map((p) => (
@@ -115,6 +125,27 @@ export default async function DataCheckPage() {
                       {f.foreignPaths.length > 10 && <li>…and {f.foreignPaths.length - 10} more</li>}
                     </ul>
                   </div>
+                )}
+
+                {/* Offered only when the order has done none of its own work.
+                    An order that inherited one step and then ran the rest
+                    legitimately must be left alone — clearing it would destroy
+                    real production and delivery records. */}
+                {f.totalStamps > 0 && f.stamps.length === f.totalStamps ? (
+                  <ResetInheritedButton
+                    quotationId={f.quotationId}
+                    quoteNumber={f.quoteNumber}
+                    stamps={f.stamps.length}
+                    paths={f.foreignPaths.length}
+                  />
+                ) : (
+                  <p className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    No reset offered. This order did {f.totalStamps - f.stamps.length} of its own
+                    workflow step{f.totalStamps - f.stamps.length === 1 ? "" : "s"}, so clearing it
+                    would destroy real work. What it wrongly inherited is the early approval above —
+                    that step shows another order&apos;s approver and date, and was never actually
+                    performed here.
+                  </p>
                 )}
               </CardContent>
             </Card>

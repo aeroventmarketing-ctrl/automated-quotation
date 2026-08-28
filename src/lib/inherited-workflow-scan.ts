@@ -46,6 +46,14 @@ export interface InheritedFinding {
   stage: OrderStage;
   /** Stamps that predate the quotation — impossible unless inherited. */
   stamps: InheritedStamp[];
+  /**
+   * Every dated event in the workflow, inherited or not. Read against
+   * `stamps.length` this is the whole diagnosis: all of them inherited means the
+   * order never ran its own workflow and needs restarting, while one inherited
+   * out of many means the order was worked properly and merely started with a
+   * step it did not earn. The two need completely different repairs.
+   */
+  totalStamps: number;
   /** Document-read keys pointing at another order's files. */
   foreignPaths: { field: string; path: string }[];
 }
@@ -94,7 +102,8 @@ export async function scanInheritedWorkflows(): Promise<InheritedScan> {
 
     // A second of slack: the workflow is written moments after the row itself.
     const floor = new Date(q.createdAt.getTime() - 1000);
-    const stamps = stampsIn(cls.workflow)
+    const allStamps = stampsIn(cls.workflow);
+    const stamps = allStamps
       .filter((s) => s.at < floor)
       .sort((a, b) => +a.at - +b.at)
       .map((s) => ({ at: s.at.toISOString(), where: s.where }));
@@ -124,6 +133,7 @@ export async function scanInheritedWorkflows(): Promise<InheritedScan> {
       duplicatedFrom: from,
       stage: readOrderWorkflow(q.classification).stage,
       stamps,
+      totalStamps: allStamps.length,
       foreignPaths,
     });
   }
