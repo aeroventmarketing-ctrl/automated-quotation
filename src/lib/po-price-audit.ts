@@ -102,6 +102,19 @@ const num = (v: unknown): number => {
 /** Prices are money — compare to the centavo, not by identity. */
 const same = (a: number, b: number) => Math.abs(a - b) < 0.005;
 
+/**
+ * A difference too small to be worth anyone's attention.
+ *
+ * Real data threw up a VFD at ₱128,785.00 against a listed ₱128,786.15 — ₱1.15
+ * on a ₱128k line — and a belt ₱0.60 out. Rows like that are rounding, and in a
+ * list of thirty they hide the ones that matter.
+ *
+ * BOTH tests must pass, which is what stops a tiny per-unit gap being dismissed
+ * on a huge quantity: ₱0.10 out on 10,000 pieces is ₱1,000 and still shows.
+ */
+const TRIVIAL_AMOUNT = 20; // pesos of line-total impact
+const TRIVIAL_SHARE = 0.02; // and no more than 2% of the line
+
 export async function auditPoPrices(): Promise<PriceAudit> {
   const [products, stockItems, requests] = await Promise.all([
     getProducts().catch(() => []),
@@ -218,6 +231,13 @@ export async function auditPoPrices(): Promise<PriceAudit> {
       const unitsDiffer = bothUnitsKnown && normUnit(poUnit) !== normUnit(productUnit);
 
       const corrected = unitsDiffer ? null : supplierPrice ?? (all.length ? all[0] : null);
+
+      // Drop rounding-level differences before they bury the real ones.
+      if (corrected !== null) {
+        const poTotal = poPrice * qty;
+        const gap = Math.abs(corrected * qty - poTotal);
+        if (gap < TRIVIAL_AMOUNT && (poTotal <= 0 || gap / poTotal < TRIVIAL_SHARE)) continue;
+      }
       issues.push({
         requestId: pr.id,
         poNumber: po.poNumber,

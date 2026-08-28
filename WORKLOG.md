@@ -1,3 +1,33 @@
+## 2026-08-28 · The price audit stops reporting rounding
+
+- **From the production list**: a VFD at **₱128,785.00** against a listed **₱128,786.15** — ₱1.15 on a ₱128k line —
+  and a belt ₱0.60 out. In a list of thirty rows, noise like that hides the rows that matter.
+- **Both tests must pass to suppress**: line-total impact under **₱20** *and* under **2%** of the line. Requiring
+  both is what stops a tiny per-unit gap being dismissed on a huge quantity — ₱0.10 out on 10,000 pieces is ₱1,000
+  and still reports.
+- **Six assertions on the real figures** from that list: the VFD (₱1.15), BELT A-28 (₱1.20 line gap) and the IDEC
+  switch (₱6, 1.06%) are suppressed; CRS ROD 5" (₱120 gap), STAIN. NUT (₱0.80 → ₱3.20, a 4× price) and the
+  10-centavos-on-10,000-pieces case all still report.
+- Full suite: 65 passed, 6 skipped. Typecheck + build clean. Read-only; no migration.
+
+### Reading the production list that prompted this
+
+The list the owner sent was produced **before the matcher fix** (`df86d78`, pushed but not yet merged), and it
+contains its own proof of the cross-matching:
+
+- **three different G.I. BOLT sizes on one PO** — 5/16 × 1, × 1/2, × 3/4 — all compared against **₱1.40**;
+- **three PULLEY sizes** — 7-1/2", 5-1/2", 5" — all compared against **₱432**;
+- **four motor ratings** all compared against **₱12,822** or **₱10,440**.
+
+Those separate once the fix lands. Two findings in that list are NOT explained by the matcher and are worth the
+owner's eye:
+
+- **ANLY TIMER AH3NC (PO-618)** — PO ₱2,060 against a listed ₱1,030, **exactly double**, on qty 2. That is the
+  signature of a line total typed into the unit-price box; the PO totals ₱4,120 for two timers.
+- **BELT B-50 (PO-555)** — PO ₱225 against a listed **₱128**. The catalogue said **₱210** when this investigation
+  started (PO 615, where the PO carried the ₱128). The product's price appears to have moved since; worth
+  confirming which figure is right before correcting anything.
+
 ## 2026-08-28 · The product matcher could not tell a 2 HP motor from a 1 HP one
 
 - **Owner-approved**, after the production Data check returned ~35 flagged PO lines and several looked wrong in a
