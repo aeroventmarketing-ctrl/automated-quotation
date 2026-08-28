@@ -1,3 +1,60 @@
+## 2026-08-28 · Duplicated quotations stop inheriting the original's order
+
+- **Owner-approved**, following the production scan: 3 of 1047 quotations affected, in two different shapes.
+
+### The fix — the deny-list becomes an allow-list
+
+- `duplicateQuotationToCustomer` copied the source's whole `classification` and deleted three keys (`sale`,
+  `revision`, `revisions`). That list was written **before the order workflow moved into the same blob** and was
+  never revisited, so every duplicate inherited `classification.workflow` — the source's stage, approval stamps,
+  job orders, MRFs, delivery batches and closing documents. Nothing anywhere resets it, so a won duplicate could
+  show as already **closed** having done no work. It also carried `saleDocReads` / `slipValidations` keyed to the
+  **source order's files**, plus `followUp`, `sentAt`, `revisedAt`, `revisionRestore` and both AI read counters.
+- Now inverted: **nothing crosses unless it is named or provably product-side.** The default is drop, which is what
+  makes it safe against the next key someone adds — the exact way this broke.
+- The invariant that makes an allow-list possible here: the builder's own classification fields are plain
+  **strings**, while every piece of order / sale / document state is an object, array or number. Only two lifecycle
+  values are strings (`sentAt`, `revisedAt`) and they are named. `pricing` is carried explicitly.
+- Worth recording: `meta.classification` is typed `Record<string, string>` but **the builder never sends it** —
+  product data lives per-item in `specsSnapshot`. So that blob is lifecycle state almost end to end, which is why
+  an allow-list this small is correct rather than lossy.
+
+### The repair — one write, and the guard is the whole point
+
+- New **Admin → Data check** action: clear a wholly-inherited workflow so the order restarts at Phase 1, and drop
+  document reads pointing at another order's files.
+- **It refuses unless EVERY dated step predates the quotation.** The scan found two shapes and only one is safe to
+  clear:
+  - **3276J** — 21 of 21 steps inherited, including duct job orders, proofs and the final payment check. It has
+    done none of its own work. Safe to reset.
+  - **3020J / 2941J** — 1 of many. They inherited a single `doc_check` and then ran the rest of the workflow
+    **legitimately**; both are genuinely closed. Clearing those would destroy weeks of real production and delivery
+    records, so the action refuses and the page explains why instead of offering a button.
+- The guard is recomputed **from the database inside the action**, never taken from the page, so a stale or edited
+  request cannot get past it. Two-step confirm in the UI is a courtesy, not the guard.
+- The order's own `sale` — arrangement and payments — is its own and is never touched. Only *foreign* document
+  reads are removed; the order's own are kept. Every reset appends to `classification.workflowResets` with who,
+  when, how many steps and which source, because a closed order silently returning to Phase 1 would be worse than
+  the bug.
+
+### Verified — 28 assertions against a real Postgres
+
+- The allow-list drops all 12 lifecycle keys, keeps `pricing` and a builder string, and a duplicate now opens at
+  `payment_review`.
+- The scan separates the two shapes (3/3 vs 1/3).
+- **The guard refuses the partly-inherited order** — *"2941J did 2 of its own workflow steps, so its workflow is
+  not purely inherited"* — and that order is left closed and untouched.
+- The wholly-inherited one restarts at `payment_review` while **keeping its own payment record and its own document
+  read**; its foreign `slipValidations` is removed entirely; an audit note is written; and the scan afterwards
+  reports only the partly-inherited order.
+- Typecheck + lint + build clean. No migration.
+
+### Left alone deliberately
+
+- **3020J and 2941J keep their false `doc_check` stamp.** Owner's call, taken on the reasoning that stripping an
+  approval from an already-closed order muddies the audit trail more than a wrong name and date does. The page now
+  states plainly what those two inherited and that the step was never actually performed for them.
+
 ## 2026-08-28 · Data check: how much of an order is inherited, not just that some is
 
 - **The production scan found 3 of 1047 quotations affected**, and they are not the same problem — which the page

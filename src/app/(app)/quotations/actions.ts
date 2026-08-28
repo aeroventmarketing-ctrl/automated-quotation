@@ -668,10 +668,44 @@ export async function searchCustomers(query: string): Promise<{ id: string; comp
 }
 
 /**
+ * What a duplicate is allowed to inherit from the source's `classification`.
+ *
+ * This USED to be a deny-list — copy everything, then delete `sale`, `revision`
+ * and `revisions`. That list was written before the order workflow moved into
+ * the same blob, and was never revisited, so every duplicate silently inherited
+ * `classification.workflow`: the source's stage, approval stamps, job orders,
+ * MRFs, delivery batches and closing documents. Nothing resets it, so a won
+ * duplicate could show as already closed without doing any work. It also
+ * carried `saleDocReads` / `slipValidations` keyed to the SOURCE order's files,
+ * plus its follow-up history and sent date.
+ *
+ * So the rule is inverted: nothing comes across unless it is named or provably
+ * product-side. The default is drop, which is what makes it safe against the
+ * next key somebody adds.
+ *
+ * The invariant that makes this work: the builder's own classification fields
+ * are plain STRINGS, while every piece of order / sale / document lifecycle
+ * state is an object, an array or a number. Two lifecycle values are strings,
+ * and they are named below.
+ */
+const CARRY_KEYS = new Set(["pricing"]);
+const LIFECYCLE_STRING_KEYS = new Set(["sentAt", "revisedAt"]);
+
+function productClassificationOnly(src: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(src)) {
+    if (CARRY_KEYS.has(k)) out[k] = v;
+    else if (typeof v === "string" && !LIFECYCLE_STRING_KEYS.has(k)) out[k] = v;
+  }
+  return out;
+}
+
+/**
  * Duplicate a quotation to another client: create a fresh inquiry + DRAFT
  * quotation for the target customer, copying the line items (specs, qty, price)
- * as-is. Sale state and revision history are not carried over. Redirects to the
- * new draft, which can then be edited independently.
+ * as-is. Order workflow, sale state, documents and revision history are not
+ * carried over — see `productClassificationOnly`. Redirects to the new draft,
+ * which can then be edited independently.
  */
 export async function duplicateQuotationToCustomer(quotationId: string, customerId: string) {
   const user = await getCurrentUser();
@@ -687,11 +721,8 @@ export async function duplicateQuotationToCustomer(quotationId: string, customer
   const totals = computeTotals(
     src.items.map((it) => ({ qty: it.qty, unitPrice: Number(it.unitPrice), lineTotal: Number(it.lineTotal), vatExempt: isFlatVatLine(it.specsSnapshot as Record<string, unknown>) })),
   );
-  // Carry the product classification but not the sale state or revision history.
-  const classification = { ...((src.classification as Record<string, unknown>) ?? {}) };
-  delete classification.sale;
-  delete classification.revision;
-  delete classification.revisions;
+  // Carry the product classification but no order, sale or document state.
+  const classification = productClassificationOnly((src.classification as Record<string, unknown>) ?? {});
   classification.vatExemptTotal = totals.vatExemptTotal;
 
   const validUntil = new Date();
