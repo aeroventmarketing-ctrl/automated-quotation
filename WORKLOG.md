@@ -1,3 +1,28 @@
+## 2026-08-28 · A new PO line starts at the catalogue price
+
+- **Owner-instructed:** *"when creating PO get the item price in product tab or inventory tab — the price of 2
+  sources are same."* Products and Inventory carry the same figure, so either answers the question.
+- **The gap was a deliberate refusal.** `catalogReferencePriceFor` filled a new line only when the product had a
+  **single unambiguous** price; when several suppliers listed *different* prices it returned `undefined` on the
+  reasoning that seeding one supplier's price before the supplier is chosen might seed the wrong one. In practice
+  that left the box **blank** — and a blank box gets filled from memory. That is how a PO reaches a price no
+  supplier lists.
+- **Now it always seeds the catalogue's figure**: the single price when suppliers agree, otherwise the reference
+  price (lowest supplier price, else the inventory unit cost). Picking a supplier still force-overwrites with that
+  supplier's own price, so the seed can only ever be replaced by something more specific. A real catalogue price
+  that a supplier pick refines beats a blank that gets typed over.
+- **The catalogue price is now visible on the line.** When a typed price disagrees with the catalogue, the
+  catalogue figure appears under the box in amber — click it to apply. Previously a wrong figure was invisible
+  until the PO had been approved, printed and vouchered. This is the "warn, don't block" answer to the question
+  left open earlier: a negotiated price is legitimate, so it is shown, not prevented.
+  - Uses the chosen supplier's price when they list one, else the reference figure — the same rule as the seed.
+- **6 more tests** (17 in `po-catalog.test.ts` now): agreeing suppliers seed their common price; **disagreeing
+  suppliers now seed rather than blank** — the behaviour change, locked in; no supplier price falls back to the
+  inventory unit cost; an uncatalogued product still seeds nothing; a new PO fills every catalogued line; and a
+  price already on the line is never overwritten (so a requisition's carried `@price` survives).
+- Full suite 71 passed, 6 skipped. Typecheck + lint + build clean. No migration.
+- **Still pre-existing:** the CEBDD `selectFan` failure on `main`.
+
 ## 2026-08-28 · The price audit stops reporting rounding
 
 - **From the production list**: a VFD at **₱128,785.00** against a listed **₱128,786.15** — ₱1.15 on a ₱128k line —

@@ -99,10 +99,18 @@ export function catalogPriceFor(description: string, companyLower: string, catal
 }
 
 /**
- * A reference price for a line before a supplier is chosen — used only when the
- * product has a SINGLE known catalogue price (unambiguous). When several
- * suppliers list different prices we leave it blank so the purchaser picks the
- * supplier first (avoids seeding a wrong-supplier price).
+ * A reference price for a line before a supplier is chosen: the catalogue's
+ * figure for the product — the lowest supplier price, or the inventory unit
+ * cost when no supplier lists one. Products and Inventory carry the same price,
+ * so either source answers the same question.
+ *
+ * This used to give up when several suppliers listed DIFFERENT prices, on the
+ * reasoning that seeding one supplier's price before the supplier is chosen
+ * might seed the wrong one. In practice that left the line **blank**, and a
+ * blank box is filled from memory — which is how a PO ends up at a price no
+ * supplier lists. A seeded figure is strictly better: it is a real catalogue
+ * price, it is visible, and choosing a supplier immediately refines it to that
+ * supplier's own price (see `withCatalogPrices`, which force-overwrites on pick).
  */
 export function catalogReferencePriceFor(description: string, catalog: CatalogPrices): number | undefined {
   const key = matchKey(description, Object.keys(catalog));
@@ -110,9 +118,9 @@ export function catalogReferencePriceFor(description: string, catalog: CatalogPr
   const entry = catalog[key] ?? {};
   const prices = [...new Set(Object.entries(entry).filter(([co, n]) => co !== REF_PRICE_KEY && n > 0).map(([, n]) => n))];
   if (prices.length === 1) return prices[0];
-  // No supplier price at all → the reference price (lowest price / unit cost).
-  if (prices.length === 0 && entry[REF_PRICE_KEY] > 0) return entry[REF_PRICE_KEY];
-  return undefined;
+  // Several prices, or none: the reference figure (lowest supplier price, else
+  // the inventory unit cost) is the catalogue's answer for this product.
+  return entry[REF_PRICE_KEY] > 0 ? entry[REF_PRICE_KEY] : undefined;
 }
 
 /** The reference (lowest price / unit cost) figure for a line description, if any. */

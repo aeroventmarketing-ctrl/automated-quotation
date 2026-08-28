@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import { carriersForLines, catalogPriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { carriersForLines, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
@@ -96,6 +96,20 @@ export function PurchaseOrderPanel({
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
     : eligible;
   const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices));
+
+  /**
+   * The catalogue's price for a line — the chosen supplier's if they list one,
+   * otherwise the reference figure (lowest supplier price, else the inventory
+   * unit cost). Products and Inventory carry the same price, so either source
+   * answers the same question.
+   */
+  const catalogueListed = (description: string): number | null => {
+    if (!description.trim()) return null;
+    const co = company.trim().toLowerCase();
+    return (co ? catalogPriceFor(description, co, catalogPrices) : undefined)
+      ?? catalogReferencePriceFor(description, catalogPrices)
+      ?? null;
+  };
 
   // Auto-populate the supplier on a new PO (once, when none is chosen yet):
   //  • Wind Driven Roof Ventilator is always sourced from JOEL LATERO SHOP.
@@ -276,7 +290,29 @@ export function PurchaseOrderPanel({
                 <td className="py-1 pr-2"><Input className="h-8" value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} /></td>
                 <td className="py-1 px-1"><Input className="h-8 text-right" value={l.qty} onChange={(e) => setLine(i, "qty", e.target.value)} /></td>
                 <td className="py-1 px-1"><Input className="h-8" value={l.unit} onChange={(e) => setLine(i, "unit", e.target.value)} /></td>
-                <td className="py-1 px-1"><Input className="h-8 text-right" value={l.unitPrice} onChange={(e) => setLine(i, "unitPrice", e.target.value)} /></td>
+                <td className="py-1 px-1">
+                  <Input className="h-8 text-right" value={l.unitPrice} onChange={(e) => setLine(i, "unitPrice", e.target.value)} />
+                  {/* What the catalogue says, shown against what has been typed.
+                      A price that disagrees was otherwise invisible until the PO
+                      had been approved, printed and vouchered. */}
+                  {(() => {
+                    const listed = catalogueListed(l.description);
+                    if (listed == null) return null;
+                    const typed = Number(String(l.unitPrice).replace(/[^0-9.-]/g, ""));
+                    if (!Number.isFinite(typed) || typed <= 0) return null;
+                    if (Math.abs(typed - listed) < 0.005) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setLine(i, "unitPrice", String(listed))}
+                        className="mt-0.5 block w-full text-right text-[10px] text-amber-600 hover:underline"
+                        title="Use the catalogue price"
+                      >
+                        catalogue {formatCurrency(listed, "PHP")}
+                      </button>
+                    );
+                  })()}
+                </td>
                 <td className="py-1 px-1 text-right tabular-nums">{formatCurrency(poLineAmount(l), "PHP")}</td>
                 <td className="py-1 text-center">
                   <button type="button" onClick={() => removeRow(i)} className="text-muted-foreground hover:text-destructive" aria-label="Remove line">×</button>
@@ -287,8 +323,9 @@ export function PurchaseOrderPanel({
         </table>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Unit price fills from the product catalogue when you pick a supplier{" "}
-        {company ? `(using ${company}'s price)` : "in Company name"}. Set up a product&rsquo;s supplier price in Products so it auto-fills; otherwise type it here.
+        Unit price fills from the product catalogue — the price in <b>Products</b> / <b>Inventory</b> — and refines
+        to the chosen supplier&rsquo;s own price when you pick one{company ? ` (using ${company}'s price)` : ""}. If
+        a typed price disagrees with the catalogue, the catalogue figure shows under the box; click it to use it.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addRow}>+ Add line</Button>
