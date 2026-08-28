@@ -1,3 +1,35 @@
+## 2026-08-28 · Admin → Data check: which orders are carrying another order's state
+
+- **The scan is now a page, not a command.** Admin → **Data check** runs it with the credentials the app already
+  holds, so answering "is this order really finished, or is it wearing 2892J's stamps?" is a click. The
+  command-line form asked the owner to clone the repo, install Node and paste a production database password into a
+  terminal — for a question that needs answering once.
+- **Nothing on the page can change an order.** It reads and prints; there is no action, no button, no write path.
+  That matters because the underlying subject is the frozen order workflow, which is untouched by this change.
+- **One detector, two front ends.** The logic moved into `src/lib/inherited-workflow-scan.ts`; the page and
+  `scripts/scan-inherited-workflows.ts` both call it, so they cannot drift into disagreeing about what counts as a
+  hit. The script is now printing only.
+- **Two tests, neither of which can fire on a clean order:**
+  - **Time travel** — an approval stamp dated *before the quotation itself existed* cannot be that order's own
+    work. This is the decisive one: it needs no knowledge of how the row was created, so it catches inherited state
+    from any route, and it still fires on a duplicate that was later worked on legitimately.
+  - **Foreign file paths** — `saleDocReads` / `slipValidations` are keyed by storage path, and an order's paths all
+    start `sales/<that order's id>/`. Anything else came from another order.
+- **Verified by rendering the page itself, in both states**, against a seeded database — not by reading the JSX.
+  With the bad row present it reports *"1 order affected"*, names the quote, shows `stage: closed`, lists all seven
+  predating stamps and both foreign paths. With the inherited blob removed it flips to *"Clear — No order is
+  carrying state from another order."* The four seeded cases also confirm it stays quiet where it should: the
+  legitimately-worked source order, a clean order with its own workflow, and an unaffected duplicate are all left
+  alone.
+- **Still not run against production** — this session has no database credentials, only `.env.example`. The page is
+  the delivery mechanism for that.
+- **Two small facts worth recording**, both found by hitting them:
+  - `WON` is an **Inquiry** status, not a `QuotationStatus` (which is `DRAFT | PENDING_APPROVAL | APPROVED | SENT`).
+  - `Customer` has no `createdById`.
+- Typecheck + lint + build clean. No migration.
+- **The bug itself is still unfixed and the affected order still needs repairing** — both are frozen-area changes
+  awaiting the owner's go-ahead. This change only makes the damage visible.
+
 ## 2026-08-27 · Catalogue backup: download the lot, edit it, upload it back
 
 - **New on Admin → Catalogue: a "Backup & bulk edit" card** with *Download Excel*, *Download CSV* and *Upload
