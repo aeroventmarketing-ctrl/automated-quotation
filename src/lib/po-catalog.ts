@@ -35,7 +35,7 @@ const hasDigit = (t: string) => /\d/.test(t);
  * matching a different model (e.g. 24CDH). A match that agrees on the model code
  * always beats a generic / substring match, so the specific variant wins.
  */
-function matchKey(description: string, keys: string[]): string | undefined {
+export function matchKey(description: string, keys: string[]): string | undefined {
   const desc = description.trim().toLowerCase();
   if (!desc) return undefined;
   if (keys.includes(desc)) return desc;

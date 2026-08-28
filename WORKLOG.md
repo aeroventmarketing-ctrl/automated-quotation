@@ -1,3 +1,43 @@
+## 2026-08-28 · Data check: PO line prices against the product catalogue
+
+- **Reported:** PO 615 bought BELT B-50 at **₱128** while both of that product's suppliers list **₱210** — 2 pcs
+  billed at ₱256 instead of ₱420. Owner asked whether it happened elsewhere.
+- **Found the mechanism, in Phase 4's own price seeding.** A PO line's price is filled from the catalogue; when the
+  chosen supplier has no saved price the fill drops to the REFERENCE price, defined in
+  `src/app/(app)/purchasing/page.tsx` as *"lowest supplier price, else the stock item's **unit cost**"*. That last
+  fallback is the trap: **inventory unit cost is a costing figure, not an offer from a supplier**, so a line seeded
+  from it goes out at a price nobody quoted. ₱128 is BELT B-50's unit cost; ₱210 is what the suppliers sell it for.
+- **New read-only section on Admin → Data check**, `src/lib/po-price-audit.ts`, checking every priced PO line
+  against the catalogue and splitting the results, because the two kinds are not equally suspicious:
+  - **`inventory_cost`** — the line's price equals the stock unit cost and **no supplier lists that price**. The
+    signature of the fallback, and the strongest evidence of a genuinely wrong price. Sorted first.
+  - **`differs`** — simply not what the supplier lists now.
+- **The audit reuses the seeding logic rather than re-implementing it.** It builds the catalogue exactly as the
+  purchasing page does and resolves descriptions through `matchKey` — the same matcher — so the audit and the
+  seeding can never disagree about what a product costs, and `BELT B-50 (JO 2600080)` resolves the same way in both.
+  `matchKey` gained an `export` keyword; no behaviour changed, and a local copy would have been the thing that
+  drifts.
+- **A caveat that stays attached to every row**, in the UI as well as the code: **a PO legitimately records the
+  price agreed at the time.** A supplier that raised its price later makes a difference *history*, not an error. The
+  audit narrows 1000+ lines to a handful worth looking at; it does not decide them.
+- **A trap caught by testing rather than reading.** The first version read the stock cost via `fallbackPriceFor`,
+  which returns the **reference** price — the lowest *supplier* price whenever the product has one. For BELT B-50
+  that is ₱210, so the check compared 210 against 210 and classified the reported line as a plain "differs",
+  missing the very signature it was built to find. The unit cost now comes from the inventory map directly.
+- **Verified with 13 assertions** against a real Postgres seeded to the reported shape — two suppliers at ₱210, a
+  stock item at ₱128, and a neighbouring BELT B-40:
+  - flags PO 615, classifies it `inventory_cost`, reports ₱128 vs ₱210, identifies the ₱128 stock cost, and
+    computes ₱256 → **₱420**;
+  - catches a second item seeded from its own ₱99 unit cost **without confusing it with B-50**;
+  - stays silent on the correct price carrying a `(JO …)` suffix, on the second supplier at the same price, and on
+    B-40 at its own price;
+  - ignores an item absent from the catalogue instead of guessing;
+  - sorts `inventory_cost` above `differs`.
+- Typecheck + lint + build clean. Read-only; no migration.
+- **Not changed — Phase 4 is frozen.** The fallback that causes this is still live. Fixing it (stop seeding a PO
+  price from inventory unit cost, or mark such a line as unpriced so the purchaser must enter one) needs the owner's
+  approval, as does correcting PO 615's ₱128.
+
 ## 2026-08-28 · Duplicated quotations stop inheriting the original's order
 
 - **Owner-approved**, following the production scan: 3 of 1047 quotations affected, in two different shapes.

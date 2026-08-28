@@ -14,13 +14,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
 import { scanInheritedWorkflows } from "@/lib/inherited-workflow-scan";
+import { auditPoPrices } from "@/lib/po-price-audit";
+import { formatCurrency } from "@/lib/utils";
 import { ResetInheritedButton } from "./reset-button";
 
 // Always the live picture — a cached one would be worse than none.
 export const dynamic = "force-dynamic";
 
 export default async function DataCheckPage() {
-  const { scanned, findings } = await scanInheritedWorkflows();
+  const [{ scanned, findings }, priceAudit] = await Promise.all([
+    scanInheritedWorkflows(),
+    auditPoPrices(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -151,6 +156,105 @@ export default async function DataCheckPage() {
             </Card>
           ))}
         </>
+      )}
+
+      <Card className="mt-8">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Purchase order prices vs the product catalogue</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            A PO line&apos;s price is filled in from the catalogue. When a product has no saved
+            supplier price, that fill falls back to the <b>stock item&apos;s unit cost</b> — a
+            costing figure, not an offer from a supplier — so a line can go out at a price no
+            supplier ever quoted.
+          </p>
+          <p className="text-xs">
+            Reading only. Checked {priceAudit.lines} priced line
+            {priceAudit.lines === 1 ? "" : "s"} across {priceAudit.purchaseOrders} purchase order
+            {priceAudit.purchaseOrders === 1 ? "" : "s"}.{" "}
+            <b>
+              A PO records the price agreed at the time, so a difference can be history rather than
+              an error — check the date before treating one as wrong.
+            </b>
+          </p>
+        </CardContent>
+      </Card>
+
+      {priceAudit.issues.length === 0 ? (
+        <Card>
+          <CardContent className="flex items-center gap-3 py-8">
+            <Badge variant="success">Clear</Badge>
+            <p className="text-sm">Every PO line matches a price its supplier lists.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="overflow-x-auto p-0">
+            <table className="w-full min-w-[880px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-3">PO</th>
+                  <th className="px-4 py-3">Item</th>
+                  <th className="px-4 py-3 text-right">On the PO</th>
+                  <th className="px-4 py-3 text-right">Supplier lists</th>
+                  <th className="px-4 py-3 text-right">Line total</th>
+                  <th className="px-4 py-3">Why flagged</th>
+                </tr>
+              </thead>
+              <tbody>
+                {priceAudit.issues.map((i, n) => (
+                  <tr key={`${i.requestId}-${n}`} className="border-b last:border-0 align-top">
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs">{i.poNumber}</span>
+                      <span className="block text-xs text-muted-foreground">{i.supplier || "—"}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {i.description}
+                      <span className="block text-xs text-muted-foreground">Qty {i.qty}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-destructive">
+                      {formatCurrency(i.poPrice)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {i.supplierPrice !== null
+                        ? formatCurrency(i.supplierPrice)
+                        : i.allSupplierPrices.length
+                          ? i.allSupplierPrices.map((p) => formatCurrency(p)).join(" / ")
+                          : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatCurrency(i.poLineTotal)}
+                      {i.correctedLineTotal !== null && !Number.isNaN(i.correctedLineTotal) && (
+                        <span className="block text-xs text-muted-foreground">
+                          would be {formatCurrency(i.correctedLineTotal)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {i.kind === "inventory_cost" ? (
+                        <>
+                          <Badge variant="destructive">Inventory cost</Badge>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Matches the stock unit cost ({formatCurrency(i.stockCost ?? 0)}), which no
+                            supplier lists.
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Badge variant="warning">Differs</Badge>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Not a price any supplier lists for this product.
+                          </span>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
