@@ -4,20 +4,30 @@
  * READ ONLY — this is a diagnostic; nothing here writes.
  *
  * Why it exists: PO 615 bought BELT B-50 at ₱128 while both of that product's
- * suppliers list ₱210. A PO line's price is seeded from the catalogue, and when
- * a product has no saved supplier price the seed falls back to the REFERENCE
- * price, which is "lowest supplier price, else the STOCK ITEM'S UNIT COST".
- * That last fallback is the trap: inventory unit cost is a costing figure, not
- * an offer from a supplier, so a line seeded from it can go out on a PO at a
- * price no supplier ever quoted.
+ * suppliers list ₱210, and its stock item is costed at ₱210 too.
  *
- * The audit compares each PO line against the catalogue as it stands today and
- * sorts the differences into two kinds, because they are not equally suspicious:
+ * A CORRECTION TO AN EARLIER READING OF THIS FILE. The first version blamed the
+ * seeding fallback — "lowest supplier price, else the stock item's unit cost" —
+ * on the assumption that the unit cost was ₱128. It is not; inventory carries
+ * ₱210. Every automatic path (the chosen supplier's price, the reference price,
+ * the unit cost) yields ₱210 for this line, and the description matcher resolves
+ * "BELT B-50 (JO 2600080)" to the product correctly, so auto-fill would have
+ * offered ₱210. The ₱128 did not come from the catalogue.
  *
- *   - `inventory_cost` — the line's price equals the stock unit cost and no
- *     supplier lists that price. This is the signature of the fallback above,
- *     and the strongest evidence of a genuinely wrong price.
- *   - `differs` — the price simply is not what the chosen supplier lists now.
+ * What that leaves is the real gap: ONCE A PRICE IS IN THE BOX, NOTHING EVER
+ * CHECKS IT AGAIN. `withCatalogPrices` fills blanks only (it overwrites solely
+ * when the supplier is re-picked), and no later step — save, approve, print,
+ * voucher — compares the line against what the supplier lists. A figure typed by
+ * hand, or one seeded when the catalogue said something different, travels
+ * untouched all the way to a signed voucher.
+ *
+ * So this audit is that missing check, applied after the fact. It compares each
+ * PO line against the catalogue as it stands today and sorts the differences:
+ *
+ *   - `inventory_cost` — the price equals the stock unit cost and no supplier
+ *     lists that price. Kept because it is a genuine signal when it happens;
+ *     it is NOT what happened to PO 615.
+ *   - `differs` — the price is not one any supplier lists. This is PO 615.
  *
  * A caveat that has to stay attached to every row: **a PO legitimately records
  * the price agreed at the time.** If a supplier raised its price after the PO

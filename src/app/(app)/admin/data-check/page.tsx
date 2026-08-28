@@ -164,10 +164,11 @@ export default async function DataCheckPage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
-            A PO line&apos;s price is filled in from the catalogue. When a product has no saved
-            supplier price, that fill falls back to the <b>stock item&apos;s unit cost</b> — a
-            costing figure, not an offer from a supplier — so a line can go out at a price no
-            supplier ever quoted.
+            A PO line&apos;s price is filled in from the catalogue when the line is blank or the
+            supplier is picked. After that, <b>nothing checks it again</b> — not saving, not
+            approval, not printing, not the voucher. A figure typed by hand, or one filled in when
+            the catalogue said something different, travels untouched to a signed voucher. This is
+            that missing check, run after the fact.
           </p>
           <p className="text-xs">
             Reading only. Checked {priceAudit.lines} priced line
@@ -236,8 +237,8 @@ export default async function DataCheckPage() {
                         <>
                           <Badge variant="destructive">Inventory cost</Badge>
                           <span className="mt-1 block text-xs text-muted-foreground">
-                            Matches the stock unit cost ({formatCurrency(i.stockCost ?? 0)}), which no
-                            supplier lists.
+                            Matches the stock unit cost ({formatCurrency(i.stockCost ?? 0)}), which
+                            no supplier lists — so it was priced from inventory, not from a quote.
                           </span>
                         </>
                       ) : (
