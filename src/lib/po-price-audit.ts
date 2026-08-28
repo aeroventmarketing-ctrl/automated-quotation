@@ -38,7 +38,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getProducts } from "@/lib/product-catalog";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
-import { catalogPriceFor, matchKey, REF_PRICE_KEY, type CatalogPrices } from "@/lib/po-catalog";
+import { catalogPriceFor, matchKey, REF_PRICE_KEY } from "@/lib/po-catalog";
+import { buildPoPriceCatalog } from "@/lib/po-price-catalog";
 
 export type PriceIssueKind = "inventory_cost" | "differs" | "unit_mismatch";
 
@@ -128,28 +129,15 @@ export async function auditPoPrices(): Promise<PriceAudit> {
       .catch(() => [] as { id: string; po: unknown }[]),
   ]);
 
-  // Built exactly as the purchasing page builds it, so the audit and the seeding
-  // logic can never disagree about what a product costs.
-  const catalog: CatalogPrices = {};
-  for (const p of products) {
-    const m: Record<string, number> = {};
-    for (const s of p.suppliers) if (s.price && s.price > 0) m[s.company.toLowerCase()] = s.price;
-    if (Object.keys(m).length) catalog[p.name.trim().toLowerCase()] = m;
-  }
+  // The SAME builder the PO form fills from and the save checks against, so the
+  // three can never disagree about what a product costs.
+  const catalog = await buildPoPriceCatalog();
   const costByName = new Map<string, number>();
   for (const si of stockItems) {
     const n = si.name.trim().toLowerCase();
     const c = Number(si.unitCost);
     if (c > 0 && !costByName.has(n)) costByName.set(n, c);
   }
-  for (const p of products) {
-    const key = p.name.trim().toLowerCase();
-    const m = catalog[key] ?? {};
-    const supplierPrices = Object.values(m).filter((n) => n > 0);
-    const ref = supplierPrices.length ? Math.min(...supplierPrices) : costByName.get(key) ?? 0;
-    if (ref > 0) catalog[key] = { ...m, [REF_PRICE_KEY]: ref };
-  }
-  for (const [n, c] of costByName) if (!catalog[n]) catalog[n] = { [REF_PRICE_KEY]: c };
 
   // Resolve a line description to its catalogue entry through the SAME matcher
   // the PO form uses, so "BELT B-50 (JO 2600080)" resolves to the BELT B-50

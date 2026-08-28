@@ -55,8 +55,18 @@ const isUnsourced = (p: ProductRow) =>
   !p.suppliers.some((s) => s.company && s.company.trim() !== "") &&
   !p.suppliers.some((s) => typeof s.price === "number" && s.price > 0);
 
-/** Add/remove the suppliers a product can be bought from, each with code + price. */
-function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplierLink[]; onChange: (v: ProductSupplierLink[]) => void; suppliers: Supplier[] }) {
+const PRICE_LOCK_HINT =
+  "Prices are set by an Admin or the Payment Approver. You can still add suppliers and codes here.";
+
+/**
+ * Add/remove the suppliers a product can be bought from, each with code + price.
+ *
+ * `canEditPrices` is the Payment Approver / admin gate. Everyone else still sees
+ * every price — they just cannot change one, so the price inputs go read-only
+ * rather than disappearing. The server enforces the same rule regardless (see
+ * lib/price-authority); this only keeps the screen honest about it.
+ */
+function SupplierEditor({ value, onChange, suppliers, canEditPrices }: { value: ProductSupplierLink[]; onChange: (v: ProductSupplierLink[]) => void; suppliers: Supplier[]; canEditPrices: boolean }) {
   const [pick, setPick] = useState("");
   const [code, setCode] = useState("");
   const [price, setPrice] = useState("");
@@ -98,7 +108,9 @@ function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplier
                   placeholder="—"
                   aria-label={`Unit price for ${v.company}`}
                   onChange={(e) => setPriceFor(v.company, e.target.value)}
-                  className="w-16 bg-transparent px-0.5 text-xs tabular-nums text-foreground outline-none placeholder:text-muted-foreground/60 focus:underline"
+                  readOnly={!canEditPrices}
+                  title={canEditPrices ? undefined : PRICE_LOCK_HINT}
+                  className={`w-16 bg-transparent px-0.5 text-xs tabular-nums outline-none placeholder:text-muted-foreground/60 ${canEditPrices ? "text-foreground focus:underline" : "cursor-not-allowed text-muted-foreground"}`}
                 />
               </span>
               <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => remove(v.company)} aria-label={`Remove ${v.company}`}>
@@ -114,14 +126,15 @@ function SupplierEditor({ value, onChange, suppliers }: { value: ProductSupplier
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.company}</option>)}
         </select>
         <Input className="h-8 w-28" placeholder="Supplier code" value={code} onChange={(e) => setCode(e.target.value)} />
-        <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Price ₱" value={price} onChange={(e) => setPrice(e.target.value)} />
+        <Input className="h-8 w-24" type="number" step="any" min={0} placeholder={canEditPrices ? "Price ₱" : "—"} value={canEditPrices ? price : ""} onChange={(e) => setPrice(e.target.value)} readOnly={!canEditPrices} title={canEditPrices ? undefined : PRICE_LOCK_HINT} />
         <Button size="sm" variant="outline" className="h-8" disabled={!pick} onClick={add}>Add</Button>
       </div>
+      {!canEditPrices && <p className="text-[11px] text-muted-foreground">{PRICE_LOCK_HINT}</p>}
     </div>
   );
 }
 
-function ProductRowView({ product, canManage, showPrices, showSuppliers, suppliers, scanTarget, scanNonce, selectable, selected, onToggle, colSpan, officeResale }: { product: ProductRow; canManage: boolean; showPrices: boolean; showSuppliers: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number; selectable: boolean; selected: boolean; onToggle: () => void; colSpan: number; officeResale: boolean }) {
+function ProductRowView({ product, canManage, canEditPrices, showPrices, showSuppliers, suppliers, scanTarget, scanNonce, selectable, selected, onToggle, colSpan, officeResale }: { product: ProductRow; canManage: boolean; canEditPrices: boolean; showPrices: boolean; showSuppliers: boolean; suppliers: Supplier[]; scanTarget: string | null; scanNonce: number; selectable: boolean; selected: boolean; onToggle: () => void; colSpan: number; officeResale: boolean }) {
   const router = useRouter();
   const [panel, setPanel] = useState<"none" | "edit" | "label">("none");
   const rowRef = useRef<HTMLTableRowElement>(null);
@@ -209,7 +222,7 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
               </div>
               <div>
                 <div className="mb-1 text-xs text-muted-foreground">Suppliers</div>
-                <SupplierEditor value={sups} onChange={setSups} suppliers={suppliers} />
+                <SupplierEditor value={sups} onChange={setSups} suppliers={suppliers} canEditPrices={canEditPrices} />
               </div>
               <label className="flex items-start gap-2 text-xs">
                 <input type="checkbox" className="mt-0.5 h-4 w-4" checked={resale} disabled={resaleBusy} onChange={toggleResale} />
@@ -250,7 +263,7 @@ function ProductRowView({ product, canManage, showPrices, showSuppliers, supplie
   );
 }
 
-export function ProductManager({ products, suppliers, canManage, admin = false, showPrices, showSuppliers = true, resaleIds = [] }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean; resaleIds?: string[] }) {
+export function ProductManager({ products, suppliers, canManage, canEditPrices = false, admin = false, showPrices, showSuppliers = true, resaleIds = [] }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; canEditPrices?: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean; resaleIds?: string[] }) {
   const router = useRouter();
   const resaleSet = useMemo(() => new Set(resaleIds), [resaleIds]);
   const [showAdd, setShowAdd] = useState(false);
@@ -452,7 +465,7 @@ export function ProductManager({ products, suppliers, canManage, admin = false, 
               </div>
               <div>
                 <div className="mb-1 text-xs text-muted-foreground">Suppliers</div>
-                <SupplierEditor value={sups} onChange={setSups} suppliers={suppliers} />
+                <SupplierEditor value={sups} onChange={setSups} suppliers={suppliers} canEditPrices={canEditPrices} />
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" className="h-8" disabled={busy} onClick={add}>{busy ? "Saving…" : "Add product"}</Button>
@@ -565,7 +578,7 @@ export function ProductManager({ products, suppliers, canManage, admin = false, 
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} showPrices={showPrices} showSuppliers={showSuppliers} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} selectable={selectable} selected={selected.has(p.id)} onToggle={() => toggleOne(p.id)} colSpan={cols} officeResale={resaleSet.has(p.id)} />)}
+                  {g.rows.map((p) => <ProductRowView key={p.id} product={p} canManage={canManage} canEditPrices={canEditPrices} showPrices={showPrices} showSuppliers={showSuppliers} suppliers={suppliers} scanTarget={scanTarget} scanNonce={scanNonce} selectable={selectable} selected={selected.has(p.id)} onToggle={() => toggleOne(p.id)} colSpan={cols} officeResale={resaleSet.has(p.id)} />)}
                 </Fragment>
               ))}
             </TableBody>

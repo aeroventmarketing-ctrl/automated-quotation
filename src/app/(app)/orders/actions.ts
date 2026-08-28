@@ -7,7 +7,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { buildPoPriceCatalog, cataloguePriceForLine } from "@/lib/po-price-catalog";
 import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
@@ -2922,6 +2923,9 @@ const poInputSchema = z.object({
         qty: z.string().trim().default(""),
         unit: z.string().trim().default(""),
         unitPrice: z.string().trim().default(""),
+        // The reason typed when a price is taken off the catalogue. Only the
+        // reason comes from the client; who and when are stamped server-side.
+        priceReason: z.string().trim().max(200).optional(),
       }),
     )
     .default([]),
@@ -2980,8 +2984,48 @@ export async function savePurchaseOrder(
     throw new Error("This request must be approved before a purchase order can be created.");
   }
 
-  const lines = d.lines.filter((l) => l.description.trim() !== "");
-  if (lines.length === 0) throw new Error("Add at least one line to the purchase order.");
+  const submitted = d.lines.filter((l) => l.description.trim() !== "");
+  if (submitted.length === 0) throw new Error("Add at least one line to the purchase order.");
+
+  // A price off the catalogue needs a reason. Checked HERE, against the
+  // catalogue as the server sees it: the form makes the box read-only until the
+  // purchaser asks to override, but a read-only input is a courtesy, not a
+  // control — the request can be replayed with any price.
+  //
+  // Deliberately not a block on the price itself. A supplier quoting something
+  // new on a Friday must not stop purchasing; the deviation is recorded and
+  // reviewed afterwards (Admin → Data check), which is the owner's decision.
+  const catalogue = await buildPoPriceCatalog();
+  const existingByKey = new Map(
+    (coercePurchaseOrder(pr.po)?.lines ?? []).map((l) => [`${l.description}|${l.unitPrice}`, l.priceOverride]),
+  );
+  const lines: POLine[] = submitted.map((l) => {
+    const listed = cataloguePriceForLine(l.description, d.supplier.company, catalogue);
+    const typed = Number(String(l.unitPrice).replace(/[^0-9.-]/g, ""));
+    const off = listed != null && Number.isFinite(typed) && typed > 0 && Math.abs(typed - listed) >= 0.005;
+    if (!off) return { description: l.description, qty: l.qty, unit: l.unit, unitPrice: l.unitPrice };
+    // An untouched line keeps the reason it was saved with, so re-saving a PO
+    // for an unrelated edit doesn't demand the reason all over again.
+    const carried = existingByKey.get(`${l.description}|${l.unitPrice}`);
+    const reason = (l.priceReason ?? "").trim() || carried?.reason || "";
+    if (!reason) {
+      throw new Error(
+        `“${l.description}” is priced at ${typed.toLocaleString()} but the catalogue says ${listed.toLocaleString()}. Give a reason for the different price, or use the catalogue price.`,
+      );
+    }
+    return {
+      description: l.description,
+      qty: l.qty,
+      unit: l.unit,
+      unitPrice: l.unitPrice,
+      priceOverride: {
+        reason,
+        byName: carried?.reason === reason ? carried.byName : user.name,
+        at: carried?.reason === reason ? carried.at : new Date().toISOString(),
+        catalogue: listed,
+      },
+    };
+  });
 
   const existing = coercePurchaseOrder(pr.po);
   const po: PurchaseOrder = {

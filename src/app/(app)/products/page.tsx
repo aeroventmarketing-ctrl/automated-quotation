@@ -1,6 +1,6 @@
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canViewPrices, canViewSupplier } from "@/lib/price-visibility";
+import { canViewPrices, canViewSupplier, canEditPrices } from "@/lib/price-visibility";
 import { Card, CardContent } from "@/components/ui/card";
 import { getProducts, type ProductRow } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -26,6 +26,10 @@ export default async function ProductsPage() {
   // admins only. Other viewers (Warehouse, Plant Manager, Logistics, …) see the
   // products and their suppliers but not the prices.
   const showPrices = canViewPrices(viewer, assignments);
+  // Everyone who can open this page keeps seeing prices; only the Admin /
+  // Payment Approver may change one (see lib/price-authority, which enforces the
+  // same rule on the server).
+  const editPrices = canEditPrices(viewer, assignments);
   // Supplier names are restricted the same way as on the purchasing surfaces —
   // Purchaser, Accounting, Payment Approver, Engineers and admins only. The Plant
   // Manager and other monitoring roles see the products but not their suppliers.
@@ -85,7 +89,7 @@ export default async function ProductsPage() {
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <ProductManager products={products} suppliers={suppliers} canManage={canManage} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
+            <ProductManager products={products} suppliers={suppliers} canManage={canManage} canEditPrices={editPrices} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
           </CardContent>
         </Card>
       )}

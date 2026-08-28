@@ -1,3 +1,56 @@
+## 2026-08-28 · Part B — a PO price off the catalogue needs a reason
+
+- **Owner's instruction, completing A+B:** *"purchaser, warehouse and anyone who can access purchasing tab and
+  inventory tab can still access, can view only but cannot edit."* Access is untouched; only the price is reserved.
+
+### View stays, edit goes
+
+- `PRICE_EDIT_ROLES` in `price-visibility.ts` moves from `["purchaser"]` to `["payment_approver"]`, matching the
+  server rule in `price-authority.ts`. **`PRICE_ROLES` (viewing) is deliberately unchanged** — the Purchaser and
+  everyone else who can open Inventory / Products still sees every price.
+- The screens now say so instead of just failing on save: the Products supplier-price inputs go **read-only** with
+  *"Prices are set by an Admin or the Payment Approver. You can still add suppliers and codes here."* Inventory
+  already threaded `canEditPrices`, so its price edit simply disappears while the price columns stay visible.
+- **Not widened:** the Warehouse still cannot *see* prices (`PRICE_ROLES` is purchaser / accounting / engineer /
+  admin, by an older deliberate policy — money is hidden from Warehouse, Plant Manager, Logistics). The owner's
+  sentence reads as "don't lock people out", not "show Warehouse the money", and quietly widening commercial
+  visibility on an ambiguous reading would be the wrong way to be wrong. **Say the word if it was meant.**
+
+### The override
+
+- `POLine` gains an optional `priceOverride { reason, byName, at, catalogue }`. `catalogue` is the figure *at the
+  moment of the override*, so the record still makes sense after the catalogue is later corrected.
+- **The form** keeps the price read-only, with *different price…* to unlock it, a reason box, and a one-click way
+  back to the catalogue figure. Unlocking resets when the supplier changes, because that refills every line and the
+  old decision no longer refers to the same number. A saved override arrives already unlocked so its reason shows.
+- **The server is the control.** `savePurchaseOrder` rebuilds the catalogue and refuses an unexplained deviation —
+  *"BELT B-50 … is priced at 128 but the catalogue says 210. Give a reason…"*. A read-only input is a courtesy; the
+  request can be replayed with any price.
+- **Never a block on the price itself**, per the owner's choice: a supplier quoting something new on a Friday must
+  not stop purchasing. The deviation is recorded and reviewed afterwards.
+- **A re-save does not demand the reason again.** An untouched line carries its stored reason forward, and the
+  original `byName` / `at` are preserved rather than restamped — otherwise fixing a typo in the remarks would
+  rewrite who authorised the price and when.
+
+### One builder, three consumers
+
+- The catalogue build was inline in the Purchasing page and **copied again** by the audit; a third copy for the
+  save would have been the drift this codebase keeps getting bitten by. It is now `src/lib/po-price-catalog.ts`,
+  used by the save and the audit — the two that must agree.
+
+### Verified — 11 new tests against a real Postgres
+
+- **Catalogue (5):** the chosen supplier's own price; the lowest price when that supplier lists none; the inventory
+  unit cost when no supplier price exists; `null` for an uncatalogued product; and 1 HP vs 2 HP motors priced from
+  their **own** product.
+- **Save gate (6):** the catalogue price saves silently; a different price with **no reason is refused and nothing
+  is written**, naming both figures; with a reason it is stored and stamped with the purchaser's name, the time and
+  the ₱210 catalogue figure; a re-save keeps the original stamp; an uncatalogued product is left alone; and going
+  back to the catalogue price **clears** the override.
+- Full suite 71 passed, 24 skipped (the DB-backed suites). Typecheck + lint + build clean. No migration —
+  `priceOverride` rides in the existing `PurchaseRequest.po` JSON.
+- **Still pre-existing:** the CEBDD `selectFan` failure on `main`.
+
 ## 2026-08-28 · The catalogue price belongs to the Admin and the Payment Approver
 
 - **Owner's decision**, answering "is it alright to disallow the purchaser to change price in PO creation?":
