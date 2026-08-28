@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { assertCataloguePriceOwner, canSetCataloguePrice, PRICE_OWNER_MESSAGE } from "@/lib/price-authority";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -54,15 +55,13 @@ async function requireItemCreator() {
   throw new Error("Only the Purchaser, Warehouse or an admin can add or import stock items.");
 }
 
-/** The Purchaser or an admin may set an item's unit cost and selling price. */
+/** Only the Admin / Payment Approver may set an item's unit cost and selling price. */
 async function requirePriceManager() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (isAdmin(user)) return user;
-  const roles = await getWorkflowRoles();
-  if (!userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)) {
-    throw new Error("Only the Purchaser or an admin can set prices.");
-  }
+  // Owner's decision: the catalogue price belongs to the Admin and the Payment
+  // Approver, not to the Purchaser who spends against it. See lib/price-authority.
+  await assertCataloguePriceOwner();
   return user;
 }
 
@@ -180,7 +179,12 @@ export async function importStockItems(
     return { created: 0, updated: 0, skipped: 0, errors: ['The first row must be headers with a "name" column (e.g. name, sku, unit, category, location, quantity, reorderLevel, unitCost). Add an "sku" (Item Code) column to set each item\'s code.'] };
   }
 
+  // The bulk import must not be a way round the price rule: for anyone but the
+  // Admin / Payment Approver the cost / price columns are ignored. Said out loud
+  // in the result, because a silently skipped column looks like a broken import.
+  const mayPrice = await canSetCataloguePrice();
   const errors: string[] = [];
+  if (!mayPrice && (iCost >= 0 || iSell >= 0)) errors.push(`Unit cost / sell price columns ignored — ${PRICE_OWNER_MESSAGE}`);
   let created = 0;
   let updated = 0;
   let skipped = 0;
@@ -314,8 +318,8 @@ export async function importStockItems(
           if (has(iCat)) data.category = cell(iCat);
           if (has(iLoc)) data.location = cell(iLoc);
           if (has(iReorder)) data.reorderLevel = num(cell(iReorder));
-          if (has(iCost)) data.unitCost = num(cell(iCost));
-          if (has(iSell)) data.sellPrice = num(cell(iSell));
+          if (mayPrice && has(iCost)) data.unitCost = num(cell(iCost));
+          if (mayPrice && has(iSell)) data.sellPrice = num(cell(iSell));
           if (Object.keys(data).length > 0) await tx.stockItem.update({ where: { id: existing.id }, data });
           // Quantity: only when a non-empty quantity is given; record the change
           // in the ledger. A blank quantity leaves on-hand untouched (so a
@@ -344,8 +348,8 @@ export async function importStockItems(
               location: cell(iLoc) || null,
               quantity,
               reorderLevel: has(iReorder) ? num(cell(iReorder)) : 0,
-              unitCost: has(iCost) ? num(cell(iCost)) : 0,
-              sellPrice: has(iSell) ? num(cell(iSell)) : 0,
+              unitCost: mayPrice && has(iCost) ? num(cell(iCost)) : 0,
+              sellPrice: mayPrice && has(iSell) ? num(cell(iSell)) : 0,
             },
           });
           if (quantity > 0) {
@@ -562,6 +566,10 @@ const createSchema = z.object({
 export async function createStockItem(input: z.infer<typeof createSchema>): Promise<void> {
   const user = await requireItemCreator();
   const d = createSchema.parse(input);
+  // Anyone who may add an item may add it — but only the Admin / Payment
+  // Approver may PRICE it. A new item from anyone else starts unpriced rather
+  // than being refused, so adding stock is never blocked on a price.
+  const mayPrice = await canSetCataloguePrice();
   const wantSku = normalizeSku(d.sku);
   const barcode = (d.barcode ?? "").trim() || null;
   await prisma.$transaction(async (tx) => {
@@ -589,8 +597,8 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
         location: d.location || null,
         quantity: d.quantity,
         reorderLevel: d.reorderLevel,
-        unitCost: d.unitCost ?? 0,
-        sellPrice: d.sellPrice ?? 0,
+        unitCost: mayPrice ? d.unitCost ?? 0 : 0,
+        sellPrice: mayPrice ? d.sellPrice ?? 0 : 0,
       },
     });
     if (d.quantity > 0) {
@@ -620,6 +628,7 @@ const metaSchema = z.object({
 export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Promise<void> {
   await requireInventoryManager();
   const d = metaSchema.parse(input);
+  const mayPrice = await canSetCataloguePrice();
   const wantSku = normalizeSku(d.sku);
   // Uniqueness is per (SKU / barcode, location): the same code may sit in another
   // location, but not twice in the location this item is being set to.
@@ -647,8 +656,10 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
       category: d.category?.trim() || null,
       location: d.location?.trim() || null,
       reorderLevel: d.reorderLevel,
-      unitCost: d.unitCost,
-      sellPrice: d.sellPrice,
+      // Prices are the Admin / Payment Approver's to set. Everyone else may edit
+      // the rest of the row; the price fields are simply left as they are rather
+      // than the whole save being refused.
+      ...(mayPrice ? { unitCost: d.unitCost, sellPrice: d.sellPrice } : {}),
     },
   });
   revalidatePath("/inventory");

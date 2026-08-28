@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { canSetCataloguePrice, PRICE_OWNER_MESSAGE } from "@/lib/price-authority";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -16,8 +17,14 @@ async function requireProductManager() {
   if (!user) throw new Error("Unauthorized");
   if (isAdmin(user)) return user;
   const roles = await getWorkflowRoles();
-  const ok = userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
-  if (!ok) throw new Error("Only the Purchaser or an admin can manage the product list.");
+  // The Payment Approver is here because they OWN the supplier price (see
+  // lib/price-authority) and the price lives inside the product record — without
+  // this they would own a figure they could not reach. Inventory needs no
+  // equivalent: `updateStockItemPrices` is already a price-only action.
+  const ok =
+    userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only the Purchaser, Payment Approver or an admin can manage the product list.");
   return user;
 }
 
@@ -36,9 +43,34 @@ const productSchema = z.object({
   suppliers: z.array(supplierLinkSchema).max(50).default([]),
 });
 
+/**
+ * Strip supplier prices from an incoming product when the user may not set them.
+ *
+ * Owner's decision: the supplier price is the figure a purchase order defaults
+ * to, so it belongs to the Admin / Payment Approver — not to the Purchaser who
+ * spends against it. The Purchaser still manages the product itself: name,
+ * unit, category, note, which suppliers carry it and their codes.
+ *
+ * On an EDIT the existing price is carried forward (matched by supplier, else by
+ * company name), so saving an unrelated change never wipes a price. On a NEW
+ * product there is nothing to carry, so it simply starts unpriced.
+ */
+function withPreservedPrices<T extends { supplierId?: string; company: string; price?: number }>(
+  incoming: T[],
+  existing: { supplierId?: string; company: string; price?: number }[],
+): T[] {
+  const bySupplier = new Map(existing.filter((e) => e.supplierId).map((e) => [e.supplierId, e.price]));
+  const byCompany = new Map(existing.map((e) => [e.company.trim().toLowerCase(), e.price]));
+  return incoming.map((s) => ({
+    ...s,
+    price: (s.supplierId ? bySupplier.get(s.supplierId) : undefined) ?? byCompany.get(s.company.trim().toLowerCase()),
+  }));
+}
+
 export async function createProduct(input: z.infer<typeof productSchema>): Promise<void> {
   await requireProductManager();
   const d = productSchema.parse(input);
+  const suppliers = (await canSetCataloguePrice()) ? d.suppliers : withPreservedPrices(d.suppliers, []);
   await prisma.$transaction(async (tx) => {
     const sku = await nextProductSku(tx);
     await tx.product.create({
@@ -48,7 +80,7 @@ export async function createProduct(input: z.infer<typeof productSchema>): Promi
         category: d.category || null,
         note: d.note || null,
         sku,
-        suppliers: coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue,
+        suppliers: coerceProductSuppliers(suppliers) as unknown as Prisma.InputJsonValue,
       },
     });
   });
@@ -58,6 +90,11 @@ export async function createProduct(input: z.infer<typeof productSchema>): Promi
 export async function updateProduct(input: { id: string } & z.infer<typeof productSchema>): Promise<void> {
   await requireProductManager();
   const d = productSchema.parse(input);
+  let suppliers = d.suppliers;
+  if (!(await canSetCataloguePrice())) {
+    const current = await prisma.product.findUnique({ where: { id: input.id }, select: { suppliers: true } });
+    suppliers = withPreservedPrices(d.suppliers, coerceProductSuppliers(current?.suppliers ?? []));
+  }
   await prisma.product.update({
     where: { id: input.id },
     data: {
@@ -65,7 +102,7 @@ export async function updateProduct(input: { id: string } & z.infer<typeof produ
       unit: d.unit || "pcs",
       category: d.category || null,
       note: d.note || null,
-      suppliers: coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue,
+      suppliers: coerceProductSuppliers(suppliers) as unknown as Prisma.InputJsonValue,
     },
   });
   revalidatePath("/products");
@@ -319,7 +356,21 @@ export async function importProducts(
     for (const s of g.suppliers) s.supplierId = idByCompany.get(s.company.toLowerCase()) ?? "";
   }
 
+  // The import must not be a way round the price rule. For anyone but the Admin
+  // / Payment Approver the file's prices are dropped here, before either the
+  // create or the merge path can read them — and it is said out loud, because a
+  // silently ignored column looks like a broken import.
   const errors: string[] = [];
+  if (!(await canSetCataloguePrice())) {
+    let hadPrice = false;
+    for (const g of groups.values()) {
+      for (const s of g.suppliers) {
+        if (s.price !== undefined) hadPrice = true;
+        s.price = undefined;
+      }
+    }
+    if (hadPrice || iPrice >= 0) errors.push(`Prices in the file were ignored — ${PRICE_OWNER_MESSAGE}`);
+  }
   let created = 0;
   let updated = 0;
   for (const g of groups.values()) {

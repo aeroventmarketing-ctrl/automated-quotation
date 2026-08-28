@@ -1,3 +1,36 @@
+## 2026-08-28 · The catalogue price belongs to the Admin and the Payment Approver
+
+- **Owner's decision**, answering "is it alright to disallow the purchaser to change price in PO creation?":
+  option **A and B together** — A moves who owns the price, B records any deviation at the line. This entry is A.
+- **Why A alone would have been theatre.** The Purchaser already owned both catalogue screens: `Products` (admin +
+  purchaser) and `Inventory` (admin + warehouse + purchaser). Locking the PO field and saying "change it in
+  Products" would have moved the same person to a different tab to type the same number.
+- **Only the PRICE FIELDS are reserved**, never the screens — new `src/lib/price-authority.ts`. The Warehouse still
+  adjusts quantities; the Purchaser still adds items and products, sets suppliers, codes, units and categories.
+  Locking the tabs would have stopped people doing their jobs.
+  - Inventory: `unitCost` / `sellPrice` on create, on the meta edit, and in the bulk import.
+  - Products: the supplier `price`, on create, on edit and in the import.
+- **A non-owner is never refused — the price is simply left alone.** A Purchaser's new item is created *unpriced*
+  rather than rejected, and their edit to a name, code or location lands while the price stays as approved. Refusing
+  the whole save would have made an approved price a blocker on unrelated work.
+- **Neither importer is a way round it.** Both drop the file's prices for a non-owner and **say so in the result** —
+  a silently ignored column looks like a broken import, and this codebase has already been bitten by that.
+- **A gap the tests caught, not the reading.** `requireProductManager` was admin + purchaser, so the Payment
+  Approver **could not open Products at all** — they would have owned a figure they had no way to reach. They are
+  now allowed in. Inventory needed no equivalent: `updateStockItemPrices` is already a price-only action, so the
+  Payment Approver can set inventory prices without broader inventory rights.
+- **7 tests** in `src/lib/price-authority.test.ts`, against a real Postgres (skipped unless `TEST_DATABASE_URL` is
+  set). As much about what STAYS possible as what is blocked:
+  - the authority admits Admin and Payment Approver, and refuses Purchaser and Warehouse;
+  - the Payment Approver sets a supplier price; the Purchaser's price is ignored **but the product is still created**;
+  - a Purchaser renaming a product and adding a supplier code keeps both edits while the approved ₱210 stands;
+  - the Admin prices a stock item; the Purchaser's item is created with its **quantity and reorder level** intact
+    and the price at zero;
+  - the Warehouse's category / location / reorder-level edit lands while unit cost and sell price stay as approved.
+- Full suite 71 passed, 13 skipped (the DB-backed suites). Typecheck + lint + build clean. No migration.
+- **Part B is next**: the PO line price read-only by default, with a "use a different price" override that records
+  who, when and why — kept open to the Purchaser, so a supplier's new quote never stops purchasing.
+
 ## 2026-08-28 · A new PO line starts at the catalogue price
 
 - **Owner-instructed:** *"when creating PO get the item price in product tab or inventory tab — the price of 2
