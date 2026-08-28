@@ -86,8 +86,16 @@ export default async function DataCheckPage() {
                 {f.stamps.length > 0 && (
                   <div>
                     <p className="font-medium">
-                      {f.stamps.length} approval stamp{f.stamps.length === 1 ? "" : "s"} predate this
-                      quotation
+                      {f.stamps.length} of {f.totalStamps} recorded step
+                      {f.totalStamps === 1 ? "" : "s"} predate this quotation
+                    </p>
+                    {/* The whole diagnosis in one line: everything inherited means
+                        the order never ran its own workflow; a few inherited out
+                        of many means it was worked properly but started ahead. */}
+                    <p className="text-xs text-muted-foreground">
+                      {f.stamps.length === f.totalStamps
+                        ? "Every recorded step came from the other order — this order has done none of its own."
+                        : `The remaining ${f.totalStamps - f.stamps.length} happened after this order was created, so they are its own work.`}
                     </p>
                     <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                       {f.stamps.slice(0, 10).map((s) => (
@@ -103,8 +111,9 @@ export default async function DataCheckPage() {
                 {f.foreignPaths.length > 0 && (
                   <div>
                     <p className="font-medium">
-                      {f.foreignPaths.length} document read
-                      {f.foreignPaths.length === 1 ? "" : "s"} point at another order&apos;s files
+                      {f.foreignPaths.length === 1
+                        ? "1 document read points at another order's files"
+                        : `${f.foreignPaths.length} document reads point at another order's files`}
                     </p>
                     <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                       {f.foreignPaths.slice(0, 10).map((p) => (

@@ -1,3 +1,31 @@
+## 2026-08-28 · Data check: how much of an order is inherited, not just that some is
+
+- **The production scan found 3 of 1047 quotations affected**, and they are not the same problem — which the page
+  could not show, because it only reported the count of inherited steps, never the total:
+  - **3276J** (MALERA, dup of 2892J) — **21** predating stamps including duct job orders, proofs and the final
+    payment check, plus a `slipValidations` entry pointing at another order's deposit slip.
+  - **3020J** (INOVUS, dup of 2648J) and **2941J** (H&H, dup of 2803J) — **1** predating stamp each, both
+    `approvals.doc_check.at`, both dated 3 Aug ~10:05.
+- **So the page now prints "N of M recorded steps"** and says which case it is in plain words: *"Every recorded step
+  came from the other order — this order has done none of its own"* versus *"The remaining N happened after this
+  order was created, so they are its own work."* That one ratio is the whole diagnosis, and it decides the repair:
+  a wholly inherited order never ran its workflow and must restart, while an order with one inherited step was
+  worked properly and merely started one step ahead. Repairing those two the same way would destroy real work.
+- **The production data corrected two of my assumptions**, both harmlessly:
+  - The real stamp keys are **snake_case** (`doc_check`, `payment_cleared`, `jo_received`, `client_notified`,
+    `final_pay_checked`) — my seed had guessed camelCase. The detector walks the blob for *any* ISO timestamp
+    rather than looking up known keys, so it never depended on the naming. That generality is why it worked
+    first time against real data.
+  - The workflow holds far more dated events than approvals — `jobOrders.duct.issuedAt`, `startedAt`,
+    `finishedAt`, `proofs.0.uploadedAt`, `ductJobOrders.0.approvedAt`. All correctly counted.
+- **Fixed a copy bug in the singular case**: "1 document read **point** at another order's files" → "points".
+- Verified by rendering the page against both shapes seeded from the real numbers: 5-of-5 reports "none of its
+  own", 1-of-4 reports "the remaining 3 are its own work".
+- Typecheck + lint + build clean. Still read-only; no migration.
+- **Outstanding, both awaiting the owner and both frozen-area:** the code fix in `duplicateQuotationToCustomer`
+  (invert the deny-list to an allow-list), and the repair of the three orders — which now needs two different
+  treatments, not one.
+
 ## 2026-08-28 · Admin → Data check: which orders are carrying another order's state
 
 - **The scan is now a page, not a command.** Admin → **Data check** runs it with the credentials the app already
