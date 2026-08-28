@@ -153,7 +153,11 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
     finally { setBusy(false); }
   }
   // Edit / Adjust / Reserve / Transfer are PROPOSED — they only take effect once
-  // both a Warehouseman and a Purchaser approve (double handshake).
+  // both a Warehouseman and a Purchaser approve (double handshake), plus, for an
+  // EDIT, the Admin / Payment Approver who owns the unit cost and selling price
+  // it carries. That third sign-off is why the edit panel may still offer the
+  // price boxes to someone who cannot set a price outright: here they PROPOSE
+  // one, and the owner is the person who makes it real.
   function apply() {
     const n = Number(qty);
     if (!Number.isFinite(n) || n < 0) { setErr("Enter a quantity."); return; }
@@ -279,6 +283,13 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
               <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Propose edit"}</Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
+            {/* An edit carries the money columns, so it is the one stock action
+                that also waits on the price owner. Said here rather than only in
+                the pending card, so nobody expects the change to be live. */}
+            <p className="pb-1 text-[11px] text-muted-foreground">
+              Proposed, not saved — an edit applies once the Warehouseman, the Purchaser
+              {canEditPrices ? " and you" : " and an Admin / the Payment Approver"} have approved it.
+            </p>
           </TableCell>
         </TableRow>
       )}
@@ -402,7 +413,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   );
 }
 
-export function InventoryManager({ items, canManage, admin = false, canDelete = admin, canScan = canManage, canCreate = true, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
   // Multi-select for bulk delete (the Purchaser or an admin — the removeStockItems
@@ -706,8 +717,10 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add stock item</Button>
-              <BulkImport />
-              {items.length > 0 && (
+              {/* Import / download are the price owner's: the file carries every
+                  unit cost and selling price, in and out (lib/price-authority). */}
+              {canTransferFiles && <BulkImport />}
+              {canTransferFiles && items.length > 0 && (
                 <>
                   <Button size="sm" variant="outline" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={exportCsv}>Download CSV</Button>
@@ -783,8 +796,9 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
             {statusFilter === "out" ? "Out of stock" : "Low stock"} ({filtered.length}) <X className="h-3.5 w-3.5" />
           </button>
         )}
-        {/* Download stays available to view-only roles (who don't get the action row above). */}
-        {!canCreate && items.length > 0 && (
+        {/* The view-only download row, for a price owner who cannot add items.
+            Everyone else no longer gets one at all. */}
+        {!canCreate && canTransferFiles && items.length > 0 && (
           <div className="flex items-center gap-1.5">
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
             <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>

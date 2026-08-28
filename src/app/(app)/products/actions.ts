@@ -1,23 +1,38 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  canSetCataloguePrice,
+  canTransferCatalogueFiles,
+  CATALOGUE_FILE_MESSAGE,
+  PRICE_OWNER_CONFIRMS,
+  PRICE_OWNER_MESSAGE,
+} from "@/lib/price-authority";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
+import { Prisma, type ProductChangeKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { logActivity } from "@/lib/activity-log";
 import { nextProductSku } from "@/lib/product-catalog";
 import { coerceProductSuppliers, type ProductSupplierLink } from "@/lib/products";
 import { getSuppliers, rememberSupplier, isPricedSupplierName } from "@/lib/suppliers";
 import { setOfficeResaleProduct } from "@/lib/office-resale";
+import { productChangeSummary, type ProductChangePayload } from "@/lib/product-change";
 
 async function requireProductManager() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   if (isAdmin(user)) return user;
   const roles = await getWorkflowRoles();
-  const ok = userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
-  if (!ok) throw new Error("Only the Purchaser or an admin can manage the product list.");
+  // The Payment Approver is here because they OWN the supplier price (see
+  // lib/price-authority) and the price lives inside the product record — without
+  // this they would own a figure they could not reach, and there would be nobody
+  // whose Save writes straight through to the catalogue.
+  const ok =
+    userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey) ||
+    userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey);
+  if (!ok) throw new Error("Only the Purchaser, Payment Approver or an admin can manage the product list.");
   return user;
 }
 
@@ -36,39 +51,133 @@ const productSchema = z.object({
   suppliers: z.array(supplierLinkSchema).max(50).default([]),
 });
 
-export async function createProduct(input: z.infer<typeof productSchema>): Promise<void> {
-  await requireProductManager();
-  const d = productSchema.parse(input);
-  await prisma.$transaction(async (tx) => {
-    const sku = await nextProductSku(tx);
-    await tx.product.create({
+/**
+ * What a Save / Add / Delete did.
+ *
+ * Returned, not thrown, on every outcome: a production build strips the message
+ * off anything a Server Action throws, and "your change is waiting for approval"
+ * is precisely the sentence the user must read.
+ *
+ * `applied: false` is not a failure — it is the change parked for the Admin /
+ * Payment Approver, so the screen must say so rather than imply a save.
+ */
+export type ProductSaveResult =
+  | { ok: true; applied: true }
+  | { ok: true; applied: false; message: string }
+  | { ok: false; error: string };
+
+const APPLIED: ProductSaveResult = { ok: true, applied: true };
+const PARKED: ProductSaveResult = { ok: true, applied: false, message: PRICE_OWNER_CONFIRMS };
+
+/** Run a save, returning any failure's real reason instead of throwing it away. */
+async function asSaveResult(fn: () => Promise<ProductSaveResult>): Promise<ProductSaveResult> {
+  try {
+    return await fn();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Something went wrong.";
+    // The approval queue is a table; before its migration runs, a proposal has
+    // nowhere to go. Say that, rather than a Prisma stack trace.
+    return { ok: false, error: /ProductChange/i.test(msg) ? "The product-approval table isn't set up yet. Run migration 0047 in Supabase." : msg };
+  }
+}
+
+const asPayload = (d: z.infer<typeof productSchema>): ProductChangePayload => ({
+  name: d.name,
+  unit: d.unit || "pcs",
+  category: d.category || null,
+  note: d.note || null,
+  suppliers: coerceProductSuppliers(d.suppliers),
+});
+
+/** The product as it stands now, in the same shape, for the reviewer's diff. */
+async function snapshot(id: string): Promise<ProductChangePayload | null> {
+  const p = await prisma.product.findUnique({ where: { id } });
+  if (!p) return null;
+  return { name: p.name, unit: p.unit, category: p.category, note: p.note, suppliers: coerceProductSuppliers(p.suppliers) };
+}
+
+/**
+ * Park a proposed change for the price owner.
+ *
+ * Kept whole — prices included — because the owner is about to read it and
+ * decide. This is the ONE path on which a non-owner's price reaches the
+ * database, and only through the owner's own click; everywhere else
+ * `canSetCataloguePrice` still strips it.
+ */
+async function park(
+  user: { id: string; name: string | null },
+  kind: ProductChangeKind,
+  productId: string | null,
+  payload: ProductChangePayload,
+): Promise<ProductSaveResult> {
+  const before = productId ? await snapshot(productId) : null;
+  const summary = productChangeSummary(kind, payload);
+  await prisma.productChange.create({
+    data: {
+      productId,
+      productName: payload.name,
+      kind,
+      payload: payload as unknown as Prisma.InputJsonValue,
+      before: (before as unknown as Prisma.InputJsonValue) ?? Prisma.DbNull,
+      summary,
+      proposedById: user.id,
+      proposedByName: user.name ?? "Unknown",
+    },
+  });
+  await logActivity(user, {
+    action: "products.change.propose",
+    category: "inventory",
+    summary: `Product change proposed — ${summary}`,
+    entity: "product",
+    entityId: productId ?? undefined,
+    href: "/products",
+  });
+  revalidatePath("/products");
+  revalidatePath("/my-dashboard");
+  return PARKED;
+}
+
+export async function createProduct(input: z.infer<typeof productSchema>): Promise<ProductSaveResult> {
+  return asSaveResult(async () => {
+    const user = await requireProductManager();
+    const d = productSchema.parse(input);
+    if (!(await canSetCataloguePrice())) return park(user, "CREATE", null, asPayload(d));
+    await prisma.$transaction(async (tx) => {
+      const sku = await nextProductSku(tx);
+      await tx.product.create({
+        data: {
+          name: d.name,
+          unit: d.unit || "pcs",
+          category: d.category || null,
+          note: d.note || null,
+          sku,
+          suppliers: coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue,
+        },
+      });
+    });
+    revalidatePath("/products");
+    return APPLIED;
+  });
+}
+
+export async function updateProduct(input: { id: string } & z.infer<typeof productSchema>): Promise<ProductSaveResult> {
+  return asSaveResult(async () => {
+    const user = await requireProductManager();
+    const d = productSchema.parse(input);
+    if (!(await canSetCataloguePrice())) return park(user, "UPDATE", input.id, asPayload(d));
+    await prisma.product.update({
+      where: { id: input.id },
       data: {
         name: d.name,
         unit: d.unit || "pcs",
         category: d.category || null,
         note: d.note || null,
-        sku,
         suppliers: coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue,
       },
     });
+    revalidatePath("/products");
+    return APPLIED;
   });
-  revalidatePath("/products");
-}
-
-export async function updateProduct(input: { id: string } & z.infer<typeof productSchema>): Promise<void> {
-  await requireProductManager();
-  const d = productSchema.parse(input);
-  await prisma.product.update({
-    where: { id: input.id },
-    data: {
-      name: d.name,
-      unit: d.unit || "pcs",
-      category: d.category || null,
-      note: d.note || null,
-      suppliers: coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue,
-    },
-  });
-  revalidatePath("/products");
 }
 
 /**
@@ -84,10 +193,132 @@ export async function setProductOfficeResaleAction(id: string, on: boolean): Pro
   return on;
 }
 
-export async function deleteProduct(id: string): Promise<void> {
-  await requireProductManager();
-  await prisma.product.update({ where: { id }, data: { active: false } });
-  revalidatePath("/products");
+/**
+ * Remove one product (soft-delete). Sits beside Save in the same panel and goes
+ * the same way: the price owner confirms it, because removing a product removes
+ * the price a purchase order prices against.
+ *
+ * The BULK tools below (`deleteProducts`, `removeUnsourcedProducts`,
+ * `clearAllProducts`) are deliberately NOT routed through the queue — they are
+ * list-maintenance actions taken deliberately, with their own confirmations, and
+ * parking hundreds of rows one at a time would make the queue useless.
+ */
+export async function deleteProduct(id: string): Promise<ProductSaveResult> {
+  return asSaveResult(async () => {
+    const user = await requireProductManager();
+    if (!(await canSetCataloguePrice())) {
+      const before = await snapshot(id);
+      if (!before) throw new Error("Product not found.");
+      return park(user, "DELETE", id, before);
+    }
+    await prisma.product.update({ where: { id }, data: { active: false } });
+    revalidatePath("/products");
+    return APPLIED;
+  });
+}
+
+// --- The price owner's queue -------------------------------------------------
+
+/** Only the Admin / Payment Approver decides a parked product change. */
+async function requirePriceOwner() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(await canSetCataloguePrice())) throw new Error(PRICE_OWNER_MESSAGE);
+  return user;
+}
+
+/** Confirm a parked change — this is the moment it reaches the catalogue. */
+export async function approveProductChange(id: string): Promise<ProductSaveResult> {
+  return asSaveResult(async () => {
+    const user = await requirePriceOwner();
+    const c = await prisma.productChange.findUnique({ where: { id } });
+    if (!c) throw new Error("That change is no longer there.");
+    if (c.status !== "PENDING") throw new Error("That change has already been decided.");
+    const d = c.payload as unknown as ProductChangePayload;
+    const suppliers = coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue;
+
+    await prisma.$transaction(async (tx) => {
+      if (c.kind === "CREATE") {
+        const sku = await nextProductSku(tx);
+        await tx.product.create({
+          data: { name: d.name, unit: d.unit || "pcs", category: d.category, note: d.note, sku, suppliers },
+        });
+      } else if (c.kind === "UPDATE") {
+        // The product may have been removed while the change waited — say so
+        // rather than resurrect it behind the reviewer's back.
+        const exists = await tx.product.findUnique({ where: { id: c.productId! }, select: { id: true } });
+        if (!exists) throw new Error("That product no longer exists.");
+        await tx.product.update({
+          where: { id: c.productId! },
+          data: { name: d.name, unit: d.unit || "pcs", category: d.category, note: d.note, suppliers },
+        });
+      } else {
+        await tx.product.update({ where: { id: c.productId! }, data: { active: false } });
+      }
+      await tx.productChange.update({
+        where: { id },
+        data: { status: "APPLIED", decidedByName: user.name, decidedAt: new Date() },
+      });
+    });
+
+    await logActivity(user, {
+      action: "products.change.approved",
+      category: "inventory",
+      summary: `Product change approved — ${c.summary}`,
+      entity: "product",
+      entityId: c.productId ?? undefined,
+      href: "/products",
+    });
+    revalidatePath("/products");
+    revalidatePath("/my-dashboard");
+    return APPLIED;
+  });
+}
+
+/** Turn a parked change down. The proposer keeps the reason on the card. */
+export async function rejectProductChange(id: string, reason?: string): Promise<ProductSaveResult> {
+  return asSaveResult(async () => {
+    const user = await requirePriceOwner();
+    const c = await prisma.productChange.findUnique({ where: { id } });
+    if (!c) throw new Error("That change is no longer there.");
+    if (c.status !== "PENDING") throw new Error("That change has already been decided.");
+    await prisma.productChange.update({
+      where: { id },
+      data: { status: "REJECTED", decidedByName: user.name, decidedAt: new Date(), rejectReason: (reason ?? "").trim() || null },
+    });
+    await logActivity(user, {
+      action: "products.change.rejected",
+      category: "inventory",
+      summary: `Product change rejected — ${c.summary}`,
+      entity: "product",
+      entityId: c.productId ?? undefined,
+      href: "/products",
+    });
+    revalidatePath("/products");
+    revalidatePath("/my-dashboard");
+    return APPLIED;
+  });
+}
+
+/**
+ * Withdraw one's own parked change. Without this a mistyped proposal would sit
+ * in the owner's queue with nobody able to clear it but them.
+ */
+export async function withdrawProductChange(id: string): Promise<ProductSaveResult> {
+  return asSaveResult(async () => {
+    const user = await requireProductManager();
+    const c = await prisma.productChange.findUnique({ where: { id } });
+    if (!c) throw new Error("That change is no longer there.");
+    if (c.status !== "PENDING") throw new Error("That change has already been decided.");
+    if (c.proposedById !== user.id && !(await canSetCataloguePrice())) throw new Error("Only the person who proposed it can withdraw it.");
+    await prisma.productChange.update({
+      where: { id },
+      data: { status: "REJECTED", decidedByName: user.name, decidedAt: new Date(), rejectReason: "Withdrawn by the proposer" },
+    });
+    revalidatePath("/products");
+    revalidatePath("/my-dashboard");
+    return APPLIED;
+  });
 }
 
 /**
@@ -224,11 +455,18 @@ function parseSupplierCell(raw: string, rowPrice?: number): { company: string; p
 export async function importProducts(
   formData: FormData,
 ): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
-  await requireProductManager();
   // Validation problems are returned (not thrown) so the real reason reaches the
   // user — production redacts every error thrown from a Server Action to a
   // generic "Server Components render" message.
   const fail = (message: string) => ({ created: 0, updated: 0, skipped: 0, errors: [message] });
+
+  // A spreadsheet writes the whole catalogue at once, so it is the price owner's
+  // to upload (see lib/price-authority). The screen hides the panel; this is the
+  // control, because a Server Action can be called without the screen.
+  //
+  // This stands in for `requireProductManager`, which it is strictly stricter
+  // than — the Purchaser it would admit is exactly who must not upload prices.
+  if (!(await canTransferCatalogueFiles())) return fail(CATALOGUE_FILE_MESSAGE);
 
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return fail("Choose a CSV or Excel file.");
@@ -319,6 +557,9 @@ export async function importProducts(
     for (const s of g.suppliers) s.supplierId = idByCompany.get(s.company.toLowerCase()) ?? "";
   }
 
+  // No price-stripping pass here any more: the gate at the top means only the
+  // Admin / Payment Approver ever reaches this line, so the file's prices are
+  // theirs and are written as given.
   const errors: string[] = [];
   let created = 0;
   let updated = 0;

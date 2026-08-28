@@ -6,10 +6,13 @@ import type { StockActionKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { isCataloguePriceOwner } from "@/lib/price-authority";
 import { logActivity } from "@/lib/activity-log";
 import { isOfficeTransfer } from "@/lib/stock-transfer";
 import {
   coerceStockDoc,
+  needsPriceOwner,
+  stockActionComplete,
   type AdjustPayload,
   type EditPayload,
   type ReservePayload,
@@ -41,6 +44,8 @@ interface Parties {
   admin: boolean;
   warehouse: boolean;
   purchaser: boolean;
+  /** Owns the catalogue price — the Admin / Payment Approver. */
+  priceOwner: boolean;
 }
 async function viewerParties(): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; p: Parties }> {
   const user = await getCurrentUser();
@@ -53,18 +58,9 @@ async function viewerParties(): Promise<{ user: NonNullable<Awaited<ReturnType<t
       admin,
       warehouse: admin || userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey),
       purchaser: admin || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey),
+      priceOwner: isCataloguePriceOwner(user, roles),
     },
   };
-}
-
-/**
- * Which approvals a pending action needs before it applies. Reserve only needs
- * the Warehouseman (it earmarks stock — no on-hand or value change); every other
- * kind needs both the Warehouseman and the Purchaser (the two-person control).
- */
-function isComplete(kind: StockActionKind, warehouseAt: Date | null, purchaserAt: Date | null): boolean {
-  if (kind === "RESERVE") return warehouseAt != null;
-  return warehouseAt != null && purchaserAt != null;
 }
 
 function summaryFor(kind: StockActionKind, item: { name: string; unit: string; quantity: unknown }, payload: unknown): string {
@@ -86,13 +82,16 @@ function summaryFor(kind: StockActionKind, item: { name: string; unit: string; q
   return `Transfer ${d.qty} ${item.unit} · ${item.name} → ${d.toLocation}${d.note ? ` · ${d.note}` : ""}`;
 }
 
-/** Propose a stock action — held pending until a Warehouseman AND a Purchaser approve. */
+/**
+ * Propose a stock action — held pending until a Warehouseman AND a Purchaser
+ * approve, plus (on an EDIT) the Admin / Payment Approver who owns the price.
+ */
 export async function proposeStockAction(kind: StockActionKind, stockItemId: string, payloadRaw: unknown): Promise<StockActionResult> {
   return asResult(() => doProposeStockAction(kind, stockItemId, payloadRaw));
 }
 async function doProposeStockAction(kind: StockActionKind, stockItemId: string, payloadRaw: unknown): Promise<void> {
   const { user, p } = await viewerParties();
-  if (!(p.admin || p.warehouse || p.purchaser)) {
+  if (!(p.admin || p.warehouse || p.purchaser || (kind === "EDIT" && p.priceOwner))) {
     throw new Error("Only the Warehouseman, Purchaser or an admin can propose a stock action.");
   }
   const item = await prisma.stockItem.findUnique({ where: { id: stockItemId } });
@@ -131,13 +130,17 @@ async function doProposeStockAction(kind: StockActionKind, stockItemId: string, 
     payload = { qty: Number(d.qty), toLocation: d.toLocation.trim(), note: (d.note ?? "").trim() || null, proof } satisfies TransferPayload;
   }
 
-  const proposedRole = !p.warehouse && !p.purchaser ? "admin" : p.warehouse ? "warehouse" : "purchaser";
+  // The proposer fills exactly ONE slot — the one their designation answers for.
+  // Filling every slot they could sign would let a single person (an admin holds
+  // all three) push a change through alone, which is the opposite of the control.
+  const proposedRole = p.warehouse ? "warehouse" : p.purchaser ? "purchaser" : p.priceOwner ? "approver" : "admin";
   const now = new Date();
   const warehouseAt = proposedRole === "warehouse" ? now : null;
   const purchaserAt = proposedRole === "purchaser" ? now : null;
+  const approverAt = proposedRole === "approver" ? now : null;
   // Reserve needs only the Warehouseman, so a Warehouse/admin proposal applies
   // immediately; every other kind stays pending for the second party's sign-off.
-  const applyNow = isComplete(kind, warehouseAt, purchaserAt);
+  const applyNow = stockActionComplete(kind, warehouseAt, purchaserAt, approverAt);
   const sum = summaryFor(kind, item, payload);
   await prisma.$transaction(async (tx) => {
     const created = await tx.stockAction.create({
@@ -153,6 +156,7 @@ async function doProposeStockAction(kind: StockActionKind, stockItemId: string, 
         // The proposer's own handshake slot is filled by proposing.
         ...(warehouseAt ? { warehouseByName: user.name, warehouseAt } : {}),
         ...(purchaserAt ? { purchaserByName: user.name, purchaserAt } : {}),
+        ...(approverAt ? { approverByName: user.name, approverAt } : {}),
         ...(applyNow ? { status: "APPLIED" as const, appliedAt: now } : {}),
       },
     });
@@ -170,7 +174,7 @@ async function doProposeStockAction(kind: StockActionKind, stockItemId: string, 
   revalidatePath("/my-dashboard");
 }
 
-/** Fill the viewer's handshake slot; when both are filled, apply the change. */
+/** Fill the viewer's handshake slot; when every slot is filled, apply the change. */
 export async function approveStockAction(id: string): Promise<StockActionResult> {
   return asResult(() => doApproveStockAction(id));
 }
@@ -185,6 +189,10 @@ async function doApproveStockAction(id: string): Promise<void> {
     const data: Prisma.StockActionUpdateInput = {};
     let whAt: Date | null = a.warehouseAt;
     let puAt: Date | null = a.purchaserAt;
+    let apAt: Date | null = a.approverAt;
+    // Slots fill in order, and one click fills one slot: somebody holding two
+    // designations signs twice, deliberately.
+    const wantsOwner = needsPriceOwner(a.kind);
     if (a.warehouseAt == null && p.warehouse) {
       data.warehouseByName = user.name;
       data.warehouseAt = now;
@@ -193,14 +201,19 @@ async function doApproveStockAction(id: string): Promise<void> {
       data.purchaserByName = user.name;
       data.purchaserAt = now;
       puAt = now;
+    } else if (wantsOwner && a.approverAt == null && p.priceOwner) {
+      data.approverByName = user.name;
+      data.approverAt = now;
+      apAt = now;
     } else {
-      throw new Error(
-        a.warehouseAt != null && a.purchaserAt != null
-          ? "Both approvals are already in."
-          : "You can't approve this side (needs the other party).",
-      );
+      const open = [
+        a.warehouseAt == null ? "the Warehouseman" : null,
+        a.purchaserAt == null ? "the Purchaser" : null,
+        wantsOwner && a.approverAt == null ? "an Admin / the Payment Approver" : null,
+      ].filter(Boolean) as string[];
+      throw new Error(open.length === 0 ? "Every approval is already in." : `Still waiting on ${open.join(" and ")}.`);
     }
-    if (isComplete(a.kind, whAt, puAt)) {
+    if (stockActionComplete(a.kind, whAt, puAt, apAt)) {
       await applyAction(tx, a, user.name);
       data.status = "APPLIED";
       data.appliedAt = now;
@@ -227,7 +240,7 @@ export async function rejectStockAction(id: string, reason?: string): Promise<St
 }
 async function doRejectStockAction(id: string, reason?: string): Promise<void> {
   const { user, p } = await viewerParties();
-  if (!(p.admin || p.warehouse || p.purchaser)) throw new Error("You can't reject this action.");
+  if (!(p.admin || p.warehouse || p.purchaser || p.priceOwner)) throw new Error("You can't reject this action.");
   await prisma.stockAction.update({
     where: { id },
     data: { status: "REJECTED", rejectedByName: user.name, rejectedAt: new Date(), rejectReason: (reason ?? "").trim() || null },

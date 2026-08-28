@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BellRing, Eye, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { StockActionView } from "@/lib/stock-action";
+import { needsPriceOwner, type StockActionView } from "@/lib/stock-action";
 import { approveStockAction, rejectStockAction, type StockActionResult } from "./stock-action-actions";
 
 /** Re-throw a failed action's real reason so the caller's catch can display it.
@@ -53,9 +53,14 @@ export function PendingStockActions({ pending }: { pending: StockActionView[] })
   return (
     <div className="space-y-2 py-1">
       {pending.map((a) => {
+        // An Edit also waits on the catalogue price owner — it carries the unit
+        // cost and selling price. `approverByName` is null on the other kinds,
+        // which never ask for that sign-off, so read the flag not the name.
+        const wantsOwner = needsPriceOwner(a.kind);
         const awaiting = [
           a.warehouseByName ? null : "Warehouseman",
           a.purchaserByName ? null : "Purchaser",
+          wantsOwner && !a.approverByName ? "Admin / Payment Approver" : null,
         ].filter(Boolean) as string[];
         return (
           <div key={a.id} className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/20">
@@ -71,13 +76,14 @@ export function PendingStockActions({ pending }: { pending: StockActionView[] })
               <span>Proposed by {a.proposedByName}</span>
               <span className={a.warehouseByName ? "text-emerald-700" : ""}>Warehouse: {a.warehouseByName ?? "—"}</span>
               <span className={a.purchaserByName ? "text-emerald-700" : ""}>Purchaser: {a.purchaserByName ?? "—"}</span>
+              {wantsOwner && <span className={a.approverByName ? "text-emerald-700" : ""}>Price approver: {a.approverByName ?? "—"}</span>}
               {a.proof && (
                 <a href={viewUrl(a.proof.path, a.proof.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
                   <Eye className="h-3.5 w-3.5" /> View form
                 </a>
               )}
             </div>
-            {(a.canApproveWarehouse || a.canApprovePurchaser) && (
+            {(a.canApproveWarehouse || a.canApprovePurchaser || a.canApproveOwner) && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Button size="sm" className="h-7 text-xs" disabled={busy === a.id + "ok"} onClick={() => run(a.id + "ok", () => unwrap(approveStockAction(a.id)))}>
                   <Check className="mr-1 h-3.5 w-3.5" /> {busy === a.id + "ok" ? "…" : "Approve"}

@@ -2,6 +2,11 @@
  * Double-handshake stock actions. An Edit / Adjust / Reserve / Transfer proposed
  * on the Inventory page is held pending and only applied once BOTH a Warehouseman
  * and a Purchaser approve it. Types + serialisable view helpers.
+ *
+ * **EDIT needs a third sign-off** — the Admin / Payment Approver who owns the
+ * catalogue price (lib/price-authority), because an edit carries the item's unit
+ * cost and selling price. Adjust / Reserve / Transfer move quantities, not money,
+ * and are unchanged.
  */
 import type { StockActionKind, StockActionStatus } from "@prisma/client";
 import { coerceStockDoc, type StockDoc } from "@/lib/stock-transfer";
@@ -49,9 +54,34 @@ export interface StockActionView {
   proposedAt: string;
   warehouseByName: string | null;
   purchaserByName: string | null;
+  /** The price owner's sign-off — EDIT only; always null on the other kinds. */
+  approverByName: string | null;
   /** Whether the viewer may fill each still-open handshake slot. */
   canApproveWarehouse: boolean;
   canApprovePurchaser: boolean;
+  canApproveOwner: boolean;
+}
+
+/** Does this kind of action wait on the catalogue price owner? EDIT only. */
+export function needsPriceOwner(kind: StockActionKind): boolean {
+  return kind === "EDIT";
+}
+
+/**
+ * Which sign-offs a pending action still needs before it applies. Reserve needs
+ * only the Warehouseman (it earmarks stock — no on-hand or value change); Edit
+ * needs the Warehouseman, the Purchaser AND the price owner; everything else
+ * needs the Warehouseman and the Purchaser.
+ */
+export function stockActionComplete(
+  kind: StockActionKind,
+  warehouseAt: Date | string | null,
+  purchaserAt: Date | string | null,
+  approverAt: Date | string | null,
+): boolean {
+  if (kind === "RESERVE") return warehouseAt != null;
+  if (warehouseAt == null || purchaserAt == null) return false;
+  return !needsPriceOwner(kind) || approverAt != null;
 }
 
 export const STOCK_ACTION_LABEL: Record<StockActionKind, string> = {

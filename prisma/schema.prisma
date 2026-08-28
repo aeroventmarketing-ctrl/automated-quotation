@@ -728,6 +728,12 @@ model StockAction {
   warehouseAt     DateTime?
   purchaserByName String?
   purchaserAt     DateTime?
+  // Third sign-off, EDIT only: the Admin / Payment Approver who owns the
+  // catalogue price (see lib/price-authority). An Edit carries the unit cost and
+  // selling price, so it cannot apply on the Warehouse + Purchaser handshake
+  // alone. Adjust / Reserve / Transfer are quantity moves and never wait on it.
+  approverByName  String?
+  approverAt      DateTime?
   appliedAt       DateTime?
   rejectedByName  String?
   rejectedAt      DateTime?
@@ -758,6 +764,53 @@ model Product {
   updatedAt DateTime @updatedAt
 
   @@index([name])
+}
+
+enum ProductChangeKind {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum ProductChangeStatus {
+  PENDING
+  APPLIED
+  REJECTED
+}
+
+/**
+ * A product add / save / delete waiting on the price owner.
+ *
+ * The supplier price lives inside the product record, so a Purchaser saving a
+ * product is one keystroke away from the figure a purchase order defaults to.
+ * Rather than let the save through and strip the prices out of it silently, the
+ * whole change is parked here and applied verbatim once an Admin or the Payment
+ * Approver confirms it (see lib/price-authority). A price owner saving their own
+ * change never lands here — they are the confirmer.
+ *
+ * `payload` is the proposed product; `before` is a snapshot taken at propose
+ * time so the reviewer can see what actually changes.
+ */
+model ProductChange {
+  id             String              @id @default(cuid())
+  productId      String? // null on CREATE
+  productName    String
+  kind           ProductChangeKind
+  payload        Json
+  before         Json?
+  summary        String // human snapshot of the proposed change
+  status         ProductChangeStatus @default(PENDING)
+  proposedById   String
+  proposedByName String
+  proposedAt     DateTime            @default(now())
+  decidedByName  String?
+  decidedAt      DateTime?
+  rejectReason   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([status])
+  @@index([productId])
 }
 
 enum ScheduleStatus {

@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+
+/** A PO line while it is being edited: the stored line plus the reason box. */
+type EditLine = POLine & { priceReason?: string };
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import { carriersForLines, catalogPriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { carriersForLines, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
@@ -78,13 +81,20 @@ export function PurchaseOrderPanel({
     if (s.remarks?.trim()) setRemarks(s.remarks.trim());
     setSupplierOpen(false);
     setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
+    setUnlocked(new Set());
   }
+  // Lines the purchaser has deliberately unlocked to type a different price.
+  // Cleared when the supplier changes, because that refills every line from the
+  // catalogue and the old decision no longer refers to the same figure.
+  const [unlocked, setUnlocked] = useState<Set<number>>(
+    () => new Set((po?.lines ?? []).flatMap((l, i) => (l.priceOverride ? [i] : []))),
+  );
   const [date, setDate] = useState(po?.date ? po.date.slice(0, 10) : todayInput());
-  const [lines, setLines] = useState<POLine[]>(() => {
+  const [lines, setLines] = useState<EditLine[]>(() => {
     const base = po?.lines?.length ? po.lines : defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }];
     // For a new PO, seed unambiguous catalogue prices so a price shows before a
     // supplier is picked; picking a supplier then refines it to their price.
-    return po ? base : withReferencePrices(base, catalogPrices);
+    return po ? base.map((l) => ({ ...l, priceReason: l.priceOverride?.reason })) : withReferencePrices(base, catalogPrices);
   });
 
   // Only offer suppliers that carry the products on the PO lines (from the
@@ -96,6 +106,20 @@ export function PurchaseOrderPanel({
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
     : eligible;
   const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices));
+
+  /**
+   * The catalogue's price for a line — the chosen supplier's if they list one,
+   * otherwise the reference figure (lowest supplier price, else the inventory
+   * unit cost). Products and Inventory carry the same price, so either source
+   * answers the same question.
+   */
+  const catalogueListed = (description: string): number | null => {
+    if (!description.trim()) return null;
+    const co = company.trim().toLowerCase();
+    return (co ? catalogPriceFor(description, co, catalogPrices) : undefined)
+      ?? catalogReferencePriceFor(description, catalogPrices)
+      ?? null;
+  };
 
   // Auto-populate the supplier on a new PO (once, when none is chosen yet):
   //  • Wind Driven Roof Ventilator is always sourced from JOEL LATERO SHOP.
@@ -156,7 +180,7 @@ export function PurchaseOrderPanel({
     }
   }
 
-  function setLine(i: number, key: keyof POLine, value: string) {
+  function setLine(i: number, key: keyof EditLine, value: string) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
   }
   function addRow() {
@@ -276,7 +300,55 @@ export function PurchaseOrderPanel({
                 <td className="py-1 pr-2"><Input className="h-8" value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} /></td>
                 <td className="py-1 px-1"><Input className="h-8 text-right" value={l.qty} onChange={(e) => setLine(i, "qty", e.target.value)} /></td>
                 <td className="py-1 px-1"><Input className="h-8" value={l.unit} onChange={(e) => setLine(i, "unit", e.target.value)} /></td>
-                <td className="py-1 px-1"><Input className="h-8 text-right" value={l.unitPrice} onChange={(e) => setLine(i, "unitPrice", e.target.value)} /></td>
+                <td className="py-1 px-1">
+                  {(() => {
+                    const listed = catalogueListed(l.description);
+                    // No catalogue price for this product — nothing to hold the
+                    // line to, so it stays an ordinary box.
+                    const locked = listed != null && !unlocked.has(i);
+                    const typed = Number(String(l.unitPrice).replace(/[^0-9.-]/g, ""));
+                    const off = listed != null && Number.isFinite(typed) && typed > 0 && Math.abs(typed - listed) >= 0.005;
+                    return (
+                      <>
+                        <Input
+                          className={`h-8 text-right ${locked ? "bg-muted/60 text-muted-foreground" : ""}`}
+                          value={l.unitPrice}
+                          readOnly={locked}
+                          title={locked ? "This is the catalogue price. Use “different price” to change it." : undefined}
+                          onChange={(e) => setLine(i, "unitPrice", e.target.value)}
+                        />
+                        {locked && (
+                          <button
+                            type="button"
+                            onClick={() => setUnlocked((u) => new Set(u).add(i))}
+                            className="mt-0.5 block w-full text-right text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+                          >
+                            different price…
+                          </button>
+                        )}
+                        {!locked && off && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => { setLine(i, "unitPrice", String(listed)); setLine(i, "priceReason", ""); }}
+                              className="mt-0.5 block w-full text-right text-[10px] text-amber-600 hover:underline"
+                              title="Go back to the catalogue price"
+                            >
+                              catalogue {formatCurrency(listed!, "PHP")}
+                            </button>
+                            <Input
+                              className="mt-1 h-7 text-[11px]"
+                              placeholder="Reason for this price"
+                              value={l.priceReason ?? ""}
+                              onChange={(e) => setLine(i, "priceReason", e.target.value)}
+                              aria-label={`Reason for the price on ${l.description || "this line"}`}
+                            />
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
+                </td>
                 <td className="py-1 px-1 text-right tabular-nums">{formatCurrency(poLineAmount(l), "PHP")}</td>
                 <td className="py-1 text-center">
                   <button type="button" onClick={() => removeRow(i)} className="text-muted-foreground hover:text-destructive" aria-label="Remove line">×</button>
@@ -287,8 +359,11 @@ export function PurchaseOrderPanel({
         </table>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Unit price fills from the product catalogue when you pick a supplier{" "}
-        {company ? `(using ${company}'s price)` : "in Company name"}. Set up a product&rsquo;s supplier price in Products so it auto-fills; otherwise type it here.
+        Unit price comes from the product catalogue — the price in <b>Products</b> / <b>Inventory</b> — and refines
+        to the chosen supplier&rsquo;s own price when you pick one{company ? ` (using ${company}'s price)` : ""}.
+        It is read-only because prices are set by an Admin or the Payment Approver. Need a different figure —
+        a new quote, a rush order? Click <b>different price…</b>, type it and say why. You are not blocked; the
+        reason is recorded on the line.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addRow}>+ Add line</Button>

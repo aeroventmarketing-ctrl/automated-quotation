@@ -1,11 +1,21 @@
+import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canViewPrices, canViewSupplier } from "@/lib/price-visibility";
+import { canViewPrices, canViewSupplier, canEditPrices } from "@/lib/price-visibility";
+import { isCataloguePriceOwner } from "@/lib/price-authority";
 import { Card, CardContent } from "@/components/ui/card";
 import { getProducts, type ProductRow } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { getOfficeResaleProductIds } from "@/lib/office-resale";
+import {
+  PRODUCT_CHANGE_LABEL,
+  productChangeDiff,
+  productChangeTouchesPrice,
+  type ProductChangePayload,
+  type ProductChangeView,
+} from "@/lib/product-change";
 import { ProductManager } from "./product-manager";
+import { PendingProductChanges } from "./pending-product-changes";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +36,10 @@ export default async function ProductsPage() {
   // admins only. Other viewers (Warehouse, Plant Manager, Logistics, …) see the
   // products and their suppliers but not the prices.
   const showPrices = canViewPrices(viewer, assignments);
+  // Everyone who can open this page keeps seeing prices; only the Admin /
+  // Payment Approver may change one (see lib/price-authority, which enforces the
+  // same rule on the server).
+  const editPrices = canEditPrices(viewer, assignments);
   // Supplier names are restricted the same way as on the purchasing surfaces —
   // Purchaser, Accounting, Payment Approver, Engineers and admins only. The Plant
   // Manager and other monitoring roles see the products but not their suppliers.
@@ -49,6 +63,38 @@ export default async function ProductsPage() {
   }
   const resaleIds = await getOfficeResaleProductIds().catch(() => []);
 
+  // Product adds / saves / removals parked for the price owner. Everyone who can
+  // manage products sees the queue — the proposer has to know their save is
+  // waiting, not lost — but only the Admin / Payment Approver may decide one.
+  const priceOwner = isCataloguePriceOwner(viewer, assignments);
+  let pendingChanges: ProductChangeView[] = [];
+  if (canManage || priceOwner) {
+    try {
+      const rows = await prisma.productChange.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" }, take: 50 });
+      pendingChanges = rows.map((c) => {
+        const after = c.payload as unknown as ProductChangePayload;
+        const before = (c.before as unknown as ProductChangePayload | null) ?? null;
+        return {
+          id: c.id,
+          productId: c.productId,
+          productName: c.productName,
+          kind: c.kind,
+          kindLabel: PRODUCT_CHANGE_LABEL[c.kind],
+          status: c.status,
+          summary: c.summary,
+          diff: c.kind === "UPDATE" ? productChangeDiff(before, after) : [],
+          touchesPrice: c.kind !== "DELETE" && productChangeTouchesPrice(before, after),
+          proposedByName: c.proposedByName,
+          proposedAt: c.proposedAt.toISOString(),
+          canDecide: priceOwner,
+          mine: viewer != null && c.proposedById === viewer.id,
+        };
+      });
+    } catch {
+      // ProductChange table not migrated yet — nothing parked.
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -58,7 +104,9 @@ export default async function ProductsPage() {
             Purchasable items connected to their suppliers. Requests made against a product carry its supplier, so the purchaser can combine same-supplier orders. Each product has a SKU with barcode &amp; QR for easy encoding.
           </p>
         </div>
-        {canManage && (
+        {/* Catalogue spreadsheets are the price owner's — a download carries the
+            whole price list out, an upload writes it back (lib/price-authority). */}
+        {priceOwner && (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <a
               href="/api/products/full-list"
@@ -78,6 +126,8 @@ export default async function ProductsPage() {
         )}
       </div>
 
+      <PendingProductChanges changes={pendingChanges} />
+
       {tableMissing ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
           The product table isn&apos;t set up yet. Run migration 0014 in Supabase, then add products here.
@@ -85,7 +135,7 @@ export default async function ProductsPage() {
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <ProductManager products={products} suppliers={suppliers} canManage={canManage} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
+            <ProductManager products={products} suppliers={suppliers} canManage={canManage} canEditPrices={editPrices} canTransferFiles={priceOwner} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
           </CardContent>
         </Card>
       )}

@@ -1,3 +1,222 @@
+## 2026-08-28 · Catalogue spreadsheets belong to the price owner
+
+- **Owner's instruction:** *"only the admin/payment approver can download or upload csv or excel file."*
+- A spreadsheet is the catalogue in bulk: an upload writes every price at once, a download carries the whole price
+  list out. Same authority as the price itself, so it lives beside it — `canTransferCatalogueFiles()` in
+  `lib/price-authority.ts`, a separate name and message from `canSetCataloguePrice` because it is a separate
+  question and one may be relaxed later without the other.
+
+### What is now Admin / Payment Approver only
+
+| Surface | Was |
+| --- | --- |
+| Products → Import from file | Purchaser / Payment Approver / admin |
+| Products → Download Excel / CSV | **anyone who could open the page**, view-only roles included |
+| Products → Export full product list (CSV) | any non-Sales user, by URL |
+| Products → Export catalogue codes (CSV) | any non-Sales user, by URL |
+| Inventory → Import from file | Purchaser / Warehouse / admin |
+| Inventory → Download Excel / CSV | **anyone who could open the page**, view-only roles included |
+
+- **Enforced on the server, not just hidden.** Both imports return the refusal (a thrown Server Action message is
+  redacted in production) and both `/api/` exports answer **403**. A hidden button is not a control — the URL and
+  the action can both be called without the screen.
+- **The import gate REPLACES the old role guard rather than stacking on it.** `requireItemCreator` (Purchaser /
+  Warehouse / admin) and `requireProductManager` (Purchaser / Payment Approver / admin) are each wrong here in a
+  different direction — one lets a Purchaser upload prices, the other turns away a Payment Approver who holds no
+  second role. Running both would have made the owner's rule unenforceable for a plain Payment Approver, which the
+  new tests caught.
+- Two now-dead price-stripping passes went with it: the imports used to drop a non-owner's price columns and say so.
+  Only the owner reaches that code now, so the file's prices are written as given.
+
+### One honest limitation
+
+The **Download Excel / CSV** buttons build the file in the browser from rows already rendered on the page. Removing
+them takes away the convenience, not the data — anyone who can still open Products or Inventory can read what is on
+screen. Closing that properly means narrowing who may open the pages at all, which is a different decision and not
+one to make silently. Say the word if it was meant.
+
+### Left alone, deliberately
+
+- The **Catalogue backup** (Admin → Catalogue) was already admin-only — stricter than asked, so untouched.
+- Every other CSV/Excel in the app: quotations, job orders, purchase orders, sales and expense reports, the
+  duplicates and suppliers exports. They carry order and quotation data, not the catalogue price list, and locking a
+  Sales user out of their own quotation export is not what was asked. **Say the word if it was.**
+
+### Verified — 3 new tests
+
+- The Purchaser's upload is refused on **both** screens, with the reason, and nothing is written; the Warehouse's is
+  refused too; the Payment Approver's lands **with its prices** on both.
+- Full suite **111 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
+## 2026-08-28 · The price owner confirms an Inventory edit and a Products save
+
+- **Owner's instruction:** *"when propose edit button in inventory and save button in products is pressed let the
+  admin/payment approver confirms/approves first before allowing to save."*
+
+### ⚠️ Run migration `0047_price_owner_confirmation` in Supabase
+
+Both halves need it (a third sign-off column on `StockAction`, and the new `ProductChange` table). Until it runs,
+the Products queue reads as empty and a non-owner's save answers *"The product-approval table isn't set up yet."*
+The migration also back-fills the price-owner slot on EDIT stock actions that were already fully approved under the
+old two-party rule, so nothing in flight is stranded.
+
+### Inventory — a third signature on "Propose edit"
+
+- `StockAction` gains `approverByName` / `approverAt`. **EDIT only**: it carries the unit cost and selling price, so
+  Warehouse + Purchaser is no longer enough. `ADJUST` / `RESERVE` / `TRANSFER` move stock, not money, and are
+  untouched — the rule lives in one place, `stockActionComplete()` in `lib/stock-action.ts`.
+- **This closes a live hole.** The A+B work reserved the price on `updateStockItemMeta`, but the edit panel does not
+  go through it — it proposes a `StockAction`, and that path wrote the cost with two non-owner signatures. A
+  Purchaser could set any unit cost by proposing an edit and having the Warehouseman approve it.
+- The proposer still fills exactly **one** slot, the one their designation answers for. Filling every slot they
+  could sign would let an admin (who holds all three) push a change through alone — the opposite of the control.
+- The panel now says so before you click, and the pending card names *Admin / Payment Approver* among the awaiting
+  parties and shows the third line. The dashboard task list routes an edit to them once the other two are in.
+
+### Products — Save / Add / Delete are parked, not stripped
+
+- A new `ProductChange` row holds the proposal **whole, prices included**, until an Admin / the Payment Approver
+  confirms it. Their own Save still writes straight through — they are the confirmer.
+- **A deliberate reversal of one detail from the A+B work.** The supplier-price inputs went read-only there; they
+  are editable again. With the whole save now parked, a locked box would leave a Purchaser who
+  spots a wrong price with no way to say so — and the price still only reaches the catalogue on the owner's click.
+  The rule "only the owner SETS a price" is intact; what changed is that a non-owner may now **propose** one.
+- The screen distinguishes *held* from *failed*: a parked save keeps its panel open with an amber line, because a
+  save that quietly queues looks exactly like one that worked until someone reopens the row and finds it unchanged.
+- The queue sits at the top of Products, visible to everyone who can manage products (the proposer has to see their
+  save is waiting, not lost) with Approve / Reject for the owner and **Withdraw** for the proposer. Each row shows a
+  field-by-field before → after and a **Price change** flag, so the owner confirms a change, not a name.
+- **Scope, said plainly:** the per-product Save / Add / Delete go through the queue. The bulk tools — Delete
+  selected, Remove no-supplier items, Clear all, and the CSV/Excel import — do **not**; they are list maintenance
+  taken deliberately, and parking hundreds of rows one at a time would make the queue useless. The import still
+  drops a non-owner's prices outright, as before.
+
+### Verified — 13 new tests against a real Postgres
+
+- **Inventory (5):** the edit is held after Warehouse + Purchaser and the item does not move; it applies on the
+  owner's sign-off and only then; an early click is told who is still missing; a quantity adjustment still applies
+  on the old two-party rule; and the owner's own proposal does not skip the other two.
+- **Products (8):** a parked change applies **verbatim** (the proposed price included); a rejection leaves the old
+  price with the reason on record; the Purchaser cannot approve their own; a change cannot be decided twice; only
+  the proposer withdraws their own; a removal is parked too; an approval does not resurrect a product deleted while
+  it waited; and the owner's own Add/Save park nothing.
+- Two existing price-authority tests were **rewritten, not patched**: the Purchaser's product save used to half-land
+  with the price silently dropped, and now waits whole. That is the behaviour change, stated rather than hidden.
+- Full suite **108 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. DB-backed suites need `--no-file-parallelism`: they share one database.
+
+## 2026-08-28 · Part B — a PO price off the catalogue needs a reason
+
+- **Owner's instruction, completing A+B:** *"purchaser, warehouse and anyone who can access purchasing tab and
+  inventory tab can still access, can view only but cannot edit."* Access is untouched; only the price is reserved.
+
+### View stays, edit goes
+
+- `PRICE_EDIT_ROLES` in `price-visibility.ts` moves from `["purchaser"]` to `["payment_approver"]`, matching the
+  server rule in `price-authority.ts`. **`PRICE_ROLES` (viewing) is deliberately unchanged** — the Purchaser and
+  everyone else who can open Inventory / Products still sees every price.
+- The screens now say so instead of just failing on save: the Products supplier-price inputs go **read-only** with
+  *"Prices are set by an Admin or the Payment Approver. You can still add suppliers and codes here."* Inventory
+  already threaded `canEditPrices`, so its price edit simply disappears while the price columns stay visible.
+- **Not widened:** the Warehouse still cannot *see* prices (`PRICE_ROLES` is purchaser / accounting / engineer /
+  admin, by an older deliberate policy — money is hidden from Warehouse, Plant Manager, Logistics). The owner's
+  sentence reads as "don't lock people out", not "show Warehouse the money", and quietly widening commercial
+  visibility on an ambiguous reading would be the wrong way to be wrong. **Say the word if it was meant.**
+
+### The override
+
+- `POLine` gains an optional `priceOverride { reason, byName, at, catalogue }`. `catalogue` is the figure *at the
+  moment of the override*, so the record still makes sense after the catalogue is later corrected.
+- **The form** keeps the price read-only, with *different price…* to unlock it, a reason box, and a one-click way
+  back to the catalogue figure. Unlocking resets when the supplier changes, because that refills every line and the
+  old decision no longer refers to the same number. A saved override arrives already unlocked so its reason shows.
+- **The server is the control.** `savePurchaseOrder` rebuilds the catalogue and refuses an unexplained deviation —
+  *"BELT B-50 … is priced at 128 but the catalogue says 210. Give a reason…"*. A read-only input is a courtesy; the
+  request can be replayed with any price.
+- **Never a block on the price itself**, per the owner's choice: a supplier quoting something new on a Friday must
+  not stop purchasing. The deviation is recorded and reviewed afterwards.
+- **A re-save does not demand the reason again.** An untouched line carries its stored reason forward, and the
+  original `byName` / `at` are preserved rather than restamped — otherwise fixing a typo in the remarks would
+  rewrite who authorised the price and when.
+
+### One builder, three consumers
+
+- The catalogue build was inline in the Purchasing page and **copied again** by the audit; a third copy for the
+  save would have been the drift this codebase keeps getting bitten by. It is now `src/lib/po-price-catalog.ts`,
+  used by the save and the audit — the two that must agree.
+
+### Verified — 11 new tests against a real Postgres
+
+- **Catalogue (5):** the chosen supplier's own price; the lowest price when that supplier lists none; the inventory
+  unit cost when no supplier price exists; `null` for an uncatalogued product; and 1 HP vs 2 HP motors priced from
+  their **own** product.
+- **Save gate (6):** the catalogue price saves silently; a different price with **no reason is refused and nothing
+  is written**, naming both figures; with a reason it is stored and stamped with the purchaser's name, the time and
+  the ₱210 catalogue figure; a re-save keeps the original stamp; an uncatalogued product is left alone; and going
+  back to the catalogue price **clears** the override.
+- Full suite 71 passed, 24 skipped (the DB-backed suites). Typecheck + lint + build clean. No migration —
+  `priceOverride` rides in the existing `PurchaseRequest.po` JSON.
+- **Still pre-existing:** the CEBDD `selectFan` failure on `main`.
+
+## 2026-08-28 · The catalogue price belongs to the Admin and the Payment Approver
+
+- **Owner's decision**, answering "is it alright to disallow the purchaser to change price in PO creation?":
+  option **A and B together** — A moves who owns the price, B records any deviation at the line. This entry is A.
+- **Why A alone would have been theatre.** The Purchaser already owned both catalogue screens: `Products` (admin +
+  purchaser) and `Inventory` (admin + warehouse + purchaser). Locking the PO field and saying "change it in
+  Products" would have moved the same person to a different tab to type the same number.
+- **Only the PRICE FIELDS are reserved**, never the screens — new `src/lib/price-authority.ts`. The Warehouse still
+  adjusts quantities; the Purchaser still adds items and products, sets suppliers, codes, units and categories.
+  Locking the tabs would have stopped people doing their jobs.
+  - Inventory: `unitCost` / `sellPrice` on create, on the meta edit, and in the bulk import.
+  - Products: the supplier `price`, on create, on edit and in the import.
+- **A non-owner is never refused — the price is simply left alone.** A Purchaser's new item is created *unpriced*
+  rather than rejected, and their edit to a name, code or location lands while the price stays as approved. Refusing
+  the whole save would have made an approved price a blocker on unrelated work.
+- **Neither importer is a way round it.** Both drop the file's prices for a non-owner and **say so in the result** —
+  a silently ignored column looks like a broken import, and this codebase has already been bitten by that.
+- **A gap the tests caught, not the reading.** `requireProductManager` was admin + purchaser, so the Payment
+  Approver **could not open Products at all** — they would have owned a figure they had no way to reach. They are
+  now allowed in. Inventory needed no equivalent: `updateStockItemPrices` is already a price-only action, so the
+  Payment Approver can set inventory prices without broader inventory rights.
+- **7 tests** in `src/lib/price-authority.test.ts`, against a real Postgres (skipped unless `TEST_DATABASE_URL` is
+  set). As much about what STAYS possible as what is blocked:
+  - the authority admits Admin and Payment Approver, and refuses Purchaser and Warehouse;
+  - the Payment Approver sets a supplier price; the Purchaser's price is ignored **but the product is still created**;
+  - a Purchaser renaming a product and adding a supplier code keeps both edits while the approved ₱210 stands;
+  - the Admin prices a stock item; the Purchaser's item is created with its **quantity and reorder level** intact
+    and the price at zero;
+  - the Warehouse's category / location / reorder-level edit lands while unit cost and sell price stay as approved.
+- Full suite 71 passed, 13 skipped (the DB-backed suites). Typecheck + lint + build clean. No migration.
+- **Part B is next**: the PO line price read-only by default, with a "use a different price" override that records
+  who, when and why — kept open to the Purchaser, so a supplier's new quote never stops purchasing.
+
+## 2026-08-28 · A new PO line starts at the catalogue price
+
+- **Owner-instructed:** *"when creating PO get the item price in product tab or inventory tab — the price of 2
+  sources are same."* Products and Inventory carry the same figure, so either answers the question.
+- **The gap was a deliberate refusal.** `catalogReferencePriceFor` filled a new line only when the product had a
+  **single unambiguous** price; when several suppliers listed *different* prices it returned `undefined` on the
+  reasoning that seeding one supplier's price before the supplier is chosen might seed the wrong one. In practice
+  that left the box **blank** — and a blank box gets filled from memory. That is how a PO reaches a price no
+  supplier lists.
+- **Now it always seeds the catalogue's figure**: the single price when suppliers agree, otherwise the reference
+  price (lowest supplier price, else the inventory unit cost). Picking a supplier still force-overwrites with that
+  supplier's own price, so the seed can only ever be replaced by something more specific. A real catalogue price
+  that a supplier pick refines beats a blank that gets typed over.
+- **The catalogue price is now visible on the line.** When a typed price disagrees with the catalogue, the
+  catalogue figure appears under the box in amber — click it to apply. Previously a wrong figure was invisible
+  until the PO had been approved, printed and vouchered. This is the "warn, don't block" answer to the question
+  left open earlier: a negotiated price is legitimate, so it is shown, not prevented.
+  - Uses the chosen supplier's price when they list one, else the reference figure — the same rule as the seed.
+- **6 more tests** (17 in `po-catalog.test.ts` now): agreeing suppliers seed their common price; **disagreeing
+  suppliers now seed rather than blank** — the behaviour change, locked in; no supplier price falls back to the
+  inventory unit cost; an uncatalogued product still seeds nothing; a new PO fills every catalogued line; and a
+  price already on the line is never overwritten (so a requisition's carried `@price` survives).
+- Full suite 71 passed, 6 skipped. Typecheck + lint + build clean. No migration.
+- **Still pre-existing:** the CEBDD `selectFan` failure on `main`.
+
 ## 2026-08-28 · The price audit stops reporting rounding
 
 - **From the production list**: a VFD at **₱128,785.00** against a listed **₱128,786.15** — ₱1.15 on a ₱128k line —

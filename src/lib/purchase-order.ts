@@ -8,11 +8,32 @@ import { config, COMPANY } from "@/lib/config";
 import { round2 } from "@/lib/quote";
 import { specDetailFor } from "@/lib/department-pnl";
 
+/**
+ * A price on a line that differs from the catalogue, and why.
+ *
+ * The catalogue price (Products / Inventory) is what a line starts at, and it is
+ * owned by the Admin / Payment Approver. A purchaser who needs a different
+ * figure — a supplier quoting something new, a rush order, an odd quantity — is
+ * not blocked, because blocking would stop purchasing whenever a price moves.
+ * They record a reason instead, and it travels with the line.
+ *
+ * `catalogue` is the figure at the moment of the override, kept so the record
+ * still makes sense after the catalogue is later corrected.
+ */
+export interface POPriceOverride {
+  reason: string;
+  byName: string;
+  at: string;
+  catalogue: number;
+}
+
 export interface POLine {
   description: string;
   qty: string;
   unit: string;
   unitPrice: string;
+  /** Present only when the price was deliberately taken off the catalogue. */
+  priceOverride?: POPriceOverride;
 }
 
 export interface POSupplier {
@@ -91,11 +112,24 @@ export function coercePurchaseOrder(value: unknown): PurchaseOrder | null {
   const lines = Array.isArray(o.lines)
     ? o.lines.map((l): POLine => {
         const r = (l ?? {}) as Record<string, unknown>;
+        const ov = (r.priceOverride ?? null) as Record<string, unknown> | null;
         return {
           description: String(r.description ?? ""),
           qty: String(r.qty ?? ""),
           unit: String(r.unit ?? ""),
           unitPrice: String(r.unitPrice ?? ""),
+          // Only a reasoned override survives the round trip; a half-written one
+          // is dropped rather than kept as an unexplained flag.
+          ...(ov && String(ov.reason ?? "").trim()
+            ? {
+                priceOverride: {
+                  reason: String(ov.reason).trim(),
+                  byName: String(ov.byName ?? ""),
+                  at: String(ov.at ?? ""),
+                  catalogue: Number(ov.catalogue) || 0,
+                },
+              }
+            : {}),
         };
       })
     : [];

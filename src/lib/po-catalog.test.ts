@@ -13,7 +13,14 @@
  * future change cannot fix one family by breaking the other.
  */
 import { describe, it, expect } from "vitest";
-import { matchKey, catalogPriceFor, suppliersForDescription, type CatalogPrices } from "./po-catalog";
+import {
+  matchKey,
+  catalogPriceFor,
+  catalogReferencePriceFor,
+  suppliersForDescription,
+  withReferencePrices,
+  type CatalogPrices,
+} from "./po-catalog";
 
 const KEYS = [
   "induction motor 1 hp, 1ph, 4 pole foot mounted (teco)",
@@ -90,5 +97,57 @@ describe("suppliersForDescription", () => {
         "induction motor 2 hp, 1ph, 4 pole foot mounted (teco)": ["POWERLINE"],
       }),
     ).toEqual(["POWERLINE"]);
+  });
+});
+
+describe("catalogReferencePriceFor — the price a new PO line starts at", () => {
+  it("uses the single price when every supplier agrees", () => {
+    expect(
+      catalogReferencePriceFor("BELT B-50 (JO 2600080)", {
+        "belt b-50": { wings: 210, "philippine bearing": 210, __ref__: 210 },
+      }),
+    ).toBe(210);
+  });
+
+  it("still seeds a price when suppliers disagree, rather than leaving it blank", () => {
+    // This used to return undefined, and a blank box gets filled from memory —
+    // which is how a PO ends up at a price no supplier lists. Picking a supplier
+    // refines it to that supplier's own price.
+    expect(
+      catalogReferencePriceFor("ANGLE BAR 6.0mm x 50mm x 50mm", {
+        "angle bar 6.0mm x 50mm x 50mm": { alpha: 740, beta: 900, __ref__: 740 },
+      }),
+    ).toBe(740);
+  });
+
+  it("falls back to the inventory unit cost when no supplier lists a price", () => {
+    expect(catalogReferencePriceFor("CUTTING DISC 4\"", { 'cutting disc 4"': { __ref__: 29 } })).toBe(29);
+  });
+
+  it("returns nothing for a product the catalogue does not have", () => {
+    expect(catalogReferencePriceFor("MYSTERY WIDGET XZ9", { "belt b-50": { wings: 210, __ref__: 210 } })).toBeUndefined();
+  });
+});
+
+describe("withReferencePrices — seeding a new PO", () => {
+  const catalog: CatalogPrices = {
+    "belt b-50": { wings: 210, "philippine bearing": 210, __ref__: 210 },
+    "angle bar 6.0mm x 50mm x 50mm": { alpha: 740, beta: 900, __ref__: 740 },
+  };
+
+  it("fills every catalogued line, including the multi-price one", () => {
+    const out = withReferencePrices(
+      [
+        { description: "BELT B-50 (JO 2600080)", qty: "2", unit: "pc", unitPrice: "" },
+        { description: "ANGLE BAR 6.0mm x 50mm x 50mm (JO#2600082)", qty: "10", unit: "pc", unitPrice: "" },
+      ],
+      catalog,
+    );
+    expect(out.map((l) => l.unitPrice)).toEqual(["210", "740"]);
+  });
+
+  it("never overwrites a price already on the line", () => {
+    const out = withReferencePrices([{ description: "BELT B-50", qty: "1", unit: "pc", unitPrice: "128" }], catalog);
+    expect(out[0].unitPrice).toBe("128");
   });
 });

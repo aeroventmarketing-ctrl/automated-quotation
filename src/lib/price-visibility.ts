@@ -15,8 +15,21 @@ import { userHasWorkflowRole, type WorkflowRoleAssignments, type WorkflowRoleKey
 /** Workflow roles (beyond admin / Engineer) allowed to see prices. */
 const PRICE_ROLES: WorkflowRoleKey[] = ["purchaser", "accounting"];
 
-/** Workflow roles (beyond admin) allowed to SET unit cost / selling price. */
-const PRICE_EDIT_ROLES: WorkflowRoleKey[] = ["purchaser"];
+/**
+ * Workflow roles (beyond admin) allowed to SET unit cost / selling price.
+ *
+ * Owner's decision: the catalogue price is what a purchase order defaults to, so
+ * it belongs to the **Payment Approver**, not to the Purchaser who spends
+ * against it — a default set by the same person who spends against it is not a
+ * control. See `src/lib/price-authority.ts`, which enforces the same rule on the
+ * server; this list is the UI half, and the two must agree.
+ *
+ * VIEWING is untouched — `PRICE_ROLES` above is deliberately not widened. Whoever
+ * could see a price before still sees it (Purchaser, Accounting, Engineer,
+ * admin) and whoever could not still cannot (Warehouse, Plant Manager,
+ * Logistics, Sales). This list only decides who may CHANGE one.
+ */
+const PRICE_EDIT_ROLES: WorkflowRoleKey[] = ["payment_approver"];
 
 /** Whether the viewer may see unit costs, selling prices and stock value. */
 export function canViewPrices(user: User | null | undefined, assignments: WorkflowRoleAssignments): boolean {

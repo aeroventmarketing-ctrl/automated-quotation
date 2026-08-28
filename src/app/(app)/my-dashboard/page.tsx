@@ -8,7 +8,8 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { SalesDashboardBody } from "../dashboard/sales-dashboard-body";
 import { hidesProductionClient } from "@/lib/client-visibility";
 import { prisma } from "@/lib/db";
-import { STOCK_ACTION_LABEL, coerceStockDoc, type StockActionView } from "@/lib/stock-action";
+import { STOCK_ACTION_LABEL, coerceStockDoc, needsPriceOwner, type StockActionView } from "@/lib/stock-action";
+import { isCataloguePriceOwner } from "@/lib/price-authority";
 import { PendingStockActions } from "../inventory/pending-stock-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getFinanceMonitor } from "@/lib/finance-monitor";
@@ -126,15 +127,21 @@ export default async function MyDashboardPage() {
   // Outstanding reconciliation backlog — POs / vouchers that can be reconciled
   // but haven't been. Shown as its own tiles beside "Reconciled by hand".
   const unrecon = canSeeManualRecon ? await getUnreconciledCounts().catch(() => ({ pos: 0, vouchers: 0, firstPoId: null, firstVoucherId: null })) : null;
-  const stockPending: StockActionView[] = (invWarehouse || invPurchaser)
+  // An inventory Edit also waits on the catalogue price owner, so they see the
+  // pending list here too — otherwise the sign-off they now hold is invisible
+  // until they happen to open Inventory.
+  const invPriceOwner = isCataloguePriceOwner(user, assignments);
+  const stockPending: StockActionView[] = (invWarehouse || invPurchaser || invPriceOwner)
     ? (await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" }, take: 50 }).catch(() => [])).map((a) => ({
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
         kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status,
         proof: a.kind === "TRANSFER" ? coerceStockDoc((a.payload as { proof?: unknown } | null)?.proof) : null,
         proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
         warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
+        approverByName: needsPriceOwner(a.kind) ? a.approverByName : null,
         canApproveWarehouse: a.warehouseAt == null && invWarehouse,
         canApprovePurchaser: a.purchaserAt == null && invPurchaser,
+        canApproveOwner: needsPriceOwner(a.kind) && a.approverAt == null && invPriceOwner,
       }))
     : [];
 

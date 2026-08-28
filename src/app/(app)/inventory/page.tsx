@@ -4,11 +4,12 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { canViewPrices, canEditPrices } from "@/lib/price-visibility";
+import { isCataloguePriceOwner } from "@/lib/price-authority";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
 import { DuplicateItemsPanel } from "./duplicate-items-panel";
-import { STOCK_ACTION_LABEL, type StockActionView } from "@/lib/stock-action";
+import { STOCK_ACTION_LABEL, needsPriceOwner, type StockActionView } from "@/lib/stock-action";
 import { StockTransfers } from "./stock-transfers";
 import { isProductionHead, isPurchaserRole, coerceStockDoc, isOfficeTransfer, nextOfficeTransferApprover, type StockTransferView } from "@/lib/stock-transfer";
 import { getApproverDirectory } from "@/lib/approver-directory";
@@ -89,6 +90,10 @@ export default async function InventoryPage() {
   // grouped per item, with per-viewer approval flags.
   const viewerWarehouse = admin || has("warehouse");
   const viewerPurchaser = admin || has("purchaser");
+  // An Edit carries the unit cost / selling price, so it also waits on the
+  // catalogue price owner (see lib/price-authority) — who is likewise the only
+  // person who may take the stock list out as a file or put one back in.
+  const viewerPriceOwner = isCataloguePriceOwner(viewer, assignments);
   const pendingByItem: Record<string, StockActionView[]> = {};
   try {
     const actions = await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" } });
@@ -99,8 +104,10 @@ export default async function InventoryPage() {
         kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status, proof,
         proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
         warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
+        approverByName: needsPriceOwner(a.kind) ? a.approverByName : null,
         canApproveWarehouse: a.warehouseAt == null && viewerWarehouse,
         canApprovePurchaser: a.purchaserAt == null && viewerPurchaser,
+        canApproveOwner: needsPriceOwner(a.kind) && a.approverAt == null && viewerPriceOwner,
       });
     }
   } catch {
@@ -249,7 +256,7 @@ export default async function InventoryPage() {
 
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 
