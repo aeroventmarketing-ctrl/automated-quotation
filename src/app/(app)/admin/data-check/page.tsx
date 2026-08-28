@@ -241,6 +241,15 @@ export default async function DataCheckPage() {
                             no supplier lists — so it was priced from inventory, not from a quote.
                           </span>
                         </>
+                      ) : i.kind === "unit_mismatch" ? (
+                        <>
+                          <Badge variant="secondary">Different unit</Badge>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            The PO is priced per <b>{i.poUnit || "—"}</b> and the catalogue per{" "}
+                            <b>{i.productUnit || "—"}</b>, so the two figures are not comparable.
+                            Probably fine — worth a glance only if the unit itself is wrong.
+                          </span>
+                        </>
                       ) : (
                         <>
                           <Badge variant="warning">Differs</Badge>

@@ -1,3 +1,75 @@
+## 2026-08-28 · The price audit stops reporting rounding
+
+- **From the production list**: a VFD at **₱128,785.00** against a listed **₱128,786.15** — ₱1.15 on a ₱128k line —
+  and a belt ₱0.60 out. In a list of thirty rows, noise like that hides the rows that matter.
+- **Both tests must pass to suppress**: line-total impact under **₱20** *and* under **2%** of the line. Requiring
+  both is what stops a tiny per-unit gap being dismissed on a huge quantity — ₱0.10 out on 10,000 pieces is ₱1,000
+  and still reports.
+- **Six assertions on the real figures** from that list: the VFD (₱1.15), BELT A-28 (₱1.20 line gap) and the IDEC
+  switch (₱6, 1.06%) are suppressed; CRS ROD 5" (₱120 gap), STAIN. NUT (₱0.80 → ₱3.20, a 4× price) and the
+  10-centavos-on-10,000-pieces case all still report.
+- Full suite: 65 passed, 6 skipped. Typecheck + build clean. Read-only; no migration.
+
+### Reading the production list that prompted this
+
+The list the owner sent was produced **before the matcher fix** (`df86d78`, pushed but not yet merged), and it
+contains its own proof of the cross-matching:
+
+- **three different G.I. BOLT sizes on one PO** — 5/16 × 1, × 1/2, × 3/4 — all compared against **₱1.40**;
+- **three PULLEY sizes** — 7-1/2", 5-1/2", 5" — all compared against **₱432**;
+- **four motor ratings** all compared against **₱12,822** or **₱10,440**.
+
+Those separate once the fix lands. Two findings in that list are NOT explained by the matcher and are worth the
+owner's eye:
+
+- **ANLY TIMER AH3NC (PO-618)** — PO ₱2,060 against a listed ₱1,030, **exactly double**, on qty 2. That is the
+  signature of a line total typed into the unit-price box; the PO totals ₱4,120 for two timers.
+- **BELT B-50 (PO-555)** — PO ₱225 against a listed **₱128**. The catalogue said **₱210** when this investigation
+  started (PO 615, where the PO carried the ₱128). The product's price appears to have moved since; worth
+  confirming which figure is right before correcting anything.
+
+## 2026-08-28 · The product matcher could not tell a 2 HP motor from a 1 HP one
+
+- **Owner-approved**, after the production Data check returned ~35 flagged PO lines and several looked wrong in a
+  way that implicated the audit itself.
+- **The real defect, and it is not in the audit — it is in the live PO price autofill.** `tokenize` in
+  `po-catalog.ts` dropped every token shorter than two characters, which **erased the rating** from a whole family
+  of products:
+
+  ```
+  INDUCTION MOTOR 2 HP, 1PH, 4 POLE …  → ["induction","motor","hp","1ph","pole","foot","mounted","teco"]
+  INDUCTION MOTOR 1.5 HP, 1PH, 4 POLE… → ["induction","motor","hp","1ph","pole","foot","mounted","teco"]
+  INDUCTION MOTOR 1 HP, 1PH, 4 POLE …  → ["induction","motor","hp","1ph","pole","foot","mounted","teco"]
+  ```
+
+  Three different motors, **identical token sets** — `1.5` split into `1` and `5` and both vanished. The
+  cross-model guard written to stop `32CHH` matching `24CDH` had nothing left to guard with, so a 2 HP line matched
+  the 1 HP product at ₱12,822. `G.I. BOLT 5/16 X 3/4` likewise matched `… 5/16 X 1`. **`matchKey` is what the PO
+  form's autofill uses**, so picking a supplier could pre-fill a motor line with a different rating's price — a far
+  better explanation for several flagged rows than anyone mistyping.
+- **Fix — two rules, both needed**, and the second only surfaced because the first was tested rather than assumed:
+  1. never drop a token carrying a digit;
+  2. keep alphanumeric runs and decimals whole. A first attempt split `1ph` into `1` + `ph`, and that stray `1`
+     satisfied the 1 HP product's guard, so 2 HP *still* matched 1 HP. Matching `[a-z0-9]+(?:\.\d+)?` keeps `1ph`
+     and `1.5` intact and the confusion goes away.
+- **11 tests in `src/lib/po-catalog.test.ts`** lock it in: all four motor ratings pick their own product, both bolt
+  lengths stay apart, belts and angle bar still match through an order-reference suffix, and **both KDK cassettes**
+  — the case the matcher was originally written to protect — still match, so one family cannot be fixed by breaking
+  the other.
+- **The audit also learned about units.** A PO priced per **piece** against a catalogue price per **box** is not a
+  discrepancy, and reporting it as one buried the real ones (BLIND RIVETS ₱0.22 vs ₱170, CRS ROD ₱6,600 vs ₱100).
+  New `unit_mismatch` kind with a `pc/pcs/piece/each/unit` alias table, shown separately, sorted last, and offering
+  no "would be" figure — called out rather than hidden, since a PO priced in the wrong unit is its own problem.
+- **Verified end to end against a real Postgres**, 7 assertions: a 2 HP line at its own correct price is **no longer
+  flagged at all** (a whole class of false positive gone); a 2 HP line priced at the 1 HP figure **is** flagged and
+  compared against the right product; per-piece vs per-box classifies as a unit mismatch with no correction
+  suggested; the inventory-cost signature still fires; unit mismatches sort last.
+- Full suite: 65 passed, 6 skipped (the DB-backed inventory tests). Typecheck + lint + build clean. No migration.
+- **The earlier production list should be re-read after this deploys** — a good share of those ~35 rows were the
+  audit comparing against the wrong product, and will disappear.
+- **Still pre-existing and untouched:** `selection.test.ts > selectFan — direct drive (CEBDD) … 4-pole band` fails
+  on `main` too.
+
 ## 2026-08-28 · Inventory import can rename an item, and a ghost stops blocking it
 
 - **Reported:** re-importing the stock list returned *"Item Code CAT00100 is already used by another item"* on three
