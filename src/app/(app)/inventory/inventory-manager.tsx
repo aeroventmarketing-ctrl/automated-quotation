@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, Pencil, SlidersHorizontal, ChevronRight } from "lucide-react";
+import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, Pencil, SlidersHorizontal, ChevronRight, BellRing } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -427,7 +427,7 @@ function StockRow({ item, canManage, canProposeEdit, editChainNote, showPrices, 
   );
 }
 
-export function InventoryManager({ items, canManage, canProposeEdit = canManage, editChainNote = "", admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canProposeEdit?: boolean; editChainNote?: string; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, canProposeEdit = canManage, editChainNote = "", admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, pendingFirst = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canProposeEdit?: boolean; editChainNote?: string; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; pendingFirst?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
   // Multi-select for bulk delete — admin only, matching the `removeStockItems`
@@ -488,9 +488,22 @@ export function InventoryManager({ items, canManage, canProposeEdit = canManage,
   const [group, setGroup] = useState<GroupKey>("none");
 
   const statusRank = (s: Item["status"]) => (s === "ok" ? 0 : s === "low" ? 1 : 2);
+  const awaitingCount = useMemo(
+    () => items.filter((it) => (pendingByItem[it.id]?.length ?? 0) > 0).length,
+    [items, pendingByItem],
+  );
   const sorted = useMemo(() => {
     const mul = dir === "asc" ? 1 : -1;
     const cmp = (a: Item, b: Item): number => {
+      // An item with a proposal on it floats to the top for the four roles who
+      // act on one. Applied BEFORE the chosen sort and never multiplied by the
+      // direction: a list of 1,020 items buried "test only · Pending" a thousand
+      // rows down, and flipping to Descending must not bury it again.
+      if (pendingFirst) {
+        const ap = (pendingByItem[a.id]?.length ?? 0) > 0 ? 0 : 1;
+        const bp = (pendingByItem[b.id]?.length ?? 0) > 0 ? 0 : 1;
+        if (ap !== bp) return ap - bp;
+      }
       switch (sortKey) {
         case "quantity": return (a.quantity - b.quantity) * mul;
         case "available": return (a.available - b.available) * mul;
@@ -505,7 +518,7 @@ export function InventoryManager({ items, canManage, canProposeEdit = canManage,
       }
     };
     return [...filtered].sort(cmp);
-  }, [filtered, sortKey, dir]);
+  }, [filtered, sortKey, dir, pendingFirst, pendingByItem]);
 
   const groupValue = (it: Item): string => {
     switch (group) {
@@ -826,10 +839,21 @@ export function InventoryManager({ items, canManage, canProposeEdit = canManage,
         <p className="py-6 text-center text-sm text-muted-foreground">No stock items yet.</p>
       ) : (
         <div>
+          {/* A proposal waiting on this viewer is worth saying before the list
+              itself, because the list starts collapsed: floating the row to the
+              top achieves nothing if nobody opens the list to see it. */}
+          {pendingFirst && awaitingCount > 0 && (
+            <p className="mt-1 flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50/60 px-2 py-1.5 text-xs font-medium text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+              <BellRing className="h-3.5 w-3.5 shrink-0 animate-approver-blink" />
+              {awaitingCount} item{awaitingCount === 1 ? "" : "s"} awaiting approval — shown at the top of the list.
+            </p>
+          )}
           {/* Pure-CSS collapse: an uncontrolled checkbox toggled by the label, so
               React never manages open/closed state (a statically-open <details>
-              re-expands on re-render; this can't). Starts open (defaultChecked). */}
-          <input type="checkbox" id="inv-list-toggle" className="peer hidden" />
+              re-expands on re-render; this can't). It opens by default only when
+              something is waiting on this viewer — otherwise a thousand-row list
+              greets everybody on arrival. */}
+          <input type="checkbox" id="inv-list-toggle" className="peer hidden" defaultChecked={pendingFirst && awaitingCount > 0} />
           <label htmlFor="inv-list-toggle" className="flex w-full cursor-pointer select-none items-center gap-1.5 border-t py-2 text-xs font-medium text-muted-foreground hover:text-foreground peer-checked:[&_svg]:rotate-90">
             <ChevronRight className="h-3.5 w-3.5 transition-transform" />
             Item list ({filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ""}) — click to show / hide

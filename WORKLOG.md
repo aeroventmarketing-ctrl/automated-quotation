@@ -1,3 +1,37 @@
+## 2026-08-29 · An item awaiting approval goes to the top of the Inventory list
+
+- **Owner's instruction:** *"move the item for approval at the 1st row of inventory list for warehouse, purchaser,
+  payment approver and admin."*
+- The screenshot that came with it says why: 1,020 items, and *"test only · Pending"* sitting a thousand rows down
+  with its amber AWAITING card attached. The row was doing its job perfectly and nobody would ever scroll to it.
+
+### Pending first, before the chosen sort
+
+The rank is applied **ahead of** the sort key and is **never multiplied by the direction**. Flipping to Descending
+must not bury the thing the badge is flashing about — that would be the same bug in a different costume.
+
+- The four roles are `watchesCatalogueApprovals` — the same set the nav badge already counts for, reused rather
+  than re-derived, so the list and the badge can never disagree about who is being asked to act. Everyone else
+  (Sales, Plant Manager, Accounting, Logistics, the production heads) keeps the plain alphabetical list.
+- With **Group by** set, a pending item leads its own group rather than the whole table. That is the only sensible
+  reading of "first row" once the table is in sections, and the default is No grouping anyway.
+
+### The list now opens itself when something is waiting
+
+Floating a row to the top achieves nothing while the list is collapsed — and it is, by default, behind *"Item list
+(1020) — click to show / hide"*. So the collapse now starts **open** for a viewer with something awaiting, and
+stays closed otherwise: a thousand-row table should not greet everybody on arrival.
+
+Above it sits a blinking amber line — *"2 items awaiting approval — shown at the top of the list."* — which is
+readable even when the list is shut, and explains why the order looks different from the sort that is selected.
+
+### Verified
+
+- Typecheck, lint and build clean; full suite **121 passed, 1 failed** (the pre-existing `selectFan` CEBDD failure
+  on `main`, untouched). **No new test, and worth saying why:** the change is a comparator branch and a banner
+  inside a client component, with no server behaviour to pin. This one rests on the build and on reading, not on a
+  rendered screenshot — the first thing to eyeball after it deploys.
+
 ## 2026-08-29 · The Purchaser gets an Edit button on Inventory
 
 - **Owner's instruction:** *"In Inventory, show edit button to purchaser."* — closing the gap the previous entry
