@@ -5,6 +5,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { canViewPrices, canEditPrices } from "@/lib/price-visibility";
 import { isCataloguePriceOwner } from "@/lib/price-authority";
+import { watchesCatalogueApprovals } from "@/lib/catalogue-approvals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
@@ -114,6 +115,11 @@ export default async function InventoryPage() {
   // catalogue price owner (see lib/price-authority) — who is likewise the only
   // person who may take the stock list out as a file or put one back in.
   const viewerPriceOwner = isCataloguePriceOwner(viewer, assignments);
+  // Owner's instruction: *"move the item for approval at the 1st row of inventory
+  // list for warehouse, purchaser, payment approver and admin."* Same four roles
+  // the nav badge already counts for, so the list and the badge agree about who
+  // is being asked to act.
+  const pendingFirst = watchesCatalogueApprovals(viewer, assignments);
   const pendingByItem: Record<string, StockActionView[]> = {};
   try {
     const actions = await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" } });
@@ -279,7 +285,7 @@ export default async function InventoryPage() {
 
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} canProposeEdit={canProposeEdit} editChainNote={editChainNote} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} canProposeEdit={canProposeEdit} editChainNote={editChainNote} pendingFirst={pendingFirst} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 
