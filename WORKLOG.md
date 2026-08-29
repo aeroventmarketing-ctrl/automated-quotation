@@ -1,3 +1,42 @@
+## 2026-08-29 · Fix: the Payment Approver had no access to the page they approve on
+
+- **Owner's bug report:** *"payment approver cannot approve in the inventory, enable the inventory button with all
+  data access including price."*
+- The screenshot is the whole story: the nav badge says **1** and the page says *"You don't have access to
+  inventory. Ask an admin for the Warehouse role."* The badge was counting their work and the page would not let
+  them do it.
+
+### Three omissions, one shape
+
+Every one of these is the Payment Approver missing from a list they should always have been on. The server named
+them throughout — `requireProductManager`, the approval chain, `canSetCataloguePrice` — so this is the screens
+catching up, not a new permission.
+
+1. **`canView` on Inventory** never listed them, so the page refused to open at all. Fixed — they now read the full
+   item list.
+2. **`PRICE_ROLES` in `price-visibility`** never listed them either, on **both** surfaces. They own the catalogue
+   price and give the final approval on every change to one, and the screen would not show them the figure they
+   were signing. Unit cost, sell price and the Stock-value tile are all theirs now, on Inventory and Products.
+3. **`canManage` on Products** left them able to press **+ Add product** (that button follows the price owner) and
+   then unable to edit the product they had just added.
+
+### What they get on Inventory
+
+The item list with every column, the pending cards with **Approve / Reject** on the requests that have reached
+them, and per row both **Set price** and **Edit**. Not the stock moves: Reserve, Adjust and the item-list buttons
+stay with the Warehouse and the admin. Their own Edit applies immediately — they are the final approver, and the
+panel says so.
+
+- **Labels / Reorder stay hidden** from them: `/inventory/labels` and `/inventory/reorder` both deny the Payment
+  Approver, so linking there would be a dead end. Say the word if those should open up too.
+
+### Verified
+
+- New test: the Payment Approver **sees** prices and Sales still never do — with a third assertion that the list
+  did not widen further (the Warehouse still cannot see a price).
+- Full suite **123 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
 ## 2026-08-29 · Fix: a Warehouse request applied itself at the Purchaser's click
 
 - **Owner's bug report:** *"notification does not show in payment approver and admin. Once warehouse raise a

@@ -66,6 +66,23 @@ run("who may set a catalogue price", () => {
     await prisma.product.deleteMany({});
   });
 
+  // The Payment Approver holds the final approval on every catalogue change, so
+  // the screens have to actually show them what they are signing. They were shut
+  // out of Inventory entirely and saw no prices anywhere — reported as "payment
+  // approver cannot approve in the inventory".
+  it("lets the Payment Approver SEE prices, not just set them", async () => {
+    const { canViewPrices } = await import("./price-visibility");
+    const user = (role: string) => ({ id: "u1", name: "Rey Gil", role }) as unknown as import("@prisma/client").User;
+    const NONE = {} as Parameters<typeof canViewPrices>[1]; // the role map is mocked above
+
+    be("payment_approver");
+    expect(canViewPrices(user("OTHER"), NONE)).toBe(true);
+    expect(canViewPrices(user("SALES"), NONE)).toBe(false);   // Sales never, whatever else they hold
+
+    be("warehouse");
+    expect(canViewPrices(user("OTHER"), NONE)).toBe(false);   // and this list did not widen
+  });
+
   it("recognises the Admin and the Payment Approver, and no one else", async () => {
     be("admin"); expect(await canSetCataloguePrice()).toBe(true);
     be("payment_approver"); expect(await canSetCataloguePrice()).toBe(true);

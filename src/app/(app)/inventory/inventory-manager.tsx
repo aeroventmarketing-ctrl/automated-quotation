@@ -99,14 +99,14 @@ function LocationField({ value, onChange, locations, className }: { value: strin
 
 function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; canProposeEdit: boolean; chainNote: string; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   const router = useRouter();
-  // Three shapes of action cell, in order of precedence:
-  //   priceOnly — a price owner who is not a stock manager: one "Set price".
+  // Two shapes of action cell:
   //   canManage — the Warehouse / admin: Label, Reserve, Edit, Adjust.
-  //   editOnly  — the Purchaser: Edit alone. They raise a change to an item's
-  //               details and the price owner releases it; the quantity moves
-  //               (Reserve, Adjust) stay with the people who hold the stock.
+  //   otherwise — whichever of "Set price" and "Edit" the viewer holds. The
+  //               Payment Approver holds both (their change applies at once, so
+  //               Edit is the fuller of the two and Set price the quick one); the
+  //               Purchaser holds Edit alone. The quantity moves stay with the
+  //               people who hold the stock either way.
   const priceOnly = canEditPrices && !canManage;
-  const editOnly = !priceOnly && !canManage && canProposeEdit;
   const canOpenEdit = canManage || canProposeEdit;
   const hasActions = canManage || canEditPrices || canProposeEdit;
   // The Sell-price column is hidden from some price viewers (e.g. Purchaser).
@@ -246,14 +246,19 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
                 fits on screen without horizontal scrolling. The active panel's
                 button stays highlighted. */}
             <div className="flex justify-end gap-0.5">
-              {priceOnly ? (
-                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "price" ? "none" : "price"))}>
-                  {!showSell ? "Set cost" : item.sellPrice <= 0 ? "Set price" : "Edit price"}
-                </Button>
-              ) : editOnly ? (
-                <Button size="sm" variant={panel === "edit" ? "default" : "outline"} className="h-7 text-xs" title="Propose an edit to this item's details" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>
-                  <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
-                </Button>
+              {!canManage ? (
+                <>
+                  {priceOnly && (
+                    <Button size="sm" variant={panel === "price" ? "default" : "outline"} className="h-7 text-xs" onClick={() => setPanel((p) => (p === "price" ? "none" : "price"))}>
+                      {!showSell ? "Set cost" : item.sellPrice <= 0 ? "Set price" : "Edit price"}
+                    </Button>
+                  )}
+                  {canProposeEdit && (
+                    <Button size="sm" variant={panel === "edit" ? "default" : "outline"} className="h-7 text-xs" title="Edit this item's details" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>
+                      <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                    </Button>
+                  )}
+                </>
               ) : (
                 <>
                   <Button size="sm" variant={panel === "label" ? "default" : "outline"} className="h-7 w-7 p-0" title="Label — barcode / QR" aria-label="Label" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}><Tag className="h-3.5 w-3.5" /></Button>

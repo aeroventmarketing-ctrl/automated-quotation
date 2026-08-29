@@ -25,12 +25,17 @@ export default async function ProductsPage() {
   const [viewer, assignments, suppliers] = await Promise.all([getCurrentUser(), getWorkflowRoles(), getSuppliers().catch(() => [])]);
   const admin = isAdmin(viewer);
   const has = (r: WorkflowRoleKey) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r);
-  // Only the Purchaser or an admin may add/edit/remove products. Other roles
-  // (Warehouse, Plant Manager, etc.) can view the list but not change it.
-  // Sales are blocked from the Products page entirely (they use the sales
+  // The Purchaser, the Payment Approver or an admin may add/edit/remove products.
+  // Other roles (Warehouse, Plant Manager, etc.) can view the list but not change
+  // it. Sales are blocked from the Products page entirely (they use the sales
   // dashboard's Check-availability tool for name / quantity / selling price).
+  //
+  // The Payment Approver was missing here, the same omission that shut them out
+  // of Inventory: `requireProductManager` names them on the server, and they
+  // already had the + Add product button (it follows the price owner), so they
+  // could add a product and then not edit it.
   const isSales = viewer?.role === "SALES";
-  const canManage = !isSales && (admin || has("purchaser"));
+  const canManage = !isSales && (admin || has("purchaser") || has("payment_approver"));
   const canView = !isSales && (canManage || VIEW_ROLES.some(has));
   // Supplier prices are commercial data — Purchaser, Engineers, Accounting and
   // admins only. Other viewers (Warehouse, Plant Manager, Logistics, …) see the
