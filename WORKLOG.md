@@ -1,3 +1,47 @@
+## 2026-08-29 · The Purchaser loses + Add product and Remove no-supplier items
+
+- **Owner's instruction:** *"hide add product button and remove no-supplier items in products tab for purchaser
+  role."*
+
+### A narrower gate, on purpose
+
+Inventory could be done by flipping `canCreateItems` / `canDeleteItems`. Products **cannot**: `canManage` also
+carries the per-row **Edit** button, and the Purchaser must keep that — their save is parked for the price owner to
+confirm, which is the whole approval flow built two days ago. Flipping `canManage` would have quietly deleted it.
+
+So the two buttons get their own prop, `canAddOrRemoveProducts`, fed the price owner (Admin / Payment Approver).
+The distinction it draws: **adding a product and purging the unsourced ones change what the list contains; editing
+a row changes what a row says.** The Purchaser keeps the second.
+
+### Hidden AND refused
+
+`requireProductShaper` — the price owner — now guards `createProduct` and `removeUnsourcedProducts`, where
+`requireProductManager` (Purchaser / Payment Approver / admin) used to. A button whose action still answers is
+theatre.
+
+### A consequence worth naming: CREATE is never parked again
+
+`createProduct` used to park a Purchaser's new product for approval. With the button gone there is nobody who may
+add a product but not price one, so it always writes straight through and the park branch went with the guard.
+**`approveProductChange` keeps its CREATE arm regardless** — rows parked before this shipped still have to be
+applied or rejected rather than stranded in the queue. The queue itself now fills with edits and removals only.
+
+### Still there for the Purchaser — say the word if it should not be
+
+**Delete selected** on Products. It was not in the instruction and it is a different button from the two named, but
+it does delete products, so it sits oddly beside them now. On Inventory the equivalent was explicitly removed. One
+line either way.
+
+### Verified — 1 new test, 1 rewritten
+
+- The Purchaser's `removeUnsourcedProducts` is refused and the products stay; the Payment Approver's still removes
+  them.
+- *"parks the Purchaser's new product"* became *"refuses the Purchaser's new product rather than parking it"* —
+  and checks that **neither a product nor a queued change** is left behind. Their EDIT is still parked, which the
+  test below it and the eight in `product-approval.test.ts` continue to cover.
+- Full suite **119 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
 ## 2026-08-29 · The Purchaser loses Add stock item, Merge duplicates and Delete selected
 
 - **Owner's instruction:** *"hide delete selected button, add stock item button, merge duplicates button for

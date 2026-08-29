@@ -36,6 +36,28 @@ async function requireProductManager() {
   return user;
 }
 
+/**
+ * Adding a product, and purging the unsourced ones — the Admin / Payment
+ * Approver, not the Purchaser.
+ *
+ * Owner's instruction: *"hide add product button and remove no-supplier items in
+ * products tab for purchaser role."* Refused here as well as hidden on screen: a
+ * button whose action still answers is theatre.
+ *
+ * Note what this does NOT touch. The Purchaser keeps **Edit** on every row, and
+ * their save is still parked for the price owner to confirm. What they lose is
+ * the pair of buttons that change what the list *contains* rather than what a
+ * row says.
+ */
+async function requireProductShaper() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(await canSetCataloguePrice())) {
+    throw new Error("Only an Admin or the Payment Approver can add or remove products.");
+  }
+  return user;
+}
+
 const supplierLinkSchema = z.object({
   supplierId: z.string().trim().default(""),
   company: z.string().trim().min(1),
@@ -137,11 +159,19 @@ async function park(
   return PARKED;
 }
 
+/**
+ * Add a product. Admin / Payment Approver only, so it always writes straight
+ * through — there is no longer anyone who may add a product but not price one,
+ * and hence nothing to park.
+ *
+ * `approveProductChange` keeps its CREATE arm all the same: rows parked before
+ * the button was withdrawn from the Purchaser still have to be applied or
+ * rejected rather than stranded.
+ */
 export async function createProduct(input: z.infer<typeof productSchema>): Promise<ProductSaveResult> {
   return asSaveResult(async () => {
-    const user = await requireProductManager();
+    await requireProductShaper();
     const d = productSchema.parse(input);
-    if (!(await canSetCataloguePrice())) return park(user, "CREATE", null, asPayload(d));
     await prisma.$transaction(async (tx) => {
       const sku = await nextProductSku(tx);
       await tx.product.create({
@@ -323,11 +353,12 @@ export async function withdrawProductChange(id: string): Promise<ProductSaveResu
 
 /**
  * Purge products that have neither a supplier nor a price — the leftovers from
- * the old auto-save behaviour. Purchaser/warehouse/admin only. Deactivates
- * (never hard-deletes) so any historical reference is preserved.
+ * the old auto-save behaviour. Admin / Payment Approver only (the Purchaser was
+ * dropped with the button). Deactivates rather than hard-deleting, so any
+ * historical reference is preserved.
  */
 export async function removeUnsourcedProducts(): Promise<{ removed: number }> {
-  await requireProductManager();
+  await requireProductShaper();
   const list = await prisma.product.findMany({ where: { active: true }, select: { id: true, suppliers: true } });
   const ids = list
     .filter((p) => {

@@ -291,7 +291,7 @@ function ProductRowView({ product, canManage, canEditPrices, showPrices, showSup
   );
 }
 
-export function ProductManager({ products, suppliers, canManage, canEditPrices = false, canTransferFiles = false, admin = false, showPrices, showSuppliers = true, resaleIds = [] }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; canEditPrices?: boolean; canTransferFiles?: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean; resaleIds?: string[] }) {
+export function ProductManager({ products, suppliers, canManage, canEditPrices = false, canTransferFiles = false, canAddOrRemoveProducts = false, admin = false, showPrices, showSuppliers = true, resaleIds = [] }: { products: ProductRow[]; suppliers: Supplier[]; canManage: boolean; canEditPrices?: boolean; canTransferFiles?: boolean; canAddOrRemoveProducts?: boolean; admin?: boolean; showPrices: boolean; showSuppliers?: boolean; resaleIds?: string[] }) {
   const router = useRouter();
   const resaleSet = useMemo(() => new Set(resaleIds), [resaleIds]);
   const [showAdd, setShowAdd] = useState(false);
@@ -511,7 +511,10 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={() => setShowAdd(true)}>+ Add product</Button>
+              {/* Adding a product and purging the unsourced ones shape the LIST;
+                  editing a row does not. The Purchaser keeps Edit (their save is
+                  parked for approval) and has lost these two. */}
+              {canAddOrRemoveProducts && <Button size="sm" onClick={() => setShowAdd(true)}>+ Add product</Button>}
               {/* Import / download are the price owner's: the file carries every
                   supplier price, in and out (lib/price-authority). */}
               {canTransferFiles && <BulkImport />}
@@ -522,7 +525,7 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
                 </>
               )}
               <Link href="/products/labels" className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">Labels</Link>
-              {unsourced > 0 && (
+              {canAddOrRemoveProducts && unsourced > 0 && (
                 <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={busy} onClick={cleanupUnsourced}>
                   {busy ? "…" : `Remove no-supplier items (${unsourced})`}
                 </Button>

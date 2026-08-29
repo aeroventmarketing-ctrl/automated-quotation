@@ -135,7 +135,11 @@ export default async function ProductsPage() {
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <ProductManager products={products} suppliers={suppliers} canManage={canManage} canEditPrices={editPrices} canTransferFiles={priceOwner} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
+            {/* `canManage` still includes the Purchaser — they edit rows, and
+                their save is parked for approval. `canAddOrRemoveProducts` is the
+                narrower gate on the two list-shaping buttons the owner had hidden
+                from them: + Add product and Remove no-supplier items. */}
+            <ProductManager products={products} suppliers={suppliers} canManage={canManage} canEditPrices={editPrices} canTransferFiles={priceOwner} canAddOrRemoveProducts={priceOwner} admin={admin} showPrices={showPrices} showSuppliers={showSuppliers} resaleIds={resaleIds} />
           </CardContent>
         </Card>
       )}
