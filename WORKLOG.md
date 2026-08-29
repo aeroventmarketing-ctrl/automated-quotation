@@ -1,3 +1,54 @@
+## 2026-08-29 · A flashing count on Inventory and Products when a change is waiting
+
+- **Owner's instruction:** *"make a flashing notification at the word inventory and products when warehouse or
+  purchaser initiate edit in inventory tab or products tab. Show this notification for purchaser, warehouse,
+  payment approver and admin role."*
+- Both queues were already visible **inside** their own page — the pending card on Products, the amber chip on an
+  Inventory row — which is exactly the problem: you had to be on the page to know. The nav badge is the part that
+  reaches someone who is somewhere else.
+
+### The badge already existed
+
+`navCounts` in the app layout has driven a blinking red count on Inbound RFQs and Inquiries for a while. This adds
+two more entries to it — same component, same blink, on both the sidebar and the mobile menu — so there is no new
+badge to get wrong. What is new is `lib/catalogue-approvals.ts`: the counting and the role gate.
+
+- **Inventory** counts pending stock actions of kind **EDIT** — what "Propose edit" raises, and the one kind that
+  now waits on the price owner. **Adjust / Reserve / Transfer are deliberately not counted**: they are quantity
+  moves on the older two-party handshake, and "initiate edit" is not what they are. Widening it is one word.
+- **Products** counts pending `ProductChange` rows. Every one is a Purchaser's save — a price owner's own writes
+  straight through and never parks.
+- A proposer keeps seeing their own change in the count. It is still waiting, and a badge that vanished for the
+  person who raised it would read as "done".
+
+### One departure from the four roles, and why
+
+The Warehouse gets the **Inventory** badge but not the **Products** one. The Products pending card shows a
+field-by-field diff **including supplier prices**, and the Warehouse is not a price viewer (`PRICE_ROLES` in
+`price-visibility`), so that page already withholds the card from them. Badging a tab that will show them nothing is
+a dead end; rendering the card instead would leak the very figures that list exists to withhold. They keep the
+Inventory badge, where they are a party to the handshake. **Say the word if the Warehouse was meant to see product
+prices** — that is a policy change, not a UI one.
+
+- The badge's screen-reader label now follows the tab. It used to say *"3 ready to view"* for every count, which on
+  Inventory would have told someone the opposite of the truth.
+
+### Refresh cadence — worth knowing
+
+The count is computed in the app layout, so it updates on navigation, on a page load, and within ~8s on the pages
+that already run `AutoRefresh` (My Dashboard, Orders, a quotation). It does **not** tick on a page that has no
+auto-refresh; putting `AutoRefresh` in the layout would make every page in the app re-fetch every 8 seconds, which
+is a far bigger change than a badge and not one to make quietly.
+
+### Verified — 5 new tests
+
+- An EDIT counts and an ADJUST does not; the Purchaser and the Payment Approver get both counts; the Warehouse gets
+  Inventory only; Accounting and a role-less user get nothing; and both clear once the changes are decided.
+- A missing table counts as **0** rather than throwing — this runs in the layout, so an error here would take every
+  page down with it.
+- Full suite **116 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
 ## 2026-08-28 · Catalogue spreadsheets belong to the price owner
 
 - **Owner's instruction:** *"only the admin/payment approver can download or upload csv or excel file."*

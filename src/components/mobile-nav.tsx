@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { visibleNav } from "./app-nav";
+import { visibleNav, navCountLabel } from "./app-nav";
 import type { Role } from "@prisma/client";
 
 /** Hamburger menu for the mobile top bar (the sidebar is hidden below md). */
@@ -52,7 +52,7 @@ export function MobileNav({ role, name, workflowRoles = [], salesPersonnel = fal
                   {count > 0 ? (
                     <span
                       className="ml-auto inline-flex h-5 min-w-[1.25rem] shrink-0 animate-approver-blink items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white"
-                      aria-label={`${count} ready to view`}
+                      aria-label={navCountLabel(item.href, count)}
                     >
                       {count > 99 ? "99+" : count}
                     </span>

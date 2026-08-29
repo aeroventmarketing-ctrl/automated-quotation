@@ -10,6 +10,19 @@ import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 /** Shown to workflow-role holders and admins (their task list). */
 export const MY_DASHBOARD_ITEM = { href: "/my-dashboard", label: "My Dashboard", icon: ListChecks } as const;
 
+/**
+ * What a blinking nav count means, per tab. The badge started life on Inbound
+ * RFQs ("ready to view") and now also carries catalogue changes awaiting
+ * confirmation — a screen reader announcing "3 ready to view" on Inventory would
+ * be telling someone the opposite of the truth, so the wording follows the tab.
+ */
+const COUNT_LABEL: Record<string, (n: number) => string> = {
+  "/inventory": (n) => `${n} stock item edit${n === 1 ? "" : "s"} awaiting approval`,
+  "/products": (n) => `${n} product change${n === 1 ? "" : "s"} awaiting approval`,
+};
+export const navCountLabel = (href: string, n: number): string =>
+  (COUNT_LABEL[href] ?? ((x: number) => `${x} ready to view`))(n);
+
 export const NAV = [
   { href: "/management", label: "Management Dashboard", icon: Gauge, roles: ["ADMIN"] },
   { href: "/dashboard", label: "Sales Dashboard", icon: LayoutDashboard, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
@@ -160,7 +173,8 @@ export function AppNav({ role, name, workflowRoles = [], salesPersonnel = false,
               {count > 0 ? (
                 <span
                   className="ml-auto inline-flex h-5 min-w-[1.25rem] shrink-0 animate-approver-blink items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white"
-                  aria-label={`${count} ready to view`}
+                  aria-label={navCountLabel(item.href, count)}
+                  title={navCountLabel(item.href, count)}
                 >
                   {count > 99 ? "99+" : count}
                 </span>
