@@ -13,6 +13,7 @@ import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import { getDashboardAlerts } from "@/lib/dashboard-alerts";
 import { getInboundQueue } from "@/lib/inbound-rfq";
 import { getInquiryAssignments } from "@/lib/inquiry-notifications";
+import { getCatalogueApprovalCounts } from "@/lib/catalogue-approvals";
 import { getAlertGoLive, alertsSuppressedNow } from "@/lib/alert-golive";
 import { AlertSuppressionProvider } from "@/components/alert-golive-context";
 
@@ -92,6 +93,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // New RFQ inquiries assigned to this salesperson — a blinking count on Inquiries.
   const assigned = (await getInquiryAssignments(user.id).catch(() => [])).length;
   if (assigned > 0) navCounts["/inquiries"] = assigned;
+  // Catalogue changes waiting to be confirmed — a blinking count on Inventory and
+  // Products for the Purchaser, Warehouse, Payment Approver and admins. Both
+  // queues already show inside their own page; this is what reaches someone who
+  // is somewhere else.
+  const catalogue = await getCatalogueApprovalCounts(user, wfAssignments);
+  if (catalogue.inventory > 0) navCounts["/inventory"] = catalogue.inventory;
+  if (catalogue.products > 0) navCounts["/products"] = catalogue.products;
 
   const layout = (
     <div className="flex min-h-screen flex-col">
