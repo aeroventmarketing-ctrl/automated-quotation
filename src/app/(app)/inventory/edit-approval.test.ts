@@ -1,11 +1,17 @@
 /**
- * An Inventory "Propose edit" now needs a third sign-off.
+ * The approval chain on an Inventory "Propose edit".
  *
  * The edit panel carries the unit cost and the selling price, so the Warehouse +
  * Purchaser handshake was a way past the rule that only the Admin / Payment
- * Approver sets a catalogue price. These check that the item does not move until
- * all three have signed — and that the quantity actions, which move stock rather
- * than money, are untouched by the change.
+ * Approver sets a catalogue price. The owner's sequence:
+ *
+ *   Warehouse raises it  →  Purchaser approves  →  Admin / Payment Approver
+ *   Purchaser raises it  →  Admin / Payment Approver          (no Warehouse step)
+ *   Admin / PA raises it →  applies at once
+ *
+ * These check the item does not move until the chain is finished, that the chain
+ * is the right LENGTH for who raised it, and that the quantity actions — which
+ * move stock rather than money — are untouched by any of it.
  *
  * Add --no-file-parallelism when running several DB-backed suites at once: they
  * share one database and truncate the same tables between tests.
@@ -71,7 +77,7 @@ run("an inventory edit needs the price owner too", () => {
   const proposeEdit = (unitCost: number) =>
     proposeStockAction("EDIT", itemId, { category: "SUPPLIES", location: "Plant Warehouse", reorderLevel: 2, unitCost, sellPrice: 300 });
 
-  it("holds the edit after the Warehouseman and the Purchaser have both signed", async () => {
+  it("holds the Warehouse's edit after the Purchaser has signed", async () => {
     be("warehouse");
     expect(await proposeEdit(128)).toEqual({ ok: true });
     be("purchaser");
@@ -88,6 +94,39 @@ run("an inventory edit needs the price owner too", () => {
     expect(Number(i.reorderLevel)).toBe(1);
   });
 
+  // Rule 2: "Remove the warehouse in approval stage."
+  it("sends the Purchaser's own edit straight to the price owner, with no Warehouse step", async () => {
+    be("purchaser");
+    await proposeEdit(128);
+    const a = (await action())!;
+    expect(a.status).toBe("PENDING");
+    expect(a.purchaserByName).toBe("Allan Ramos");
+    expect(a.warehouseAt).toBeNull();      // and it never will be
+
+    // The Warehouseman has nothing to sign here.
+    be("warehouse");
+    const r = await approveStockAction(a.id);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.error).toMatch(/Admin \/ Payment Approver/i);
+    expect((await action())!.status).toBe("PENDING");
+
+    be("payment_approver");
+    expect(await approveStockAction(a.id)).toEqual({ ok: true });
+    expect((await action())!.status).toBe("APPLIED");
+    expect(Number((await item())!.unitCost)).toBe(128);
+  });
+
+  // Rule 1, in order: the price owner does not get to sign before the Purchaser.
+  it("will not take the final approval before the Purchaser has reviewed it", async () => {
+    be("warehouse");
+    await proposeEdit(128);
+    be("payment_approver");
+    const r = await approveStockAction((await action())!.id);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.error).toMatch(/Purchaser/i);
+    expect(Number((await item())!.unitCost)).toBe(210);
+  });
+
   it("applies it on the price owner's sign-off, and only then", async () => {
     be("warehouse"); await proposeEdit(128);
     be("purchaser"); await approveStockAction((await action())!.id);
@@ -102,13 +141,13 @@ run("an inventory edit needs the price owner too", () => {
     expect(i.category).toBe("SUPPLIES");
   });
 
-  it("tells whoever clicks too early who is still missing", async () => {
+  it("tells whoever clicks out of turn whose signature is wanted", async () => {
     be("warehouse");
     await proposeEdit(128);
-    // The Warehouseman's slot is already theirs; there is nothing left for them.
+    // The Warehouseman's slot is already theirs; the Purchaser is next.
     const r = await approveStockAction((await action())!.id);
     expect(r.ok).toBe(false);
-    expect(r.ok === false && r.error).toMatch(/Purchaser.*Admin|Payment Approver/i);
+    expect(r.ok === false && r.error).toMatch(/Purchaser/i);
   });
 
   it("leaves a quantity adjustment on the old two-party rule", async () => {
@@ -121,13 +160,15 @@ run("an inventory edit needs the price owner too", () => {
     expect(Number((await item())!.quantity)).toBe(10);
   });
 
-  it("does not let the price owner's own proposal skip the other two", async () => {
+  // The price owner IS the final approver, so their own edit has nobody left to
+  // wait for. Previously it filed itself as a Warehouseman's and queued for two
+  // people who would only have been signing on their behalf.
+  it("applies the price owner's own edit at once", async () => {
     be("payment_approver");
     await proposeEdit(128);
     const a = (await action())!;
-    expect(a.status).toBe("PENDING");
-    expect(a.approverByName).toBe("Ana Cruz");   // their own slot, filled by proposing
-    expect(a.warehouseAt).toBeNull();
-    expect(Number((await item())!.unitCost)).toBe(210);
+    expect(a.status).toBe("APPLIED");
+    expect(a.approverByName).toBe("Ana Cruz");
+    expect(Number((await item())!.unitCost)).toBe(128);
   });
 });

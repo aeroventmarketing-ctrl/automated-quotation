@@ -11,8 +11,9 @@ import { logActivity } from "@/lib/activity-log";
 import { isOfficeTransfer } from "@/lib/stock-transfer";
 import {
   coerceStockDoc,
-  needsPriceOwner,
+  nextStockActionSlot,
   stockActionComplete,
+  STOCK_SLOT_LABEL,
   type AdjustPayload,
   type EditPayload,
   type ReservePayload,
@@ -83,8 +84,10 @@ function summaryFor(kind: StockActionKind, item: { name: string; unit: string; q
 }
 
 /**
- * Propose a stock action — held pending until a Warehouseman AND a Purchaser
- * approve, plus (on an EDIT) the Admin / Payment Approver who owns the price.
+ * Propose a stock action — held pending until the signatures it needs are in.
+ * Which ones those are, and in what order, is `nextStockActionSlot`: the
+ * quantity kinds keep the Warehouse + Purchaser handshake, and an Edit runs the
+ * owner's chain, whose length depends on who raised it.
  */
 export async function proposeStockAction(kind: StockActionKind, stockItemId: string, payloadRaw: unknown): Promise<StockActionResult> {
   return asResult(() => doProposeStockAction(kind, stockItemId, payloadRaw));
@@ -133,14 +136,23 @@ async function doProposeStockAction(kind: StockActionKind, stockItemId: string, 
   // The proposer fills exactly ONE slot — the one their designation answers for.
   // Filling every slot they could sign would let a single person (an admin holds
   // all three) push a change through alone, which is the opposite of the control.
-  const proposedRole = p.warehouse ? "warehouse" : p.purchaser ? "purchaser" : p.priceOwner ? "approver" : "admin";
+  //
+  // An EDIT reads the price owner FIRST. `p.warehouse` and `p.purchaser` are both
+  // true for an admin (they stand in for either party when approving), so the old
+  // order filed an admin's own edit as a Warehouseman's and left it queueing for
+  // two people who would only be signing on their behalf. Every other kind keeps
+  // the original order, so the quantity handshakes behave exactly as before.
+  const proposedRole =
+    kind === "EDIT"
+      ? p.priceOwner ? "approver" : p.warehouse ? "warehouse" : p.purchaser ? "purchaser" : "admin"
+      : !p.warehouse && !p.purchaser ? "admin" : p.warehouse ? "warehouse" : "purchaser";
   const now = new Date();
   const warehouseAt = proposedRole === "warehouse" ? now : null;
   const purchaserAt = proposedRole === "purchaser" ? now : null;
   const approverAt = proposedRole === "approver" ? now : null;
-  // Reserve needs only the Warehouseman, so a Warehouse/admin proposal applies
-  // immediately; every other kind stays pending for the second party's sign-off.
-  const applyNow = stockActionComplete(kind, warehouseAt, purchaserAt, approverAt);
+  // Reserve needs only the Warehouseman, and an Edit raised by the price owner
+  // needs nobody else, so those apply immediately; everything else stays pending.
+  const applyNow = stockActionComplete(kind, proposedRole, warehouseAt, purchaserAt, approverAt);
   const sum = summaryFor(kind, item, payload);
   await prisma.$transaction(async (tx) => {
     const created = await tx.stockAction.create({
@@ -190,30 +202,28 @@ async function doApproveStockAction(id: string): Promise<void> {
     let whAt: Date | null = a.warehouseAt;
     let puAt: Date | null = a.purchaserAt;
     let apAt: Date | null = a.approverAt;
-    // Slots fill in order, and one click fills one slot: somebody holding two
-    // designations signs twice, deliberately.
-    const wantsOwner = needsPriceOwner(a.kind);
-    if (a.warehouseAt == null && p.warehouse) {
+    // One slot is open at a time, in order, and one click fills one slot —
+    // somebody holding two designations signs twice, deliberately. The order
+    // itself lives in `nextStockActionSlot`, so the screen and the server can
+    // never disagree about whose turn it is.
+    const slot = nextStockActionSlot(a.kind, a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
+    if (slot == null) throw new Error("Every approval is already in.");
+    const maySign = slot === "warehouse" ? p.warehouse : slot === "purchaser" ? p.purchaser : p.priceOwner;
+    if (!maySign) throw new Error(`Waiting on the ${STOCK_SLOT_LABEL[slot]} — you can't sign this step.`);
+    if (slot === "warehouse") {
       data.warehouseByName = user.name;
       data.warehouseAt = now;
       whAt = now;
-    } else if (a.purchaserAt == null && p.purchaser) {
+    } else if (slot === "purchaser") {
       data.purchaserByName = user.name;
       data.purchaserAt = now;
       puAt = now;
-    } else if (wantsOwner && a.approverAt == null && p.priceOwner) {
+    } else {
       data.approverByName = user.name;
       data.approverAt = now;
       apAt = now;
-    } else {
-      const open = [
-        a.warehouseAt == null ? "the Warehouseman" : null,
-        a.purchaserAt == null ? "the Purchaser" : null,
-        wantsOwner && a.approverAt == null ? "an Admin / the Payment Approver" : null,
-      ].filter(Boolean) as string[];
-      throw new Error(open.length === 0 ? "Every approval is already in." : `Still waiting on ${open.join(" and ")}.`);
     }
-    if (stockActionComplete(a.kind, whAt, puAt, apAt)) {
+    if (stockActionComplete(a.kind, a.proposedRole, whAt, puAt, apAt)) {
       await applyAction(tx, a, user.name);
       data.status = "APPLIED";
       data.appliedAt = now;

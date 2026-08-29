@@ -39,7 +39,8 @@ process.env.DIRECT_URL = TEST_DB;
 const { PrismaClient } = await import("@prisma/client");
 const prisma = new (PrismaClient as unknown as new () => import("@prisma/client").PrismaClient)();
 const { canSetCataloguePrice } = await import("./price-authority");
-const { createProduct, updateProduct, importProducts } = await import("@/app/(app)/products/actions");
+const { createProduct, updateProduct, importProducts, removeUnsourcedProducts } =
+  await import("@/app/(app)/products/actions");
 const { createStockItem, updateStockItemMeta, importStockItems, removeStockItems, mergeDuplicateStockItems } =
   await import("@/app/(app)/inventory/actions");
 
@@ -81,18 +82,30 @@ run("who may set a catalogue price", () => {
       expect((p!.suppliers as { price?: number }[])[0].price).toBe(210);
     });
 
-    // The Purchaser's save no longer half-lands with the price quietly dropped:
-    // the whole proposal is parked until the price owner confirms it.
-    it("parks the Purchaser's new product instead of creating it", async () => {
+    // This used to park the Purchaser's new product for approval. The owner has
+    // since had the Add-product button hidden from them, so there is nothing to
+    // park — it is refused outright, and neither a product nor a queued change
+    // is left behind. Their EDIT is still parked; that is the test below.
+    it("refuses the Purchaser's new product rather than parking it", async () => {
       be("purchaser");
       const r = await createProduct({ name: "BELT B-50", unit: "pc", suppliers: [{ supplierId: "", company: "WINGS", price: 128 }] });
-      expect(r.ok).toBe(true);
-      expect(r.ok && r.applied).toBe(false);
+      expect(r.ok).toBe(false);
+      expect(r.ok === false && r.error).toMatch(/Admin or the Payment Approver/i);
       expect(await prisma.product.findFirst({ where: { name: "BELT B-50" } })).toBeNull();
-      const parked = await prisma.productChange.findFirst({ where: { status: "PENDING" } });
-      expect(parked!.kind).toBe("CREATE");
-      // Parked WHOLE — the price they typed is what the owner will be shown.
-      expect(((parked!.payload as { suppliers: { price?: number }[] }).suppliers)[0].price).toBe(128);
+      expect(await prisma.productChange.count()).toBe(0);
+    });
+
+    it("refuses the Purchaser's Remove no-supplier items, and keeps the products", async () => {
+      be("payment_approver");
+      await createProduct({ name: "ORPHAN WIDGET", unit: "pc", suppliers: [] });
+
+      be("purchaser");
+      await expect(removeUnsourcedProducts()).rejects.toThrow(/Admin or the Payment Approver/i);
+      expect(await prisma.product.count({ where: { active: true } })).toBe(1);
+
+      // …and the price owner still can.
+      be("payment_approver");
+      expect(await removeUnsourcedProducts()).toEqual({ removed: 1 });
     });
 
     it("leaves the live product untouched while the Purchaser's edit waits", async () => {

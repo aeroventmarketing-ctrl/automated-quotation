@@ -1,3 +1,165 @@
+## 2026-08-29 · The Purchaser gets an Edit button on Inventory
+
+- **Owner's instruction:** *"In Inventory, show edit button to purchaser."* — closing the gap the previous entry
+  flagged: rule 2 of the approval sequence (*Purchaser raises it → Admin / Payment Approver*) was implemented and
+  tested on Inventory but **unreachable**, because the Purchaser's rows carried no Edit button at all.
+
+### Edit alone, not the whole toolbar
+
+`canProposeEdit` is a new, wider gate than `canManageItems`: **Warehouse, Purchaser or admin**. The Purchaser's row
+shows **Edit** and nothing else — Reserve and Adjust stay with the people who hold the stock, and Label with the
+people who print them. The distinction the gate draws: **an edit is a request, not a write.** It goes into the
+same chain everything else does, so widening who may *ask* costs nothing.
+
+- The server already allowed it — `doProposeStockAction` has named the Purchaser since the chain was built — so
+  this is the screen catching up with the rule, not a new permission.
+
+### The panel's note is now computed for the viewer
+
+It used to be a two-way guess in the component (price owner or "everyone else"). With three possible chains it has
+to be right for whoever is looking, so the sentence is computed on the page and passed in:
+
+| Viewer | Note |
+| --- | --- |
+| Admin / Payment Approver | *Applies immediately — you are the final approver for a catalogue price.* |
+| Warehouse | *Proposed, not saved — the Purchaser reviews it, then an Admin / the Payment Approver…* |
+| Purchaser | *Proposed, not saved — an Admin / the Payment Approver gives the final approval.* |
+
+The order of those tests **mirrors `proposedRole`** in `stock-action-actions` (price owner → Warehouse →
+Purchaser), so the panel can never promise a chain the server will not run. Both are commented to say so.
+
+### What the Purchaser sees in the panel
+
+Location, reorder level, category and **unit cost** — `showPrices` includes them. The **selling price** stays
+hidden (`showSellPrice` excludes the Purchaser, Warehouse and Accounting) and rides through the proposal unchanged,
+so editing an item never silently blanks a figure the editor could not see.
+
+- **Worth a separate look some time:** `loadItems()` ships `sellPrice` to every viewer's browser and the column is
+  then hidden in the markup. That predates all of this week's work and is not a hole this change opens, but it is
+  the kind of thing the price-visibility rules exist to prevent. Say the word and I will make the server drop it.
+
+### Verified
+
+- No new test: the capability itself is already covered — *"sends the Purchaser's own edit straight to the price
+  owner, with no Warehouse step"* proposes as the Purchaser and follows it to APPLIED. What changed here is which
+  button is on screen.
+- Full suite **121 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
+## 2026-08-29 · The approval chain depends on who raised the request
+
+- **Owner's clarification** of the earlier instruction:
+  1. *"if warehouse made a request in inventory or products, purchaser will approve then admin/payment approver
+     makes the final approval"*
+  2. *"If purchaser make a request in inventory or products, admin/payment approver will approve/reject. Remove the
+     warehouse in approval stage"*
+
+### One function decides the whole chain
+
+`nextStockActionSlot(kind, proposedRole, …)` in `lib/stock-action.ts` returns the single signature an action is
+waiting for, or `null` when it is finished. The propose, the approve, the Inventory card and the dashboard task
+list all read it, so none of them can invite the wrong person. For an Edit:
+
+| Raised by | Chain |
+| --- | --- |
+| Warehouse | Purchaser → Admin / Payment Approver |
+| Purchaser | Admin / Payment Approver (**no Warehouse step**) |
+| Admin / Payment Approver | applies at once — they *are* the final approver |
+
+Adjust and Transfer keep the Warehouse + Purchaser handshake; Reserve still needs the Warehouseman alone. Nothing
+about the quantity moves changed.
+
+### Two behaviours that actually moved
+
+- **A price owner's own edit applies immediately.** It used to file itself as a *Warehouseman's* — `p.warehouse` is
+  true for an admin, because they stand in for either party when approving — and then queue for two people who
+  would only have been signing on their behalf. An EDIT now reads the price owner first. This matches Products,
+  where a price owner's save has always written straight through.
+- **The order is enforced, not just the count.** The price owner cannot take the final approval before the
+  Purchaser has reviewed a Warehouse-raised edit. *"Purchaser will approve **then** admin/payment approver"* is a
+  sequence, and a final approver signing first would make the middle step decorative.
+
+### What the screens say now
+
+- The pending card names **one** party — the next signatory — instead of listing every empty slot. A Purchaser's
+  edit never needs a Warehouseman, so showing one as "awaiting" was asking for a signature that would never come.
+  The Warehouse line is hidden entirely on an Edit that has no Warehouse step, rather than printing a dash.
+- **Approve** belongs to the next signatory alone; **Reject** stays with every party at any point, so a price owner
+  who can see a bad edit two steps early does not have to wait their turn to stop it.
+- The edit panel's button reads **Save edit** for a price owner (with *"Applies immediately — you are the final
+  approver"*) and **Propose edit** for everyone else, naming both remaining steps.
+
+### Which combinations are actually reachable — please read
+
+The two rules describe four cases; **two of them cannot happen today**, because of who can edit what:
+
+| Surface | Warehouse | Purchaser |
+| --- | --- | --- |
+| **Inventory** | raises edits ✔ (`canManageItems` = admin/warehouse) | **no Edit button at all** |
+| **Products** | **no access** (`requireProductManager` is purchaser / payment approver / admin) | raises edits ✔ |
+
+So in practice rule 1 runs on **Inventory** and rule 2 on **Products** — which is exactly how the two rules read if
+each role raises requests where it can act. Both are implemented and tested. The chain logic handles the other two
+cases correctly if you ever grant the access, but note what granting it would cost:
+
+- **Purchaser editing Inventory rows** — a straightforward switch, though it runs against the last few changes,
+  which have been *removing* Purchaser buttons from Inventory.
+- **Warehouse editing Products** — this one is not free. The product edit panel shows supplier prices, and the
+  Warehouse is deliberately not a price viewer (`PRICE_ROLES`). Granting it would expose the catalogue prices that
+  list exists to withhold. **Say the word and I will do it, but it is a price-visibility decision, not a UI one.**
+
+### Verified — 3 new tests, 3 rewritten
+
+- The Purchaser's own edit skips the Warehouse: the Warehouseman is turned away by name, the price owner applies it.
+- The price owner cannot sign before the Purchaser on a Warehouse-raised edit, and the item does not move.
+- The price owner's own edit applies at once.
+- Full suite **121 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. **No migration** — `StockAction` already carries all three slots and `proposedRole`.
+
+## 2026-08-29 · The Purchaser loses + Add product and Remove no-supplier items
+
+- **Owner's instruction:** *"hide add product button and remove no-supplier items in products tab for purchaser
+  role."*
+
+### A narrower gate, on purpose
+
+Inventory could be done by flipping `canCreateItems` / `canDeleteItems`. Products **cannot**: `canManage` also
+carries the per-row **Edit** button, and the Purchaser must keep that — their save is parked for the price owner to
+confirm, which is the whole approval flow built two days ago. Flipping `canManage` would have quietly deleted it.
+
+So the two buttons get their own prop, `canAddOrRemoveProducts`, fed the price owner (Admin / Payment Approver).
+The distinction it draws: **adding a product and purging the unsourced ones change what the list contains; editing
+a row changes what a row says.** The Purchaser keeps the second.
+
+### Hidden AND refused
+
+`requireProductShaper` — the price owner — now guards `createProduct` and `removeUnsourcedProducts`, where
+`requireProductManager` (Purchaser / Payment Approver / admin) used to. A button whose action still answers is
+theatre.
+
+### A consequence worth naming: CREATE is never parked again
+
+`createProduct` used to park a Purchaser's new product for approval. With the button gone there is nobody who may
+add a product but not price one, so it always writes straight through and the park branch went with the guard.
+**`approveProductChange` keeps its CREATE arm regardless** — rows parked before this shipped still have to be
+applied or rejected rather than stranded in the queue. The queue itself now fills with edits and removals only.
+
+### Still there for the Purchaser — say the word if it should not be
+
+**Delete selected** on Products. It was not in the instruction and it is a different button from the two named, but
+it does delete products, so it sits oddly beside them now. On Inventory the equivalent was explicitly removed. One
+line either way.
+
+### Verified — 1 new test, 1 rewritten
+
+- The Purchaser's `removeUnsourcedProducts` is refused and the products stay; the Payment Approver's still removes
+  them.
+- *"parks the Purchaser's new product"* became *"refuses the Purchaser's new product rather than parking it"* —
+  and checks that **neither a product nor a queued change** is left behind. Their EDIT is still parked, which the
+  test below it and the eight in `product-approval.test.ts` continue to cover.
+- Full suite **119 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
 ## 2026-08-29 · The Purchaser loses Add stock item, Merge duplicates and Delete selected
 
 - **Owner's instruction:** *"hide delete selected button, add stock item button, merge duplicates button for

@@ -1,12 +1,21 @@
 /**
- * Double-handshake stock actions. An Edit / Adjust / Reserve / Transfer proposed
- * on the Inventory page is held pending and only applied once BOTH a Warehouseman
- * and a Purchaser approve it. Types + serialisable view helpers.
+ * Stock actions proposed on the Inventory page, and the sign-offs each needs.
  *
- * **EDIT needs a third sign-off** — the Admin / Payment Approver who owns the
- * catalogue price (lib/price-authority), because an edit carries the item's unit
- * cost and selling price. Adjust / Reserve / Transfer move quantities, not money,
- * and are unchanged.
+ * **Adjust / Reserve / Transfer** keep the original handshake: Reserve needs the
+ * Warehouseman alone (it earmarks stock — no on-hand or value change), the other
+ * two need the Warehouseman and the Purchaser.
+ *
+ * **Edit** carries the unit cost and selling price, so it runs the owner's
+ * approval chain instead, and the chain depends on WHO RAISED IT:
+ *
+ *   Warehouse raises it  →  Purchaser approves  →  Admin / Payment Approver
+ *   Purchaser raises it  →  Admin / Payment Approver          (no Warehouse step)
+ *   Admin / PA raises it →  applies at once     (they are the final approver)
+ *
+ * The middle line is the owner's *"remove the warehouse in approval stage"*: a
+ * Purchaser's own edit used to sit waiting for a Warehouseman who had nothing to
+ * add to it. The last line matches Products, where a price owner's save has
+ * always written straight through.
  */
 import type { StockActionKind, StockActionStatus } from "@prisma/client";
 import { coerceStockDoc, type StockDoc } from "@/lib/stock-transfer";
@@ -56,11 +65,22 @@ export interface StockActionView {
   purchaserByName: string | null;
   /** The price owner's sign-off — EDIT only; always null on the other kinds. */
   approverByName: string | null;
-  /** Whether the viewer may fill each still-open handshake slot. */
-  canApproveWarehouse: boolean;
-  canApprovePurchaser: boolean;
-  canApproveOwner: boolean;
+  /** Whose signature the action is waiting for, or null when it is complete. */
+  nextSlot: StockSlot | null;
+  /** Whether THIS viewer is the one who may sign that next slot. */
+  canApproveNext: boolean;
+  /** Whether the viewer may reject it — any party to the chain, at any point. */
+  canReject: boolean;
 }
+
+/** The three signatures an action can need, in the order they are taken. */
+export type StockSlot = "warehouse" | "purchaser" | "approver";
+
+export const STOCK_SLOT_LABEL: Record<StockSlot, string> = {
+  warehouse: "Warehouseman",
+  purchaser: "Purchaser",
+  approver: "Admin / Payment Approver",
+};
 
 /** Does this kind of action wait on the catalogue price owner? EDIT only. */
 export function needsPriceOwner(kind: StockActionKind): boolean {
@@ -68,20 +88,42 @@ export function needsPriceOwner(kind: StockActionKind): boolean {
 }
 
 /**
- * Which sign-offs a pending action still needs before it applies. Reserve needs
- * only the Warehouseman (it earmarks stock — no on-hand or value change); Edit
- * needs the Warehouseman, the Purchaser AND the price owner; everything else
- * needs the Warehouseman and the Purchaser.
+ * The signature this action is waiting for, or `null` when every one it needs is
+ * in. One function decides the whole chain — the propose, the approve, the
+ * Inventory card and the dashboard task list all read it, so none of them can
+ * disagree about whose turn it is.
+ *
+ * `proposedRole` is the slot the proposer filled by proposing, which is what
+ * makes an Edit's chain depend on who raised it. A legacy row saying "admin"
+ * (nobody writes that for an Edit any more) takes the long chain, which is the
+ * safe way to be wrong.
  */
+export function nextStockActionSlot(
+  kind: StockActionKind,
+  proposedRole: string,
+  warehouseAt: Date | string | null,
+  purchaserAt: Date | string | null,
+  approverAt: Date | string | null,
+): StockSlot | null {
+  if (kind === "EDIT") {
+    if (proposedRole === "approver") return null; // the final approver raised it
+    if (proposedRole !== "purchaser" && purchaserAt == null) return "purchaser";
+    return approverAt == null ? "approver" : null;
+  }
+  if (kind === "RESERVE") return warehouseAt == null ? "warehouse" : null;
+  if (warehouseAt == null) return "warehouse";
+  return purchaserAt == null ? "purchaser" : null;
+}
+
+/** Every signature in? */
 export function stockActionComplete(
   kind: StockActionKind,
+  proposedRole: string,
   warehouseAt: Date | string | null,
   purchaserAt: Date | string | null,
   approverAt: Date | string | null,
 ): boolean {
-  if (kind === "RESERVE") return warehouseAt != null;
-  if (warehouseAt == null || purchaserAt == null) return false;
-  return !needsPriceOwner(kind) || approverAt != null;
+  return nextStockActionSlot(kind, proposedRole, warehouseAt, purchaserAt, approverAt) === null;
 }
 
 export const STOCK_ACTION_LABEL: Record<StockActionKind, string> = {

@@ -97,11 +97,18 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
+function StockRow({ item, canManage, canProposeEdit, editChainNote, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; canProposeEdit: boolean; editChainNote: string; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   const router = useRouter();
-  // Purchaser/admin who aren't the stock manager still get a "Set price" action.
+  // Three shapes of action cell, in order of precedence:
+  //   priceOnly — a price owner who is not a stock manager: one "Set price".
+  //   canManage — the Warehouse / admin: Label, Reserve, Edit, Adjust.
+  //   editOnly  — the Purchaser: Edit alone. They raise a change to an item's
+  //               details and the price owner releases it; the quantity moves
+  //               (Reserve, Adjust) stay with the people who hold the stock.
   const priceOnly = canEditPrices && !canManage;
-  const hasActions = canManage || canEditPrices;
+  const editOnly = !priceOnly && !canManage && canProposeEdit;
+  const canOpenEdit = canManage || canProposeEdit;
+  const hasActions = canManage || canEditPrices || canProposeEdit;
   // The Sell-price column is hidden from some price viewers (e.g. Purchaser).
   const showSell = showPrices && showSellPrice;
   // Table has 8 always-on columns + price columns (unit cost, [sell price],
@@ -152,12 +159,15 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(false); }
   }
-  // Edit / Adjust / Reserve / Transfer are PROPOSED — they only take effect once
-  // both a Warehouseman and a Purchaser approve (double handshake), plus, for an
-  // EDIT, the Admin / Payment Approver who owns the unit cost and selling price
-  // it carries. That third sign-off is why the edit panel may still offer the
-  // price boxes to someone who cannot set a price outright: here they PROPOSE
-  // one, and the owner is the person who makes it real.
+  // Edit / Adjust / Reserve / Transfer are PROPOSED, not saved.
+  //
+  // Adjust and Transfer keep the Warehouse + Purchaser handshake; Reserve needs
+  // the Warehouseman alone. An EDIT carries the unit cost and selling price, so
+  // it runs the owner's chain instead — Warehouse raises it → Purchaser → Admin /
+  // Payment Approver, and a price owner's own edit applies at once because they
+  // are the final approver. That chain is why the panel still offers the price
+  // boxes to someone who cannot set a price outright: here they PROPOSE one, and
+  // the owner is the person who makes it real. See lib/stock-action.
   function apply() {
     const n = Number(qty);
     if (!Number.isFinite(n) || n < 0) { setErr("Enter a quantity."); return; }
@@ -239,6 +249,10 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "price" ? "none" : "price"))}>
                   {!showSell ? "Set cost" : item.sellPrice <= 0 ? "Set price" : "Edit price"}
                 </Button>
+              ) : editOnly ? (
+                <Button size="sm" variant={panel === "edit" ? "default" : "outline"} className="h-7 text-xs" title="Propose an edit to this item's details" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                </Button>
               ) : (
                 <>
                   <Button size="sm" variant={panel === "label" ? "default" : "outline"} className="h-7 w-7 p-0" title="Label — barcode / QR" aria-label="Label" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}><Tag className="h-3.5 w-3.5" /></Button>
@@ -271,7 +285,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
           </TableCell>
         </TableRow>
       )}
-      {panel === "edit" && canManage && (
+      {panel === "edit" && canOpenEdit && (
         <TableRow>
           <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
@@ -280,16 +294,16 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
               {showSell && <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>}
               <label className="text-xs text-muted-foreground">Reorder at<Input className="h-8 w-28" type="number" step="any" min={0} value={reorder} onChange={(e) => setReorder(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
-              <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Propose edit"}</Button>
+              <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>
+                {busy ? "…" : canEditPrices ? "Save edit" : "Propose edit"}
+              </Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
-            {/* An edit carries the money columns, so it is the one stock action
-                that also waits on the price owner. Said here rather than only in
-                the pending card, so nobody expects the change to be live. */}
-            <p className="pb-1 text-[11px] text-muted-foreground">
-              Proposed, not saved — an edit applies once the Warehouseman, the Purchaser
-              {canEditPrices ? " and you" : " and an Admin / the Payment Approver"} have approved it.
-            </p>
+            {/* An edit carries the money columns, so it runs the owner's approval
+                chain — and how long that chain is depends on who is standing here.
+                Said in the panel rather than only in the pending card, so nobody
+                walks away thinking the change is live when it is not. */}
+            <p className="pb-1 text-[11px] text-muted-foreground">{editChainNote}</p>
           </TableCell>
         </TableRow>
       )}
@@ -413,7 +427,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   );
 }
 
-export function InventoryManager({ items, canManage, admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, canProposeEdit = canManage, editChainNote = "", admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canProposeEdit?: boolean; editChainNote?: string; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
   // Multi-select for bulk delete — admin only, matching the `removeStockItems`
@@ -508,7 +522,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices ? 1 : 0) + (canDelete ? 1 : 0);
+  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices || canProposeEdit ? 1 : 0) + (canDelete ? 1 : 0);
   // Hide the price-based sort options from viewers who can't see prices.
   const sortOptions = SORT_OPTIONS.filter((o) =>
     (showPrices || (o.key !== "unitCost" && o.key !== "sellPrice" && o.key !== "value")) && (showSell || o.key !== "sellPrice"),
@@ -850,7 +864,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
                 {showSell && <TableHead className="text-right">Sell price</TableHead>}
                 {showPrices && <TableHead className="text-right">Value</TableHead>}
                 <TableHead>Status</TableHead>
-                {(canManage || canEditPrices) && <TableHead className="text-right">Action</TableHead>}
+                {(canManage || canEditPrices || canProposeEdit) && <TableHead className="text-right">Action</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -864,7 +878,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} canProposeEdit={canProposeEdit} editChainNote={editChainNote} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
                 </Fragment>
               ))}
             </TableBody>
