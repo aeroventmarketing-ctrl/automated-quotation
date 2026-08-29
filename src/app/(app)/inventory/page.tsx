@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
 import { DuplicateItemsPanel } from "./duplicate-items-panel";
-import { STOCK_ACTION_LABEL, needsPriceOwner, nextStockActionSlot, type StockActionView } from "@/lib/stock-action";
+import { STOCK_ACTION_LABEL, nextStockActionSlot, type StockActionView } from "@/lib/stock-action";
 import { StockTransfers } from "./stock-transfers";
 import { isProductionHead, isPurchaserRole, coerceStockDoc, isOfficeTransfer, nextOfficeTransferApprover, type StockTransferView } from "@/lib/stock-transfer";
 import { getApproverDirectory } from "@/lib/approver-directory";
@@ -74,12 +74,12 @@ export default async function InventoryPage() {
   // write. The quantity actions (Reserve / Adjust) stay with the people who hold
   // the stock, so the Purchaser's row shows the Edit button alone.
   const canProposeEdit = !isSales && (canManageItems || has("purchaser"));
-  // The sentence under the edit panel, which has to name the RIGHT remaining
+  // The sentence under each proposal panel, which has to name the RIGHT remaining
   // steps for whoever is looking. The order of these tests mirrors `proposedRole`
   // in stock-action-actions — price owner, then Warehouse, then Purchaser — so
   // the panel never promises a chain the server will not run.
-  const editChainNote = isCataloguePriceOwner(viewer, assignments)
-    ? "Applies immediately — you are the final approver for a catalogue price."
+  const chainNote = isCataloguePriceOwner(viewer, assignments)
+    ? "Applies immediately — you are the final approver."
     : canManageItems
       ? "Proposed, not saved — the Purchaser reviews it, then an Admin / the Payment Approver gives the final approval."
       : "Proposed, not saved — an Admin / the Payment Approver gives the final approval.";
@@ -126,13 +126,13 @@ export default async function InventoryPage() {
     for (const a of actions) {
       const proof = a.kind === "TRANSFER" ? coerceStockDoc((a.payload as { proof?: unknown } | null)?.proof) : null;
       // Whose signature is next — one function decides it for every surface.
-      const nextSlot = nextStockActionSlot(a.kind, a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
+      const nextSlot = nextStockActionSlot(a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
       (pendingByItem[a.stockItemId] ??= []).push({
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
         kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status, proof,
         proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
         warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
-        approverByName: needsPriceOwner(a.kind) ? a.approverByName : null,
+        approverByName: a.approverByName,
         nextSlot,
         canApproveNext:
           nextSlot === "warehouse" ? viewerWarehouse : nextSlot === "purchaser" ? viewerPurchaser : nextSlot === "approver" ? viewerPriceOwner : false,
@@ -285,7 +285,7 @@ export default async function InventoryPage() {
 
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} canProposeEdit={canProposeEdit} editChainNote={editChainNote} pendingFirst={pendingFirst} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} canProposeEdit={canProposeEdit} chainNote={chainNote} pendingFirst={pendingFirst} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 

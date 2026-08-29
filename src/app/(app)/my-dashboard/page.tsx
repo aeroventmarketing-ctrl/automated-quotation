@@ -8,7 +8,7 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { SalesDashboardBody } from "../dashboard/sales-dashboard-body";
 import { hidesProductionClient } from "@/lib/client-visibility";
 import { prisma } from "@/lib/db";
-import { STOCK_ACTION_LABEL, coerceStockDoc, needsPriceOwner, nextStockActionSlot, type StockActionView } from "@/lib/stock-action";
+import { STOCK_ACTION_LABEL, coerceStockDoc, nextStockActionSlot, type StockActionView } from "@/lib/stock-action";
 import { isCataloguePriceOwner } from "@/lib/price-authority";
 import { PendingStockActions } from "../inventory/pending-stock-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -138,10 +138,10 @@ export default async function MyDashboardPage() {
         proof: a.kind === "TRANSFER" ? coerceStockDoc((a.payload as { proof?: unknown } | null)?.proof) : null,
         proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
         warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
-        approverByName: needsPriceOwner(a.kind) ? a.approverByName : null,
-        nextSlot: nextStockActionSlot(a.kind, a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt),
+        approverByName: a.approverByName,
+        nextSlot: nextStockActionSlot(a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt),
         canApproveNext: (() => {
-          const slot = nextStockActionSlot(a.kind, a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
+          const slot = nextStockActionSlot(a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
           return slot === "warehouse" ? invWarehouse : slot === "purchaser" ? invPurchaser : slot === "approver" ? invPriceOwner : false;
         })(),
         canReject: invWarehouse || invPurchaser || invPriceOwner,

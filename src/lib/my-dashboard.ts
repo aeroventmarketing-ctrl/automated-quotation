@@ -500,7 +500,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         // Whose sign-off is still outstanding. Read from the same function the
         // Inventory card and the server use, so this list can never invite the
         // wrong person — an Edit raised by the Purchaser skips the Warehouse step.
-        const slot = nextStockActionSlot(a.kind, a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
+        const slot = nextStockActionSlot(a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
         if (slot == null) continue; // every signature in — shouldn't still be PENDING
         const nextRole: WorkflowRoleKey = slot === "approver" ? "payment_approver" : slot;
         const myTurn = has(nextRole);

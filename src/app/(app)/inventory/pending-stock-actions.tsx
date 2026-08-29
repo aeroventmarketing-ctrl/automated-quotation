@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BellRing, Eye, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { needsPriceOwner, STOCK_SLOT_LABEL, type StockActionView } from "@/lib/stock-action";
+import { STOCK_SLOT_LABEL, type StockActionView } from "@/lib/stock-action";
 import { approveStockAction, rejectStockAction, type StockActionResult } from "./stock-action-actions";
 
 /** Re-throw a failed action's real reason so the caller's catch can display it.
@@ -31,7 +31,7 @@ export function PendingChip({ pending }: { pending: StockActionView[] }) {
   );
 }
 
-/** The expandable list of an item's pending double-handshake actions. */
+/** The expandable list of an item's requests still working through the chain. */
 export function PendingStockActions({ pending }: { pending: StockActionView[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -54,15 +54,14 @@ export function PendingStockActions({ pending }: { pending: StockActionView[] })
     <div className="space-y-2 py-1">
       {pending.map((a) => {
         // ONE signature is open at a time and the card names it, rather than
-        // listing every empty slot: an Edit raised by the Purchaser never needs a
-        // Warehouseman, so showing one as "awaiting" would be asking for a
+        // listing every empty slot: a request raised by the Purchaser never needs
+        // a Warehouseman, so showing one as "awaiting" would be asking for a
         // signature that will never be taken.
-        const wantsOwner = needsPriceOwner(a.kind);
         const awaiting = a.nextSlot ? STOCK_SLOT_LABEL[a.nextSlot] : "applying…";
-        // On an Edit the Warehouse slot is only ever filled by proposing, so a
-        // blank one means the chain does not include it — don't print a dash that
-        // reads as a signature still outstanding.
-        const showWarehouseLine = !wantsOwner || a.warehouseByName != null;
+        // The Warehouse slot is only ever filled by proposing, so a blank one
+        // means the chain does not include it — don't print a dash that reads as
+        // a signature still outstanding.
+        const showWarehouseLine = a.warehouseByName != null;
         return (
           <div key={a.id} className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/20">
             <div className="flex flex-wrap items-center gap-2">
@@ -77,7 +76,7 @@ export function PendingStockActions({ pending }: { pending: StockActionView[] })
               <span>Proposed by {a.proposedByName}</span>
               {showWarehouseLine && <span className={a.warehouseByName ? "text-emerald-700" : ""}>Warehouse: {a.warehouseByName ?? "—"}</span>}
               <span className={a.purchaserByName ? "text-emerald-700" : ""}>Purchaser: {a.purchaserByName ?? "—"}</span>
-              {wantsOwner && <span className={a.approverByName ? "text-emerald-700" : ""}>Price approver: {a.approverByName ?? "—"}</span>}
+              <span className={a.approverByName ? "text-emerald-700" : ""}>Final approver: {a.approverByName ?? "—"}</span>
               {a.proof && (
                 <a href={viewUrl(a.proof.path, a.proof.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
                   <Eye className="h-3.5 w-3.5" /> View form

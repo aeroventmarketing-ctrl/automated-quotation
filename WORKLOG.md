@@ -1,3 +1,63 @@
+## 2026-08-29 · Fix: a Warehouse request applied itself at the Purchaser's click
+
+- **Owner's bug report:** *"notification does not show in payment approver and admin. Once warehouse raise a
+  request, purchaser approves. After purchaser approves it stops and admin/payment approver cannot approve after
+  purchaser approves."*
+
+### One cause, both symptoms
+
+The screenshot shows *"test only"* back to a normal row — **applied**, not stuck. The request was a **stock
+adjustment** (*Receive +1 pc · test lang*), and ADJUST still ran the old two-party handshake, so the Purchaser's
+approval finished it. Everything follows from that: nothing was left to approve, and with nothing left PENDING
+there was nothing for the badge or the dashboard to notify the Admin / Payment Approver about. The notification was
+not broken — it had nothing to report.
+
+### The scoping call that caused it, named
+
+The chain was built on **EDIT only**, on my reading that *"when propose edit button in inventory … is pressed"*
+meant the edit panel. The owner's sequence said *"if warehouse made a **request**"*, and a request is a request
+whatever it changes. `nextStockActionSlot` no longer takes `kind` at all — the per-kind shortcuts were exactly what
+let a request finish early, so the parameter is gone rather than corrected.
+
+**Now, for every kind — Edit, Adjust, Reserve and Transfer alike:**
+
+| Raised by | Chain |
+| --- | --- |
+| Warehouse | Purchaser → Admin / Payment Approver |
+| Purchaser | Admin / Payment Approver |
+| Admin / Payment Approver | applies at once |
+
+`proposedRole` also reads the price owner first for every kind now, not just EDIT; an admin's own request applies
+on the spot instead of queueing for two people who would only be signing on their behalf.
+
+### Does this jam the warehouse? No — and here is why
+
+Day-to-day receiving does **not** go through this. The **scan → receive / issue** box is a direct write
+(`adjustStock` / `requireStockMover`) and always was. What now needs two signatures is the deliberate per-row
+proposal, which is the thing the owner asked to be approved. Worth knowing all the same, because a Reservation
+used to apply on the Warehouseman's own click and now waits.
+
+### Screens
+
+- The per-row **Adjust** panel now carries the same chain sentence the Edit panel had — it is a proposal too, and
+  said nothing about it before. The note is one string computed on the page (`chainNote`), so all the panels agree.
+- The card's third line reads **Final approver**, not "Price approver": it is on every request now, not only the
+  ones carrying a price.
+
+### Verified — 2 new tests
+
+- **The regression itself:** a Warehouse ADJUST is still PENDING after the Purchaser approves, **the stock has not
+  moved**, and it applies only on the price owner's sign-off.
+- A Warehouse **Reservation** is held for the same two signatures and creates no reservation row until the end —
+  it used to apply on the spot.
+- Full suite **122 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
+### Rows already in flight
+
+A pending row that had collected both older signatures resolves to *awaiting the Admin / Payment Approver* and
+simply waits for the one it was never asked for. Nothing is stranded, and nothing that already applied is undone.
+
 ## 2026-08-29 · An item awaiting approval goes to the top of the Inventory list
 
 - **Owner's instruction:** *"move the item for approval at the 1st row of inventory list for warehouse, purchaser,
