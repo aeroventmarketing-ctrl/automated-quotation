@@ -1,3 +1,51 @@
+## 2026-08-29 · The Purchaser loses Add stock item, Merge duplicates and Delete selected
+
+- **Owner's instruction:** *"hide delete selected button, add stock item button, merge duplicates button for
+  purchaser role."*
+
+### What changed
+
+- `canCreateItems` and `canDeleteItems` on the Inventory page drop the Purchaser and become **admin only**. That
+  takes away all three buttons in one move: *+ Add stock item* and *Merge duplicates* live inside the
+  `canCreate` action row, and *Delete selected* is the `canDelete` selection bar — whose tick-boxes go with it, so
+  there is no orphan "1 selected" strip and no column of checkboxes that lead nowhere.
+
+### Admin-only, not Warehouse — worth stating
+
+The Purchaser and the admin were the only two holders of these; **the Warehouseman never had them**. So dropping the
+Purchaser leaves the admin alone with adding, merging and deleting stock items. That is the literal effect of the
+instruction rather than an oversight — but if you meant the Warehouse to pick them up, it is one line. **Say the
+word.**
+
+### Hidden AND refused
+
+Both server guards were narrowed to match, not just the screen:
+
+- `requireItemCreator` — Purchaser / Warehouse / admin → **Warehouse / admin** (`createStockItem`,
+  `mergeDuplicateStockItems`).
+- `requireItemRemover` — Purchaser / admin → **admin** (`removeStockItem`, `removeStockItems`), which is where
+  "Clear all" already sat.
+
+A hidden button whose action still answers is theatre, and the next person to wire up a form would silently undo
+the rule.
+
+### What the Purchaser keeps
+
+Everything they actually buy with: the scan → receive / issue box (`requireStockMover` still names them — goods
+receipt on deliveries), the read-only item list with its prices, the per-row proposals, Requisitions and the whole
+Purchasing surface. This removes three list-maintenance buttons, not their job.
+
+### Verified — 2 new tests, 1 rewritten
+
+- The Purchaser's `createStockItem`, `mergeDuplicateStockItems` and `removeStockItems` are all refused **and
+  nothing moves** — the item is still there and still active afterwards. The Warehouse can still add; the admin can
+  still delete.
+- *"creates the item unpriced for the Purchaser"* became *"…for the Warehouse"*: the Purchaser no longer creates
+  stock items at all, and the Warehouse is now the non-owner who does, so the point (the item lands, the price does
+  not) is carried by the actor who can still reach it.
+- Full suite **118 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
 ## 2026-08-29 · A flashing count on Inventory and Products when a change is waiting
 
 - **Owner's instruction:** *"make a flashing notification at the word inventory and products when warehouse or

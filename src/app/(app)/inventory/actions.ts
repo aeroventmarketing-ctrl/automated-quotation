@@ -45,21 +45,24 @@ async function requireStockMover() {
   return user;
 }
 
-/** Adding / merging catalogue items — the Purchaser, Warehouse or an admin.
- *  (Importing from a file is NOT here: that is the price owner's — see
- *  `importStockItems` and lib/price-authority.) */
+/**
+ * Adding / merging catalogue items — the Warehouse or an admin.
+ *
+ * The Purchaser was dropped on the owner's instruction (*"hide … add stock item
+ * button, merge duplicates button … for purchaser role"*). Dropped from the
+ * guard as well as the screen: a hidden button whose action still answers is
+ * theatre, and the next person to wire up a form would silently undo the rule.
+ *
+ * (Importing from a file is NOT here — that is the price owner's; see
+ * `importStockItems` and lib/price-authority.)
+ */
 async function requireItemCreator() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   if (isAdmin(user)) return user;
   const roles = await getWorkflowRoles();
-  if (
-    userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey) ||
-    userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)
-  ) {
-    return user;
-  }
-  throw new Error("Only the Purchaser, Warehouse or an admin can add or import stock items.");
+  if (userHasWorkflowRole(roles, user.id, "warehouse" as WorkflowRoleKey)) return user;
+  throw new Error("Only the Warehouse or an admin can add stock items.");
 }
 
 /** Only the Admin / Payment Approver may set an item's unit cost and selling price. */
@@ -72,15 +75,18 @@ async function requirePriceManager() {
   return user;
 }
 
-/** Removing (soft-deleting) stock items — the Purchaser or an admin. */
+/**
+ * Removing (soft-deleting) stock items — **admin only**.
+ *
+ * The Purchaser was the other holder and was dropped with the Delete-selected
+ * button, on the owner's instruction. Removing an item is not reversible from
+ * the screen (an admin recovers it), so it sits with the same person who owns
+ * "Clear all".
+ */
 async function requireItemRemover() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (isAdmin(user)) return user;
-  const roles = await getWorkflowRoles();
-  if (!userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey)) {
-    throw new Error("Only the Purchaser or an admin can remove stock items.");
-  }
+  if (!isAdmin(user)) throw new Error("Only an admin can remove stock items.");
   return user;
 }
 
@@ -162,9 +168,9 @@ export async function importStockItems(
   // be called without the screen.
   //
   // This REPLACES `requireItemCreator` rather than adding to it. That guard is
-  // Purchaser / Warehouse / admin, which is both too wide (it lets a Purchaser
-  // upload prices) and too narrow (it turns away a Payment Approver who holds no
-  // other role) — running both would leave the owner's own rule unenforceable.
+  // Warehouse / admin, which is the wrong set here in both directions — it would
+  // let the Warehouse upload prices, and turn away a Payment Approver who holds
+  // no other role. Running both would leave the owner's own rule unenforceable.
   const user = await getCurrentUser();
   if (!user) return { created: 0, updated: 0, skipped: 0, errors: ["Unauthorized"] };
   if (!(await canTransferCatalogueFiles())) return { created: 0, updated: 0, skipped: 0, errors: [CATALOGUE_FILE_MESSAGE] };
@@ -496,7 +502,7 @@ export async function mergeStockItemsInto(input: z.infer<typeof mergeIntoSchema>
   revalidatePath("/inventory");
 }
 
-/** Remove (deactivate) a stock item — the Purchaser or an admin. History is preserved. */
+/** Remove (deactivate) a stock item — admin only. History is preserved. */
 export async function removeStockItem(id: string): Promise<void> {
   const user = await requireItemRemover();
   const item = await prisma.stockItem.findUnique({ where: { id } });
@@ -510,7 +516,7 @@ export async function removeStockItem(id: string): Promise<void> {
   revalidatePath("/inventory");
 }
 
-/** Remove several stock items at once (soft-delete). The Purchaser or an admin. */
+/** Remove several stock items at once (soft-delete). Admin only. */
 export async function removeStockItems(ids: string[]): Promise<{ removed: number }> {
   const user = await requireItemRemover();
   const clean = [...new Set((ids ?? []).filter((x): x is string => typeof x === "string" && x.length > 0))];

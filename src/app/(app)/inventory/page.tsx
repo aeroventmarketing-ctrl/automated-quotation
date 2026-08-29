@@ -42,12 +42,18 @@ export default async function InventoryPage() {
   // add / import / per-row action buttons for them (a Warehouseman or admin
   // still manages). They keep read-only view + their stock-transfer rights.
   const canManageItems = !isSales && (admin || has("warehouse"));
-  // Adding / importing stock items — the Purchaser or an admin (hidden from the
-  // Warehouseman, who still proposes per-row edits/adjustments).
-  const canCreateItems = admin || has("purchaser");
-  // Deleting stock items (multi-select bulk delete) — the Purchaser or an admin.
-  // The full "Clear all" wipe stays admin-only.
-  const canDeleteItems = admin || has("purchaser");
+  // Adding a stock item and merging duplicates — **admin only**.
+  //
+  // Owner's instruction: *"hide delete selected button, add stock item button,
+  // merge duplicates button for purchaser role."* The Purchaser held both of
+  // these; the Warehouseman never did, so dropping the Purchaser leaves the
+  // admin alone with them. That is the intended effect, not an oversight: these
+  // three change what the item list *is*, and the Warehouseman still proposes
+  // per-row edits / adjustments through the handshake.
+  const canCreateItems = admin;
+  // Deleting stock items (multi-select bulk delete) — admin only, as is the full
+  // "Clear all" wipe.
+  const canDeleteItems = admin;
   // …and hide the Labels / Reorder header tools from the read-only monitors —
   // the Warehouseman, Plant Manager, Accounting, Logistics and the production
   // heads (their Labels / Reorder target pages deny them anyway). The Purchaser
