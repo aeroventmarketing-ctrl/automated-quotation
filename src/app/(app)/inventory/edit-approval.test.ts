@@ -1,17 +1,17 @@
 /**
- * The approval chain on an Inventory "Propose edit".
+ * The approval chain on an Inventory request — EVERY kind of request.
  *
- * The edit panel carries the unit cost and the selling price, so the Warehouse +
- * Purchaser handshake was a way past the rule that only the Admin / Payment
- * Approver sets a catalogue price. The owner's sequence:
+ * The owner's sequence:
  *
  *   Warehouse raises it  →  Purchaser approves  →  Admin / Payment Approver
  *   Purchaser raises it  →  Admin / Payment Approver          (no Warehouse step)
  *   Admin / PA raises it →  applies at once
  *
- * These check the item does not move until the chain is finished, that the chain
- * is the right LENGTH for who raised it, and that the quantity actions — which
- * move stock rather than money — are untouched by any of it.
+ * These check the item does not move until the chain is finished and that the
+ * chain is the right LENGTH for who raised it. The ADJUST case is a regression
+ * test: it ran the old two-party handshake, so a Warehouse adjustment applied
+ * itself the moment the Purchaser approved and never reached the Admin / Payment
+ * Approver — who then had nothing pending to be notified about either.
  *
  * Add --no-file-parallelism when running several DB-backed suites at once: they
  * share one database and truncate the same tables between tests.
@@ -60,13 +60,14 @@ let itemId = "";
 const item = () => prisma.stockItem.findUnique({ where: { id: itemId } });
 const action = () => prisma.stockAction.findFirst({ orderBy: { proposedAt: "desc" } });
 
-run("an inventory edit needs the price owner too", () => {
+run("an inventory request ends with the price owner", () => {
   beforeAll(async () => { await prisma.$connect(); });
   afterAll(async () => { await prisma.$disconnect(); });
 
   beforeEach(async () => {
     await prisma.stockAction.deleteMany({});
     await prisma.stockMovement.deleteMany({});
+    await prisma.stockReservation.deleteMany({});
     await prisma.stockItem.deleteMany({});
     const i = await prisma.stockItem.create({
       data: { name: "BELT B-50", unit: "pc", quantity: 4, reorderLevel: 1, unitCost: 210, sellPrice: 300, location: "Plant Warehouse" },
@@ -150,14 +151,35 @@ run("an inventory edit needs the price owner too", () => {
     expect(r.ok === false && r.error).toMatch(/Purchaser/i);
   });
 
-  it("leaves a quantity adjustment on the old two-party rule", async () => {
+  // THE REGRESSION. Reported as "once warehouse raise a request, purchaser
+  // approves… after purchaser approves it stops and admin/payment approver cannot
+  // approve": the adjustment had already applied itself, so there was nothing
+  // left to approve and nothing left to notify anyone about.
+  it("does NOT apply a Warehouse adjustment when the Purchaser approves", async () => {
     be("warehouse");
     expect(await proposeStockAction("ADJUST", itemId, { kind: "RECEIPT", qty: 6, reason: "delivery" })).toEqual({ ok: true });
     be("purchaser");
     await approveStockAction((await action())!.id);
 
-    expect((await action())!.status).toBe("APPLIED");   // no third sign-off wanted
+    expect((await action())!.status).toBe("PENDING");            // still waiting
+    expect(Number((await item())!.quantity)).toBe(4);            // stock has not moved
+
+    be("payment_approver");
+    expect(await approveStockAction((await action())!.id)).toEqual({ ok: true });
+    expect((await action())!.status).toBe("APPLIED");
     expect(Number((await item())!.quantity)).toBe(10);
+  });
+
+  it("holds a Warehouse reservation for the same two signatures", async () => {
+    be("warehouse");
+    expect(await proposeStockAction("RESERVE", itemId, { qty: 2, forRef: "JO 2600080" })).toEqual({ ok: true });
+    expect((await action())!.status).toBe("PENDING");            // used to apply on the spot
+    expect(await prisma.stockReservation.count()).toBe(0);
+
+    be("purchaser"); await approveStockAction((await action())!.id);
+    be("payment_approver"); await approveStockAction((await action())!.id);
+    expect((await action())!.status).toBe("APPLIED");
+    expect(await prisma.stockReservation.count()).toBe(1);
   });
 
   // The price owner IS the final approver, so their own edit has nobody left to

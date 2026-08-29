@@ -97,7 +97,7 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, canProposeEdit, editChainNote, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; canProposeEdit: boolean; editChainNote: string; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
+function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; canProposeEdit: boolean; chainNote: string; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   const router = useRouter();
   // Three shapes of action cell, in order of precedence:
   //   priceOnly — a price owner who is not a stock manager: one "Set price".
@@ -159,15 +159,16 @@ function StockRow({ item, canManage, canProposeEdit, editChainNote, showPrices, 
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(false); }
   }
-  // Edit / Adjust / Reserve / Transfer are PROPOSED, not saved.
+  // Edit / Adjust / Reserve / Transfer are PROPOSED, not saved — every one of
+  // them, through the same chain: Warehouse raises it → Purchaser → Admin /
+  // Payment Approver, with the Purchaser's own request skipping the first step
+  // and a price owner's applying at once. That chain is why the edit panel still
+  // offers the price boxes to someone who cannot set a price outright: here they
+  // PROPOSE one, and the owner is the person who makes it real.
   //
-  // Adjust and Transfer keep the Warehouse + Purchaser handshake; Reserve needs
-  // the Warehouseman alone. An EDIT carries the unit cost and selling price, so
-  // it runs the owner's chain instead — Warehouse raises it → Purchaser → Admin /
-  // Payment Approver, and a price owner's own edit applies at once because they
-  // are the final approver. That chain is why the panel still offers the price
-  // boxes to someone who cannot set a price outright: here they PROPOSE one, and
-  // the owner is the person who makes it real. See lib/stock-action.
+  // The scan → receive / issue box is the exception and stays direct
+  // (`adjustStock` / `requireStockMover`), so day-to-day goods receipt is not
+  // waiting on two signatures. See lib/stock-action.
   function apply() {
     const n = Number(qty);
     if (!Number.isFinite(n) || n < 0) { setErr("Enter a quantity."); return; }
@@ -282,6 +283,7 @@ function StockRow({ item, canManage, canProposeEdit, editChainNote, showPrices, 
               <Button size="sm" className="h-8" disabled={busy} onClick={apply}>{busy ? "…" : "Propose"}</Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
+            <p className="pb-1 text-[11px] text-muted-foreground">{chainNote}</p>
           </TableCell>
         </TableRow>
       )}
@@ -303,7 +305,7 @@ function StockRow({ item, canManage, canProposeEdit, editChainNote, showPrices, 
                 chain — and how long that chain is depends on who is standing here.
                 Said in the panel rather than only in the pending card, so nobody
                 walks away thinking the change is live when it is not. */}
-            <p className="pb-1 text-[11px] text-muted-foreground">{editChainNote}</p>
+            <p className="pb-1 text-[11px] text-muted-foreground">{chainNote}</p>
           </TableCell>
         </TableRow>
       )}
@@ -427,7 +429,7 @@ function StockRow({ item, canManage, canProposeEdit, editChainNote, showPrices, 
   );
 }
 
-export function InventoryManager({ items, canManage, canProposeEdit = canManage, editChainNote = "", admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, pendingFirst = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canProposeEdit?: boolean; editChainNote?: string; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; pendingFirst?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, canProposeEdit = canManage, chainNote = "", admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, pendingFirst = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canProposeEdit?: boolean; chainNote?: string; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; pendingFirst?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
   // Multi-select for bulk delete — admin only, matching the `removeStockItems`
@@ -902,7 +904,7 @@ export function InventoryManager({ items, canManage, canProposeEdit = canManage,
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} canProposeEdit={canProposeEdit} editChainNote={editChainNote} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} canProposeEdit={canProposeEdit} chainNote={chainNote} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
                 </Fragment>
               ))}
             </TableBody>
