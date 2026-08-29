@@ -1,3 +1,73 @@
+## 2026-08-29 · The approval chain depends on who raised the request
+
+- **Owner's clarification** of the earlier instruction:
+  1. *"if warehouse made a request in inventory or products, purchaser will approve then admin/payment approver
+     makes the final approval"*
+  2. *"If purchaser make a request in inventory or products, admin/payment approver will approve/reject. Remove the
+     warehouse in approval stage"*
+
+### One function decides the whole chain
+
+`nextStockActionSlot(kind, proposedRole, …)` in `lib/stock-action.ts` returns the single signature an action is
+waiting for, or `null` when it is finished. The propose, the approve, the Inventory card and the dashboard task
+list all read it, so none of them can invite the wrong person. For an Edit:
+
+| Raised by | Chain |
+| --- | --- |
+| Warehouse | Purchaser → Admin / Payment Approver |
+| Purchaser | Admin / Payment Approver (**no Warehouse step**) |
+| Admin / Payment Approver | applies at once — they *are* the final approver |
+
+Adjust and Transfer keep the Warehouse + Purchaser handshake; Reserve still needs the Warehouseman alone. Nothing
+about the quantity moves changed.
+
+### Two behaviours that actually moved
+
+- **A price owner's own edit applies immediately.** It used to file itself as a *Warehouseman's* — `p.warehouse` is
+  true for an admin, because they stand in for either party when approving — and then queue for two people who
+  would only have been signing on their behalf. An EDIT now reads the price owner first. This matches Products,
+  where a price owner's save has always written straight through.
+- **The order is enforced, not just the count.** The price owner cannot take the final approval before the
+  Purchaser has reviewed a Warehouse-raised edit. *"Purchaser will approve **then** admin/payment approver"* is a
+  sequence, and a final approver signing first would make the middle step decorative.
+
+### What the screens say now
+
+- The pending card names **one** party — the next signatory — instead of listing every empty slot. A Purchaser's
+  edit never needs a Warehouseman, so showing one as "awaiting" was asking for a signature that would never come.
+  The Warehouse line is hidden entirely on an Edit that has no Warehouse step, rather than printing a dash.
+- **Approve** belongs to the next signatory alone; **Reject** stays with every party at any point, so a price owner
+  who can see a bad edit two steps early does not have to wait their turn to stop it.
+- The edit panel's button reads **Save edit** for a price owner (with *"Applies immediately — you are the final
+  approver"*) and **Propose edit** for everyone else, naming both remaining steps.
+
+### Which combinations are actually reachable — please read
+
+The two rules describe four cases; **two of them cannot happen today**, because of who can edit what:
+
+| Surface | Warehouse | Purchaser |
+| --- | --- | --- |
+| **Inventory** | raises edits ✔ (`canManageItems` = admin/warehouse) | **no Edit button at all** |
+| **Products** | **no access** (`requireProductManager` is purchaser / payment approver / admin) | raises edits ✔ |
+
+So in practice rule 1 runs on **Inventory** and rule 2 on **Products** — which is exactly how the two rules read if
+each role raises requests where it can act. Both are implemented and tested. The chain logic handles the other two
+cases correctly if you ever grant the access, but note what granting it would cost:
+
+- **Purchaser editing Inventory rows** — a straightforward switch, though it runs against the last few changes,
+  which have been *removing* Purchaser buttons from Inventory.
+- **Warehouse editing Products** — this one is not free. The product edit panel shows supplier prices, and the
+  Warehouse is deliberately not a price viewer (`PRICE_ROLES`). Granting it would expose the catalogue prices that
+  list exists to withhold. **Say the word and I will do it, but it is a price-visibility decision, not a UI one.**
+
+### Verified — 3 new tests, 3 rewritten
+
+- The Purchaser's own edit skips the Warehouse: the Warehouseman is turned away by name, the price owner applies it.
+- The price owner cannot sign before the Purchaser on a Warehouse-raised edit, and the item does not move.
+- The price owner's own edit applies at once.
+- Full suite **121 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. **No migration** — `StockAction` already carries all three slots and `proposedRole`.
+
 ## 2026-08-29 · The Purchaser loses + Add product and Remove no-supplier items
 
 - **Owner's instruction:** *"hide add product button and remove no-supplier items in products tab for purchaser

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
 import { DuplicateItemsPanel } from "./duplicate-items-panel";
-import { STOCK_ACTION_LABEL, needsPriceOwner, type StockActionView } from "@/lib/stock-action";
+import { STOCK_ACTION_LABEL, needsPriceOwner, nextStockActionSlot, type StockActionView } from "@/lib/stock-action";
 import { StockTransfers } from "./stock-transfers";
 import { isProductionHead, isPurchaserRole, coerceStockDoc, isOfficeTransfer, nextOfficeTransferApprover, type StockTransferView } from "@/lib/stock-transfer";
 import { getApproverDirectory } from "@/lib/approver-directory";
@@ -105,15 +105,18 @@ export default async function InventoryPage() {
     const actions = await prisma.stockAction.findMany({ where: { status: "PENDING" }, orderBy: { proposedAt: "desc" } });
     for (const a of actions) {
       const proof = a.kind === "TRANSFER" ? coerceStockDoc((a.payload as { proof?: unknown } | null)?.proof) : null;
+      // Whose signature is next — one function decides it for every surface.
+      const nextSlot = nextStockActionSlot(a.kind, a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
       (pendingByItem[a.stockItemId] ??= []).push({
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
         kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status, proof,
         proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
         warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
         approverByName: needsPriceOwner(a.kind) ? a.approverByName : null,
-        canApproveWarehouse: a.warehouseAt == null && viewerWarehouse,
-        canApprovePurchaser: a.purchaserAt == null && viewerPurchaser,
-        canApproveOwner: needsPriceOwner(a.kind) && a.approverAt == null && viewerPriceOwner,
+        nextSlot,
+        canApproveNext:
+          nextSlot === "warehouse" ? viewerWarehouse : nextSlot === "purchaser" ? viewerPurchaser : nextSlot === "approver" ? viewerPriceOwner : false,
+        canReject: viewerWarehouse || viewerPurchaser || viewerPriceOwner,
       });
     }
   } catch {

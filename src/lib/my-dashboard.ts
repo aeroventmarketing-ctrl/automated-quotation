@@ -25,7 +25,7 @@ import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
-import { STOCK_ACTION_LABEL, needsPriceOwner } from "@/lib/stock-action";
+import { STOCK_ACTION_LABEL, nextStockActionSlot } from "@/lib/stock-action";
 import { listActivityForActor, type ActivityView } from "@/lib/activity-log";
 
 export type TaskArea = "order" | "purchase" | "cash" | "schedule" | "commission" | "quotation" | "inventory";
@@ -497,14 +497,12 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         take: 100,
       });
       for (const a of actions) {
-        // Whose sign-off is still outstanding (Warehouse first, then Purchaser,
-        // then — on an Edit — the price approver).
-        const nextRole: "warehouse" | "purchaser" | "payment_approver" | null =
-          a.warehouseAt == null ? "warehouse"
-          : a.purchaserAt == null ? "purchaser"
-          : needsPriceOwner(a.kind) && a.approverAt == null ? "payment_approver"
-          : null;
-        if (nextRole == null) continue; // every slot in — shouldn't still be PENDING
+        // Whose sign-off is still outstanding. Read from the same function the
+        // Inventory card and the server use, so this list can never invite the
+        // wrong person — an Edit raised by the Purchaser skips the Warehouse step.
+        const slot = nextStockActionSlot(a.kind, a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);
+        if (slot == null) continue; // every signature in — shouldn't still be PENDING
+        const nextRole: WorkflowRoleKey = slot === "approver" ? "payment_approver" : slot;
         const myTurn = has(nextRole);
         const label = STOCK_ACTION_LABEL[a.kind];
         tasks.push({

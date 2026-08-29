@@ -152,12 +152,15 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(false); }
   }
-  // Edit / Adjust / Reserve / Transfer are PROPOSED — they only take effect once
-  // both a Warehouseman and a Purchaser approve (double handshake), plus, for an
-  // EDIT, the Admin / Payment Approver who owns the unit cost and selling price
-  // it carries. That third sign-off is why the edit panel may still offer the
-  // price boxes to someone who cannot set a price outright: here they PROPOSE
-  // one, and the owner is the person who makes it real.
+  // Edit / Adjust / Reserve / Transfer are PROPOSED, not saved.
+  //
+  // Adjust and Transfer keep the Warehouse + Purchaser handshake; Reserve needs
+  // the Warehouseman alone. An EDIT carries the unit cost and selling price, so
+  // it runs the owner's chain instead — Warehouse raises it → Purchaser → Admin /
+  // Payment Approver, and a price owner's own edit applies at once because they
+  // are the final approver. That chain is why the panel still offers the price
+  // boxes to someone who cannot set a price outright: here they PROPOSE one, and
+  // the owner is the person who makes it real. See lib/stock-action.
   function apply() {
     const n = Number(qty);
     if (!Number.isFinite(n) || n < 0) { setErr("Enter a quantity."); return; }
@@ -280,15 +283,19 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
               {showSell && <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>}
               <label className="text-xs text-muted-foreground">Reorder at<Input className="h-8 w-28" type="number" step="any" min={0} value={reorder} onChange={(e) => setReorder(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Category<Input className="h-8 w-40" value={category} onChange={(e) => setCategory(e.target.value)} /></label>
-              <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>{busy ? "…" : "Propose edit"}</Button>
+              <Button size="sm" className="h-8" disabled={busy} onClick={saveMeta}>
+                {busy ? "…" : canEditPrices ? "Save edit" : "Propose edit"}
+              </Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
-            {/* An edit carries the money columns, so it is the one stock action
-                that also waits on the price owner. Said here rather than only in
-                the pending card, so nobody expects the change to be live. */}
+            {/* An edit carries the money columns, so it runs the owner's approval
+                chain — and how long that chain is depends on who is standing here.
+                Said in the panel rather than only in the pending card, so nobody
+                walks away thinking the change is live when it is not. */}
             <p className="pb-1 text-[11px] text-muted-foreground">
-              Proposed, not saved — an edit applies once the Warehouseman, the Purchaser
-              {canEditPrices ? " and you" : " and an Admin / the Payment Approver"} have approved it.
+              {canEditPrices
+                ? "Applies immediately — you are the final approver for a catalogue price."
+                : "Proposed, not saved — the Purchaser reviews it, then an Admin / the Payment Approver gives the final approval."}
             </p>
           </TableCell>
         </TableRow>
