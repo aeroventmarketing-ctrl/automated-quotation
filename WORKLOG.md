@@ -1,3 +1,51 @@
+## 2026-08-29 · The Purchaser gets an Edit button on Inventory
+
+- **Owner's instruction:** *"In Inventory, show edit button to purchaser."* — closing the gap the previous entry
+  flagged: rule 2 of the approval sequence (*Purchaser raises it → Admin / Payment Approver*) was implemented and
+  tested on Inventory but **unreachable**, because the Purchaser's rows carried no Edit button at all.
+
+### Edit alone, not the whole toolbar
+
+`canProposeEdit` is a new, wider gate than `canManageItems`: **Warehouse, Purchaser or admin**. The Purchaser's row
+shows **Edit** and nothing else — Reserve and Adjust stay with the people who hold the stock, and Label with the
+people who print them. The distinction the gate draws: **an edit is a request, not a write.** It goes into the
+same chain everything else does, so widening who may *ask* costs nothing.
+
+- The server already allowed it — `doProposeStockAction` has named the Purchaser since the chain was built — so
+  this is the screen catching up with the rule, not a new permission.
+
+### The panel's note is now computed for the viewer
+
+It used to be a two-way guess in the component (price owner or "everyone else"). With three possible chains it has
+to be right for whoever is looking, so the sentence is computed on the page and passed in:
+
+| Viewer | Note |
+| --- | --- |
+| Admin / Payment Approver | *Applies immediately — you are the final approver for a catalogue price.* |
+| Warehouse | *Proposed, not saved — the Purchaser reviews it, then an Admin / the Payment Approver…* |
+| Purchaser | *Proposed, not saved — an Admin / the Payment Approver gives the final approval.* |
+
+The order of those tests **mirrors `proposedRole`** in `stock-action-actions` (price owner → Warehouse →
+Purchaser), so the panel can never promise a chain the server will not run. Both are commented to say so.
+
+### What the Purchaser sees in the panel
+
+Location, reorder level, category and **unit cost** — `showPrices` includes them. The **selling price** stays
+hidden (`showSellPrice` excludes the Purchaser, Warehouse and Accounting) and rides through the proposal unchanged,
+so editing an item never silently blanks a figure the editor could not see.
+
+- **Worth a separate look some time:** `loadItems()` ships `sellPrice` to every viewer's browser and the column is
+  then hidden in the markup. That predates all of this week's work and is not a hole this change opens, but it is
+  the kind of thing the price-visibility rules exist to prevent. Say the word and I will make the server drop it.
+
+### Verified
+
+- No new test: the capability itself is already covered — *"sends the Purchaser's own edit straight to the price
+  owner, with no Warehouse step"* proposes as the Purchaser and follows it to APPLIED. What changed here is which
+  button is on screen.
+- Full suite **121 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. No migration.
+
 ## 2026-08-29 · The approval chain depends on who raised the request
 
 - **Owner's clarification** of the earlier instruction:

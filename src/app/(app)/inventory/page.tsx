@@ -68,6 +68,20 @@ export default async function InventoryPage() {
   // unit cost + stock value (needed for buying / valuation); the Warehouse sees
   // no money columns at all. Admins and Engineers always see everything.
   const showSellPrice = admin || !(has("purchaser") || has("warehouse") || has("accounting"));
+  // Proposing an EDIT to an item's details — the Warehouse, the Purchaser or an
+  // admin. Wider than `canManageItems` on purpose: an edit is a *request*, not a
+  // write. The quantity actions (Reserve / Adjust) stay with the people who hold
+  // the stock, so the Purchaser's row shows the Edit button alone.
+  const canProposeEdit = !isSales && (canManageItems || has("purchaser"));
+  // The sentence under the edit panel, which has to name the RIGHT remaining
+  // steps for whoever is looking. The order of these tests mirrors `proposedRole`
+  // in stock-action-actions — price owner, then Warehouse, then Purchaser — so
+  // the panel never promises a chain the server will not run.
+  const editChainNote = isCataloguePriceOwner(viewer, assignments)
+    ? "Applies immediately — you are the final approver for a catalogue price."
+    : canManageItems
+      ? "Proposed, not saved — the Purchaser reviews it, then an Admin / the Payment Approver gives the final approval."
+      : "Proposed, not saved — an Admin / the Payment Approver gives the final approval.";
   // The scan → jump / receive / issue tool is available to stock movers (the
   // Warehouse / Plant Manager / admin) and to the Purchaser (goods receipt on
   // deliveries). This does NOT grant the per-row manage actions.
@@ -265,7 +279,7 @@ export default async function InventoryPage() {
 
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} canProposeEdit={canProposeEdit} editChainNote={editChainNote} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 

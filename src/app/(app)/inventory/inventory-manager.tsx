@@ -97,11 +97,18 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
+function StockRow({ item, canManage, canProposeEdit, editChainNote, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; canProposeEdit: boolean; editChainNote: string; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   const router = useRouter();
-  // Purchaser/admin who aren't the stock manager still get a "Set price" action.
+  // Three shapes of action cell, in order of precedence:
+  //   priceOnly — a price owner who is not a stock manager: one "Set price".
+  //   canManage — the Warehouse / admin: Label, Reserve, Edit, Adjust.
+  //   editOnly  — the Purchaser: Edit alone. They raise a change to an item's
+  //               details and the price owner releases it; the quantity moves
+  //               (Reserve, Adjust) stay with the people who hold the stock.
   const priceOnly = canEditPrices && !canManage;
-  const hasActions = canManage || canEditPrices;
+  const editOnly = !priceOnly && !canManage && canProposeEdit;
+  const canOpenEdit = canManage || canProposeEdit;
+  const hasActions = canManage || canEditPrices || canProposeEdit;
   // The Sell-price column is hidden from some price viewers (e.g. Purchaser).
   const showSell = showPrices && showSellPrice;
   // Table has 8 always-on columns + price columns (unit cost, [sell price],
@@ -242,6 +249,10 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPanel((p) => (p === "price" ? "none" : "price"))}>
                   {!showSell ? "Set cost" : item.sellPrice <= 0 ? "Set price" : "Edit price"}
                 </Button>
+              ) : editOnly ? (
+                <Button size="sm" variant={panel === "edit" ? "default" : "outline"} className="h-7 text-xs" title="Propose an edit to this item's details" onClick={() => setPanel((p) => (p === "edit" ? "none" : "edit"))}>
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                </Button>
               ) : (
                 <>
                   <Button size="sm" variant={panel === "label" ? "default" : "outline"} className="h-7 w-7 p-0" title="Label — barcode / QR" aria-label="Label" onClick={() => setPanel((p) => (p === "label" ? "none" : "label"))}><Tag className="h-3.5 w-3.5" /></Button>
@@ -274,7 +285,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
           </TableCell>
         </TableRow>
       )}
-      {panel === "edit" && canManage && (
+      {panel === "edit" && canOpenEdit && (
         <TableRow>
           <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
@@ -292,11 +303,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
                 chain — and how long that chain is depends on who is standing here.
                 Said in the panel rather than only in the pending card, so nobody
                 walks away thinking the change is live when it is not. */}
-            <p className="pb-1 text-[11px] text-muted-foreground">
-              {canEditPrices
-                ? "Applies immediately — you are the final approver for a catalogue price."
-                : "Proposed, not saved — the Purchaser reviews it, then an Admin / the Payment Approver gives the final approval."}
-            </p>
+            <p className="pb-1 text-[11px] text-muted-foreground">{editChainNote}</p>
           </TableCell>
         </TableRow>
       )}
@@ -420,7 +427,7 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
   );
 }
 
-export function InventoryManager({ items, canManage, admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, canProposeEdit = canManage, editChainNote = "", admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canProposeEdit?: boolean; editChainNote?: string; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
   // Multi-select for bulk delete — admin only, matching the `removeStockItems`
@@ -515,7 +522,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
     return [...map.entries()].map(([key, rows]) => ({ key, rows }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, group]);
-  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices ? 1 : 0) + (canDelete ? 1 : 0);
+  const cols = 8 + (showPrices ? (showSellPrice ? 3 : 2) : 0) + (canManage || canEditPrices || canProposeEdit ? 1 : 0) + (canDelete ? 1 : 0);
   // Hide the price-based sort options from viewers who can't see prices.
   const sortOptions = SORT_OPTIONS.filter((o) =>
     (showPrices || (o.key !== "unitCost" && o.key !== "sellPrice" && o.key !== "value")) && (showSell || o.key !== "sellPrice"),
@@ -857,7 +864,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
                 {showSell && <TableHead className="text-right">Sell price</TableHead>}
                 {showPrices && <TableHead className="text-right">Value</TableHead>}
                 <TableHead>Status</TableHead>
-                {(canManage || canEditPrices) && <TableHead className="text-right">Action</TableHead>}
+                {(canManage || canEditPrices || canProposeEdit) && <TableHead className="text-right">Action</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -871,7 +878,7 @@ export function InventoryManager({ items, canManage, admin = false, canDelete = 
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} canProposeEdit={canProposeEdit} editChainNote={editChainNote} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
                 </Fragment>
               ))}
             </TableBody>
