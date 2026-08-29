@@ -13,11 +13,12 @@
  * someone who is somewhere else.
  *
  * Counted, and why:
- *   - **Inventory** — pending stock actions of kind `EDIT`. That is what
- *     "Propose edit" raises, and the one kind that now waits on the price owner
- *     (it carries the unit cost and selling price). Adjust / Reserve / Transfer
- *     are quantity moves on the older two-party handshake and are deliberately
- *     NOT counted here; widening this to every pending action is one word.
+ *   - **Inventory** — **every** pending stock action: Edit, Adjust, Reserve and
+ *     Transfer alike. It first counted Edits only, on the reading that "initiate
+ *     edit" meant the edit panel; the owner asked for the rest to be included,
+ *     and they were right — an adjustment sitting unapproved needs someone to
+ *     look at it just as much, and a badge that ignored it made the Inventory
+ *     row's amber "Pending" chip look like it was flashing about nothing.
  *   - **Products** — pending `ProductChange` rows. Every one of them is a
  *     Purchaser's add / save / delete, since a price owner's own save writes
  *     straight through and never parks.
@@ -66,6 +67,6 @@ export async function getCatalogueApprovalCounts(
     user && (isAdmin(user) || userHasWorkflowRole(assignments, user.id, "purchaser" as WorkflowRoleKey) || userHasWorkflowRole(assignments, user.id, "payment_approver" as WorkflowRoleKey))
       ? await prisma.productChange.count({ where: { status: "PENDING" } }).catch(() => 0)
       : 0;
-  const inventory = await prisma.stockAction.count({ where: { status: "PENDING", kind: "EDIT" } }).catch(() => 0);
+  const inventory = await prisma.stockAction.count({ where: { status: "PENDING" } }).catch(() => 0);
   return { inventory, products };
 }

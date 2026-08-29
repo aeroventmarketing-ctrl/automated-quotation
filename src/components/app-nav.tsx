@@ -17,7 +17,10 @@ export const MY_DASHBOARD_ITEM = { href: "/my-dashboard", label: "My Dashboard",
  * be telling someone the opposite of the truth, so the wording follows the tab.
  */
 const COUNT_LABEL: Record<string, (n: number) => string> = {
-  "/inventory": (n) => `${n} stock item edit${n === 1 ? "" : "s"} awaiting approval`,
+  // "change" rather than "edit": Inventory counts every pending stock action —
+  // Edit, Adjust, Reserve and Transfer — so naming one of the four would be
+  // wrong three times out of four.
+  "/inventory": (n) => `${n} stock change${n === 1 ? "" : "s"} awaiting approval`,
   "/products": (n) => `${n} product change${n === 1 ? "" : "s"} awaiting approval`,
 };
 export const navCountLabel = (href: string, n: number): string =>

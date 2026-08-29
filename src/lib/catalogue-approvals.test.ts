@@ -49,8 +49,9 @@ function be(role: keyof typeof who | "none") {
 }
 const counts = () => getCatalogueApprovalCounts(USER, NO_ROLES);
 
-/** One pending stock action of the given kind. */
-async function stockAction(kind: "EDIT" | "ADJUST") {
+/** One pending stock action of the given kind, written straight in — the count
+ *  is what's under test, not the handshake that would normally produce it. */
+async function stockAction(kind: "EDIT" | "ADJUST" | "RESERVE" | "TRANSFER") {
   const i = await prisma.stockItem.create({ data: { name: `ITEM ${kind} ${Math.random()}`, unit: "pc" } });
   await prisma.stockAction.create({
     data: {
@@ -71,7 +72,7 @@ run("the catalogue approval nav counts", () => {
     await prisma.productChange.deleteMany({});
     await prisma.product.deleteMany({});
     await stockAction("EDIT");
-    await stockAction("ADJUST"); // a quantity move — deliberately not counted
+    await stockAction("ADJUST"); // a quantity move — counted too, per the owner
     await prisma.productChange.create({
       data: {
         productName: "BELT B-50", kind: "CREATE", payload: {}, summary: "Add BELT B-50",
@@ -80,24 +81,28 @@ run("the catalogue approval nav counts", () => {
     });
   });
 
-  it("counts a proposed EDIT but not a proposed quantity adjustment", async () => {
+  // Every kind counts, not just the edit panel's: an adjustment sitting
+  // unapproved needs someone to look at it just as much.
+  it("counts every pending stock action, whatever kind it is", async () => {
     be("admin");
-    await stockAction("ADJUST");
-    expect(await counts()).toEqual({ inventory: 1, products: 1 });
+    expect(await counts()).toEqual({ inventory: 2, products: 1 }); // the EDIT + the ADJUST
+    await stockAction("RESERVE");
+    await stockAction("TRANSFER");
+    expect(await counts()).toEqual({ inventory: 4, products: 1 });
   });
 
   it("gives the Purchaser and the Payment Approver both counts", async () => {
     be("purchaser");
-    expect(await counts()).toEqual({ inventory: 1, products: 1 });
+    expect(await counts()).toEqual({ inventory: 2, products: 1 });
     be("payment_approver");
-    expect(await counts()).toEqual({ inventory: 1, products: 1 });
+    expect(await counts()).toEqual({ inventory: 2, products: 1 });
   });
 
   // The Products queue shows supplier prices, which the Warehouse may not see,
   // so that page withholds the card from them — a badge there would be a dead end.
   it("gives the Warehouse the Inventory count only", async () => {
     be("warehouse");
-    expect(await counts()).toEqual({ inventory: 1, products: 0 });
+    expect(await counts()).toEqual({ inventory: 2, products: 0 });
   });
 
   it("gives everyone else nothing at all", async () => {
@@ -110,7 +115,7 @@ run("the catalogue approval nav counts", () => {
 
   it("clears once the changes are decided", async () => {
     be("admin");
-    await prisma.stockAction.updateMany({ where: { kind: "EDIT" }, data: { status: "APPLIED" } });
+    await prisma.stockAction.updateMany({ data: { status: "APPLIED" } });
     await prisma.productChange.updateMany({ data: { status: "REJECTED" } });
     expect(await counts()).toEqual({ inventory: 0, products: 0 });
   });

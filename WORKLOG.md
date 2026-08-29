@@ -13,9 +13,12 @@
 two more entries to it — same component, same blink, on both the sidebar and the mobile menu — so there is no new
 badge to get wrong. What is new is `lib/catalogue-approvals.ts`: the counting and the role gate.
 
-- **Inventory** counts pending stock actions of kind **EDIT** — what "Propose edit" raises, and the one kind that
-  now waits on the price owner. **Adjust / Reserve / Transfer are deliberately not counted**: they are quantity
-  moves on the older two-party handshake, and "initiate edit" is not what they are. Widening it is one word.
+- **Inventory** counts **every** pending stock action — Edit, Adjust, Reserve and Transfer alike. It shipped
+  counting Edits only, on the reading that *"initiate edit"* meant the edit panel; the owner asked for the rest to
+  be included (*"include this in flashing notification"*), and they were right — an adjustment sitting unapproved
+  needs someone to look at it just as much, and a badge that ignored it made the Inventory row's amber "Pending"
+  chip look like it was flashing about nothing. The badge's label says "stock change", not "edit", for the same
+  reason: naming one of the four kinds would be wrong three times out of four.
 - **Products** counts pending `ProductChange` rows. Every one is a Purchaser's save — a price owner's own writes
   straight through and never parks.
 - A proposer keeps seeing their own change in the count. It is still waiting, and a badge that vanished for the
@@ -42,8 +45,8 @@ is a far bigger change than a badge and not one to make quietly.
 
 ### Verified — 5 new tests
 
-- An EDIT counts and an ADJUST does not; the Purchaser and the Payment Approver get both counts; the Warehouse gets
-  Inventory only; Accounting and a role-less user get nothing; and both clear once the changes are decided.
+- Every kind counts (Edit, Adjust, Reserve, Transfer); the Purchaser and the Payment Approver get both counts; the
+  Warehouse gets Inventory only; Accounting and a role-less user get nothing; and both clear once decided.
 - A missing table counts as **0** rather than throwing — this runs in the layout, so an error here would take every
   page down with it.
 - Full suite **116 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
