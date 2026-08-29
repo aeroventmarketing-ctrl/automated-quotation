@@ -416,8 +416,10 @@ function StockRow({ item, canManage, showPrices, showSellPrice = true, canEditPr
 export function InventoryManager({ items, canManage, admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
-  // Multi-select for bulk delete (the Purchaser or an admin — the removeStockItems
-  // server action is gated to them). The full "Clear all" wipe stays admin-only.
+  // Multi-select for bulk delete — admin only, matching the `removeStockItems`
+  // server action. The Purchaser held this and no longer does; the tick-boxes
+  // themselves disappear with it, so there is nothing to select and no dangling
+  // "1 selected" bar.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toggleOne = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const searchParams = useSearchParams();

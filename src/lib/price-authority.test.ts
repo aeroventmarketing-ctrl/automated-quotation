@@ -40,7 +40,8 @@ const { PrismaClient } = await import("@prisma/client");
 const prisma = new (PrismaClient as unknown as new () => import("@prisma/client").PrismaClient)();
 const { canSetCataloguePrice } = await import("./price-authority");
 const { createProduct, updateProduct, importProducts } = await import("@/app/(app)/products/actions");
-const { createStockItem, updateStockItemMeta, importStockItems } = await import("@/app/(app)/inventory/actions");
+const { createStockItem, updateStockItemMeta, importStockItems, removeStockItems, mergeDuplicateStockItems } =
+  await import("@/app/(app)/inventory/actions");
 
 /** A CSV upload, as the import panel submits it. */
 function upload(csv: string): FormData {
@@ -121,8 +122,11 @@ run("who may set a catalogue price", () => {
       expect(Number(i!.sellPrice)).toBe(40);
     });
 
-    it("creates the item unpriced for the Purchaser rather than refusing it", async () => {
-      be("purchaser");
+    // Was the Purchaser, who no longer adds stock items at all (the owner had
+    // that button hidden). The Warehouse is now the non-owner who can create
+    // one, so it carries the same point: the item lands, the price does not.
+    it("creates the item unpriced for the Warehouse rather than refusing it", async () => {
+      be("warehouse");
       await createStockItem({ name: "CUTTING DISC 4\"", unit: "pc", quantity: 5, reorderLevel: 1, unitCost: 29, sellPrice: 40 });
       const i = await prisma.stockItem.findFirst({ where: { name: 'CUTTING DISC 4"' } });
       expect(i).toBeTruthy();
@@ -147,6 +151,40 @@ run("who may set a catalogue price", () => {
       expect(Number(after!.reorderLevel)).toBe(4);
       expect(Number(after!.unitCost)).toBe(210);       // the price is untouched
       expect(Number(after!.sellPrice)).toBe(300);
+    });
+  });
+
+  /**
+   * The three buttons the owner had hidden from the Purchaser — Add stock item,
+   * Merge duplicates, Delete selected. Hidden on the screen AND refused by the
+   * action: a button that is merely invisible is theatre, and the next person to
+   * wire up a form would silently undo the rule.
+   */
+  describe("Buttons the Purchaser no longer has on Inventory", () => {
+    it("refuses the Purchaser's Add stock item, Merge duplicates and Delete selected", async () => {
+      be("admin");
+      await createStockItem({ name: "BELT B-50", unit: "pc", quantity: 1, reorderLevel: 0, unitCost: 210, sellPrice: 300 });
+      const id = (await prisma.stockItem.findFirst({ where: { name: "BELT B-50" } }))!.id;
+
+      be("purchaser");
+      await expect(createStockItem({ name: "NEW ITEM", unit: "pc", quantity: 0, reorderLevel: 0, unitCost: 0, sellPrice: 0 }))
+        .rejects.toThrow(/Warehouse or an admin/i);
+      await expect(mergeDuplicateStockItems()).rejects.toThrow(/Warehouse or an admin/i);
+      await expect(removeStockItems([id])).rejects.toThrow(/admin/i);
+
+      // Nothing moved: the item is still there and still active.
+      expect(await prisma.stockItem.count({ where: { active: true } })).toBe(1);
+      expect((await prisma.stockItem.findUnique({ where: { id } }))!.active).toBe(true);
+    });
+
+    it("still lets the Warehouse add an item, and the admin delete one", async () => {
+      be("warehouse");
+      await createStockItem({ name: "GI SHEET 24GA", unit: "sheet", quantity: 2, reorderLevel: 0, unitCost: 0, sellPrice: 0 });
+      const id = (await prisma.stockItem.findFirst({ where: { name: "GI SHEET 24GA" } }))!.id;
+
+      be("admin");
+      expect(await removeStockItems([id])).toEqual({ removed: 1 });
+      expect((await prisma.stockItem.findUnique({ where: { id } }))!.active).toBe(false);
     });
   });
 
