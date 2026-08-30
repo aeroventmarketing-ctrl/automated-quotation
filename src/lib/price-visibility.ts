@@ -12,8 +12,16 @@ import type { User } from "@prisma/client";
 import { isAdmin } from "@/lib/auth";
 import { userHasWorkflowRole, type WorkflowRoleAssignments, type WorkflowRoleKey } from "@/lib/workflow-roles";
 
-/** Workflow roles (beyond admin / Engineer) allowed to see prices. */
-const PRICE_ROLES: WorkflowRoleKey[] = ["purchaser", "accounting"];
+/**
+ * Workflow roles (beyond admin / Engineer) allowed to see prices.
+ *
+ * The **Payment Approver** joined this list when the owner asked for their
+ * Inventory access *"with all data access including price"* — and it was an
+ * omission rather than a policy: they own the catalogue price
+ * (`lib/price-authority`) and give the final approval on every change to one, so
+ * they were being asked to sign off figures the screen would not show them.
+ */
+const PRICE_ROLES: WorkflowRoleKey[] = ["purchaser", "accounting", "payment_approver"];
 
 /**
  * Workflow roles (beyond admin) allowed to SET unit cost / selling price.

@@ -21,8 +21,12 @@ export const dynamic = "force-dynamic";
 export default async function InventoryPage() {
   const [viewer, assignments, locations] = await Promise.all([getCurrentUser(), getWorkflowRoles(), getStockLocations()]);
   const admin = isAdmin(viewer);
-  const has = (role: "warehouse" | "plant_manager" | "purchaser" | "accounting" | "logistics" | "technical_head") =>
+  const has = (role: "warehouse" | "plant_manager" | "purchaser" | "accounting" | "logistics" | "technical_head" | "payment_approver") =>
     viewer != null && userHasWorkflowRole(assignments, viewer.id, role);
+  // The Admin / Payment Approver who owns the catalogue price and gives the final
+  // approval on every stock request. Computed up here because it now decides
+  // access to the page itself, not just what happens once you are on it.
+  const priceOwner = isCataloguePriceOwner(viewer, assignments);
   // Sales may VIEW inventory read-only — name / quantity / availability / selling
   // price — but never the unit cost, stock value, or any management action
   // (add / import / edit / adjust / transfer / labels / reorder). `canViewPrices`
@@ -38,7 +42,11 @@ export default async function InventoryPage() {
     );
   // Accounting monitors inventory read-only, with the same characteristics as
   // the Plant Manager (no add/edit, no Labels/Reorder, no Out-of-stock tile).
-  const canView = isSales || admin || canManage || has("purchaser") || has("accounting") || has("logistics") || has("technical_head") || isProdHeadViewer;
+  // The Payment Approver was missing from this list, which is how they ended up
+  // holding the final approval on every inventory request while the page told
+  // them *"You don't have access to inventory."* The nav badge counted their work
+  // and the page would not let them do it.
+  const canView = isSales || admin || canManage || priceOwner || has("purchaser") || has("accounting") || has("logistics") || has("technical_head") || isProdHeadViewer;
   // The Plant Manager monitors stock but does not edit items — hide the
   // add / import / per-row action buttons for them (a Warehouseman or admin
   // still manages). They keep read-only view + their stock-transfer rights.
@@ -59,7 +67,9 @@ export default async function InventoryPage() {
   // the Warehouseman, Plant Manager, Accounting, Logistics and the production
   // heads (their Labels / Reorder target pages deny them anyway). The Purchaser
   // still sees them; admins always do.
-  const hidePlantMgrTools = isSales || (!admin && (has("plant_manager") || has("accounting") || has("warehouse") || has("logistics") || has("technical_head") || isProdHeadViewer));
+  // The Payment Approver is here too: /inventory/labels and /inventory/reorder
+  // both deny them, so linking there would be a dead end.
+  const hidePlantMgrTools = isSales || (!admin && (has("payment_approver") || has("plant_manager") || has("accounting") || has("warehouse") || has("logistics") || has("technical_head") || isProdHeadViewer));
   // Prices (unit cost, sell price, stock value) are commercial data — only the
   // Purchaser, Engineers, Accounting and admins see them. A warehouseman can
   // manage stock but the money columns stay hidden.
@@ -73,12 +83,12 @@ export default async function InventoryPage() {
   // admin. Wider than `canManageItems` on purpose: an edit is a *request*, not a
   // write. The quantity actions (Reserve / Adjust) stay with the people who hold
   // the stock, so the Purchaser's row shows the Edit button alone.
-  const canProposeEdit = !isSales && (canManageItems || has("purchaser"));
+  const canProposeEdit = !isSales && (canManageItems || has("purchaser") || priceOwner);
   // The sentence under each proposal panel, which has to name the RIGHT remaining
   // steps for whoever is looking. The order of these tests mirrors `proposedRole`
   // in stock-action-actions — price owner, then Warehouse, then Purchaser — so
   // the panel never promises a chain the server will not run.
-  const chainNote = isCataloguePriceOwner(viewer, assignments)
+  const chainNote = priceOwner
     ? "Applies immediately — you are the final approver."
     : canManageItems
       ? "Proposed, not saved — the Purchaser reviews it, then an Admin / the Payment Approver gives the final approval."
@@ -114,7 +124,7 @@ export default async function InventoryPage() {
   // An Edit carries the unit cost / selling price, so it also waits on the
   // catalogue price owner (see lib/price-authority) — who is likewise the only
   // person who may take the stock list out as a file or put one back in.
-  const viewerPriceOwner = isCataloguePriceOwner(viewer, assignments);
+  const viewerPriceOwner = priceOwner;
   // Owner's instruction: *"move the item for approval at the 1st row of inventory
   // list for warehouse, purchaser, payment approver and admin."* Same four roles
   // the nav badge already counts for, so the list and the badge agree about who
