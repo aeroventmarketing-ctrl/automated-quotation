@@ -54,6 +54,8 @@ export interface InventoryAccess {
   showHeaderTools: boolean;
   /** Float items with a pending request to the top, and open the list. */
   pendingFirst: boolean;
+  /** The approval history — the record of decided requests, at /inventory/approvals. */
+  canViewApprovalHistory: boolean;
   /** Whose signature this viewer can give, and the sentence the panels show. */
   isPriceOwner: boolean;
   chainNote: string;
@@ -117,6 +119,10 @@ export function inventoryAccess(user: User | null | undefined, roles: WorkflowRo
         !(has("payment_approver") || has("plant_manager") || has("accounting") || has("warehouse") ||
           has("logistics") || has("technical_head") || prodHead)),
     pendingFirst: watchesCatalogueApprovals(user, roles),
+    // The same four parties who see a request while it waits may read it after
+    // it is decided. Anyone who never had a signature to give has no record to
+    // read — and the record names people and quotes prices.
+    canViewApprovalHistory: watchesCatalogueApprovals(user, roles),
     isPriceOwner: priceOwner,
     // The order of these tests mirrors `proposedRole` in stock-action-actions —
     // price owner, then Warehouse, then Purchaser — so a panel never promises a

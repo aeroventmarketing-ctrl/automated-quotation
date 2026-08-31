@@ -6,18 +6,8 @@ import { BellRing, Eye, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { STOCK_SLOT_LABEL, stockActionSignatures, type StockActionView, type StockSlot } from "@/lib/stock-action";
 
+import { ApprovalTrail } from "@/components/approval-trail";
 import { approveStockAction, rejectStockAction, type StockActionResult } from "./stock-action-actions";
-
-/**
- * Date + time on an approval record, fixed to Manila and en-PH so the server and
- * the browser render the same string (a locale-dependent format would hydrate
- * differently on a machine set to another region).
- */
-const stamp = (iso: string) =>
-  new Date(iso).toLocaleString("en-PH", {
-    timeZone: "Asia/Manila", year: "numeric", month: "short", day: "numeric",
-    hour: "numeric", minute: "2-digit",
-  });
 
 /** The office the proposer answers for, for the "Raised by" line. */
 const proposerDesignation = (role: string): string =>
@@ -86,35 +76,19 @@ export function PendingStockActions({ pending }: { pending: StockActionView[] })
               <span className="text-muted-foreground">{a.summary}</span>
             </div>
             {/* The approval record: who raised it and who has signed since, each
-                with their designation and the date and time of the signature.
-                One line per step, in the order the chain takes them. */}
-            <ul className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
-              <li>
-                <span className="font-medium text-foreground">Raised by</span>{" "}
-                {a.proposedByName} · {proposerDesignation(a.proposedRole)}
-                {a.proposedAt && <> · {stamp(a.proposedAt)}</>}
-              </li>
-              {stockActionSignatures(a).map((sig) => (
-                <li key={sig.slot} className={sig.signed ? "text-emerald-700 dark:text-emerald-500" : ""}>
-                  <span className="font-medium">{sig.designation}</span>{" · "}
-                  {sig.signed ? (
-                    <>
-                      <Check className="mr-0.5 inline h-3 w-3" />
-                      {sig.name} · {sig.at ? stamp(sig.at) : ""}
-                    </>
-                  ) : (
-                    <span className="italic">awaiting approval</span>
-                  )}
-                </li>
-              ))}
-              {a.proof && (
-                <li>
-                  <a href={viewUrl(a.proof.path, a.proof.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-                    <Eye className="h-3.5 w-3.5" /> View form
-                  </a>
-                </li>
-              )}
-            </ul>
+                with their designation and the date and time. Shared with the
+                history page so a request reads the same before and after it is
+                decided — "awaiting approval" simply becomes a name and a time. */}
+            <ApprovalTrail
+              className="mt-1.5"
+              raisedBy={{ designation: proposerDesignation(a.proposedRole), name: a.proposedByName, at: a.proposedAt, signed: true }}
+              steps={stockActionSignatures(a)}
+            />
+            {a.proof && (
+              <a href={viewUrl(a.proof.path, a.proof.name)} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-primary hover:underline">
+                <Eye className="h-3.5 w-3.5" /> View form
+              </a>
+            )}
             {/* Approve is the next signatory's alone; Reject stays with every
                 party to the chain, so a price owner who can see a bad edit two
                 steps early does not have to wait their turn to stop it. */}

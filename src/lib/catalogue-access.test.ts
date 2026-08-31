@@ -77,6 +77,9 @@ const INVENTORY: Record<keyof ReturnType<typeof inventoryAccess> & string, Recor
   showHeaderTools: only("admin", "engineer", "purchaser", "nobody"),
   // The four parties to a request see it float to the top.
   pendingFirst: only("admin", "warehouse", "purchaser", "paymentApprover"),
+  // The record of decided requests: the same four, and nobody else — it names
+  // people and quotes prices.
+  canViewApprovalHistory: only("admin", "warehouse", "purchaser", "paymentApprover"),
   isPriceOwner: only("admin", "paymentApprover"),
 };
 
