@@ -1,3 +1,43 @@
+## 2026-08-31 · The Engineer can open the Products tab they were already being offered
+
+- **Owner's instruction:** *"let the engineer allowed by the page."*
+
+The capability grid found this on its first run and it was flagged, not fixed, because widening who may read the
+catalogue is the owner's call. It is now theirs: `visibleNav` has always listed **Products** for an `ENGINEER`,
+and `productsAccess` then refused them — a tab that led to *"You don't have access to the product list."*
+
+### Read, and only read
+
+`canView` gains the Engineer. Nothing else moves: no per-row **Edit**, no **+ Add product**, no **Import /
+Download**, no decisions on the parked-change queue. The two cells that were already true for them —
+`showPrices` and `showSuppliers` — stop being stranded behind a page that wouldn't open; an Engineer quotes from
+this catalogue and was cleared to see its prices everywhere else already.
+
+Exactly one cell moved in the grid (`canView` / engineer), and the grid was updated in the same commit, as the
+rule in CLAUDE.md requires. A named regression test pins the decision: the Engineer opens the page, sees prices
+and suppliers, and holds none of the five write capabilities.
+
+### The harness could not look as an Engineer
+
+The role harness had five people in its cast — admin, warehouse, purchaser, payment approver, sales — and no
+`ENGINEER`. A base role it cannot look as is a blind spot, and this bug lived in exactly that spot: an Engineer
+holds no workflow role, so every rule keyed off one misses them. **Elena Cruz (ENGINEER)** joins the cast
+permanently. On the real screens:
+
+| | open | price | import | add |
+| --- | --- | --- | --- | --- |
+| Products · Elena Cruz | **true** | true | false | false |
+
+No other role's Products row moved.
+
+### Still open, and deliberately not changed
+
+- **Inventory has the identical shape for the same person.** The nav offers `/inventory` to an `ENGINEER` and the
+  page refuses them — now shown by the harness (`inv · Elena Cruz · open=false`) rather than inferred. The
+  owner's instruction named Products, so Inventory is left alone and reported.
+- **A base-role `OTHER` user with no workflow role at all** is still offered the Products tab and still refused.
+  The fix there is arguably the other way round — stop offering a tab to someone with no configured role — so it
+  stays recorded as current truth in the grid.
 ## 2026-08-31 · The Plant Manager can see what they are holding up, and the requestor knows who to chase
 
 - **Owner's report:** *"error when purchaser make a requisitions"* — a Purchaser's Office requisition for
