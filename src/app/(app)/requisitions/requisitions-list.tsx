@@ -234,17 +234,23 @@ export function RequisitionsList({
           bottom, independent of the tab filter, exactly as the Purchasing
           workspace keeps its completed department POs: a finished requisition
           stays readable instead of vanishing from the tab it was last seen in.
-          The chain is terminal here — nothing left to press but View / Print. */}
+          The chain is terminal here — nothing left to press but View / Print.
+
+          GREEN. Its twin on the Purchasing page — "Completed department POs" —
+          is INDIGO. Collapsed, the two are a single bar of near-identical text
+          with a near-identical count, on two pages that look alike; the colour
+          is what tells you at a glance which box (and which page) you are on.
+          Keep them different if either is ever restyled. */}
       {completedRows.length > 0 && (
         <details
-          className="rounded-lg border bg-card"
+          className="rounded-lg border border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40"
           open={completedOpen}
           onToggle={(e) => setCompletedOpen((e.target as HTMLDetailsElement).open)}
         >
-          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
             Completed requisitions ({completedRows.length})
           </summary>
-          <div className="border-t p-4">
+          <div className="border-t border-emerald-300 bg-card p-4 dark:border-emerald-900">
             {shownCompleted.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">No completed requisitions match your search.</p>
             ) : (
