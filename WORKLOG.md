@@ -1,3 +1,47 @@
+## 2026-08-31 · Stock labels: the barcode printed across the next label
+
+- **Owner's report:** *"overlapping bar code and qr code for printing"* — on Stock labels, each card's Code 128
+  ran out of its own box and over its neighbour, with the QR landing on top of the barcode beside it.
+
+### The label was always too small for what was drawn on it
+
+Both codes are generated at a **natural** size and injected as raw SVG. A Code 128 of an 8-character item code
+(`CAT00001`) is ~143 modules; at `moduleWidth: 1.8` that is **241px** — already wider than a label card in the
+4-up grid, which measures **203px**. Add a 75px QR beside it and the row needed 320px in a 203px box. Nothing
+clipped it, so it simply drew over the next label. On paper it was the same story: a 231px A4 column against a
+241px barcode.
+
+So this was never a spacing tweak — the artwork did not fit and never had.
+
+### Scaled to the card, and stacked so the bars stay thick
+
+- Both SVGs now scale to their container. They carry a `viewBox`, so `width:100%; height:auto` re-fits them
+  exactly.
+- The barcode is **stacked above** the QR instead of sharing its row. That is not cosmetic: it gives the barcode
+  the full card width. Sharing the row would leave it ~160px ≈ **0.30mm per module**, at the ragged edge of what
+  a scanner reads.
+- The QR is **capped** at 80px rather than stretched — a QR reads fine small, and a full-width one wastes label.
+- The card gets `overflow-hidden` and `min-w-0`, so nothing can bleed into a neighbour again whatever is drawn.
+- Printing drops to **3-up** (`print:grid-cols-3`). At 4-up an A4 column is ~180px and squeezes the bars to
+  ~0.33mm — readable, with no margin for a tired printer or a scuffed label.
+
+### The subtlety that made the first attempt fail
+
+The first fix put `[&>svg]:w-full` on a wrapper *around* the div the SVG was injected into. `[&>svg]` is a
+**direct-child** selector, so it matched nothing and the barcode kept its natural width — the page looked
+untouched. Caught by measuring rather than by looking: the check compares each `<svg>`'s bounding box against its
+card's and prints the spill.
+
+### Verified by measuring, on screen and on A4
+
+| | card | barcode | overflowing SVGs |
+| --- | --- | --- | --- |
+| screen 4-up, before | 203px | **241px** | **7** |
+| screen 4-up, after | 203px | 177px | **0** |
+| A4 print 3-up, after | 231px | 205px (**54.2mm**, ~0.38mm per module) | **0** |
+
+Checked with a supplier-barcode label in the set too (`CON000001`, GTIN `4806012345678`), since that label draws
+a third code and had the least room of all.
 ## 2026-08-31 · The two Completed boxes are told apart by colour
 
 - **Owner's instruction:** *"when collapsed make completed requisitions and completed PO different color to easily
