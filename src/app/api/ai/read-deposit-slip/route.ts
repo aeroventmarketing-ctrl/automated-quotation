@@ -9,16 +9,24 @@ import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { depositSlipReadSchema } from "@/lib/ai/schemas";
 import { AI_DEPOSIT_SLIP_READ_LIMIT } from "@/lib/ai/limits";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { getCounterSaleViewer } from "@/lib/counter-sale-access";
 import type { SlipValidation } from "@/lib/payment-slip";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+/**
+ * The proof belongs either to an order (`quotationId`) or to a counter sale
+ * (`counterSaleId`) — exactly one. Both keep a Payments Collected list of the
+ * same shape, so they read their slips through the same prompt; only where the
+ * file lives, who may read it, and where the read count is kept differ.
+ */
 const bodySchema = z.object({
-  quotationId: z.string(),
+  quotationId: z.string().optional(),
+  counterSaleId: z.string().optional(),
   path: z.string(),
   uploadedAt: z.string().optional(), // the proof's upload timestamp (used as the payment date for a BIR 2307)
-});
+}).refine((b) => !!b.quotationId !== !!b.counterSaleId, "Provide either quotationId or counterSaleId.");
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
@@ -61,36 +69,73 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  // The proof must belong to this order's sale uploads.
-  if (!body.path.startsWith(`sales/${body.quotationId}/`)) {
-    return NextResponse.json({ error: "That file doesn't belong to this order." }, { status: 400 });
+  const admin = isAdmin(user);
+
+  // Resolve which record this proof hangs off: an order or a counter sale. Each
+  // answers the same three questions — is the file ours, may this person read it,
+  // and how many reads has it spent — then takes the validation stamp at the end.
+  let subject: "order" | "sale";
+  let reads: number;
+  let persist: (stamp: SlipValidation, usedReads: number) => Promise<void>;
+
+  if (body.counterSaleId) {
+    subject = "sale";
+    if (!body.path.startsWith(`counter-sales/${body.counterSaleId}/`)) {
+      return NextResponse.json({ error: "That file doesn't belong to this sale." }, { status: 400 });
+    }
+    // Anyone who may use Counter Sales may read its slips — the same audience
+    // that records the payment in the first place.
+    const { allowed } = await getCounterSaleViewer();
+    if (!allowed) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+    const sale = await prisma.counterSale.findUnique({ where: { id: body.counterSaleId }, select: { slipReads: true } });
+    if (!sale) return NextResponse.json({ error: "Sale not found" }, { status: 404 });
+    reads = sale.slipReads;
+    // A counter sale keeps no classification blob, so only the count is kept —
+    // the figures are shown to the person reading and saved with the payment.
+    persist = async (_stamp, usedReads) => {
+      await prisma.counterSale.update({ where: { id: body.counterSaleId! }, data: { slipReads: usedReads } });
+    };
+  } else {
+    subject = "order";
+    // The proof must belong to this order's sale uploads.
+    if (!body.path.startsWith(`sales/${body.quotationId}/`)) {
+      return NextResponse.json({ error: "That file doesn't belong to this order." }, { status: 400 });
+    }
+
+    const quote = await prisma.quotation.findUnique({
+      where: { id: body.quotationId },
+      select: { id: true, preparedById: true, classification: true },
+    });
+    if (!quote) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+
+    // Same audience that may record a payment.
+    const roles = await getWorkflowRoles();
+    const allowed = admin
+      || quote.preparedById === user.id
+      || user.role === "ENGINEER"
+      || userHasWorkflowRole(roles, user.id, "accounting")
+      || userHasWorkflowRole(roles, user.id, "payment_approver");
+    if (!allowed) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+
+    const cls = ((quote.classification as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    reads = typeof cls.depositSlipReadCount === "number" ? cls.depositSlipReadCount : 0;
+    // Stamp the validation on the classification so the save action can enforce
+    // it and follow the machine/computer figures.
+    persist = async (stamp, usedReads) => {
+      const slipValidations = { ...((cls.slipValidations as Record<string, unknown>) ?? {}), [body.path]: stamp };
+      await prisma.quotation.update({
+        where: { id: body.quotationId },
+        data: { classification: { ...cls, slipValidations, depositSlipReadCount: usedReads } as unknown as Prisma.InputJsonValue },
+      });
+    };
   }
 
-  const quote = await prisma.quotation.findUnique({
-    where: { id: body.quotationId },
-    select: { id: true, preparedById: true, classification: true },
-  });
-  if (!quote) return NextResponse.json({ error: "Order not found" }, { status: 404 });
-
-  // Same audience that may record a payment.
-  const roles = await getWorkflowRoles();
-  const allowed = isAdmin(user)
-    || quote.preparedById === user.id
-    || user.role === "ENGINEER"
-    || userHasWorkflowRole(roles, user.id, "accounting")
-    || userHasWorkflowRole(roles, user.id, "payment_approver");
-  if (!allowed) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
-
-  const cls = ((quote.classification as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
-
-  // Cap the AI reads per order so figures are verified by hand instead of relying
-  // on repeated reads. Admins are exempt (no limit, and their reads don't consume
-  // the shared budget). The count is persisted on the classification.
-  const admin = isAdmin(user);
-  const reads = typeof cls.depositSlipReadCount === "number" ? cls.depositSlipReadCount : 0;
+  // Cap the AI reads per order / sale so figures are verified by hand instead of
+  // relying on repeated reads. Admins are exempt (no limit, and their reads don't
+  // consume the shared budget).
   if (!admin && reads >= AI_DEPOSIT_SLIP_READ_LIMIT) {
     return NextResponse.json({
-      error: `AI read limit reached (${AI_DEPOSIT_SLIP_READ_LIMIT} of ${AI_DEPOSIT_SLIP_READ_LIMIT} used for this order). Check the slip and enter the figures manually — or ask an admin.`,
+      error: `AI read limit reached (${AI_DEPOSIT_SLIP_READ_LIMIT} of ${AI_DEPOSIT_SLIP_READ_LIMIT} used for this ${subject}). Check the slip and enter the figures manually — or ask an admin.`,
       limitReached: true,
       reads,
       limit: AI_DEPOSIT_SLIP_READ_LIMIT,
@@ -145,8 +190,6 @@ export async function POST(req: NextRequest) {
       && date != null && amount != null && confidence >= CONFIDENCE_MIN,
     );
 
-    // Stamp the validation on the classification so the save action can enforce
-    // it and follow the machine/computer figures.
     const stamp: SlipValidation = {
       path: body.path,
       validated,
@@ -157,12 +200,8 @@ export async function POST(req: NextRequest) {
       readByName: user.name,
       readAt: new Date().toISOString(),
     };
-    const slipValidations = { ...((cls.slipValidations as Record<string, unknown>) ?? {}), [body.path]: stamp };
     const usedReads = admin ? reads : reads + 1; // admin reads don't consume the budget
-    await prisma.quotation.update({
-      where: { id: body.quotationId },
-      data: { classification: { ...cls, slipValidations, depositSlipReadCount: usedReads } as unknown as Prisma.InputJsonValue },
-    });
+    await persist(stamp, usedReads);
 
     const warnings = [...(r.warnings ?? [])];
     if (!validated) {

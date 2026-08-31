@@ -13,14 +13,15 @@ import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 import {
   counterTotals,
   coerceCounterDocs,
+  coerceCounterPayments,
   coerceCounterVatMode,
-  counterDocSlots,
+  counterFileSlots,
   formatCounterSaleNumber,
   isCashMethod,
   PAYMENT_METHODS,
   type CounterSaleVatMode,
 } from "@/lib/counter-sale";
-import type { SaleDoc } from "@/lib/sale";
+import type { SaleDoc, SalePayment } from "@/lib/sale";
 
 async function requireViewer() {
   const { user, allowed } = await getCounterSaleViewer();
@@ -366,7 +367,7 @@ export async function addCounterSaleDoc(id: string, slotKey: string, doc: SaleDo
   const sale = await prisma.counterSale.findUnique({ where: { id }, select: { docs: true, vatMode: true, status: true } });
   if (!sale) throw new Error("Sale not found.");
   if (sale.status === "VOID") throw new Error("This sale is void.");
-  const slots = counterDocSlots(sale.vatMode as CounterSaleVatMode);
+  const slots = counterFileSlots(sale.vatMode as CounterSaleVatMode);
   if (!slots.some((s) => s.key === slotKey)) throw new Error("Unknown document slot.");
   const docs = coerceCounterDocs(sale.docs);
   docs[slotKey] = [...(docs[slotKey] ?? []), { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt || new Date().toISOString() }];
@@ -385,6 +386,27 @@ export async function removeCounterSaleDoc(id: string, slotKey: string, path: st
     if (docs[slotKey].length === 0) delete docs[slotKey];
   }
   await prisma.counterSale.update({ where: { id }, data: { docs: docs as unknown as Prisma.InputJsonValue } });
+  revalidatePath(`/counter-sales/${id}`);
+}
+
+/**
+ * Save the Payments Collected list — the collections against this sale with
+ * their proof of payment attached (deposit slip / transfer confirmation / check
+ * photo). The same list an order carries, so a walk-in payment is evidenced the
+ * same way a manufactured order's is.
+ *
+ * The list is a RECORD of what was collected. It deliberately does NOT rewrite
+ * `amountPaid` — that is the figure booked when the sale was completed and it
+ * feeds the sales report; a proof attached afterwards must not silently restate
+ * the takings. The panel shows both, so a mismatch is visible rather than merged.
+ */
+export async function saveCounterSalePayments(id: string, payments: SalePayment[]): Promise<void> {
+  await requireViewer();
+  const sale = await prisma.counterSale.findUnique({ where: { id }, select: { status: true } });
+  if (!sale) throw new Error("Sale not found.");
+  if (sale.status === "VOID") throw new Error("This sale is void.");
+  const clean = coerceCounterPayments(payments);
+  await prisma.counterSale.update({ where: { id }, data: { payments: clean as unknown as Prisma.InputJsonValue } });
   revalidatePath(`/counter-sales/${id}`);
 }
 

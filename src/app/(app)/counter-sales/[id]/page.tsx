@@ -12,12 +12,15 @@ import {
   COUNTER_VAT_LABEL,
   counterDocSlots,
   coerceCounterDocs,
+  coerceCounterPayments,
   paymentMethodLabel,
   isCashMethod,
+  COUNTER_FINAL_PAYMENT_SLOT,
   type CounterSaleStatusKey,
   type CounterSaleVatMode,
 } from "@/lib/counter-sale";
 import { CounterSaleDocs } from "../counter-sale-docs";
+import { CounterSalePayments } from "../counter-sale-payments";
 import { CounterSaleActions } from "../counter-sale-actions";
 import { CounterSaleAdminEdit } from "../counter-sale-admin-edit";
 
@@ -52,6 +55,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
   const vatMode = sale.vatMode as CounterSaleVatMode;
   const slots = counterDocSlots(vatMode);
   const docs = coerceCounterDocs(sale.docs);
+  const payments = coerceCounterPayments(sale.payments);
   const nonCash = !isCashMethod(sale.paymentMethod);
   const uncleared = status === "COMPLETED" && !sale.paymentCleared;
 
@@ -154,7 +158,20 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Documents</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Payments collected, with the proof of each — the same list an order
+              carries, so a walk-in payment is evidenced the same way. */}
+          <CounterSalePayments
+            saleId={sale.id}
+            currency={sale.currency}
+            saleTotal={Number(sale.total)}
+            amountPaid={Number(sale.amountPaid)}
+            initialPayments={payments}
+            canEdit={status !== "VOID"}
+          />
+          <CounterSaleDocs saleId={sale.id} slots={[COUNTER_FINAL_PAYMENT_SLOT]} docs={docs} canEdit={status !== "VOID"} admin={admin} />
+
+          <div>
           <p className="mb-2 text-xs text-muted-foreground">
             {vatMode === "INCLUSIVE"
               ? "VAT-inclusive: Sales Invoice, Collection Receipt and Delivery Receipt (BIR 2307 optional)."
@@ -163,6 +180,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
               : "VAT-exclusive: Delivery Form and Acknowledgement Form (BIR 2307 optional)."}
           </p>
           <CounterSaleDocs saleId={sale.id} slots={slots} docs={docs} canEdit={status !== "VOID"} admin={admin} />
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -891,7 +891,9 @@ model CounterSale {
   paymentDueAt    DateTime? // post-dated check / expected clearing date
   clearedByName   String?
   clearedAt       DateTime?
-  docs            Json              @default("{}") // Record<string, SaleDoc[]> — SI / CR / DR / DF / AF / 2307
+  docs            Json              @default("{}") // Record<string, SaleDoc[]> — SI / CR / DR / DF / AF / 2307 / final payment proof
+  payments        Json              @default("[]") // SalePayment[] — collections with their proof of payment
+  slipReads       Int               @default(0) // AI "read slip" runs used on this sale (non-admins are capped)
   notes           String?
   createdAt       DateTime          @default(now())
   completedAt     DateTime?
