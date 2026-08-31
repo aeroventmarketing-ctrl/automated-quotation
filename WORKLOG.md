@@ -1,3 +1,57 @@
+## 2026-08-31 · Payments Collected, with the proof, on a counter sale
+
+- **Owner's request:** *"add 1st picture with details and same behavior to Counter Sales Documents box"* — the order
+  page's **Payments Collected** list, moved into the counter sale's **Documents** box.
+
+### What a counter sale could not do
+
+It recorded a payment *method* and a single `amountPaid`, and that was all. There was nowhere to put the GCash
+screenshot, the deposit slip or the photo of the check — the evidence a walk-in payment leaves behind. An order has
+carried that list for a long time; the counter had the sale but not the proof.
+
+### The same list, the same behaviour
+
+`counter-sale-payments.tsx` is the order panel's payment block at the counter: a row per collection (Down payment /
+Full payment / Progress billing / EWT withheld), its amount and date, its **proof** with view / download, the
+**read slip** AI button, and a trash button — under **+ Add payment**, teal until a full payment is recorded, and
+**Save payments**. Below it sits **Final payment proof (optional)**, in the same row style as the documents it
+now shares a card with.
+
+Two behaviours are carried over verbatim because they are the interesting ones:
+
+- **Auto-designate full payment.** The payment that makes the running total tally to the sale total flips from Down
+  to Full. It only ever promotes, never demotes — a figure someone already settled on isn't re-labelled behind them.
+- **The slip read never overwrites you.** An empty amount is filled from a machine-validated / computer-generated
+  slip; a figure you typed is kept and the disagreement is *reported* ("Slip reads ₱X but you entered ₱Y") for
+  admin / accounting to settle. Handwritten-only proofs are refused, as on an order.
+
+### What it deliberately does NOT do
+
+**It does not rewrite `amountPaid`.** That figure is booked when the sale completes and it feeds the sales report;
+a proof attached a day later must not silently restate the takings. The panel shows both and says so when they
+disagree — *"Recorded ₱7,000.00 of ₱10,000.00 · ₱3,000.00 not yet recorded · sale booked ₱10,000.00"* — so a gap is
+visible instead of merged away.
+
+### One route, two subjects
+
+`/api/ai/read-deposit-slip` now reads a slip for an order (`quotationId`) **or** a counter sale (`counterSaleId`) —
+one prompt, one set of bank-specific rules (BDO cash slips, UnionBank UBPP fees, BIR 2307), so the two never drift
+apart. Only three things differ per subject: where the file must live, who may read it, and where the read count is
+kept. The 3-read cap applies per sale exactly as it does per order, and admins stay exempt.
+
+### Migration — run this in Supabase SQL
+
+`0048_counter_sale_payments` adds two columns to `CounterSale`: `payments` (jsonb, `'[]'`) and `slipReads`
+(integer, `0`). Both are additive with defaults, and the file is idempotent (`ADD COLUMN IF NOT EXISTS`) — but
+**the Counter Sales page will not open until it is run**, because Prisma selects the new columns.
+
+### Verified by running it
+
+Applied the migration to a throwaway Postgres, booted the real app on the role harness and drove the panel in a
+browser: added a payment, keyed ₱6,000 against a ₱4,000 down payment on a ₱10,000 sale, saved, and read the row
+back from the database — the second row had promoted itself to `full`, and `amountPaid` was untouched. The page
+opens for Sales, Warehouse, Accounting and the Payment Approver; the Purchaser is still redirected away from
+Counter Sales, as before.
 ## 2026-08-31 · Fix: the job-order eye view showed the template's ghost, not your order
 
 - **Owner's bug report:** *"In orders, when eye view is pressed, drive motor is always 15HP but in Print Job Order

@@ -4,7 +4,7 @@
  * order workflow — a counter sale is a cash sale of finished goods off the shelf.
  */
 import { config } from "@/lib/config";
-import type { SaleDoc } from "@/lib/sale";
+import type { SaleDoc, SalePayment, PaymentKind } from "@/lib/sale";
 
 /** Round to 2 decimals (kept local so this module stays client-bundle-safe). */
 function round2(n: number): number {
@@ -124,6 +124,19 @@ export function counterDocSlots(vatMode: CounterSaleVatMode): CounterDocSlot[] {
   ];
 }
 
+/**
+ * Proof of the final payment. Not one of the documents handed to the client, so
+ * it isn't in `counterDocSlots()` — it sits under the Payments Collected list,
+ * the same place it sits on an order. Kept in the same `docs` blob, which is why
+ * the save actions accept it alongside the handover slots.
+ */
+export const COUNTER_FINAL_PAYMENT_SLOT: CounterDocSlot = { key: "final_payment", label: "Final payment proof", optional: true };
+
+/** Every slot a file may be filed under: the handover documents + final payment proof. */
+export function counterFileSlots(vatMode: CounterSaleVatMode): CounterDocSlot[] {
+  return [...counterDocSlots(vatMode), COUNTER_FINAL_PAYMENT_SLOT];
+}
+
 /** Coerce a stored docs blob into a clean Record<slotKey, SaleDoc[]>. */
 export function coerceCounterDocs(v: unknown): Record<string, SaleDoc[]> {
   const out: Record<string, SaleDoc[]> = {};
@@ -136,6 +149,41 @@ export function coerceCounterDocs(v: unknown): Record<string, SaleDoc[]> {
     if (docs.length) out[k] = docs;
   }
   return out;
+}
+
+const PAYMENT_KINDS: PaymentKind[] = ["down", "full", "progress", "ewt"];
+
+/**
+ * Coerce a stored payments blob into a clean SalePayment[]. Same shape as an
+ * order's payments (`SalePayment`) so the two lists read and behave alike —
+ * including "ewt", the tax the client withheld rather than cash received.
+ */
+export function coerceCounterPayments(v: unknown): SalePayment[] {
+  if (!Array.isArray(v)) return [];
+  const out: SalePayment[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== "object") continue;
+    const p = raw as Record<string, unknown>;
+    if (typeof p.id !== "string" || !p.id) continue;
+    const amount = Number(p.amount);
+    const proof = p.proof && typeof p.proof === "object" && typeof (p.proof as SaleDoc).path === "string"
+      ? { path: String((p.proof as SaleDoc).path), name: String((p.proof as SaleDoc).name ?? "file"), uploadedAt: String((p.proof as SaleDoc).uploadedAt ?? "") }
+      : null;
+    out.push({
+      id: p.id,
+      kind: PAYMENT_KINDS.includes(p.kind as PaymentKind) ? (p.kind as PaymentKind) : "down",
+      amount: Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0,
+      date: typeof p.date === "string" ? p.date.slice(0, 10) : "",
+      proof,
+      ...(typeof p.note === "string" && p.note ? { note: p.note } : {}),
+    });
+  }
+  return out;
+}
+
+/** Total collected across the recorded payments (EWT included — it settles the deal). */
+export function counterCollected(payments: SalePayment[]): number {
+  return round2(payments.reduce((a, p) => a + (Number(p.amount) || 0), 0));
 }
 
 /** Next counter-sale number, e.g. "CS-2026-00001". Claim inside a transaction. */
