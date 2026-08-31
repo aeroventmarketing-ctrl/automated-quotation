@@ -31,18 +31,31 @@ function Label({ item }: { item: LabelItem }) {
       <div className="text-xs text-muted-foreground">
         {[item.sku ? `SKU ${item.sku}` : null, item.location ? `Loc ${item.location}` : null, item.unit].filter(Boolean).join(" · ")}
       </div>
-      <div className="mt-1 flex items-center justify-center gap-3">
-        {/* Item Code (SKU) — Code 128 + QR, scannable by any scanner. */}
-        {/* eslint-disable-next-line react/no-danger */}
-        <div className="overflow-hidden" dangerouslySetInnerHTML={{ __html: bar }} />
-        {/* eslint-disable-next-line react/no-danger */}
-        <div dangerouslySetInnerHTML={{ __html: qr }} />
-      </div>
+      {/* Item Code (SKU) — Code 128 above, QR beneath.
+          These SVGs are generated at their NATURAL size: a Code 128 of an
+          8-character item code is ~143 modules ≈ 257px at moduleWidth 1.8, which
+          is already wider than a label card in a 4-up grid. Side by side with the
+          QR they overflowed the card and printed across the neighbouring label.
+          So: stacked, and each SVG is scaled to its container
+          (`[&>svg]:w-full [&>svg]:h-auto` works because both carry a viewBox).
+          Stacking is not cosmetic — it gives the barcode the FULL card width,
+          which is what keeps its bars thick enough to scan. Sharing the row with
+          the QR would leave it about 160px, ~0.30mm per module, at the ragged
+          edge of what a scanner reads. */}
+      {/* The scaling class sits on the SAME element the SVG is injected into —
+          `[&>svg]` is a direct-child selector, so a wrapper around the wrapper
+          silently matches nothing and the SVG keeps its natural width. */}
+      {/* eslint-disable-next-line react/no-danger */}
+      <div className="mt-1 w-full [&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: bar }} />
+      {/* The QR is capped rather than stretched — a QR reads fine small, and a
+          full-width one would waste the label. */}
+      {/* eslint-disable-next-line react/no-danger */}
+      <div className="w-20 max-w-full [&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: qr }} />
       {extBar && (
-        <div className="mt-1 flex flex-col items-center">
+        <div className="mt-1 flex w-full flex-col items-center">
           <div className="text-[9px] uppercase tracking-wide text-muted-foreground">Barcode {item.barcode}</div>
           {/* eslint-disable-next-line react/no-danger */}
-          <div className="overflow-hidden" dangerouslySetInnerHTML={{ __html: extBar }} />
+          <div className="w-full [&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: extBar }} />
         </div>
       )}
     </>
@@ -80,13 +93,19 @@ export function LabelSheet({ items, initialSelected }: { items: LabelItem[]; ini
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+      {/* Three-up on paper, not four. A printed A4 column at 4-up is ~180px wide,
+          which squeezes a Code 128 to ~0.33mm per module — readable, but with no
+          margin for a tired printer or a scuffed label. Three columns give ~0.44mm
+          and cost only a little paper. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 print:grid-cols-3">
         {items.map((i) => {
           const hideOnPrint = onlySelected && !selected.has(i.id);
           return (
             <label
               key={i.id}
-              className={`flex cursor-pointer flex-col items-center gap-1 rounded-md border p-3 text-center break-inside-avoid ${selected.has(i.id) ? "ring-2 ring-primary" : ""} ${hideOnPrint ? "print:hidden" : ""}`}
+              // `overflow-hidden` + `min-w-0`: belt and braces, so nothing can
+              // ever bleed into the neighbouring label again.
+              className={`flex min-w-0 cursor-pointer flex-col items-center gap-1 overflow-hidden rounded-md border p-3 text-center break-inside-avoid ${selected.has(i.id) ? "ring-2 ring-primary" : ""} ${hideOnPrint ? "print:hidden" : ""}`}
             >
               <input type="checkbox" className="self-start accent-[#ED1C24] print:hidden" checked={selected.has(i.id)} onChange={() => toggle(i.id)} />
               <Label item={i} />
