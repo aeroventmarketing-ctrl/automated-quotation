@@ -1,3 +1,71 @@
+## 2026-08-31 · Fix: the job-order eye view showed the template's ghost, not your order
+
+- **Owner's bug report:** *"In orders, when eye view is pressed, drive motor is always 15HP but in Print Job Order
+  button, job order is correct. This error exist in all roles at eye view button."*
+
+### It was not the drive motor, and not the roles
+
+The two screenshots gave it away: the preview was headed **AFBM-JO2600055, 6 July 2026** while the row and the
+download were **AFBM-JO2600084, 29 August 2026**. The preview was not getting one field wrong — it was showing an
+**entirely different job order**, the same one every time, for everybody. "Always 15 HP" was one visible symptom of
+a whole ghost form.
+
+### Where the ghost lives
+
+A Fans & Blowers job order is a printable sheet of ~46 formulas over a hidden Source sheet, and Source holds ~19
+VLOOKUPs of its own. Every one of those cells ships with a **cached result** in the template — the values that were
+on screen when the template was last saved in Excel. The builder writes the new inputs into Source and sets
+`fullCalcOnLoad`:
+
+- **Excel** honours that flag, recalculates on open, and the **download has always been right**.
+- **LibreOffice**, which renders the eye-view headless, does **not** recalculate OOXML by default. It printed the
+  cached values — `AFBM-JO2600055`, 15 HP, belt drive — for every order ever previewed.
+
+`xlsx-to-html.ts` already had the root cause written down and worked around it for **single-reference** formulas
+(JO#, date, project), falling back to the cache for composite ones. The motor line is composite —
+`TRIM(TEXT(Source!D88,"# ?/?"))&" HP, "&…` — which is exactly why the HP was the field that showed.
+
+### The fix, and where it is NOT
+
+`dropStaleFormulaCaches` in `lib/job-order-response.ts` strips every `<v>` that follows an `<f>`, on **every**
+sheet, on the **view path only**. A cell with no cached result cannot be printed from cache, so the renderer has to
+compute it.
+
+- **Every sheet**, because the hidden Source sheet caches its VLOOKUPs too: clearing only the printable sheet would
+  have recomputed the form from stale intermediate values and looked fixed while still being wrong.
+- **View only.** The download opens in Excel, which already recalculates. Changing the file people open in the tool
+  it was written for is risk without benefit, and a test asserts it stays byte-for-byte identical.
+- **Not in the builder, and not in the templates.** `src/lib/excel/job-order-xlsx.ts` is Phase 2 machinery and the
+  templates are binaries; the response layer is document rendering, touches no workflow, and fixes all four JO
+  routes plus the standalone tool at once.
+
+### Verified against a real LibreOffice, not inferred
+
+`libreoffice-calc` was installed in the sandbox to reproduce it properly. Converting the builder's own output:
+
+| | JO number | Drive |
+| --- | --- | --- |
+| before | **2600055** (the ghost) | Belt |
+| after | **2600084** (correct) | Direct |
+
+Same builder, same inputs; the only change is the stripped caches.
+
+### Verified — 4 new tests
+
+- The builder's output still carries the ghost, and the view path removes **every** cached result.
+- The download is **byte-for-byte unchanged**.
+- The HTML preview (what runs when no converter is configured) no longer contains `2600055` and does contain
+  `2600084`.
+- **All six** Fans & Blowers templates ship the same ghost and all six are cleared — the bug was never about one
+  form.
+
+**Known trade-off:** on the HTML fallback, composite formulas now render **empty** instead of stale. A blank field
+is visibly incomplete; a stale one reads as authoritative. Where the LibreOffice converter is configured — the
+production path — everything computes and nothing is blank.
+
+- Full suite **165 tests, 164 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched.
+  Typecheck, lint and build clean. No migration.
+
 ## 2026-08-31 · An approval record that survives the approval
 
 - **Owner's instruction:** *"build it"* — closing the gap the last entry flagged: the pending card shows a request
