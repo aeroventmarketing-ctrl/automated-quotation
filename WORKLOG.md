@@ -1,3 +1,27 @@
+## 2026-08-31 · The two Completed boxes are told apart by colour
+
+- **Owner's instruction:** *"when collapsed make completed requisitions and completed PO different color to easily
+  determine the box."*
+
+Collapsed, the two sections were the same grey bar with near-identical text and — on the owner's own screens —
+near-identical counts: **Completed department POs (420)** on Purchasing, **Completed requisitions (422)** on
+Requisitions. Two pages that already look alike, distinguished only by a word.
+
+| box | page | colour |
+| --- | --- | --- |
+| **Completed requisitions** | Requisitions | **green** — emerald border / tint / text |
+| **Completed department POs** | Purchasing | **indigo** — indigo border / tint / text |
+
+Neither hue collides with something that already means something here: amber is *awaiting approval*, sky and
+violet are the alternating order-group cards in Purchasing, red is the brand. Green reads as *finished*, which is
+what the box holds.
+
+Both carry a dark variant (`emerald-950/40` / `indigo-950/40` with 200-weight text), checked by toggling the
+app's `dark` class rather than assumed — the app switches on a class, not on `prefers-color-scheme`, so a
+media-query check would have silently proved nothing. Expanded, the body returns to `bg-card` so the rows inside
+read normally and only the frame stays coloured.
+
+Each block carries a comment naming its twin and its colour, so a future restyle of one has to notice the other.
 ## 2026-08-31 · A Budgeted tab and a Completed section on Requisitions
 
 - **Owner's instruction:** *"In requisitions tab add budgeted tab same as purchasing tab. At the bottom of
