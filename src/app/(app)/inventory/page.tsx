@@ -68,8 +68,10 @@ export default async function InventoryPage() {
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
         kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status, proof,
         proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
-        warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
-        approverByName: a.approverByName,
+        proposedRole: a.proposedRole,
+        warehouseByName: a.warehouseByName, warehouseAt: a.warehouseAt?.toISOString() ?? null,
+        purchaserByName: a.purchaserByName, purchaserAt: a.purchaserAt?.toISOString() ?? null,
+        approverByName: a.approverByName, approverAt: a.approverAt?.toISOString() ?? null,
         nextSlot,
         canApproveNext:
           nextSlot === "warehouse" ? viewerWarehouse : nextSlot === "purchaser" ? viewerPurchaser : nextSlot === "approver" ? viewerPriceOwner : false,

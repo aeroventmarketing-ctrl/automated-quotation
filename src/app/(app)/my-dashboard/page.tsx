@@ -137,8 +137,10 @@ export default async function MyDashboardPage() {
         kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status,
         proof: a.kind === "TRANSFER" ? coerceStockDoc((a.payload as { proof?: unknown } | null)?.proof) : null,
         proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
-        warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
-        approverByName: a.approverByName,
+        proposedRole: a.proposedRole,
+        warehouseByName: a.warehouseByName, warehouseAt: a.warehouseAt?.toISOString() ?? null,
+        purchaserByName: a.purchaserByName, purchaserAt: a.purchaserAt?.toISOString() ?? null,
+        approverByName: a.approverByName, approverAt: a.approverAt?.toISOString() ?? null,
         nextSlot: nextStockActionSlot(a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt),
         canApproveNext: (() => {
           const slot = nextStockActionSlot(a.proposedRole, a.warehouseAt, a.purchaserAt, a.approverAt);

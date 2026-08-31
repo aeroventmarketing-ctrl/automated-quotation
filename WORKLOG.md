@@ -1,3 +1,49 @@
+## 2026-08-31 · The approval card carries the record: designation, name, date, time
+
+- **Owner's instruction:** *"Put the details of approval such as date, time, designation and name of approver."*
+- **No migration and no new data.** `warehouseAt`, `purchaserAt` and `approverAt` have been stamped on every
+  sign-off since the chain was built; the card simply never showed them. It printed
+  *"Warehouse: Joemel Jamero  Purchaser: Allan Ramos  Final approver: —"* — names with no dates, no designations,
+  and a dash for a step that on some chains is never taken at all.
+
+### What the card says now
+
+```
+AWAITING · Admin / Payment Approver    Stock adjustment  Receive +6 pc · BELT B-50 (now 4 pc) · delivery
+Raised by Willy Ho · Warehouseman · Aug 31, 2026, 10:47 AM
+Purchaser · ✓ Allan Ramos · Aug 31, 2026, 10:47 AM
+Admin / Payment Approver · awaiting approval
+```
+
+- One line per step, **in the order the chain takes them**, each with the office, the person and the stamp.
+- **The proposer's own step is the "Raised by" line, not a second entry in the trail.** It used to appear twice —
+  "Proposed by Joemel Jamero" and "Warehouse: Joemel Jamero" — which read as though one person had both raised and
+  approved the same request.
+- A step the chain does not use is **not printed**. `stockActionSignatures()` follows the same rule as
+  `nextStockActionSlot`, so a Purchaser's request shows no Warehouse line rather than an empty one waiting for a
+  signature that will never be taken. Both read from `proposedRole`, so they cannot disagree.
+
+### Dates
+
+Fixed to `en-PH` / `Asia/Manila`. A locale-dependent format renders differently on the server and in the browser
+and would hydrate mismatched; the year is included because an approval record without one is not a record.
+
+### Verified
+
+- 4 new tests on the trail: the Purchaser-then-owner order on a Warehouse request with its timestamp; the
+  proposer's own step excluded; **no Warehouse line on any chain**; an unsigned step carrying no name and no time.
+- Seen rendered, as the Payment Approver, through `scripts/role-harness.mjs` — the screenshot above is the harness
+  paying for itself a second time.
+- **155 tests, 154 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean.
+
+### One gap this exposes, not closed here
+
+The card lives on the **pending** request. The moment the last signature lands, the request applies and the card
+disappears — so the completed record of who approved what, and when, is visible only while it is still waiting.
+`ActivityLog` keeps a one-line summary, not the signatures. **An approval history that survives the approval is a
+separate piece of work; say the word.**
+
 ## 2026-08-31 · A capability grid and a role harness, and the bug they found
 
 - **Owner's question:** *"there is always an instance wherein we repair a feature, while repairing such feature
