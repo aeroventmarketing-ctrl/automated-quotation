@@ -1,3 +1,61 @@
+## 2026-08-31 · Requisitions for the Payment Approver, and the notification they can act on
+
+- **Owner's instruction:** *"enable requisitions for payment approver and check if the notification can be
+  approved by payment approver."* Rey Gil, the Payment Approver, was invited by the Requisitions tab and then met
+  *"You don't have access to raise department requisitions. Ask an admin for a production-head or purchaser role."*
+
+### Both gates, one commit
+
+The refusal lives in two places, and they have to move together or the form appears and Submit throws:
+
+- `requisitions/page.tsx` — `officeRaiser`, which decides whether the page opens.
+- `createDepartmentRequisition` — the server's own Office rule, re-checked on submit.
+
+The Payment Approver now passes both, for their own department (**Office**), like Accounting and the other
+office-type raisers. They pick no other department — that stays with the Purchaser, Technical Head, Logistics and
+admin.
+
+### The notification can be approved — verified by clicking it
+
+Raised both kinds as Rey Gil and followed each through:
+
+| raised | lands at | whose approval |
+| --- | --- | --- |
+| `BOND PAPER A4` | **APPROVED** (ordinary Office item — no Plant Manager step) | **Payment Approver** (`approve_po`) |
+| `DUCT ANGLE CORNER GA#18` | **PENDING_APPROVAL** (in-house duct hardware) | **Plant Manager** first |
+
+My Dashboard raised *"Purchasing · Requisition · Office — Approve purchase"* for Rey Gil. Clicking the
+notification itself landed on `/purchasing?req=…`, on the right card, carrying **Approve Purchase / Reject**.
+The click stamped **"Purchase order approved — Rey Gil (Payment Approver)"** and moved it to *"Approved —
+awaiting Purchase Order."* So: **yes, the notification is actionable by the Payment Approver.**
+
+The separation holds. On the duct requisition — still `PENDING_APPROVAL` — the Payment Approver gets no Approve
+at all, only Cancel (theirs as the requestor); the Plant Manager gets Approve / Reject. The Plant Manager's own
+dashboard raised that one, not the other.
+
+### Worth the owner's eye: this lets the Payment Approver approve their own requisition
+
+An ordinary Office requisition starts at `APPROVED`, which is precisely the Payment Approver's `approve_po` step
+— so raising one and approving it are the same person's two clicks, with no second party in between. That is
+inherent in giving the final approver a requisition form, not a defect in this change, and the trail records both
+lines under their name. Flagged, not changed: whether it needs a second signature is the owner's call.
+
+### The harness now watches this page too, and found two more roles in the same state
+
+`/requisitions` joins the probe list (`open` = the page lets you in, `form` = the New-requisition card is
+offered). Rey Gil reads `open=true form=true` where the report started with a refusal.
+
+A probe cannot see the server's re-check, so each `form=true` role was submitted by hand — which turned up the
+identical bug still live for two others:
+
+| | page | submit |
+| --- | --- | --- |
+| Accounting (Ana Cruz) | form offered | **"You don't have access to raise a requisition."** |
+| Engineer (Elena Cruz) | form offered | **"You don't have access to raise a requisition."** |
+
+Both are in the page's `officeRaiser` list and neither is in the server's Office rule. The fix could go either
+way — grant them, or stop offering them the form — and both are a widening/narrowing decision, so they are
+reported rather than chosen.
 ## 2026-08-31 · The Engineer can open the Products tab they were already being offered
 
 - **Owner's instruction:** *"let the engineer allowed by the page."*
