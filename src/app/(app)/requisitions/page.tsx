@@ -28,9 +28,14 @@ export default async function RequisitionsPage() {
   // Which departments the viewer heads.
   const ownDeptKeys = viewer == null ? [] : PRODUCTION_DEPTS.filter((d) => has(deptRole(d.key) as WorkflowRoleKey)).map((d) => d.key);
   // Office-type raisers (accounting, plant manager, warehouse, logistics,
-  // engineers, sales) may raise requisitions for their own department.
+  // engineers, sales, the Payment Approver) may raise requisitions for their own
+  // department. The Payment Approver is here on the owner's instruction —
+  // *"enable requisitions for payment approver"* — and is granted in
+  // `createDepartmentRequisition` in the same commit, so the form and the Submit
+  // agree.
   const officeRaiser =
-    isSales || isEngineer || has("accounting") || has("plant_manager") || has("warehouse") || has("logistics") || has("technical_head");
+    isSales || isEngineer || has("accounting") || has("payment_approver") || has("plant_manager") ||
+    has("warehouse") || has("logistics") || has("technical_head");
   const canRaise = admin || purchaser || officeRaiser || ownDeptKeys.length > 0;
 
   if (!canRaise) {

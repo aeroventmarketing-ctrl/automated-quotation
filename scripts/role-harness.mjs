@@ -64,6 +64,19 @@ const PROBES = [
     record: (t) => t.includes("CUTTING DISC"),
     signatures: (t) => t.includes("Rey Gil") && t.includes("Allan Ramos"),
   } },
+  // Requisitions has the same nav-offers/page-refuses shape as the catalogue
+  // screens: the tab is open to every base role, and the page decides. The
+  // Payment Approver hit the refusal after being invited by the nav.
+  //
+  // `open` is the page letting you in; `form` is the page offering the New
+  // department requisition card. Neither proves the SUBMIT will be accepted —
+  // `createDepartmentRequisition` re-checks the role server-side, and an Office
+  // requisition raised by someone it doesn't recognise throws. A probe can't see
+  // that without posting, so a `form=true` role is worth submitting as by hand.
+  { path: "/requisitions", label: "reqs", checks: {
+    open: (t) => !t.includes("have access to raise department requisitions"),
+    form: (t) => t.includes("New department requisition"),
+  } },
   { path: "/products", label: "prod", checks: {
     open: (t) => !t.includes("don't have access to the product list"),
     price: (t) => t.includes("₱"),

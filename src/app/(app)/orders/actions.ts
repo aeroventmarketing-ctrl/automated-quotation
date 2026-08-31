@@ -1211,9 +1211,15 @@ export async function createDepartmentRequisition(
   const dept = chosen ?? requestorDeptKey((role) => userHasWorkflowRole(roles, user.id, role as WorkflowRoleKey));
   const isOffice = dept === OFFICE_DEPT_KEY;
   const purchaserOrAdmin = isAdmin(user) || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey);
-  // Office requisitions are for Sales, Purchaser, Logistics, the Technical Head
-  // or admin — not Engineers or other office roles with no requisition duty.
-  const allowed = isOffice ? purchaserOrAdmin || user.role === "SALES" || canPickAnyDept : true;
+  // Owner's instruction: *"enable requisitions for payment approver."* They ran
+  // into the page refusing them outright. Granted here as well as on the page —
+  // the two gates have to move together, or the form appears and the Submit
+  // throws.
+  const isApprover = userHasWorkflowRole(roles, user.id, "payment_approver" as WorkflowRoleKey);
+  // Office requisitions are for Sales, Purchaser, Logistics, the Technical Head,
+  // the Payment Approver or admin — not Engineers or other office roles with no
+  // requisition duty.
+  const allowed = isOffice ? purchaserOrAdmin || isApprover || user.role === "SALES" || canPickAnyDept : true;
   if (!allowed) throw new Error("You don't have access to raise a requisition.");
 
   const cleanItems: MRFItem[] = (items ?? [])
