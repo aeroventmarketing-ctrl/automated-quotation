@@ -1,3 +1,50 @@
+## 2026-08-31 · The Plant Manager can see what they are holding up, and the requestor knows who to chase
+
+- **Owner's report:** *"error when purchaser make a requisitions"* — a Purchaser's Office requisition for
+  `DUCT ANGLE CORNER GA#18` sitting at Pending, reading *"Awaiting Plant Manager approval."*
+- **It wasn't an error.** An Office requisition is normally created already `APPROVED` and goes straight to the
+  Purchaser for a PO. The exception is **in-house duct hardware** (Duct Angle corner / TDC Cleat / S-clip /
+  C-clip) — stock Fans & Blowers *produces*, so it isn't a purchase at all but a release of Fans's own goods,
+  and the Plant Manager authorises that first. The test item hit that rule exactly. Approved by the owner to
+  fix the two things around it that were genuinely wrong.
+
+### The approver could not see the thing they were approving
+
+The Requisitions page showed admins and the Purchaser everything, department heads their own department, and
+everybody else **only what they raised themselves**. The Plant Manager approves *every* department requisition
+and heads *no* department — so they landed in that last bucket and their list came up empty. A requisition
+whose note named them as the hold-up was invisible on the page it was raised from.
+
+They were never actually stuck: My Dashboard raised *"Requisition · Office — Approve purchase"* and Purchasing
+carried the buttons. But the one page that says "requisitions" showed them nothing, which is a trap, not a route.
+
+They now see the ones **waiting on them** (`PENDING_APPROVAL`) and the ones **they have already decided**
+(`decidedById`). The second half matters: without it, approving a requisition made the row vanish from the
+approver's own screen. Everyone else's scope is byte-for-byte what it was.
+
+### "Awaiting Plant Manager approval." named nobody
+
+Every other rung of the chain names the person — *"AWAITING APPROVAL · Payment Approver (Rey Gil)"*. The three
+pending-approval notes were flat grey text with no name, so the requestor had nobody to chase and no way to
+notice the worse case: **that the role is unassigned**, which strands the request silently. All three now render
+the same `ApproverHighlight` as the rest of the chain, reading
+**"AWAITING APPROVAL · Plant Manager (Pedro Mancia)"** (plus *"— on the order's Materials tab"* on the two
+order-linked variants).
+
+### Verified by running it, both before and after
+
+Booted the app on the role harness with a real Plant Manager and raised the owner's exact requisition as the
+Purchaser:
+
+| | before | after |
+| --- | --- | --- |
+| Plant Manager · /requisitions | **row not on the page** | row + **Approve Material Request / Reject** |
+| Purchaser · /requisitions | "Awaiting Plant Manager approval." | "AWAITING APPROVAL · Plant Manager (Pedro Mancia)" |
+| Warehouse, Sales · /requisitions | not visible | not visible (unchanged) |
+
+Then approved it from that page: the row stayed put under **Approved** and re-pointed itself at
+*"AWAITING APPROVAL · Payment Approver (Rey Gil) — process in Purchasing"*. The order-linked MRF variants of the
+note were checked on both `/purchasing` and an order page; neither still contains the old flat sentence.
 ## 2026-08-31 · Payments Collected, with the proof, on a counter sale
 
 - **Owner's request:** *"add 1st picture with details and same behavior to Counter Sales Documents box"* — the order
