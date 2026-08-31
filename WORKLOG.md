@@ -1,3 +1,53 @@
+## 2026-08-31 · A Budgeted tab and a Completed section on Requisitions
+
+- **Owner's instruction:** *"In requisitions tab add budgeted tab same as purchasing tab. At the bottom of
+  budgeted tab add a completed requisitions same arrangement and behavior as in the purchasing tab. All completed
+  requisitions will show in completed requisitions. To be considered completed it must be received and add to
+  stock by the warehouse."*
+
+### Budgeted — the same split, by the same rule
+
+`Budgeted` is a display-only split of the `Approved` bucket, lifted verbatim from the Purchasing workspace: once
+the voucher & check are **SIGNED** (`VOUCHER_SIGNED` onward) the money is committed, so the request leaves
+Approved. Nothing about the chain changes — no status, no step, no gate. Only which pill a row sits under.
+
+### Completed — the last rung, and nowhere else
+
+"Completed" is exactly the owner's definition: `COMPLETED`, which the chain only reaches through the Warehouse's
+**Receive & Add Stock** (`PLANT_APPROVED → COMPLETED`). Those rows leave the tabs entirely for a collapsed
+**Completed requisitions (n)** section at the bottom of the page — the same `<details>` treatment, count and
+search behaviour as *Completed department POs* in Purchasing, and in the same place: below every tab, independent
+of which one is selected. So it reads as "the bottom of Budgeted" from where the owner was standing, and a
+finished requisition never vanishes from a tab you were last looking at.
+
+They leave the tabs rather than appearing twice, which is what *"all completed requisitions will show in
+completed requisitions"* asks for — `All` now means everything still moving.
+
+**One exception, copied from Purchasing:** a completed requisition still carrying an **unresolved supplier
+return** stays in the tabs, because the replacement is still being chased and its buttons are still live.
+
+### Verified by running it — one requisition per bucket
+
+Seeded twelve department requisitions across every status and read the tabs in a browser:
+
+| tab | count | what landed there |
+| --- | --- | --- |
+| Pending | 1 | PAPER CLIPS (`PENDING_APPROVAL`) |
+| Approved | 3 | STAPLER (`APPROVED`), MASKING TAPE (`APPROVED` + `approve_po`), PRINTER INK (`VOUCHER_READY`) |
+| **Budgeted** | **4** | GRINDING DISC (`VOUCHER_SIGNED`), WELDING ROD (`PURCHASED`), SAFETY GLOVES (`PLANT_APPROVED`), **BELT B-50 — `COMPLETED` but with an open return** |
+| Rejected · Cancelled | 1 · 1 | |
+| All | 10 | everything still moving |
+| **Completed requisitions** | **(2)** | NIHONBOND #18, CUTTING DISC 4in |
+
+Checked as Purchaser, Warehouse and Admin (all ten/two) and as the Payment Approver, who correctly still sees
+only what they raised.
+
+### A stray control character, removed in passing
+
+`requisitions-list.tsx` carried a literal **SOH (`\x01`)** byte inside the search separator
+(`.join(" \x01 ")`) — the only such byte in the repository, and invisible in every editor. Harmless (it only ever
+separated fields for substring matching) but it defeats exact-text edits and searches. The line was being
+rewritten anyway; the byte is gone with it.
 ## 2026-08-31 · Requisitions for the Payment Approver, and the notification they can act on
 
 - **Owner's instruction:** *"enable requisitions for payment approver and check if the notification can be
