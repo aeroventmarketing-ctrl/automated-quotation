@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canViewPrices, canViewSupplier, canEditPrices } from "@/lib/price-visibility";
-import { isCataloguePriceOwner } from "@/lib/price-authority";
+import { getWorkflowRoles } from "@/lib/workflow-roles";
+import { productsAccess } from "@/lib/catalogue-access";
 import { Card, CardContent } from "@/components/ui/card";
 import { getProducts, type ProductRow } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -19,36 +18,15 @@ import { PendingProductChanges } from "./pending-product-changes";
 
 export const dynamic = "force-dynamic";
 
-const VIEW_ROLES: WorkflowRoleKey[] = ["purchaser", "warehouse", "plant_manager", "payment_approver", "accounting", "logistics", "technical_head", "prod_head_fans", "prod_head_duct", "prod_head_accessories", "prod_head_motor"];
-
 export default async function ProductsPage() {
   const [viewer, assignments, suppliers] = await Promise.all([getCurrentUser(), getWorkflowRoles(), getSuppliers().catch(() => [])]);
+  // Every rule below lives in `lib/catalogue-access.ts` and is asserted for every
+  // role at once in `catalogue-access.test.ts` — see that file for the policy.
+  const a = productsAccess(viewer, assignments);
+  const { canView, canManage, showPrices, showSuppliers } = a;
   const admin = isAdmin(viewer);
-  const has = (r: WorkflowRoleKey) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r);
-  // The Purchaser, the Payment Approver or an admin may add/edit/remove products.
-  // Other roles (Warehouse, Plant Manager, etc.) can view the list but not change
-  // it. Sales are blocked from the Products page entirely (they use the sales
-  // dashboard's Check-availability tool for name / quantity / selling price).
-  //
-  // The Payment Approver was missing here, the same omission that shut them out
-  // of Inventory: `requireProductManager` names them on the server, and they
-  // already had the + Add product button (it follows the price owner), so they
-  // could add a product and then not edit it.
-  const isSales = viewer?.role === "SALES";
-  const canManage = !isSales && (admin || has("purchaser") || has("payment_approver"));
-  const canView = !isSales && (canManage || VIEW_ROLES.some(has));
-  // Supplier prices are commercial data — Purchaser, Engineers, Accounting and
-  // admins only. Other viewers (Warehouse, Plant Manager, Logistics, …) see the
-  // products and their suppliers but not the prices.
-  const showPrices = canViewPrices(viewer, assignments);
-  // Everyone who can open this page keeps seeing prices; only the Admin /
-  // Payment Approver may change one (see lib/price-authority, which enforces the
-  // same rule on the server).
-  const editPrices = canEditPrices(viewer, assignments);
-  // Supplier names are restricted the same way as on the purchasing surfaces —
-  // Purchaser, Accounting, Payment Approver, Engineers and admins only. The Plant
-  // Manager and other monitoring roles see the products but not their suppliers.
-  const showSuppliers = canViewSupplier(viewer, assignments);
+  const editPrices = a.canEditPrices;
+  const priceOwner = a.isPriceOwner;
 
   if (!canView) {
     return (
@@ -71,7 +49,6 @@ export default async function ProductsPage() {
   // Product adds / saves / removals parked for the price owner. Everyone who can
   // manage products sees the queue — the proposer has to know their save is
   // waiting, not lost — but only the Admin / Payment Approver may decide one.
-  const priceOwner = isCataloguePriceOwner(viewer, assignments);
   let pendingChanges: ProductChangeView[] = [];
   if (canManage || priceOwner) {
     try {
