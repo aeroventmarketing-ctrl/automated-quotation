@@ -1,3 +1,110 @@
+## 2026-08-31 · An approval record that survives the approval
+
+- **Owner's instruction:** *"build it"* — closing the gap the last entry flagged: the pending card shows a request
+  only while it is still waiting, so the completed record of who approved what was visible only in the window
+  before it stopped mattering.
+
+### Nothing new is stored
+
+`StockAction` and `ProductChange` rows survive their decision with every timestamp on them. They were simply never
+read back once `status` left PENDING. `lib/approval-history.ts` reads them; there is **no migration and no new
+column**.
+
+### One record, both screens
+
+Inventory requests and Products changes are the same event seen from two screens, so they are normalised to one
+shape and one page at **`/inventory/approvals`**, linked from the header of both. A record split across two
+formats is a record people stop reading.
+
+- Each row: the outcome (**Approved** / **Rejected**), which screen, the item, the change, and the trail — who
+  raised it in what capacity, then each signature with name and stamp. A rejection carries its reason and who gave
+  it.
+- Searchable by item, change or person, filterable by screen. Client-side over a loaded page: a record is read by
+  looking something up, and a round trip per keystroke buys nothing on a few hundred rows.
+
+### The trail is one component now
+
+`components/approval-trail.tsx` serves the pending card **and** the history, so a request reads identically before
+and after it is decided — the same lines in the same order, with *"awaiting approval"* simply becoming a name and a
+time. `stockActionSignatures` still decides which steps exist, so a Purchaser's request has no Warehouse line in
+the record either: the chain never took that step.
+
+### Access, through the grid
+
+`canViewApprovalHistory` is a new cell in `catalogue-access.ts`, asserted for every role in the grid: the same four
+parties who see a request while it waits may read it after — the record names people and quotes prices. Sales are
+out. **This is the first feature built with the grid rather than alongside it**, so the nav link and the page
+cannot disagree about who may open it.
+
+### Two more harness bugs, found and fixed while using it
+
+The pattern from last time repeats, which is itself the argument for having the thing:
+
+1. **`proc.kill()` killed `npx`, not the server it spawned.** A zombie kept the port and went on serving a worktree
+   that had already been deleted, so the next run met *"Internal Server Error"* from an app that no longer existed
+   on disk. It now spawns detached and kills the whole process group, and `--keep` cleans up on Ctrl-C.
+2. **The seed dated a request AFTER the signatures that approved it.** Harmless to the code, but a record whose
+   signatures predate the request reads as nonsense to anyone checking the output — and the output is the point.
+
+The harness also gained a `/inventory/approvals` probe and a decided request to show there: a record you can only
+ever see empty proves nothing.
+
+### Verified
+
+- **5 new tests** on the history: the whole trail survives the apply; a step the chain never took is still omitted;
+  a rejection keeps its reason and its rejector; product changes sort into the same list newest-first; a **pending**
+  request stays out of the record.
+- The page seen rendered as the Payment Approver, and probed for all five roles — Sales refused, the other four
+  see the record and its signatures.
+- **161 tests, 160 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean. **No migration.**
+
+## 2026-08-31 · The approval card carries the record: designation, name, date, time
+
+- **Owner's instruction:** *"Put the details of approval such as date, time, designation and name of approver."*
+- **No migration and no new data.** `warehouseAt`, `purchaserAt` and `approverAt` have been stamped on every
+  sign-off since the chain was built; the card simply never showed them. It printed
+  *"Warehouse: Joemel Jamero  Purchaser: Allan Ramos  Final approver: —"* — names with no dates, no designations,
+  and a dash for a step that on some chains is never taken at all.
+
+### What the card says now
+
+```
+AWAITING · Admin / Payment Approver    Stock adjustment  Receive +6 pc · BELT B-50 (now 4 pc) · delivery
+Raised by Willy Ho · Warehouseman · Aug 31, 2026, 10:47 AM
+Purchaser · ✓ Allan Ramos · Aug 31, 2026, 10:47 AM
+Admin / Payment Approver · awaiting approval
+```
+
+- One line per step, **in the order the chain takes them**, each with the office, the person and the stamp.
+- **The proposer's own step is the "Raised by" line, not a second entry in the trail.** It used to appear twice —
+  "Proposed by Joemel Jamero" and "Warehouse: Joemel Jamero" — which read as though one person had both raised and
+  approved the same request.
+- A step the chain does not use is **not printed**. `stockActionSignatures()` follows the same rule as
+  `nextStockActionSlot`, so a Purchaser's request shows no Warehouse line rather than an empty one waiting for a
+  signature that will never be taken. Both read from `proposedRole`, so they cannot disagree.
+
+### Dates
+
+Fixed to `en-PH` / `Asia/Manila`. A locale-dependent format renders differently on the server and in the browser
+and would hydrate mismatched; the year is included because an approval record without one is not a record.
+
+### Verified
+
+- 4 new tests on the trail: the Purchaser-then-owner order on a Warehouse request with its timestamp; the
+  proposer's own step excluded; **no Warehouse line on any chain**; an unsigned step carrying no name and no time.
+- Seen rendered, as the Payment Approver, through `scripts/role-harness.mjs` — the screenshot above is the harness
+  paying for itself a second time.
+- **155 tests, 154 passed, 1 failed** — the pre-existing `selectFan` CEBDD failure on `main`, untouched. Typecheck,
+  lint and build clean.
+
+### One gap this exposes, not closed here
+
+The card lives on the **pending** request. The moment the last signature lands, the request applies and the card
+disappears — so the completed record of who approved what, and when, is visible only while it is still waiting.
+`ActivityLog` keeps a one-line summary, not the signatures. **An approval history that survives the approval is a
+separate piece of work; say the word.**
+
 ## 2026-08-31 · A capability grid and a role harness, and the bug they found
 
 - **Owner's question:** *"there is always an instance wherein we repair a feature, while repairing such feature

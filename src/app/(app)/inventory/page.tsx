@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, History } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -25,7 +25,7 @@ export default async function InventoryPage() {
   // out of the page they approve on.
   const {
     canView, canManageItems, canCreateItems, canDeleteItems, canProposeEdit, canScan,
-    showPrices, showSellPrice, showHeaderTools, pendingFirst, chainNote,
+    showPrices, showSellPrice, showHeaderTools, pendingFirst, chainNote, canViewApprovalHistory,
   } = a;
   const admin = isAdmin(viewer);
   const isSales = viewer?.role === "SALES";
@@ -68,8 +68,10 @@ export default async function InventoryPage() {
         id: a.id, stockItemId: a.stockItemId, itemName: a.itemName, kind: a.kind,
         kindLabel: STOCK_ACTION_LABEL[a.kind], summary: a.summary, status: a.status, proof,
         proposedByName: a.proposedByName, proposedAt: a.proposedAt.toISOString(),
-        warehouseByName: a.warehouseByName, purchaserByName: a.purchaserByName,
-        approverByName: a.approverByName,
+        proposedRole: a.proposedRole,
+        warehouseByName: a.warehouseByName, warehouseAt: a.warehouseAt?.toISOString() ?? null,
+        purchaserByName: a.purchaserByName, purchaserAt: a.purchaserAt?.toISOString() ?? null,
+        approverByName: a.approverByName, approverAt: a.approverAt?.toISOString() ?? null,
         nextSlot,
         canApproveNext:
           nextSlot === "warehouse" ? viewerWarehouse : nextSlot === "purchaser" ? viewerPurchaser : nextSlot === "approver" ? viewerPriceOwner : false,
@@ -188,8 +190,17 @@ export default async function InventoryPage() {
           <h1 className="text-2xl font-bold">Inventory</h1>
           <p className="text-sm text-muted-foreground">{isSales ? "Stock on hand, availability and selling price — read-only." : "Warehouse stock on hand, with receive / issue / adjust and a movement ledger."}</p>
         </div>
-        {showHeaderTools && (
-          <div className="flex gap-2">
+        {(canViewApprovalHistory || showHeaderTools) && (
+          <div className="flex flex-wrap gap-2">
+            {/* Where a request goes once its last signature lands — the pending
+                card on the row only exists while it is still waiting. */}
+            {canViewApprovalHistory && (
+              <Link href="/inventory/approvals" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
+                <History className="h-4 w-4" />
+                Approval history
+              </Link>
+            )}
+            {showHeaderTools && (<>
             <Link href="/inventory/labels" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
               Labels
             </Link>
@@ -197,6 +208,7 @@ export default async function InventoryPage() {
               <ShoppingCart className="h-4 w-4" />
               Reorder{lowCount + outCount > 0 ? ` (${lowCount + outCount})` : ""}
             </Link>
+            </>)}
           </div>
         )}
       </div>

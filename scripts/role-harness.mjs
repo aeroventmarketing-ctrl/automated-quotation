@@ -55,6 +55,11 @@ const PROBES = [
     edit: (t) => / Edit\b/.test(t) || /aria-label="Edit"/.test(t),
     approve: (t) => /AWAITING[\s\S]{0,300}?\bApprove\b/.test(t),
   } },
+  { path: "/inventory/approvals", label: "history", checks: {
+    open: (t) => !t.includes("can read the catalogue approval record"),
+    record: (t) => t.includes("CUTTING DISC"),
+    signatures: (t) => t.includes("Rey Gil") && t.includes("Allan Ramos"),
+  } },
   { path: "/products", label: "prod", checks: {
     open: (t) => !t.includes("don't have access to the product list"),
     price: (t) => t.includes("₱"),
@@ -129,6 +134,22 @@ async function seed() {
     warehouseByName: "Willy Ho", warehouseAt: new Date(),
     purchaserByName: "Allan Ramos", purchaserAt: new Date(),
   } });
+  // …and one already decided, so the approval HISTORY has something to show.
+  // A record you can only see when it is empty proves nothing.
+  const disc = await p.stockItem.findFirst({ where: { name: "CUTTING DISC 4in" } });
+  await p.stockAction.create({ data: {
+    stockItemId: disc.id, itemName: disc.name, kind: "EDIT",
+    payload: { category: "SUPPLIES", location: "Plant Warehouse", reorderLevel: 2, unitCost: 29, sellPrice: 45 },
+    summary: "Edit CUTTING DISC 4in: unit cost ₱29.00, sell ₱45.00", status: "APPLIED",
+    // Backdated in order — a record whose signatures predate the request it
+    // signs reads as nonsense to anyone checking the harness output.
+    proposedById: ids["harness-wh@test"], proposedByName: "Willy Ho", proposedRole: "warehouse",
+    proposedAt: new Date(Date.now() - 7200e3),
+    warehouseByName: "Willy Ho", warehouseAt: new Date(Date.now() - 7200e3),
+    purchaserByName: "Allan Ramos", purchaserAt: new Date(Date.now() - 3600e3),
+    approverByName: "Rey Gil", approverAt: new Date(Date.now() - 1800e3),
+    appliedAt: new Date(Date.now() - 1800e3),
+  } });
   await p.$disconnect();
 }
 
@@ -151,7 +172,11 @@ async function boot() {
   // Always logged. A silent harness that reports "everything false" because the
   // server never compiled is worse than no harness at all.
   const log = openSync(LOG, "w");
-  const proc = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: WORKTREE, env, stdio: ["ignore", log, log], detached: false });
+  // `detached` so the whole tree gets its own process group: `npx` spawns the
+  // real server as a child, and killing only `npx` left a zombie holding the port
+  // and serving a worktree that had already been deleted — the next run then met
+  // "Internal Server Error" from an app that no longer existed on disk.
+  const proc = spawn("npx", ["next", "dev", "-p", String(PORT)], { cwd: WORKTREE, env, stdio: ["ignore", log, log], detached: true });
   for (let i = 0; i < 90; i++) {
     await sleep(1000);
     if (proc.exitCode !== null) throw new Error(`dev server exited (${proc.exitCode}) — see ${LOG}`);
@@ -196,11 +221,21 @@ try {
   if (KEEP) {
     console.log(`\nServer left up: http://localhost:${PORT}  (cookie e2e_as=<email>)`);
     console.log(CAST.map((c) => `  ${c.email}  ${c.name}`).join("\n"));
+    // Ctrl-C must take the server and the copy with it, or the next run inherits
+    // a zombie on the port.
+    const stop = () => {
+      if (proc?.pid) { try { process.kill(-proc.pid, "SIGTERM"); } catch { /* gone */ } }
+      try { rmSync(`${WORKTREE}/node_modules`, { force: true }); } catch { /* symlink */ }
+      try { rmSync(WORKTREE, { recursive: true, force: true }); } catch { /* gone */ }
+      process.exit(0);
+    };
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
     await new Promise(() => {});
   }
 } finally {
   if (!KEEP) {
-    if (proc) proc.kill();
+    if (proc?.pid) { try { process.kill(-proc.pid, "SIGTERM"); } catch { /* already gone */ } }
     try { rmSync(`${WORKTREE}/node_modules`, { force: true }); } catch { /* symlink */ }
     try { rmSync(WORKTREE, { recursive: true, force: true }); } catch { /* already gone */ }
   }

@@ -4,8 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BellRing, Eye, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { STOCK_SLOT_LABEL, type StockActionView } from "@/lib/stock-action";
+import { STOCK_SLOT_LABEL, stockActionSignatures, type StockActionView, type StockSlot } from "@/lib/stock-action";
+
+import { ApprovalTrail } from "@/components/approval-trail";
 import { approveStockAction, rejectStockAction, type StockActionResult } from "./stock-action-actions";
+
+/** The office the proposer answers for, for the "Raised by" line. */
+const proposerDesignation = (role: string): string =>
+  role in STOCK_SLOT_LABEL ? STOCK_SLOT_LABEL[role as StockSlot] : "Admin";
+
 
 /** Re-throw a failed action's real reason so the caller's catch can display it.
  *  (Server Actions strip thrown messages in production, so we return them.) */
@@ -58,10 +65,6 @@ export function PendingStockActions({ pending }: { pending: StockActionView[] })
         // a Warehouseman, so showing one as "awaiting" would be asking for a
         // signature that will never be taken.
         const awaiting = a.nextSlot ? STOCK_SLOT_LABEL[a.nextSlot] : "applying…";
-        // The Warehouse slot is only ever filled by proposing, so a blank one
-        // means the chain does not include it — don't print a dash that reads as
-        // a signature still outstanding.
-        const showWarehouseLine = a.warehouseByName != null;
         return (
           <div key={a.id} className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/20">
             <div className="flex flex-wrap items-center gap-2">
@@ -72,17 +75,20 @@ export function PendingStockActions({ pending }: { pending: StockActionView[] })
               <span className="font-medium text-foreground">{a.kindLabel}</span>
               <span className="text-muted-foreground">{a.summary}</span>
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-              <span>Proposed by {a.proposedByName}</span>
-              {showWarehouseLine && <span className={a.warehouseByName ? "text-emerald-700" : ""}>Warehouse: {a.warehouseByName ?? "—"}</span>}
-              <span className={a.purchaserByName ? "text-emerald-700" : ""}>Purchaser: {a.purchaserByName ?? "—"}</span>
-              <span className={a.approverByName ? "text-emerald-700" : ""}>Final approver: {a.approverByName ?? "—"}</span>
-              {a.proof && (
-                <a href={viewUrl(a.proof.path, a.proof.name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-                  <Eye className="h-3.5 w-3.5" /> View form
-                </a>
-              )}
-            </div>
+            {/* The approval record: who raised it and who has signed since, each
+                with their designation and the date and time. Shared with the
+                history page so a request reads the same before and after it is
+                decided — "awaiting approval" simply becomes a name and a time. */}
+            <ApprovalTrail
+              className="mt-1.5"
+              raisedBy={{ designation: proposerDesignation(a.proposedRole), name: a.proposedByName, at: a.proposedAt, signed: true }}
+              steps={stockActionSignatures(a)}
+            />
+            {a.proof && (
+              <a href={viewUrl(a.proof.path, a.proof.name)} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-primary hover:underline">
+                <Eye className="h-3.5 w-3.5" /> View form
+              </a>
+            )}
             {/* Approve is the next signatory's alone; Reject stays with every
                 party to the chain, so a price owner who can see a bad edit two
                 steps early does not have to wait their turn to stop it. */}

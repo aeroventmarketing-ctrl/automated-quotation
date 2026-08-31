@@ -64,10 +64,15 @@ export interface StockActionView {
   proof: StockDoc | null; // transfer proof (eye-view), else null
   proposedByName: string;
   proposedAt: string;
+  /** Which slot the proposer filled by proposing — decides the chain's shape. */
+  proposedRole: string;
   warehouseByName: string | null;
+  warehouseAt: string | null;
   purchaserByName: string | null;
+  purchaserAt: string | null;
   /** The price owner's final sign-off. */
   approverByName: string | null;
+  approverAt: string | null;
   /** Whose signature the action is waiting for, or null when it is complete. */
   nextSlot: StockSlot | null;
   /** Whether THIS viewer is the one who may sign that next slot. */
@@ -110,6 +115,42 @@ export function nextStockActionSlot(
   if (proposedRole === "approver") return null; // the final approver raised it
   if (proposedRole !== "purchaser" && purchaserAt == null) return "purchaser";
   return approverAt == null ? "approver" : null;
+}
+
+/** One line of the approval trail, as the card prints it. */
+export interface StockSignature {
+  slot: StockSlot;
+  /** The office that signs — "Purchaser", "Admin / Payment Approver". */
+  designation: string;
+  /** Who signed, or null while it is still outstanding. */
+  name: string | null;
+  /** ISO timestamp of the signature, or null. */
+  at: string | null;
+  signed: boolean;
+}
+
+/**
+ * The signatures this request needs, in order, with who gave each and when —
+ * everything an approval record has to say: date, time, designation and name.
+ *
+ * The proposer's OWN slot is left out: it is the "raised by" line above the
+ * trail, and printing it twice made the card read as though a Warehouseman had
+ * both raised and approved the same thing. Which slots appear at all follows the
+ * same rule as `nextStockActionSlot` — a Purchaser's request has no Warehouse
+ * step, so it must not show an empty one.
+ */
+export function stockActionSignatures(a: {
+  proposedRole: string;
+  warehouseByName: string | null; warehouseAt: string | null;
+  purchaserByName: string | null; purchaserAt: string | null;
+  approverByName: string | null; approverAt: string | null;
+}): StockSignature[] {
+  const line = (slot: StockSlot, name: string | null, at: string | null): StockSignature =>
+    ({ slot, designation: STOCK_SLOT_LABEL[slot], name, at, signed: at != null });
+  const out: StockSignature[] = [];
+  if (a.proposedRole !== "purchaser") out.push(line("purchaser", a.purchaserByName, a.purchaserAt));
+  out.push(line("approver", a.approverByName, a.approverAt));
+  return out;
 }
 
 /** Every signature in? */

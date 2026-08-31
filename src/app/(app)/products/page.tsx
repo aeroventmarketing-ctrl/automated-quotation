@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
-import { productsAccess } from "@/lib/catalogue-access";
+import Link from "next/link";
+import { History } from "lucide-react";
+import { inventoryAccess, productsAccess } from "@/lib/catalogue-access";
 import { Card, CardContent } from "@/components/ui/card";
 import { getProducts, type ProductRow } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -24,6 +26,9 @@ export default async function ProductsPage() {
   // role at once in `catalogue-access.test.ts` — see that file for the policy.
   const a = productsAccess(viewer, assignments);
   const { canView, canManage, showPrices, showSuppliers } = a;
+  // Read from the Inventory rules on purpose: it is ONE record covering both
+  // screens, so one flag decides who may open it.
+  const { canViewApprovalHistory } = inventoryAccess(viewer, assignments);
   const admin = isAdmin(viewer);
   const editPrices = a.canEditPrices;
   const priceOwner = a.isPriceOwner;
@@ -86,10 +91,18 @@ export default async function ProductsPage() {
             Purchasable items connected to their suppliers. Requests made against a product carry its supplier, so the purchaser can combine same-supplier orders. Each product has a SKU with barcode &amp; QR for easy encoding.
           </p>
         </div>
-        {/* Catalogue spreadsheets are the price owner's — a download carries the
-            whole price list out, an upload writes it back (lib/price-authority). */}
-        {priceOwner && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* A decided product change leaves the queue below; this is where the
+              record of it lives. The same page as Inventory's — one record for
+              both screens (lib/approval-history). */}
+          {canViewApprovalHistory && (
+            <Link href="/inventory/approvals" className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted">
+              <History className="h-4 w-4" /> Approval history
+            </Link>
+          )}
+          {/* Catalogue spreadsheets are the price owner's — a download carries the
+              whole price list out, an upload writes it back (lib/price-authority). */}
+          {priceOwner && (<>
             <a
               href="/api/products/full-list"
               className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted"
@@ -104,8 +117,8 @@ export default async function ProductsPage() {
             >
               Export catalogue codes (CSV)
             </a>
-          </div>
-        )}
+          </>)}
+        </div>
       </div>
 
       <PendingProductChanges changes={pendingChanges} />
