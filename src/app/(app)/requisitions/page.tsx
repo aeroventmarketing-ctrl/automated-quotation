@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { listStockItemsWithAvailability } from "@/lib/inventory";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -80,13 +81,21 @@ export default async function RequisitionsPage() {
   let rows: (ReturnType<typeof buildPurchaseChainRow> & { createdAt: string; requestor: string })[] = [];
   let tableMissing = false;
   try {
+    // Admin/purchaser see all; dept heads see their dept; everyone else
+    // (Office-type raisers) sees what they raised.
+    const own: Prisma.PurchaseRequestWhereInput =
+      ownDeptKeys.length > 0 ? { dept: { in: ownDeptKeys } } : { createdById: viewer!.id };
+    // The Plant Manager approves EVERY department requisition, but heads no
+    // department — so the rule above showed them only what they raised
+    // themselves, and a requisition telling its requestor "Awaiting Plant
+    // Manager approval" was invisible on the very page it was raised from.
+    // Give them the ones waiting on them, and the ones they have already
+    // decided so an approval doesn't make the row vanish.
+    const scope: Prisma.PurchaseRequestWhereInput = has("plant_manager")
+      ? { OR: [own, { status: "PENDING_APPROVAL" }, { decidedById: viewer!.id }] }
+      : own;
     const prs = await prisma.purchaseRequest.findMany({
-      where: {
-        kind: "department",
-        // Admin/purchaser see all; dept heads see their dept; everyone else
-        // (Office-type raisers) sees what they raised.
-        ...(admin || purchaser ? {} : ownDeptKeys.length > 0 ? { dept: { in: ownDeptKeys } } : { createdById: viewer!.id }),
-      },
+      where: { kind: "department", ...(admin || purchaser ? {} : scope) },
       orderBy: { createdAt: "desc" },
     });
     rows = prs.map((pr) => ({

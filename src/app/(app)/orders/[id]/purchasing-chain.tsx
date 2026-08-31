@@ -296,6 +296,12 @@ export function PurchasingChain({
           deptApprovalHere && r.status === "PENDING_APPROVAL"
             ? r.actions.filter((a) => (a.key === "approve" || a.key === "reject") && a.canAct)
             : [];
+        // Who the requisition is actually waiting on, named — "Plant Manager
+        // (Pedro Mancia)". Every other rung of the chain names the person; the
+        // pending-approval notes used to say only "Awaiting Plant Manager
+        // approval", leaving the requestor with nobody to chase (and no way to
+        // tell that the role is unassigned, which would strand the request).
+        const approverRoleLabel = r.actions.find((a) => a.key === "approve")?.roleLabel;
         return (
           <div
             key={r.id}
@@ -395,10 +401,10 @@ export function PurchasingChain({
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval.</div>
+                  <div className="mt-2"><ApproverHighlight role={approverRoleLabel} /></div>
                 )
               ) : requisitionNeedsApproval ? (
-                <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval on the order&rsquo;s Materials tab.</div>
+                <div className="mt-2"><ApproverHighlight role={approverRoleLabel} detail={"— on the order’s Materials tab"} /></div>
               ) : requisitionAwaitingPO ? (
                 <div className="mt-2 text-xs text-muted-foreground">Waiting on the Purchaser to prepare the Purchase Order — process in Purchasing</div>
               ) : r.status !== "REJECTED" && r.status !== "COMPLETED" && r.actions[0] ? (
@@ -451,7 +457,7 @@ export function PurchasingChain({
             ) : awaiting ? (
               <div className="mt-2"><ApproverHighlight role={awaiting.roleLabel} /></div>
             ) : awaitingPlantApproval ? (
-              <div className="mt-2 text-xs text-muted-foreground">Awaiting Plant Manager approval on the order&rsquo;s Materials tab.</div>
+              <div className="mt-2"><ApproverHighlight role={approverRoleLabel} detail={"— on the order’s Materials tab"} /></div>
             ) : null}
 
             {/* The Purchaser can reject a still-pending request they can't source —
