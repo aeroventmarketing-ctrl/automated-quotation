@@ -37,6 +37,10 @@ const CAST = [
   { email: "harness-pu@test", name: "Allan Ramos", base: "OTHER", roles: ["purchaser"] },
   { email: "harness-pa@test", name: "Rey Gil", base: "OTHER", roles: ["payment_approver"] },
   { email: "harness-sales@test", name: "Sam Sales", base: "SALES", roles: [] },
+  // An ENGINEER holds no workflow role, so every rule that keys off one misses
+  // them — which is exactly how the nav came to offer them Products while the
+  // page refused it. A base role the harness cannot look as is a blind spot.
+  { email: "harness-eng@test", name: "Elena Cruz", base: "ENGINEER", roles: [] },
 ];
 
 /**

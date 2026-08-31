@@ -89,14 +89,17 @@ const INVENTORY: Record<keyof ReturnType<typeof inventoryAccess> & string, Recor
 const PRODUCTS: Record<string, Record<Who, boolean>> = {
   // Sales are blocked entirely; they use Check availability instead.
   //
-  // NOTE — a mismatch this grid found on its first run, recorded as the current
-  // truth rather than quietly "fixed": an **Engineer** (and a base-role OTHER
-  // user with no workflow role) is offered the Products tab by `visibleNav` and
-  // then refused by the page. Engineers already see prices everywhere else, so
-  // this looks like the same nav-offers/page-refuses shape as the Payment
-  // Approver bug. Widening who may read the catalogue is the owner's call, so it
-  // is flagged, not changed.
-  canView: only("admin", "warehouse", "purchaser", "paymentApprover", "accounting", "plantManager", "logistics", "prodHead"),
+  // The **Engineer** is here on the owner's instruction — *"let the engineer
+  // allowed by the page"* — closing a mismatch this grid found on its first run:
+  // the nav offered them the Products tab and the page then refused it. Read
+  // only; every other Products cell below leaves the Engineer false.
+  //
+  // NOTE — the same mismatch REMAINS for a base-role OTHER user holding no
+  // workflow role at all (`nobody`): still offered the tab, still refused. Left
+  // as current truth, because the fix there is arguably the other way round —
+  // stop offering the tab to someone with no configured role — and that is the
+  // owner's call, not this file's.
+  canView: only("admin", "engineer", "warehouse", "purchaser", "paymentApprover", "accounting", "plantManager", "logistics", "prodHead"),
   // Per-row Edit. The Purchaser's save is parked for the price owner.
   canManage: only("admin", "purchaser", "paymentApprover"),
   // The two list-shaping buttons the owner took off the Purchaser.
@@ -157,6 +160,19 @@ describe("the catalogue capability grid", () => {
       for (const w of EVERYONE) {
         expect(inventoryAccess(...as(w)).canTransferFiles).toBe(productsAccess(...as(w)).canTransferFiles);
       }
+    });
+
+    it("the Engineer is offered the Products tab AND the page opens", () => {
+      // The nav has always listed Products for an ENGINEER. Until the owner's
+      // instruction the page refused them, so the tab was a dead end that also
+      // stranded the prices and suppliers they were already cleared to see.
+      const p = productsAccess(...as("engineer"));
+      expect(p.canView).toBe(true);
+      expect(p.showPrices).toBe(true);
+      expect(p.showSuppliers).toBe(true);
+      // Read only — the grant stops at looking.
+      expect([p.canManage, p.canAddOrRemoveProducts, p.canEditPrices, p.canTransferFiles, p.canDecideChanges])
+        .toEqual([false, false, false, false, false]);
     });
 
     it("nobody is offered a page-level action they cannot reach the page for", () => {

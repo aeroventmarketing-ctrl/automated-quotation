@@ -159,12 +159,19 @@ export function productsAccess(user: User | null | undefined, roles: WorkflowRol
   // Sales are blocked from Products entirely; they use the sales dashboard's
   // Check-availability tool for name / quantity / selling price.
   const isSales = user?.role === "SALES";
+  // Owner's instruction: *"let the engineer allowed by the page."* The nav had
+  // offered an Engineer the Products tab all along and the page then refused it
+  // — the same nav-offers/page-refuses shape as the Payment Approver bug, found
+  // by the capability grid on its first run. An Engineer reads the catalogue to
+  // quote from it and already sees prices and suppliers everywhere else, so the
+  // grant is READ: no per-row Edit, no + Add product, no file transfer.
+  const isEngineer = user?.role === "ENGINEER";
   // The Payment Approver was missing here too — `requireProductManager` names
   // them on the server, and they already had + Add product, so they could add a
   // product and then not edit it.
   const canManage = !isSales && (admin || has("purchaser") || has("payment_approver"));
   return {
-    canView: !isSales && (canManage || PRODUCT_VIEW_ROLES.some(has) || admin),
+    canView: !isSales && (canManage || isEngineer || PRODUCT_VIEW_ROLES.some(has) || admin),
     canManage,
     canAddOrRemoveProducts: priceOwner,
     canEditPrices: canEditPrices(user, roles),
