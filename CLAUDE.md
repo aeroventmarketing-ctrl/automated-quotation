@@ -178,6 +178,35 @@ Files:
   `saveMultiBatchDoc`, `removeMultiBatchDoc`, `removeMultiBatchProof`) and the
   delivery / batch types & status logic in `src/lib/order-workflow.ts`
 
+## 🧭 Permission changes — update the capability grid in the same commit
+
+A run of individually-correct permission changes shut the Payment Approver out of
+the Inventory page they give final approval on, and left them allowed by the
+server to upload a catalogue file with no button to do it. Neither was caught by
+typecheck, lint or the build; both reached the owner.
+
+**The rules live in `src/lib/catalogue-access.ts`** — `inventoryAccess()` and
+`productsAccess()`, pure functions over (user, role map). Do not add role
+booleans back into the page components: inline gates are what made the blast
+radius of a change invisible.
+
+**`src/lib/catalogue-access.test.ts` is the policy**, asserted for every role at
+once. Change a rule → update the expected table in the same commit, and read
+every cell that moved. The moved cells ARE the blast radius.
+
+**Before a PR that touches permissions or screens**, run the role harness — it
+boots the real app on a throwaway copy of your working tree and reports what each
+role can actually see and press:
+
+```
+node scripts/role-harness.mjs          # table per role
+node scripts/role-harness.mjs --keep   # leave it up and click around
+```
+
+The grid catches wrong *rules* in milliseconds; the harness catches wrong
+*screens* — a button on the wrong flag, a page that refuses someone the nav just
+invited. Every permission bug that reached the owner was of the second kind.
+
 ## 🔐 Database migrations — always enable RLS on new tables
 
 Supabase exposes every `public`-schema table through its REST API (authenticated

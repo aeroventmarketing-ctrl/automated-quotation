@@ -753,15 +753,6 @@ export function InventoryManager({ items, canManage, canProposeEdit = canManage,
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => setShowAdd(true)}>+ Add stock item</Button>
-              {/* Import / download are the price owner's: the file carries every
-                  unit cost and selling price, in and out (lib/price-authority). */}
-              {canTransferFiles && <BulkImport />}
-              {canTransferFiles && items.length > 0 && (
-                <>
-                  <Button size="sm" variant="outline" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
-                  <Button size="sm" variant="outline" disabled={busy} onClick={exportCsv}>Download CSV</Button>
-                </>
-              )}
               {dupCount > 0 && (
                 <Button size="sm" variant="outline" className="text-amber-700 hover:text-amber-700" disabled={busy} onClick={mergeDupes}>
                   {busy ? "…" : `Merge duplicates (${dupCount})`}
@@ -832,12 +823,22 @@ export function InventoryManager({ items, canManage, canProposeEdit = canManage,
             {statusFilter === "out" ? "Out of stock" : "Low stock"} ({filtered.length}) <X className="h-3.5 w-3.5" />
           </button>
         )}
-        {/* The view-only download row, for a price owner who cannot add items.
-            Everyone else no longer gets one at all. */}
-        {!canCreate && canTransferFiles && items.length > 0 && (
+        {/* Import / download are the price owner's: the file carries every unit
+            cost and selling price, in and out (lib/price-authority).
+            ONE row, gated on ONE flag, deliberately. These used to live inside the
+            `canCreate` block with a download-only copy out here; when Add-stock-item
+            went admin-only the Payment Approver kept the copy and silently lost the
+            import — allowed to upload by the server, with no button to do it. Two
+            gates for one capability is what let that happen. */}
+        {canTransferFiles && (
           <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>
+            <BulkImport />
+            {items.length > 0 && (
+              <>
+                <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportXlsx}>Download Excel</Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={exportCsv}>Download CSV</Button>
+              </>
+            )}
           </div>
         )}
       </div>

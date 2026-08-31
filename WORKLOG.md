@@ -1,3 +1,69 @@
+## 2026-08-31 · A capability grid and a role harness, and the bug they found
+
+- **Owner's question:** *"there is always an instance wherein we repair a feature, while repairing such feature
+  other features are broken… Is there a way to avoid this repair, breaking feature and recheck cycle?"* — followed
+  by *"do both"* on the two answers.
+
+### Naming the failure honestly
+
+Every permission regression that reached the owner in August was the same species: **a change whose blast radius
+was never swept.** Price authority moved to the Payment Approver, and nobody checked whether that role could reach
+the pages the authority applies to. The approval chain was built on EDIT, and an ADJUST quietly finished early.
+Rule 2 was implemented on a screen where the Purchaser had no button to trigger it.
+
+None of those is catchable by typecheck, lint or the build. All of them are *"can this role see or reach this?"*
+The structural cause: `inventory/page.tsx` computed **23** role booleans inline and 52 files read roles directly.
+Every change was locally correct; nothing held the whole picture.
+
+### The fix that was already needed — the Payment Approver's missing Import button
+
+`<BulkImport />` sat inside the `canCreate` block on Inventory, with a **download-only copy** outside it. When Add
+stock item went admin-only, the Payment Approver kept the copy and silently lost the import — allowed to upload by
+the server, with no button to do it. **Two gates for one capability** is what let that happen, so both screens now
+render one file-tools row on one flag. Products had the identical shape, latent; it is fixed too.
+
+### 1. The capability grid — `lib/catalogue-access.ts` + its test
+
+The ~30 inline booleans are now two pure functions, and `catalogue-access.test.ts` asserts **every capability for
+every role at once**. Read it as the policy. When a rule changes, the failing cells are the blast radius — visible
+in milliseconds instead of after eight screens of clicking.
+
+- **It found a live mismatch on its first run**, before it was even finished: an **Engineer** (and a role-less
+  OTHER user) is offered the Products tab by `visibleNav` and then refused by the page — the same
+  nav-offers/page-refuses shape as the Payment Approver bug. Engineers see prices everywhere else, so this looks
+  wrong, but widening who may read the catalogue is the owner's call. **Recorded as the current truth in the table
+  with a note, not quietly "fixed".**
+
+### 2. The role harness — `scripts/role-harness.mjs`
+
+Boots the real app on a throwaway copy of the **working tree**, patches `getCurrentUser` **in that copy only** to
+read an `e2e_as` cookie, seeds four roles plus the exact "stuck" state, and prints what each role can see and press.
+Production code never contains an auth bypass — that is why it is a copy and not an env-gated backdoor.
+
+It confirmed the whole approval chain end-to-end in the real UI: the Warehouse request already approved by the
+Purchaser shows **AWAITING · Admin / Payment Approver** to everyone, with **Approve** only for the price owner and
+**Reject** for every party.
+
+**Two bugs in the harness itself, both worth recording** because they are the same "verify the thing you think you
+are verifying" mistake:
+
+1. It first copied **HEAD**, so it faithfully reproduced a bug already fixed on disk. A pre-commit check must test
+   the working tree.
+2. A stale server from an earlier run answered the readiness probe, so every cell reported `false` against an app
+   that did not contain the change. It now refuses to run against a port it did not open, and always writes
+   `/var/tmp/role-harness.log` — a silent harness reporting "everything false" is worse than none.
+
+### The standing rule
+
+`CLAUDE.md` now says: permission changes update the grid in the same commit, role booleans do not go back into page
+components, and the harness runs before a PR that touches permissions or screens.
+
+### Verified
+
+- **27 grid assertions**, 151 tests total — **150 passed, 1 failed**: the pre-existing `selectFan` CEBDD failure on
+  `main`, untouched. Typecheck, lint and build clean. No migration, and **no behaviour change** beyond the Import
+  button: the extraction preserves every rule, which is what the grid proves.
+
 ## 2026-08-29 · Fix: the Payment Approver had no access to the page they approve on
 
 - **Owner's bug report:** *"payment approver cannot approve in the inventory, enable the inventory button with all
