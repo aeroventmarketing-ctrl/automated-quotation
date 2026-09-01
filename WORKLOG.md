@@ -1,3 +1,54 @@
+## 2026-09-01 · The real CEB catalogue, checked against the selection engine
+
+The owner uploaded **`CEB Catalog SISW only.xlsx`** so the motor-sizing question could be settled against real data
+instead of the suite's synthetic fixture. No code changed — this is the arithmetic, recorded because its
+conclusion points at the data pipeline rather than at the engine.
+
+### The catalogue is sound
+
+21 models, **4,826** (CFM × SP) cells carrying RPM and BHP. Fan static efficiency, computed cell by cell as
+`(CFM × in.w.g. ÷ 6356) ÷ BHP`:
+
+| | min | median | p95 | max | impossible (>100%) |
+| --- | --- | --- | --- | --- | --- |
+| 1225CEB … 982CEB, all cells | 7.5% | **69.7%** | 76.6% | **77.0%** | **0** |
+
+A peak near 77% is right for a backward-inclined wheel, and not one cell claims more work out than in. Contrast
+the suite's synthetic fixture, which claims 987 W drawn to move 185 W of air — 19% — beside an efficiency column
+reading 0.72. **That fixture, not the engine, was the "motor too big" in the earlier table.**
+
+### The engine reads it exactly
+
+Real 1225CEB grid, belt drive, four duties. The engine's absorbed BHP matches the catalogue cell to the last
+printed digit:
+
+| duty | catalogue cell | engine, `power_kw = BHP × 0.7457` | engine, BHP typed into `power_kw` |
+| --- | --- | --- | --- |
+| 1720 cfm @ 1" SP | 1988 rpm, **0.60 BHP** | **0.60 BHP → 1 HP** | 0.80 BHP → 1.5 HP |
+| 2064 cfm @ 1" SP | 2245 rpm, **0.86 BHP** | **0.86 BHP → 1.5 HP** | 1.15 BHP → 2 HP |
+| 2580 cfm @ 2" SP | 2921 rpm, **1.89 BHP** | **1.89 BHP → 3 HP** | 2.53 BHP → 5 HP |
+| 1204 cfm @ 1.5" SP | 1816 rpm, **0.45 BHP** | **0.45 BHP → 1 HP** | 0.60 BHP → 1 HP |
+
+No inflation anywhere in the selection path.
+
+### The one way the motor still comes out too big
+
+**Nothing in this repository converts BHP to kW on import.** `src/lib/import/csv.ts` stores `power_kw` verbatim,
+and a search for a conversion in the import path returns nothing — the CSV must already be in kW. A catalogue
+whose **BHP column was loaded straight into `power_kw`** inflates every absorbed figure by **1 ÷ 0.7457 = 1.34×**,
+which is one to two motor frames: 1 → 1.5 HP, 1.5 → 2 HP, 3 → **5** HP.
+
+**The check on live data:** take any stored rating row and compare `power_kw ÷ 0.7457` with the BHP printed in the
+catalogue for that CFM/SP cell. Equal → the import is right. About 34% high → the conversion was skipped.
+
+### A second, smaller thing
+
+`MOTOR_HP_LIST` runs `0.5, 1, 1.5, 2, 3, 5, …` — there is **no 0.75 HP**. The AFBM rule is BHP ÷ 0.75 rounded up,
+so 0.60 BHP asks for 0.80 HP and has to take a **1 HP** motor. If AFBM stocks 0.75 HP, adding it to the list
+would land 0.75 HP there. A commercial decision, so flagged rather than changed.
+
+Confirmed while looking: the 1.15 service factor is **display-only** for non-propeller fans (`void serviceFactor`)
+— it is *not* applied on top of ÷0.75, so there is no double margin.
 ## 2026-09-01 · A 2-pole fan is now a request, never the selector's own idea
 
 - **Owner's rule:** *"2 pole should show only when the user specifies 2 pole. If not specified, default is 4 pole.
