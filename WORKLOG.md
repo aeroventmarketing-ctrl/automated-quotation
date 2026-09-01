@@ -44,6 +44,14 @@ would silently undo the ruling; now it fails a test first.
 ### 8-pole
 
 Dropped at the owner's instruction. Not to be raised again until they do.
+
+### "1 kw = 1.34 HP" — confirmed, and pinned
+
+The owner confirmed the conversion the check is built on. It is what the code already uses:
+`KW_PER_HP = 0.745699872`, so `kwToHp(1) = 1.3410`. Now stated in that direction in `units.test.ts`
+(`1 kW → 1.34 HP`, `1.34 HP → 1 kW`) rather than only as `1 HP → 0.7457 kW`, because 1.34 is the number the
+rating-power mistake hides behind: a BHP column loaded into `power_kw` overstates every absorbed figure by
+exactly this factor.
 ## 2026-09-01 · The propeller catalogues: the Motor HP column is a fraction, and the reader could not read it
 
 - **Owner:** *"catalog for ewf/ewfdd/prv/prvdd is in github… Look at the Motor HP column for motor HP to install."*
