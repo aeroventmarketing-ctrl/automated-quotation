@@ -1,3 +1,162 @@
+## 2026-09-01 · The propeller catalogues: the Motor HP column is a fraction, and the reader could not read it
+
+- **Owner:** *"catalog for ewf/ewfdd/prv/prvdd is in github… Look at the Motor HP column for motor HP to install."*
+
+The engine already does exactly that — `selectPropellerRow` ends `const motorHp = chosen.hp`, straight off the
+row, no ÷0.75 and no service factor. The problem was that the row never got that far.
+
+### 422 printed rows, 1 of them readable
+
+The four catalogues print **Motor HP as a fraction** — `1/4`, `1/3`, `1/2`, `3/4`, `1 1/2`, `7 1/2` — and print
+the **Blade Angle** (and even the static-pressure column headers) as text. `selectPropellerRow` accepted a value
+only when `typeof v === "number"`, so:
+
+| | rows | usable as printed | usable once read properly |
+| --- | --- | --- | --- |
+| EWF · 8 sheets | 125 | 0 | 45 |
+| EWFDD · WPD Direct Drive | 37 | **1** | 33 |
+| PRV / PRVDD · 34 sheets | 260 | 0 | 144 |
+| **all four** | **422** | **1** | **222** |
+
+A row with an unreadable `hp` or `a` is skipped **silently**. Skip every row and `selectPropellerRow` returns
+null, and a model that returns null is simply absent from the results — no error, no warning, nothing to notice.
+Four whole product families could vanish from the selector and the only symptom would be that nobody ever quoted
+one. (The 422→222 gap is mostly the documented **≤40° blade-angle rule**, which is untouched.)
+
+### `catalogueNum`
+
+One exported reader that takes a number written the way a catalogue writes it: `"1 1/2"` → 1.5, `"3/4"` → 0.75,
+`"16"` → 16, a real number through untouched, and `null` for anything it cannot read — so a genuinely bad row is
+still dropped. Applied to the propeller row table (`hp`, `a`, `rpm`, `bhp`) and to the catalogue `motorTable`
+pairs, where a `"1/2"` HP entry would otherwise have reached `hpToKw()` as `NaN`.
+
+**No selection rule changed.** The ≤40° blade angle, the rpm ceiling, "smallest motor that meets the duty", the
+AFBM ÷0.75 for non-propeller fans, and the service-factor divisor the owner asked to keep are all exactly as they
+were. This is only about being able to read the sheet.
+
+### Proved against the owner's own file
+
+`propeller-catalogue.test.ts` parses `EWF Catalog.xlsx` column for column and runs three duties through
+`3600EWF`. It skips itself if the file isn't in the repo root, so moving the upload cannot break the suite.
+
+| duty | selected row (as printed) | motor installed | BHP ÷ 0.75 would have said |
+| --- | --- | --- | --- |
+| 12000 cfm @ 0.125" | 35°, 757 rpm, 1.09 BHP | **1 HP** | 1.5 HP |
+| 15000 cfm @ 0.125" | 35°, 954 rpm, 2.19 BHP | **2 HP** | 3 HP |
+| 19000 cfm @ 0.125" | 35°, 1092 rpm, 3.26 BHP | **3 HP** | 5 HP |
+
+**The owner signed these three off — *"this is the correct one"*** — so the test asserts them outright: blade
+angle, rpm, BHP and installed motor, duty by duty. They are no longer a loose "the motor is some printed value"
+invariant but a reference case with the owner's name on it, and any change that moves one of these nine numbers
+has to be justified against that.
+
+Every pick is a printed row, and the Motor HP column is a **frame size smaller** than the ÷0.75 rule every time —
+which is the whole reason these families read their motor from the catalogue.
+
+### The blade-angle rules, now stated rather than incidental
+
+Asked directly and answered:
+
+- *"if blade angle is more than 40 degrees, do not include in selection"* — already the rule
+  (`if (angle > 40 || rpm > rpmCeiling) continue;`), and already held by two tests: one picks the 30°/3 HP row
+  over a 45°/7.5 HP row that also meets the duty, one excludes the size entirely when only a 45° row could
+  deliver. Across the four catalogues this bars **111 rows**. No change.
+- *"should a row with no stated blade angle be selectable, or stay excluded?"* → **exclude.** Also already the
+  behaviour — but only **incidentally**, as a side effect of `"—"` failing to parse. The 40 such rows sit on the
+  EWF Level-1 sheets (13 of 21 on 2400EWF, 27 of 44 on 3000EWF); both sheets keep usable ≤40° rows either way.
+
+The second one is now written down as a **rule** and pinned by a test: a row whose only failing is a missing
+angle is not selected even when it alone meets the duty, and the same row with a 30° angle is. Without that, a
+future improvement to `catalogueNum` — teaching it to read a dash, say — would quietly put 40 unquotable rows
+back into the selector, and nothing would have objected.
+## 2026-09-01 · The service factor stays in motor selection — a change made, then reverted on the owner's word
+
+- **Owner's ruling, in two parts:** *"EWF / EWFDD / PRV / PRVDD do not follow such 0.75 division factor.
+  Disregard service factor in motor selection. Some motors do not have SF or 1.0 SF only."*
+  Then, shown what that would actually change: *"do not change this part. Follow the previous rule set."*
+
+The first half confirmed existing behaviour — a propeller fan carrying a catalogue `motorTable` reads its motor
+straight from the MOTOR HP / MAX BHP column and never touches ÷0.75. Nothing to do.
+
+The second half looked like an instruction to remove the one place a service factor still sized a motor. It was
+removed, the owner was shown the consequence in figures, and the owner reverted it. **This section exists so the
+rule is not re-derived and "fixed" a third time.**
+
+### The rule, as it stands and is to remain
+
+Past the largest entry in a propeller fan's catalogue motor table, the fallback is:
+
+```
+motorAtLeastHp(bhp / serviceFactor)   // serviceFactor = 1.15
+```
+
+Dividing by the service factor sizes the motor on the assumption it may absorb 1.15× its nameplate continuously,
+which is what a motor rated SF 1.15 is for. Removing the division makes the fallback pick a **larger** motor —
+a fan absorbing **1.1 BHP** past its table would move from **1 HP** (1.1 ÷ 1.15 = 0.96) to **1.5 HP**. The owner
+does not want that: **keep the divisor.**
+
+`serviceFactor` therefore stays as it is — a `SelectionOptions` input, a `SelectionResult` field, and the divisor
+in that one fallback. It is worth knowing that nothing in the app reads the result field today; it is carried for
+display and for callers.
+
+### Unchanged, and worth restating
+
+- The AFBM **÷0.75** rule sizes every non-propeller fan (CEB and the rest).
+- A propeller fan with a motor table reads its motor from the catalogue column — no ÷0.75.
+- The full chain: catalogue cell → density correction (cancels at standard air) → kW→HP → round to 2 dp →
+  **÷0.75** (non-propeller) *or* the catalogue motor column (propeller) → round **up** to `MOTOR_HP_LIST`.
+
+## 2026-09-01 · The real CEB catalogue, checked against the selection engine
+
+The owner uploaded **`CEB Catalog SISW only.xlsx`** so the motor-sizing question could be settled against real data
+instead of the suite's synthetic fixture. No code changed — this is the arithmetic, recorded because its
+conclusion points at the data pipeline rather than at the engine.
+
+### The catalogue is sound
+
+21 models, **4,826** (CFM × SP) cells carrying RPM and BHP. Fan static efficiency, computed cell by cell as
+`(CFM × in.w.g. ÷ 6356) ÷ BHP`:
+
+| | min | median | p95 | max | impossible (>100%) |
+| --- | --- | --- | --- | --- | --- |
+| 1225CEB … 982CEB, all cells | 7.5% | **69.7%** | 76.6% | **77.0%** | **0** |
+
+A peak near 77% is right for a backward-inclined wheel, and not one cell claims more work out than in. Contrast
+the suite's synthetic fixture, which claims 987 W drawn to move 185 W of air — 19% — beside an efficiency column
+reading 0.72. **That fixture, not the engine, was the "motor too big" in the earlier table.**
+
+### The engine reads it exactly
+
+Real 1225CEB grid, belt drive, four duties. The engine's absorbed BHP matches the catalogue cell to the last
+printed digit:
+
+| duty | catalogue cell | engine, `power_kw = BHP × 0.7457` | engine, BHP typed into `power_kw` |
+| --- | --- | --- | --- |
+| 1720 cfm @ 1" SP | 1988 rpm, **0.60 BHP** | **0.60 BHP → 1 HP** | 0.80 BHP → 1.5 HP |
+| 2064 cfm @ 1" SP | 2245 rpm, **0.86 BHP** | **0.86 BHP → 1.5 HP** | 1.15 BHP → 2 HP |
+| 2580 cfm @ 2" SP | 2921 rpm, **1.89 BHP** | **1.89 BHP → 3 HP** | 2.53 BHP → 5 HP |
+| 1204 cfm @ 1.5" SP | 1816 rpm, **0.45 BHP** | **0.45 BHP → 1 HP** | 0.60 BHP → 1 HP |
+
+No inflation anywhere in the selection path.
+
+### The one way the motor still comes out too big
+
+**Nothing in this repository converts BHP to kW on import.** `src/lib/import/csv.ts` stores `power_kw` verbatim,
+and a search for a conversion in the import path returns nothing — the CSV must already be in kW. A catalogue
+whose **BHP column was loaded straight into `power_kw`** inflates every absorbed figure by **1 ÷ 0.7457 = 1.34×**,
+which is one to two motor frames: 1 → 1.5 HP, 1.5 → 2 HP, 3 → **5** HP.
+
+**The check on live data:** take any stored rating row and compare `power_kw ÷ 0.7457` with the BHP printed in the
+catalogue for that CFM/SP cell. Equal → the import is right. About 34% high → the conversion was skipped.
+
+### A second, smaller thing
+
+`MOTOR_HP_LIST` runs `0.5, 1, 1.5, 2, 3, 5, …` — there is **no 0.75 HP**. The AFBM rule is BHP ÷ 0.75 rounded up,
+so 0.60 BHP asks for 0.80 HP and has to take a **1 HP** motor. If AFBM stocks 0.75 HP, adding it to the list
+would land 0.75 HP there. A commercial decision, so flagged rather than changed.
+
+Confirmed while looking: the 1.15 service factor is **display-only** for non-propeller fans (`void serviceFactor`)
+— it is *not* applied on top of ÷0.75, so there is no double margin.
 ## 2026-09-01 · A 2-pole fan is now a request, never the selector's own idea
 
 - **Owner's rule:** *"2 pole should show only when the user specifies 2 pole. If not specified, default is 4 pole.

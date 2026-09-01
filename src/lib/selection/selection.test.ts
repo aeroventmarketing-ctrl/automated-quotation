@@ -8,6 +8,7 @@ import {
   forwardCurveOvLimit,
   didwCfabOvLimit,
   MOTOR_HP_LIST,
+  catalogueNum,
   type FanModelInput,
 } from "./index";
 
@@ -434,6 +435,31 @@ describe("selectFan — propeller catalogue-row lookup (EWF/EWFDD/PRV/PRVDD)", (
     expect(r).toBeNull();
   });
 
+  // Owner's ruling, asked directly: a row with **no stated blade angle** stays
+  // excluded. The EWF Level-1 sheets print "—" in that column for 40 rows. It
+  // currently reads as a parse failure, so this pins it as the RULE — teaching
+  // `catalogueNum` to read a dash must not quietly make them selectable.
+  it("never selects a row with no stated blade angle, even if it alone meets the duty", () => {
+    const unangled: FanModelInput = {
+      ...belt,
+      id: "ewf-dash",
+      specs: {
+        ...belt.specs,
+        // The only row that can deliver this duty carries no angle.
+        rows: [{ a: "—", hp: 1, rpm: 700, bhp: 1.0, c: [[0, 9000], [0.25, 8200], [0.5, 7400]] }],
+      },
+    };
+    expect(selectFan(unangled, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })).toBeNull();
+    // Same row with an angle the rule allows — proof the exclusion is the angle,
+    // not something else about the row.
+    const angled: FanModelInput = {
+      ...unangled,
+      id: "ewf-angled",
+      specs: { ...belt.specs, rows: [{ a: 30, hp: 1, rpm: 700, bhp: 1.0, c: [[0, 9000], [0.25, 8200], [0.5, 7400]] }] },
+    };
+    expect(selectFan(angled, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })?.motorHp).toBe(1);
+  });
+
   it("flags outlet velocity over 2200 fpm as LOW", () => {
     const tight: FanModelInput = {
       ...belt,
@@ -539,3 +565,58 @@ describe("selectFans — ranking", () => {
     expect(ranked[0].modelCode).toBe("TEST-100");
   });
 });
+
+// The propeller catalogues (EWF / EWFDD / PRV / PRVDD) print MOTOR HP as a
+// fraction — 1/4, 3/4, 1 1/2, 7 1/2 — and some sheets print the blade angle as
+// text. Across the four uploaded catalogues that is 422 rows, of which exactly
+// ONE survives a plain `typeof v === "number"` test: built from the columns
+// verbatim, every model would vanish from the results with no error anywhere.
+/** cfm → m³/hr, matching the engine's own constant. */
+const CFM_PER_M3HR_T = 0.588578;
+
+describe("catalogueNum — a number written the way a catalogue writes it", () => {
+  it("reads the Motor HP column's fractions", () => {
+    expect(catalogueNum("1/4")).toBe(0.25);
+    expect(catalogueNum("1/3")).toBeCloseTo(1 / 3, 10);
+    expect(catalogueNum("1/2")).toBe(0.5);
+    expect(catalogueNum("3/4")).toBe(0.75);
+    expect(catalogueNum("1 1/2")).toBe(1.5);
+    expect(catalogueNum("7 1/2")).toBe(7.5);
+  });
+
+  it("passes real numbers through and reads numerals written as text", () => {
+    expect(catalogueNum(2)).toBe(2);
+    expect(catalogueNum(7.5)).toBe(7.5);
+    expect(catalogueNum("16")).toBe(16); // PRV prints its blade angle as text
+    expect(catalogueNum(" 3 ")).toBe(3);
+  });
+
+  it("still refuses what it cannot read, so the row is still dropped", () => {
+    for (const v of ["—", "", "  ", "n/a", null, undefined, {}, NaN, "1/0"]) {
+      expect(catalogueNum(v)).toBeNull();
+    }
+  });
+
+  it("makes a catalogue row selectable, and reports the printed Motor HP", () => {
+    // One EWF row exactly as the sheet prints it: 3/4 HP, 32°, 886 rpm.
+    const ewf: FanModelInput = {
+      id: "ewf-frac",
+      modelCode: "AV2000EWF",
+      name: "Exhaust Wall Fan 20",
+      ratingPoints: [], // a propeller model selects off `specs.rows`, not a curve
+      specs: {
+        propeller: true,
+        drive: "belt",
+        bladeDia_in: 20,
+        outletArea_ft2: 2.4,
+        maxRpm: 1200,
+        rows: [{ a: 32, hp: "3/4", rpm: 886, bhp: 0.28, c: [[0, 5991], [0.125, 5700], [0.25, 5400]] }],
+      },
+    };
+    const r = selectFan(ewf, { airflow_m3hr: 5000 / CFM_PER_M3HR_T, staticPressure_pa: 0.125 * 249.0889 })!;
+    expect(r).not.toBeNull();
+    expect(r.motorHp).toBe(0.75); // the Motor HP column, not BHP/0.75
+    expect(r.bladeAngle).toBe(32);
+  });
+});
+
