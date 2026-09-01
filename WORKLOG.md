@@ -1,3 +1,58 @@
+## 2026-09-01 · The propeller catalogues: the Motor HP column is a fraction, and the reader could not read it
+
+- **Owner:** *"catalog for ewf/ewfdd/prv/prvdd is in github… Look at the Motor HP column for motor HP to install."*
+
+The engine already does exactly that — `selectPropellerRow` ends `const motorHp = chosen.hp`, straight off the
+row, no ÷0.75 and no service factor. The problem was that the row never got that far.
+
+### 422 printed rows, 1 of them readable
+
+The four catalogues print **Motor HP as a fraction** — `1/4`, `1/3`, `1/2`, `3/4`, `1 1/2`, `7 1/2` — and print
+the **Blade Angle** (and even the static-pressure column headers) as text. `selectPropellerRow` accepted a value
+only when `typeof v === "number"`, so:
+
+| | rows | usable as printed | usable once read properly |
+| --- | --- | --- | --- |
+| EWF · 8 sheets | 125 | 0 | 45 |
+| EWFDD · WPD Direct Drive | 37 | **1** | 33 |
+| PRV / PRVDD · 34 sheets | 260 | 0 | 144 |
+| **all four** | **422** | **1** | **222** |
+
+A row with an unreadable `hp` or `a` is skipped **silently**. Skip every row and `selectPropellerRow` returns
+null, and a model that returns null is simply absent from the results — no error, no warning, nothing to notice.
+Four whole product families could vanish from the selector and the only symptom would be that nobody ever quoted
+one. (The 422→222 gap is mostly the documented **≤40° blade-angle rule**, which is untouched.)
+
+### `catalogueNum`
+
+One exported reader that takes a number written the way a catalogue writes it: `"1 1/2"` → 1.5, `"3/4"` → 0.75,
+`"16"` → 16, a real number through untouched, and `null` for anything it cannot read — so a genuinely bad row is
+still dropped. Applied to the propeller row table (`hp`, `a`, `rpm`, `bhp`) and to the catalogue `motorTable`
+pairs, where a `"1/2"` HP entry would otherwise have reached `hpToKw()` as `NaN`.
+
+**No selection rule changed.** The ≤40° blade angle, the rpm ceiling, "smallest motor that meets the duty", the
+AFBM ÷0.75 for non-propeller fans, and the service-factor divisor the owner asked to keep are all exactly as they
+were. This is only about being able to read the sheet.
+
+### Proved against the owner's own file
+
+`propeller-catalogue.test.ts` parses `EWF Catalog.xlsx` column for column and runs three duties through
+`3600EWF`. It skips itself if the file isn't in the repo root, so moving the upload cannot break the suite.
+
+| duty | selected row (as printed) | motor installed | BHP ÷ 0.75 would have said |
+| --- | --- | --- | --- |
+| 12000 cfm @ 0.125" | 35°, 757 rpm, 1.09 BHP | **1 HP** | 1.5 HP |
+| 15000 cfm @ 0.125" | 35°, 954 rpm, 2.19 BHP | **2 HP** | 3 HP |
+| 19000 cfm @ 0.125" | 35°, 1092 rpm, 3.26 BHP | **3 HP** | 5 HP |
+
+Every pick is a printed row, and the Motor HP column is a **frame size smaller** than the ÷0.75 rule every time —
+which is the whole reason these families read their motor from the catalogue.
+
+### Left alone, and worth the owner's word
+
+Rows whose **Blade Angle prints as `"—"`** (40 of them, on the EWF Level-1 sheets) are still dropped: `"—"` is not
+a number, and whether "no stated angle" should pass the ≤40° rule is a judgement about what may be quoted, not a
+parsing question.
 ## 2026-09-01 · The service factor stays in motor selection — a change made, then reverted on the owner's word
 
 - **Owner's ruling, in two parts:** *"EWF / EWFDD / PRV / PRVDD do not follow such 0.75 division factor.

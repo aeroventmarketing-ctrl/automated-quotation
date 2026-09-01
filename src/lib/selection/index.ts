@@ -568,6 +568,38 @@ function gridOperatingPoint(
   };
 }
 
+/**
+ * A number written the way a fan catalogue writes it.
+ *
+ * The propeller catalogues (EWF / EWFDD / PRV / PRVDD) print **Motor HP** as a
+ * fraction — `1/4`, `1/3`, `3/4`, `1 1/2`, `7 1/2` — and some sheets print the
+ * **Blade Angle** as text (`"16"`) rather than a number. Across the four
+ * catalogues that is 422 printed rows, of which exactly **1** survives a plain
+ * `typeof v === "number"` test: a spec built from the columns verbatim leaves
+ * `selectPropellerRow` with no candidates, and the whole model disappears from
+ * the results without an error anywhere.
+ *
+ * So the reader accepts what the catalogue actually prints. A real number passes
+ * through untouched; anything unparseable is still `null`, and the row is still
+ * dropped. This changes no selection RULE — the ≤40° blade-angle limit, the rpm
+ * ceiling and "smallest motor that meets the duty" are all as they were.
+ */
+export function catalogueNum(v: unknown): number | null {
+  if (typeof v === "number") return Number.isNaN(v) ? null : v;
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (s === "") return null;
+  // "1 1/2" → 1.5, "3/4" → 0.75
+  const frac = s.match(/^(?:(\d+)\s+)?(\d+)\s*\/\s*(\d+)$/);
+  if (frac) {
+    const den = Number(frac[3]);
+    if (!den) return null;
+    return (frac[1] ? Number(frac[1]) : 0) + Number(frac[2]) / den;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Operating point for one direct-drive band, or null if the SP can't be developed there. */
 function directDriveBand(
   band: { pole: number; minRpm: number; maxRpm: number },
@@ -734,8 +766,8 @@ function interpCfmAtSp(curve: Array<[number, number]>, sp_in: number): number | 
 function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionResult | null {
   const rowsSpec = model.specs?.rows;
   if (!Array.isArray(rowsSpec) || rowsSpec.length === 0) return null;
-  const numv = (v: unknown): number | null =>
-    typeof v === "number" && !Number.isNaN(v) ? v : null;
+  // Reads the catalogue's own notation — see `catalogueNum`.
+  const numv = catalogueNum;
 
   const direct = String(model.specs?.drive ?? "") === "direct";
   const rpmCeiling = direct ? 1750 : 1200;
@@ -1175,8 +1207,12 @@ export function selectFan(
   let motorHp: number;
   let motorBasis: "catalog" | "BHP/0.75";
   if (hasMotorTable) {
-    const table = (motorTbl as Array<[number, number]>)
+    // Same catalogue notation as the row tables: a "1/2" HP entry is a real
+    // motor size, and left as a string it would reach hpToKw() as NaN.
+    const table = (motorTbl as Array<[unknown, unknown]>)
       .filter((e) => Array.isArray(e) && e.length === 2)
+      .map((e) => [catalogueNum(e[0]), catalogueNum(e[1])] as [number | null, number | null])
+      .filter((e): e is [number, number] => e[0] != null && e[1] != null)
       .sort((a, b) => a[0] - b[0]);
     const hit = table.find(([, maxBhp]) => maxBhp >= bhp - 1e-9);
     // Above the largest catalog motor's envelope, fall back to a standard motor
