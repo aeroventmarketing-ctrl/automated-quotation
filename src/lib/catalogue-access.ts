@@ -74,6 +74,13 @@ export function inventoryAccess(user: User | null | undefined, roles: WorkflowRo
   // Sales may VIEW inventory read-only — name / quantity / availability / selling
   // price — but never the unit cost, stock value, or any management action.
   const isSales = user?.role === "SALES";
+  // Owner's instruction: *"allow inventory to engineer role."* The nav had
+  // offered an Engineer the Inventory tab all along and the page then refused
+  // it — the same shape as Products, closed a change earlier. An Engineer quotes
+  // against what is on the shelf; they already see unit cost and stock value
+  // (`showPrices`) and the Labels / Reorder links (`showHeaderTools`), all of
+  // which were stranded behind a page that would not open.
+  const isEngineer = user?.role === "ENGINEER";
   const prodHead = PROD_HEADS.some(has);
 
   // The Plant Manager monitors stock but does not edit items; a Warehouseman or
@@ -86,7 +93,7 @@ export function inventoryAccess(user: User | null | undefined, roles: WorkflowRo
     // holding the final approval on every inventory request while the page
     // refused to open for them.
     canView:
-      isSales || admin || canManage || priceOwner || has("purchaser") || has("accounting") ||
+      isSales || isEngineer || admin || canManage || priceOwner || has("purchaser") || has("accounting") ||
       has("logistics") || has("technical_head") || prodHead,
     canManageItems,
     canManageTransfers: canManage,

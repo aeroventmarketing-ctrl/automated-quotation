@@ -26,8 +26,11 @@ const bodySchema = z.object({
   tag: z.string().optional(),
   // Legacy: restrict to a blade type (forward-curve CFAB vs backward CEB).
   bladeType: z.string().optional(),
-  // Direct-drive (CEBDD) selection: constrain to standard 2-/4-pole speed bands.
+  // Direct-drive (CEBDD) selection: constrain to the standard pole speed bands.
   directDrive: z.boolean().optional(),
+  // The motor pole asked for. Omitted, a CEBDD selection runs on the 4-pole
+  // band — a 2-pole is only ever offered when it is requested here.
+  motorPole: z.number().int().optional(),
 });
 
 /**
@@ -193,7 +196,7 @@ export async function POST(req: NextRequest) {
       })),
     }));
 
-    const results = selectFans(inputs, duty, { directDrive: body.directDrive });
+    const results = selectFans(inputs, duty, { directDrive: body.directDrive, motorPole: body.motorPole });
     return NextResponse.json({ duty, sourceUnits, results });
   } catch (err) {
     console.error("[/api/selection] selection failed", {

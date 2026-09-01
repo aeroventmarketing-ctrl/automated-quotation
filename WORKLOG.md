@@ -1,3 +1,126 @@
+## 2026-09-01 · A 2-pole fan is now a request, never the selector's own idea
+
+- **Owner's rule:** *"2 pole should show only when the user specifies 2 pole. If not specified, default is 4 pole.
+  First row is wrong sizing up while 2nd row is correct but the motor is too big… It should be at least less than
+  1HP or 747 watts."*
+
+### What the selector was doing
+
+`selectDirectDrive` walked the whole band list (6, 4, 2) and returned the **first band that met the flow**. Order
+was preference, and 2-pole sat at the end of it as a silent fallback. So a duty the 4-pole band missed by **1.3%**
+was answered by doubling the speed:
+
+| duty | selected | delivered | absorbed |
+| --- | --- | --- | --- |
+| 2000 m³/hr @ 350 Pa — **before** | 2-pole, 3590 rpm | **7353 m³/hr** (3.7× asked) | **10.00 kW** |
+| 2000 m³/hr @ 350 Pa — **after** | **4-pole, 1750 rpm** | **2000 m³/hr** (exact) | 1.00 kW |
+
+Two changes get there, and both were needed.
+
+### 1. The pole is chosen, not guessed
+
+`SelectionOptions.motorPole` carries the request. Unset, a CEBDD selection runs on the **4-pole band alone**
+(`DEFAULT_DIRECT_DRIVE_POLE`); a 2-pole is only ever offered when it is asked for. If the requested pole is one
+the fan can't run, the size is excluded rather than quietly substituted.
+
+The narrowing applies **only to the standard `DIRECT_DRIVE_BANDS`**. A model carrying its own bands
+(`specs.directBands`) or running at fixed rated speeds (`fixedSpeedDirect`, e.g. EWFDD) turns at speeds the fan
+itself is rated for — there is no pole to choose there, and defaulting those to 4 would simply make such a model
+unselectable. An explicit request is still honoured everywhere.
+
+Exposed as **Motor pole** on the Fan Selector (shown only for Direct drive): *Default (4-pole)* / 2 / 4 / 6, and
+as `motorPole` on `/api/selection`. The public store selector inherits the 4-pole default without changing.
+
+### 2. A band is raised before it is abandoned
+
+`directDriveBand` already had a rule, in its own words, that a band should be raised toward its `maxRpm` rather
+than jumping a pole "for a small shortfall" — but that rule lived **only in the rpm-grid branch**. A model with a
+single rated curve took the fan-law fallback, which judged the band at its nominal speed and nowhere else. At the
+4-pole nominal (1745 rpm) the fixture delivers 1974 m³/hr against 2000 asked, so the band was thrown away. Both
+paths now share one `at(rpm)` reader and the same search. This is what makes the 4-pole answer land on 2000
+m³/hr exactly instead of 26 short.
+
+With 2-pole no longer reachable by accident, the concern that parked this fix last time is gone: the duty the
+suite excludes (2000 m³/hr @ 2100 Pa) is unreachable on the 4-pole band and stays excluded.
+
+### 3. "The motor is too big" — the engine is right, the fixture isn't
+
+Worth being exact, because it changes where to look. Same curve, same duty, two power columns:
+
+| rating data | absorbed | motor | air-power floor |
+| --- | --- | --- | --- |
+| the suite's synthetic fixture | 987 W | **2 HP / 1490 W** | 185 W |
+| the same curve, `power_kw` = air power ÷ efficiency | **267 W** | **0.5 HP / 370 W** | 185 W |
+
+The fixture claims a fan drawing 987 W to move 185 W of air — **19% efficient** — on a rating row whose own
+`efficiency` column says **0.72**. Its power numbers were invented for interpolation tests. Fed physically
+consistent data, the engine sizes **0.5 HP (370 W)**, comfortably under the owner's 1 HP / 747 W.
+
+So the sizing rule (absorbed → BHP ÷ 0.75 → next standard motor) is not the problem. **`power_kw` comes straight
+from the catalogue rating points** and is only scaled by the fan laws — if a real model's power column is wrong,
+its quoted motor will be wrong no matter what the selector does. That is a data check on the owner's side, and
+it is the one thing here I cannot verify from this repository: it holds no fan catalogue.
+
+### The suite is green for the first time
+
+`selectFan — direct drive (CEBDD): SP + pole priority` had been failing on `main` throughout this session. It
+passes, along with three new tests pinning the rule: no escalation to 2-pole unasked, the 2-pole band on request,
+the 4-pole band raised within itself rather than abandoned, and an unavailable pole excluding the size.
+**123 passed, 0 failed.**
+## 2026-09-01 · The Engineer gets Inventory; Accounting and the Engineer lose the requisition form
+
+Two rulings from the owner on the open flag list, and one diagnosis parked for their decision.
+
+### "allow inventory to engineer role"
+
+The last of the nav-offers/page-refuses pairs the capability grid found on its first run. `visibleNav` has always
+listed **Inventory** for an `ENGINEER`; `inventoryAccess` then refused them, which also stranded the unit cost,
+stock value and the Labels / Reorder links they were already cleared to see.
+
+`canView` gains the Engineer and **nothing else moves** — no manage, transfer, create, delete, propose-edit,
+price-set, file-transfer or scan. Exactly one grid cell changed, the grid was updated in the same commit as
+CLAUDE.md requires, and a named regression test pins it. On the real screen:
+
+| | open | cost | value | import | edit |
+| --- | --- | --- | --- | --- | --- |
+| Inventory · Elena Cruz (ENGINEER) | **true** | true | true | false | false |
+
+### "Accounting and Engineer are not allowed to make a requisition"
+
+The other half of the same shape, resolved the other way. Both were listed in the page's `officeRaiser`, so both
+were offered the whole New-requisition form; `createDepartmentRequisition` then refused the Submit with *"You
+don't have access to raise a requisition."* **The server was right and the page was wrong**, so the page moved to
+match the server rather than the reverse. Verified by loading the page as each: refused, no form.
+
+Any future change here needs the matching change in that action, or the two drift apart again — the comment on
+each side now says so.
+
+### Parked for the owner: a CEBDD direct-drive selection defect worth a look
+
+The pre-existing failing test (`selectFan — direct drive (CEBDD)` expects a 4-pole, gets 2) is not a stale
+expectation. Measured against the test's own fixture:
+
+| duty | selects | delivers | motor |
+| --- | --- | --- | --- |
+| 2000 m³/hr @ **350 Pa** | **2-pole, 3590 rpm** | **7353 m³/hr** (3.7× the request) | **10.00 kW** |
+| 1900 m³/hr @ 350 Pa | 4-pole, 1745 rpm | 1974 m³/hr | 0.99 kW |
+
+**Cause.** `directDriveBand` has a rule, in its own words, that a band should be raised toward its `maxRpm`
+rather than jumping a pole "for a small shortfall". That rule lives **only in the rpm-grid branch**. A model with
+a single rated curve takes the fan-law fallback, which evaluates the band at its nominal speed and nowhere else.
+At the 4-pole nominal (1745 rpm) the fixture delivers 1974 m³/hr against a requested 2000 — **1.3% short** — so
+the band is discarded and 2-pole wins. 4-pole at 1840 rpm would have delivered ~2337 m³/hr on about 1.2 kW.
+Power goes with the cube of speed, so jumping a pole band is never a small matter.
+
+**Not applied.** The fix (hoist the raise-within-band search so both data paths share it) is written and passes
+the 4-pole test, but it also makes a duty the suite currently expects to be *excluded* — 2000 m³/hr @ 2100 Pa —
+selectable at 3766 rpm, inside the 2-pole band's 3780 limit. That is arguably correct, and arguably a fan nobody
+should quote. Changing which duties the selection engine will accept is a commercial decision, so it waits for
+the owner's word rather than riding along with two permission changes.
+
+Also noted for that decision: `DIRECT_DRIVE_BANDS` carries **6, 4 and 2 pole** — the owner's *"CEBDD is either 2
+pole, 4 pole, 6 pole or 8 pole"* says an **8-pole** band is missing. Adding one would change which motor wins on
+low-pressure duties, so it is the same decision.
 ## 2026-08-31 · Stock labels: the barcode printed across the next label
 
 - **Owner's report:** *"overlapping bar code and qr code for printing"* — on Stock labels, each card's Code 128

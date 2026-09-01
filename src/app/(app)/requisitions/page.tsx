@@ -24,17 +24,22 @@ export default async function RequisitionsPage() {
   const has = (r: WorkflowRoleKey) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r);
   const purchaser = admin || has("purchaser");
   const isSales = viewer?.role === "SALES";
-  const isEngineer = viewer?.role === "ENGINEER";
   // Which departments the viewer heads.
   const ownDeptKeys = viewer == null ? [] : PRODUCTION_DEPTS.filter((d) => has(deptRole(d.key) as WorkflowRoleKey)).map((d) => d.key);
-  // Office-type raisers (accounting, plant manager, warehouse, logistics,
-  // engineers, sales, the Payment Approver) may raise requisitions for their own
-  // department. The Payment Approver is here on the owner's instruction —
-  // *"enable requisitions for payment approver"* — and is granted in
-  // `createDepartmentRequisition` in the same commit, so the form and the Submit
-  // agree.
+  // Office-type raisers (plant manager, warehouse, logistics, the Technical Head,
+  // sales, the Payment Approver) may raise requisitions for their own department.
+  // The Payment Approver is here on the owner's instruction — *"enable
+  // requisitions for payment approver"*.
+  //
+  // **Accounting and Engineers are NOT** — owner's ruling: *"Accounting and
+  // Engineer are not allowed to make a requisition."* They used to be listed
+  // here, which offered them the whole form; `createDepartmentRequisition` then
+  // refused the Submit with *"You don't have access to raise a requisition."*
+  // The server was right and this list was wrong, so the list moved to match it.
+  // Any change here needs the matching change in that action, or the two drift
+  // apart again.
   const officeRaiser =
-    isSales || isEngineer || has("accounting") || has("payment_approver") || has("plant_manager") ||
+    isSales || has("payment_approver") || has("plant_manager") ||
     has("warehouse") || has("logistics") || has("technical_head");
   const canRaise = admin || purchaser || officeRaiser || ownDeptKeys.length > 0;
 
