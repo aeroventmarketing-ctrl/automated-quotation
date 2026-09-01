@@ -52,8 +52,12 @@ const only = (...w: Who[]) => Object.fromEntries(EVERYONE.map((k) => [k, w.inclu
 // INVENTORY
 // ---------------------------------------------------------------------------
 const INVENTORY: Record<keyof ReturnType<typeof inventoryAccess> & string, Record<Who, boolean>> | Record<string, Record<Who, boolean>> = {
-  // Everyone with a reason to look. Sales get a read-only, no-cost view.
-  canView: only("admin", "sales", "warehouse", "purchaser", "paymentApprover", "accounting", "plantManager", "logistics", "prodHead"),
+  // Everyone with a reason to look. Sales get a read-only, no-cost view. The
+  // **Engineer** is here on the owner's instruction — *"allow inventory to
+  // engineer role"* — closing the last of the nav-offers/page-refuses pairs the
+  // grid found on its first run. Read only: every management cell below leaves
+  // them false.
+  canView: only("admin", "sales", "engineer", "warehouse", "purchaser", "paymentApprover", "accounting", "plantManager", "logistics", "prodHead"),
   // Label / Reserve / Adjust: the people who hold the stock.
   canManageItems: only("admin", "warehouse"),
   // Wider than the item actions: the Plant Manager moves stock between locations.
@@ -160,6 +164,19 @@ describe("the catalogue capability grid", () => {
       for (const w of EVERYONE) {
         expect(inventoryAccess(...as(w)).canTransferFiles).toBe(productsAccess(...as(w)).canTransferFiles);
       }
+    });
+
+    it("the Engineer is offered the Inventory tab AND the page opens", () => {
+      // The nav has always listed Inventory for an ENGINEER. Until the owner's
+      // instruction the page refused them, which also stranded the unit cost,
+      // stock value and Labels / Reorder links they were already cleared for.
+      const a = inventoryAccess(...as("engineer"));
+      expect(a.canView).toBe(true);
+      expect(a.showPrices).toBe(true);
+      expect(a.showHeaderTools).toBe(true);
+      // Read only — the grant stops at looking.
+      expect([a.canManageItems, a.canManageTransfers, a.canCreateItems, a.canDeleteItems, a.canProposeEdit, a.canEditPrices, a.canTransferFiles, a.canScan])
+        .toEqual([false, false, false, false, false, false, false, false]);
     });
 
     it("the Engineer is offered the Products tab AND the page opens", () => {

@@ -1,3 +1,57 @@
+## 2026-09-01 · The Engineer gets Inventory; Accounting and the Engineer lose the requisition form
+
+Two rulings from the owner on the open flag list, and one diagnosis parked for their decision.
+
+### "allow inventory to engineer role"
+
+The last of the nav-offers/page-refuses pairs the capability grid found on its first run. `visibleNav` has always
+listed **Inventory** for an `ENGINEER`; `inventoryAccess` then refused them, which also stranded the unit cost,
+stock value and the Labels / Reorder links they were already cleared to see.
+
+`canView` gains the Engineer and **nothing else moves** — no manage, transfer, create, delete, propose-edit,
+price-set, file-transfer or scan. Exactly one grid cell changed, the grid was updated in the same commit as
+CLAUDE.md requires, and a named regression test pins it. On the real screen:
+
+| | open | cost | value | import | edit |
+| --- | --- | --- | --- | --- | --- |
+| Inventory · Elena Cruz (ENGINEER) | **true** | true | true | false | false |
+
+### "Accounting and Engineer are not allowed to make a requisition"
+
+The other half of the same shape, resolved the other way. Both were listed in the page's `officeRaiser`, so both
+were offered the whole New-requisition form; `createDepartmentRequisition` then refused the Submit with *"You
+don't have access to raise a requisition."* **The server was right and the page was wrong**, so the page moved to
+match the server rather than the reverse. Verified by loading the page as each: refused, no form.
+
+Any future change here needs the matching change in that action, or the two drift apart again — the comment on
+each side now says so.
+
+### Parked for the owner: a CEBDD direct-drive selection defect worth a look
+
+The pre-existing failing test (`selectFan — direct drive (CEBDD)` expects a 4-pole, gets 2) is not a stale
+expectation. Measured against the test's own fixture:
+
+| duty | selects | delivers | motor |
+| --- | --- | --- | --- |
+| 2000 m³/hr @ **350 Pa** | **2-pole, 3590 rpm** | **7353 m³/hr** (3.7× the request) | **10.00 kW** |
+| 1900 m³/hr @ 350 Pa | 4-pole, 1745 rpm | 1974 m³/hr | 0.99 kW |
+
+**Cause.** `directDriveBand` has a rule, in its own words, that a band should be raised toward its `maxRpm`
+rather than jumping a pole "for a small shortfall". That rule lives **only in the rpm-grid branch**. A model with
+a single rated curve takes the fan-law fallback, which evaluates the band at its nominal speed and nowhere else.
+At the 4-pole nominal (1745 rpm) the fixture delivers 1974 m³/hr against a requested 2000 — **1.3% short** — so
+the band is discarded and 2-pole wins. 4-pole at 1840 rpm would have delivered ~2337 m³/hr on about 1.2 kW.
+Power goes with the cube of speed, so jumping a pole band is never a small matter.
+
+**Not applied.** The fix (hoist the raise-within-band search so both data paths share it) is written and passes
+the 4-pole test, but it also makes a duty the suite currently expects to be *excluded* — 2000 m³/hr @ 2100 Pa —
+selectable at 3766 rpm, inside the 2-pole band's 3780 limit. That is arguably correct, and arguably a fan nobody
+should quote. Changing which duties the selection engine will accept is a commercial decision, so it waits for
+the owner's word rather than riding along with two permission changes.
+
+Also noted for that decision: `DIRECT_DRIVE_BANDS` carries **6, 4 and 2 pole** — the owner's *"CEBDD is either 2
+pole, 4 pole, 6 pole or 8 pole"* says an **8-pole** band is missing. Adding one would change which motor wins on
+low-pressure duties, so it is the same decision.
 ## 2026-08-31 · Stock labels: the barcode printed across the next label
 
 - **Owner's report:** *"overlapping bar code and qr code for printing"* — on Stock labels, each card's Code 128
