@@ -45,6 +45,11 @@ were. This is only about being able to read the sheet.
 | 15000 cfm @ 0.125" | 35°, 954 rpm, 2.19 BHP | **2 HP** | 3 HP |
 | 19000 cfm @ 0.125" | 35°, 1092 rpm, 3.26 BHP | **3 HP** | 5 HP |
 
+**The owner signed these three off — *"this is the correct one"*** — so the test asserts them outright: blade
+angle, rpm, BHP and installed motor, duty by duty. They are no longer a loose "the motor is some printed value"
+invariant but a reference case with the owner's name on it, and any change that moves one of these nine numbers
+has to be justified against that.
+
 Every pick is a printed row, and the Motor HP column is a **frame size smaller** than the ÷0.75 rule every time —
 which is the whole reason these families read their motor from the catalogue.
 

@@ -68,15 +68,26 @@ describe("the real EWF catalogue, read as printed", () => {
       specs: { propeller: true, drive: "belt", bladeDia_in: 36, outletArea_ft2: 7.6, maxRpm: 1200, rows },
     };
 
-    for (const [cfm, sp] of [[12000, 0.125], [15000, 0.125], [19000, 0.125]] as const) {
+    // The expected column is the OWNER'S sign-off on these three selections
+    // ("this is the correct one"), so they are pinned outright rather than left
+    // to a loose invariant: duty → the printed row, and the motor it installs.
+    const CONFIRMED = [
+      { cfm: 12000, sp: 0.125, angle: 35, rpm: 757, bhp: 1.09, motorHp: 1 },
+      { cfm: 15000, sp: 0.125, angle: 35, rpm: 954, bhp: 2.19, motorHp: 2 },
+      { cfm: 19000, sp: 0.125, angle: 35, rpm: 1092, bhp: 3.26, motorHp: 3 },
+    ];
+    for (const { cfm, sp, angle, rpm, bhp, motorHp } of CONFIRMED) {
       const r = selectFan(model, { airflow_m3hr: cfm / CFM_PER_M3HR, staticPressure_pa: sp * PA_PER_INWG });
       expect(r).not.toBeNull();
+      expect({ angle: r!.bladeAngle, rpm: r!.rpm, bhp: r!.bhp, motorHp: r!.motorHp })
+        .toEqual({ angle, rpm, bhp, motorHp });
       // The chosen motor is a value printed in the Motor HP column — never BHP/0.75.
       const printed = rows.map((x) => catalogueNum(x.hp));
       expect(printed).toContain(r!.motorHp);
       // …and it is the CATALOGUE motor, not BHP/0.75: at 15000 cfm the printed
       // row is 2 HP on 2.19 BHP, where BHP/0.75 would have called for 3 HP.
       expect(r!.motorHp).toBeLessThanOrEqual(suggestMotorHp(r!.bhp));
+      expect(suggestMotorHp(bhp)).toBeGreaterThan(motorHp); // ÷0.75 is always a size up here
     }
   });
 });
