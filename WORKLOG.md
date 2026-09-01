@@ -1,3 +1,49 @@
+## 2026-09-01 · A query for the rating-power check, and the 0.75 HP ruling
+
+Three answers from the owner. Two closed with a comment and a test; one turned into a tool.
+
+### "Please explain more" — the rating-power check, now a query you can run
+
+The worry: **`power_kw` is imported verbatim.** `src/lib/import/csv.ts` stores whatever the CSV says and nothing
+in the repository converts BHP to kW, so a catalogue whose **BHP column was loaded straight into `power_kw`**
+overstates every absorbed figure by `1 ÷ 0.7457 = 1.34×` — one to two motor frames, on every quote for that model.
+
+Physics gives a free test, needing no reference to the printed catalogue:
+
+```
+air power a fan delivers = (m³/hr ÷ 3600) × Pa       [watts]
+fan static efficiency    = air power ÷ absorbed power
+```
+
+If `power_kw` holds BHP, the absorbed figure is 1.34× too big, so **every efficiency reads 0.7457× too small**.
+A backward-inclined wheel peaks around 0.70–0.80; the same data mis-imported peaks near 0.50–0.60.
+
+`scripts/sql/rating-power-check.sql` prints, per model, the peak efficiency **as stored** beside what it would be
+**if the column were BHP** — read the two and keep the believable one. Proved by loading 219 real 1225CEB cells
+into a throwaway database twice, once each way:
+
+| modelCode | rows | peak as stored | peak if BHP was copied |
+| --- | --- | --- | --- |
+| AV1225CEB-**BAD** (BHP → `power_kw`) | 219 | **0.505** ← too low for a BI wheel | **0.677** ← believable |
+| AV1225CEB-**GOOD** (BHP × 0.7457) | 219 | **0.677** ← believable | 0.908 ← near-impossible |
+
+The two columns swap places. Whichever row shows a believable peak in "as stored" is fine; a model that only
+looks believable in the other column never had its conversion done. A peak above 1.0 is flagged outright — more
+air power out than shaft power in.
+
+The threshold is deliberately left to the eye rather than hard-coded: a forward-curve wheel legitimately peaks
+lower than a backward-inclined one, so a fixed cutoff would cry wolf on CFAB.
+
+### "yes, move to 1HP" — no 0.75 HP size
+
+Put to the owner that the absence of 0.75 HP from `MOTOR_HP_LIST` is what sends 0.60 BHP (÷0.75 = 0.80) to a
+**1 HP** motor. Answer: keep it that way. The 0.5 → 1 jump is now written at the list as the rule, and pinned:
+`MOTOR_HP_LIST` contains no 0.75, `suggestMotorHp(0.6) === 1`, `suggestMotorHp(0.3) === 0.5`. Adding 0.75 later
+would silently undo the ruling; now it fails a test first.
+
+### 8-pole
+
+Dropped at the owner's instruction. Not to be raised again until they do.
 ## 2026-09-01 · The propeller catalogues: the Motor HP column is a fraction, and the reader could not read it
 
 - **Owner:** *"catalog for ewf/ewfdd/prv/prvdd is in github… Look at the Motor HP column for motor HP to install."*
