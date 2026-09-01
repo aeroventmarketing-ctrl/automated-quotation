@@ -1,3 +1,46 @@
+## 2026-09-01 · The service factor is out of motor selection entirely
+
+- **Owner's ruling:** *"EWF / EWFDD / PRV / PRVDD do not follow such 0.75 division factor. Disregard service
+  factor in motor selection. Some motors do not have SF or 1.0 SF only."*
+
+The first half confirms what the code already did — a propeller fan carrying a catalogue `motorTable` reads its
+motor straight from the MOTOR HP / MAX BHP column and never touches ÷0.75. Unchanged.
+
+The second half was a live rule, in exactly one place.
+
+### Where a service factor was still sizing a motor
+
+Past the largest entry in a propeller fan's catalogue motor table, the fallback was:
+
+```
+motorAtLeastHp(bhp / serviceFactor)   // serviceFactor = 1.15
+```
+
+Dividing by the service factor banks on running the motor **15% over its nameplate** — defensible only if every
+motor really is rated SF 1.15. The owner's point is that they are not: some carry no SF, or SF 1.0. So the
+division picked a motor that might have no headroom to give.
+
+It is now `motorAtLeastHp(bhp)` — the smallest standard motor whose **nameplate** covers the absorbed BHP. Where
+the two differ, the new answer is the larger motor: a fan absorbing **1.1 BHP** past its table used to get a
+**1 HP** motor (1.1 ÷ 1.15 = 0.96) and now gets **1.5 HP**.
+
+### And the factor is gone, not just unused
+
+`serviceFactor` was also a `SelectionOptions` input and a `SelectionResult` field, set to 1.15 and carried
+through for display. **Nothing in the app ever read it** — no component, no route, no test. A result that reports
+a service factor the sizing does not apply is how the assumption creeps back in, so the option, the field and the
+division are all removed. `void serviceFactor; // retained for display only` goes with them.
+
+Nothing else changes: the AFBM **÷0.75** rule still sizes every non-propeller fan (CEB and the rest), and a
+propeller fan with a motor table still reads its motor from the catalogue column.
+
+### What is left in the chain
+
+Catalogue cell → density correction (cancels at standard air) → kW→HP → round to 2 dp → **÷ 0.75** (non-propeller
+only) → round **up** to `MOTOR_HP_LIST`. One divisor, one round-up, no service factor anywhere.
+
+Suite green: **124 passed**, including a new test pinning that past the catalogue table the nameplate covers the
+absorbed BHP on its own.
 ## 2026-09-01 · The real CEB catalogue, checked against the selection engine
 
 The owner uploaded **`CEB Catalog SISW only.xlsx`** so the motor-sizing question could be settled against real data
