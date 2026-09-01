@@ -1,3 +1,76 @@
+## 2026-09-01 · The rating-power check, run: no unit error anywhere, two real defects
+
+The owner ran `scripts/sql/rating-power-check.sql` against the live catalogue and sent the output: **295 models,
+38,210 rating rows.** The verdict, and the three things worth acting on.
+
+### The conversion is right. Nothing needs multiplying by 0.7457
+
+Three independent lines say so.
+
+**Direct.** `AV1225CEB` reads **0.682** live. A correctly-converted copy of the *same 219 printed cells*, loaded
+into a throwaway database from `CEB Catalog SISW only.xlsx`, read **0.677**. Same data, same answer — and the
+mis-converted copy read 0.505. The one model whose printed sheet is in the repository checks out exactly.
+
+**Family consistency.** A conversion missed on some models but not others would blow a family's spread past
+1.34×. It does not. Every family with eight or more members sits between **1.12× and 1.36×**:
+
+| family | models | min | median | max | spread |
+| --- | --- | --- | --- | --- | --- |
+| CEB | 20 | 0.662 | 0.753 | 0.771 | 1.16× |
+| DIDWCEB | 20 | 0.626 | 0.724 | 0.750 | 1.20× |
+| CIEB | 17 | 0.482 | 0.552 | 0.575 | 1.19× |
+| HPB | 17 | 0.690 | 0.814 | 0.814 | 1.18× |
+| CMB | 15 | 0.570 | 0.632 | 0.638 | 1.12× |
+| PRV · EWF · FAWF | 8 each | — | — | — | 1.19× · 1.18× · 1.17× |
+
+Too tight to contain a mix of kW and BHP.
+
+**The arithmetic filter is a trap, and worth naming.** Asking "which models land in 0.70–0.80 when multiplied by
+1.34?" returns **63 candidates** — because 0.55 × 1.34 = 0.74, so anything near the middle of the distribution
+qualifies. Nearly all of them sit *at or above* their own family median (AV3650CIEB reads 0.552 against a family
+median of 0.552). Absolute thresholds cannot answer this question; **only the comparison to a model's own
+siblings can.**
+
+### The low readings are size, not error
+
+Efficiency climbs with wheel size, monotonically at the small end of every family:
+
+```
+DIDWCFAB   900:0.38  1050:0.38  1225:0.52  1350:0.57  1500:0.57  1650:0.57
+VAF       1200:0.49  1600:0.64  1800:0.66  2200:0.66  2400:0.65  2800:0.65
+CMA       1281:0.53  1562:0.53  1912:0.62  2262:0.68  2612:0.68  2962:0.68
+```
+
+The eight models that read below 80% of their family median are, without exception, the **smallest sizes in that
+family** — and ×1.34 does not lift them into family range anyway (0.377 → 0.506 against a median of 0.581). Small
+fans really are less efficient. Not a defect.
+
+### Two real defects, and one question
+
+**1. `AV3650DIDWCFAB` — impossible, and off by a factor of two.** Peak 1.182: more air power out than shaft power
+in. Against its family median of 0.581 that is **2.03×** — the signature of a halved power or a doubled airflow,
+not a unit slip (a unit slip is 1.34×). 106 rows. This one is wrong and is being quoted from.
+
+**2. `AV8075CEB` — imported twice.** 444 rating rows where **every** sibling in its group has exactly 222 — a
+clean 2.00×. Duplicated rows do not move the efficiency check (the same numbers are simply present twice), so
+nothing else would ever have noticed. `AV2400FAWFDD` (51 rows vs a family median of 29) and `AV3000FAWFDD` (48)
+are looser candidates that may just have larger printed tables.
+
+**3. The 37 third-party models** — `17CUG`, `12CGB15`, `12NSB`, `GSC`, `CK200` and the rest — read **0.107–0.591**,
+far below any Aerovent family, and ×1.34 does not rescue them (0.107 → 0.143). That is the signature of
+**electrical input watts** rather than shaft power: divide air power by a small motor's *input* and 10–25% is
+exactly what you get. A different quantity, not a bad conversion. Worth the owner's word on whether motor sizing
+(`BHP ÷ 0.75`) is applied to those at all — on an input-watts figure it would oversize.
+
+`HPB` peaking at 0.813–0.814 is at the top of the believable band for static efficiency; an airfoil
+high-pressure wheel can reach it and the family is tight, so it is noted rather than flagged.
+
+### Two more queries
+
+`scripts/sql/rating-power-check.sql` gains a **duplicate-rating-row detector** (rows vs distinct rpm/airflow/SP —
+it finds `AV8075CEB`-shaped problems that the efficiency check is blind to) and a **single-model inspector** that
+prints cfm / SP / rpm / kW / **BHP** / efficiency for one model, so its rows can be read straight against the
+printed catalogue page. Both tested against a seeded database.
 ## 2026-09-01 · A query for the rating-power check, and the 0.75 HP ruling
 
 Three answers from the owner. Two closed with a comment and a test; one turned into a tool.
