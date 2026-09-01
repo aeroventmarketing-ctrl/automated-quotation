@@ -8,7 +8,6 @@ import {
   forwardCurveOvLimit,
   didwCfabOvLimit,
   MOTOR_HP_LIST,
-  motorAtLeastHp,
   type FanModelInput,
 } from "./index";
 
@@ -388,27 +387,6 @@ describe("selectFan — fixed-speed direct (EWFDD propeller): own rated speed", 
     const r = selectFan(withMotor, { airflow_m3hr: 2000, staticPressure_pa: 150 }, { directDrive: true })!;
     expect(r.bhp).toBeLessThan(2.2);
     expect(r.motorHp).toBe(2); // smallest motor whose MAX BHP ≥ absorbed BHP
-  });
-
-  // Owner's ruling: *"Disregard service factor in motor selection. Some motors
-  // do not have SF or 1.0 SF only."* Past the catalogue table's largest motor
-  // the fallback used to divide the absorbed BHP by a 1.15 service factor —
-  // banking on running the motor 15% over its nameplate, which is only safe if
-  // every motor is rated SF 1.15. The nameplate must cover the load itself.
-  it("past the catalog table, the motor's NAMEPLATE covers the absorbed BHP — no service-factor overload", () => {
-    const tiny: FanModelInput = {
-      ...ewfdd,
-      id: "ewfdd4",
-      specs: { maxRpm: 860, propeller: true, fixedSpeedDirect: true, motorTable: [[0.5, 0.4]] },
-    };
-    const r = selectFan(tiny, { airflow_m3hr: 2000, staticPressure_pa: 150 }, { directDrive: true })!;
-    // Absorbed BHP is past the only table entry (max 0.4), so the fallback runs.
-    expect(r.bhp).toBeGreaterThan(0.4);
-    // The nameplate covers the load on its own — no 15% overload assumed.
-    expect(r.motorHp).toBeGreaterThanOrEqual(r.bhp - 1e-9);
-    expect(r.motorHp).toBe(motorAtLeastHp(r.bhp));
-    // Dividing by 1.15 first could only ever have allowed a smaller motor.
-    expect(r.motorHp).toBeGreaterThanOrEqual(motorAtLeastHp(r.bhp / 1.15));
   });
 });
 

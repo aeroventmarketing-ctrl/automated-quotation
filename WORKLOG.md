@@ -1,46 +1,40 @@
-## 2026-09-01 · The service factor is out of motor selection entirely
+## 2026-09-01 · The service factor stays in motor selection — a change made, then reverted on the owner's word
 
-- **Owner's ruling:** *"EWF / EWFDD / PRV / PRVDD do not follow such 0.75 division factor. Disregard service
-  factor in motor selection. Some motors do not have SF or 1.0 SF only."*
+- **Owner's ruling, in two parts:** *"EWF / EWFDD / PRV / PRVDD do not follow such 0.75 division factor.
+  Disregard service factor in motor selection. Some motors do not have SF or 1.0 SF only."*
+  Then, shown what that would actually change: *"do not change this part. Follow the previous rule set."*
 
-The first half confirms what the code already did — a propeller fan carrying a catalogue `motorTable` reads its
-motor straight from the MOTOR HP / MAX BHP column and never touches ÷0.75. Unchanged.
+The first half confirmed existing behaviour — a propeller fan carrying a catalogue `motorTable` reads its motor
+straight from the MOTOR HP / MAX BHP column and never touches ÷0.75. Nothing to do.
 
-The second half was a live rule, in exactly one place.
+The second half looked like an instruction to remove the one place a service factor still sized a motor. It was
+removed, the owner was shown the consequence in figures, and the owner reverted it. **This section exists so the
+rule is not re-derived and "fixed" a third time.**
 
-### Where a service factor was still sizing a motor
+### The rule, as it stands and is to remain
 
-Past the largest entry in a propeller fan's catalogue motor table, the fallback was:
+Past the largest entry in a propeller fan's catalogue motor table, the fallback is:
 
 ```
 motorAtLeastHp(bhp / serviceFactor)   // serviceFactor = 1.15
 ```
 
-Dividing by the service factor banks on running the motor **15% over its nameplate** — defensible only if every
-motor really is rated SF 1.15. The owner's point is that they are not: some carry no SF, or SF 1.0. So the
-division picked a motor that might have no headroom to give.
+Dividing by the service factor sizes the motor on the assumption it may absorb 1.15× its nameplate continuously,
+which is what a motor rated SF 1.15 is for. Removing the division makes the fallback pick a **larger** motor —
+a fan absorbing **1.1 BHP** past its table would move from **1 HP** (1.1 ÷ 1.15 = 0.96) to **1.5 HP**. The owner
+does not want that: **keep the divisor.**
 
-It is now `motorAtLeastHp(bhp)` — the smallest standard motor whose **nameplate** covers the absorbed BHP. Where
-the two differ, the new answer is the larger motor: a fan absorbing **1.1 BHP** past its table used to get a
-**1 HP** motor (1.1 ÷ 1.15 = 0.96) and now gets **1.5 HP**.
+`serviceFactor` therefore stays as it is — a `SelectionOptions` input, a `SelectionResult` field, and the divisor
+in that one fallback. It is worth knowing that nothing in the app reads the result field today; it is carried for
+display and for callers.
 
-### And the factor is gone, not just unused
+### Unchanged, and worth restating
 
-`serviceFactor` was also a `SelectionOptions` input and a `SelectionResult` field, set to 1.15 and carried
-through for display. **Nothing in the app ever read it** — no component, no route, no test. A result that reports
-a service factor the sizing does not apply is how the assumption creeps back in, so the option, the field and the
-division are all removed. `void serviceFactor; // retained for display only` goes with them.
+- The AFBM **÷0.75** rule sizes every non-propeller fan (CEB and the rest).
+- A propeller fan with a motor table reads its motor from the catalogue column — no ÷0.75.
+- The full chain: catalogue cell → density correction (cancels at standard air) → kW→HP → round to 2 dp →
+  **÷0.75** (non-propeller) *or* the catalogue motor column (propeller) → round **up** to `MOTOR_HP_LIST`.
 
-Nothing else changes: the AFBM **÷0.75** rule still sizes every non-propeller fan (CEB and the rest), and a
-propeller fan with a motor table still reads its motor from the catalogue column.
-
-### What is left in the chain
-
-Catalogue cell → density correction (cancels at standard air) → kW→HP → round to 2 dp → **÷ 0.75** (non-propeller
-only) → round **up** to `MOTOR_HP_LIST`. One divisor, one round-up, no service factor anywhere.
-
-Suite green: **124 passed**, including a new test pinning that past the catalogue table the nameplate covers the
-absorbed BHP on its own.
 ## 2026-09-01 · The real CEB catalogue, checked against the selection engine
 
 The owner uploaded **`CEB Catalog SISW only.xlsx`** so the motor-sizing question could be settled against real data

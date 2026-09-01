@@ -140,6 +140,8 @@ export interface DutyPoint {
 }
 
 export interface SelectionOptions {
+  /** Motor service factor applied to absorbed power before sizing (default 1.15). */
+  serviceFactor?: number;
   /** Max allowable speed ratio vs reference before flagging out-of-envelope (default 1.15). */
   maxSpeedRatio?: number;
   /** Min allowable speed ratio vs reference before flagging out-of-envelope (default 0.5). */
@@ -182,6 +184,7 @@ export interface SelectionResult {
   motorHp: number; // suggested motor (BHP/0.75 rounded up to the motor list)
   motorPole: number | null; // motor pole from the direct-drive band (null for belt drive)
   efficiency: number | null;
+  serviceFactor: number;
   // Outlet-velocity check (AFBM "good selection" rule).
   outletVelocity_fpm: number | null;
   ovLimit_fpm: number | null;
@@ -833,6 +836,7 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
     motorHp,
     motorPole,
     efficiency: null,
+    serviceFactor: 1.15,
     outletVelocity_fpm,
     ovLimit_fpm,
     ovWithinLimit,
@@ -920,6 +924,7 @@ function selectFixedSpeed(model: FanModelInput, duty: DutyPoint): SelectionResul
     motorHp: 0, // integral motor — rated in watts, shown by the builder
     motorPole: null,
     efficiency: null,
+    serviceFactor: 1,
     outletVelocity_fpm: null,
     ovLimit_fpm: null,
     ovWithinLimit: null,
@@ -947,6 +952,7 @@ export function selectFan(
   if (model.specs?.fixedSpeed === true) {
     return selectFixedSpeed(model, duty);
   }
+  const serviceFactor = options.serviceFactor ?? 1.15;
   const maxSpeedRatio = options.maxSpeedRatio ?? 1.15;
   const minSpeedRatio = options.minSpeedRatio ?? 0.5;
 
@@ -1173,15 +1179,9 @@ export function selectFan(
       .filter((e) => Array.isArray(e) && e.length === 2)
       .sort((a, b) => a[0] - b[0]);
     const hit = table.find(([, maxBhp]) => maxBhp >= bhp - 1e-9);
-    // Above the largest catalog motor's envelope, fall back to the smallest
-    // standard motor whose NAMEPLATE covers the absorbed BHP.
-    //
-    // Owner's ruling: *"Disregard service factor in motor selection. Some motors
-    // do not have SF or 1.0 SF only."* This used to divide by a 1.15 service
-    // factor — i.e. bank on the motor being run 15% over its nameplate — which
-    // picks a smaller motor and is only safe if every motor is actually rated
-    // SF 1.15. They are not, so the load has to fit the nameplate itself.
-    motorHp = hit ? hit[0] : motorAtLeastHp(bhp);
+    // Above the largest catalog motor's envelope, fall back to a standard motor
+    // that covers the absorbed BHP with the service factor.
+    motorHp = hit ? hit[0] : motorAtLeastHp(bhp / serviceFactor);
     motorBasis = "catalog";
   } else {
     // Size from the BHP as displayed (rounded to 2 dp): the rating power is
@@ -1192,6 +1192,7 @@ export function selectFan(
     motorBasis = "BHP/0.75";
   }
   const motorKw = Math.round(hpToKw(motorHp) * 100) / 100;
+  void serviceFactor; // retained in the result for display only
 
   // --- Outlet-velocity check ("good selection" rule) ----------------------
   const num = (v: unknown): number | null =>
@@ -1355,6 +1356,7 @@ export function selectFan(
     motorHp,
     motorPole,
     efficiency: efficiency != null ? Math.round(efficiency * 1000) / 1000 : null,
+    serviceFactor,
     outletVelocity_fpm,
     ovLimit_fpm,
     ovWithinLimit,
