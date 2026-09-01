@@ -788,7 +788,15 @@ function selectPropellerRow(model: FanModelInput, duty: DutyPoint): SelectionRes
     const rpm = numv(raw.rpm);
     const hp = numv(raw.hp);
     const bhp = numv(raw.bhp);
+    // A row with **no stated blade angle** is excluded. Owner's ruling, asked
+    // directly ("should a row with no stated blade angle be selectable, or stay
+    // excluded?" — *"exclude"*). It reads as a parse failure below, but it is a
+    // rule: the EWF Level-1 sheets print `"—"` in the Blade Angle column for 40
+    // rows, and those rows are not to be selected. Anything that later teaches
+    // `catalogueNum` to read a dash must not quietly let them back in.
     if (angle == null || rpm == null || hp == null || bhp == null) continue;
+    // Owner's ruling: *"if blade angle is more than 40 degrees, do not include
+    // in selection."* Across the four propeller catalogues this bars 111 rows.
     if (angle > 40 || rpm > rpmCeiling) continue;
     if (!Array.isArray(raw.c)) continue;
     const curve = (raw.c as Array<[number, number]>)

@@ -53,11 +53,22 @@ has to be justified against that.
 Every pick is a printed row, and the Motor HP column is a **frame size smaller** than the ÷0.75 rule every time —
 which is the whole reason these families read their motor from the catalogue.
 
-### Left alone, and worth the owner's word
+### The blade-angle rules, now stated rather than incidental
 
-Rows whose **Blade Angle prints as `"—"`** (40 of them, on the EWF Level-1 sheets) are still dropped: `"—"` is not
-a number, and whether "no stated angle" should pass the ≤40° rule is a judgement about what may be quoted, not a
-parsing question.
+Asked directly and answered:
+
+- *"if blade angle is more than 40 degrees, do not include in selection"* — already the rule
+  (`if (angle > 40 || rpm > rpmCeiling) continue;`), and already held by two tests: one picks the 30°/3 HP row
+  over a 45°/7.5 HP row that also meets the duty, one excludes the size entirely when only a 45° row could
+  deliver. Across the four catalogues this bars **111 rows**. No change.
+- *"should a row with no stated blade angle be selectable, or stay excluded?"* → **exclude.** Also already the
+  behaviour — but only **incidentally**, as a side effect of `"—"` failing to parse. The 40 such rows sit on the
+  EWF Level-1 sheets (13 of 21 on 2400EWF, 27 of 44 on 3000EWF); both sheets keep usable ≤40° rows either way.
+
+The second one is now written down as a **rule** and pinned by a test: a row whose only failing is a missing
+angle is not selected even when it alone meets the duty, and the same row with a 30° angle is. Without that, a
+future improvement to `catalogueNum` — teaching it to read a dash, say — would quietly put 40 unquotable rows
+back into the selector, and nothing would have objected.
 ## 2026-09-01 · The service factor stays in motor selection — a change made, then reverted on the owner's word
 
 - **Owner's ruling, in two parts:** *"EWF / EWFDD / PRV / PRVDD do not follow such 0.75 division factor.

@@ -435,6 +435,31 @@ describe("selectFan — propeller catalogue-row lookup (EWF/EWFDD/PRV/PRVDD)", (
     expect(r).toBeNull();
   });
 
+  // Owner's ruling, asked directly: a row with **no stated blade angle** stays
+  // excluded. The EWF Level-1 sheets print "—" in that column for 40 rows. It
+  // currently reads as a parse failure, so this pins it as the RULE — teaching
+  // `catalogueNum` to read a dash must not quietly make them selectable.
+  it("never selects a row with no stated blade angle, even if it alone meets the duty", () => {
+    const unangled: FanModelInput = {
+      ...belt,
+      id: "ewf-dash",
+      specs: {
+        ...belt.specs,
+        // The only row that can deliver this duty carries no angle.
+        rows: [{ a: "—", hp: 1, rpm: 700, bhp: 1.0, c: [[0, 9000], [0.25, 8200], [0.5, 7400]] }],
+      },
+    };
+    expect(selectFan(unangled, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })).toBeNull();
+    // Same row with an angle the rule allows — proof the exclusion is the angle,
+    // not something else about the row.
+    const angled: FanModelInput = {
+      ...unangled,
+      id: "ewf-angled",
+      specs: { ...belt.specs, rows: [{ a: 30, hp: 1, rpm: 700, bhp: 1.0, c: [[0, 9000], [0.25, 8200], [0.5, 7400]] }] },
+    };
+    expect(selectFan(angled, { airflow_m3hr: 6500 * 1.6990108, staticPressure_pa: 0.25 * 249.0889 })?.motorHp).toBe(1);
+  });
+
   it("flags outlet velocity over 2200 fpm as LOW", () => {
     const tight: FanModelInput = {
       ...belt,
