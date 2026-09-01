@@ -29,6 +29,10 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
   const [pressureUnit, setPressureUnit] = useState("inwg");
   const [tag, setTag] = useState("");
   const [drive, setDrive] = useState("belt");
+  // Motor pole for a direct-drive (CEBDD) selection. "" = not specified, which
+  // the engine reads as the 4-pole default — a 2-pole is only ever offered when
+  // it is asked for here.
+  const [pole, setPole] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<SelectionResult[] | null>(null);
@@ -55,6 +59,7 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
           },
           tag: tag || undefined,
           directDrive: drive === "direct",
+          ...(drive === "direct" && pole ? { motorPole: Number(pole) } : {}),
         }),
       });
       // Read as text first so an empty / non-JSON response surfaces the HTTP
@@ -134,6 +139,20 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
               <option value="direct">Direct (CEBDD)</option>
             </Select>
           </div>
+          {/* A 2-pole is only ever offered when it is asked for here — left on
+              "Default (4-pole)", a direct-drive selection stays on the 4-pole
+              band rather than climbing to a faster, larger-motor fan on its own. */}
+          {drive === "direct" && (
+            <div className="space-y-1">
+              <Label>Motor pole</Label>
+              <Select className="w-40" value={pole} onChange={(e) => setPole(e.target.value)}>
+                <option value="">Default (4-pole)</option>
+                <option value="2">2-pole (~3600 rpm)</option>
+                <option value="4">4-pole (~1750 rpm)</option>
+                <option value="6">6-pole (~1200 rpm)</option>
+              </Select>
+            </div>
+          )}
           <Button onClick={run} disabled={busy}>{busy ? "Selecting…" : "Run selection"}</Button>
         </CardContent>
       </Card>

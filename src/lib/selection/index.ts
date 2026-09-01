@@ -80,6 +80,33 @@ export const DIRECT_DRIVE_BANDS = [
   { pole: 2, minRpm: 3400, maxRpm: 3780 },
 ] as const;
 
+/**
+ * The pole a CEBDD selection runs on when the user hasn't named one.
+ *
+ * Owner's rule: *"2 pole should show only when the user specifies 2 pole. If not
+ * specified, default is 4 pole."* Before this, the whole list was walked in
+ * order and the first band that met the flow won — so a duty the 4-pole band
+ * missed by 1.3% was answered with a 2-pole fan turning at twice the speed,
+ * delivering 3.7× the requested air on a motor an order of magnitude bigger.
+ * A 2-pole is now a deliberate request, never a fallback.
+ */
+export const DEFAULT_DIRECT_DRIVE_POLE = 4;
+
+/**
+ * Narrow the standard CEBDD bands to the pole in play: the one the user asked
+ * for, or the 4-pole default.
+ *
+ * Applied ONLY to `DIRECT_DRIVE_BANDS`. A model carrying its own bands
+ * (`specs.directBands`) or running at fixed rated speeds (`fixedSpeedDirect`,
+ * e.g. EWFDD) turns at speeds the fan itself is rated for — there is no pole to
+ * choose, and defaulting those to 4 would simply make such a model unselectable.
+ * An explicit request is still honoured everywhere.
+ */
+function bandsForPole<T extends { pole: number }>(bands: readonly T[], motorPole: number | undefined, isStandard: boolean): T[] {
+  if (motorPole != null) return bands.filter((b) => b.pole === motorPole);
+  return isStandard ? bands.filter((b) => b.pole === DEFAULT_DIRECT_DRIVE_POLE) : [...bands];
+}
+
 // Standard induction-motor sizes (kW) used for motor sizing after service factor.
 export const STANDARD_MOTOR_KW = [
   0.18, 0.25, 0.37, 0.55, 0.75, 1.1, 1.5, 2.2, 3.0, 3.7, 4.0, 5.5, 7.5, 9.3,
@@ -121,10 +148,16 @@ export interface SelectionOptions {
   minSpeedRatio?: number;
   /**
    * Direct-drive (CEBDD) selection: the fan runs at the motor speed, so the
-   * operating speed must land in a 2- or 4-pole band (with that band's outlet-
-   * velocity limit). Off-band sizes are excluded from the results.
+   * operating speed must land in a pole band (with that band's outlet-velocity
+   * limit). Off-band sizes are excluded from the results.
    */
   directDrive?: boolean;
+  /**
+   * The motor pole the user asked for (2 / 4 / 6). Owner's rule: **a 2-pole is
+   * only ever offered when it is asked for**; left unset, a CEBDD selection runs
+   * on the 4-pole band. See `DEFAULT_DIRECT_DRIVE_POLE`.
+   */
+  motorPole?: number;
 }
 
 export type Confidence = "HIGH" | "MEDIUM" | "LOW";
@@ -545,61 +578,70 @@ function directDriveBand(
   requestedFlow_m3hr = 0,
 ): Omit<DirectDriveResult, "meetsFlow"> | null {
   const nominal = Math.round((band.minRpm + band.maxRpm) / 2);
-  const nomOp = gridOperatingPoint(points, nominal, selectionPressure);
-  if (nomOp) {
-    // Prefer the nominal speed; if it's just short of the requested flow, raise
-    // the speed within the band (up to maxRpm) to meet it — a real motor of this
-    // pole runs anywhere in the band, so we shouldn't jump to the next pole for a
-    // small shortfall. Pick the lowest rpm in the band that meets the flow.
-    let rpm = nominal;
-    let op = nomOp;
-    if (op.q < requestedFlow_m3hr - 1 && band.maxRpm > nominal) {
-      const maxOp = gridOperatingPoint(points, band.maxRpm, selectionPressure);
-      if (maxOp && maxOp.q >= requestedFlow_m3hr - 1) {
-        let lo = nominal;
-        let hi = band.maxRpm;
-        while (hi - lo > 1) {
-          const mid = Math.round((lo + hi) / 2);
-          const g = gridOperatingPoint(points, mid, selectionPressure);
-          if (g && g.q >= requestedFlow_m3hr - 1) hi = mid;
-          else lo = mid;
-        }
-        rpm = hi;
-        op = gridOperatingPoint(points, rpm, selectionPressure) ?? maxOp;
-      } else if (maxOp && maxOp.q > op.q) {
-        rpm = band.maxRpm;
-        op = maxOp;
-      }
-    }
+  type BandOp = Omit<DirectDriveResult, "meetsFlow" | "pole">;
+
+  /** What the fan does at one speed, read off the rpm grid. */
+  const fromGrid = (rpm: number): BandOp | null => {
+    const g = gridOperatingPoint(points, rpm, selectionPressure);
+    return g
+      ? { rpm, deliveredFlow_m3hr: g.q, powerStd_kw: g.power_kw, efficiency: null, withinEnvelope: g.inRange }
+      : null;
+  };
+  /** Same, from a single rated curve scaled by the fan laws. */
+  const fromCurve = (rpm: number): BandOp | null => {
+    const ratio = rpm / referenceRpm;
+    const refSp = selectionPressure / (ratio * ratio);
+    const qRef = airflowAtPressure(curve, refSp);
+    if (qRef == null) return null; // can't develop this SP at this speed
+    const refPower = interpAtAirflow(curve, qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
     return {
       rpm,
-      pole: band.pole,
-      deliveredFlow_m3hr: op.q,
-      powerStd_kw: op.power_kw,
-      efficiency: null,
-      withinEnvelope: op.inRange,
+      deliveredFlow_m3hr: qRef * ratio,
+      powerStd_kw: refPower * Math.pow(ratio, 3),
+      efficiency: interpAtAirflow(curve, qRef, "efficiency"),
+      withinEnvelope:
+        refSp <= curve[0].staticPressure_pa &&
+        refSp >= curve[curve.length - 1].staticPressure_pa &&
+        qRef <= curve[curve.length - 1].airflow_m3hr + 1,
     };
-  }
-  const rpm = nominal;
-  // Fallback: single rated curve scaled by fan laws.
-  const ratio = rpm / referenceRpm;
-  const refSp = selectionPressure / (ratio * ratio);
-  const qRef = airflowAtPressure(curve, refSp);
-  if (qRef == null) return null; // can't develop this SP at this speed
-  const refPower =
-    interpAtAirflow(curve, qRef, "power_kw") ?? curve[curve.length - 1].power_kw;
-  const within =
-    refSp <= curve[0].staticPressure_pa &&
-    refSp >= curve[curve.length - 1].staticPressure_pa &&
-    qRef <= curve[curve.length - 1].airflow_m3hr + 1;
-  return {
-    rpm,
-    pole: band.pole,
-    deliveredFlow_m3hr: qRef * ratio,
-    powerStd_kw: refPower * Math.pow(ratio, 3),
-    efficiency: interpAtAirflow(curve, qRef, "efficiency"),
-    withinEnvelope: within,
   };
+
+  // Which source answers for this band is decided ONCE, at the nominal speed —
+  // a model either carries an rpm grid or a single rated curve — so every speed
+  // probed below is read the same way.
+  const at = gridOperatingPoint(points, nominal, selectionPressure) ? fromGrid : fromCurve;
+  const nomOp = at(nominal);
+  if (!nomOp) return null;
+
+  // Prefer the nominal speed; if it's just short of the requested flow, raise the
+  // speed within the band (up to maxRpm) to meet it — a real motor of this pole
+  // runs anywhere in the band, so we shouldn't jump to the next pole for a small
+  // shortfall. Pick the lowest rpm in the band that meets the flow.
+  //
+  // THIS USED TO LIVE IN THE GRID BRANCH ONLY. A single-curve model therefore
+  // never got it: the band was judged at its nominal speed and nowhere else, so a
+  // 1.3% shortfall at 4-pole (1974 m³/hr against a requested 2000) fell through
+  // to the 2-pole band — which met the flow by delivering 7353 m³/hr and calling
+  // for a 10 kW motor where 4-pole at 1840 rpm does it on about 1.2 kW. Power
+  // goes with the cube of speed, so jumping a pole band is never a small matter.
+  let chosen = nomOp;
+  if (chosen.deliveredFlow_m3hr < requestedFlow_m3hr - 1 && band.maxRpm > nominal) {
+    const maxOp = at(band.maxRpm);
+    if (maxOp && maxOp.deliveredFlow_m3hr >= requestedFlow_m3hr - 1) {
+      let lo = nominal;
+      let hi = band.maxRpm;
+      while (hi - lo > 1) {
+        const mid = Math.round((lo + hi) / 2);
+        const g = at(mid);
+        if (g && g.deliveredFlow_m3hr >= requestedFlow_m3hr - 1) hi = mid;
+        else lo = mid;
+      }
+      chosen = at(hi) ?? maxOp;
+    } else if (maxOp && maxOp.deliveredFlow_m3hr > chosen.deliveredFlow_m3hr) {
+      chosen = maxOp;
+    }
+  }
+  return { ...chosen, pole: band.pole };
 }
 
 /**
@@ -981,12 +1023,16 @@ export function selectFan(
           (b) => b && typeof b.pole === "number" && typeof b.minRpm === "number" && typeof b.maxRpm === "number",
         )
       : [];
-    const bands =
-      model.specs?.fixedSpeedDirect === true
-        ? fixedSpeedBands(model.ratingPoints)
-        : customBands.length > 0
-          ? customBands
-          : DIRECT_DRIVE_BANDS;
+    const fixedSpeed = model.specs?.fixedSpeedDirect === true;
+    const allBands = fixedSpeed
+      ? fixedSpeedBands(model.ratingPoints)
+      : customBands.length > 0
+        ? customBands
+        : DIRECT_DRIVE_BANDS;
+    // 2-pole only on request; unasked, 4-pole. See `bandsForPole`.
+    const bands = bandsForPole(allBands, options.motorPole, !fixedSpeed && customBands.length === 0);
+    // The pole the user asked for isn't one this fan has — nothing to offer.
+    if (bands.length === 0) return null;
     const dd = selectDirectDrive(model.ratingPoints, curve, referenceRpm, selectionPressure, duty.airflow_m3hr, bands);
     if (!dd) return null;
     rpm = dd.rpm;

@@ -206,14 +206,39 @@ describe("selectFan — direct drive (CEBDD): SP + pole priority", () => {
     expect(r.ovWithinLimit).toBeNull();
   });
 
-  it("escalates to 2-pole when the SP can't be made on the 4-pole band, raising the flow", () => {
-    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 620 }, { directDrive: true })!;
+  // Owner's rule: *"2 pole should show only when the user specifies 2 pole. If
+  // not specified, default is 4 pole."* A 2-pole is a request, never a fallback
+  // — the engine used to escalate to it on its own, which is how a duty the
+  // 4-pole band missed by 1.3% came back as a fan turning at twice the speed.
+  it("does NOT escalate to 2-pole when the SP can't be made on the 4-pole band", () => {
+    expect(selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 620 }, { directDrive: true })).toBeNull();
+  });
+
+  it("uses the 2-pole band when the user asks for it, raising the flow", () => {
+    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 620 }, { directDrive: true, motorPole: 2 })!;
     expect(r).not.toBeNull();
     expect(r.motorPole).toBe(2);
     expect(r.rpm).toBeGreaterThanOrEqual(3325);
-    expect(r.rpm).toBeLessThanOrEqual(3684);
+    expect(r.rpm).toBeLessThanOrEqual(3780);
     // Volume flow is increased to land on the curve at the required SP.
     expect(r.selectedAirflow_m3hr!).toBeGreaterThan(2000);
+  });
+
+  it("stays on 4-pole for a duty it nearly meets, instead of jumping a band", () => {
+    // 1974 m³/hr at the 4-pole nominal against a requested 2000 — a 1.3%
+    // shortfall. The band runs to 1840 rpm, so it is raised within the band
+    // rather than abandoned. Jumping to 2-pole here used to deliver 7353 m³/hr.
+    const r = selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 350 }, { directDrive: true })!;
+    expect(r.motorPole).toBe(4);
+    expect(r.rpm).toBeGreaterThan(1745); // raised above the band's nominal
+    expect(r.rpm).toBeLessThanOrEqual(1840); // but still inside the 4-pole band
+    expect(r.selectedAirflow_m3hr!).toBeGreaterThanOrEqual(2000);
+    // …and nowhere near the 3.7× overshoot the 2-pole escalation produced.
+    expect(r.selectedAirflow_m3hr!).toBeLessThan(2600);
+  });
+
+  it("asking for a pole the fan cannot run excludes the size", () => {
+    expect(selectFan(dd, { airflow_m3hr: 2000, staticPressure_pa: 350 }, { directDrive: true, motorPole: 8 })).toBeNull();
   });
 
   it("excludes a size that can't develop the SP even on the 2-pole band", () => {
