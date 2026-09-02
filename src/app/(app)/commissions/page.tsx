@@ -11,6 +11,7 @@ import {
   buildCommissions,
   allDeals,
   isPayable,
+  dealKey,
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
   OVERRIDE_RATE_PCT,
@@ -19,6 +20,8 @@ import {
   type CommissionDeal,
 } from "@/lib/sales-commission";
 import { MarkPaid } from "./mark-paid";
+import { PayoutPanel, type PayoutRow } from "./payout-panel";
+import { getCommissionVoucherNoByDeal } from "@/lib/commission-voucher";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +77,28 @@ export default async function CommissionsPage() {
   const awaitingPayment = deals.filter((d) => !d.fullyPaid);
   const belowQuota = months.filter((m) => !m.qualifies);
 
+  // Money leaves the company one voucher per salesperson, not one per order, so
+  // the payable rows are rolled up per person here — across every month and both
+  // rates. A voucher number appears once one has been printed for exactly this
+  // set of commissions.
+  const voucherByDeal = await getCommissionVoucherNoByDeal().catch(() => new Map<string, string>());
+  const payoutRows: PayoutRow[] = [...payableNow
+    .reduce((m, d) => {
+      const r = m.get(d.salespersonId) ?? {
+        salespersonId: d.salespersonId, salespersonName: d.salespersonName,
+        count: 0, total: 0, nextReleaseYMD: null as string | null, voucherNo: null as string | null,
+      };
+      r.count += 1;
+      r.total = round2(r.total + d.amount);
+      if (d.payoutYMD && (!r.nextReleaseYMD || d.payoutYMD < r.nextReleaseYMD)) r.nextReleaseYMD = d.payoutYMD;
+      // Only show a number when the printed voucher covers this row — a voucher
+      // printed before another client paid no longer describes what is owed.
+      r.voucherNo = r.voucherNo ?? voucherByDeal.get(dealKey(d)) ?? null;
+      return m.set(d.salespersonId, r);
+    }, new Map<string, PayoutRow>())
+    .values()]
+    .sort((a, b) => b.total - a.total);
+
   const tiles = [
     { label: "Payable now", value: formatCurrency(round2(payableNow.reduce((a, d) => a + d.amount, 0)), currency), caption: `${payableNow.length} approved, unpaid` },
     { label: "Paid out", value: formatCurrency(view?.totals.paid ?? 0, currency), caption: `${deals.filter((d) => d.paid).length} released` },
@@ -120,6 +145,12 @@ export default async function CommissionsPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Only the people who can act on it: the voucher page itself is Accounting
+          / Payment Approver / admin, so showing a salesperson a "Cash voucher"
+          button that 404s for them would be a dead end. They see their own totals
+          on the month cards and the dashboard tile. */}
+      {canSeeAll && payoutRows.length > 0 && <PayoutPanel rows={payoutRows} canManage={canManage} currency={currency} />}
 
       {failed ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">

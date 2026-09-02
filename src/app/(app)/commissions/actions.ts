@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
-import { buildCommissions, allDeals, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, isPayable, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -102,4 +102,60 @@ export async function payDealCommission(
   revalidatePath("/commissions");
   revalidatePath("/management");
   revalidatePath(deal.href);
+}
+
+/**
+ * Settle a whole cash voucher: mark EVERY commission a salesperson is currently
+ * owed as paid, in one go.
+ *
+ * The voucher is per person, not per order — *"Total every approved inquiry and
+ * make a single cash voucher per sales personnel"* — so releasing it one row at a
+ * time would leave a half-paid voucher whenever someone was interrupted. Each row
+ * still gets its own payout record; this only spares Accounting fifteen clicks.
+ *
+ * The set is recomputed here, so it is whatever the person is owed at the moment
+ * of settlement — never a stale list posted from the browser.
+ */
+export async function payAllForSalesperson(salespersonId: string): Promise<{ paid: number; total: number; error?: string }> {
+  const user = await assertAccounting();
+  const due = allDeals(await buildCommissions({ salespersonId })).filter(isPayable);
+  if (due.length === 0) return { paid: 0, total: 0, error: "Nothing is awaiting payout for this salesperson." };
+
+  const now = new Date();
+  for (const d of due) {
+    const ref = d.kind === "order" ? { quotationId: d.refId } : { counterSaleId: d.refId };
+    const where = d.kind === "order"
+      ? { quotationId_kind: { quotationId: d.refId, kind: d.payeeKind } }
+      : { counterSaleId_kind: { counterSaleId: d.refId, kind: d.payeeKind } };
+    const payout = { paid: true, paidAt: now, paidByName: user.name };
+    await prisma.commission.upsert({
+      where,
+      create: {
+        ...ref,
+        kind: d.payeeKind,
+        salespersonId: d.salespersonId,
+        salespersonName: d.salespersonName,
+        orderValue: d.net,
+        ratePct: d.ratePct,
+        amount: d.amount,
+        salesMonth: d.salesMonth,
+        ...payout,
+      },
+      update: { orderValue: d.net, ratePct: d.ratePct, amount: d.amount, salesMonth: d.salesMonth, ...payout },
+    });
+  }
+
+  const total = due.reduce((a, d) => a + d.amount, 0);
+  await logActivity(user, {
+    action: "commission.voucher.paid",
+    category: "commission",
+    summary: `Commission voucher released — ${due[0].salespersonName} · ${due.length} item${due.length === 1 ? "" : "s"} (${peso(total)})`,
+    entity: "commission",
+    entityId: salespersonId,
+    href: "/commissions",
+  });
+  revalidatePath("/commissions");
+  revalidatePath("/management");
+  revalidatePath("/my-dashboard");
+  return { paid: due.length, total };
 }

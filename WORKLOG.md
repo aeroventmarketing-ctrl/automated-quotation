@@ -1,3 +1,68 @@
+## 2026-09-02 · One cash voucher per salesperson, not one per order
+
+Owner: *"voucher creation for release of commission is per sales personnel. Total every approved inquiry and make a
+single cash voucher per sales personnel."*
+
+Until now the only way to release a commission was **Mark paid**, one order at a time. A salesperson owed four
+August deals and a September one got five clicks and no document. Money leaves the company as a voucher, so the
+system now produces one.
+
+### A sibling of the purchasing voucher, not a change to it
+
+`purchase-voucher.ts` is Phase 4 and frozen, and it pays *suppliers*. `commission-voucher.ts` pays *staff*. They
+share exactly one thing: the **system voucher counter** (`cash_request_counter`, admin-set), so every cash voucher
+the company issues — purchasing, cash request or commission — draws from one sequence and two vouchers can never
+carry the same number. Maps and registries are separate. The printed sheet is the same layout: red auto-number,
+Paid to, PARTICULAR / AMOUNT grid, amount in words, three signatories.
+
+### What makes a voucher's identity
+
+Not the salesperson — the salesperson **plus the exact set of commissions covered**. A voucher printed today and
+another printed next month, after two more clients have settled, describe different money and take different
+numbers. That is why the deal keys are in the selection key.
+
+Which also means the number shown on the payout panel disappears when the set changes: a voucher printed before a
+sixth client paid no longer describes what is owed, and saying "No. 0000501" against a different total would be
+worse than saying nothing.
+
+### Viewing is free; printing claims
+
+Same rule as the purchasing voucher, and worth restating because it is the part that silently burns numbers if
+got wrong. Verified: **three views left the counter at 501** and the sheet read *"(assigned when printed)"*;
+printing took it to 502; **reprinting reused 0000501 and did not advance it.**
+
+### Checked end to end
+
+Willy Ho, Sales Head, owed six overrides spanning three release months and two source salespeople:
+
+```
+No. 0000501   Paid to: Willy Ho
+  DES-PAID-AUG03  · 0.25% override on Sam Sales  · rel. Sep 15, 2026     1,339.29
+  DES-PAID-AUG28  · 0.25% override on Sam Sales  · rel. Sep 15, 2026     1,339.29
+  SEED-A-700K     · 0.25% override on Sam Sales  · rel. Sep 15, 2026     1,562.50
+  DES-PAID-SEP20  · 0.25% override on Sam Sales  · rel. Sep 30, 2026       892.86
+  DES-PAID-OCT02  · 0.25% override on Sam Sales  · rel. Oct 15, 2026       892.86
+  SEED-D-TERMS-2M · 0.25% override on Admin Ana  · rel. Oct 15, 2026     4,464.29
+                                              TOTAL Php                 10,491.09
+  "TEN THOUSAND FOUR HUNDRED NINETY-ONE AND 09/100 PESOS"
+```
+
+One voucher, six commissions, three months. Each line names the order, the client, the rate it was earned at and
+the date it was released on, so the total is auditable back to the individual rows below it.
+
+**Mark voucher paid** then wrote all six payout records in one action — 1 override row before, 7 after — Willy
+dropped off the payout panel, and the Paid-out tile moved by exactly ₱10,491.09. The set is recomputed server-side
+at the moment of settlement, so what gets paid is what is owed then, never a stale list posted from a browser.
+
+### One thing caught by looking
+
+The panel was rendering for **Sales** viewers too, with a "Cash voucher" button that 404s for them — the voucher
+page is Accounting / Payment Approver / admin. The panel is now gated to the same audience; a salesperson still
+sees their own totals on the month cards and the dashboard tile. Confirmed: Sales sees no panel, and opening
+another rep's voucher URL directly returns **404**.
+
+No migration — the registry is an AppSetting, like the purchasing one.
+
 ## 2026-09-02 · The override becomes an allow-list — named people, not "everyone who qualifies"
 
 Owner: *"JayR Basal can have a 0.25% cut from Desiree Enigo, Kurt Calucin, May-Ann Asong sales. We will add more
