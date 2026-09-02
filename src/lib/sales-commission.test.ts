@@ -65,16 +65,45 @@ describe("rule 4 — released every 15th and 30th", () => {
     expect(payoutDateFor("2026-09-30")).toBe("2026-09-30");
   });
 
-  it("carries the 31st of a long month to the next 15th, and December to January", () => {
+  /**
+   * The owner's wording, month shape by month shape (2026-09-02): *"commission
+   * release is 15th and 30th of the month. If there is 31st in the month, pay on
+   * 30th. If there is no 30th, let us say 29th or 28th, pay on 29th or 28th
+   * whichever is applicable."*
+   *
+   * Asserted as a table across every shape a month can have, because the shapes
+   * are exactly where this goes wrong — the previous "rolls to the 30th" test
+   * used September, a 30-day month, so it never showed that a 31-day month must
+   * stop at the 30th.
+   */
+  const MONTH_SHAPES: { label: string; y: number; m: string; last: number; second: string }[] = [
+    { label: "31-day month pays on the 30th, never the 31st", y: 2026, m: "01", last: 31, second: "30" },
+    { label: "August, 31 days", y: 2026, m: "08", last: 31, second: "30" },
+    { label: "30-day month pays on the 30th", y: 2026, m: "04", last: 30, second: "30" },
+    { label: "February pays on the 28th — there is no 30th", y: 2026, m: "02", last: 28, second: "28" },
+    { label: "leap February pays on the 29th", y: 2028, m: "02", last: 29, second: "29" },
+  ];
+
+  for (const { label, y, m, last, second } of MONTH_SHAPES) {
+    it(label, () => {
+      const day = (d: number) => `${y}-${m}-${String(d).padStart(2, "0")}`;
+      // First half of the month → the 15th.
+      expect(payoutDateFor(day(1))).toBe(`${y}-${m}-15`);
+      expect(payoutDateFor(day(15))).toBe(`${y}-${m}-15`);
+      // Second half → this month's second release day, whatever the shape.
+      expect(payoutDateFor(day(16))).toBe(`${y}-${m}-${second}`);
+      expect(payoutDateFor(day(Number(second)))).toBe(`${y}-${m}-${second}`);
+      // The release day is never the 31st, and never later than the month's end.
+      expect(Number(second)).toBeLessThanOrEqual(30);
+      expect(Number(second)).toBeLessThanOrEqual(last);
+    });
+  }
+
+  it("carries money that lands on the 31st to the next cycle", () => {
+    // Both of October's releases (15th, 30th) are gone by the 31st — the 30th
+    // cannot pay out cash that had not arrived by the 30th.
     expect(payoutDateFor("2026-10-31")).toBe("2026-11-15");
     expect(payoutDateFor("2026-12-31")).toBe("2027-01-15");
-  });
-
-  it("uses the last day of February, which has no 30th", () => {
-    expect(payoutDateFor("2026-02-20")).toBe("2026-02-28"); // 2026 is not a leap year
-    expect(payoutDateFor("2028-02-20")).toBe("2028-02-29");
-    // …and never skips the cycle: the 28th still pays on the 28th.
-    expect(payoutDateFor("2026-02-28")).toBe("2026-02-28");
   });
 });
 

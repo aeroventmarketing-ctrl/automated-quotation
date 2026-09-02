@@ -1,3 +1,38 @@
+## 2026-09-02 · The release calendar, pinned month-shape by month-shape
+
+Owner: *"commission release is 15th and 30th of the month. If there is 31st in the month, pay on 30th. If there is
+no 30th, let us say 29th or 28th, pay on 29th or 28th whichever is applicable."*
+
+`payoutDateFor` already did exactly this — `min(30, last day of the month)` is that whole sentence — so nothing
+changed in behaviour. What changed is that it is now **asserted**, because the test that appeared to cover it did
+not.
+
+### The test that looked like it covered this, and didn't
+
+*"rolls to the 30th from the 16th onward"* used **September**, a 30-day month. In a 30-day month the 30th is both
+"the 30th" and "the last day", so the test passed under either rule and proved neither. The 31-day case — the one
+the owner just named — was never asserted at all.
+
+The release days are now a table over every shape a month can have:
+
+| Month | Releases |
+| --- | --- |
+| January, August (31 days) | 15th and **30th** — never the 31st |
+| April, September (30 days) | 15th and 30th |
+| February | 15th and **28th** |
+| February, leap year | 15th and **29th** |
+
+Each row checks the 1st and 15th land on the 15th, the 16th and the release day itself land on the second release,
+and that the second release is never past the 30th nor past the month's own end.
+
+### The one case the wording doesn't reach: money that arrives on the 31st
+
+Both of that month's releases have already gone by, so it catches the next cycle — 31 Oct → 15 Nov. The 30th
+cannot pay out cash that had not arrived by the 30th. Called out in its own test rather than left as a surprise.
+
+The page now says the same thing out loud: *"A month with 31 days releases on the 30th; February on the 28th (29th
+in a leap year)."*
+
 ## 2026-09-02 · A month's commissions cannot be released inside that month
 
 Owner, on Desiree Enigo's August card: *"Desiree meet the target on August 2026, commission release start should be

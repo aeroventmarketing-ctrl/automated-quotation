@@ -98,13 +98,25 @@ export const commissionOn = (net: number): number => round2((net * COMMISSION_RA
 const daysInMonth = (year: number, month1: number) => new Date(year, month1, 0).getDate();
 
 /**
- * Rule 4 — commissions are released on the 15th and the 30th. Given the day the
- * client's money fully landed, this is the first release date ON OR AFTER it:
- * paid 1 Sept → 15 Sept; paid 15 Sept → 15 Sept; paid 16 Sept → 30 Sept;
- * paid 31 Oct → 15 Nov.
+ * Rule 4 — the release days. Owner (2026-09-02): *"commission release is 15th
+ * and 30th of the month. If there is 31st in the month, pay on 30th. If there is
+ * no 30th, let us say 29th or 28th, pay on 29th or 28th whichever is
+ * applicable."*
  *
- * February has no 30th, so its second release is the last day of the month —
- * the payroll never skips a cycle just because the calendar is short.
+ * So every month has exactly two release days — the 15th, and `min(30, last day
+ * of the month)`:
+ *
+ *   31-day month (Jan, Aug…) → 15th and **30th** (never the 31st)
+ *   30-day month (Apr, Sep…) → 15th and 30th
+ *   February                 → 15th and **28th**, or the **29th** in a leap year
+ *
+ * Given the day the client's money fully landed, this returns the first release
+ * day ON OR AFTER it. Money that arrives on the **31st** has missed both of that
+ * month's releases, so it catches the next cycle (31 Oct → 15 Nov): the 30th
+ * cannot pay out cash that had not arrived by the 30th.
+ *
+ * NOTE this is only half of rule 4 — `releaseDateFor` also applies the sales
+ * month's floor. Call that, not this, for a deal.
  *
  * @param fullyPaidYMD Manila calendar day (YYYY-MM-DD) the order was fully paid.
  */
