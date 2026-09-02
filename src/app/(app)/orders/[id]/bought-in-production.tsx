@@ -33,9 +33,19 @@ export function BoughtInProduction({
 
   async function notify() {
     setBusy(true); setErr(null);
-    try { await notifyClientBoughtInOrder(orderId); router.refresh(); }
-    catch (e) { setErr(e instanceof Error ? e.message : "Failed."); }
-    finally { setBusy(false); }
+    try {
+      // The action RETURNS its refusals rather than throwing them. Next.js
+      // replaces any error thrown inside a server action with a generic
+      // "An error occurred in the Server Components render…" in production, so a
+      // thrown "The Purchaser must buy the goods before notifying the client."
+      // reached the user as unreadable boilerplate. A returned reason survives.
+      const res = await notifyClientBoughtInOrder(orderId);
+      if (res?.error) { setErr(res.error); return; }
+      router.refresh();
+    } catch (e) {
+      // Still catch: a genuine crash (not a refusal) can only arrive this way.
+      setErr(e instanceof Error ? e.message : "Failed.");
+    } finally { setBusy(false); }
   }
 
   const step = (done: boolean, text: string) => (

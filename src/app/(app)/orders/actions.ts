@@ -51,7 +51,7 @@ import {
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
-import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
@@ -1344,20 +1344,26 @@ async function autoRaiseBoughtInRequisition(
  * (billing / final payment). Available once the supplier goods have been received
  * (the full purchasing chain is complete).
  */
-export async function notifyClientBoughtInOrder(quotationId: string): Promise<void> {
+export async function notifyClientBoughtInOrder(quotationId: string): Promise<{ error?: string }> {
   const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
+  if (!user) return { error: "Unauthorized." };
   const { quote, cls, wf } = await loadWorkflow(quotationId);
   const isSales = isAdmin(user) || quote.preparedById === user.id || user.role === "SALES" || user.role === "ENGINEER";
-  if (!isSales) throw new Error("Only a Sales team member or an admin can do this.");
-  if (wf.stage !== "released") throw new Error("The order isn't awaiting client notification.");
+  if (!isSales) return { error: "Only a Sales team member or an admin can do this." };
+  if (wf.stage !== "released") return { error: "The order isn't awaiting client notification." };
   // The Purchaser must have bought the goods (bought items go straight to the
   // client — they don't pass warehouse receiving into stock).
+  //
+  // DEPT_REQUISITION_WHERE, not `kind: "department"`. An MRF-escalated request
+  // carries `mrfId` and the schema default kind "order", so filtering on kind
+  // alone missed it — while the order page ticked "Purchaser bought the goods"
+  // using `isDeptRequisition`, which counts it. The button enabled and the server
+  // refused, and Next.js masked the reason in production.
   const purchased: PRStatus[] = ["PURCHASED", "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED", "COMPLETED"];
   const bought = await prisma.purchaseRequest.count({
-    where: { quotationId, kind: "department", status: { in: purchased } },
+    where: { quotationId, ...DEPT_REQUISITION_WHERE, status: { in: purchased } },
   });
-  if (bought === 0) throw new Error("The Purchaser must buy the goods before notifying the client.");
+  if (bought === 0) return { error: "The Purchaser must buy the goods before notifying the client." };
   await saveWorkflow(quotationId, cls, { ...wf, stage: "final_pay_review", approvals: stamp(wf, "client_notified", user) });
   await logActivity(user, {
     action: "order.boughtin.notify",
@@ -1367,6 +1373,7 @@ export async function notifyClientBoughtInOrder(quotationId: string): Promise<vo
     entityId: quotationId,
     href: `/orders/${quotationId}#pending`,
   });
+  return {};
 }
 
 /** Sales viewer test (matches the "sales" pending-step semantics). */

@@ -176,9 +176,29 @@ export function effectiveStepRole(step: PurchaseStepDef, isDepartment: boolean):
  * purchase requests escalated from an order's Material Request Form (they carry an
  * `mrfId`): in both cases the warehouseman asked for materials that aren't on hand.
  */
+/**
+ * A department / material requisition: raised by a department (`kind`
+ * "department"), or escalated from an MRF — which sets `mrfId` and leaves `kind`
+ * at the schema default "order". Both are the same thing to every screen that
+ * asks "did the Purchaser buy this?".
+ *
+ * `DEPT_REQUISITION_WHERE` below is the SAME rule as a Prisma filter. They must
+ * move together: a server action that filtered on `kind: "department"` alone
+ * while the order page ticked its steps with this predicate let a Sales user
+ * press "Notify Client — Order Ready" on an MRF-purchased order and be refused
+ * by the server, with the reason masked by Next.js in production. One rule, two
+ * spellings, side by side so the next reader changes both.
+ */
 export function isDeptRequisition(pr: { kind?: string | null; mrfId?: string | null }): boolean {
-  return pr.kind === "department" || pr.mrfId != null;
+  return pr.kind === DEPT_REQUISITION_KIND || pr.mrfId != null;
 }
+
+export const DEPT_REQUISITION_KIND = "department";
+
+/** `isDeptRequisition` as a Prisma `where` fragment. Keep in step with it. */
+export const DEPT_REQUISITION_WHERE: { OR: ({ kind: string } | { mrfId: { not: null } })[] } = {
+  OR: [{ kind: DEPT_REQUISITION_KIND }, { mrfId: { not: null } }],
+};
 
 export function purchaseStep(key: string): PurchaseStepDef | undefined {
   return PURCHASE_STEPS.find((s) => s.key === key);

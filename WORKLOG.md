@@ -1,3 +1,59 @@
+## 2026-09-02 · "Notify Client — Order Ready" refused an order it had just ticked green
+
+Owner: *"error when notify client is pressed"* — order AFBM00003247J, a bought-in office pick-up, all three Phase 2
+steps ✓, button enabled, and a wall of Next.js boilerplate underneath it.
+
+**Approved by the owner before editing** (Phase 2 is frozen).
+
+### One rule, two spellings, and they had drifted
+
+| | The test it used |
+| --- | --- |
+| the ✓ ticks and the enabled button (`page.tsx:866`) | `isDeptRequisition(pr)` — `kind === "department"` **or `mrfId != null`** |
+| the server (`actions.ts:1358`) | `kind: "department"` |
+
+An **MRF-escalated** purchase request is created with `mrfId` set and **no `kind`**, so it takes the schema default
+`"order"`. It satisfies the button and is invisible to the server. On an order whose goods were bought through an
+MRF-raised request rather than the auto-filed bought-in one, every tick goes green and the server says no.
+
+Reproduced before touching anything: a department requisition parked at `APPROVED` plus an MRF request at
+`PURCHASED` → three ✓, button enabled, `Error: The Purchaser must buy the goods before notifying the client.` at
+`actions.ts:1360`, order still at `released`. Exactly the owner's screenshot.
+
+The fix is not "add `mrfId` to the query" but to stop having two spellings of one rule. `DEPT_REQUISITION_WHERE`
+now sits directly beneath `isDeptRequisition` in `lib/purchasing.ts`, and `purchasing.test.ts` asserts **both**
+against the same truth table — including the MRF row, which is the assertion that would have failed while they
+were out of step. The shape is pinned too: a third condition added to one side and not the other fails the test.
+
+### Next.js was eating every explanation
+
+The action said *"The Purchaser must buy the goods before notifying the client."* The user saw *"An error occurred
+in the Server Components render. The specific message is omitted in production builds…"* — because **Next.js
+replaces anything thrown inside a server action in production**. The sentence that would have let the owner
+diagnose this in ten seconds never left the server.
+
+`notifyClientBoughtInOrder` now **returns** its refusals (`{ error }`) instead of throwing them, and the panel
+renders what comes back. The `catch` stays for genuine crashes, which can still only arrive that way.
+
+Verified by forcing a refusal — advancing the order between the render and the click — and reading the screen:
+**"The order isn't awaiting client notification."** Not boilerplate.
+
+**This applies to every server action in the app, not just this one.** Every `throw new Error("…")` in
+`orders/actions.ts` and its siblings is invisible in production today. Converting them all is a bigger job; this
+entry is the note that it is worth doing.
+
+### Checked
+
+The MRF-purchased order now advances to *Awaiting final payment* with no error; a genuine refusal shows its own
+sentence; 187 tests pass; the role harness reports the same capability table as before.
+
+### One thing found and deliberately left
+
+`page.tsx:820` casts `pr.items as string[]` unchecked and hands it to `withSpecDetail`. A purchase request whose
+`items` JSON is not an array of strings crashes the **whole order page** with `v.toLowerCase is not a function` —
+I hit it with a malformed fixture while building the repro, not with real data. It is one bad row away from taking
+an order page down, and it is outside what the owner approved here.
+
 ## 2026-09-02 · The books open on 1 August 2026, and the Sales Head's override answers to nobody's target but the rep's
 
 Two rulings from the owner, one confirming behaviour and one changing it.
