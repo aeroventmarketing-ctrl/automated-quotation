@@ -27,6 +27,7 @@ import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
 import { STOCK_ACTION_LABEL, nextStockActionSlot } from "@/lib/stock-action";
 import { listActivityForActor, type ActivityView } from "@/lib/activity-log";
+import { buildCommissions, allDeals, isPayable } from "@/lib/sales-commission";
 
 export type TaskArea = "order" | "purchase" | "cash" | "schedule" | "commission" | "quotation" | "inventory";
 
@@ -434,29 +435,18 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // 5) Commissions awaiting payout — Accounting / Admin mark them paid.
   if (isAdmin(user) || has("accounting")) {
     try {
-      const comm = await prisma.commission.findMany({
-        where: { paid: false },
-        include: {
-          quotation: { include: { inquiry: { include: { customer: true } } } },
-          counterSale: { include: { customer: true } },
-        },
-        orderBy: { salesMonth: "desc" },
-        take: 100,
-      });
-      for (const c of comm) {
-        const ref = c.quotation
-          ? { label: c.quotation.quoteNumber, client: c.quotation.inquiry.customer.company, href: `/orders/${c.quotationId}` }
-          : c.counterSale
-          ? { label: c.counterSale.saleNumber ?? "Counter sale", client: c.counterSale.customer.company, href: `/counter-sales/${c.counterSaleId}` }
-          : null;
-        if (!ref) continue;
+      // Entitlement is computed (rules 1-6 in `lib/sales-commission`): a deal is
+      // only a task once its month cleared ₱1M and the client has fully paid.
+      // Reading unpaid `Commission` rows instead put deals here that nobody could
+      // pay yet — the row exists from the moment the order closes.
+      for (const c of allDeals(await buildCommissions()).filter(isPayable).slice(0, 100)) {
         tasks.push({
-          key: `comm:${c.id}`, area: "commission", areaLabel: AREA_LABEL.commission,
-          title: `Commission · ${ref.label}`, action: "Mark commission paid",
-          client: maskClient(ref.client), amount: maskAmount(Number(c.amount)), currency: "PHP",
+          key: `comm:${c.kind}:${c.refId}`, area: "commission", areaLabel: AREA_LABEL.commission,
+          title: `Commission · ${c.refLabel}`, action: "Mark commission paid",
+          client: maskClient(c.company), amount: maskAmount(c.amount), currency: "PHP",
           // "Mark paid" is done on the Commissions page — deep-link (anchor) to the row.
-          href: `/commissions#commission-${c.id}`,
-          since: c.computedAt.toISOString(),
+          href: `/commissions#commission-${c.kind}-${c.refId}`,
+          since: c.payoutYMD ?? c.recognisedYMD,
         });
       }
     } catch { /* ignore */ }
