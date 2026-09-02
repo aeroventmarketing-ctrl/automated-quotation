@@ -56,6 +56,23 @@ clean 2.00×. Duplicated rows do not move the efficiency check (the same numbers
 nothing else would ever have noticed. `AV2400FAWFDD` (51 rows vs a family median of 29) and `AV3000FAWFDD` (48)
 are looser candidates that may just have larger printed tables.
 
+### The third-party question, answered from the code
+
+The 37 low-reading models raised a question: *is motor sizing even applied to them?* The selector picks one of
+**four** rules from a model's `specs`, and only the last divides by 0.75:
+
+| rule | chosen when | motor comes from |
+| --- | --- | --- |
+| **fixed-speed** | `specs.fixedSpeed = true` | **nothing is sized** — `selectFixedSpeed` reads the unit's nameplate watts from `specs.power_w`, ignores the rating rows' power entirely, and returns `motorHp: 0` ("integral motor — rated in watts") |
+| catalogue motor table | `specs.motorTable` | the MOTOR HP / MAX BHP column |
+| catalogue row | `specs.propeller` + `specs.rows` | the MOTOR HP printed on the selected row |
+| **BHP ÷ 0.75** | everything else | the AFBM rule |
+
+So **if those models are `fixedSpeed`, their odd power column is harmless**: nothing sizes a motor from it, and
+the watts shown come from a different field. Query 4 in `scripts/sql/rating-power-check.sql` prints which rule
+each model falls under, which settles it in one look — and is worth reading beside query 1 generally, since a
+model whose power column looks strange may be one the selector never sizes a motor from.
+
 **3. The 37 third-party models** — `17CUG`, `12CGB15`, `12NSB`, `GSC`, `CK200` and the rest — read **0.107–0.591**,
 far below any Aerovent family, and ×1.34 does not rescue them (0.107 → 0.143). That is the signature of
 **electrical input watts** rather than shaft power: divide air power by a small motor's *input* and 10–25% is
