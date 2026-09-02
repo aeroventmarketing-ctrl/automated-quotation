@@ -14,6 +14,7 @@ import {
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
   OVERRIDE_RATE_PCT,
+  SALES_START_YMD,
   type CommissionMonth,
   type CommissionDeal,
 } from "@/lib/sales-commission";
@@ -94,10 +95,15 @@ export default async function CommissionsPage() {
           <p><span className="font-semibold text-foreground">3 · Full payment.</span> The client must have paid the order in full — whenever that happens.</p>
           <p><span className="font-semibold text-foreground">4 · Release.</span> A month&apos;s commissions start on the <strong>15th of the following month</strong> — the target isn&apos;t settled until the month ends — then on each 15th and 30th as the remaining clients pay in full. A month with 31 days releases on the 30th; February on the 28th (29th in a leap year).</p>
           <p><span className="font-semibold text-foreground">5 · Approval.</span> Automatic — meeting 1–3 approves it; no one signs off the entitlement.</p>
-          <p className="sm:col-span-2"><span className="font-semibold text-foreground">The Sales Head&apos;s override.</span> Whoever holds the <em>Sales Head</em> role also earns {OVERRIDE_RATE_PCT}% of every <em>other</em> salesperson&apos;s qualifying month, on the same net-of-VAT base and released on the same dates. It is on top of the {COMMISSION_RATE_PCT}% — the salesperson&apos;s own commission is untouched — and never applies to the Sales Head&apos;s own sales.</p>
+          <p className="sm:col-span-2"><span className="font-semibold text-foreground">The Sales Head&apos;s override.</span> Whoever holds the <em>Sales Head</em> role also earns {OVERRIDE_RATE_PCT}% of every <em>other</em> salesperson&apos;s qualifying month, on the same net-of-VAT base and released on the same dates. It is on top of the {COMMISSION_RATE_PCT}% — the salesperson&apos;s own commission is untouched — never applies to the Sales Head&apos;s own sales, and is <strong>not conditional on the Sales Head hitting their own target</strong>.</p>
           <p><span className="font-semibold text-foreground">6 · The rate.</span> {COMMISSION_RATE_PCT}% of gross sales less VAT. VAT is deducted only where the client was charged it — a <em>VAT exclusive</em> or <em>zero rated</em> order pays {COMMISSION_RATE_PCT}% of its full amount.</p>
         </CardContent>
       </Card>
+
+      <p className="text-xs text-muted-foreground">
+        Commissions are counted from <strong>{formatDate(SALES_START_YMD)}</strong> onwards. Earlier sales are
+        hidden here, not deleted — they remain on Orders, the WON report and the P&amp;L.
+      </p>
 
       {failed ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -119,7 +125,7 @@ export default async function CommissionsPage() {
 
           {months.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
-              No confirmed sales yet. A deal appears here in the month its PO (terms) or down payment (everyone else) landed.
+              No confirmed sales since {formatDate(SALES_START_YMD)}. A deal appears here in the month its PO (terms) or down payment (everyone else) landed.
             </CardContent></Card>
           ) : (
             <div className="space-y-4">

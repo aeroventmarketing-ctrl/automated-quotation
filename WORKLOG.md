@@ -1,3 +1,51 @@
+## 2026-09-02 · The books open on 1 August 2026, and the Sales Head's override answers to nobody's target but the rep's
+
+Two rulings from the owner, one confirming behaviour and one changing it.
+
+### 1. The override does not depend on the Sales Head's own target
+
+*"If incase JayR Basal was not able to meet the 1 million pesos target, Basal will still get the 0.25% cut from
+every sales role who meet the target."*
+
+Already true, and true for a structural reason worth naming: `withOverrides` reads **only the source rep's**
+month (`g.qualifies`) and never the head's. There is no code path in which the head's own selling could gate it.
+That is now said in a comment where the condition lives, on the page, and in three tests — the strongest being
+the one that asserts the override is **numerically identical** whether the head sold ₱0 or ₱5,000,000 that month.
+
+Proven on the running app in the bluntest available way: **Willy Ho, who has sold nothing at all**, was made
+Sales Head and earned ₱11,846.44 across 10 August rows and ₱4,464.29 in September — with no card of his own,
+because he has no sales of his own.
+
+### 2. Commissions start on 1 August 2026 — hidden, not deleted
+
+*"Show Sales order from August 1, 2026 onwards only and get and show the sales commission from that date onwards.
+Hide but do not delete all sales transactions and sales commissions before August 1, 2026."*
+
+`SALES_START_YMD` drops any sale recognised (rule 2) before that Manila day.
+
+**The placement is the whole point.** The filter runs *before* grouping, not after. Dropping the deals afterwards
+would leave a July sale counting toward a month's ₱1,000,000 target while contributing no commission — a target
+met on money the books are not supposed to see. Verified with a seeded July month of **₱2.8M, fully paid**: it
+would have qualified handsomely, and it produces exactly **zero rows**. A ₱500k deal dated **31 July** is gone
+too; the boundary is inclusive of 1 August and nothing else.
+
+Nothing is deleted. Pre-August sales, and any `Commission` payout rows already written against them, sit
+untouched; move the date back and they reappear.
+
+### Scoped to commissions on purpose
+
+The owner chose this over the wider options. A July order still in production, awaiting delivery or awaiting
+final payment stays fully visible and workable on Orders, the WON report and the P&L — only its *commission* is
+out of scope. Hiding it everywhere would have taken in-flight July work away from production and collections,
+which is a different and much worse thing than closing the commission books.
+
+This reverses an earlier judgement call recorded in this log — that commissions should never be date-gated,
+because "a commission is money someone earned, not an alert to be silenced". That reasoning was about the *alert
+go-live* gate and still holds for it; this is a deliberate opening balance for the commission scheme, set by the
+owner, and it is a separate constant precisely so the two cannot be confused.
+
+Six new tests (180 in the suite).
+
 ## 2026-09-02 · The Sales Head's 0.25% override — and the unique constraint that said one sale owes one person
 
 Owner: *"For JayR Basal, add 0.25% from each sales who were able to meet the target. Commission Amount will be net

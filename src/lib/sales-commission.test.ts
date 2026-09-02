@@ -13,6 +13,7 @@ import {
   OVERRIDE_RATE_PCT,
   overrideOn,
   withOverrides,
+  SALES_START_YMD,
   type CommissionDeal,
 } from "./sales-commission";
 import type { SaleRecord } from "./sale";
@@ -379,5 +380,67 @@ describe("the Sales Head's 0.25% override", () => {
 
   it("does nothing at all when no one holds the Sales Head role", () => {
     expect(withOverrides(team(), new Map())).toHaveLength(2);
+  });
+});
+
+describe("the books open on 1 August 2026", () => {
+  it("starts where the owner said", () => {
+    expect(SALES_START_YMD).toBe("2026-08-01");
+  });
+
+  it("is a boundary the grouping never sees — a hidden sale cannot help meet a target", () => {
+    // The cutoff is applied in `buildCommissions` BEFORE grouping, so this is the
+    // property that matters: whatever survives it is all rule 1 counts. A July
+    // sale reaching the grouper would silently lift a July or August month over
+    // ₱1,000,000 on money the books are not supposed to see.
+    const kept = [deal({ refId: "aug", recognisedYMD: "2026-08-01", salesMonth: "2026-08", gross: 1_200_000 })];
+    const months = groupByPersonMonth(kept);
+    expect(months).toHaveLength(1);
+    expect(months[0].monthGross).toBe(1_200_000);
+  });
+
+  it("keeps 1 August itself — the boundary is inclusive", () => {
+    expect("2026-08-01" < SALES_START_YMD).toBe(false);
+    expect("2026-07-31" < SALES_START_YMD).toBe(true);
+  });
+});
+
+describe("the Sales Head's own target does not gate their override", () => {
+  const HEAD = new Map([["head", "JayR"]]);
+
+  /**
+   * Owner (2026-09-02): *"If incase JayR Basal was not able to meet the 1 million
+   * pesos target, Basal will still get the 0.25% cut from every sales role who
+   * meet the target."*
+   */
+  it("pays the override in full on a month where the head sold nothing at all", () => {
+    const months = groupByPersonMonth(
+      withOverrides([deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 })], HEAD),
+    );
+    const head = months.find((m) => m.salespersonId === "head")!;
+    expect(head.kind).toBe("override");
+    expect(head.earned).toBe(2_500);
+  });
+
+  it("pays it in full on a month where the head sold, but fell short", () => {
+    const months = groupByPersonMonth(withOverrides([
+      deal({ refId: "h", salespersonId: "head", salespersonName: "JayR", gross: 10_000, net: 10_000 }),
+      deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
+    ], HEAD));
+    const own = months.find((m) => m.salespersonId === "head" && m.kind === "base")!;
+    const ovr = months.find((m) => m.salespersonId === "head" && m.kind === "override")!;
+    expect(own.qualifies).toBe(false); // ₱10,000 — nowhere near
+    expect(own.earned).toBe(0);        // …so his own sale earns him nothing
+    expect(ovr.earned).toBe(2_500);    // …and the override is untouched by that
+  });
+
+  it("pays the same override whether the head qualified or not", () => {
+    const rey = () => deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 });
+    const short = groupByPersonMonth(withOverrides([rey()], HEAD));
+    const rich = groupByPersonMonth(withOverrides([
+      rey(), deal({ refId: "h", salespersonId: "head", salespersonName: "JayR", gross: 5_000_000, net: 5_000_000 }),
+    ], HEAD));
+    const of = (ms: typeof short) => ms.find((m) => m.salespersonId === "head" && m.kind === "override")!.earned;
+    expect(of(short)).toBe(of(rich));
   });
 });

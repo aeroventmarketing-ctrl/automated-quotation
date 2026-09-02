@@ -65,6 +65,25 @@ export const MONTHLY_QUOTA_GROSS = 1_000_000;
  */
 export const OVERRIDE_RATE_PCT = 0.25;
 
+/**
+ * The commission books open here. Owner (2026-09-02): *"Show Sales order from
+ * August 1, 2026 onwards only and get and show the sales commission from that
+ * date onwards. Hide but do not delete all sales transactions and sales
+ * commissions before August 1, 2026."*
+ *
+ * A sale recognised (rule 2) before this Manila day is dropped **before**
+ * grouping, so it neither earns a commission nor counts toward any month's
+ * ₱1,000,000 target — a July sale must not help meet a target in books that
+ * do not start until August.
+ *
+ * NOTHING IS DELETED. Pre-August sales, and any `Commission` payout rows already
+ * recorded against them, stay exactly where they are; move this date back and
+ * they reappear. The cutoff is deliberately scoped to commissions — the Orders
+ * and Quotations lists, the WON report and the P&L still show everything, so a
+ * July order still in production stays visible and workable.
+ */
+export const SALES_START_YMD = "2026-08-01";
+
 /** Money is equal to the cent; never compare Decimals-turned-floats exactly. */
 const PESO_EPS = 0.005;
 
@@ -381,6 +400,10 @@ export function withOverrides(baseDeals: CommissionDeal[], heads: Map<string, st
   const out = [...baseDeals];
   for (const [headId, headName] of heads) {
     for (const g of months) {
+      // The condition is on the SOURCE rep's month only. Owner: *"If incase JayR
+      // Basal was not able to meet the 1 million pesos target, Basal will still
+      // get the 0.25% cut from every sales role who meet the target."* Nothing
+      // here reads the head's own month, which is what makes that true.
       if (g.kind !== "base" || !g.qualifies || g.salespersonId === headId) continue;
       for (const d of g.deals) {
         if (!d.approved) continue;
@@ -488,6 +511,7 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
     const recognised = saleRecognitionDate(sale);
     if (!recognised) continue;
     const recognisedYMD = manilaYMD(recognised);
+    if (recognisedYMD < SALES_START_YMD) continue; // hidden, not deleted
 
     const gross = round2(payableTotal(q));
     const net = netOfVat(q, gross);
@@ -528,6 +552,7 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
     if (scopeToRep && salespersonId !== scopeToRep) continue;
     const dated = cs.completedAt ?? cs.createdAt;
     const recognisedYMD = manilaYMD(dated.toISOString());
+    if (recognisedYMD < SALES_START_YMD) continue; // hidden, not deleted
     const gross = round2(Number(cs.total));
     // A counter sale carries its own net (`subtotal`), which `counterTotals`
     // already computes by the same rule: total ÷ 1.12 when VAT-inclusive, and
