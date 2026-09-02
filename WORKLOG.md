@@ -1,3 +1,145 @@
+## 2026-09-02 · VAT on the commission base: the rule written down, and the mode that isn't what it says
+
+Owner: *"if order is VAT inclusive, deduct vat amount to sales commission. If order is VAT Exclusive or Zero Rated
+do not deduct VAT amount to sales commission."*
+
+Three of the four VAT presentations already behaved that way — `netOfVat` deducts via
+`vatModeChargesOutputVat`, the same predicate the P&L and the Sales Summary use. **The fourth is a trap worth
+naming.**
+
+### "VAT exclusive (+12%)" is labelled exclusive and behaves inclusive
+
+The quotation offers four options, three of which begin with the words *VAT exclusive*:
+
+| Option | What the client pays | Contains VAT? |
+| --- | --- | --- |
+| VAT inclusive | the entered price | **yes** |
+| VAT exclusive **(+12%)** | net **+ 12% on top** | **yes** |
+| VAT exclusive (÷1.12) | the net; no VAT line | no |
+| VAT exclusive zero rated | the entered price | no |
+
+Read by its label, "+12%" falls under *VAT Exclusive* and would take no deduction. Read by what it does, it is
+VAT inclusive with the VAT shown on its own line — the 12% goes to BIR either way. **Owner's call: it deducts.**
+Paying 1.5% of that 12% would be paying commission on the government's share, and would make two identical deals
+pay differently for a presentation choice.
+
+That ruling is now written into `netOfVat`'s doc comment with the reasoning and an explicit *"do not swap it for a
+name check on EXCLUSIVE"* — because the next reader will see three options starting with the same two words and
+will be tempted.
+
+### Asserted as a table, not four scattered tests
+
+`sales-commission.test.ts` now walks all four modes in one loop, checking the base, whether VAT moved, and the
+resulting commission. Widening or narrowing the rule moves a cell rather than leaving a case untested. The point
+of the distinction, in one number: on a ₱1,120,000 invoice it is the difference between ₱16,800 and ₱15,000.
+
+### Said out loud on the screens
+
+A VAT-exclusive deal's base equals its gross, and a column repeating the same figure reads as a bug. So the
+column is now **Commission base** (not "Net of VAT"), each row is stamped **LESS VAT** or **NO VAT CHARGED**, and
+rule 6 on the page spells out the exception. The order page's Phase 6 card says the same thing about its own order.
+
+### Checked on screen, one order per mode
+
+Four ₱560,000 orders for one salesperson, one in each mode:
+
+| Order | Gross | Base | 1.5% |
+| --- | --- | --- | --- |
+| VAT inclusive | ₱560,000 | ₱500,000 · less VAT | ₱7,500 |
+| VAT exclusive (+12%) | ₱560,000 | ₱500,000 · less VAT | ₱7,500 |
+| VAT exclusive (÷1.12) | ₱500,000 | ₱500,000 · no VAT charged | ₱7,500 |
+| VAT exclusive zero rated | ₱560,000 | ₱560,000 · no VAT charged | ₱8,400 |
+
+The three VAT-bearing modes land on the same ₱500,000 base for the same underlying deal — the invariant that says
+the rule is right. Zero-rated keeps its full ₱560,000, which is the point of being zero-rated.
+
+The role harness reports the same capability table as before: no screen moved.
+
+## 2026-09-02 · Commissions by salesperson and month, and the six rules that decide them
+
+The Management Dashboard's **Unpaid commissions** tile read **₱0.00**. It linked to `/commissions`, which listed
+every closed order flat — no month, no quota, no sense of who had earned anything. The owner set out the rules the
+company actually pays on, and this makes the system enforce them.
+
+### The rules, and where each one lives
+
+They are quoted verbatim at the top of the one new file, `src/lib/sales-commission.ts`, because a rule that is
+paraphrased is a rule that drifts:
+
+| # | Rule | How it is implemented |
+| --- | --- | --- |
+| 1 | more than ₱1M within the month | the salesperson's **month total, gross** — a quota on the group, not the order |
+| 2 | down payment in the month (non-terms) / PO in the month (terms) | `saleRecognitionDate` — it already encoded exactly this split; no new date logic was written |
+| 3 | fully paid, regardless of date | collected ≥ payable, dated by the **last** payment |
+| 4 | released every 15th and 30th | the first release **on or after** full payment |
+| 5 | automatically approve | clearing 1–3 *is* the approval — there is no button |
+| 6 | 1.5% of gross sales less VAT | `netOfVat` then 1.5% |
+
+Two of the six are per-month and four are per-deal. That is the whole reason the page is grouped **salesperson ×
+month** rather than listed flat: rule 1 can only be answered by a group, rule 3 only by a deal.
+
+**Two judgement calls the owner made**, recorded here so they are not re-litigated: the ₱1M is the **month's
+total** (three ₱600k deals qualify; one ₱600k deal does not), and it is measured on **gross**, even though the
+1.5% is paid on the net. So ₱1.05M gross qualifies and pays 1.5% of ₱937.5k.
+
+### Entitlement is computed; the table only records the payout
+
+The `Commission` row used to be the answer: written when the order closed, at 1.5% of **gross**, stamped with the
+**close** month. Every one of those three is wrong under the new rules — the close month is not the sales month,
+and a deal can be payable long before it closes.
+
+So the row stopped being the source of truth. `buildCommissions()` recomputes entitlement from the confirmed sales
+themselves — the same source the WON report and the P&L read — and the table is joined in for one field: whether
+the money went out. `payDealCommission` upserts that row **at payout**, with the recomputed figures, so a revised
+or late-paid deal can never pay yesterday's amount.
+
+Four surfaces read that one engine now, and therefore cannot disagree: the Commissions page, the Management tile,
+the finance-monitor card, and My Dashboard's "Mark commission paid" task. The last two were quietly wrong in a way
+worth naming — they listed **every unpaid `Commission` row**, which exists from the moment an order closes, so
+they offered Accounting deals nobody was allowed to pay yet.
+
+### Rule 5 reaches the order page too
+
+Phase 6's first step was *"Approve Commission Amount"*, signed by the Payment Approver. Under rule 5 there is
+nothing to approve, so the step shows **"approved automatically — the rules are met"** and the flow opens on
+*Prepare Commission Voucher*. The voucher, the budget release and the payout are untouched — still human, still
+Accounting and the Payment Approver. The server gate moved with it: `uploadCommissionVoucher` now asks the engine,
+not `wf.commission.approvedAt`, so the button and the action can't disagree.
+
+The card's figures moved to match: **1.5% of sales less VAT** (with the base shown beside it) instead of 1.5% of
+gross, and rule 4's release date instead of a flat "15 days after the sales month".
+
+### One de-duplication, worth doing while here
+
+`fileDocuments` carried an inline copy of `ensureCommissionRow`; the multi-batch close called the helper. Two
+copies of the same computation, one of which would have been fixed and the other left behind — the single-batch
+close now calls the helper too.
+
+### Checked in the running app, not just typechecked
+
+Seeded into the role harness and read off the screen:
+
+- Sam Sales, August: ₱700k (last payment 1 Sept) + ₱500k still owing = **₱1.2M, Qualified**. The paid one earns
+  **₱9,375** = 1.5% of ₱625,000, released **15 Sept**. The other reads *awaiting full payment, ₱400,000 outstanding*
+  — and still counts toward the quota.
+- Admin Ana, August: one ₱800k deal, **fully paid** — *₱190,000 short of ₱1,000,000*, earns **nothing**. The page
+  still shows the date it *would* have released, so the shortfall is legible rather than mysterious.
+- Admin Ana, September: a **terms** client, ₱2M, dated *PO submitted* 2 Sept, paid 20 Sept → **₱26,785.71**,
+  released **30 Sept**.
+- **Mark paid** on a deal with no `Commission` row: created one, recorded ₱9,375 on base ₱625,000 for month
+  `2026-08`, and moved Payable ₱36,160.71 → ₱26,785.71 and Paid ₱0 → ₱9,375.
+- The Management tile now reads **₱36,160.71 · 2 approved · release Sep 15** — the same figure as the page it links to.
+
+21 tests pin the rules (`src/lib/sales-commission.test.ts`), including the ones a calendar gets wrong: the 31st of
+a long month rolls to the next 15th, December rolls into January, and February's second release is the 28th (29th
+in 2028) because it has no 30th.
+
+### One thing deliberately not done
+
+The go-live alert gate is **not** applied to commissions. It exists to silence a pre-launch backlog of *alerts*;
+a commission is money someone earned, and hiding it because the deal predates the launch date would quietly
+under-pay them.
+
 ## 2026-09-01 · The rating-power check, run: no unit error anywhere, two real defects
 
 The owner ran `scripts/sql/rating-power-check.sql` against the live catalogue and sent the output: **295 models,
@@ -55,6 +197,23 @@ not a unit slip (a unit slip is 1.34×). 106 rows. This one is wrong and is bein
 clean 2.00×. Duplicated rows do not move the efficiency check (the same numbers are simply present twice), so
 nothing else would ever have noticed. `AV2400FAWFDD` (51 rows vs a family median of 29) and `AV3000FAWFDD` (48)
 are looser candidates that may just have larger printed tables.
+
+### The third-party question, answered from the code
+
+The 37 low-reading models raised a question: *is motor sizing even applied to them?* The selector picks one of
+**four** rules from a model's `specs`, and only the last divides by 0.75:
+
+| rule | chosen when | motor comes from |
+| --- | --- | --- |
+| **fixed-speed** | `specs.fixedSpeed = true` | **nothing is sized** — `selectFixedSpeed` reads the unit's nameplate watts from `specs.power_w`, ignores the rating rows' power entirely, and returns `motorHp: 0` ("integral motor — rated in watts") |
+| catalogue motor table | `specs.motorTable` | the MOTOR HP / MAX BHP column |
+| catalogue row | `specs.propeller` + `specs.rows` | the MOTOR HP printed on the selected row |
+| **BHP ÷ 0.75** | everything else | the AFBM rule |
+
+So **if those models are `fixedSpeed`, their odd power column is harmless**: nothing sizes a motor from it, and
+the watts shown come from a different field. Query 4 in `scripts/sql/rating-power-check.sql` prints which rule
+each model falls under, which settles it in one look — and is worth reading beside query 1 generally, since a
+model whose power column looks strange may be one the selector never sizes a motor from.
 
 **3. The 37 third-party models** — `17CUG`, `12CGB15`, `12NSB`, `GSC`, `CK200` and the rest — read **0.107–0.591**,
 far below any Aerovent family, and ×1.34 does not rescue them (0.107 → 0.143). That is the signature of

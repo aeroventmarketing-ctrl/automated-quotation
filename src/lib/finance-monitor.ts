@@ -8,6 +8,7 @@
 import { prisma } from "@/lib/db";
 import { payableTotal, round2 } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
+import { buildCommissions, allDeals, isPayable, type CommissionDeal } from "@/lib/sales-commission";
 import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
@@ -72,7 +73,10 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
     prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),
-    prisma.commission.findMany({ where: { paid: false, ...createdFilter }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } }, counterSale: { select: { paymentCleared: true } } } }).catch(() => []),
+    // Entitlement is computed (rules 1-6 in `lib/sales-commission`), not read off
+    // the Commission table — that table only records what was PAID. No go-live
+    // filter: a commission is money someone earned, not an alert to silence.
+    buildCommissions().then(allDeals).catch(() => [] as CommissionDeal[]),
     // CANCELLED is terminal too — a withdrawn request is not money in flight,
     // and counting it inflated the pending-purchase figure.
     prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED", "CANCELLED"] }, ...createdFilter }, select: { id: true } }).catch(() => []),
@@ -119,17 +123,10 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
     .filter((i) => { const q = Number(i.quantity); const r = Number(i.reorderLevel); return q <= 0 || (r > 0 && q <= r); })
     .map((i) => ({ id: i.id, name: i.name, unit: i.unit, quantity: Number(i.quantity) }));
 
-  // Commissions count once the order is fully paid (matches the Commissions page).
-  const payableCommissions = commissions.filter((c) => {
-    const ov = Number(c.orderValue);
-    if (c.counterSale) return c.counterSale.paymentCleared;
-    if (c.quotation) {
-      const col = collectedTotal(saleFromClassification(c.quotation.classification));
-      return ov > 0 && col >= ov - 0.005;
-    }
-    return false;
-  });
-  const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + Number(c.amount), 0));
+  // Payable = the month cleared ₱1M, the client has fully paid, and no payout has
+  // been recorded (matches the Commissions page and the Management tile exactly).
+  const payableCommissions = commissions.filter(isPayable);
+  const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + c.amount, 0));
 
   // Printed cash vouchers (after go-live) and whether they tally with their POs.
   const printedVouchers = (await getPrintedVouchers().catch(() => []))

@@ -58,3 +58,30 @@ JOIN "CatalogueItem" ci ON ci.id = rp."catalogueItemId"
 WHERE ci."modelCode" = 'AV3650DIDWCFAB'   -- ← change this
 ORDER BY sp_inwg, cfm
 LIMIT 40;
+
+
+-- ── 4. Which motor rule does each model actually fall under? ─────────────────
+-- The selector applies one of four, decided by the model's `specs`, and only the
+-- last of them divides by 0.75. This matters when reading query 1: a model whose
+-- power column looks odd may be one the selector never sizes a motor from.
+--
+--   fixed-speed  → NO motor sizing at all. `selectFixedSpeed` reads the unit's
+--                  nameplate watts from `specs.power_w`, ignores the rating
+--                  rows' power entirely, and returns motorHp = 0. Typical of
+--                  bought-in cassette / box fans with an integral motor.
+--   motor table  → the catalogue's MOTOR HP / MAX BHP column (`specs.motorTable`).
+--   catalogue row→ the MOTOR HP printed on the selected row (`specs.rows[].hp`),
+--                  for EWF / EWFDD / PRV / PRVDD.
+--   BHP / 0.75   → the AFBM rule, everything else (CEB, CFAB, CIEB, HPB, …).
+SELECT CASE
+         WHEN ci.specs->>'fixedSpeed' = 'true'                          THEN 'fixed-speed — no motor sizing'
+         WHEN ci.specs ? 'motorTable'                                   THEN 'catalogue motor table'
+         WHEN ci.specs->>'propeller' = 'true' AND ci.specs ? 'rows'     THEN 'catalogue row Motor HP'
+         ELSE                                                                'BHP / 0.75'
+       END                       AS motor_rule,
+       count(*)                  AS models,
+       string_agg(ci."modelCode", ', ' ORDER BY ci."modelCode") FILTER (WHERE true) AS model_codes
+FROM "CatalogueItem" ci
+WHERE EXISTS (SELECT 1 FROM "FanRatingPoint" rp WHERE rp."catalogueItemId" = ci.id)
+GROUP BY motor_rule
+ORDER BY models DESC;

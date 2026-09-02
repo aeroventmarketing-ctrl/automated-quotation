@@ -11,6 +11,7 @@ import { getPrintedVouchers } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
+import { buildCommissions, allDeals, isPayable, type CommissionDeal } from "@/lib/sales-commission";
 import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, requisitionDeptLabel, type OrderStage } from "@/lib/order-workflow";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -137,7 +138,11 @@ export default async function ManagementPage() {
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
     prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),
-    prisma.commission.findMany({ where: { paid: false, ...createdFilter }, select: { amount: true, orderValue: true, quotation: { select: { classification: true } }, counterSale: { select: { paymentCleared: true } } } }).catch(() => []),
+    // Entitlement is computed from the confirmed sales themselves (rules 1–6 in
+    // `lib/sales-commission`), not read off the Commission table — that table
+    // only records what was PAID. No go-live filter: a commission is money
+    // someone earned, not an alert to be silenced before launch.
+    buildCommissions().then(allDeals).catch(() => [] as CommissionDeal[]),
     prisma.purchaseRequest.findMany({ where: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...createdFilter }, select: { id: true, quotationId: true } }).catch(() => []),
   ]);
 
@@ -396,18 +401,12 @@ export default async function ManagementPage() {
     const r = Number(i.reorderLevel);
     return q <= 0 || (r > 0 && q <= r);
   });
-  // Commissions only count once the client has fully paid the order — an
-  // unpaid-order commission stays hidden (matches the Commissions page).
-  const payableCommissions = commissions.filter((c) => {
-    const ov = Number(c.orderValue);
-    if (c.counterSale) return c.counterSale.paymentCleared; // counter sale: once payment cleared
-    if (c.quotation) {
-      const collected = collectedTotal(saleFromClassification(c.quotation.classification));
-      return ov > 0 && collected >= ov - 0.005;
-    }
-    return false;
-  });
-  const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + Number(c.amount), 0));
+  // Commissions come from the same engine as the Commissions page the tile links
+  // to, so the two can never disagree: a deal is payable only once its month
+  // cleared ₱1M, the client has fully paid, and no payout has been recorded.
+  const payableCommissions = commissions.filter(isPayable);
+  const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + c.amount, 0));
+  const nextCommissionPayout = payableCommissions.map((c) => c.payoutYMD).filter((d): d is string => !!d).sort()[0] ?? null;
 
   // Printed cash vouchers — number, details, and whether they tally with the
   // approved requests they cover (voucher total vs Σ current net PO amounts).
@@ -571,7 +570,7 @@ export default async function ManagementPage() {
     { label: "Counter sales (mo.)", value: formatCurrency(csMonthTotal, CURRENCY), caption: `${csMonthCount} this month`, href: "/counter-sales", icon: Store, color: "#7c3aed" },
     { label: "Receivables", value: formatCurrency(outstanding, CURRENCY), caption: `${collectedPct}% collected`, href: "/orders", icon: Wallet, color: "#1baf7a" },
     { label: "Low / out of stock", value: String(lowStock.length), caption: lowStock.length === 0 ? "all healthy" : "needs reorder", href: "/inventory/reorder", icon: PackageX, color: lowStock.length > 0 ? "#d03b3b" : "#0ca30c" },
-    { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), caption: `${payableCommissions.length} pending`, href: "/commissions", icon: Percent, color: "#4a3aa7" },
+    { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), caption: nextCommissionPayout ? `${payableCommissions.length} approved · release ${fmtDue(nextCommissionPayout)}` : `${payableCommissions.length} pending`, href: "/commissions", icon: Percent, color: "#4a3aa7" },
   ];
 
   return (

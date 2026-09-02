@@ -56,9 +56,12 @@ function DocRow({ label, doc, onRemove }: { label: string; doc: WorkflowDoc; onR
 export function CommissionFlow({
   orderId,
   amount,
+  base,
+  vatDeducted = true,
   currency,
   salesMonth,
   dueLabel,
+  autoApproved = false,
   flow,
   canApprove,
   canAccounting,
@@ -67,9 +70,18 @@ export function CommissionFlow({
 }: {
   orderId: string;
   amount: number;
+  /** The commission base — gross less VAT (rule 6). */
+  base?: number;
+  /** Whether VAT was deducted; false for a VAT-exclusive / zero-rated order. */
+  vatDeducted?: boolean;
   currency: string;
   salesMonth: string;
   dueLabel: string;
+  /**
+   * Rule 5 — the entitlement rules approved this by themselves (the month
+   * cleared ₱1M and the client has fully paid), so step 1 needs no signature.
+   */
+  autoApproved?: boolean;
   flow: OrderCommissionFlow;
   canApprove: boolean;
   canAccounting: boolean;
@@ -120,8 +132,13 @@ export function CommissionFlow({
 
   // Per-step tracker so Sales can monitor the whole phase — each step's role,
   // the assigned approver name(s), and who signed it off (or who it's waiting on).
-  const steps: { label: string; role: string; by?: string; at?: string }[] = [
-    { label: "Commission amount approved", role: "payment_approver", by: flow.approvedByName, at: flow.approvedAt },
+  // Rule 5: the amount approves itself once the entitlement rules are met, so
+  // step 1 is shown as done and credited to the rules — no one to wait on.
+  const amountApproved = autoApproved || !!flow.approvedAt;
+  const steps: { label: string; role: string; by?: string; at?: string; auto?: boolean }[] = [
+    autoApproved && !flow.approvedAt
+      ? { label: "Commission amount approved", role: "payment_approver", by: "automatic", at: "auto", auto: true }
+      : { label: "Commission amount approved", role: "payment_approver", by: flow.approvedByName, at: flow.approvedAt },
     { label: "Commission voucher prepared", role: "accounting", by: flow.voucherByName, at: flow.voucherAt },
     { label: "Commission voucher approved", role: "payment_approver", by: flow.voucherApprovedByName, at: flow.voucherApprovedAt },
     { label: "Commission budget released", role: "payment_approver", by: flow.budgetReleasedByName, at: flow.budgetReleasedAt },
@@ -133,12 +150,26 @@ export function CommissionFlow({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">Commission amount (1.5%)</p>
-        <span className="text-sm font-semibold">{formatCurrency(amount, currency)}</span>
+        <p className="text-sm text-muted-foreground">
+          Commission base{base != null ? ` — ${formatCurrency(base, currency)}` : ""}{" "}
+          <span className="text-xs">({vatDeducted ? "sales less VAT" : "no VAT charged on this order"})</span>
+        </p>
+        <span className="text-sm font-semibold">
+          {formatCurrency(amount, currency)} <span className="text-xs font-normal text-muted-foreground">· 1.5%</span>
+        </span>
       </div>
       <p className="text-xs text-muted-foreground">
-        Sales month {salesMonth}. Issued to Sales {dueLabel ? `by ${dueLabel}` : ""} — 15 days after the sales month.
+        Sales month {salesMonth}.{" "}
+        {dueLabel
+          ? `Released ${dueLabel} — the next 15th or 30th after the client paid in full.`
+          : "Released on the next 15th or 30th after the client pays in full."}
       </p>
+      {!autoApproved && !flow.approvedAt && (
+        <p className="text-xs text-amber-700">
+          Not yet earned: the salesperson&apos;s sales for {salesMonth} must exceed ₱1,000,000 and the client must have
+          paid in full.
+        </p>
+      )}
 
       {/* Approval progress — role + assigned approver name per step. */}
       <div className="space-y-1 rounded-md border bg-muted/20 p-2">
@@ -162,7 +193,9 @@ export function CommissionFlow({
                   {s.label}
                   {" — "}
                   <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{roleLabel}</span>
-                  {done ? (
+                  {s.auto ? (
+                    <span className="text-emerald-700"> · approved automatically — the rules are met</span>
+                  ) : done ? (
                     <span className="text-muted-foreground"> · {s.by}{s.at ? ` · ${fmtWhen(s.at)}` : ""}</span>
                   ) : (
                     <span className={current ? "font-semibold text-amber-700" : "text-muted-foreground"}>
@@ -180,8 +213,9 @@ export function CommissionFlow({
         {flow.signedVoucherDoc && <DocRow label="Signed Voucher" doc={flow.signedVoucherDoc} onRemove={admin ? () => { if (window.confirm("Remove this signed voucher?")) run(() => removeCommissionVoucher(orderId, "signed")); } : undefined} />}
       </div>
 
-      {/* Current actionable step */}
-      {!flow.approvedAt ? (
+      {/* Current actionable step. Rule 5 skips the first one when the entitlement
+          rules have already approved the amount. */}
+      {!amountApproved ? (
         canApprove ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => approveCommission(orderId))}>
             {busy ? "Saving…" : "Approve Commission Amount"}

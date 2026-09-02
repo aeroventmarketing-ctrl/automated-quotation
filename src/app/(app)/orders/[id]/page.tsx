@@ -6,7 +6,8 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { buildCommissions, allDeals } from "@/lib/sales-commission";
 import { payableTotal } from "@/lib/quote";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -146,9 +147,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Catalogue of purchasable products (for the MRF autocomplete); may be empty
   // before the product table is migrated.
   const productOptions = await getProducts().then((ps) => ps.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))).catch(() => []);
-  // Sales commission (exists once the order is closed) — for the post-close
-  // commission sign-offs and the "issued 15 days after the sales month" due date.
-  const commissionRow = await prisma.commission.findUnique({ where: { quotationId: id } }).catch(() => null);
+  // Sales commission — the entitlement is COMPUTED (rules 1–6 in
+  // `lib/sales-commission`: the salesperson's month must clear ₱1M, the client
+  // must have fully paid, and it is 1.5% of the net), so this reads the same
+  // engine the Commissions page and the Management tile read rather than the
+  // `Commission` table, which now only records what was paid out. Scoped to this
+  // order's salesperson because rule 1 needs their whole month.
+  const commissionDeal = quote.preparedById
+    ? await buildCommissions({ salespersonId: quote.preparedById })
+        .then((v) => allDeals(v).find((d) => d.kind === "order" && d.refId === id) ?? null)
+        .catch(() => null)
+    : null;
 
   const adminViewer = isAdmin(viewer);
   // PO money amounts show only to the money-handling roles (Purchaser,
@@ -546,20 +555,19 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     proof: p.proof ?? null,
   }));
 
-  // Sales-commission info for the post-close sign-offs. Due date = the 15th day
-  // after the sales month ends ("issued 15 days after the sales month").
-  const commissionInfo = commissionRow
+  // Sales-commission info for the post-close sign-offs. The release date is
+  // rule 4's — the next 15th or 30th after the client fully paid — not a fixed
+  // "15 days after the month".
+  const commissionInfo = commissionDeal
     ? {
-        amount: Number(commissionRow.amount),
+        amount: commissionDeal.amount,
+        base: commissionDeal.net,
+        vatDeducted: commissionDeal.vatDeducted,
         currency: quote.currency,
-        salesMonth: commissionRow.salesMonth,
-        dueLabel: ((): string => {
-          const [y, m] = commissionRow.salesMonth.split("-").map(Number);
-          if (!y || !m) return "";
-          const d = new Date(y, m, 0); // last day of the sales month
-          d.setDate(d.getDate() + 15);
-          return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-        })(),
+        salesMonth: commissionDeal.salesMonth,
+        dueLabel: commissionDeal.payoutYMD ? formatDate(commissionDeal.payoutYMD) : "",
+        // Rule 5 — clearing rules 1–3 IS the approval; nobody signs the amount off.
+        autoApproved: commissionDeal.approved,
         flow: wf.commission ?? {},
       }
     : null;
@@ -1208,9 +1216,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <CommissionFlow
               orderId={quote.id}
               amount={commissionInfo.amount}
+              base={commissionInfo.base}
+              vatDeducted={commissionInfo.vatDeducted}
               currency={commissionInfo.currency}
               salesMonth={commissionInfo.salesMonth}
               dueLabel={commissionInfo.dueLabel}
+              autoApproved={commissionInfo.autoApproved}
               flow={commissionInfo.flow}
               canApprove={perms.canApproveComm}
               canAccounting={perms.canAccountingComm}

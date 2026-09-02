@@ -71,6 +71,7 @@ import {
 } from "@/lib/delivery-multibatch";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
+import { buildCommissions, allDeals } from "@/lib/sales-commission";
 import { applyStockChange } from "@/lib/inventory";
 import { isLocationAllowedForDept, PLANT_LOCATION } from "@/lib/stock-location";
 import { recordDeptStockTransfer, isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
@@ -117,18 +118,32 @@ const COMMISSION_RATE_PCT = 1.5;
  * overwrites an existing one, keeping its paid state). Guarded so a missing table
  * never blocks closing the order. Used by both the single-batch close and the
  * multiple-batch close.
+ *
+ * The row is the PAYOUT RECORD, not the entitlement — whether a commission is
+ * earned at all is computed live by `lib/sales-commission` (the month must clear
+ * ₱1M, the client must have fully paid). What is written here is that engine's
+ * figures so the record can't disagree with the screens: `orderValue` is the
+ * commission BASE (gross less VAT, rule 6) and `salesMonth` is the month the
+ * sale was recognised in (rule 2) — not the month the order happened to close.
  */
 async function ensureCommissionRow(quotationId: string): Promise<void> {
   try {
     const q = await prisma.quotation.findUnique({ where: { id: quotationId }, include: { preparedBy: true } });
     if (!q) return;
-    const orderValue = payableTotal(q);
-    const amount = round2((orderValue * COMMISSION_RATE_PCT) / 100);
-    const now = new Date();
-    const salesMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const deal = await buildCommissions({ salespersonId: q.preparedById })
+      .then((v) => allDeals(v).find((d) => d.kind === "order" && d.refId === quotationId) ?? null);
+    if (!deal) return; // no confirmed sale to commission
     await prisma.commission.upsert({
       where: { quotationId },
-      create: { quotationId, salespersonId: q.preparedById, salespersonName: q.preparedBy.name, orderValue, ratePct: COMMISSION_RATE_PCT, amount, salesMonth },
+      create: {
+        quotationId,
+        salespersonId: q.preparedById,
+        salespersonName: q.preparedBy.name,
+        orderValue: deal.net,
+        ratePct: COMMISSION_RATE_PCT,
+        amount: deal.amount,
+        salesMonth: deal.salesMonth,
+      },
       update: {},
     });
   } catch {
@@ -4335,32 +4350,11 @@ export async function fileDocuments(quotationId: string): Promise<void> {
     await saveWorkflow(quotationId, cls, { ...wf, stage: "closed", approvals: stamp(wf, "documents_filed", user) });
   }
 
-  // Phase 7 — compute the 1.5% sales commission for the close month. Guarded so a
-  // missing table (before the migration is applied) never blocks closing the order.
-  try {
-    const q = await prisma.quotation.findUnique({ where: { id: quotationId }, include: { preparedBy: true } });
-    if (q) {
-      const orderValue = payableTotal(q);
-      const amount = round2((orderValue * COMMISSION_RATE_PCT) / 100);
-      const now = new Date();
-      const salesMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      await prisma.commission.upsert({
-        where: { quotationId },
-        create: {
-          quotationId,
-          salespersonId: q.preparedById,
-          salespersonName: q.preparedBy.name,
-          orderValue,
-          ratePct: COMMISSION_RATE_PCT,
-          amount,
-          salesMonth,
-        },
-        update: {}, // never overwrite an existing commission (keeps paid state)
-      });
-    }
-  } catch {
-    // Commission table not set up yet — closing the order still succeeds.
-  }
+  // Phase 7 — open the sales-commission record for this order. This was an inline
+  // copy of `ensureCommissionRow` (the multi-batch close called the helper, the
+  // single-batch close repeated it); one of them would have been fixed and the
+  // other left behind, so both now go through the helper.
+  await ensureCommissionRow(quotationId);
   revalidatePath("/commissions");
 }
 
@@ -4393,11 +4387,29 @@ export async function approveCommission(quotationId: string): Promise<void> {
   await saveWorkflow(quotationId, cls, { ...wf, commission });
 }
 
+/**
+ * Whether the commission amount is approved: either someone signed it off, or —
+ * the owner's rule 5 — the entitlement rules approved it themselves (the
+ * salesperson's month cleared ₱1M and the client has fully paid). Computed by the
+ * one engine in `lib/sales-commission`, so this can't drift from what the
+ * Commissions page and the order card show.
+ */
+async function commissionAmountApproved(quotationId: string, wf: { commission?: { approvedAt?: string } | null }): Promise<boolean> {
+  if (wf.commission?.approvedAt) return true;
+  const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { preparedById: true } });
+  if (!quote?.preparedById) return false;
+  return await buildCommissions({ salespersonId: quote.preparedById })
+    .then((v) => allDeals(v).some((d) => d.kind === "order" && d.refId === quotationId && d.approved))
+    .catch(() => false);
+}
+
 /** 2. Accounting uploads the commission voucher. */
 export async function uploadCommissionVoucher(quotationId: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
   const user = await commissionActor("accounting");
   const { cls, wf } = await loadWorkflow(quotationId);
-  if (!wf.commission?.approvedAt) throw new Error("The commission amount hasn't been approved yet.");
+  if (!(await commissionAmountApproved(quotationId, wf))) {
+    throw new Error("This commission isn't earned yet — the salesperson's month must exceed ₱1,000,000 and the client must have paid in full.");
+  }
   const commission = {
     ...wf.commission,
     voucherDoc: { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt || new Date().toISOString() },
@@ -4432,12 +4444,17 @@ export async function receiveCommission(quotationId: string): Promise<void> {
   if (!wf.commission?.budgetReleasedAt) throw new Error("The commission budget hasn't been released yet.");
   const commission = { ...wf.commission, receivedByName: user.name, receivedAt: new Date().toISOString() };
   await saveWorkflow(quotationId, cls, { ...wf, commission });
+  // The payout record may not exist yet (entitlement is computed, so a
+  // commission can be payable before any row was written), hence create-or-update
+  // rather than update.
   try {
+    await ensureCommissionRow(quotationId);
     await prisma.commission.update({ where: { quotationId }, data: { paid: true, paidAt: new Date(), paidByName: user.name } });
   } catch {
     /* commission row not present — order-side sign-off still recorded */
   }
   revalidatePath("/commissions");
+  revalidatePath("/management");
 }
 
 /** 6. Accounting files the voucher signed by the sales executive. */
