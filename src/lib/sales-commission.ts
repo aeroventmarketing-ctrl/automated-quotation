@@ -321,6 +321,14 @@ export interface CommissionsView {
 export const isPayable = (d: CommissionDeal): boolean => d.approved && !d.paid;
 
 /**
+ * A commission row's stable identity: the sale AND who is being paid on it, since
+ * one order can owe both the rep (base) and the Sales Head (override). Used as the
+ * page anchor, and as what a printed cash voucher records itself as covering.
+ */
+export const dealKey = (d: Pick<CommissionDeal, "kind" | "refId" | "payeeKind">): string =>
+  `${d.kind}-${d.refId}-${d.payeeKind}`;
+
+/**
  * Group the deals salesperson × month and apply the rules: rule 1 to the group,
  * rules 3–6 to each deal inside it. Mutates the deals it is given (they are
  * built for this) and returns the months, newest first.
