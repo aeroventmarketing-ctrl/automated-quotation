@@ -93,7 +93,7 @@ export default async function CommissionsPage() {
           <p><span className="font-semibold text-foreground">3 · Full payment.</span> The client must have paid the order in full — whenever that happens.</p>
           <p><span className="font-semibold text-foreground">4 · Release.</span> On the next 15th or 30th after full payment (February releases on the last day).</p>
           <p><span className="font-semibold text-foreground">5 · Approval.</span> Automatic — meeting 1–3 approves it; no one signs off the entitlement.</p>
-          <p><span className="font-semibold text-foreground">6 · The rate.</span> {COMMISSION_RATE_PCT}% of gross sales less VAT.</p>
+          <p><span className="font-semibold text-foreground">6 · The rate.</span> {COMMISSION_RATE_PCT}% of gross sales less VAT. VAT is deducted only where the client was charged it — a <em>VAT exclusive</em> or <em>zero rated</em> order pays {COMMISSION_RATE_PCT}% of its full amount.</p>
         </CardContent>
       </Card>
 
@@ -163,7 +163,7 @@ function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; 
                 <TableHead>Order</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead className="text-right">Gross</TableHead>
-                <TableHead className="text-right">Net of VAT</TableHead>
+                <TableHead className="text-right">Commission base</TableHead>
                 <TableHead className="text-right">{COMMISSION_RATE_PCT}%</TableHead>
                 <TableHead>Status</TableHead>
                 {canManage && <TableHead className="text-right">Action</TableHead>}
@@ -179,7 +179,15 @@ function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; 
                   <TableCell><Link href={d.href} className="text-primary hover:underline">{d.refLabel}</Link></TableCell>
                   <TableCell className="text-sm">{d.company}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(d.gross, currency)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">{formatCurrency(d.net, currency)}</TableCell>
+                  {/* A VAT-exclusive / zero-rated deal has no VAT to strip, so its
+                      base equals its gross. Saying so stops the repeated figure
+                      reading as a bug. */}
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {formatCurrency(d.net, currency)}
+                    <span className="block text-[10px] uppercase tracking-wide">
+                      {d.vatDeducted ? "less VAT" : "no VAT charged"}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
                     {d.approved ? formatCurrency(d.amount, currency) : <span className="text-muted-foreground">—</span>}
                   </TableCell>

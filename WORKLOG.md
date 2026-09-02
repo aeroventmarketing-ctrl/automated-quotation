@@ -1,3 +1,60 @@
+## 2026-09-02 · VAT on the commission base: the rule written down, and the mode that isn't what it says
+
+Owner: *"if order is VAT inclusive, deduct vat amount to sales commission. If order is VAT Exclusive or Zero Rated
+do not deduct VAT amount to sales commission."*
+
+Three of the four VAT presentations already behaved that way — `netOfVat` deducts via
+`vatModeChargesOutputVat`, the same predicate the P&L and the Sales Summary use. **The fourth is a trap worth
+naming.**
+
+### "VAT exclusive (+12%)" is labelled exclusive and behaves inclusive
+
+The quotation offers four options, three of which begin with the words *VAT exclusive*:
+
+| Option | What the client pays | Contains VAT? |
+| --- | --- | --- |
+| VAT inclusive | the entered price | **yes** |
+| VAT exclusive **(+12%)** | net **+ 12% on top** | **yes** |
+| VAT exclusive (÷1.12) | the net; no VAT line | no |
+| VAT exclusive zero rated | the entered price | no |
+
+Read by its label, "+12%" falls under *VAT Exclusive* and would take no deduction. Read by what it does, it is
+VAT inclusive with the VAT shown on its own line — the 12% goes to BIR either way. **Owner's call: it deducts.**
+Paying 1.5% of that 12% would be paying commission on the government's share, and would make two identical deals
+pay differently for a presentation choice.
+
+That ruling is now written into `netOfVat`'s doc comment with the reasoning and an explicit *"do not swap it for a
+name check on EXCLUSIVE"* — because the next reader will see three options starting with the same two words and
+will be tempted.
+
+### Asserted as a table, not four scattered tests
+
+`sales-commission.test.ts` now walks all four modes in one loop, checking the base, whether VAT moved, and the
+resulting commission. Widening or narrowing the rule moves a cell rather than leaving a case untested. The point
+of the distinction, in one number: on a ₱1,120,000 invoice it is the difference between ₱16,800 and ₱15,000.
+
+### Said out loud on the screens
+
+A VAT-exclusive deal's base equals its gross, and a column repeating the same figure reads as a bug. So the
+column is now **Commission base** (not "Net of VAT"), each row is stamped **LESS VAT** or **NO VAT CHARGED**, and
+rule 6 on the page spells out the exception. The order page's Phase 6 card says the same thing about its own order.
+
+### Checked on screen, one order per mode
+
+Four ₱560,000 orders for one salesperson, one in each mode:
+
+| Order | Gross | Base | 1.5% |
+| --- | --- | --- | --- |
+| VAT inclusive | ₱560,000 | ₱500,000 · less VAT | ₱7,500 |
+| VAT exclusive (+12%) | ₱560,000 | ₱500,000 · less VAT | ₱7,500 |
+| VAT exclusive (÷1.12) | ₱500,000 | ₱500,000 · no VAT charged | ₱7,500 |
+| VAT exclusive zero rated | ₱560,000 | ₱560,000 · no VAT charged | ₱8,400 |
+
+The three VAT-bearing modes land on the same ₱500,000 base for the same underlying deal — the invariant that says
+the rule is right. Zero-rated keeps its full ₱560,000, which is the point of being zero-rated.
+
+The role harness reports the same capability table as before: no screen moved.
+
 ## 2026-09-02 · Commissions by salesperson and month, and the six rules that decide them
 
 The Management Dashboard's **Unpaid commissions** tile read **₱0.00**. It linked to `/commissions`, which listed

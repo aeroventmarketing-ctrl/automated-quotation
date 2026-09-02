@@ -49,13 +49,28 @@ const PESO_EPS = 0.005;
 // --- Rule 6: the commission base ------------------------------------------
 
 /**
- * Strip output VAT from a deal's gross. INCLUSIVE and EXCLUSIVE_PLUS charge the
- * client VAT, so the net is gross ÷ 1.12 — except for the flat VAT-exempt lines
- * (KDK / jet fans), which carry no VAT and stay at face value. EXCLUSIVE and
- * ZERO_RATED never charged VAT in the first place, so their gross IS the net.
+ * Strip output VAT from a deal's gross — but only where the client was actually
+ * charged VAT. The owner's ruling (2026-09-02): *"if order is VAT inclusive,
+ * deduct vat amount to sales commission. If order is VAT Exclusive or Zero Rated
+ * do not deduct VAT amount to sales commission."*
  *
- * The exempt share is pro-rated off the quote's own total, because `gross` here
- * is the payable total — already through the quote's mark-up / discount.
+ * The quotation has four VAT presentations, and the deciding question is whether
+ * the payable amount CONTAINS VAT, not what the option is called:
+ *
+ *   VAT inclusive          → the price already contains VAT      → ÷ 1.12
+ *   VAT exclusive (+12%)   → 12% is added on top, so it contains → ÷ 1.12
+ *   VAT exclusive (÷1.12)  → the client pays the net, no VAT     → no deduction
+ *   VAT exclusive zero rated → no output VAT at all              → no deduction
+ *
+ * The "+12%" mode is labelled *exclusive* but is confirmed by the owner to
+ * deduct: the 12% on top is money the company remits to BIR, so paying 1.5% of
+ * it would pay commission on the government's share. That is `vatModeChargesOutputVat`,
+ * the same predicate the P&L and the Sales Summary use — do not swap it for a
+ * name check on "EXCLUSIVE".
+ *
+ * Flat VAT-exempt lines (KDK / jet fans) carry no VAT and stay at face value.
+ * Their share is pro-rated off the quote's own total, because `gross` here is the
+ * payable total — already through the quote's mark-up / discount.
  */
 export function netOfVat(
   q: { total: number | { toString(): string }; vatMode: string; classification?: unknown },
@@ -138,8 +153,10 @@ export interface CommissionDeal {
   basis: CommissionBasis;
   /** VAT-inclusive deal value — what rule 1's quota counts. */
   gross: number;
-  /** Rule 6's base: gross less VAT. */
+  /** Rule 6's base: gross less VAT (= gross when the deal charged no output VAT). */
   net: number;
+  /** Whether VAT was actually deducted — false for a VAT-exclusive / zero-rated deal. */
+  vatDeducted: boolean;
   collected: number;
   /** Rule 3. */
   fullyPaid: boolean;
@@ -305,6 +322,7 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
     const recognisedYMD = manilaYMD(recognised);
 
     const gross = round2(payableTotal(q));
+    const net = netOfVat(q, gross);
     const record = payout.get(`q:${q.id}`);
     deals.push({
       kind: "order",
@@ -318,7 +336,8 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
       recognisedYMD,
       basis: sale.arrangement === "terms" ? "po" : "payment",
       gross,
-      net: netOfVat(q, gross),
+      net,
+      vatDeducted: net < gross - PESO_EPS,
       collected: round2(collectedTotal(sale)),
       fullyPaid: false, // filled below (needs fullyPaidOn)
       fullyPaidYMD: fullyPaidOn(sale, gross),
@@ -339,7 +358,9 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
     const dated = cs.completedAt ?? cs.createdAt;
     const recognisedYMD = manilaYMD(dated.toISOString());
     const gross = round2(Number(cs.total));
-    // A counter sale carries its own net (subtotal) — no VAT mode to unpick.
+    // A counter sale carries its own net (`subtotal`), which `counterTotals`
+    // already computes by the same rule: total ÷ 1.12 when VAT-inclusive, and
+    // total unchanged when VAT-exclusive or zero-rated.
     const net = round2(Number(cs.subtotal) || gross);
     // Rule 3 for a walk-in: the money has cleared (cash clears on the spot; a
     // post-dated cheque does not until Accounting says so).
@@ -358,6 +379,7 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
       basis: "counter",
       gross,
       net,
+      vatDeducted: net < gross - PESO_EPS,
       collected: round2(Number(cs.amountPaid)),
       fullyPaid: false,
       fullyPaidYMD: cleared ? manilaYMD((cs.clearedAt ?? dated).toISOString()) : null,

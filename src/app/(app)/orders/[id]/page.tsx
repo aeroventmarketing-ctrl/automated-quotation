@@ -562,6 +562,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     ? {
         amount: commissionDeal.amount,
         base: commissionDeal.net,
+        vatDeducted: commissionDeal.vatDeducted,
         currency: quote.currency,
         salesMonth: commissionDeal.salesMonth,
         dueLabel: commissionDeal.payoutYMD ? formatDate(commissionDeal.payoutYMD) : "",
@@ -1216,6 +1217,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               orderId={quote.id}
               amount={commissionInfo.amount}
               base={commissionInfo.base}
+              vatDeducted={commissionInfo.vatDeducted}
               currency={commissionInfo.currency}
               salesMonth={commissionInfo.salesMonth}
               dueLabel={commissionInfo.dueLabel}

@@ -57,6 +57,7 @@ export function CommissionFlow({
   orderId,
   amount,
   base,
+  vatDeducted = true,
   currency,
   salesMonth,
   dueLabel,
@@ -71,6 +72,8 @@ export function CommissionFlow({
   amount: number;
   /** The commission base — gross less VAT (rule 6). */
   base?: number;
+  /** Whether VAT was deducted; false for a VAT-exclusive / zero-rated order. */
+  vatDeducted?: boolean;
   currency: string;
   salesMonth: string;
   dueLabel: string;
@@ -148,9 +151,12 @@ export function CommissionFlow({
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          Commission amount (1.5% of sales less VAT{base != null ? ` — ${formatCurrency(base, currency)}` : ""})
+          Commission base{base != null ? ` — ${formatCurrency(base, currency)}` : ""}{" "}
+          <span className="text-xs">({vatDeducted ? "sales less VAT" : "no VAT charged on this order"})</span>
         </p>
-        <span className="text-sm font-semibold">{formatCurrency(amount, currency)}</span>
+        <span className="text-sm font-semibold">
+          {formatCurrency(amount, currency)} <span className="text-xs font-normal text-muted-foreground">· 1.5%</span>
+        </span>
       </div>
       <p className="text-xs text-muted-foreground">
         Sales month {salesMonth}.{" "}

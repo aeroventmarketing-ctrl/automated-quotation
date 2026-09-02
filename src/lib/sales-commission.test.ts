@@ -28,6 +28,7 @@ function deal(over: Partial<CommissionDeal> = {}): CommissionDeal {
     basis: "payment",
     gross,
     net: over.net ?? Math.round((gross / 1.12) * 100) / 100,
+    vatDeducted: true,
     collected: gross,
     fullyPaid: true,
     fullyPaidYMD: "2026-09-01",
@@ -76,19 +77,38 @@ describe("rule 4 — released every 15th and 30th", () => {
 });
 
 describe("rule 6 — 1.5% of gross sales less VAT", () => {
-  it("strips 12% VAT from a VAT-inclusive deal", () => {
-    expect(netOfVat({ total: 1_120_000, vatMode: "INCLUSIVE" }, 1_120_000)).toBe(1_000_000);
+  /**
+   * All four VAT presentations, and the owner's ruling on each (2026-09-02):
+   * *"if order is VAT inclusive, deduct vat amount to sales commission. If order
+   * is VAT Exclusive or Zero Rated do not deduct VAT amount."* The "+12%" mode is
+   * labelled exclusive but adds VAT on top, so the client IS charged it — the
+   * owner confirmed it deducts. Whole table asserted at once, so widening or
+   * narrowing the rule shows up as a moved cell rather than a missing test.
+   */
+  const VAT_MODES: { mode: string; label: string; gross: number; base: number; deducts: boolean }[] = [
+    { mode: "INCLUSIVE", label: "VAT inclusive", gross: 1_120_000, base: 1_000_000, deducts: true },
+    { mode: "EXCLUSIVE_PLUS", label: "VAT exclusive (+12%)", gross: 1_120_000, base: 1_000_000, deducts: true },
+    { mode: "EXCLUSIVE", label: "VAT exclusive (÷1.12)", gross: 900_000, base: 900_000, deducts: false },
+    { mode: "ZERO_RATED", label: "VAT exclusive zero rated", gross: 900_000, base: 900_000, deducts: false },
+  ];
+
+  for (const { mode, label, gross, base, deducts } of VAT_MODES) {
+    it(`${label} — ${deducts ? "deducts" : "does NOT deduct"} VAT`, () => {
+      expect(netOfVat({ total: gross, vatMode: mode }, gross)).toBe(base);
+      expect(base < gross).toBe(deducts);
+      // …and the commission follows the base, not the invoice.
+      expect(commissionOn(netOfVat({ total: gross, vatMode: mode }, gross))).toBe(commissionOn(base));
+    });
+  }
+
+  it("pays 1.5% of the net", () => {
     expect(commissionOn(1_000_000)).toBe(15_000);
   });
 
-  it("adds nothing back for EXCLUSIVE_PLUS — the gross already carries the VAT", () => {
-    // A ₱1,000,000 net quoted "+ 12% VAT" is invoiced at ₱1,120,000.
-    expect(netOfVat({ total: 1_120_000, vatMode: "EXCLUSIVE_PLUS" }, 1_120_000)).toBe(1_000_000);
-  });
-
-  it("leaves a zero-rated or VAT-exclusive deal alone — no output VAT was charged", () => {
-    expect(netOfVat({ total: 900_000, vatMode: "ZERO_RATED" }, 900_000)).toBe(900_000);
-    expect(netOfVat({ total: 900_000, vatMode: "EXCLUSIVE" }, 900_000)).toBe(900_000);
+  it("costs the salesperson ₱1,800 on a ₱1.12M deal when VAT is deducted", () => {
+    // The whole point of the distinction, in one number: 1.5% of ₱1,120,000 is
+    // ₱16,800; of the ₱1,000,000 net it is ₱15,000.
+    expect(commissionOn(1_120_000) - commissionOn(1_000_000)).toBe(1_800);
   });
 
   it("keeps flat VAT-exempt lines at face value inside a VAT-inclusive deal", () => {
