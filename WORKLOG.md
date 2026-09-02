@@ -1,3 +1,50 @@
+## 2026-09-02 · A Commissions tile on My Dashboard, showing each salesperson only their own
+
+Owner: *"In sales Role Dashboard, put a tile at the right side of the orders tile, name the tile as Commissions.
+Commissions will appear only to specific sales. For example, JayR Basal sales record and commissions will appear
+only to JayR Basal account."*
+
+### The privacy rule is in the query, not the render
+
+The tile asks `buildCommissions({ salespersonId: user.id })` for a salesperson, so the engine's quotation query
+carries `where: { preparedById }` and **no other rep's deals are ever loaded**. That is deliberate: filtering a
+full list after the fact would put every salesperson's earnings in the same server response, one bug away from
+being rendered. Accounting, the Payment Approver and admins — who already manage payouts — get the unfiltered
+figure, the same number as the Management Dashboard's tile.
+
+Verified as three different people on the same data:
+
+| Viewer | Tile |
+| --- | --- |
+| Sam Sales (SALES) | **₱4,017.86** · 1 approved — his own, and only his |
+| Rey Gil (Payment Approver) | **₱61,703.57** · 6 approved — the whole figure |
+| Admin Ana | **₱61,703.57** · 6 approved |
+
+Sam's commissions page likewise shows one card, his own August. The only other name on it is *"Paid · Admin Ana"* —
+who released the money, not another rep's earnings.
+
+### Three things the first attempt got wrong, all caught by looking
+
+**1. The tile vanished for the very people it was for.** The tile row renders on
+`data.byArea.length > 0 || manualReconCard` — a salesperson with nothing pending has an empty `byArea`, so the
+whole row, and with it the new tile, silently disappeared. It only showed up because the harness's Sam Sales had
+no pending tasks. `data.commissions` is now part of that condition.
+
+**2. It truncated its own figure to "₱4,0…".** The row is `lg:grid-cols-7`, sized for a one- or two-digit count;
+a peso amount does not fit in ~150px. The tile is `col-span-2`.
+
+**3. Two tiles labelled COMMISSIONS, side by side, with different numbers.** Admin and Accounting already have a
+task-area tile counting *"Mark commission paid"* actions. Next to a money tile of the same name it reads as a
+bug — and the numbers legitimately differ, because the task feed passes the go-live / notification-baseline gate
+and the money deliberately does not. The task area is now **Commission payouts**, which is also what its rows say.
+
+### A release date in the past is not a promise
+
+Both tiles said *"release Jul 15"* for a date two months gone. The earliest pending release usually IS past — that
+is what makes it pending. Both now read **"due since Jul 15"** once the date has passed.
+
+The role harness reports the same capability table as before.
+
 ## 2026-09-02 · VAT on the commission base: the rule written down, and the mode that isn't what it says
 
 Owner: *"if order is VAT inclusive, deduct vat amount to sales commission. If order is VAT Exclusive or Zero Rated

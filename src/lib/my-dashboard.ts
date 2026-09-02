@@ -18,7 +18,7 @@ import { isStockOnlyOrder, isBoughtInOnlyOrder, isDuctHardwareStockOnly } from "
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
-import { payableTotal } from "@/lib/quote";
+import { payableTotal, round2 } from "@/lib/quote";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
@@ -106,6 +106,22 @@ export interface MyDashboard {
   // Purchase Order summary (all POs, by number) — Admin / Payment Approver /
   // Accounting / Purchaser only.
   poSummary: PoSummaryRow[];
+  // The commissions tile. Null when the viewer has no commission access.
+  commissions: CommissionSummary | null;
+}
+
+/**
+ * What the My Dashboard commissions tile shows. `ownOnly` is the privacy fact,
+ * not a display preference: a salesperson sees THEIR earnings and no one else's,
+ * so the tile has to say whose figure it is.
+ */
+export interface CommissionSummary {
+  /** Approved and not yet paid out — the same basis as the Management tile. */
+  unpaid: number;
+  count: number;
+  /** The earliest release date among them (rule 4), or null. */
+  nextPayoutYMD: string | null;
+  ownOnly: boolean;
 }
 
 /** The workflow-role labels a user holds. */
@@ -122,7 +138,11 @@ const AREA_LABEL: Record<TaskArea, string> = {
   purchase: "Purchasing",
   cash: "Cash requests",
   schedule: "Schedules",
-  commission: "Commissions",
+  // "Commission payouts", not "Commissions": the My Dashboard money tile is
+  // called Commissions, and two tiles with that label side by side (one a task
+  // count, one a peso figure, and legitimately different numbers because the
+  // task feed is go-live gated and the money is not) read as a bug.
+  commission: "Commission payouts",
   quotation: "Quotations",
   inventory: "Inventory",
 };
@@ -578,6 +598,29 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     return rank(a) - rank(b) || b.when.localeCompare(a.when);
   });
 
+  // --- Commissions tile ------------------------------------------------------
+  // A salesperson sees ONLY their own commissions — one rep must never see
+  // another's earnings, which is why this asks the engine for their id rather
+  // than filtering a full list afterwards (nothing else is ever loaded).
+  // Accounting / the Payment Approver / admins already manage payouts and see
+  // the whole figure — the same number as the Management Dashboard's tile.
+  const seesAllCommissions = isAdmin(user) || has("accounting") || has("payment_approver");
+  const seesCommissions = seesAllCommissions || user.role === "SALES";
+  let commissions: CommissionSummary | null = null;
+  if (seesCommissions) {
+    try {
+      const payable = allDeals(await buildCommissions(seesAllCommissions ? {} : { salespersonId: user.id })).filter(isPayable);
+      commissions = {
+        unpaid: round2(payable.reduce((a, d) => a + d.amount, 0)),
+        count: payable.length,
+        nextPayoutYMD: payable.map((d) => d.payoutYMD).filter((d): d is string => !!d).sort()[0] ?? null,
+        ownOnly: !seesAllCommissions,
+      };
+    } catch {
+      commissions = null; // commission table not set up — the rest of the page still renders
+    }
+  }
+
   return {
     // Sales base-role users get their own My Dashboard too — to monitor their
     // approvals (notify client, 2nd QC, POD) and the production-status card —
@@ -590,5 +633,6 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     materialsFeed: visibleFeed.slice(0, 15),
     returnsFeed: visibleReturns.slice(0, 15),
     poSummary,
+    commissions,
   };
 }

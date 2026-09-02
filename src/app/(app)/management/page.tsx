@@ -570,7 +570,9 @@ export default async function ManagementPage() {
     { label: "Counter sales (mo.)", value: formatCurrency(csMonthTotal, CURRENCY), caption: `${csMonthCount} this month`, href: "/counter-sales", icon: Store, color: "#7c3aed" },
     { label: "Receivables", value: formatCurrency(outstanding, CURRENCY), caption: `${collectedPct}% collected`, href: "/orders", icon: Wallet, color: "#1baf7a" },
     { label: "Low / out of stock", value: String(lowStock.length), caption: lowStock.length === 0 ? "all healthy" : "needs reorder", href: "/inventory/reorder", icon: PackageX, color: lowStock.length > 0 ? "#d03b3b" : "#0ca30c" },
-    { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), caption: nextCommissionPayout ? `${payableCommissions.length} approved · release ${fmtDue(nextCommissionPayout)}` : `${payableCommissions.length} pending`, href: "/commissions", icon: Percent, color: "#4a3aa7" },
+    // A release date that has already passed reads as a future promise unless it
+    // is called overdue — and the earliest pending release usually IS past.
+    { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), caption: nextCommissionPayout ? `${payableCommissions.length} approved · ${nextCommissionPayout < phToday ? "due since" : "release"} ${fmtDue(nextCommissionPayout)}` : `${payableCommissions.length} pending`, href: "/commissions", icon: Percent, color: "#4a3aa7" },
   ];
 
   return (
