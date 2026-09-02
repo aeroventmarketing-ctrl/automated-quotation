@@ -461,11 +461,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       // pay yet — the row exists from the moment the order closes.
       for (const c of allDeals(await buildCommissions()).filter(isPayable).slice(0, 100)) {
         tasks.push({
-          key: `comm:${c.kind}:${c.refId}`, area: "commission", areaLabel: AREA_LABEL.commission,
-          title: `Commission · ${c.refLabel}`, action: "Mark commission paid",
+          key: `comm:${c.kind}:${c.refId}:${c.payeeKind}`, area: "commission", areaLabel: AREA_LABEL.commission,
+          title: `Commission · ${c.refLabel}${c.payeeKind === "override" ? " (override)" : ""}`, action: "Mark commission paid",
           client: maskClient(c.company), amount: maskAmount(c.amount), currency: "PHP",
           // "Mark paid" is done on the Commissions page — deep-link (anchor) to the row.
-          href: `/commissions#commission-${c.kind}-${c.refId}`,
+          href: `/commissions#commission-${c.kind}-${c.refId}-${c.payeeKind}`,
           since: c.payoutYMD ?? c.recognisedYMD,
         });
       }

@@ -10,6 +10,9 @@ import {
   isPayable,
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
+  OVERRIDE_RATE_PCT,
+  overrideOn,
+  withOverrides,
   type CommissionDeal,
 } from "./sales-commission";
 import type { SaleRecord } from "./sale";
@@ -28,6 +31,9 @@ function deal(over: Partial<CommissionDeal> = {}): CommissionDeal {
     salesMonth: "2026-08",
     recognisedYMD: "2026-08-10",
     basis: "payment",
+    payeeKind: "base",
+    sourceSalespersonName: null,
+    ratePct: 1.5,
     gross,
     net: over.net ?? Math.round((gross / 1.12) * 100) / 100,
     vatDeducted: true,
@@ -287,5 +293,91 @@ describe("rule 1 — the ₱1,000,000 month, and rule 5's automatic approval", (
     expect(months[0].earned).toBe(15_000);
     expect(months[0].paid).toBe(15_000);
     expect(months[0].unpaid).toBe(0);
+  });
+});
+
+describe("the Sales Head's 0.25% override", () => {
+  const HEAD = new Map([["head", "JayR"]]);
+  /** Two reps: Rey qualifies (₱1.12M), Des does not (₱500k). Both fully paid. */
+  const team = () => [
+    deal({ refId: "rey1", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
+    deal({ refId: "des1", salespersonId: "des", salespersonName: "Des", gross: 500_000, net: 500_000 }),
+  ];
+
+  it("pays 0.25% of the same net base the rep's 1.5% is paid on", () => {
+    expect(OVERRIDE_RATE_PCT).toBe(0.25);
+    expect(overrideOn(1_000_000)).toBe(2_500);
+    expect(commissionOn(1_000_000)).toBe(15_000);
+  });
+
+  it("is ON TOP of the rep's 1.5% — the rep's payout is untouched", () => {
+    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const rey = months.find((m) => m.salespersonId === "rey" && m.kind === "base")!;
+    const head = months.find((m) => m.salespersonId === "head")!;
+    expect(rey.earned).toBe(15_000); // exactly what it was without a Sales Head
+    expect(head.earned).toBe(2_500);
+    // The company pays 1.75% on that sale, split between two people.
+    expect(rey.earned + head.earned).toBe(commissionOn(1_000_000) + overrideOn(1_000_000));
+  });
+
+  it("earns nothing from a rep who missed the target", () => {
+    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const head = months.find((m) => m.salespersonId === "head")!;
+    // Only Rey's qualifying deal is overridden; Des's ₱500k month is not.
+    expect(head.deals).toHaveLength(1);
+    expect(head.deals[0].sourceSalespersonName).toBe("Rey");
+  });
+
+  it("earns nothing until the client has fully paid, like the rep's own", () => {
+    const owing = [deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, fullyPaidYMD: null })];
+    expect(groupByPersonMonth(withOverrides(owing, HEAD)).some((m) => m.salespersonId === "head")).toBe(false);
+  });
+
+  it("does NOT override the Sales Head's own sales — they earn 1.5% there, not 1.75%", () => {
+    const own = [deal({ refId: "h1", salespersonId: "head", salespersonName: "JayR", gross: 1_120_000, net: 1_000_000 })];
+    const months = groupByPersonMonth(withOverrides(own, HEAD));
+    expect(months).toHaveLength(1);
+    expect(months[0].kind).toBe("base");
+    expect(months[0].earned).toBe(15_000);
+  });
+
+  it("keeps the override off the head's own quota — it is not their sale", () => {
+    // JayR sells ₱600k himself (short of ₱1M) while Rey's ₱1.12M month qualifies.
+    const mixed = [
+      deal({ refId: "h1", salespersonId: "head", salespersonName: "JayR", gross: 600_000, net: 600_000 }),
+      deal({ refId: "rey1", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
+    ];
+    const months = groupByPersonMonth(withOverrides(mixed, HEAD));
+    const own = months.find((m) => m.salespersonId === "head" && m.kind === "base")!;
+    const ovr = months.find((m) => m.salespersonId === "head" && m.kind === "override")!;
+    // His own month is still short, so his own sale earns nothing…
+    expect(own.monthGross).toBe(600_000);
+    expect(own.qualifies).toBe(false);
+    expect(own.earned).toBe(0);
+    // …but the override on Rey's qualifying month is unaffected by that.
+    expect(ovr.monthGross).toBe(0);
+    expect(ovr.earned).toBe(2_500);
+  });
+
+  it("releases on the same date as the commission it rides on", () => {
+    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const rey = months.find((m) => m.salespersonId === "rey")!.deals[0];
+    const ovr = months.find((m) => m.salespersonId === "head")!.deals[0];
+    expect(ovr.payoutYMD).toBe(rey.payoutYMD);
+    expect(ovr.salesMonth).toBe(rey.salesMonth);
+  });
+
+  it("carries its own payout record, not the rep's", () => {
+    const paidTeam = team().map((d) => ({ ...d, paid: true, paidByName: "Acctg", commissionId: "c1" }));
+    const months = groupByPersonMonth(withOverrides(paidTeam, HEAD));
+    const ovr = months.find((m) => m.salespersonId === "head")!.deals[0];
+    // The rep having been paid must not mark the head's override paid.
+    expect(ovr.paid).toBe(false);
+    expect(ovr.commissionId).toBeNull();
+    expect(ovr.payeeKind).toBe("override");
+  });
+
+  it("does nothing at all when no one holds the Sales Head role", () => {
+    expect(withOverrides(team(), new Map())).toHaveLength(2);
   });
 });

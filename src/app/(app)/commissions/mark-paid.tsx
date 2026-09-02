@@ -4,14 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { payDealCommission } from "./actions";
-import type { CommissionDealKind } from "@/lib/sales-commission";
+import type { CommissionDealKind, CommissionPayeeKind } from "@/lib/sales-commission";
 
 /**
  * Record the payout against the deal itself. Entitlement is computed, so there
  * may be no `Commission` row yet — the action upserts one with the amount it
  * recomputes server-side (nothing here is trusted with a peso figure).
  */
-export function MarkPaid({ kind, refId, paid }: { kind: CommissionDealKind; refId: string; paid: boolean }) {
+export function MarkPaid({ kind, refId, payeeKind, paid }: { kind: CommissionDealKind; refId: string; payeeKind: CommissionPayeeKind; paid: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -23,7 +23,7 @@ export function MarkPaid({ kind, refId, paid }: { kind: CommissionDealKind; refI
     setBusy(true);
     setErr(null);
     try {
-      await payDealCommission(kind, refId, true);
+      await payDealCommission(kind, refId, payeeKind, true);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not record the payout.");

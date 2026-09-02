@@ -42,11 +42,28 @@ import { prisma } from "@/lib/db";
 import { payableTotal, round2, readVatExemptTotal, vatModeChargesOutputVat } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed, collectedTotal, type SaleRecord } from "@/lib/sale";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
+import { getWorkflowRoles, usersWithWorkflowRole } from "@/lib/workflow-roles";
 
 /** Rule 6 — the rate. */
 export const COMMISSION_RATE_PCT = 1.5;
 /** Rule 1 — the monthly quota, on GROSS (VAT-inclusive) sales. Strictly "more than". */
 export const MONTHLY_QUOTA_GROSS = 1_000_000;
+/**
+ * The Sales Head's override. Owner (2026-09-02): *"For JayR Basal, add 0.25% from
+ * each sales who were able to meet the target. Commission Amount will be net of
+ * VAT."*
+ *
+ * Two rulings that go with it, confirmed the same day:
+ *  · it is **on top of** the rep's 1.5%, not carved out of it — the rep's payout
+ *    is untouched and the company pays 1.75% on an overridden sale;
+ *  · it is earned on **other** salespeople's sales only. The Sales Head still
+ *    earns their own 1.5% on anything they sell themselves, with no override
+ *    stacked on it.
+ *
+ * The seat is a workflow role (`sales_head`), never a name in the code, so the
+ * override follows whoever holds it.
+ */
+export const OVERRIDE_RATE_PCT = 0.25;
 
 /** Money is equal to the cent; never compare Decimals-turned-floats exactly. */
 const PESO_EPS = 0.005;
@@ -92,6 +109,9 @@ export function netOfVat(
 
 /** Rule 6 — 1.5% of the net. */
 export const commissionOn = (net: number): number => round2((net * COMMISSION_RATE_PCT) / 100);
+
+/** The Sales Head's 0.25%, on the same net-of-VAT base as the rep's 1.5%. */
+export const overrideOn = (net: number): number => round2((net * OVERRIDE_RATE_PCT) / 100);
 
 // --- Rule 4: the payout calendar ------------------------------------------
 
@@ -190,14 +210,26 @@ export type CommissionDealKind = "order" | "counter";
 /** How rule 2 dated this deal — shown so the month is never a mystery. */
 export type CommissionBasis = "po" | "payment" | "counter";
 
+/**
+ * Who is being paid on this row. "base" is the rep who closed the sale (1.5%);
+ * "override" is the Sales Head's 0.25% on the same sale. Both can exist for one
+ * order — hence `(quotationId, kind)` on the `Commission` payout table.
+ */
+export type CommissionPayeeKind = "base" | "override";
+
 export interface CommissionDeal {
   kind: CommissionDealKind;
+  /** base = the rep's 1.5%; override = the Sales Head's 0.25% on someone else's sale. */
+  payeeKind: CommissionPayeeKind;
   refId: string;
   refLabel: string;
   href: string;
   company: string;
+  /** Who earns this row. On an override row this is the Sales Head, not the rep. */
   salespersonId: string;
   salespersonName: string;
+  /** On an override row, the rep whose sale it is. Null on a base row. */
+  sourceSalespersonName: string | null;
   /** Rule 2 — Manila YYYY-MM of the recognition date. */
   salesMonth: string;
   recognisedYMD: string;
@@ -212,7 +244,9 @@ export interface CommissionDeal {
   /** Rule 3. */
   fullyPaid: boolean;
   fullyPaidYMD: string | null;
-  /** Rule 6 — 1.5% of net. Earned only when the month qualifies AND it is fully paid. */
+  /** The rate this row pays — 1.5% on a base row, 0.25% on an override. */
+  ratePct: number;
+  /** Rate × net. Earned only when the month qualifies AND the client has fully paid. */
   amount: number;
   /** Rule 4 — null until fully paid. */
   payoutYMD: string | null;
@@ -228,11 +262,17 @@ export interface CommissionDeal {
 export interface CommissionMonth {
   salespersonId: string;
   salespersonName: string;
+  /**
+   * "own" is the person's own sales and their 1.5%. "override" is the Sales
+   * Head's 0.25% on other reps' sales — a separate card, because rule 1's quota
+   * is about a person's OWN selling and an override row is not their sale.
+   */
+  kind: CommissionPayeeKind;
   /** YYYY-MM. */
   salesMonth: string;
-  /** Rule 1 — every confirmed sale recognised in this month, gross. */
+  /** Rule 1 — every confirmed sale recognised in this month, gross. Always 0 on an override card. */
   monthGross: number;
-  /** Rule 1 — monthGross > ₱1,000,000. */
+  /** Rule 1 — monthGross > ₱1,000,000. Meaningless (false) on an override card. */
   qualifies: boolean;
   /** How far short of the quota (0 once it qualifies). */
   shortfall: number;
@@ -266,29 +306,38 @@ export function groupByPersonMonth(deals: CommissionDeal[]): CommissionMonth[] {
   const groups = new Map<string, CommissionMonth>();
   for (const d of deals) {
     d.fullyPaid = d.fullyPaidYMD != null;
-    const key = `${d.salespersonId}::${d.salesMonth}`;
+    // An override card is keyed separately from the person's own selling: rule
+    // 1's quota is about what THEY sold, and someone else's order is not that.
+    const key = `${d.salespersonId}::${d.salesMonth}::${d.payeeKind}`;
     let g = groups.get(key);
     if (!g) {
       g = {
-        salespersonId: d.salespersonId, salespersonName: d.salespersonName, salesMonth: d.salesMonth,
+        salespersonId: d.salespersonId, salespersonName: d.salespersonName, kind: d.payeeKind,
+        salesMonth: d.salesMonth,
         monthGross: 0, qualifies: false, shortfall: 0, deals: [],
         earned: 0, paid: 0, unpaid: 0, nextPayoutYMD: null,
       };
       groups.set(key, g);
     }
     g.deals.push(d);
-    g.monthGross = round2(g.monthGross + d.gross);
+    // Only the person's OWN sales count toward their quota.
+    if (d.payeeKind === "base") g.monthGross = round2(g.monthGross + d.gross);
   }
 
   for (const g of groups.values()) {
     // Rule 1 — strictly MORE than ₱1M, on the month's GROSS. A month that misses
     // the quota earns nothing at all, however much of it the clients have paid.
-    g.qualifies = g.monthGross > MONTHLY_QUOTA_GROSS;
-    g.shortfall = g.qualifies ? 0 : round2(MONTHLY_QUOTA_GROSS - g.monthGross);
+    // An override card has no quota of its own: each of its rows was created
+    // only because the SOURCE rep's month already qualified.
+    g.qualifies = g.kind === "base" ? g.monthGross > MONTHLY_QUOTA_GROSS : false;
+    g.shortfall = g.kind === "base" && !g.qualifies ? round2(MONTHLY_QUOTA_GROSS - g.monthGross) : 0;
     for (const d of g.deals) {
-      // Rule 5 — no one approves this; clearing rules 1–3 IS the approval.
-      d.approved = g.qualifies && d.fullyPaid;
-      d.amount = d.approved ? commissionOn(d.net) : 0;
+      if (d.payeeKind === "base") {
+        // Rule 5 — no one approves this; clearing rules 1–3 IS the approval.
+        d.approved = g.qualifies && d.fullyPaid;
+        d.amount = d.approved ? commissionOn(d.net) : 0;
+      }
+      // Override rows arrive already approved and priced (see `withOverrides`).
       // Rule 4 — a release date exists as soon as the client has fully paid, even
       // while the month is short of quota, so Sales can see what it would be. It
       // is never inside the sales month itself: the month's ₱1M target isn't a
@@ -304,16 +353,73 @@ export function groupByPersonMonth(deals: CommissionDeal[]): CommissionMonth[] {
   }
 
   return [...groups.values()].sort(
-    (a, b) => b.salesMonth.localeCompare(a.salesMonth) || a.salespersonName.localeCompare(b.salespersonName),
+    (a, b) =>
+      b.salesMonth.localeCompare(a.salesMonth) ||
+      a.salespersonName.localeCompare(b.salespersonName) ||
+      a.kind.localeCompare(b.kind),
   );
+}
+
+/**
+ * Add the Sales Head's 0.25% override rows to a set of BASE deals, and return
+ * every deal (base + override) for grouping.
+ *
+ * One override row per approved base deal, so the override releases exactly when
+ * the rep's own commission does — as each client settles, on that deal's own
+ * release date. A row is created only for a deal that is already approved, which
+ * is what enforces both halves of the owner's rule: the source month cleared
+ * ₱1,000,000, and the client has paid in full.
+ *
+ * The head's OWN sales are skipped: they earn 1.5% on those like anyone else,
+ * with no override stacked on top.
+ *
+ * @param heads userId → display name for everyone holding the Sales Head role.
+ */
+export function withOverrides(baseDeals: CommissionDeal[], heads: Map<string, string>): CommissionDeal[] {
+  if (heads.size === 0) return baseDeals;
+  const months = groupByPersonMonth(baseDeals); // prices + approves the base rows first
+  const out = [...baseDeals];
+  for (const [headId, headName] of heads) {
+    for (const g of months) {
+      if (g.kind !== "base" || !g.qualifies || g.salespersonId === headId) continue;
+      for (const d of g.deals) {
+        if (!d.approved) continue;
+        out.push({
+          ...d,
+          payeeKind: "override",
+          salespersonId: headId,
+          salespersonName: headName,
+          sourceSalespersonName: d.salespersonName,
+          ratePct: OVERRIDE_RATE_PCT,
+          amount: overrideOn(d.net),
+          // The payout record is this row's own — never the rep's.
+          paid: false, paidAt: null, paidByName: null, commissionId: null,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 // --- The build ------------------------------------------------------------
 
 type BuildOptions = {
-  /** Only this salesperson (Sales viewing their own). */
+  /** Only this person's earnings (Sales viewing their own). */
   salespersonId?: string;
 };
+
+/** userId → name for everyone holding the Sales Head role. */
+async function salesHeads(): Promise<Map<string, string>> {
+  try {
+    const assignments = await getWorkflowRoles();
+    const ids = usersWithWorkflowRole(assignments, "sales_head");
+    if (ids.length === 0) return new Map();
+    const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+    return new Map(users.map((u) => [u.id, u.name] as const));
+  } catch {
+    return new Map(); // no role registry yet — no override, everything else still works
+  }
+}
 
 // Deliberately NOT gated by the alert go-live floor. That gate exists to silence
 // a pre-launch backlog of *alerts*; a commission is money someone earned, and
@@ -325,11 +431,18 @@ type BuildOptions = {
  * with rules 1–6 applied. Reads only.
  */
 export async function buildCommissions(opts: BuildOptions = {}): Promise<CommissionsView> {
+  const heads = await salesHeads();
+  // Narrowing the query to one rep is what keeps a salesperson from ever having
+  // another's deals in their response. It CANNOT be done for a Sales Head: their
+  // 0.25% is computed from other people's qualifying months, so they need those
+  // deals loaded — which is the point of the role, not a leak. Everyone else
+  // still gets the narrow query.
+  const scopeToRep = opts.salespersonId && !heads.has(opts.salespersonId) ? opts.salespersonId : undefined;
   const [quotations, counterSales, paidRows] = await Promise.all([
     prisma.quotation.findMany({
       // Rule 1 needs the salesperson's WHOLE month, so this can be narrowed to
       // one salesperson but never to one order.
-      where: opts.salespersonId ? { preparedById: opts.salespersonId } : undefined,
+      where: scopeToRep ? { preparedById: scopeToRep } : undefined,
       select: {
         id: true,
         quoteNumber: true,
@@ -356,12 +469,14 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
       .catch(() => [] as never[]),
     // The payout record. Missing table (pre-migration) must not blank the page.
     prisma.commission
-      .findMany({ select: { id: true, quotationId: true, counterSaleId: true, paid: true, paidAt: true, paidByName: true } })
-      .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; paid: boolean; paidAt: Date | null; paidByName: string | null }[]),
+      .findMany({ select: { id: true, quotationId: true, counterSaleId: true, kind: true, paid: true, paidAt: true, paidByName: true } })
+      .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; kind: string; paid: boolean; paidAt: Date | null; paidByName: string | null }[]),
   ]);
 
+  // Keyed by (sale, payee kind): one order can carry both the rep's 1.5% payout
+  // and the Sales Head's 0.25% one.
   const payout = new Map(
-    paidRows.map((c) => [c.quotationId ? `q:${c.quotationId}` : `c:${c.counterSaleId}`, c] as const),
+    paidRows.map((c) => [`${c.quotationId ? `q:${c.quotationId}` : `c:${c.counterSaleId}`}:${c.kind}`, c] as const),
   );
   const currency = quotations.find((q) => q.currency)?.currency ?? "PHP";
   const deals: CommissionDeal[] = [];
@@ -376,9 +491,12 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
 
     const gross = round2(payableTotal(q));
     const net = netOfVat(q, gross);
-    const record = payout.get(`q:${q.id}`);
+    const record = payout.get(`q:${q.id}:base`);
     deals.push({
       kind: "order",
+      payeeKind: "base",
+      sourceSalespersonName: null,
+      ratePct: COMMISSION_RATE_PCT,
       refId: q.id,
       refLabel: q.quoteNumber,
       href: `/orders/${q.id}`,
@@ -407,7 +525,7 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
   for (const cs of counterSales) {
     // A walk-in is credited to the named salesperson, else whoever recorded it.
     const salespersonId = cs.salespersonId ?? cs.soldById;
-    if (opts.salespersonId && salespersonId !== opts.salespersonId) continue;
+    if (scopeToRep && salespersonId !== scopeToRep) continue;
     const dated = cs.completedAt ?? cs.createdAt;
     const recognisedYMD = manilaYMD(dated.toISOString());
     const gross = round2(Number(cs.total));
@@ -418,9 +536,12 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
     // Rule 3 for a walk-in: the money has cleared (cash clears on the spot; a
     // post-dated cheque does not until Accounting says so).
     const cleared = cs.paymentCleared && Number(cs.amountPaid) >= gross - PESO_EPS;
-    const record = payout.get(`c:${cs.id}`);
+    const record = payout.get(`c:${cs.id}:base`);
     deals.push({
       kind: "counter",
+      payeeKind: "base",
+      sourceSalespersonName: null,
+      ratePct: COMMISSION_RATE_PCT,
       refId: cs.id,
       refLabel: cs.saleNumber ?? "Counter sale",
       href: `/counter-sales/${cs.id}`,
@@ -446,7 +567,27 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
     });
   }
 
-  const months = groupByPersonMonth(deals);
+  // Add the Sales Head's 0.25% rows, then group everything. Overrides come from
+  // OTHER reps' qualifying months, so they can only be computed once every base
+  // deal is present — which is why a Sales Head's view is never query-narrowed.
+  const withOverride = withOverrides(deals, heads);
+  // Attach each override's own payout record (kind "override" — a different row
+  // from the rep's on the same sale).
+  for (const d of withOverride) {
+    if (d.payeeKind !== "override") continue;
+    const rec = payout.get(`${d.kind === "order" ? "q" : "c"}:${d.refId}:override`);
+    d.paid = rec?.paid ?? false;
+    d.paidAt = rec?.paidAt ? rec.paidAt.toISOString() : null;
+    d.paidByName = rec?.paidByName ?? null;
+    d.commissionId = rec?.id ?? null;
+  }
+
+  let months = groupByPersonMonth(withOverride);
+  // A rep asked for their own page gets exactly their own cards. A Sales Head
+  // had to have everyone's deals loaded to price their override — this is where
+  // the rest drops out again, so what leaves the function is only theirs.
+  if (opts.salespersonId) months = months.filter((m) => m.salespersonId === opts.salespersonId);
+  const shown = months.flatMap((m) => m.deals);
 
   return {
     months,
@@ -454,8 +595,8 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
       earned: round2(months.reduce((a, g) => a + g.earned, 0)),
       paid: round2(months.reduce((a, g) => a + g.paid, 0)),
       unpaid: round2(months.reduce((a, g) => a + g.unpaid, 0)),
-      dealCount: deals.length,
-      approvedCount: deals.filter((d) => d.approved).length,
+      dealCount: shown.length,
+      approvedCount: shown.filter((d) => d.approved).length,
     },
     currency,
   };

@@ -187,7 +187,7 @@ async function ensureCounterSaleCommission(saleId: string): Promise<void> {
     const at = s.completedAt ?? new Date();
     const salesMonth = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}`;
     await prisma.commission.upsert({
-      where: { counterSaleId: saleId },
+      where: { counterSaleId_kind: { counterSaleId: saleId, kind: "base" } },
       create: { counterSaleId: saleId, salespersonId: s.salespersonId, salespersonName: s.salespersonName ?? "", orderValue, ratePct: COMMISSION_RATE_PCT, amount, salesMonth },
       update: {},
     });

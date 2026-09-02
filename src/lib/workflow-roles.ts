@@ -12,6 +12,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 export const WORKFLOW_ROLES = [
+  // The Sales Head earns an override on every OTHER salesperson's qualifying
+  // month (see `lib/sales-commission`). A role, not a name in the code: the
+  // override follows whoever holds the seat.
+  { key: "sales_head", label: "Sales Head", group: "Sales" },
   { key: "accounting", label: "Accounting", group: "Finance" },
   { key: "payment_approver", label: "Payment Approver", group: "Finance" },
   { key: "technical_head", label: "Technical Head", group: "Production" },

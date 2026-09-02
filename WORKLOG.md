@@ -1,3 +1,73 @@
+## 2026-09-02 · The Sales Head's 0.25% override — and the unique constraint that said one sale owes one person
+
+Owner: *"For JayR Basal, add 0.25% from each sales who were able to meet the target. Commission Amount will be net
+of VAT."* Two rulings confirmed alongside it: the 0.25% is **on top of** the rep's 1.5% (the rep's payout is
+untouched; the company pays 1.75% on an overridden sale), and it is earned on **other** people's sales only — the
+head still takes 1.5% on anything they sell themselves, with no override stacked on it.
+
+### A role, not a name
+
+`sales_head` is a workflow role, assignable in Admin like every other. A name in the code breaks the day JayR
+changes seat, and there is already a screen for handing out roles.
+
+### ⚠️ Migration 0049 must be run in Supabase
+
+`Commission.quotationId` was **UNIQUE** — one payout record per order. That was true right up until this rule:
+an overridden sale owes **two** people. Uniqueness moves to `(quotationId, kind)`, with `kind` being `base` (the
+rep's 1.5%) or `override` (the head's 0.25%); same for counter sales. Existing rows default to `base`.
+
+Two knock-on details worth knowing:
+
+- Dropping a single-column `@unique` turns Prisma's relation from 1:1 into 1:many, so `Quotation.commission`
+  became `commissions`. Prisma refused to generate until that was fixed — a good error.
+- Prisma had created those uniques as **indexes**, not constraints. The migration drops both spellings
+  (`alter table … drop constraint if exists` *and* `drop index if exists`), which is what made it apply cleanly.
+
+**Until the migration is run the override cannot be paid out** — the row has nowhere to go. Everything else keeps
+working.
+
+### Where the override is computed, and why a Sales Head's query is not narrowed
+
+A rep's page narrows the quotation query to `preparedById`, so no other rep's deals are ever loaded. **That cannot
+be done for a Sales Head**: their 0.25% is derived from other people's qualifying months, so those deals have to
+be present. That is the point of the role rather than a leak — but it is a deliberate exception, so it is one
+named `scopeToRep`, with the narrowing still applied to everyone else, and the non-head months filtered back out
+before the view leaves the function.
+
+One override row is created per **approved** base deal. That single condition carries both halves of the owner's
+rule — the source month cleared ₱1,000,000, and the client has fully paid — and it makes the override release on
+exactly the same date as the commission it rides on.
+
+### The override is a separate card, not extra rows on the head's own
+
+Rule 1's quota is about what a person **sold**. An override row is somebody else's order, so counting it toward
+the head's own ₱1M would be wrong, and showing "₱1,000,000 short" on a card made entirely of other people's sales
+would be nonsense. So groups are keyed `person × month × kind`, an override card carries `monthGross` 0 and no
+quota badge, and each row names who sold it.
+
+### Checked on live-shaped data
+
+Rey Gil made Sales Head, with his own qualifying August (₱2.18M) alongside Sam Sales' (₱3.5M) and Admin Ana's
+short one (₱810k):
+
+| Card | What it shows |
+| --- | --- |
+| Rey Gil · August | his own 4 sales at **1.5%** → ₱30,900 — **no override on his own** |
+| Rey Gil · **Sales Head override** · August | 6 rows at **0.25%**, each "sold by Sam Sales" → ₱6,696.44 |
+| Rey Gil · **Sales Head override** · September | ₱4,464.29 = 0.25% of Admin Ana's ₱1,785,714.29 terms deal |
+| Admin Ana · August (₱190k short) | contributes **nothing** to the override |
+| Sam Sales · August | earned **₱40,178.56 — unchanged**; the override took nothing from him |
+
+Release dates on every override row match the rep's row exactly (15 Sep, 30 Sep, 15 Oct).
+
+And the constraint change, proven end to end: order **2941J** now carries two payout records — ₱4,017.86 to Sam
+Sales at 1.5% and ₱669.64 to Rey Gil at 0.25% — marked paid independently, which the old schema could not store.
+
+Nine new tests; the role harness reports the same capability table as before.
+
+*(The harness's own guard earned its keep on the way: a stale `.next` in its worktree made every page 500, and it
+printed "Every page refused — that is the server, not the policy" instead of a table of false negatives.)*
+
 ## 2026-09-02 · The release calendar, pinned month-shape by month-shape
 
 Owner: *"commission release is 15th and 30th of the month. If there is 31st in the month, pay on 30th. If there is

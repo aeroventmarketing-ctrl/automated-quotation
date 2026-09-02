@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
-import { buildCommissions, allDeals, COMMISSION_RATE_PCT, type CommissionDealKind } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -49,41 +49,55 @@ export async function markCommissionPaid(commissionId: string, paid: boolean): P
  * id, never an amount) and upserts the row it is paying, so the payout record
  * always carries the figure that was actually earned.
  */
-export async function payDealCommission(kind: CommissionDealKind, refId: string, paid: boolean): Promise<void> {
+export async function payDealCommission(
+  kind: CommissionDealKind,
+  refId: string,
+  payeeKind: CommissionPayeeKind,
+  paid: boolean,
+): Promise<void> {
   const user = await assertAccounting();
-  const deal = allDeals(await buildCommissions()).find((d) => d.kind === kind && d.refId === refId);
+  const deal = allDeals(await buildCommissions()).find(
+    (d) => d.kind === kind && d.refId === refId && d.payeeKind === payeeKind,
+  );
   if (!deal) throw new Error("That sale is no longer in the commission list.");
   if (paid && !deal.approved) {
     throw new Error("This commission isn't approved yet — the month must clear ₱1,000,000 and the client must have fully paid.");
   }
 
-  const where = kind === "order" ? { quotationId: refId } : { counterSaleId: refId };
+  // One sale can owe two people, so the payout row is keyed by (sale, payee):
+  // "base" is the rep's 1.5%, "override" the Sales Head's 0.25% on the same sale.
+  const ref = kind === "order" ? { quotationId: refId } : { counterSaleId: refId };
+  const where = kind === "order"
+    ? { quotationId_kind: { quotationId: refId, kind: payeeKind } }
+    : { counterSaleId_kind: { counterSaleId: refId, kind: payeeKind } };
   const payout = paid ? { paid: true, paidAt: new Date(), paidByName: user.name } : { paid: false, paidAt: null, paidByName: null };
   const row = await prisma.commission.upsert({
-    where: where as { quotationId: string } | { counterSaleId: string },
+    where,
     create: {
-      ...where,
+      ...ref,
+      kind: payeeKind,
       salespersonId: deal.salespersonId,
       salespersonName: deal.salespersonName,
-      // The row records what was earned: the NET base and the 1.5% on it.
+      // The row records what was earned: the NET base and the rate on it.
       orderValue: deal.net,
-      ratePct: COMMISSION_RATE_PCT,
+      ratePct: deal.ratePct,
       amount: deal.amount,
       salesMonth: deal.salesMonth,
       ...payout,
     },
     // Keep the row's figures in step with the live computation — a revised or
     // late-paid deal must not pay out yesterday's amount.
-    update: { orderValue: deal.net, amount: deal.amount, salesMonth: deal.salesMonth, ...payout },
+    update: { orderValue: deal.net, ratePct: deal.ratePct, amount: deal.amount, salesMonth: deal.salesMonth, ...payout },
   });
 
+  const what = payeeKind === "override" ? `override on ${deal.sourceSalespersonName ?? "a sale"}` : "commission";
   await logActivity(user, {
     action: paid ? "commission.paid" : "commission.unpaid",
     category: "commission",
-    summary: `Commission marked ${paid ? "paid" : "unpaid"} — ${deal.salespersonName} · ${deal.refLabel} (${peso(deal.amount)})`,
+    summary: `Commission ${what} marked ${paid ? "paid" : "unpaid"} — ${deal.salespersonName} · ${deal.refLabel} (${peso(deal.amount)})`,
     entity: "commission",
     entityId: row.id,
-    href: `/commissions#commission-${kind}-${refId}`,
+    href: `/commissions#commission-${kind}-${refId}-${payeeKind}`,
   });
   revalidatePath("/commissions");
   revalidatePath("/management");
