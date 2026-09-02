@@ -16,6 +16,13 @@ export const WORKFLOW_ROLES = [
   // month (see `lib/sales-commission`). A role, not a name in the code: the
   // override follows whoever holds the seat.
   { key: "sales_head", label: "Sales Head", group: "Sales" },
+  // Whose sales the Sales Head's 0.25% is earned on. An ALLOW-LIST, on the
+  // owner's instruction: *"JayR Basal can have a 0.25% cut from Desiree Enigo,
+  // Kurt Calucin, May-Ann Asong sales. We will add more sales if needed"* and
+  // *"JayR Basal do not have 0.25% cut from Flor Gil sales"*. Tick a salesperson
+  // here to include them; leave them untocked and the Sales Head earns nothing
+  // from their months.
+  { key: "override_source", label: "Counts toward override", group: "Sales" },
   { key: "accounting", label: "Accounting", group: "Finance" },
   { key: "payment_approver", label: "Payment Approver", group: "Finance" },
   { key: "technical_head", label: "Technical Head", group: "Production" },
