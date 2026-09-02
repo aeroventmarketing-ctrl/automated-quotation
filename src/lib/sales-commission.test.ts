@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   payoutDateFor,
+  firstReleaseForMonth,
+  releaseDateFor,
   netOfVat,
   commissionOn,
   fullyPaidOn,
@@ -73,6 +75,48 @@ describe("rule 4 — released every 15th and 30th", () => {
     expect(payoutDateFor("2028-02-20")).toBe("2028-02-29");
     // …and never skips the cycle: the 28th still pays on the 28th.
     expect(payoutDateFor("2026-02-28")).toBe("2026-02-28");
+  });
+});
+
+describe("rule 4's floor — a month's commissions start after the month ends", () => {
+  it("starts August's releases on 15 September, per the owner's Desiree example", () => {
+    expect(firstReleaseForMonth("2026-08")).toBe("2026-09-15");
+    // Every August deal, however early the client paid, waits for 15 September.
+    expect(releaseDateFor("2026-08-03", "2026-08")).toBe("2026-09-15");
+    expect(releaseDateFor("2026-08-28", "2026-08")).toBe("2026-09-15");
+    expect(releaseDateFor("2026-08-31", "2026-08")).toBe("2026-09-15");
+  });
+
+  it("still honours the owner's original worked example", () => {
+    // "client made a full payment on September 1, 2026 → September 15, 2026"
+    expect(releaseDateFor("2026-09-01", "2026-08")).toBe("2026-09-15");
+  });
+
+  it("trickles on past the floor as each client settles", () => {
+    // "…onwards until every client who purchased in August 2026 has paid."
+    expect(releaseDateFor("2026-09-20", "2026-08")).toBe("2026-09-30");
+    expect(releaseDateFor("2026-10-02", "2026-08")).toBe("2026-10-15");
+    expect(releaseDateFor("2027-01-20", "2026-08")).toBe("2027-01-30");
+  });
+
+  it("rolls a December sales month into January", () => {
+    expect(firstReleaseForMonth("2026-12")).toBe("2027-01-15");
+    expect(releaseDateFor("2026-12-05", "2026-12")).toBe("2027-01-15");
+  });
+
+  it("never releases inside the sales month, whatever its length", () => {
+    for (const [month, paid] of [["2026-02", "2026-02-20"], ["2026-04", "2026-04-30"], ["2026-09", "2026-09-16"]]) {
+      expect(releaseDateFor(paid, month) > `${month}-31`).toBe(true);
+    }
+  });
+
+  it("applies the floor through the grouping, not just in the helper", () => {
+    // Desiree's August, in miniature: qualified, client paid 3 August. The card
+    // used to say "Release Aug 15" — a date inside the month it was earned in.
+    const months = groupByPersonMonth([deal({ gross: 1_200_000, salesMonth: "2026-08", fullyPaidYMD: "2026-08-03" })]);
+    expect(months[0].qualifies).toBe(true);
+    expect(months[0].deals[0].payoutYMD).toBe("2026-09-15");
+    expect(months[0].nextPayoutYMD).toBe("2026-09-15");
   });
 });
 

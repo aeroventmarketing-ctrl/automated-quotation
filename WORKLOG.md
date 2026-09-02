@@ -1,3 +1,57 @@
+## 2026-09-02 · A month's commissions cannot be released inside that month
+
+Owner, on Desiree Enigo's August card: *"Desiree meet the target on August 2026, commission release start should be
+September 15, 2026 onwards until every client who purchased in August 2026 has paid. Amount will automatically add
+in every month Desiree meet the target."*
+
+Her card was showing releases dated **Aug 11, Aug 15, Aug 30** — inside the very month being earned.
+
+### The defect was a missing floor, not a wrong calculation
+
+`payoutDateFor` only ever looked at one thing: the day the client's money landed. Paid 3 August → next release
+15 August. Correct in isolation, wrong in context — **because rule 1's ₱1,000,000 target is a fact about a
+finished month.** On 15 August the August total is still being added to. Paying against it is paying against a
+number that isn't final.
+
+So each deal's release is now the **later** of two dates:
+
+```
+release = max( next 15th/30th after full payment ,  15th of the month AFTER the sales month )
+```
+
+Desiree's August, worked through — the floor holds the early payers and the trickle carries the rest:
+
+| Client paid in full | Release |
+| --- | --- |
+| 3 August | **15 September** ← floor |
+| 28 August | **15 September** ← floor |
+| 20 September | 30 September |
+| 2 October | 15 October |
+
+That is *"September 15 onwards until every client who purchased in August has paid"*, exactly.
+
+### It does not disturb the original example
+
+The owner's first worked example — *"full payment on September 1, 2026 → commission payment September 15, 2026"* —
+gives the same answer under both readings (own = 15 Sept, floor = 15 Sept). It was always consistent with the
+floor; nothing in the earlier rules had to be re-decided.
+
+### Why the floor is the 15th of the next month, not the month's own last release
+
+A 30-day sales month would otherwise release on its own 30th — the final day of the month it is earned in — while
+a 31-day month waited for the 15th. Same rule, different answer depending on the calendar. The floor is
+`firstReleaseForMonth`, uniformly the 15th of the following month, so August, September and February all behave
+the same way.
+
+### Checked on screen
+
+Four deals in one qualifying August, clients settling on 3 Aug, 28 Aug, 20 Sept and 2 Oct, produced exactly the
+table above. The month footer reads **"Next release Sep 15, 2026"**, and a previously-seeded deal that used to say
+*Release Aug 30* now says *Release Sep 15*. Six new tests pin it, including the invariant that no release ever
+falls inside its own sales month whatever that month's length.
+
+Commissions already **paid** keep their record — a payout is history, not a recalculation.
+
 ## 2026-09-02 · A Commissions tile on My Dashboard, showing each salesperson only their own
 
 Owner: *"In sales Role Dashboard, put a tile at the right side of the orders tile, name the tile as Commissions.

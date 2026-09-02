@@ -161,8 +161,8 @@ export function CommissionFlow({
       <p className="text-xs text-muted-foreground">
         Sales month {salesMonth}.{" "}
         {dueLabel
-          ? `Released ${dueLabel} — the next 15th or 30th after the client paid in full.`
-          : "Released on the next 15th or 30th after the client pays in full."}
+          ? `Released ${dueLabel} — the 15th of the month after the sales month at the earliest, then the next 15th or 30th once the client has paid in full.`
+          : "Released on the 15th of the month after the sales month at the earliest, then the next 15th or 30th once the client pays in full."}
       </p>
       {!autoApproved && !flow.approvedAt && (
         <p className="text-xs text-amber-700">

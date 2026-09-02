@@ -24,7 +24,12 @@
  *     VAT-inclusive amount invoiced, even though the 1.5% is paid on the net.
  *     Below quota, NOTHING in that month is earned.
  *   · Rules 3 & 4 then release each deal individually, on its own full-payment
- *     date — so one month's commissions can pay out on several dates.
+ *     date — so one month's commissions can pay out on several dates. They never
+ *     pay out INSIDE the sales month, though: the owner's follow-up on Desiree's
+ *     August — *"commission release start should be September 15, 2026 onwards
+ *     until every client who purchased in August 2026 has paid"* — makes the
+ *     15th of the following month a floor, because rule 1's target is a fact
+ *     about a finished month. See `firstReleaseForMonth`.
  *
  * Nothing here writes. The figures are recomputed from the confirmed sales
  * themselves (the same source as the WON report and the P&L), so a deal that is
@@ -114,6 +119,40 @@ export function payoutDateFor(fullyPaidYMD: string): string {
   // Past the last release of a 31-day month → the 15th of the next one.
   return mo === 12 ? `${y + 1}-01-15` : `${y}-${pad(mo + 1)}-15`;
 }
+
+/**
+ * Rule 4's FLOOR: nothing from a sales month can be released before the **15th of
+ * the month after it**.
+ *
+ * Owner (2026-09-02), on Desiree's August: *"Desiree meet the target on August
+ * 2026, commission release start should be September 15, 2026 onwards until every
+ * client who purchased in August 2026 has paid."*
+ *
+ * The reason is rule 1: the ₱1,000,000 target is a fact about a whole month, and
+ * a month in progress hasn't got one yet. Releasing on a date inside August would
+ * be paying out against a total still being added to. So August's commissions
+ * start on 15 September and trickle on from there as each client settles — a
+ * client who pays in October releases on October's own 15th or 30th.
+ *
+ * @param salesMonth Manila YYYY-MM the deal was recognised in (rule 2).
+ */
+export function firstReleaseForMonth(salesMonth: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(salesMonth);
+  if (!m) return salesMonth;
+  const [y, mo] = [Number(m[1]), Number(m[2])];
+  return mo === 12 ? `${y + 1}-01-15` : `${y}-${String(mo + 1).padStart(2, "0")}-15`;
+}
+
+/**
+ * The release date for one deal: the later of its own next 15th/30th and its
+ * sales month's floor. Both are already valid release days, so the later of the
+ * two is too — YYYY-MM-DD compares correctly as text.
+ */
+export const releaseDateFor = (fullyPaidYMD: string, salesMonth: string): string => {
+  const own = payoutDateFor(fullyPaidYMD);
+  const floor = firstReleaseForMonth(salesMonth);
+  return own > floor ? own : floor;
+};
 
 // --- Rule 3: when the money was all in ------------------------------------
 
@@ -238,9 +277,11 @@ export function groupByPersonMonth(deals: CommissionDeal[]): CommissionMonth[] {
       // Rule 5 — no one approves this; clearing rules 1–3 IS the approval.
       d.approved = g.qualifies && d.fullyPaid;
       d.amount = d.approved ? commissionOn(d.net) : 0;
-      // Rule 4 — a payout date exists as soon as the client has fully paid, even
-      // while the month is short of quota, so Sales can see what it would be.
-      d.payoutYMD = d.fullyPaidYMD ? payoutDateFor(d.fullyPaidYMD) : null;
+      // Rule 4 — a release date exists as soon as the client has fully paid, even
+      // while the month is short of quota, so Sales can see what it would be. It
+      // is never inside the sales month itself: the month's ₱1M target isn't a
+      // fact until the month ends, so the floor is the 15th of the month after.
+      d.payoutYMD = d.fullyPaidYMD ? releaseDateFor(d.fullyPaidYMD, g.salesMonth) : null;
     }
     g.deals.sort((a, b) => a.recognisedYMD.localeCompare(b.recognisedYMD) || a.refLabel.localeCompare(b.refLabel));
     g.earned = round2(g.deals.reduce((a, d) => a + d.amount, 0));

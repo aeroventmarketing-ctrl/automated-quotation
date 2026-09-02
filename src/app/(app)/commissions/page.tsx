@@ -91,7 +91,7 @@ export default async function CommissionsPage() {
           <p><span className="font-semibold text-foreground">1 · The month.</span> The salesperson&apos;s sales for the month must exceed {formatCurrency(MONTHLY_QUOTA_GROSS, currency)} gross. Below that, nothing in the month is earned.</p>
           <p><span className="font-semibold text-foreground">2 · The month it counts in.</span> A terms client counts in the month their PO was submitted; everyone else in the month of their down payment.</p>
           <p><span className="font-semibold text-foreground">3 · Full payment.</span> The client must have paid the order in full — whenever that happens.</p>
-          <p><span className="font-semibold text-foreground">4 · Release.</span> On the next 15th or 30th after full payment (February releases on the last day).</p>
+          <p><span className="font-semibold text-foreground">4 · Release.</span> A month&apos;s commissions start on the <strong>15th of the following month</strong> — the target isn&apos;t settled until the month ends — then on each 15th or 30th as the remaining clients pay in full.</p>
           <p><span className="font-semibold text-foreground">5 · Approval.</span> Automatic — meeting 1–3 approves it; no one signs off the entitlement.</p>
           <p><span className="font-semibold text-foreground">6 · The rate.</span> {COMMISSION_RATE_PCT}% of gross sales less VAT. VAT is deducted only where the client was charged it — a <em>VAT exclusive</em> or <em>zero rated</em> order pays {COMMISSION_RATE_PCT}% of its full amount.</p>
         </CardContent>
