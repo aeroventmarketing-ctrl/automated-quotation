@@ -84,6 +84,16 @@ describe("power conversions", () => {
     approx(kwToHp(0.745699872), 1, 1e-6);
     approx(hpToKw(1), 0.745699872, 1e-6);
   });
+
+  // Owner: *"1 kw = 1.34 HP, this is the correct conversion."* Stated plainly in
+  // the direction the fan work reads it, because it is the factor a rating-power
+  // mistake hides behind: a catalogue BHP column loaded into `power_kw` without
+  // conversion overstates every absorbed figure by exactly this much, which is
+  // one to two motor frames on every quote for that model.
+  it("1 kW is 1.34 HP", () => {
+    approx(kwToHp(1), 1.34, 0.005);
+    approx(hpToKw(1.34), 1, 0.005);
+  });
 });
 
 describe("unit string normalization", () => {

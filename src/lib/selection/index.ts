@@ -26,6 +26,11 @@ const PA_PER_INWG = 249.0889;
 
 // AFBM induction-motor sizes (HP). The suggested motor is BHP/0.75 rounded UP
 // to the next size in this list.
+//
+// **There is deliberately no 0.75 HP.** It was put to the owner that its absence
+// is what sends 0.60 BHP (÷0.75 = 0.80) to a 1 HP motor rather than 0.75 HP —
+// answer: *"yes, move to 1HP."* So the jump from 0.5 straight to 1 is the rule,
+// not a gap waiting to be filled.
 export const MOTOR_HP_LIST = [
   0.5, 1, 1.5, 2, 3, 5, 7.5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100,
 ];

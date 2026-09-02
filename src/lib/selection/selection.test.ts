@@ -54,6 +54,15 @@ describe("AFBM selection rules", () => {
     expect(suggestMotorHp(6)).toBe(10); // 6/0.75 = 8 -> 10
   });
 
+  // Owner's ruling, asked directly about the missing 0.75 HP size: "yes, move
+  // to 1HP." The 0.5 → 1 jump is the rule; 0.60 BHP asks for 0.80 HP and takes
+  // a 1 HP motor. Adding 0.75 to MOTOR_HP_LIST would silently undo that.
+  it("has no 0.75 HP size, so 0.60 BHP takes a 1 HP motor", () => {
+    expect(MOTOR_HP_LIST).not.toContain(0.75);
+    expect(suggestMotorHp(0.6)).toBe(1); // 0.6/0.75 = 0.80 -> 1, not 0.75
+    expect(suggestMotorHp(0.3)).toBe(0.5); // 0.3/0.75 = 0.40 -> 0.5
+  });
+
   it("applies outlet-velocity limits by wheel diameter", () => {
     expect(outletVelocityLimit(24)).toBe(1800);
     expect(outletVelocityLimit(33)).toBe(2000);
