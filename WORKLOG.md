@@ -1,3 +1,42 @@
+## 2026-09-02 · The override becomes an allow-list — named people, not "everyone who qualifies"
+
+Owner: *"JayR Basal can have a 0.25% cut from Desiree Enigo, Kurt Calucin, May-Ann Asong sales. We will add more
+sales if needed"* and *"JayR Basal do not have 0.25% cut from Flor Gil sales."*
+
+The override shipped yesterday paid on **every** qualifying salesperson. It now pays only on the ones named — and
+"we will add more sales if needed" is the requirement that decided the design: this had to be something the owner
+can change without a deployment.
+
+### A second role, on a screen that already exists
+
+`override_source` — chip label **"Counts toward override"** — sits beside *Sales Head* in Admin → Workflow roles.
+Tick a salesperson, the Sales Head earns 0.25% of their qualifying months; untick them and it stops. No new screen,
+no new table, no migration; the roles manager renders a chip per role straight from `WORKFLOW_ROLES`.
+
+### Empty means nobody, and it says so
+
+The list is an **allow-list**, so an empty one earns the Sales Head nothing. That is the safe direction: defaulting
+to "everyone" would quietly pay an override on exactly the person the owner just excluded, and nobody would see it.
+
+But a silent zero looks like a bug, so when a Sales Head is assigned and nobody is ticked, the Commissions page
+shows an amber banner naming the setting and linking to it. It disappears the moment someone is ticked.
+
+### Checked on screen
+
+Willy Ho as Sales Head (he sells nothing himself), Sam Sales and Admin Ana ticked, **Rey Gil deliberately not**:
+
+| | |
+| --- | --- |
+| nobody ticked | banner shown, **no override cards at all** |
+| Sam + Ana ticked | override cards of **₱6,696.44** (6 rows, all "sold by Sam Sales") and **₱4,464.29** ("sold by Admin Ana") |
+| Rey Gil, not ticked | his August still **Qualified**, still earns **his own ₱30,900** at 1.5% — and contributes **zero** override rows |
+
+That last row is the whole point: being off the list costs the salesperson nothing. It only means their months do
+not feed the Sales Head.
+
+Five new tests, named for the owner's people, including the one that matters — Flor Gil qualifies, is paid her own
+1.5%, and appears nowhere in the head's override.
+
 ## 2026-09-02 · "Notify Client — Order Ready" refused an order it had just ticked green
 
 Owner: *"error when notify client is pressed"* — order AFBM00003247J, a bought-in office pick-up, all three Phase 2

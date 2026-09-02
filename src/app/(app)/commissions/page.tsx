@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CheckCircle2, Clock, TrendingDown } from "lucide-react";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole } from "@/lib/workflow-roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -53,6 +53,12 @@ export default async function CommissionsPage() {
     );
   }
 
+  // A Sales Head with nobody on the allow-list earns nothing, which would look
+  // like a bug rather than a setting. Say so, to the people who can fix it.
+  const headCount = usersWithWorkflowRole(assignments, "sales_head").length;
+  const sourceCount = usersWithWorkflowRole(assignments, "override_source").length;
+  const overrideUnset = headCount > 0 && sourceCount === 0 && canSeeAll;
+
   let view: Awaited<ReturnType<typeof buildCommissions>> | null = null;
   let failed = false;
   try {
@@ -95,7 +101,7 @@ export default async function CommissionsPage() {
           <p><span className="font-semibold text-foreground">3 · Full payment.</span> The client must have paid the order in full — whenever that happens.</p>
           <p><span className="font-semibold text-foreground">4 · Release.</span> A month&apos;s commissions start on the <strong>15th of the following month</strong> — the target isn&apos;t settled until the month ends — then on each 15th and 30th as the remaining clients pay in full. A month with 31 days releases on the 30th; February on the 28th (29th in a leap year).</p>
           <p><span className="font-semibold text-foreground">5 · Approval.</span> Automatic — meeting 1–3 approves it; no one signs off the entitlement.</p>
-          <p className="sm:col-span-2"><span className="font-semibold text-foreground">The Sales Head&apos;s override.</span> Whoever holds the <em>Sales Head</em> role also earns {OVERRIDE_RATE_PCT}% of every <em>other</em> salesperson&apos;s qualifying month, on the same net-of-VAT base and released on the same dates. It is on top of the {COMMISSION_RATE_PCT}% — the salesperson&apos;s own commission is untouched — never applies to the Sales Head&apos;s own sales, and is <strong>not conditional on the Sales Head hitting their own target</strong>.</p>
+          <p className="sm:col-span-2"><span className="font-semibold text-foreground">The Sales Head&apos;s override.</span> Whoever holds the <em>Sales Head</em> role also earns {OVERRIDE_RATE_PCT}% of each <em>listed</em> salesperson&apos;s qualifying month, on the same net-of-VAT base and released on the same dates. It is on top of the {COMMISSION_RATE_PCT}% — the salesperson&apos;s own commission is untouched — never applies to the Sales Head&apos;s own sales, and is <strong>not conditional on the Sales Head hitting their own target</strong>. Only salespeople ticked <em>Counts toward override</em> in Admin → Workflow roles are included.</p>
           <p><span className="font-semibold text-foreground">6 · The rate.</span> {COMMISSION_RATE_PCT}% of gross sales less VAT. VAT is deducted only where the client was charged it — a <em>VAT exclusive</em> or <em>zero rated</em> order pays {COMMISSION_RATE_PCT}% of its full amount.</p>
         </CardContent>
       </Card>
@@ -104,6 +110,16 @@ export default async function CommissionsPage() {
         Commissions are counted from <strong>{formatDate(SALES_START_YMD)}</strong> onwards. Earlier sales are
         hidden here, not deleted — they remain on Orders, the WON report and the P&amp;L.
       </p>
+
+      {overrideUnset && (
+        <Card className="border-amber-500/40 bg-amber-50/60 dark:bg-amber-950/20">
+          <CardContent className="py-3 text-xs text-amber-800 dark:text-amber-300">
+            A <strong>Sales Head</strong> is assigned, but no salesperson is ticked{" "}
+            <strong>Counts toward override</strong> — so no {OVERRIDE_RATE_PCT}% override is being earned. Tick the
+            salespeople it applies to in <Link href="/admin/workflow-roles" className="underline">Admin → Workflow roles</Link>.
+          </CardContent>
+        </Card>
+      )}
 
       {failed ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -152,7 +168,7 @@ function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; 
           </CardTitle>
           <p className="text-xs text-muted-foreground">
             {monthLabel(m.salesMonth)} · {m.deals.length} sale{m.deals.length === 1 ? "" : "s"}
-            {isOverride ? ` · ${OVERRIDE_RATE_PCT}% of other salespeople's qualifying months` : ""}
+            {isOverride ? ` · ${OVERRIDE_RATE_PCT}% of listed salespeople's qualifying months` : ""}
           </p>
         </div>
         {/* An override card has no quota of its own — every row on it exists

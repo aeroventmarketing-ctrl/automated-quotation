@@ -62,6 +62,13 @@ export const MONTHLY_QUOTA_GROSS = 1_000_000;
  *
  * The seat is a workflow role (`sales_head`), never a name in the code, so the
  * override follows whoever holds it.
+ *
+ * WHOSE sales it is earned on is a second role, `override_source` — an
+ * ALLOW-LIST, not "everyone who qualifies". Owner: *"JayR Basal can have a 0.25%
+ * cut from Desiree Enigo, Kurt Calucin, May-Ann Asong sales. We will add more
+ * sales if needed"* and *"JayR Basal do not have 0.25% cut from Flor Gil sales"*.
+ * A salesperson nobody has ticked earns the Sales Head nothing, so a rep added to
+ * the team never starts paying an override by accident — someone has to say so.
  */
 export const OVERRIDE_RATE_PCT = 0.25;
 
@@ -392,10 +399,15 @@ export function groupByPersonMonth(deals: CommissionDeal[]): CommissionMonth[] {
  * The head's OWN sales are skipped: they earn 1.5% on those like anyone else,
  * with no override stacked on top.
  *
- * @param heads userId → display name for everyone holding the Sales Head role.
+ * @param heads   userId → display name for everyone holding the Sales Head role.
+ * @param sources userIds whose sales the override is earned on (allow-list).
  */
-export function withOverrides(baseDeals: CommissionDeal[], heads: Map<string, string>): CommissionDeal[] {
-  if (heads.size === 0) return baseDeals;
+export function withOverrides(
+  baseDeals: CommissionDeal[],
+  heads: Map<string, string>,
+  sources: Set<string>,
+): CommissionDeal[] {
+  if (heads.size === 0 || sources.size === 0) return baseDeals;
   const months = groupByPersonMonth(baseDeals); // prices + approves the base rows first
   const out = [...baseDeals];
   for (const [headId, headName] of heads) {
@@ -404,7 +416,10 @@ export function withOverrides(baseDeals: CommissionDeal[], heads: Map<string, st
       // Basal was not able to meet the 1 million pesos target, Basal will still
       // get the 0.25% cut from every sales role who meet the target."* Nothing
       // here reads the head's own month, which is what makes that true.
+      // `sources` is the allow-list — a rep nobody ticked earns the head nothing,
+      // however well their month went.
       if (g.kind !== "base" || !g.qualifies || g.salespersonId === headId) continue;
+      if (!sources.has(g.salespersonId)) continue;
       for (const d of g.deals) {
         if (!d.approved) continue;
         out.push({
@@ -431,16 +446,25 @@ type BuildOptions = {
   salespersonId?: string;
 };
 
-/** userId → name for everyone holding the Sales Head role. */
-async function salesHeads(): Promise<Map<string, string>> {
+/**
+ * Who holds the Sales Head seat, and whose sales their override is earned on.
+ * Read together so one registry lookup answers both.
+ *
+ * `sources` is an allow-list: empty means the Sales Head earns no override at
+ * all. That is the safe direction — a salesperson nobody has ticked costs
+ * nothing, whereas defaulting to "everyone" would quietly pay an override on a
+ * rep the owner had excluded.
+ */
+async function overrideRoles(): Promise<{ heads: Map<string, string>; sources: Set<string> }> {
   try {
     const assignments = await getWorkflowRoles();
-    const ids = usersWithWorkflowRole(assignments, "sales_head");
-    if (ids.length === 0) return new Map();
-    const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
-    return new Map(users.map((u) => [u.id, u.name] as const));
+    const headIds = usersWithWorkflowRole(assignments, "sales_head");
+    const sources = new Set(usersWithWorkflowRole(assignments, "override_source"));
+    if (headIds.length === 0) return { heads: new Map(), sources };
+    const users = await prisma.user.findMany({ where: { id: { in: headIds } }, select: { id: true, name: true } });
+    return { heads: new Map(users.map((u) => [u.id, u.name] as const)), sources };
   } catch {
-    return new Map(); // no role registry yet — no override, everything else still works
+    return { heads: new Map(), sources: new Set() }; // no registry yet — no override, everything else works
   }
 }
 
@@ -454,7 +478,7 @@ async function salesHeads(): Promise<Map<string, string>> {
  * with rules 1–6 applied. Reads only.
  */
 export async function buildCommissions(opts: BuildOptions = {}): Promise<CommissionsView> {
-  const heads = await salesHeads();
+  const { heads, sources } = await overrideRoles();
   // Narrowing the query to one rep is what keeps a salesperson from ever having
   // another's deals in their response. It CANNOT be done for a Sales Head: their
   // 0.25% is computed from other people's qualifying months, so they need those
@@ -595,7 +619,7 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
   // Add the Sales Head's 0.25% rows, then group everything. Overrides come from
   // OTHER reps' qualifying months, so they can only be computed once every base
   // deal is present — which is why a Sales Head's view is never query-narrowed.
-  const withOverride = withOverrides(deals, heads);
+  const withOverride = withOverrides(deals, heads, sources);
   // Attach each override's own payout record (kind "override" — a different row
   // from the rep's on the same sale).
   for (const d of withOverride) {

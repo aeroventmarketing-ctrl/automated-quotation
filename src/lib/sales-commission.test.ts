@@ -299,6 +299,8 @@ describe("rule 1 — the ₱1,000,000 month, and rule 5's automatic approval", (
 
 describe("the Sales Head's 0.25% override", () => {
   const HEAD = new Map([["head", "JayR"]]);
+  /** Everyone in these fixtures is on the override allow-list unless said otherwise. */
+  const ALL = new Set(["rey", "des", "head"]);
   /** Two reps: Rey qualifies (₱1.12M), Des does not (₱500k). Both fully paid. */
   const team = () => [
     deal({ refId: "rey1", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
@@ -312,7 +314,7 @@ describe("the Sales Head's 0.25% override", () => {
   });
 
   it("is ON TOP of the rep's 1.5% — the rep's payout is untouched", () => {
-    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const months = groupByPersonMonth(withOverrides(team(), HEAD, ALL));
     const rey = months.find((m) => m.salespersonId === "rey" && m.kind === "base")!;
     const head = months.find((m) => m.salespersonId === "head")!;
     expect(rey.earned).toBe(15_000); // exactly what it was without a Sales Head
@@ -322,7 +324,7 @@ describe("the Sales Head's 0.25% override", () => {
   });
 
   it("earns nothing from a rep who missed the target", () => {
-    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const months = groupByPersonMonth(withOverrides(team(), HEAD, ALL));
     const head = months.find((m) => m.salespersonId === "head")!;
     // Only Rey's qualifying deal is overridden; Des's ₱500k month is not.
     expect(head.deals).toHaveLength(1);
@@ -331,12 +333,12 @@ describe("the Sales Head's 0.25% override", () => {
 
   it("earns nothing until the client has fully paid, like the rep's own", () => {
     const owing = [deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, fullyPaidYMD: null })];
-    expect(groupByPersonMonth(withOverrides(owing, HEAD)).some((m) => m.salespersonId === "head")).toBe(false);
+    expect(groupByPersonMonth(withOverrides(owing, HEAD, ALL)).some((m) => m.salespersonId === "head")).toBe(false);
   });
 
   it("does NOT override the Sales Head's own sales — they earn 1.5% there, not 1.75%", () => {
     const own = [deal({ refId: "h1", salespersonId: "head", salespersonName: "JayR", gross: 1_120_000, net: 1_000_000 })];
-    const months = groupByPersonMonth(withOverrides(own, HEAD));
+    const months = groupByPersonMonth(withOverrides(own, HEAD, ALL));
     expect(months).toHaveLength(1);
     expect(months[0].kind).toBe("base");
     expect(months[0].earned).toBe(15_000);
@@ -348,7 +350,7 @@ describe("the Sales Head's 0.25% override", () => {
       deal({ refId: "h1", salespersonId: "head", salespersonName: "JayR", gross: 600_000, net: 600_000 }),
       deal({ refId: "rey1", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
     ];
-    const months = groupByPersonMonth(withOverrides(mixed, HEAD));
+    const months = groupByPersonMonth(withOverrides(mixed, HEAD, ALL));
     const own = months.find((m) => m.salespersonId === "head" && m.kind === "base")!;
     const ovr = months.find((m) => m.salespersonId === "head" && m.kind === "override")!;
     // His own month is still short, so his own sale earns nothing…
@@ -361,7 +363,7 @@ describe("the Sales Head's 0.25% override", () => {
   });
 
   it("releases on the same date as the commission it rides on", () => {
-    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const months = groupByPersonMonth(withOverrides(team(), HEAD, ALL));
     const rey = months.find((m) => m.salespersonId === "rey")!.deals[0];
     const ovr = months.find((m) => m.salespersonId === "head")!.deals[0];
     expect(ovr.payoutYMD).toBe(rey.payoutYMD);
@@ -370,7 +372,7 @@ describe("the Sales Head's 0.25% override", () => {
 
   it("carries its own payout record, not the rep's", () => {
     const paidTeam = team().map((d) => ({ ...d, paid: true, paidByName: "Acctg", commissionId: "c1" }));
-    const months = groupByPersonMonth(withOverrides(paidTeam, HEAD));
+    const months = groupByPersonMonth(withOverrides(paidTeam, HEAD, ALL));
     const ovr = months.find((m) => m.salespersonId === "head")!.deals[0];
     // The rep having been paid must not mark the head's override paid.
     expect(ovr.paid).toBe(false);
@@ -379,7 +381,7 @@ describe("the Sales Head's 0.25% override", () => {
   });
 
   it("does nothing at all when no one holds the Sales Head role", () => {
-    expect(withOverrides(team(), new Map())).toHaveLength(2);
+    expect(withOverrides(team(), new Map(), ALL)).toHaveLength(2);
   });
 });
 
@@ -407,6 +409,7 @@ describe("the books open on 1 August 2026", () => {
 
 describe("the Sales Head's own target does not gate their override", () => {
   const HEAD = new Map([["head", "JayR"]]);
+  const ALL = new Set(["rey", "head"]);
 
   /**
    * Owner (2026-09-02): *"If incase JayR Basal was not able to meet the 1 million
@@ -415,7 +418,7 @@ describe("the Sales Head's own target does not gate their override", () => {
    */
   it("pays the override in full on a month where the head sold nothing at all", () => {
     const months = groupByPersonMonth(
-      withOverrides([deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 })], HEAD),
+      withOverrides([deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 })], HEAD, ALL),
     );
     const head = months.find((m) => m.salespersonId === "head")!;
     expect(head.kind).toBe("override");
@@ -426,7 +429,7 @@ describe("the Sales Head's own target does not gate their override", () => {
     const months = groupByPersonMonth(withOverrides([
       deal({ refId: "h", salespersonId: "head", salespersonName: "JayR", gross: 10_000, net: 10_000 }),
       deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
-    ], HEAD));
+    ], HEAD, ALL));
     const own = months.find((m) => m.salespersonId === "head" && m.kind === "base")!;
     const ovr = months.find((m) => m.salespersonId === "head" && m.kind === "override")!;
     expect(own.qualifies).toBe(false); // ₱10,000 — nowhere near
@@ -436,11 +439,65 @@ describe("the Sales Head's own target does not gate their override", () => {
 
   it("pays the same override whether the head qualified or not", () => {
     const rey = () => deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 });
-    const short = groupByPersonMonth(withOverrides([rey()], HEAD));
+    const short = groupByPersonMonth(withOverrides([rey()], HEAD, ALL));
     const rich = groupByPersonMonth(withOverrides([
       rey(), deal({ refId: "h", salespersonId: "head", salespersonName: "JayR", gross: 5_000_000, net: 5_000_000 }),
-    ], HEAD));
+    ], HEAD, ALL));
     const of = (ms: typeof short) => ms.find((m) => m.salespersonId === "head" && m.kind === "override")!.earned;
     expect(of(short)).toBe(of(rich));
+  });
+});
+
+describe("the override allow-list — whose sales the Sales Head earns on", () => {
+  const HEAD = new Map([["head", "JayR"]]);
+  /**
+   * Owner (2026-09-02): *"JayR Basal can have a 0.25% cut from Desiree Enigo,
+   * Kurt Calucin, May-Ann Asong sales. We will add more sales if needed"* and
+   * *"JayR Basal do not have 0.25% cut from Flor Gil sales"*.
+   */
+  const TEAM = [
+    deal({ refId: "des", salespersonId: "des", salespersonName: "Desiree Enigo", gross: 1_120_000, net: 1_000_000 }),
+    deal({ refId: "kur", salespersonId: "kur", salespersonName: "Kurt Calucin", gross: 1_120_000, net: 1_000_000 }),
+    deal({ refId: "may", salespersonId: "may", salespersonName: "May-Ann Asong", gross: 1_120_000, net: 1_000_000 }),
+    deal({ refId: "flo", salespersonId: "flo", salespersonName: "Flor Gil", gross: 1_120_000, net: 1_000_000 }),
+  ];
+  const LISTED = new Set(["des", "kur", "may"]); // Flor is deliberately absent
+
+  it("earns 0.25% from each listed salesperson", () => {
+    const head = groupByPersonMonth(withOverrides(TEAM, HEAD, LISTED)).find((m) => m.salespersonId === "head")!;
+    expect(head.deals.map((d) => d.sourceSalespersonName).sort())
+      .toEqual(["Desiree Enigo", "Kurt Calucin", "May-Ann Asong"]);
+    expect(head.earned).toBe(overrideOn(1_000_000) * 3);
+  });
+
+  it("earns NOTHING from Flor Gil, whose month qualified just as well", () => {
+    const months = groupByPersonMonth(withOverrides(TEAM, HEAD, LISTED));
+    const flor = months.find((m) => m.salespersonId === "flo")!;
+    const head = months.find((m) => m.salespersonId === "head")!;
+    expect(flor.qualifies).toBe(true);          // she hit the target…
+    expect(flor.earned).toBe(commissionOn(1_000_000)); // …and is paid her own 1.5%…
+    // …but nothing of hers reaches the Sales Head.
+    expect(head.deals.some((d) => d.sourceSalespersonName === "Flor Gil")).toBe(false);
+  });
+
+  it("adds a new salesperson the moment they are ticked — no code change", () => {
+    const widened = new Set([...LISTED, "flo"]);
+    const head = groupByPersonMonth(withOverrides(TEAM, HEAD, widened)).find((m) => m.salespersonId === "head")!;
+    expect(head.deals).toHaveLength(4);
+    expect(head.earned).toBe(overrideOn(1_000_000) * 4);
+  });
+
+  it("earns nothing at all while the list is empty — the safe default", () => {
+    // Not "everyone by default": that would quietly pay an override on a rep the
+    // owner had excluded. Nobody ticked, nobody counted.
+    expect(withOverrides(TEAM, HEAD, new Set())).toHaveLength(TEAM.length);
+  });
+
+  it("still never overrides the head's own sales, even if the head is ticked", () => {
+    const withHead = [...TEAM, deal({ refId: "h", salespersonId: "head", salespersonName: "JayR", gross: 1_120_000, net: 1_000_000 })];
+    const head = groupByPersonMonth(withOverrides(withHead, HEAD, new Set([...LISTED, "head"])))
+      .find((m) => m.salespersonId === "head" && m.kind === "override")!;
+    expect(head.deals.some((d) => d.sourceSalespersonName === "JayR")).toBe(false);
+    expect(head.deals).toHaveLength(3);
   });
 });
