@@ -50,6 +50,17 @@ const AREA_COLOR: Record<TaskArea, string> = {
 const fmtWhen = (iso: string) =>
   new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
+/** A commission release day (YYYY-MM-DD) as "release Sep 15" — or "overdue" once it's past. */
+function fmtRelease(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return ymd;
+  const label = new Date(y, m - 1, d).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+  // Manila "today", so a release date that has already passed reads as due now
+  // rather than as a future promise.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return ymd < today ? `due since ${label}` : `release ${label}`;
+}
+
 function TaskRow({ t }: { t: MyTask }) {
   const Icon = AREA_ICON[t.area];
   return (
@@ -163,7 +174,10 @@ export default async function MyDashboardPage() {
   // Counts by area — click a box to jump to that area's items below. The
   // "Reconciled by hand" tile (when shown) joins the same row; its list expands
   // full-width beneath the row (col-span-full).
-  const ordersGrid = (data.byArea.length > 0 || manualReconCard) && (
+  // `data.commissions` is in the condition, not just the row: a salesperson with
+  // nothing pending has an empty `byArea`, and without this the whole row — and
+  // with it their commissions tile — silently disappeared.
+  const ordersGrid = (data.byArea.length > 0 || manualReconCard || data.commissions) && (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
       {data.byArea.map((a) => {
         const Icon = AREA_ICON[a.area];
@@ -181,6 +195,32 @@ export default async function MyDashboardPage() {
           </Link>
         );
       })}
+      {/* Commissions — sits immediately right of the area tiles. A salesperson
+          sees only their OWN figure (the engine is asked for their id, so no
+          one else's earnings are ever loaded); Accounting / the Payment Approver
+          / admins see the same total as the Management Dashboard's tile.
+          Two columns wide: the other tiles hold a one- or two-digit count, and a
+          peso amount squeezed into that width truncated to "₱4,0…". */}
+      {data.commissions && (
+        <Link href="/commissions" className="col-span-2 rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+          <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+            <CardContent className="flex items-center gap-3 py-4">
+              <Percent className="h-6 w-6 shrink-0 text-pink-600" />
+              <div className="min-w-0">
+                <div className="text-lg font-bold tabular-nums leading-none">
+                  {formatCurrency(data.commissions.unpaid, "PHP")}
+                </div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Commissions</div>
+                <div className="text-[10px] leading-tight text-muted-foreground">
+                  {data.commissions.count === 0
+                    ? "none approved yet"
+                    : `${data.commissions.count} approved${data.commissions.nextPayoutYMD ? ` · ${fmtRelease(data.commissions.nextPayoutYMD)}` : ""}`}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
       {manualReconCard}
       {unrecon && (
         <>
