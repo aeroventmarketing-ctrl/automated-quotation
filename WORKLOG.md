@@ -1,3 +1,210 @@
+## 2026-09-02 · The books open on 1 August 2026, and the Sales Head's override answers to nobody's target but the rep's
+
+Two rulings from the owner, one confirming behaviour and one changing it.
+
+### 1. The override does not depend on the Sales Head's own target
+
+*"If incase JayR Basal was not able to meet the 1 million pesos target, Basal will still get the 0.25% cut from
+every sales role who meet the target."*
+
+Already true, and true for a structural reason worth naming: `withOverrides` reads **only the source rep's**
+month (`g.qualifies`) and never the head's. There is no code path in which the head's own selling could gate it.
+That is now said in a comment where the condition lives, on the page, and in three tests — the strongest being
+the one that asserts the override is **numerically identical** whether the head sold ₱0 or ₱5,000,000 that month.
+
+Proven on the running app in the bluntest available way: **Willy Ho, who has sold nothing at all**, was made
+Sales Head and earned ₱11,846.44 across 10 August rows and ₱4,464.29 in September — with no card of his own,
+because he has no sales of his own.
+
+### 2. Commissions start on 1 August 2026 — hidden, not deleted
+
+*"Show Sales order from August 1, 2026 onwards only and get and show the sales commission from that date onwards.
+Hide but do not delete all sales transactions and sales commissions before August 1, 2026."*
+
+`SALES_START_YMD` drops any sale recognised (rule 2) before that Manila day.
+
+**The placement is the whole point.** The filter runs *before* grouping, not after. Dropping the deals afterwards
+would leave a July sale counting toward a month's ₱1,000,000 target while contributing no commission — a target
+met on money the books are not supposed to see. Verified with a seeded July month of **₱2.8M, fully paid**: it
+would have qualified handsomely, and it produces exactly **zero rows**. A ₱500k deal dated **31 July** is gone
+too; the boundary is inclusive of 1 August and nothing else.
+
+Nothing is deleted. Pre-August sales, and any `Commission` payout rows already written against them, sit
+untouched; move the date back and they reappear.
+
+### Scoped to commissions on purpose
+
+The owner chose this over the wider options. A July order still in production, awaiting delivery or awaiting
+final payment stays fully visible and workable on Orders, the WON report and the P&L — only its *commission* is
+out of scope. Hiding it everywhere would have taken in-flight July work away from production and collections,
+which is a different and much worse thing than closing the commission books.
+
+This reverses an earlier judgement call recorded in this log — that commissions should never be date-gated,
+because "a commission is money someone earned, not an alert to be silenced". That reasoning was about the *alert
+go-live* gate and still holds for it; this is a deliberate opening balance for the commission scheme, set by the
+owner, and it is a separate constant precisely so the two cannot be confused.
+
+Six new tests (180 in the suite).
+
+## 2026-09-02 · The Sales Head's 0.25% override — and the unique constraint that said one sale owes one person
+
+Owner: *"For JayR Basal, add 0.25% from each sales who were able to meet the target. Commission Amount will be net
+of VAT."* Two rulings confirmed alongside it: the 0.25% is **on top of** the rep's 1.5% (the rep's payout is
+untouched; the company pays 1.75% on an overridden sale), and it is earned on **other** people's sales only — the
+head still takes 1.5% on anything they sell themselves, with no override stacked on it.
+
+### A role, not a name
+
+`sales_head` is a workflow role, assignable in Admin like every other. A name in the code breaks the day JayR
+changes seat, and there is already a screen for handing out roles.
+
+### ⚠️ Migration 0049 must be run in Supabase
+
+`Commission.quotationId` was **UNIQUE** — one payout record per order. That was true right up until this rule:
+an overridden sale owes **two** people. Uniqueness moves to `(quotationId, kind)`, with `kind` being `base` (the
+rep's 1.5%) or `override` (the head's 0.25%); same for counter sales. Existing rows default to `base`.
+
+Two knock-on details worth knowing:
+
+- Dropping a single-column `@unique` turns Prisma's relation from 1:1 into 1:many, so `Quotation.commission`
+  became `commissions`. Prisma refused to generate until that was fixed — a good error.
+- Prisma had created those uniques as **indexes**, not constraints. The migration drops both spellings
+  (`alter table … drop constraint if exists` *and* `drop index if exists`), which is what made it apply cleanly.
+
+**Until the migration is run the override cannot be paid out** — the row has nowhere to go. Everything else keeps
+working.
+
+### Where the override is computed, and why a Sales Head's query is not narrowed
+
+A rep's page narrows the quotation query to `preparedById`, so no other rep's deals are ever loaded. **That cannot
+be done for a Sales Head**: their 0.25% is derived from other people's qualifying months, so those deals have to
+be present. That is the point of the role rather than a leak — but it is a deliberate exception, so it is one
+named `scopeToRep`, with the narrowing still applied to everyone else, and the non-head months filtered back out
+before the view leaves the function.
+
+One override row is created per **approved** base deal. That single condition carries both halves of the owner's
+rule — the source month cleared ₱1,000,000, and the client has fully paid — and it makes the override release on
+exactly the same date as the commission it rides on.
+
+### The override is a separate card, not extra rows on the head's own
+
+Rule 1's quota is about what a person **sold**. An override row is somebody else's order, so counting it toward
+the head's own ₱1M would be wrong, and showing "₱1,000,000 short" on a card made entirely of other people's sales
+would be nonsense. So groups are keyed `person × month × kind`, an override card carries `monthGross` 0 and no
+quota badge, and each row names who sold it.
+
+### Checked on live-shaped data
+
+Rey Gil made Sales Head, with his own qualifying August (₱2.18M) alongside Sam Sales' (₱3.5M) and Admin Ana's
+short one (₱810k):
+
+| Card | What it shows |
+| --- | --- |
+| Rey Gil · August | his own 4 sales at **1.5%** → ₱30,900 — **no override on his own** |
+| Rey Gil · **Sales Head override** · August | 6 rows at **0.25%**, each "sold by Sam Sales" → ₱6,696.44 |
+| Rey Gil · **Sales Head override** · September | ₱4,464.29 = 0.25% of Admin Ana's ₱1,785,714.29 terms deal |
+| Admin Ana · August (₱190k short) | contributes **nothing** to the override |
+| Sam Sales · August | earned **₱40,178.56 — unchanged**; the override took nothing from him |
+
+Release dates on every override row match the rep's row exactly (15 Sep, 30 Sep, 15 Oct).
+
+And the constraint change, proven end to end: order **2941J** now carries two payout records — ₱4,017.86 to Sam
+Sales at 1.5% and ₱669.64 to Rey Gil at 0.25% — marked paid independently, which the old schema could not store.
+
+Nine new tests; the role harness reports the same capability table as before.
+
+*(The harness's own guard earned its keep on the way: a stale `.next` in its worktree made every page 500, and it
+printed "Every page refused — that is the server, not the policy" instead of a table of false negatives.)*
+
+## 2026-09-02 · The release calendar, pinned month-shape by month-shape
+
+Owner: *"commission release is 15th and 30th of the month. If there is 31st in the month, pay on 30th. If there is
+no 30th, let us say 29th or 28th, pay on 29th or 28th whichever is applicable."*
+
+`payoutDateFor` already did exactly this — `min(30, last day of the month)` is that whole sentence — so nothing
+changed in behaviour. What changed is that it is now **asserted**, because the test that appeared to cover it did
+not.
+
+### The test that looked like it covered this, and didn't
+
+*"rolls to the 30th from the 16th onward"* used **September**, a 30-day month. In a 30-day month the 30th is both
+"the 30th" and "the last day", so the test passed under either rule and proved neither. The 31-day case — the one
+the owner just named — was never asserted at all.
+
+The release days are now a table over every shape a month can have:
+
+| Month | Releases |
+| --- | --- |
+| January, August (31 days) | 15th and **30th** — never the 31st |
+| April, September (30 days) | 15th and 30th |
+| February | 15th and **28th** |
+| February, leap year | 15th and **29th** |
+
+Each row checks the 1st and 15th land on the 15th, the 16th and the release day itself land on the second release,
+and that the second release is never past the 30th nor past the month's own end.
+
+### The one case the wording doesn't reach: money that arrives on the 31st
+
+Both of that month's releases have already gone by, so it catches the next cycle — 31 Oct → 15 Nov. The 30th
+cannot pay out cash that had not arrived by the 30th. Called out in its own test rather than left as a surprise.
+
+The page now says the same thing out loud: *"A month with 31 days releases on the 30th; February on the 28th (29th
+in a leap year)."*
+
+## 2026-09-02 · A month's commissions cannot be released inside that month
+
+Owner, on Desiree Enigo's August card: *"Desiree meet the target on August 2026, commission release start should be
+September 15, 2026 onwards until every client who purchased in August 2026 has paid. Amount will automatically add
+in every month Desiree meet the target."*
+
+Her card was showing releases dated **Aug 11, Aug 15, Aug 30** — inside the very month being earned.
+
+### The defect was a missing floor, not a wrong calculation
+
+`payoutDateFor` only ever looked at one thing: the day the client's money landed. Paid 3 August → next release
+15 August. Correct in isolation, wrong in context — **because rule 1's ₱1,000,000 target is a fact about a
+finished month.** On 15 August the August total is still being added to. Paying against it is paying against a
+number that isn't final.
+
+So each deal's release is now the **later** of two dates:
+
+```
+release = max( next 15th/30th after full payment ,  15th of the month AFTER the sales month )
+```
+
+Desiree's August, worked through — the floor holds the early payers and the trickle carries the rest:
+
+| Client paid in full | Release |
+| --- | --- |
+| 3 August | **15 September** ← floor |
+| 28 August | **15 September** ← floor |
+| 20 September | 30 September |
+| 2 October | 15 October |
+
+That is *"September 15 onwards until every client who purchased in August has paid"*, exactly.
+
+### It does not disturb the original example
+
+The owner's first worked example — *"full payment on September 1, 2026 → commission payment September 15, 2026"* —
+gives the same answer under both readings (own = 15 Sept, floor = 15 Sept). It was always consistent with the
+floor; nothing in the earlier rules had to be re-decided.
+
+### Why the floor is the 15th of the next month, not the month's own last release
+
+A 30-day sales month would otherwise release on its own 30th — the final day of the month it is earned in — while
+a 31-day month waited for the 15th. Same rule, different answer depending on the calendar. The floor is
+`firstReleaseForMonth`, uniformly the 15th of the following month, so August, September and February all behave
+the same way.
+
+### Checked on screen
+
+Four deals in one qualifying August, clients settling on 3 Aug, 28 Aug, 20 Sept and 2 Oct, produced exactly the
+table above. The month footer reads **"Next release Sep 15, 2026"**, and a previously-seeded deal that used to say
+*Release Aug 30* now says *Release Sep 15*. Six new tests pin it, including the invariant that no release ever
+falls inside its own sales month whatever that month's length.
+
+Commissions already **paid** keep their record — a payout is history, not a recalculation.
+
 ## 2026-09-02 · A Commissions tile on My Dashboard, showing each salesperson only their own
 
 Owner: *"In sales Role Dashboard, put a tile at the right side of the orders tile, name the tile as Commissions.

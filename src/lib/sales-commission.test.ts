@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   payoutDateFor,
+  firstReleaseForMonth,
+  releaseDateFor,
   netOfVat,
   commissionOn,
   fullyPaidOn,
@@ -8,6 +10,10 @@ import {
   isPayable,
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
+  OVERRIDE_RATE_PCT,
+  overrideOn,
+  withOverrides,
+  SALES_START_YMD,
   type CommissionDeal,
 } from "./sales-commission";
 import type { SaleRecord } from "./sale";
@@ -26,6 +32,9 @@ function deal(over: Partial<CommissionDeal> = {}): CommissionDeal {
     salesMonth: "2026-08",
     recognisedYMD: "2026-08-10",
     basis: "payment",
+    payeeKind: "base",
+    sourceSalespersonName: null,
+    ratePct: 1.5,
     gross,
     net: over.net ?? Math.round((gross / 1.12) * 100) / 100,
     vatDeducted: true,
@@ -63,16 +72,87 @@ describe("rule 4 — released every 15th and 30th", () => {
     expect(payoutDateFor("2026-09-30")).toBe("2026-09-30");
   });
 
-  it("carries the 31st of a long month to the next 15th, and December to January", () => {
+  /**
+   * The owner's wording, month shape by month shape (2026-09-02): *"commission
+   * release is 15th and 30th of the month. If there is 31st in the month, pay on
+   * 30th. If there is no 30th, let us say 29th or 28th, pay on 29th or 28th
+   * whichever is applicable."*
+   *
+   * Asserted as a table across every shape a month can have, because the shapes
+   * are exactly where this goes wrong — the previous "rolls to the 30th" test
+   * used September, a 30-day month, so it never showed that a 31-day month must
+   * stop at the 30th.
+   */
+  const MONTH_SHAPES: { label: string; y: number; m: string; last: number; second: string }[] = [
+    { label: "31-day month pays on the 30th, never the 31st", y: 2026, m: "01", last: 31, second: "30" },
+    { label: "August, 31 days", y: 2026, m: "08", last: 31, second: "30" },
+    { label: "30-day month pays on the 30th", y: 2026, m: "04", last: 30, second: "30" },
+    { label: "February pays on the 28th — there is no 30th", y: 2026, m: "02", last: 28, second: "28" },
+    { label: "leap February pays on the 29th", y: 2028, m: "02", last: 29, second: "29" },
+  ];
+
+  for (const { label, y, m, last, second } of MONTH_SHAPES) {
+    it(label, () => {
+      const day = (d: number) => `${y}-${m}-${String(d).padStart(2, "0")}`;
+      // First half of the month → the 15th.
+      expect(payoutDateFor(day(1))).toBe(`${y}-${m}-15`);
+      expect(payoutDateFor(day(15))).toBe(`${y}-${m}-15`);
+      // Second half → this month's second release day, whatever the shape.
+      expect(payoutDateFor(day(16))).toBe(`${y}-${m}-${second}`);
+      expect(payoutDateFor(day(Number(second)))).toBe(`${y}-${m}-${second}`);
+      // The release day is never the 31st, and never later than the month's end.
+      expect(Number(second)).toBeLessThanOrEqual(30);
+      expect(Number(second)).toBeLessThanOrEqual(last);
+    });
+  }
+
+  it("carries money that lands on the 31st to the next cycle", () => {
+    // Both of October's releases (15th, 30th) are gone by the 31st — the 30th
+    // cannot pay out cash that had not arrived by the 30th.
     expect(payoutDateFor("2026-10-31")).toBe("2026-11-15");
     expect(payoutDateFor("2026-12-31")).toBe("2027-01-15");
   });
+});
 
-  it("uses the last day of February, which has no 30th", () => {
-    expect(payoutDateFor("2026-02-20")).toBe("2026-02-28"); // 2026 is not a leap year
-    expect(payoutDateFor("2028-02-20")).toBe("2028-02-29");
-    // …and never skips the cycle: the 28th still pays on the 28th.
-    expect(payoutDateFor("2026-02-28")).toBe("2026-02-28");
+describe("rule 4's floor — a month's commissions start after the month ends", () => {
+  it("starts August's releases on 15 September, per the owner's Desiree example", () => {
+    expect(firstReleaseForMonth("2026-08")).toBe("2026-09-15");
+    // Every August deal, however early the client paid, waits for 15 September.
+    expect(releaseDateFor("2026-08-03", "2026-08")).toBe("2026-09-15");
+    expect(releaseDateFor("2026-08-28", "2026-08")).toBe("2026-09-15");
+    expect(releaseDateFor("2026-08-31", "2026-08")).toBe("2026-09-15");
+  });
+
+  it("still honours the owner's original worked example", () => {
+    // "client made a full payment on September 1, 2026 → September 15, 2026"
+    expect(releaseDateFor("2026-09-01", "2026-08")).toBe("2026-09-15");
+  });
+
+  it("trickles on past the floor as each client settles", () => {
+    // "…onwards until every client who purchased in August 2026 has paid."
+    expect(releaseDateFor("2026-09-20", "2026-08")).toBe("2026-09-30");
+    expect(releaseDateFor("2026-10-02", "2026-08")).toBe("2026-10-15");
+    expect(releaseDateFor("2027-01-20", "2026-08")).toBe("2027-01-30");
+  });
+
+  it("rolls a December sales month into January", () => {
+    expect(firstReleaseForMonth("2026-12")).toBe("2027-01-15");
+    expect(releaseDateFor("2026-12-05", "2026-12")).toBe("2027-01-15");
+  });
+
+  it("never releases inside the sales month, whatever its length", () => {
+    for (const [month, paid] of [["2026-02", "2026-02-20"], ["2026-04", "2026-04-30"], ["2026-09", "2026-09-16"]]) {
+      expect(releaseDateFor(paid, month) > `${month}-31`).toBe(true);
+    }
+  });
+
+  it("applies the floor through the grouping, not just in the helper", () => {
+    // Desiree's August, in miniature: qualified, client paid 3 August. The card
+    // used to say "Release Aug 15" — a date inside the month it was earned in.
+    const months = groupByPersonMonth([deal({ gross: 1_200_000, salesMonth: "2026-08", fullyPaidYMD: "2026-08-03" })]);
+    expect(months[0].qualifies).toBe(true);
+    expect(months[0].deals[0].payoutYMD).toBe("2026-09-15");
+    expect(months[0].nextPayoutYMD).toBe("2026-09-15");
   });
 });
 
@@ -214,5 +294,153 @@ describe("rule 1 — the ₱1,000,000 month, and rule 5's automatic approval", (
     expect(months[0].earned).toBe(15_000);
     expect(months[0].paid).toBe(15_000);
     expect(months[0].unpaid).toBe(0);
+  });
+});
+
+describe("the Sales Head's 0.25% override", () => {
+  const HEAD = new Map([["head", "JayR"]]);
+  /** Two reps: Rey qualifies (₱1.12M), Des does not (₱500k). Both fully paid. */
+  const team = () => [
+    deal({ refId: "rey1", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
+    deal({ refId: "des1", salespersonId: "des", salespersonName: "Des", gross: 500_000, net: 500_000 }),
+  ];
+
+  it("pays 0.25% of the same net base the rep's 1.5% is paid on", () => {
+    expect(OVERRIDE_RATE_PCT).toBe(0.25);
+    expect(overrideOn(1_000_000)).toBe(2_500);
+    expect(commissionOn(1_000_000)).toBe(15_000);
+  });
+
+  it("is ON TOP of the rep's 1.5% — the rep's payout is untouched", () => {
+    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const rey = months.find((m) => m.salespersonId === "rey" && m.kind === "base")!;
+    const head = months.find((m) => m.salespersonId === "head")!;
+    expect(rey.earned).toBe(15_000); // exactly what it was without a Sales Head
+    expect(head.earned).toBe(2_500);
+    // The company pays 1.75% on that sale, split between two people.
+    expect(rey.earned + head.earned).toBe(commissionOn(1_000_000) + overrideOn(1_000_000));
+  });
+
+  it("earns nothing from a rep who missed the target", () => {
+    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const head = months.find((m) => m.salespersonId === "head")!;
+    // Only Rey's qualifying deal is overridden; Des's ₱500k month is not.
+    expect(head.deals).toHaveLength(1);
+    expect(head.deals[0].sourceSalespersonName).toBe("Rey");
+  });
+
+  it("earns nothing until the client has fully paid, like the rep's own", () => {
+    const owing = [deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, fullyPaidYMD: null })];
+    expect(groupByPersonMonth(withOverrides(owing, HEAD)).some((m) => m.salespersonId === "head")).toBe(false);
+  });
+
+  it("does NOT override the Sales Head's own sales — they earn 1.5% there, not 1.75%", () => {
+    const own = [deal({ refId: "h1", salespersonId: "head", salespersonName: "JayR", gross: 1_120_000, net: 1_000_000 })];
+    const months = groupByPersonMonth(withOverrides(own, HEAD));
+    expect(months).toHaveLength(1);
+    expect(months[0].kind).toBe("base");
+    expect(months[0].earned).toBe(15_000);
+  });
+
+  it("keeps the override off the head's own quota — it is not their sale", () => {
+    // JayR sells ₱600k himself (short of ₱1M) while Rey's ₱1.12M month qualifies.
+    const mixed = [
+      deal({ refId: "h1", salespersonId: "head", salespersonName: "JayR", gross: 600_000, net: 600_000 }),
+      deal({ refId: "rey1", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
+    ];
+    const months = groupByPersonMonth(withOverrides(mixed, HEAD));
+    const own = months.find((m) => m.salespersonId === "head" && m.kind === "base")!;
+    const ovr = months.find((m) => m.salespersonId === "head" && m.kind === "override")!;
+    // His own month is still short, so his own sale earns nothing…
+    expect(own.monthGross).toBe(600_000);
+    expect(own.qualifies).toBe(false);
+    expect(own.earned).toBe(0);
+    // …but the override on Rey's qualifying month is unaffected by that.
+    expect(ovr.monthGross).toBe(0);
+    expect(ovr.earned).toBe(2_500);
+  });
+
+  it("releases on the same date as the commission it rides on", () => {
+    const months = groupByPersonMonth(withOverrides(team(), HEAD));
+    const rey = months.find((m) => m.salespersonId === "rey")!.deals[0];
+    const ovr = months.find((m) => m.salespersonId === "head")!.deals[0];
+    expect(ovr.payoutYMD).toBe(rey.payoutYMD);
+    expect(ovr.salesMonth).toBe(rey.salesMonth);
+  });
+
+  it("carries its own payout record, not the rep's", () => {
+    const paidTeam = team().map((d) => ({ ...d, paid: true, paidByName: "Acctg", commissionId: "c1" }));
+    const months = groupByPersonMonth(withOverrides(paidTeam, HEAD));
+    const ovr = months.find((m) => m.salespersonId === "head")!.deals[0];
+    // The rep having been paid must not mark the head's override paid.
+    expect(ovr.paid).toBe(false);
+    expect(ovr.commissionId).toBeNull();
+    expect(ovr.payeeKind).toBe("override");
+  });
+
+  it("does nothing at all when no one holds the Sales Head role", () => {
+    expect(withOverrides(team(), new Map())).toHaveLength(2);
+  });
+});
+
+describe("the books open on 1 August 2026", () => {
+  it("starts where the owner said", () => {
+    expect(SALES_START_YMD).toBe("2026-08-01");
+  });
+
+  it("is a boundary the grouping never sees — a hidden sale cannot help meet a target", () => {
+    // The cutoff is applied in `buildCommissions` BEFORE grouping, so this is the
+    // property that matters: whatever survives it is all rule 1 counts. A July
+    // sale reaching the grouper would silently lift a July or August month over
+    // ₱1,000,000 on money the books are not supposed to see.
+    const kept = [deal({ refId: "aug", recognisedYMD: "2026-08-01", salesMonth: "2026-08", gross: 1_200_000 })];
+    const months = groupByPersonMonth(kept);
+    expect(months).toHaveLength(1);
+    expect(months[0].monthGross).toBe(1_200_000);
+  });
+
+  it("keeps 1 August itself — the boundary is inclusive", () => {
+    expect("2026-08-01" < SALES_START_YMD).toBe(false);
+    expect("2026-07-31" < SALES_START_YMD).toBe(true);
+  });
+});
+
+describe("the Sales Head's own target does not gate their override", () => {
+  const HEAD = new Map([["head", "JayR"]]);
+
+  /**
+   * Owner (2026-09-02): *"If incase JayR Basal was not able to meet the 1 million
+   * pesos target, Basal will still get the 0.25% cut from every sales role who
+   * meet the target."*
+   */
+  it("pays the override in full on a month where the head sold nothing at all", () => {
+    const months = groupByPersonMonth(
+      withOverrides([deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 })], HEAD),
+    );
+    const head = months.find((m) => m.salespersonId === "head")!;
+    expect(head.kind).toBe("override");
+    expect(head.earned).toBe(2_500);
+  });
+
+  it("pays it in full on a month where the head sold, but fell short", () => {
+    const months = groupByPersonMonth(withOverrides([
+      deal({ refId: "h", salespersonId: "head", salespersonName: "JayR", gross: 10_000, net: 10_000 }),
+      deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 }),
+    ], HEAD));
+    const own = months.find((m) => m.salespersonId === "head" && m.kind === "base")!;
+    const ovr = months.find((m) => m.salespersonId === "head" && m.kind === "override")!;
+    expect(own.qualifies).toBe(false); // ₱10,000 — nowhere near
+    expect(own.earned).toBe(0);        // …so his own sale earns him nothing
+    expect(ovr.earned).toBe(2_500);    // …and the override is untouched by that
+  });
+
+  it("pays the same override whether the head qualified or not", () => {
+    const rey = () => deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_120_000, net: 1_000_000 });
+    const short = groupByPersonMonth(withOverrides([rey()], HEAD));
+    const rich = groupByPersonMonth(withOverrides([
+      rey(), deal({ refId: "h", salespersonId: "head", salespersonName: "JayR", gross: 5_000_000, net: 5_000_000 }),
+    ], HEAD));
+    const of = (ms: typeof short) => ms.find((m) => m.salespersonId === "head" && m.kind === "override")!.earned;
+    expect(of(short)).toBe(of(rich));
   });
 });

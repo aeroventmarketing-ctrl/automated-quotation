@@ -233,7 +233,8 @@ model Quotation {
   approvedBy       User?             @relation("QuotationApprovedBy", fields: [approvedById], references: [id])
   items            QuotationItem[]
   purchaseRequests PurchaseRequest[]
-  commission       Commission?
+  // Two at most: the rep's 1.5% and the Sales Head's 0.25% override.
+  commissions      Commission[]
 
   @@index([status])
   @@index([inquiryId])
@@ -467,16 +468,25 @@ model CashRequest {
  * credited to the order's salesperson and attributed to the close month.
  * Paid 15 days after that month ends.
  */
+/// The record that a commission was PAID OUT. Entitlement itself is computed live
+/// from the confirmed sales (`lib/sales-commission`) — this table never decides
+/// who is owed what, only what has been released.
+///
+/// One sale can now owe TWO people: the rep who closed it (kind "base", 1.5%) and
+/// the Sales Head's override on it (kind "override", 0.25%). That is why the
+/// uniqueness is (quotationId, kind) rather than quotationId alone.
 model Commission {
   id              String    @id @default(cuid())
-  quotationId     String?   @unique // set for an order commission (null for a counter sale)
-  counterSaleId   String?   @unique // set for a walk-in counter-sale commission
+  quotationId     String? // set for an order commission (null for a counter sale)
+  counterSaleId   String? // set for a walk-in counter-sale commission
+  /// "base" = the salesperson's own 1.5%; "override" = the Sales Head's 0.25%.
+  kind            String    @default("base")
   salespersonId   String
   salespersonName String
   orderValue      Decimal   @db.Decimal(14, 2)
   ratePct         Decimal   @default(1.5) @db.Decimal(5, 2)
   amount          Decimal   @db.Decimal(14, 2)
-  salesMonth      String // "YYYY-MM" (close month)
+  salesMonth      String // "YYYY-MM" (the sale's recognition month)
   computedAt      DateTime  @default(now())
   paid            Boolean   @default(false)
   paidAt          DateTime?
@@ -485,6 +495,8 @@ model Commission {
   quotation   Quotation?   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   counterSale CounterSale? @relation(fields: [counterSaleId], references: [id], onDelete: Cascade)
 
+  @@unique([quotationId, kind])
+  @@unique([counterSaleId, kind])
   @@index([salesMonth])
   @@index([salespersonId])
   @@index([paid])
@@ -780,14 +792,12 @@ enum ProductChangeStatus {
 
 /**
  * A product add / save / delete waiting on the price owner.
- *
  * The supplier price lives inside the product record, so a Purchaser saving a
  * product is one keystroke away from the figure a purchase order defaults to.
  * Rather than let the save through and strip the prices out of it silently, the
  * whole change is parked here and applied verbatim once an Admin or the Payment
  * Approver confirms it (see lib/price-authority). A price owner saving their own
  * change never lands here — they are the confirmer.
- *
  * `payload` is the proposed product; `before` is a snapshot taken at propose
  * time so the reviewer can see what actually changes.
  */
@@ -900,9 +910,10 @@ model CounterSale {
   voidedByName    String?
   voidedAt        DateTime?
 
-  customer   Customer          @relation(fields: [customerId], references: [id])
-  items      CounterSaleItem[]
-  commission Commission?
+  customer    Customer          @relation(fields: [customerId], references: [id])
+  items       CounterSaleItem[]
+  // Two at most: the rep's 1.5% and the Sales Head's 0.25% override.
+  commissions Commission[]
 
   @@index([status])
   @@index([customerId])

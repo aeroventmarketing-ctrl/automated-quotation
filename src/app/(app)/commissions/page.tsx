@@ -13,6 +13,8 @@ import {
   isPayable,
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
+  OVERRIDE_RATE_PCT,
+  SALES_START_YMD,
   type CommissionMonth,
   type CommissionDeal,
 } from "@/lib/sales-commission";
@@ -91,11 +93,17 @@ export default async function CommissionsPage() {
           <p><span className="font-semibold text-foreground">1 · The month.</span> The salesperson&apos;s sales for the month must exceed {formatCurrency(MONTHLY_QUOTA_GROSS, currency)} gross. Below that, nothing in the month is earned.</p>
           <p><span className="font-semibold text-foreground">2 · The month it counts in.</span> A terms client counts in the month their PO was submitted; everyone else in the month of their down payment.</p>
           <p><span className="font-semibold text-foreground">3 · Full payment.</span> The client must have paid the order in full — whenever that happens.</p>
-          <p><span className="font-semibold text-foreground">4 · Release.</span> On the next 15th or 30th after full payment (February releases on the last day).</p>
+          <p><span className="font-semibold text-foreground">4 · Release.</span> A month&apos;s commissions start on the <strong>15th of the following month</strong> — the target isn&apos;t settled until the month ends — then on each 15th and 30th as the remaining clients pay in full. A month with 31 days releases on the 30th; February on the 28th (29th in a leap year).</p>
           <p><span className="font-semibold text-foreground">5 · Approval.</span> Automatic — meeting 1–3 approves it; no one signs off the entitlement.</p>
+          <p className="sm:col-span-2"><span className="font-semibold text-foreground">The Sales Head&apos;s override.</span> Whoever holds the <em>Sales Head</em> role also earns {OVERRIDE_RATE_PCT}% of every <em>other</em> salesperson&apos;s qualifying month, on the same net-of-VAT base and released on the same dates. It is on top of the {COMMISSION_RATE_PCT}% — the salesperson&apos;s own commission is untouched — never applies to the Sales Head&apos;s own sales, and is <strong>not conditional on the Sales Head hitting their own target</strong>.</p>
           <p><span className="font-semibold text-foreground">6 · The rate.</span> {COMMISSION_RATE_PCT}% of gross sales less VAT. VAT is deducted only where the client was charged it — a <em>VAT exclusive</em> or <em>zero rated</em> order pays {COMMISSION_RATE_PCT}% of its full amount.</p>
         </CardContent>
       </Card>
+
+      <p className="text-xs text-muted-foreground">
+        Commissions are counted from <strong>{formatDate(SALES_START_YMD)}</strong> onwards. Earlier sales are
+        hidden here, not deleted — they remain on Orders, the WON report and the P&amp;L.
+      </p>
 
       {failed ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -117,12 +125,12 @@ export default async function CommissionsPage() {
 
           {months.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
-              No confirmed sales yet. A deal appears here in the month its PO (terms) or down payment (everyone else) landed.
+              No confirmed sales since {formatDate(SALES_START_YMD)}. A deal appears here in the month its PO (terms) or down payment (everyone else) landed.
             </CardContent></Card>
           ) : (
             <div className="space-y-4">
               {months.map((m) => (
-                <MonthCard key={`${m.salespersonId}-${m.salesMonth}`} month={m} currency={currency} canManage={canManage} />
+                <MonthCard key={`${m.salespersonId}-${m.salesMonth}-${m.kind}`} month={m} currency={currency} canManage={canManage} />
               ))}
             </div>
           )}
@@ -133,14 +141,24 @@ export default async function CommissionsPage() {
 }
 
 function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; currency: string; canManage: boolean }) {
+  const isOverride = m.kind === "override";
   return (
-    <Card className={m.qualifies ? "border-emerald-600/30" : ""}>
+    <Card className={isOverride ? "border-violet-600/30" : m.qualifies ? "border-emerald-600/30" : ""}>
       <CardHeader className="flex-row flex-wrap items-baseline justify-between gap-2 space-y-0 pb-3">
         <div>
-          <CardTitle className="text-base">{m.salespersonName}</CardTitle>
-          <p className="text-xs text-muted-foreground">{monthLabel(m.salesMonth)} · {m.deals.length} sale{m.deals.length === 1 ? "" : "s"}</p>
+          <CardTitle className="text-base">
+            {m.salespersonName}
+            {isOverride && <span className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-950 dark:text-violet-300">Sales Head override</span>}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            {monthLabel(m.salesMonth)} · {m.deals.length} sale{m.deals.length === 1 ? "" : "s"}
+            {isOverride ? ` · ${OVERRIDE_RATE_PCT}% of other salespeople's qualifying months` : ""}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-right">
+        {/* An override card has no quota of its own — every row on it exists
+            because SOMEONE ELSE's month already cleared ₱1,000,000. Showing
+            "₱1,000,000 short" there would be nonsense. */}
+        <div className={`flex flex-wrap items-center gap-2 text-right ${isOverride ? "hidden" : ""}`}>
           <div>
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Sales this month</p>
             <p className="text-sm font-semibold tabular-nums">{formatCurrency(m.monthGross, currency)}</p>
@@ -164,20 +182,25 @@ function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; 
                 <TableHead>Client</TableHead>
                 <TableHead className="text-right">Gross</TableHead>
                 <TableHead className="text-right">Commission base</TableHead>
-                <TableHead className="text-right">{COMMISSION_RATE_PCT}%</TableHead>
+                <TableHead className="text-right">{isOverride ? `${OVERRIDE_RATE_PCT}%` : `${COMMISSION_RATE_PCT}%`}</TableHead>
                 <TableHead>Status</TableHead>
                 {canManage && <TableHead className="text-right">Action</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {m.deals.map((d) => (
-                <TableRow key={`${d.kind}-${d.refId}`} id={`commission-${d.kind}-${d.refId}`} className="scroll-mt-24 target:bg-primary/10">
+                <TableRow key={`${d.kind}-${d.refId}-${d.payeeKind}`} id={`commission-${d.kind}-${d.refId}-${d.payeeKind}`} className="scroll-mt-24 target:bg-primary/10">
                   <TableCell className="whitespace-nowrap text-sm">
                     {formatDate(d.recognisedYMD)}
                     <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">{basisLabel[d.basis]}</span>
                   </TableCell>
                   <TableCell><Link href={d.href} className="text-primary hover:underline">{d.refLabel}</Link></TableCell>
-                  <TableCell className="text-sm">{d.company}</TableCell>
+                  <TableCell className="text-sm">
+                    {d.company}
+                    {d.sourceSalespersonName && (
+                      <span className="block text-[10px] text-muted-foreground">sold by {d.sourceSalespersonName}</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(d.gross, currency)}</TableCell>
                   {/* A VAT-exclusive / zero-rated deal has no VAT to strip, so its
                       base equals its gross. Saying so stops the repeated figure
@@ -194,7 +217,7 @@ function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; 
                   <TableCell><DealStatus deal={d} qualifies={m.qualifies} currency={currency} /></TableCell>
                   {canManage && (
                     <TableCell className="text-right">
-                      {d.approved ? <MarkPaid kind={d.kind} refId={d.refId} paid={d.paid} /> : null}
+                      {d.approved ? <MarkPaid kind={d.kind} refId={d.refId} payeeKind={d.payeeKind} paid={d.paid} /> : null}
                     </TableCell>
                   )}
                 </TableRow>

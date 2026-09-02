@@ -134,9 +134,12 @@ async function ensureCommissionRow(quotationId: string): Promise<void> {
       .then((v) => allDeals(v).find((d) => d.kind === "order" && d.refId === quotationId) ?? null);
     if (!deal) return; // no confirmed sale to commission
     await prisma.commission.upsert({
-      where: { quotationId },
+      // "base" — the rep's own 1.5%. The Sales Head's 0.25% override on this same
+      // order is a separate row (kind "override"), written when it is paid out.
+      where: { quotationId_kind: { quotationId, kind: "base" } },
       create: {
         quotationId,
+        kind: "base",
         salespersonId: q.preparedById,
         salespersonName: q.preparedBy.name,
         orderValue: deal.net,
@@ -4449,7 +4452,10 @@ export async function receiveCommission(quotationId: string): Promise<void> {
   // rather than update.
   try {
     await ensureCommissionRow(quotationId);
-    await prisma.commission.update({ where: { quotationId }, data: { paid: true, paidAt: new Date(), paidByName: user.name } });
+    await prisma.commission.update({
+      where: { quotationId_kind: { quotationId, kind: "base" } },
+      data: { paid: true, paidAt: new Date(), paidByName: user.name },
+    });
   } catch {
     /* commission row not present — order-side sign-off still recorded */
   }
