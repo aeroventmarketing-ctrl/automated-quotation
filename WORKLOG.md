@@ -1,3 +1,29 @@
+## 2026-09-03 · "ONLY" is how our checks close the line
+
+Owner: *"per 00/100 we use the words 'only' in check."*
+
+Already handled — `normWords` has stripped `ONLY` since the words comparison was written, so this needed no
+behaviour change. Checked against every form a hand or a printer produces it in, rather than assumed:
+
+| words on the check | ₱2,180.00 |
+| --- | --- |
+| `TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY` | ✓ |
+| `TWO THOUSAND ONE HUNDRED EIGHTY ONLY` | ✓ |
+| `Two Thousand One Hundred Eighty Pesos Only` | ✓ |
+| `TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY.` | ✓ |
+| `** TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY **` | ✓ |
+| `TWO THOUSAND ONE HUNDRED EIGHTY AND 00/100` | ✓ |
+
+All eight forms are now pinned as tests, so the house style can't be normalised away by a later tidy-up of that
+regex.
+
+**"ONLY" closes the line; it never excuses centavos that are actually there.** A check for ₱2,160.54 whose
+words read "…SIXTY PESOS ONLY" is genuinely wrong and is still flagged — that case is pinned alongside.
+
+The reader's prompt now names the convention too, so the model returns the line **verbatim** instead of quietly
+converting "PESOS ONLY" into "AND 00/100". The comparison treats the two as equal either way, but what gets
+stored should be what the check actually says.
+
 ## 2026-09-03 · The check equals the PO's NET — confirmed, and a round amount stopped reading as a mismatch
 
 Owner: *"amount in PO and amount in check should be same."*

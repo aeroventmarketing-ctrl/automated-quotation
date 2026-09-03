@@ -49,7 +49,7 @@ The fields on the check, and exactly what each one means:
 - PAY TO THE ORDER OF — the payee, i.e. the supplier being paid. Return the company name as printed.
 - DATE — the boxed date, usually as MM-DD-YYYY in separate character boxes (e.g. 1 0 - 1 7 - 2 0 2 6 = 17 October 2026). THIS IS THE DATE THE CHECK CLEARS, not the date it was written — company checks here are commonly post-dated, so a date weeks or months in the future is normal and must be read as printed. Return it as YYYY-MM-DD.
 - AMOUNT IN FIGURES — the number in the box beside the "P" peso sign, e.g. "20,827.37".
-- AMOUNT IN WORDS — the line above "PESOS", spelled out, e.g. "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100". Return it VERBATIM as printed.
+- AMOUNT IN WORDS — the line above "PESOS", spelled out, e.g. "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100". Return it VERBATIM as printed, including however the line is closed. On these checks a whole-peso amount ends with the word "ONLY" ("TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY") where other checks would write "AND 00/100" — do NOT convert one into the other, and do not drop a trailing "ONLY", asterisks or filler characters. Copy the line.
 
 CRITICAL RULES:
 - Read the amount in figures and the amount in words INDEPENDENTLY. Do NOT correct one to match the other, and do NOT compute either from the other. If they disagree, return both exactly as printed and add a warning — the disagreement is the useful signal.

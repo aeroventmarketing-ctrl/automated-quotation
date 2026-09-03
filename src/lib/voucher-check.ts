@@ -214,11 +214,16 @@ export function sameCompany(a: string | null | undefined, b: string | null | und
  * and spacing ignored, along with "PESOS" / "ONLY" and a ZERO-centavo tail.
  *
  * That last one matters. Our speller writes a whole amount as
- * "TWO THOUSAND ONE HUNDRED EIGHTY" with no tail, but a check ALWAYS carries one
- * — "AND 00/100", "AND NO/100" — because a blank there is where a fraud gets
- * written in. Without dropping it, every check for a round peso amount would be
- * reported as disagreeing with its own figure. A non-zero tail is kept: "AND
- * 54/100" is part of the amount.
+ * "TWO THOUSAND ONE HUNDRED EIGHTY" with no tail, but a check ALWAYS closes the
+ * line, because a blank there is where a fraud gets written in. The owner's
+ * house style is the word **ONLY** — *"per 00/100 we use the words 'only' in
+ * check"* — while other banks and check printers write "AND 00/100" or "AND
+ * NO/100". All of them mean zero centavos, so all of them are dropped, or every
+ * check for a round peso amount would be reported as disagreeing with its own
+ * figure.
+ *
+ * A NON-zero tail is kept: "AND 54/100" is part of the amount, and a check whose
+ * words say "…SIXTY PESOS ONLY" for ₱2,160.54 is genuinely wrong.
  */
 const normWords = (s: string) =>
   s
