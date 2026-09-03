@@ -178,9 +178,51 @@ export function coerceCheckDoc(v: unknown): CheckDoc | null {
   };
 }
 
-/** Every check number read off this PO's photos, in upload order. */
+/**
+ * Every check number read off this PO's photos, in upload order — each in BOTH
+ * the form it was read and the canonical 10-digit form.
+ *
+ * Both, because this feeds the Purchasing search box: someone reading the
+ * printed check types `0000486625`, someone reading the register types `486625`,
+ * and each has to find the same PO.
+ */
 export function checkNumbers(docs: CheckDoc[]): string[] {
-  return docs.map((d) => d.read?.checkNo).filter((n): n is string => !!n);
+  const out: string[] = [];
+  for (const d of docs) {
+    const raw = d.read?.checkNo;
+    if (!raw) continue;
+    out.push(raw);
+    const canonical = formatCheckNo(raw);
+    if (canonical && canonical !== raw) out.push(canonical);
+  }
+  return out;
+}
+
+/**
+ * How many digits a check number carries on our bank's checks, leading zeros
+ * included — the owner's rule: *"In the file I sent you is 6 digit check number
+ * with 0000 before the first number. We will be using the 10 digit check number
+ * from now on."*
+ *
+ * Their hand-kept register abbreviates to the six significant digits (486625);
+ * the check itself reads 0000486625. Ten is the canonical form.
+ */
+export const CHECK_NO_DIGITS = 10;
+
+/**
+ * A check number as it should be SHOWN: the canonical 10-digit form.
+ *
+ * Padding is applied only to a plain run of digits shorter than ten — the case
+ * where the printed zeros were dropped, by the reader or by a person typing the
+ * short form. Anything longer, or carrying non-digits, is left exactly as it
+ * came: a number that doesn't fit the pattern is more likely a misread than
+ * something to pad into looking correct.
+ */
+export function formatCheckNo(no: string | null | undefined): string | null {
+  if (!no) return null;
+  const trimmed = no.trim();
+  if (!/^\d+$/.test(trimmed)) return trimmed;
+  return trimmed.length >= CHECK_NO_DIGITS ? trimmed : trimmed.padStart(CHECK_NO_DIGITS, "0");
 }
 
 /**
@@ -402,7 +444,7 @@ export function checkIssues(opts: {
   if (r.checkNo) {
     const mine = normalizeCheckNo(r.checkNo);
     if (mine && (opts.usedCheckNos ?? []).some((n) => normalizeCheckNo(n) === mine)) {
-      issues.push({ key: "duplicate", message: `Check No. ${r.checkNo} is already recorded on another purchase order.` });
+      issues.push({ key: "duplicate", message: `Check No. ${formatCheckNo(r.checkNo)} is already recorded on another purchase order.` });
     }
   }
   return issues;

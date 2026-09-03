@@ -1,3 +1,43 @@
+## 2026-09-03 · Ten digits is the check number
+
+Owner: *"In the training we have done. I trained the AI to read 10 digit check number. In the file I sent you is
+6 digit check number with 0000 before the first number. We will be using the 10 digit check number from now on."*
+
+Their hand-kept register abbreviates to the six significant digits (`486625`); the check itself reads
+`0000486625`. The system was storing and showing **whatever the reader returned**, so a dropped-zeros read would
+have sat in the column next to a full one and looked like two different formats — or worse, like two different
+checks.
+
+### Canonical on the way out, tolerant on the way in
+
+`formatCheckNo()` pads a plain run of fewer than ten digits to ten. Every place the number is shown now goes
+through it: the monitoring table, the PO row, the "Read check No. …" confirmation, the duplicate warning, and
+the My Dashboard notice.
+
+Padding applies **only** to a plain run of digits shorter than ten. Anything longer, or carrying punctuation, is
+left exactly as it came — `01053-313-0` is a BRSTN, not a check number, and padding an ill-fitting value into
+looking correct is how a misread stops looking like one.
+
+The raw read is **not** rewritten in storage. What the AI returned stays as the record of what it saw; the
+canonical form is a display concern. The duplicate test was already immune either way — `normalizeCheckNo`
+drops leading zeros before comparing, so `486625` and `0000486625` have always been the same check to it.
+
+`checkNumbers()` now feeds the Purchasing search box **both** forms, because whoever is holding the printed
+check types ten digits and whoever is reading the register types six, and both have to find the same PO.
+
+The reader's prompt now states the count outright — *"It is TEN DIGITS INCLUDING LEADING ZEROS … six
+significant digits padded with zeros. Return all ten"* — rather than only showing an example and hoping.
+
+Verified in the harness with one check stored short and one stored canonical: both render `0000486625` /
+`0000486624`, and each PO is found by either form typed into the search box, with no cross-matching.
+
+### An environment trap worth recording
+
+The harness came up with **every cell in every grid `false`** — its own "the server, not the policy" signal. The
+cause was not the code: a `next build` had left a `.next/` in the working tree, the harness tar-copies that
+tree, and the copied build was missing `routes-manifest.json`, so every page 500'd. `rm -rf .next` before
+booting the harness, not just `rm -rf /var/tmp/aq-role-harness`.
+
 ## 2026-09-03 · The check screen takes the owner's own register columns
 
 The sample workbook arrived encrypted; with the password it opened as **two different files**. The first,

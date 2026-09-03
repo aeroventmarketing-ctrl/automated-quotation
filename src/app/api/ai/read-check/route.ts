@@ -46,7 +46,7 @@ const SYSTEM = `You read a photo of a PHILIPPINE COMPANY CHECK (cheque) issued b
 The fields on the check, and exactly what each one means:
 - ACCOUNT NO. — the account the check is drawn on (printed top-left). Digits only, keep leading zeros.
 - ACCOUNT NAME — the account holder. On our checks this is our own company, "AEROVENT FANS AND BLOWERS MANUFACTURING". Read what is printed, even if it is not us.
-- CHECK NO. — the pre-printed check number (top-right, usually beside a BRSTN number). KEEP ALL LEADING ZEROS exactly as printed, e.g. "0000486722". Do NOT return the BRSTN / routing number (the one with dashes, e.g. "01053-313-0") as the check number.
+- CHECK NO. — the pre-printed check number (top-right, usually beside a BRSTN number). It is TEN DIGITS INCLUDING LEADING ZEROS, e.g. "0000486722" — six significant digits padded with zeros. Return all ten; do NOT strip the leading zeros and do not return only the significant digits. Do NOT return the BRSTN / routing number (the one with dashes, e.g. "01053-313-0") as the check number.
 - PAY TO THE ORDER OF — the payee, i.e. the supplier being paid. Return the company name as printed.
 - DATE — the boxed date, usually as MM-DD-YYYY in separate character boxes (e.g. 1 0 - 1 7 - 2 0 2 6 = 17 October 2026). THIS IS THE DATE THE CHECK CLEARS, not the date it was written — company checks here are commonly post-dated, so a date weeks or months in the future is normal and must be read as printed. Return it as YYYY-MM-DD.
 - AMOUNT IN FIGURES — the number in the box beside the "P" peso sign, e.g. "20,827.37".
@@ -65,7 +65,7 @@ const USER_PROMPT = `From the attached photo of a check, return JSON with this e
 {
   "accountNo": string|null,     // Account No., digits only, leading zeros kept
   "accountName": string|null,   // Account Name as printed
-  "checkNo": string|null,       // Check No. as printed, leading zeros kept (NOT the BRSTN)
+  "checkNo": string|null,       // Check No. as printed — all 10 digits, leading zeros kept (NOT the BRSTN)
   "payee": string|null,         // Pay to the order of — the supplier
   "date": string|null,          // YYYY-MM-DD from the DATE boxes (the clearing date; may be in the future)
   "amount": number|null,        // the figure in the peso box

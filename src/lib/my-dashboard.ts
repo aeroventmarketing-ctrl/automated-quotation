@@ -23,7 +23,7 @@ import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, 
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
-import { coerceCheckDocs, checkMissing, checkAttachableAt } from "@/lib/voucher-check";
+import { coerceCheckDocs, checkMissing, checkAttachableAt, formatCheckNo } from "@/lib/voucher-check";
 import { buildCheckWatch, needsAttention } from "@/lib/check-monitor";
 import { getSuppliers } from "@/lib/suppliers";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
@@ -496,7 +496,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         if (!needsAttention(row.state)) continue;
         tasks.push({
           key: `check-clearing:${row.prId}:${row.path}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
-          title: `${row.supplier || "Supplier"}${row.checkNo ? ` · Check No. ${row.checkNo}` : ""}`,
+          title: `${row.supplier || "Supplier"}${row.checkNo ? ` · Check No. ${formatCheckNo(row.checkNo)}` : ""}`,
           action:
             row.state === "overdue"
               ? "Check has not cleared — confirm or move the date"

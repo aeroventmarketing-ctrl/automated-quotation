@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { CHECK_STATE_LABEL, needsAttention, type CheckWatchRow, type CheckWatchSummary } from "@/lib/check-monitor";
+import { formatCheckNo } from "@/lib/voucher-check";
 import { markCheckCleared, rescheduleCheck, unclearCheck } from "../orders/actions";
 
 const TONE: Record<CheckWatchRow["state"], string> = {
@@ -153,7 +154,7 @@ export function CheckMonitor({
                         {r.poNumber}
                       </Link>
                     </td>
-                    <td className="px-3 py-2 font-medium tabular-nums">{r.checkNo ?? <span className="text-muted-foreground">not read</span>}</td>
+                    <td className="px-3 py-2 font-medium tabular-nums">{formatCheckNo(r.checkNo) ?? <span className="text-muted-foreground">not read</span>}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.amount != null ? formatCurrency(r.amount, "PHP") : "—"}</td>
                     <td className="px-3 py-2">
                       <div className="font-medium tabular-nums">{r.clearingYMD ? formatDate(r.clearingYMD) : "—"}</div>
