@@ -1,3 +1,36 @@
+## 2026-09-04 · Funding Shortfall changes direction, and signed figures get their colour
+
+Owner: *"Correct computation should be, Available funds less accounts payables = funding shortfall. Put a + or -
+indicator, green highlight for positive number and red highlight for negative number."*
+
+### The direction flip
+
+`Available Funds − Accounts Payable`, in that order — the reverse of the original rule 8. **Positive is now
+good**: money left over once every issued check is honoured. Negative is the gap still to be funded.
+
+The field was renamed with it, `deficit` → `fundingShortfall`. Keeping the old name would have left a *deficit*
+of **+379,531** meaning a surplus, which is the kind of name that outlives the person who understood it.
+
+### Signed figures, coloured by sign
+
+A `signed` mode on the row: a leading **+** or **−** (a true minus sign, not a hyphen, with the amount itself
+unsigned so the two never read as "₱-−123"), green above zero, red below.
+
+Applied to the four figures that can genuinely go either way — Available Bank Balance, Available Cash Balance,
+Available Funds and Funding Shortfall. The rows that can only ever be positive (Cash in Bank, Receivables,
+Accounts Payable, Outstanding Check) are left plain: a "+" on every line teaches the eye to stop seeing it.
+
+Verified on the running app, reading the computed background colour off each row:
+
+| | | |
+| --- | --- | --- |
+| Available Bank Balance | **−₱11,000.00** | red |
+| Available Cash Balance | **+₱411,358.40** | green |
+| Available Funds | **+₱411,358.40** | green |
+| Funding Shortfall | **+₱379,531.03** | green |
+
+411,358.40 − 31,827.37 = 379,531.03 — the new direction, in the new colour.
+
 ## 2026-09-04 · Cash / Gcash / Checking becomes Expected Collections
 
 Owner: *"Rename Cash/Gcash/Checking to Expected Collections."*
