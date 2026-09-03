@@ -22,6 +22,9 @@ import { payableTotal, round2 } from "@/lib/quote";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { poBatchId } from "@/lib/purchase-batch";
+import { coerceCheckDocs, checkMissing } from "@/lib/voucher-check";
+import { getSuppliers } from "@/lib/suppliers";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
@@ -413,6 +416,52 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
               href, since: when,
             });
           }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 2c) A PO paid by CHECK whose check photo has never been attached.
+  //
+  //     The owner's ruling: *"It is required, but not a gate. Admin should be
+  //     notified if not attached. Check is required for suppliers that give terms
+  //     to us."* So nothing upstream is blocked — the PO simply keeps asking here
+  //     until someone photographs the check.
+  if (isAdmin(user) || has("accounting") || has("payment_approver")) {
+    try {
+      const suppliers = await getSuppliers();
+      const termsCompanies = new Set(suppliers.filter((s) => s.terms).map((s) => s.company.trim().toLowerCase()));
+      if (termsCompanies.size > 0) {
+        const prs = await prisma.purchaseRequest.findMany({
+          where: { status: { notIn: ["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY", "REJECTED", "CANCELLED"] } },
+          include: { quotation: { include: { inquiry: { include: { customer: true } } } } },
+          orderBy: { createdAt: "desc" },
+        });
+        // A combined PO's members all carry the same `po` JSON, and the check
+        // rides on the ANCHOR — the first member in this createdAt-desc order,
+        // exactly as the Purchasing workspace picks it. Without this the same
+        // missing check would be reported once per member request.
+        const seenBatch = new Set<string>();
+        for (const pr of prs) {
+          const bid = poBatchId(pr.po);
+          if (bid) {
+            if (seenBatch.has(bid)) continue;
+            seenBatch.add(bid);
+          }
+          const po = coercePurchaseOrder(pr.po);
+          if (!po) continue;
+          if (!termsCompanies.has(po.supplier.company.trim().toLowerCase())) continue;
+          if (!checkMissing({ supplierGivesTerms: true, status: pr.status as PRStatus, docs: coerceCheckDocs(pr.voucherCheckDocs) })) continue;
+          tasks.push({
+            key: `pr-check:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
+            title: po.supplier.company || (pr.quotation?.quoteNumber ?? "Purchase order"),
+            action: "Attach the check photo",
+            client: pr.quotationId ? maskClient(pr.quotation?.inquiry.customer.company ?? null) : null,
+            amount: null, currency: "PHP",
+            href: `/purchasing?req=${pr.id}`,
+            ref: po.poNumber || undefined,
+            since: (pr.voucherAt ?? pr.createdAt).toISOString(),
+          });
         }
       }
     } catch { /* ignore */ }

@@ -17,6 +17,8 @@ import { PurchaseReturnsPanel } from "./purchase-returns-panel";
 import { PurchaseReconcilePanel } from "./purchase-reconcile-panel";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
+import type { CheckDoc } from "@/lib/voucher-check";
+import { VoucherCheckControl } from "./voucher-check-control";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
@@ -79,6 +81,12 @@ export interface BatchCard {
   canSettleReconcile: boolean;
   canEscalateReconcile: boolean;
   canApproveReconcile: boolean;
+  /** Photos of the check issued for this PO's voucher (on the anchor request). */
+  checkDocs: CheckDoc[];
+  /** The PO's supplier gives us terms — so this PO is paid by check. */
+  supplierGivesTerms: boolean;
+  /** Accounting / Payment Approver / admin may attach or remove the check photo. */
+  canAttachCheck: boolean;
 }
 
 function todayInput(): string {
@@ -460,6 +468,15 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
               <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
             </a>
           )}
+          {/* …and, to its right, the photo of the check that paid for it. */}
+          <VoucherCheckControl
+            prId={batch.anchorId}
+            docs={batch.checkDocs}
+            status={batch.status}
+            supplierGivesTerms={batch.supplierGivesTerms}
+            canAttach={batch.canAttachCheck}
+            canView={showSupplier}
+          />
         </div>
       </div>
       {err && <p className="mt-1 text-xs text-destructive">{err}</p>}

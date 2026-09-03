@@ -16,6 +16,7 @@ import {
   type ReturnStage,
 } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
+import { coerceCheckDocs, type CheckDoc } from "@/lib/voucher-check";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { requisitionDeptLabel } from "@/lib/order-workflow";
@@ -172,6 +173,12 @@ export interface PurchaseChainRow {
   canSettleReconcile: boolean;
   canEscalateReconcile: boolean;
   canApproveReconcile: boolean;
+  /** Photos of the check issued for this PO's voucher. */
+  checkDocs: CheckDoc[];
+  /** The PO's supplier gives us terms — so this PO is paid by check. */
+  supplierGivesTerms: boolean;
+  /** Accounting / Payment Approver / admin may attach or remove the check photo. */
+  canAttachCheck: boolean;
   canOverride: boolean; // admin escape hatch — roll the chain back
   priorStatuses: { key: string; label: string }[];
   // A warehouse/material requisition — the Plant Manager approves the request
@@ -200,6 +207,7 @@ export interface PurchaseRequestLike {
   note: string | null;
   status: string;
   po: unknown;
+  voucherCheckDocs?: unknown;
   createdByName: string;
   createdAt: Date;
   decidedByName: string | null;
@@ -348,6 +356,10 @@ export function buildPurchaseChainRow(
     canAct: (role: WorkflowRoleKey) => boolean;
     admin?: boolean;
     voucherNo?: string | null;
+    /** Accounting / Payment Approver / admin — may attach the check photo. */
+    canAttachCheck?: boolean;
+    /** Does this PO's supplier give us terms? Looked up by company name. */
+    givesTerms?: (company: string | undefined) => boolean;
   },
 ): PurchaseChainRow {
   const status = pr.status as PRStatus;
@@ -411,6 +423,9 @@ export function buildPurchaseChainRow(
     canSettleReconcile,
     canEscalateReconcile,
     canApproveReconcile,
+    checkDocs: coerceCheckDocs(pr.voucherCheckDocs),
+    supplierGivesTerms: ctx.givesTerms?.(coercePurchaseOrder(pr.po)?.supplier.company) ?? false,
+    canAttachCheck: ctx.canAttachCheck ?? false,
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,

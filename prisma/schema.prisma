@@ -367,6 +367,12 @@ model PurchaseRequest {
   // receipts attached — { voucherAmount, actualSpent, receipts[], recordedByName,
   // recordedAt, settled? }. Auto-tallies so change/overspend is flagged.
   reconciliation Json                  @default("{}")
+  // Photos of the CHECK issued for this PO's voucher — [{ path, name, uploadedAt,
+  // uploadedByName }]. Attached by Accounting / the Payment Approver / an admin on
+  // the PO row, for future reference when the check is queried. Expected (not
+  // required) on a PO to a supplier who gives us terms; a missing one is flagged,
+  // never blocked.
+  voucherCheckDocs Json                @default("[]")
 
   createdById   String
   createdByName String

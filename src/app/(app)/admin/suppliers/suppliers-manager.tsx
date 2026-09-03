@@ -4,7 +4,15 @@ import { useRef, useState, Fragment } from "react";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SUPPLIER_COLUMNS, parseEwt, type Supplier, type BulkResult } from "@/lib/suppliers";
+import {
+  SUPPLIER_COLUMNS,
+  mapSupplierHeaders,
+  parseYesNo,
+  type Supplier,
+  type BulkResult,
+  type SupplierBoolField as BoolField,
+  type SupplierStrField as StrField,
+} from "@/lib/suppliers";
 
 type SaveFn = (input: {
   id?: string;
@@ -18,53 +26,21 @@ type SaveFn = (input: {
   bankName: string;
   accountNumber: string;
   ewt: boolean;
+  terms: boolean;
   remarks: string;
 }) => Promise<Supplier[]>;
 type DeleteFn = (id: string) => Promise<Supplier[]>;
 type DeleteManyFn = (ids: string[]) => Promise<Supplier[]>;
 type ClearAllFn = () => Promise<Supplier[]>;
-type BulkFn = (input: { rows: Array<Omit<Supplier, "id" | "ewt"> & { ewt?: boolean }> }) => Promise<BulkResult>;
+type BulkFn = (input: { rows: Array<Omit<Supplier, "id" | BoolField> & Partial<Record<BoolField, boolean>>> }) => Promise<BulkResult>;
 type LoadMasterFn = () => Promise<BulkResult>;
 
 type Fields = Omit<Supplier, "id">;
-type StrField = Exclude<keyof Fields, "ewt">;
-const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", tin: "", zip: "", bankName: "", accountNumber: "", ewt: false, remarks: "" };
+const blank: Fields = { company: "", contactPerson: "", contactNumber: "", email: "", address: "", tin: "", zip: "", bankName: "", accountNumber: "", ewt: false, terms: false, remarks: "" };
 const HEADERS = SUPPLIER_COLUMNS.map((c) => c.label);
-
-const nk = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-const ALIASES: Record<StrField, string[]> = {
-  company: ["company name", "company", "supplier", "supplier name"],
-  contactPerson: ["contact person", "contact", "attention", "person", "contact name"],
-  contactNumber: ["contact number", "contact no", "number", "phone", "mobile", "telephone", "tel"],
-  email: ["email address", "email", "e-mail", "email add"],
-  address: ["address", "location", "company address"],
-  tin: ["tin", "taxpayer identification number", "taxpayer id", "tax id"],
-  zip: ["zip code", "zip", "postal code", "postal"],
-  bankName: ["bank name", "bank", "bank details", "bank name and account number", "payment details"],
-  accountNumber: ["account number", "account no", "account #", "acct number", "acct no", "account"],
-  remarks: ["remarks", "remark", "po remarks", "terms", "payment terms", "notes"],
-};
-const EWT_ALIASES = ["ewt capable (yes/no)", "ewt capable", "ewt", "ewt capable?", "with ewt", "ewt?"];
 
 function csvEscape(v: string) {
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-}
-
-/** Map a header row to field → column index, using aliases (exact then contains). */
-function mapHeaders(headers: string[]): Partial<Record<StrField, number>> & { ewt?: number } {
-  const H = headers.map(nk);
-  const map: Partial<Record<StrField, number>> & { ewt?: number } = {};
-  for (const field of Object.keys(ALIASES) as StrField[]) {
-    const aliases = ALIASES[field];
-    let idx = H.findIndex((h) => aliases.includes(h));
-    if (idx < 0) idx = H.findIndex((h) => aliases.some((a) => h.includes(a)));
-    if (idx >= 0) map[field] = idx;
-  }
-  // EWT column (exact match first, then contains "ewt").
-  let ei = H.findIndex((h) => EWT_ALIASES.includes(h));
-  if (ei < 0) ei = H.findIndex((h) => h.includes("ewt"));
-  if (ei >= 0) map.ewt = ei;
-  return map;
 }
 
 export function SuppliersManager({
@@ -127,9 +103,10 @@ export function SuppliersManager({
   }
 
   const ewtText = (b: boolean) => (b ? "yes" : "no");
+  const rowOf = (s: Supplier) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt), ewtText(s.terms), s.remarks];
 
   function downloadCsv(base = "suppliers-template") {
-    const rows = [HEADERS, ...list.map((s) => [s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt), s.remarks])];
+    const rows = [HEADERS, ...list.map(rowOf)];
     const csv = rows.map((r) => r.map((c) => csvEscape(c ?? "")).join(",")).join("\r\n");
     download(`${base}.csv`, new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
   }
@@ -143,7 +120,7 @@ export function SuppliersManager({
       const ws = wb.addWorksheet("Suppliers");
       ws.addRow(HEADERS);
       ws.getRow(1).font = { bold: true };
-      list.forEach((s) => ws.addRow([s.company, s.contactPerson, s.contactNumber, s.email, s.address, s.tin, s.zip, s.bankName, s.accountNumber, ewtText(s.ewt), s.remarks]));
+      list.forEach((s) => ws.addRow(rowOf(s)));
       ws.columns.forEach((c) => (c.width = 28));
       const buf = await wb.xlsx.writeBuffer();
       download(`${base}.xlsx`, new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -206,7 +183,7 @@ export function SuppliersManager({
       const rows = await fileToRows(file);
       const nonEmpty = rows.filter((r) => r.some((c) => (c ?? "").trim() !== ""));
       if (nonEmpty.length < 2) throw new Error("The file has no data rows.");
-      const cols = mapHeaders(nonEmpty[0]);
+      const cols = mapSupplierHeaders(nonEmpty[0]);
       if (cols.company === undefined) throw new Error("Couldn't find a 'Company Name' column. Use the downloaded template.");
       const get = (r: string[], f: StrField) => (cols[f] !== undefined ? (r[cols[f]!] ?? "").trim() : "");
       const data = nonEmpty.slice(1).map((r) => ({
@@ -219,7 +196,8 @@ export function SuppliersManager({
         zip: get(r, "zip"),
         bankName: get(r, "bankName"),
         accountNumber: get(r, "accountNumber"),
-        ewt: cols.ewt !== undefined ? parseEwt(r[cols.ewt]) : undefined,
+        ewt: cols.ewt !== undefined ? parseYesNo(r[cols.ewt]) : undefined,
+        terms: cols.terms !== undefined ? parseYesNo(r[cols.terms]) : undefined,
         remarks: get(r, "remarks"),
       }));
       const result = await onBulkImport({ rows: data });
@@ -327,6 +305,10 @@ export function SuppliersManager({
             <input type="checkbox" className="h-4 w-4" checked={add.ewt} onChange={(e) => setAdd({ ...add, ewt: e.target.checked })} />
             EWT capable
           </label>
+          <label className="flex h-8 items-center gap-2 text-sm" title="This supplier gives us payment terms — we pay later, by check. A PO to them is expected to carry a photo of the check.">
+            <input type="checkbox" className="h-4 w-4" checked={add.terms} onChange={(e) => setAdd({ ...add, terms: e.target.checked })} />
+            Gives us terms
+          </label>
           <Input className="h-8 sm:col-span-2 lg:col-span-3" placeholder="Remarks (auto-filled on the PO, e.g. 15 days / 30 DAYS PDC)" value={add.remarks} onChange={(e) => setAdd({ ...add, remarks: e.target.value })} />
         </div>
         <Button size="sm" className="h-8" disabled={busy || !add.company.trim()} onClick={() => run(() => onSave(add), () => setAdd(blank))}>
@@ -339,7 +321,7 @@ export function SuppliersManager({
         <p className="text-sm text-muted-foreground">No suppliers yet. Add one above, import in bulk, or issue a Purchase Order to save one automatically.</p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[1520px] border-collapse text-sm">
+          <table className="w-full min-w-[1620px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                 {selectable && (
@@ -357,6 +339,7 @@ export function SuppliersManager({
                 <th className="py-2 px-3 font-medium">Bank Name</th>
                 <th className="py-2 px-3 font-medium">Account Number</th>
                 <th className="py-2 px-3 font-medium">EWT</th>
+                <th className="py-2 px-3 font-medium" title="Gives us payment terms — we pay by check">Terms</th>
                 <th className="py-2 px-3 font-medium">Remarks</th>
                 <th className="py-2 px-3 font-medium text-right">Actions</th>
               </tr>
@@ -376,6 +359,7 @@ export function SuppliersManager({
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.bankName} onChange={(e) => setEdit({ ...edit, bankName: e.target.value })} /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.accountNumber} onChange={(e) => setEdit({ ...edit, accountNumber: e.target.value })} /></td>
                     <td className="py-1.5 px-2 text-center"><input type="checkbox" className="h-4 w-4" checked={edit.ewt} onChange={(e) => setEdit({ ...edit, ewt: e.target.checked })} /></td>
+                    <td className="py-1.5 px-2 text-center"><input type="checkbox" className="h-4 w-4" checked={edit.terms} onChange={(e) => setEdit({ ...edit, terms: e.target.checked })} aria-label="Gives us terms" /></td>
                     <td className="py-1.5 px-2"><Input className="h-8" value={edit.remarks} onChange={(e) => setEdit({ ...edit, remarks: e.target.value })} /></td>
                     <td className="py-1.5 px-3">
                       <div className="flex justify-end gap-1.5">
@@ -416,17 +400,22 @@ export function SuppliersManager({
                         ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700">EWT</span>
                         : <span className="text-xs text-muted-foreground">No</span>}
                     </td>
+                    <td className="py-2 px-3">
+                      {s.terms
+                        ? <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-700">Terms</span>
+                        : <span className="text-xs text-muted-foreground">Cash</span>}
+                    </td>
                     <td className="py-2 px-3 text-muted-foreground">{cell(s.remarks)}</td>
                     <td className="py-2 px-3">
                       <div className="flex justify-end gap-1.5">
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, tin: s.tin, zip: s.zip, bankName: s.bankName, accountNumber: s.accountNumber, ewt: s.ewt, remarks: s.remarks }); }}>Edit</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditId(s.id); setEdit({ company: s.company, contactPerson: s.contactPerson, contactNumber: s.contactNumber, email: s.email, address: s.address, tin: s.tin, zip: s.zip, bankName: s.bankName, accountNumber: s.accountNumber, ewt: s.ewt, terms: s.terms, remarks: s.remarks }); }}>Edit</Button>
                         <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={busy} onClick={() => run(() => onDelete(s.id))}>Remove</Button>
                       </div>
                     </td>
                   </tr>
                   {openId === s.id && (
                     <tr className="border-b last:border-0 bg-muted/20">
-                      <td colSpan={selectable ? 13 : 12} className="p-0">
+                      <td colSpan={selectable ? 14 : 13} className="p-0">
                         {/* Pinned to the left of the scroll area and width-capped so
                             every field stays visible without scrolling the wide table. */}
                         <div className="sticky left-0 max-w-3xl px-4 py-3">
@@ -442,6 +431,7 @@ export function SuppliersManager({
                             ["Bank Name", s.bankName],
                             ["Account Number", s.accountNumber],
                             ["EWT capable", s.ewt ? "Yes" : "No"],
+                            ["Gives us terms", s.terms ? "Yes — we pay by check" : "No — cash on purchase"],
                             ["Remarks", s.remarks],
                           ] as [string, string][]).map(([label, value]) => (
                             <div key={label} className="flex flex-col">

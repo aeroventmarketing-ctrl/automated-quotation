@@ -1,3 +1,71 @@
+## 2026-09-03 · A photo of the check, on the PO it paid for
+
+Owner: *"I would like accounting role to attach or upload picture of check in this location (right side of Print
+PO & 2307 button) for future reference."* — and, on the two questions that followed:
+
+> *"Should attaching a check be required before 'Voucher & Check Signed'? — **It is required, but not a gate.**
+> Admin should be notified if not attached. **Check is required for suppliers that give terms to us.**"*
+>
+> *"Who can upload? — **Accounting, Payment Approver and Admin.**"*
+
+Pass 1 of two. This one collects the photos; the AI reading of them comes next, and cannot be built first — a
+prompt that reads a check can only be tuned against real checks, which is what this ships to gather.
+
+### "Required, but not a gate"
+
+Nothing here refuses a step. The only consequence of a missing check is an amber **Check not attached** badge on
+the PO row and a *Attach the check photo* task in My Dashboard for the admin, Accounting and the Payment
+Approver. A gate would stop a supplier being paid because nobody had taken a photo yet, which is a worse failure
+than the one it prevents.
+
+### Which POs are chased
+
+Two conditions, both the owner's, in `src/lib/voucher-check.ts`:
+
+| | |
+| --- | --- |
+| the supplier **gives us terms** | we pay them later, by check — a cash purchase has no check to photograph |
+| the PO has reached **Voucher & Check Signed** | before that there is nothing to photograph, and a flag nobody can clear is a flag everybody learns to ignore |
+
+**"Gives us terms" is a flag on the SUPPLIER**, not a reading of the PO's payment-terms remark. That remark is
+free text — *"30 days upon delivery"*, *"Payment via Cash / GCASH / Online banking"*, *"50% DP, 50% on
+delivery"* — and guessing from it is how you end up silently right most of the time and wrong on the deals that
+matter. Whether a supplier gives us terms is a fact about the supplier, so it is stored as one: a **Gives Terms
+(yes/no)** column on the admin Suppliers page, in the add form, the row editor, the detail panel, and the
+Excel/CSV template both ways.
+
+### A trap in the supplier import, closed on the way in
+
+The header matcher's `remarks` aliases include `"terms"` and `"payment terms"`, with a `contains` fallback. A
+`Gives Terms (yes/no)` column contains "terms" — so Remarks would have eaten it, the import would have reported
+success, and **every supplier would have read "Cash"** with nothing to show anything had gone wrong. The whole
+feature keys off that flag.
+
+So the yes/no columns are now claimed **first** and their indices are off-limits to the free-text search, and
+`terms` gets a deliberately narrow `contains` fallback (`"gives terms"`, never a bare `"terms"`, which would
+also swallow a genuine *Payment Terms* remark column). The matcher moved out of the client component into
+`src/lib/suppliers.ts` as `mapSupplierHeaders` so it could be asserted at all — `suppliers.test.ts` pins our own
+template, the trap, and the *Payment Terms*-is-still-Remarks case that the fix must not break.
+
+### Where it lives
+
+`PurchaseRequest.voucherCheckDocs` (migration `0050`, an ADD COLUMN — no table, so no RLS block). On a combined
+PO the file rides on the **anchor** request, which is right: one check is written per PO, not per member
+request. The dashboard notification groups by batch id and reports the anchor, so a four-request combined PO
+asks once, not four times.
+
+The control sits to the right of *Print PO & 2307* in both places that button appears — the combined-PO card in
+Purchasing and the individual chain row — because a single-request PO is the common case and a flag nobody can
+clear from the screen they are looking at is not a reminder, it is noise.
+
+`voucher-check.test.ts` asserts the upload permission for every role at once, including the three who are
+closest to the money and still may not attach one (Purchaser, Plant Manager, Logistics Head), and walks the
+whole status chain for both a terms and a cash supplier.
+
+**Not done, deliberately — pass 2:** `/api/ai/read-check`, reading payee / amount in figures *and* words /
+check number / date / bank off the photo and validating them against the PO's supplier and net amount, with
+duplicate-check-number detection. It gets built once there are real photos to tune it against.
+
 ## 2026-09-03 · JayR Basal could not see his own commission — three gates, one wrong assumption
 
 Owner: *"show commissions tile at the right side of orders tile for JayR Basal, it should be same as other sales
