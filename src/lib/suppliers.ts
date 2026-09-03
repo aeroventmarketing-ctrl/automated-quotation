@@ -22,6 +22,18 @@ export interface Supplier {
   bankName: string; // Bank Name
   accountNumber: string; // Account Number
   ewt: boolean; // EWT capable — issuing a PO to this supplier defaults to "with EWT"
+  // Gives us payment terms (we pay later, by check) rather than cash on purchase.
+  // Owner's rule: *"Check is required for suppliers that give terms to us."* A PO
+  // to a terms supplier is expected to carry a photo of the check once the check
+  // is signed; one that doesn't is flagged to Accounting and the admin. Nothing
+  // is blocked — it is a reminder, not a gate.
+  //
+  // Deliberately a flag on the SUPPLIER, not a reading of the PO's payment-terms
+  // text: that text is free-form ("30 days upon delivery", "Payment via Cash /
+  // GCASH / Online banking", "50% DP, 50% on delivery"), and guessing from it is
+  // how you end up silently right most of the time and wrong on the deals that
+  // matter. Whether a supplier gives us terms is a fact about the supplier.
+  terms: boolean;
   remarks: string; // Default PO remark (e.g. payment terms) — auto-filled on the PO
 }
 
@@ -37,6 +49,7 @@ export const SUPPLIER_COLUMNS = [
   { key: "bankName", label: "Bank Name" },
   { key: "accountNumber", label: "Account Number" },
   { key: "ewt", label: "EWT Capable (yes/no)" },
+  { key: "terms", label: "Gives Terms (yes/no)" },
   { key: "remarks", label: "Remarks" },
 ] as const;
 
@@ -48,12 +61,96 @@ const norm = (s: string) => s.trim().toLowerCase();
  * an existing value on a partial import).
  */
 export function parseEwt(v: unknown): boolean | undefined {
+  return parseYesNo(v);
+}
+
+/**
+ * Parse a raw boolean-ish cell (a real boolean, or "yes"/"no"/"1"/"0"/…) into a
+ * tri-state: true / false / undefined. `undefined` means "not specified", so a
+ * partial import preserves whatever the supplier already had rather than
+ * silently resetting it to false.
+ */
+export function parseYesNo(v: unknown): boolean | undefined {
   if (typeof v === "boolean") return v;
   const s = String(v ?? "").trim().toLowerCase();
   if (!s) return undefined;
-  if (["yes", "y", "true", "1", "with ewt", "with", "ewt", "ewt capable", "capable"].includes(s)) return true;
-  if (["no", "n", "false", "0", "without ewt", "without", "non-ewt", "not capable", "none"].includes(s)) return false;
+  if (["yes", "y", "true", "1", "with ewt", "with", "ewt", "ewt capable", "capable", "terms", "with terms"].includes(s)) return true;
+  if (["no", "n", "false", "0", "without ewt", "without", "non-ewt", "not capable", "none", "cash", "no terms"].includes(s)) return false;
   return undefined;
+}
+
+/** The yes/no columns. They are matched before the free-text ones — see `mapSupplierHeaders`. */
+export type SupplierBoolField = "ewt" | "terms";
+export type SupplierStrField = Exclude<keyof Omit<Supplier, "id">, SupplierBoolField>;
+
+const nk = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+
+const STR_ALIASES: Record<SupplierStrField, string[]> = {
+  company: ["company name", "company", "supplier", "supplier name"],
+  contactPerson: ["contact person", "contact", "attention", "person", "contact name"],
+  contactNumber: ["contact number", "contact no", "number", "phone", "mobile", "telephone", "tel"],
+  email: ["email address", "email", "e-mail", "email add"],
+  address: ["address", "location", "company address"],
+  tin: ["tin", "taxpayer identification number", "taxpayer id", "tax id"],
+  zip: ["zip code", "zip", "postal code", "postal"],
+  bankName: ["bank name", "bank", "bank details", "bank name and account number", "payment details"],
+  accountNumber: ["account number", "account no", "account #", "acct number", "acct no", "account"],
+  remarks: ["remarks", "remark", "po remarks", "terms", "payment terms", "notes"],
+};
+
+/**
+ * Each yes/no column, with an exact-alias list and a deliberately narrow
+ * `contains` fallback.
+ *
+ * `terms` may NOT fall back on a bare `includes("terms")`: that also matches
+ * "Payment Terms", which is a free-text remark, not a yes/no flag. It has to be
+ * the two words together.
+ */
+const BOOL_ALIASES: Record<SupplierBoolField, { exact: string[]; contains: string[] }> = {
+  ewt: {
+    exact: ["ewt capable (yes/no)", "ewt capable", "ewt", "ewt capable?", "with ewt", "ewt?"],
+    contains: ["ewt"],
+  },
+  terms: {
+    exact: ["gives terms (yes/no)", "gives terms", "gives terms?", "gives us terms", "terms supplier", "with terms"],
+    contains: ["gives terms", "gives us terms"],
+  },
+};
+
+export type SupplierHeaderMap = Partial<Record<SupplierStrField, number>> & Partial<Record<SupplierBoolField, number>>;
+
+/**
+ * Map an imported header row to field → column index, using aliases (exact match
+ * first, then `contains`).
+ *
+ * The yes/no columns are claimed FIRST and their indices are then off-limits to
+ * the free-text search. Without that, "Gives Terms (yes/no)" is swallowed by
+ * Remarks — whose aliases include "terms" and "payment terms" with a `contains`
+ * fallback — and the flag silently imports as blank on every row. Silently: the
+ * import reports success and every supplier reads "Cash".
+ */
+export function mapSupplierHeaders(headers: string[]): SupplierHeaderMap {
+  const H = headers.map(nk);
+  const map: SupplierHeaderMap = {};
+  const taken = new Set<number>();
+  const find = (pred: (h: string) => boolean) => H.findIndex((h, i) => !taken.has(i) && pred(h));
+
+  for (const field of Object.keys(BOOL_ALIASES) as SupplierBoolField[]) {
+    const { exact, contains } = BOOL_ALIASES[field];
+    let idx = find((h) => exact.includes(h));
+    if (idx < 0) idx = find((h) => contains.some((a) => h.includes(a)));
+    if (idx >= 0) { map[field] = idx; taken.add(idx); }
+  }
+  // The free-text fields then search what's left. They do NOT claim columns from
+  // each other — two of them landing on one header ("Bank Name and Account
+  // Number") is long-standing behaviour and not what this is here to change.
+  for (const field of Object.keys(STR_ALIASES) as SupplierStrField[]) {
+    const aliases = STR_ALIASES[field];
+    let idx = find((h) => aliases.includes(h));
+    if (idx < 0) idx = find((h) => aliases.some((a) => h.includes(a)));
+    if (idx >= 0) map[field] = idx;
+  }
+  return map;
 }
 
 /** Coerce one raw record into a Supplier (tolerates the legacy attention/address shape). */
@@ -75,7 +172,8 @@ function coerceOne(r: unknown): Supplier | null {
     // Legacy records stored the combined "paymentDetails" — carry it into Bank Name.
     bankName: String(o.bankName ?? o.paymentDetails ?? "").trim(),
     accountNumber: String(o.accountNumber ?? "").trim(),
-    ewt: parseEwt(o.ewt) ?? false,
+    ewt: parseYesNo(o.ewt) ?? false,
+    terms: parseYesNo(o.terms) ?? false,
     remarks: String(o.remarks ?? "").trim(),
   };
 }
@@ -116,6 +214,7 @@ export interface SupplierInput {
   bankName?: string;
   accountNumber?: string;
   ewt?: boolean;
+  terms?: boolean;
   remarks?: string;
 }
 
@@ -131,6 +230,7 @@ function normalizeInput(input: SupplierInput): Omit<Supplier, "id"> {
     bankName: (input.bankName ?? "").trim(),
     accountNumber: (input.accountNumber ?? "").trim(),
     ewt: input.ewt ?? false,
+    terms: input.terms ?? false,
     remarks: (input.remarks ?? "").trim(),
   };
 }
@@ -230,8 +330,9 @@ export async function bulkUpsertSuppliers(rows: SupplierInput[]): Promise<BulkRe
         zip: d.zip || list[idx].zip,
         bankName: d.bankName || list[idx].bankName,
         accountNumber: d.accountNumber || list[idx].accountNumber,
-        // Boolean: preserve the existing flag when the import didn't specify one.
+        // Booleans: preserve the existing flag when the import didn't specify one.
         ewt: raw.ewt ?? list[idx].ewt,
+        terms: raw.terms ?? list[idx].terms,
         remarks: d.remarks || list[idx].remarks,
       };
       updated++;
@@ -267,6 +368,7 @@ export async function rememberSupplier(input: { company: string; attention?: str
     bankName: "",
     accountNumber: "",
     ewt: false,
+    terms: false,
     remarks: "",
   });
   await writeSuppliers(list);

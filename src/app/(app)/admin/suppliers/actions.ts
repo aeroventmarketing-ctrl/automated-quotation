@@ -26,6 +26,7 @@ const supplierSchema = z.object({
   bankName: z.string().trim().optional().default(""),
   accountNumber: z.string().trim().optional().default(""),
   ewt: z.boolean().optional().default(false),
+  terms: z.boolean().optional().default(false),
   remarks: z.string().trim().optional().default(""),
 });
 
@@ -73,6 +74,7 @@ const bulkSchema = z.object({
       bankName: z.string().trim().optional().default(""),
       accountNumber: z.string().trim().optional().default(""),
       ewt: z.boolean().optional(),
+      terms: z.boolean().optional(),
       remarks: z.string().trim().optional().default(""),
     }),
   ),

@@ -10,10 +10,12 @@ import { ApproverHighlight } from "@/components/approver-highlight";
 import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
 import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
 import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override";
+import { VoucherCheckControl } from "../../purchasing/voucher-check-control";
 import { StockAvailabilityLookup } from "@/components/stock-availability-lookup";
 import { RequisitionStockCheck } from "../../requisitions/requisition-stock-check";
 import { AdminPrEditDelete, SplitRequisition } from "../../purchasing/admin-pr-manage";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
+import type { CheckDoc } from "@/lib/voucher-check";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
@@ -59,6 +61,12 @@ interface PRRow {
   canSettleReconcile?: boolean;
   canEscalateReconcile?: boolean;
   canApproveReconcile?: boolean;
+  /** Photos of the check issued for this PO's voucher. */
+  checkDocs?: CheckDoc[];
+  /** The PO's supplier gives us terms — so this PO is paid by check. */
+  supplierGivesTerms?: boolean;
+  /** Accounting / Payment Approver / admin may attach or remove the check photo. */
+  canAttachCheck?: boolean;
   canOverride?: boolean;
   priorStatuses?: { key: string; label: string }[];
   isDept?: boolean;
@@ -557,6 +565,15 @@ export function PurchasingChain({
                       <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
                     </a>
                     )}
+                    {/* …and, to its right, the photo of the check that paid for it. */}
+                    <VoucherCheckControl
+                      prId={r.id}
+                      docs={r.checkDocs ?? []}
+                      status={r.status as PRStatus}
+                      supplierGivesTerms={!!r.supplierGivesTerms}
+                      canAttach={!readOnly && !!r.canAttachCheck}
+                      canView={showSupplier}
+                    />
                   </div>
                   {/* Once approved, only an admin may edit the PO. */}
                   {!readOnly && r.canManagePO && (!r.poApproved || admin) && (

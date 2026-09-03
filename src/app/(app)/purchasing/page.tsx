@@ -18,6 +18,7 @@ import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
 import { REF_PRICE_KEY } from "@/lib/po-catalog";
 import { getSuppliers } from "@/lib/suppliers";
+import { coerceCheckDocs, canAttachCheck } from "@/lib/voucher-check";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { type ReplenScanRow } from "./replenishment-list";
@@ -54,6 +55,12 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   // Generating a payment voucher from selected requests — Accounting, Payment
   // Approver or an admin.
   const canVoucher = canAct("accounting") || canAct("payment_approver");
+  // Attaching the photo of the check issued for a PO — Accounting, the Payment
+  // Approver, an admin. Same audience as the voucher itself.
+  const canAttachCheckHere = canAttachCheck({
+    admin,
+    workflowRoles: (["accounting", "payment_approver"] as WorkflowRoleKey[]).filter((r) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r)),
+  });
   // Printed cash-voucher number covering each purchase request (if any).
   const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
   // Who may cancel: before approval the requestor / purchaser / admin; once
@@ -85,6 +92,13 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   let deptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
   let completedDeptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
   let tableMissing = false;
+
+  // Which supplier companies give us payment terms — i.e. we pay them later, by
+  // check, so a PO to them is expected to carry a photo of that check. The flag
+  // lives on the supplier record, deliberately not read out of the PO's free-text
+  // payment-terms remark (see the note on `Supplier.terms`).
+  const termsCompanies = new Set(suppliers.filter((s) => s.terms).map((s) => s.company.trim().toLowerCase()));
+  const givesTerms = (company: string | undefined): boolean => !!company && termsCompanies.has(company.trim().toLowerCase());
 
   // Product catalogue → supplier lookup, used to suggest same-supplier combines.
   const products = await getProducts().catch(() => []);
@@ -259,6 +273,9 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       const canEscalateReconcile = canAct("accounting") || canAct("purchaser");
       const canApproveReconcile = canAct("payment_approver");
       return {
+        checkDocs: coerceCheckDocs(anchor.voucherCheckDocs),
+        supplierGivesTerms: givesTerms(po?.supplier.company),
+        canAttachCheck: canAttachCheckHere,
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
         poNumber: po?.poNumber ?? "—",
@@ -305,7 +322,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         const rows = unbatched
           .filter((pr) => pr.quotationId === qid)
           .map((pr) =>
-            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null }),
+            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null, canAttachCheck: canAttachCheckHere, givesTerms }),
           );
         if (rows.length === 0) return null;
         const project = q.projectName ?? q.inquiry.projectName ?? "";
@@ -331,6 +348,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       canAct,
       admin,
       voucherNo: voucherNoByPr.get(pr.id) ?? null,
+      canAttachCheck: canAttachCheckHere,
+      givesTerms,
     });
     // Order-linked (bought-in supplier) requisitions carry a quotationId and are
     // shown under their order above — keep them out of the generic Department
@@ -365,7 +384,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       const stock = stockIds.length ? await prisma.stockItem.findMany({ where: { id: { in: stockIds } }, select: { id: true, sku: true, unit: true } }) : [];
       const stockById = new Map(stock.map((s) => [s.id, s]));
       replenRows = prs.map((pr) =>
-        buildPurchaseChainRow(pr, { mrfNo: null, canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null }),
+        buildPurchaseChainRow(pr, { mrfNo: null, canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null, canAttachCheck: canAttachCheckHere, givesTerms }),
       );
       // Ready to receive = the receive step is available (PLANT_APPROVED) and the
       // viewer is the Warehouse/admin who can post it into stock.

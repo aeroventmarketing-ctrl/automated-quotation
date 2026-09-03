@@ -54,6 +54,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
+import { coerceCheckDocs, canAttachCheck, type CheckDoc } from "@/lib/voucher-check";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
@@ -2483,6 +2484,78 @@ export async function advancePurchaseReturn(
   revalidatePath("/requisitions");
   revalidatePath("/my-dashboard");
   revalidatePath("/management");
+}
+
+// --- The check photo on a PO -------------------------------------------------
+
+/**
+ * Attach / remove the photo of the CHECK issued for a PO's voucher — the owner's
+ * request: *"I would like accounting role to attach or upload picture of check in
+ * this location (right side of Print PO & 2307 button) for future reference."*
+ *
+ * Gated to **Accounting, the Payment Approver and an admin** (`canAttachCheck`);
+ * these return `{ error }` rather than throwing, because Next.js masks a thrown
+ * error in production behind "An error occurred in the Server Components render"
+ * and the person would be left with a dead button and no reason.
+ *
+ * The combined-PO case needs no special handling: the file rides on the anchor
+ * request, which is the PO, and one check is written per PO.
+ */
+async function assertCanAttachCheck(): Promise<string | null> {
+  const user = await getCurrentUser();
+  if (!user) return "Unauthorized";
+  const assignments = await getWorkflowRoles();
+  const roles = (["accounting", "payment_approver"] as WorkflowRoleKey[]).filter((r) => userHasWorkflowRole(assignments, user.id, r));
+  if (!canAttachCheck({ admin: isAdmin(user), workflowRoles: roles })) {
+    return "Only Accounting, the Payment Approver or an admin can attach the check.";
+  }
+  return null;
+}
+
+async function writeCheckDocs(purchaseRequestId: string, next: CheckDoc[]): Promise<void> {
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { quotationId: true } });
+  await prisma.purchaseRequest.update({
+    where: { id: purchaseRequestId },
+    data: { voucherCheckDocs: next as unknown as Prisma.InputJsonValue },
+  });
+  if (pr?.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+  revalidatePath("/my-dashboard");
+}
+
+export async function attachVoucherCheck(
+  purchaseRequestId: string,
+  doc: { path: string; name: string; uploadedAt?: string },
+): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCanAttachCheck();
+  if (denied) return { error: denied };
+  const user = await getCurrentUser();
+  if (!doc || typeof doc.path !== "string" || !doc.path) return { error: "Invalid file." };
+
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { id: true, voucherCheckDocs: true } });
+  if (!pr) return { error: "Purchase order not found." };
+
+  const clean: CheckDoc = {
+    path: doc.path,
+    name: typeof doc.name === "string" && doc.name ? doc.name : "check",
+    uploadedAt: doc.uploadedAt ?? new Date().toISOString(),
+    uploadedByName: user?.name ?? "",
+  };
+  const cur = coerceCheckDocs(pr.voucherCheckDocs);
+  // Same file uploaded twice — keep one.
+  await writeCheckDocs(purchaseRequestId, [...cur.filter((d) => d.path !== clean.path), clean]);
+  return { ok: true };
+}
+
+export async function removeVoucherCheck(purchaseRequestId: string, path: string): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCanAttachCheck();
+  if (denied) return { error: denied };
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { id: true, voucherCheckDocs: true } });
+  if (!pr) return { error: "Purchase order not found." };
+  const cur = coerceCheckDocs(pr.voucherCheckDocs);
+  await writeCheckDocs(purchaseRequestId, cur.filter((d) => d.path !== path));
+  return { ok: true };
 }
 
 // --- Voucher reconciliation -------------------------------------------------
