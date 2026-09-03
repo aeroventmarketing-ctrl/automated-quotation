@@ -3,7 +3,7 @@ import type { CheckDoc } from "./voucher-check";
 import { effectiveClearingYMD, coerceCheckDocs } from "./voucher-check";
 import {
   CHECK_NOTICE_DAYS, buildCheckWatch, checkWatchState, checkWatchSummary,
-  daysBetweenYMD, needsAttention, type CheckWatchState,
+  daysBetweenYMD, needsAttention, notifiesAdmin, type CheckWatchState,
 } from "./check-monitor";
 
 const TODAY = "2026-09-03";
@@ -39,8 +39,11 @@ describe("days between two dates", () => {
 });
 
 /**
- * The owner's rule: *"notify the admin at least 3 days before clearing"* — so a
- * check three days out is already in the notice window, not one day short of it.
+ * `CHECK_NOTICE_DAYS` began as the owner's *"notify the admin at least 3 days
+ * before clearing"*, so a check three days out is inside the window rather than
+ * one day short of it. The window survives as a DISPLAY threshold only — the
+ * notification itself was withdrawn: *"do not notify the admin for checks that
+ * will soon clear."*
  */
 describe("the state a check is in", () => {
   const CASES: [string, string | null, string][] = [
@@ -67,9 +70,29 @@ describe("the state a check is in", () => {
     expect(checkWatchState({ ...due("2026-12-01"), cleared: { on: "2026-09-03", byName: "A", at: "" } }, TODAY)).toBe("cleared");
   });
 
-  it("tells the admin about overdue, today and within three days — and nothing else", () => {
+  it("draws overdue, today and within three days in amber — and nothing else", () => {
     expect((["overdue", "due", "soon"] as CheckWatchState[]).every(needsAttention)).toBe(true);
     expect((["scheduled", "cleared", "undated"] as CheckWatchState[]).some(needsAttention)).toBe(false);
+  });
+
+  it("pushes a task at the admin for an OVERDUE check only", () => {
+    // The owner withdrew the advance warning: "do not notify the admin for
+    // checks that will soon clear." A check approaching — today's included — is
+    // on the register and in First Priority already; only the one that should
+    // have cleared and did not is worth interrupting someone for.
+    expect(notifiesAdmin("overdue")).toBe(true);
+    for (const s of ["due", "soon", "scheduled", "cleared", "undated"] as CheckWatchState[]) {
+      expect(notifiesAdmin(s), s).toBe(false);
+    }
+  });
+
+  it("notifies about strictly fewer states than it colours", () => {
+    // The two must not drift back together: amber is a glance, a task is a poke.
+    const all: CheckWatchState[] = ["overdue", "due", "soon", "scheduled", "cleared", "undated"];
+    const coloured = all.filter(needsAttention);
+    const notified = all.filter(notifiesAdmin);
+    expect(notified.every((s) => coloured.includes(s))).toBe(true);
+    expect(notified.length).toBeLessThan(coloured.length);
   });
 
   it("uses the owner's number", () => {

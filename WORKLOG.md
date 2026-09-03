@@ -1,3 +1,31 @@
+## 2026-09-03 · No more advance notice — only a check that failed to clear
+
+Owner, asked whether "disregard the 3 day notice" meant dropping the feature or just my explanation:
+*"What I mean is do not notify the admin for checks that will soon clear."*
+
+So the **notification** goes; the **on-screen states stay**. That split a distinction the code had been
+conflating — one function was deciding both what to colour amber and who to poke.
+
+| | |
+| --- | --- |
+| `needsAttention(state)` | a **display** rule: overdue, today, or within 3 days draw amber |
+| `notifiesAdmin(state)` | a **notification** rule: **overdue only** |
+
+A check that is merely approaching — today's included — is already on the register and inside First Priority on
+the cash panel, which is where the owner is looking anyway. A check that *should* have cleared and did not is
+the exception worth interrupting someone for, and it is the only one that now raises a My Dashboard task
+(*"Check has not cleared — confirm it, or move the date"*).
+
+`CHECK_NOTICE_DAYS = 3` survives, but purely as the *Clearing soon* badge threshold, and its comment now says so
+— it began as the owner's notification rule and outlived it.
+
+A test pins the two apart permanently: whatever `notifiesAdmin` covers must be a **strict subset** of what
+`needsAttention` colours. Amber is a glance; a task is a poke, and the two must not drift back together.
+
+Verified in the harness with four checks — one overdue, one clearing today, one in two days, one far off. My
+Dashboard raised **exactly one** notice, naming the overdue check; the today and two-day checks appear nowhere
+on it. The register still shows all three states.
+
 ## 2026-09-03 · The cash position under the check register
 
 The owner's eight rules, given with a screenshot of the sheet they keep them on:

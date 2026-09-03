@@ -24,7 +24,7 @@ import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplet
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { coerceCheckDocs, checkMissing, checkAttachableAt, formatCheckNo } from "@/lib/voucher-check";
-import { buildCheckWatch, needsAttention } from "@/lib/check-monitor";
+import { buildCheckWatch, notifiesAdmin } from "@/lib/check-monitor";
 import { getSuppliers } from "@/lib/suppliers";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
@@ -473,8 +473,12 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     } catch { /* ignore */ }
   }
 
-  // 2d) A check about to clear — the owner's rule: *"notify the admin at least
-  //      3 days before clearing."*
+  // 2d) A check that should have cleared and did not.
+  //
+  //      NOT an advance warning: the owner withdrew that — *"do not notify the
+  //      admin for checks that will soon clear."* A check that is merely
+  //      approaching sits on the register and in First Priority, where they are
+  //      already looking. Only the exception is pushed at anyone.
   //
   //      Admin only, matching who may act on it: clearing a check and moving its
   //      date are admin-only decisions, so telling anyone else would be an alert
@@ -493,16 +497,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         },
       });
       for (const row of watch) {
-        if (!needsAttention(row.state)) continue;
+        if (!notifiesAdmin(row.state)) continue;
         tasks.push({
           key: `check-clearing:${row.prId}:${row.path}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
           title: `${row.supplier || "Supplier"}${row.checkNo ? ` · Check No. ${formatCheckNo(row.checkNo)}` : ""}`,
-          action:
-            row.state === "overdue"
-              ? "Check has not cleared — confirm or move the date"
-              : row.state === "due"
-                ? "Check clears today"
-                : `Check clears in ${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}`,
+          action: "Check has not cleared — confirm it, or move the date",
           client: null, amount: row.amount, currency: "PHP",
           href: "/checks",
           ref: row.poNumber || undefined,

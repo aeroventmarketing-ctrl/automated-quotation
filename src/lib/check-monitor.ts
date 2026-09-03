@@ -20,7 +20,15 @@
 import type { CheckDoc } from "@/lib/voucher-check";
 import { effectiveClearingYMD } from "@/lib/voucher-check";
 
-/** *"notify the admin at least 3 days before clearing"* — the owner's number. */
+/**
+ * How far ahead a check reads as *Clearing soon* on screen.
+ *
+ * This is a DISPLAY threshold only. It began life as the owner's *"notify the
+ * admin at least 3 days before clearing"*, but they withdrew the notification:
+ * *"do not notify the admin for checks that will soon clear."* The badge stays
+ * so the schedule can be read at a glance; nothing is pushed at anyone because
+ * of it.
+ */
 export const CHECK_NOTICE_DAYS = 3;
 
 export type CheckWatchState =
@@ -49,9 +57,26 @@ export function checkWatchState(doc: CheckDoc, todayYMD: string): CheckWatchStat
   return days <= CHECK_NOTICE_DAYS ? "soon" : "scheduled";
 }
 
-/** The states the admin is meant to be told about: due within 3 days, or already past. */
+/**
+ * The states drawn in amber ON SCREEN — clearing within 3 days, today, or
+ * already past. A display rule: it decides colour, not who gets told.
+ */
 export function needsAttention(state: CheckWatchState): boolean {
   return state === "overdue" || state === "due" || state === "soon";
+}
+
+/**
+ * The one state that PUSHES a task at the admin — a check whose date has passed
+ * and which nobody has cleared.
+ *
+ * Deliberately narrower than `needsAttention`, on the owner's instruction: *"do
+ * not notify the admin for checks that will soon clear."* A check that is merely
+ * approaching, today's included, is on the register and in First Priority where
+ * they are already looking; a check that should have cleared and did not is the
+ * exception worth interrupting someone for.
+ */
+export function notifiesAdmin(state: CheckWatchState): boolean {
+  return state === "overdue";
 }
 
 export const CHECK_STATE_LABEL: Record<CheckWatchState, string> = {
