@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, CalendarClock, CheckCircle2, Image as ImageIcon, Undo2 } from "lucide-react";
@@ -169,7 +169,8 @@ export function CheckMonitor({
                 const key = keyOf(r);
                 const openForm_ = form?.key === key ? form : null;
                 return (
-                  <tr key={key} className="border-b align-top last:border-0">
+                  <Fragment key={key}>
+                  <tr className={`align-top ${openForm_ ? "" : "border-b last:border-0"}`}>
                     <td className="px-2 py-2 tabular-nums text-muted-foreground">{r.poDate ? formatDate(r.poDate) : "—"}</td>
                     <td className="px-2 py-2 break-words">{r.supplier || "—"}</td>
                     <td className="px-2 py-2">
@@ -223,72 +224,95 @@ export function CheckMonitor({
                     <td className="px-2 py-2 text-xs text-muted-foreground">{r.remarks ?? ""}</td>
                     {admin && (
                       <td className="px-2 py-2">
-                        {openForm_ ? (
-                          <div className="w-full space-y-1.5 rounded-md border bg-background p-2 text-left">
-                            <div className="text-xs font-medium">
-                              {openForm_.kind === "clear" ? "Date the check cleared" : "New clearing date"}
-                            </div>
-                            <Input type="date" className="h-8 w-full px-1 text-xs" value={dateVal} onChange={(e) => setDateVal(e.target.value)} />
-                            {openForm_.kind === "move" && (
-                              <Input
-                                className="h-8 w-full px-1 text-xs"
-                                placeholder="Why?"
-                                value={reason}
-                                onChange={(e) => setReason(e.target.value)}
-                              />
-                            )}
-                            <div className="flex flex-col items-stretch gap-1.5">
-                              <Button size="sm" variant="outline" className="h-7 px-1 text-xs" onClick={() => setForm(null)}>Cancel</Button>
+                        <div className="flex flex-col items-stretch gap-1.5">
+                          {r.state === "cleared" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 w-full justify-center px-1 text-xs"
+                              disabled={busy === key}
+                              onClick={() => run(key, () => unclearCheck(r.prId, r.path))}
+                              title="Put this check back on the watch list"
+                            >
+                              <Undo2 className="mr-1 h-3.5 w-3.5" /> Not cleared
+                            </Button>
+                          ) : (
+                            <>
                               <Button
                                 size="sm"
-                                className="h-7 px-1 text-xs"
-                                disabled={busy === key || (openForm_.kind === "move" && !reason.trim())}
-                                onClick={() =>
-                                  run(key, () =>
-                                    openForm_.kind === "clear"
-                                      ? markCheckCleared(r.prId, r.path, { on: dateVal })
-                                      : rescheduleCheck(r.prId, r.path, { to: dateVal, reason }),
-                                  )
-                                }
-                              >
-                                {busy === key ? "Saving…" : openForm_.kind === "clear" ? "Mark cleared" : "Move date"}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-stretch gap-1.5">
-                            {r.state === "cleared" ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
+                                variant={openForm_?.kind === "clear" ? "secondary" : "default"}
                                 className="h-7 w-full justify-center px-1 text-xs"
-                                disabled={busy === key}
-                                onClick={() => run(key, () => unclearCheck(r.prId, r.path))}
-                                title="Put this check back on the watch list"
+                                onClick={() => openForm(r, "clear")}
                               >
-                                <Undo2 className="mr-1 h-3.5 w-3.5" /> Not cleared
+                                <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Cleared
                               </Button>
-                            ) : (
-                              <>
-                                <Button size="sm" className="h-7 w-full justify-center px-1 text-xs" onClick={() => openForm(r, "clear")}>
-                                  <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Cleared
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 w-full justify-center px-1 text-xs"
-                                  onClick={() => openForm(r, "move")}
-                                  title="Move the clearing date — e.g. the account can't fund it yet"
-                                >
-                                  <CalendarClock className="mr-1 h-3.5 w-3.5" /> Move date
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        )}
+                              <Button
+                                size="sm"
+                                variant={openForm_?.kind === "move" ? "secondary" : "outline"}
+                                className="h-7 w-full justify-center px-1 text-xs"
+                                onClick={() => openForm(r, "move")}
+                                title="Move the clearing date — e.g. the account can't fund it yet"
+                              >
+                                <CalendarClock className="mr-1 h-3.5 w-3.5" /> Move date
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
+                  {/* The date form gets a row of its own, spanning the table.
+                      Squeezed into the ~100px Actions column the native picker
+                      was cut off and the value read "10/17/202…". */}
+                  {openForm_ && (
+                    <tr className="border-b bg-muted/30 last:border-0">
+                      <td colSpan={admin ? 10 : 9} className="px-3 py-2">
+                        <div className="flex flex-wrap items-end gap-3">
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs font-medium">
+                              {openForm_.kind === "clear" ? "Date the check cleared" : "New clearing date"}
+                            </span>
+                            <Input
+                              type="date"
+                              autoFocus
+                              className="h-9 w-[180px]"
+                              value={dateVal}
+                              onChange={(e) => setDateVal(e.target.value)}
+                            />
+                          </label>
+                          {openForm_.kind === "move" && (
+                            <label className="flex min-w-[240px] flex-1 flex-col gap-1">
+                              <span className="text-xs font-medium">Why is it being moved?</span>
+                              <Input
+                                className="h-9"
+                                placeholder="e.g. insufficient funds"
+                                value={reason}
+                                onChange={(e) => setReason(e.target.value)}
+                              />
+                            </label>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => setForm(null)}>Cancel</Button>
+                            <Button
+                              size="sm"
+                              className="h-9 text-xs"
+                              disabled={busy === key || (openForm_.kind === "move" && !reason.trim())}
+                              onClick={() =>
+                                run(key, () =>
+                                  openForm_.kind === "clear"
+                                    ? markCheckCleared(r.prId, r.path, { on: dateVal })
+                                    : rescheduleCheck(r.prId, r.path, { to: dateVal, reason }),
+                                )
+                              }
+                            >
+                              {busy === key ? "Saving…" : openForm_.kind === "clear" ? "Mark cleared" : "Move date"}
+                            </Button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

@@ -2681,26 +2681,28 @@ export async function rescheduleCheck(
 }
 
 /**
- * The four cash figures under the check register — Cash on Bank, Cash on Hand,
- * Collectibles, Cash/Gcash/Checking. *"I will manually input the detail."*
+ * The cash figures under the check register that only a person can know — Cash in
+ * Bank, Cash on Hand, Expected Collections. *"I will manually input the detail."*
+ * Receivables used to be among them and is now linked to the Management
+ * Dashboard's figure instead.
  *
  * Admin only, the same as clearing a check: these decide whether the company is
  * reported as short, and nothing in the system can check them against a bank.
  */
 export async function saveCashPositionAction(input: {
-  cob: number; coh: number; collectibles: number; cashGcashChecking: number;
+  cob: number; coh: number; cashGcashChecking: number;
 }): Promise<{ ok?: true; error?: string }> {
   const denied = await assertCheckAdmin();
   if (denied) return { error: denied };
   const user = await getCurrentUser();
-  const bad = (["cob", "coh", "collectibles", "cashGcashChecking"] as const).find(
+  const bad = (["cob", "coh", "cashGcashChecking"] as const).find(
     (k) => !Number.isFinite(Number(input?.[k])),
   );
   if (bad) return { error: "Every figure must be a number." };
   await saveCashPosition({
     cob: Number(input.cob),
     coh: Number(input.coh),
-    collectibles: Number(input.collectibles),
+    collectibles: 0, // superseded by the linked Receivables figure
     cashGcashChecking: Number(input.cashGcashChecking),
     updatedByName: user?.name ?? "",
     updatedAt: new Date().toISOString(),

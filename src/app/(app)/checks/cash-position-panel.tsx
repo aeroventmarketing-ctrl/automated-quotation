@@ -11,14 +11,19 @@ import type { CashPosition } from "@/lib/cash-position";
 import { saveCashPositionAction } from "../orders/actions";
 
 /**
- * The cash position under the register, laid out as the owner's own sheet:
- * Total First Priority · COB · Remaining COB · COH · Collectibles ·
- * Cash/Gcash/Checking · Remaining Cash · Dispensable Cash · Total Payables ·
- * Deficit.
+ * The cash position under the register, under the owner's own names:
+ * Outstanding Check · Cash in Bank · Available Bank Balance · Cash on Hand ·
+ * Receivables · Expected Collections · Available Cash Balance · Available Funds ·
+ * Accounts Payable · Funding Shortfall.
  *
- * Two of those ten rows are typed in by the owner (COB, and the three cash
- * lines); the rest are derived — from those, and from the checks in the table
- * above, so the panel can never disagree with the register it sits under.
+ * **Three** rows are typed in — Cash in Bank, Cash on Hand and Expected
+ * Collections. Receivables used to be one of them and is now linked to
+ * the Management Dashboard's Receivables tile, so the two always agree. The rest
+ * are derived from those and from the checks in the table above.
+ *
+ * The bank-only line and the all-in line briefly shared the name *Available Cash
+ * Balance*; the owner resolved it — the bank-only one is **Available Bank
+ * Balance**, which is also what it measures: Cash in Bank less what clears now.
  */
 export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: boolean }) {
   const router = useRouter();
@@ -26,8 +31,7 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [f, setF] = useState({
-    cob: String(pos.cob), coh: String(pos.coh),
-    collectibles: String(pos.collectibles), cashGcashChecking: String(pos.cashGcashChecking),
+    cob: String(pos.cob), coh: String(pos.coh), cashGcashChecking: String(pos.cashGcashChecking),
   });
 
   const peso = (n: number) => formatCurrency(n, "PHP");
@@ -38,7 +42,7 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
     try {
       const res = await saveCashPositionAction({
         cob: Number(f.cob) || 0, coh: Number(f.coh) || 0,
-        collectibles: Number(f.collectibles) || 0, cashGcashChecking: Number(f.cashGcashChecking) || 0,
+        cashGcashChecking: Number(f.cashGcashChecking) || 0,
       });
       if (res.error) { setErr(res.error); return; }
       setEditing(false);
@@ -86,15 +90,17 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
       </CardHeader>
       <CardContent className="space-y-0.5 text-sm">
         {/* Rule 1 — what the bank can take today. */}
-        <Row label="TOTAL FIRST PRIORITY" value={pos.firstPriority} tone="bg-emerald-100 text-emerald-900" strong />
+        <Row label="OUTSTANDING CHECK" value={pos.firstPriority} tone="bg-emerald-100 text-emerald-900" strong />
 
         {editing ? (
           <>
-            <Field label="COB — Cash on Bank" k="cob" />
-            <Row label="Remaining COB" value={Number(f.cob) - pos.firstPriority} tone="bg-orange-100 text-orange-900" strong />
-            <Field label="COH — Cash on Hand" k="coh" />
-            <Field label="Collectibles" k="collectibles" />
-            <Field label="Cash / Gcash / Checking" k="cashGcashChecking" />
+            <Field label="Cash in Bank" k="cob" />
+            <Row label="Available Bank Balance" value={Number(f.cob) - pos.firstPriority} tone="bg-orange-100 text-orange-900" strong />
+            <Field label="Cash on Hand" k="coh" />
+            {/* Receivables is linked, not typed — shown here so the running
+                total the owner is editing against still adds up. */}
+            <Row label="Receivables" value={pos.receivables} indent />
+            <Field label="Expected Collections" k="cashGcashChecking" />
             {err && <p className="px-2 text-xs text-destructive">{err}</p>}
             <div className="flex justify-end gap-1.5 px-2 pt-2">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditing(false); setErr(null); }}>Cancel</Button>
@@ -103,19 +109,19 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
           </>
         ) : (
           <>
-            <Row label="COB" value={pos.cob} />
-            {/* Rule 3 — COB less what clears now. */}
-            <Row label="Remaining COB" value={pos.remainingCob} tone="bg-orange-100 text-orange-900" strong />
-            <Row label="COH" value={pos.coh} />
-            <Row label="Collectibles" value={pos.collectibles} />
-            <Row label="Cash / Gcash / Checking" value={pos.cashGcashChecking} />
-            {/* Rules 5 and 6 — the same figure, both names, as the sheet shows. */}
-            <Row label="Remaining Cash" value={pos.remainingCash} />
-            <Row label="Dispensable Cash" value={pos.dispensableCash} strong />
+            <Row label="Cash in Bank" value={pos.cob} />
+            {/* Rule 3 — Cash in Bank less what clears now. */}
+            <Row label="Available Bank Balance" value={pos.remainingCob} tone="bg-orange-100 text-orange-900" strong />
+            <Row label="Cash on Hand" value={pos.coh} />
+            <Row label="Receivables" value={pos.receivables} />
+            <Row label="Expected Collections" value={pos.cashGcashChecking} />
+            {/* Rules 5 and 6 — the same figure under two of the owner's names. */}
+            <Row label="Available Cash Balance" value={pos.remainingCash} />
+            <Row label="Available Funds" value={pos.dispensableCash} strong />
             {/* Rules 7 and 8. */}
-            <Row label="Total Payables" value={pos.totalPayables} />
+            <Row label="Accounts Payable" value={pos.totalPayables} />
             <Row
-              label="Deficit"
+              label="Funding Shortfall"
               value={pos.deficit}
               strong
               tone={pos.deficit > 0 ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-700"}
@@ -125,8 +131,8 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
       </CardContent>
       {!editing && (
         <div className="px-6 pb-3 text-xs text-muted-foreground">
-          First Priority and Total Payables come from the checks above. COB, COH, Collectibles and
-          Cash/Gcash/Checking are entered by hand
+          Outstanding Check and Accounts Payable come from the checks above, and Receivables from the
+          Management Dashboard. Cash in Bank, Cash on Hand and Expected Collections are entered by hand
           {pos.updatedAt ? ` — last by ${pos.updatedByName || "an admin"} on ${formatDateTime(new Date(pos.updatedAt))}` : " and have not been set yet"}.
         </div>
       )}

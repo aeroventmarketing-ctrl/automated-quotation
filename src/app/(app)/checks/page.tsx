@@ -8,6 +8,7 @@ import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { buildCheckWatch, checkWatchSummary, CHECK_NOTICE_DAYS } from "@/lib/check-monitor";
 import { PH_TIME_ZONE } from "@/lib/utils";
 import { getCashPosition, computeCashPosition, EMPTY_CASH_POSITION } from "@/lib/cash-position";
+import { getReceivablesOutstanding } from "@/lib/receivables";
 import { CheckMonitor } from "./check-monitor-table";
 import { CashPositionPanel } from "./cash-position-panel";
 
@@ -59,9 +60,15 @@ export default async function ChecksPage() {
   const summary = checkWatchSummary(rows);
   // The cash position sits under the register and is driven by it: First
   // Priority and Total Payables are the register's own totals, never re-derived.
-  const cash = computeCashPosition(await getCashPosition().catch(() => EMPTY_CASH_POSITION), {
+  const [saved, receivables] = await Promise.all([
+    getCashPosition().catch(() => EMPTY_CASH_POSITION),
+    // The same figure as the Management Dashboard's Receivables tile.
+    getReceivablesOutstanding().catch(() => 0),
+  ]);
+  const cash = computeCashPosition(saved, {
     firstPriority: summary.firstPriorityAmount,
     totalPayables: summary.openAmount,
+    receivables,
   });
 
   return (

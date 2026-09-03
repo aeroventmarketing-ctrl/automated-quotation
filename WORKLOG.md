@@ -1,3 +1,76 @@
+## 2026-09-04 · Cash / Gcash / Checking becomes Expected Collections
+
+Owner: *"Rename Cash/Gcash/Checking to Expected Collections."*
+
+A label change only — in the read view, the edit form and the footer note. The **stored key stays
+`cashGcashChecking`**, so figures already saved are not orphaned by the rename; a comment on the field says so,
+because a key that no longer matches its label is exactly the sort of thing that looks like a bug later.
+
+The panel now reads: Outstanding Check · Cash in Bank · Available Bank Balance · Cash on Hand · Receivables ·
+**Expected Collections** · Available Cash Balance · Available Funds · Accounts Payable · Funding Shortfall.
+Verified on screen, with the old wording gone from the page entirely.
+
+## 2026-09-04 · The duplicate row name is resolved
+
+Owner: *"Rename 4. Available Cash Balance to Available Bank Balance."*
+
+Two rows had briefly shared the name *Available Cash Balance* — the bank-only line (Cash in Bank − Outstanding
+Check) and the all-in line — after the owner's earlier *"Change the name only"*. The bank-only one is now
+**Available Bank Balance**, which is also what it measures.
+
+The panel reads, top to bottom: Outstanding Check · Cash in Bank · **Available Bank Balance** · Cash on Hand ·
+Receivables · Cash/Gcash/Checking · **Available Cash Balance** · Available Funds · Accounts Payable · Funding
+Shortfall. Verified on screen — exactly **one** row now carries each name.
+
+## 2026-09-04 · The cash position takes the owner's accounting names, and Receivables becomes a link
+
+Ten changes, given as a numbered list against a screenshot.
+
+### The renames
+
+| was | is |
+| --- | --- |
+| Total First Priority | **Outstanding Check** |
+| COB | **Cash in Bank** |
+| Remaining COB | **Available Cash Balance** |
+| COH | **Cash on Hand** |
+| Collectibles | **Receivables** |
+| Remaining Cash | **Available Cash Balance** |
+| Dispensable Cash | **Available Funds** |
+| Total Payables | **Accounts Payable** |
+| Deficit | **Funding Shortfall** |
+
+Items 4 and 7 both landed on *Available Cash Balance* — the bank-only line (Cash in Bank − Outstanding Check)
+and the all-in line, which differ whenever Cash on Hand or Receivables is non-zero. Asked which was meant, the
+owner answered **"Change the name only"**, so both rows keep the name and **no row was removed**. Recorded here
+because two rows sharing a label is the sort of thing a later reader will assume is a bug.
+
+### Receivables stopped being typed and started being linked
+
+*"link and show the amount from Receivables in Management dashboard."*
+
+The dashboard computes its figure inside a loop that also builds a dozen other things, so **the rule** — not the
+loop — moved into `src/lib/receivables.ts`, and both callers use it:
+
+- `countsAsReceivable()` — confirmed sales only (deliberately not `inquiry.status === "WON"`, because a
+  quotation revision reopens the inquiry and would drop a confirmed, already-paid order), and the go-live floor.
+- `receivableOf()` — value, collected, balance.
+
+The Management Dashboard's loop now calls both instead of inlining them, so the tile and the panel are the same
+arithmetic over the same query. Verified live: the panel reads **₱422,358.40** and the tile reads **₱422,358.40**.
+
+`collectibles` survives on the stored record but is ignored — a test pins that a stale hand-typed 999,999 does
+not get added on top of the linked figure.
+
+### The date picker had no room to be a date picker
+
+Squeezed into the ~100px Actions column, the native control was cut off and its value read *"10/17/202…"*. The
+form now opens as **its own full-width row beneath the check**, which is also why it is not a popover: the table
+sits in an `overflow-x-auto` wrapper that would clip one.
+
+Measured: the date field is now **180×36px** with its calendar button intact, the reason field 695px, and the
+table still has **0px** of horizontal overflow with the form open.
+
 ## 2026-09-03 · The check register fits on the screen, and the check number opens its photo
 
 Owner: *"Fit the details in the table. To be able to view all detail I have to scroll left and right. Make the
