@@ -1,3 +1,40 @@
+## 2026-09-03 · The check equals the PO's NET — confirmed, and a round amount stopped reading as a mismatch
+
+Owner: *"amount in PO and amount in check should be same."*
+
+Asked which of the two figures the PO card shows — their TOZEN PO reads **"₱2,180.00 · Net ₱2,160.54"**, the
+difference being the 1% EWT we withhold and remit ourselves — the owner confirmed: **the Net.**
+
+That is what `checkIssues()` already compared against, so the rule needed no change. It is now written down at
+the parameter, with the reason: where a supplier is EWT-capable the check is written for the remainder and the
+supplier gets a BIR 2307 for the difference; where they are not, net and gross are the same number, so NET is
+the correct comparison either way. The figure comes from the same `poTotals(po).net` the card prints, so the
+number a check is judged against is always the number on screen beside it.
+
+Pinned as a test against those exact figures — ₱2,160.54 passes, the same check written for ₱2,180.00 is
+flagged.
+
+### The test that pinned it found a real bug
+
+Writing the gross case needed the amount in words, and the words comparison rejected it:
+
+```
+pesoAmountInWords(2180) === "TWO THOUSAND ONE HUNDRED EIGHTY"      // no tail
+a real check                "TWO THOUSAND ONE HUNDRED EIGHTY AND 00/100"
+```
+
+A check **always** writes the centavo tail — `AND 00/100`, `AND NO/100` — because a blank there is where a
+fraud gets written in. Our speller stops at the peso. So **every check for a round peso amount** — which is
+most of them — would have been reported as disagreeing with its own figure, on a warning line the owner is
+meant to trust.
+
+`normWords` now drops a ZERO tail from either side (`AND 00/100`, `AND NO/100`, `AND 0/100`) and keeps a
+non-zero one, since `AND 54/100` is part of the amount. Tested both ways: 54/100 must still match 54/100 and
+must not match 45/100 or 00/100.
+
+The mismatch line also reads in pesos now — *"Check is for ₱20,827.37 but this PO's net is ₱2,160.54"* rather
+than bare decimals.
+
 ## 2026-09-03 · The AI reads the check, and the check number finds the PO
 
 Owner, with a photo of a real check to practise on:

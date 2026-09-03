@@ -118,6 +118,25 @@ describe("the practice check", () => {
     expect(amountMatchesWords(20827.37, PRACTICE.amountWords, pesoAmountInWords)).toBe(true);
   });
 
+  it("accepts the zero-centavo tail a check always writes and we never do", () => {
+    // Our speller stops at the peso: `pesoAmountInWords(2180)` has no tail. A
+    // check always writes one, because a blank there is where a fraud gets
+    // written in. Every round-amount check would otherwise read as a mismatch.
+    expect(pesoAmountInWords(2180)).toBe("TWO THOUSAND ONE HUNDRED EIGHTY");
+    for (const words of [
+      "TWO THOUSAND ONE HUNDRED EIGHTY AND 00/100",
+      "TWO THOUSAND ONE HUNDRED EIGHTY AND NO/100",
+      "TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY",
+      "Two Thousand One Hundred Eighty",
+    ]) {
+      expect(amountMatchesWords(2180, words, pesoAmountInWords), words).toBe(true);
+    }
+    // A real centavo tail is still part of the amount, and still has to agree.
+    expect(amountMatchesWords(2160.54, "TWO THOUSAND ONE HUNDRED SIXTY AND 54/100", pesoAmountInWords)).toBe(true);
+    expect(amountMatchesWords(2160.54, "TWO THOUSAND ONE HUNDRED SIXTY AND 45/100", pesoAmountInWords)).toBe(false);
+    expect(amountMatchesWords(2160.54, "TWO THOUSAND ONE HUNDRED SIXTY AND 00/100", pesoAmountInWords)).toBe(false);
+  });
+
   it("survives the company name being written our way or the bank's", () => {
     // "&" vs "AND", and the suffixes suppliers drop at will.
     expect(sameCompany("AEROVENT FANS AND BLOWERS MANUFACTURING", OURS)).toBe(true);
@@ -134,6 +153,25 @@ describe("what the read is cross-examined against", () => {
 
   it("flags a check written for a different amount than the PO's net", () => {
     expect(ok({ netAmount: 2160.54 }).map((i) => i.key)).toContain("amount");
+  });
+
+  // The owner's ruling, asked directly against their own TOZEN PO — which reads
+  // "₱2,180.00 · Net ₱2,160.54", the difference being the 1% EWT we withhold and
+  // remit ourselves: *the check equals the NET.* Pinned because the two figures
+  // sit side by side on the card and picking the wrong one would flag every
+  // EWT supplier's check as a mismatch.
+  it("judges the check against the PO's NET, not its gross total", () => {
+    const withEwt = { netAmount: 2160.54, supplierCompany: "TOZEN PHILIPPINES INC." };
+    const forNet = { ...PRACTICE, amount: 2160.54, amountWords: "TWO THOUSAND ONE HUNDRED SIXTY AND 54/100", payee: "TOZEN PHILIPPINES INC." };
+    expect(ok({ ...withEwt, read: forNet })).toEqual([]);
+    // The same check written for the gross is the error this is here to catch.
+    const forGross = { ...forNet, amount: 2180, amountWords: "TWO THOUSAND ONE HUNDRED EIGHTY AND 00/100" };
+    expect(ok({ ...withEwt, read: forGross }).map((i) => i.key)).toEqual(["amount"]);
+  });
+
+  it("says which two figures disagree, in pesos a person can read", () => {
+    const [issue] = ok({ netAmount: 2160.54 });
+    expect(issue.message).toBe("Check is for ₱20,827.37 but this PO's net is ₱2,160.54.");
   });
 
   it("flags figures and words that disagree — a digit misread, or a bad check", () => {
