@@ -63,10 +63,35 @@ export const CHECK_STATE_LABEL: Record<CheckWatchState, string> = {
   undated: "No clearing date read",
 };
 
+/**
+ * The owner's own status vocabulary, taken from the legend at the foot of their
+ * register (`Pending · For Payment · Check Clearing · Finished`).
+ *
+ * This screen only ever holds the last two: a row exists here because a check
+ * exists, so it is either still clearing or finished. *Pending* and *For
+ * Payment* describe a PO before any check is written, which is a payables
+ * question, not a check one.
+ */
+export function registerStatus(state: CheckWatchState): "Check Clearing" | "Finished" {
+  return state === "cleared" ? "Finished" : "Check Clearing";
+}
+
+/**
+ * Post-dated or not. Every row in the owner's register reads **PDC**, which is
+ * the norm for a terms supplier — but it is derived rather than assumed, so a
+ * current-dated check is not mislabelled.
+ */
+export function formOfPayment(poDate: string | null, clearingYMD: string | null): "PDC" | "Check" {
+  if (!poDate || !clearingYMD) return "Check";
+  return clearingYMD > poDate.slice(0, 10) ? "PDC" : "Check";
+}
+
 /** One check, as the monitoring screen and the tile see it. */
 export interface CheckWatchRow {
   prId: string;
   path: string; // identifies the check within its PO
+  /** The date on the PO itself — the register's leading column. */
+  poDate: string | null;
   poNumber: string;
   supplier: string;
   orderId: string | null;
@@ -84,6 +109,12 @@ export interface CheckWatchRow {
   state: CheckWatchState;
   clearedOn: string | null;
   clearedByName: string | null;
+  /** "Check Clearing" / "Finished" — the owner's register wording. */
+  statusLabel: string;
+  /** "PDC" for a post-dated check, the register's Form of Payment column. */
+  form: "PDC" | "Check";
+  /** Why a date was moved, or the note left when it cleared. */
+  remarks: string | null;
 }
 
 /** The PurchaseRequest fields this reads — a subset, so callers can select narrowly. */
@@ -99,7 +130,7 @@ export function buildCheckWatch(
   todayYMD: string,
   helpers: {
     coerceDocs: (v: unknown) => CheckDoc[];
-    poOf: (v: unknown) => { poNumber: string; supplierCompany: string } | null;
+  poOf: (v: unknown) => { poNumber: string; supplierCompany: string; date: string | null } | null;
   },
 ): CheckWatchRow[] {
   const rows: CheckWatchRow[] = [];
@@ -109,9 +140,12 @@ export function buildCheckWatch(
       const due = effectiveClearingYMD(doc);
       const original = doc.read?.clearingYMD ?? null;
       const moves = doc.reschedules?.length ?? 0;
+      const state = checkWatchState(doc, todayYMD);
+      const poDate = po?.date ? po.date.slice(0, 10) : null;
       rows.push({
         prId: pr.id,
         path: doc.path,
+        poDate,
         poNumber: po?.poNumber ?? "—",
         supplier: po?.supplierCompany ?? "",
         orderId: pr.quotationId,
@@ -122,9 +156,14 @@ export function buildCheckWatch(
         moves,
         lastMoveReason: moves ? doc.reschedules![moves - 1].reason || null : null,
         daysLeft: due ? daysBetweenYMD(todayYMD, due) : null,
-        state: checkWatchState(doc, todayYMD),
+        state,
         clearedOn: doc.cleared?.on ?? null,
         clearedByName: doc.cleared?.byName ?? null,
+        statusLabel: registerStatus(state),
+        form: formOfPayment(poDate, due),
+        // The register's Remarks column, filled with what the system actually
+        // knows: why a date moved, or the note left when it cleared.
+        remarks: doc.cleared?.note ?? (moves ? doc.reschedules![moves - 1].reason || null : null),
       });
     }
   }

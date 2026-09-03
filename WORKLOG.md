@@ -1,3 +1,42 @@
+## 2026-09-03 · The check screen takes the owner's own register columns
+
+The sample workbook arrived encrypted; with the password it opened as **two different files**. The first,
+`AFBM Sales and Expenses_AeroERP.xlsx`, is the 2023–2025 sales & expenses ledger — eleven sheets of P&L by
+business line, and **no check data at all** (its only "check" matches are the words *"for double checking"* in
+a remarks column). The second, `…2026 for AeroERP2.xlsx`, is the real one: a single **Purchase Orders** sheet,
+108 rows, which is the check register kept by hand today.
+
+### The table now reads like the register
+
+| the register | the screen |
+| --- | --- |
+| Date · Company · Purchase Order Number · Check No. · Amount · Date Paid/Cleared · Form of Payment · Status · Remarks | the same nine, in the same order |
+
+Three columns were added to match it: the **PO date** (which the screen had not shown at all), **Form of
+Payment**, and **Remarks**. Form of Payment is *derived*, not assumed — `clearingYMD > poDate` means **PDC**.
+All 42 rows of the register read PDC, so assuming it would have been right today and silently wrong the first
+time a current-dated check was issued. Remarks carries what the system actually knows: why a date was moved, or
+the note left when it cleared.
+
+### Their status words, kept — with the urgency they don't carry
+
+The register's legend defines four: `Pending · For Payment · Check Clearing · Finished`. The Status column now
+shows **Check Clearing** / **Finished** in their wording, with the urgency badge underneath, because *"Check
+Clearing"* is equally true of a check due next month and one three days overdue — and the whole point of the
+tile is telling those apart.
+
+### A gap the register revealed, left open deliberately
+
+Of the register's 44 data rows, **13 are `For Payment` and carry no check number**: a PO that is due to be paid
+where no check has been written yet. This screen cannot show them — a row exists here *because a check exists*.
+That is a payables question rather than a check one, and inventing an answer to it was not the ask. Raised with
+the owner rather than guessed at.
+
+Verified against the register's own Powerlink rows: PO-AFBM2026000473 / check 486625 / ₱263,081.89 / Aug 22
+reads *"Check Clearing · Overdue — not cleared · 12 days ago"*; a check moved from Sep 1 to Oct 9 shows *"moved
+from Sep 1, 2026"* with **insufficient funds** in Remarks; the cleared one shows *"Finished · by Admin Ana"* on
+the Cleared tab.
+
 ## 2026-09-03 · Check monitoring — every issued check, watched to the day it clears
 
 Owner: *"In admin Management Dashboard at the right side and in row with Unpaid Commissions, add a tile named

@@ -121,11 +121,11 @@ describe("moving a check's date", () => {
 describe("the monitoring list", () => {
   const helpers = {
     coerceDocs: (v: unknown) => v as CheckDoc[],
-    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string } | null,
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null } | null,
   };
   const pr = (id: string, docs: CheckDoc[]) => ({
     id, quotationId: null,
-    po: { poNumber: `PO-${id}`, supplierCompany: "POWERLINK" },
+    po: { poNumber: `PO-${id}`, supplierCompany: "POWERLINK", date: "2026-08-01" },
     voucherCheckDocs: docs,
   });
 

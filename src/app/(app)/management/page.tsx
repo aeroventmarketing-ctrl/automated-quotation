@@ -576,7 +576,7 @@ export default async function ManagementPage() {
     coerceDocs: coerceCheckDocs,
     poOf: (v) => {
       const po = coercePurchaseOrder(v);
-      return po ? { poNumber: po.poNumber, supplierCompany: po.supplier.company } : null;
+      return po ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null } : null;
     },
   });
   const checks = checkWatchSummary(checkRows);

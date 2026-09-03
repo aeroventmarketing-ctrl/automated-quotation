@@ -122,15 +122,21 @@ export function CheckMonitor({
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[1000px] border-collapse text-sm">
+          <table className="w-full min-w-[1240px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Clearing date</th>
+                {/* The owner's own register columns, in their order and their
+                    wording: Date · Company · Purchase Order Number · Check No. ·
+                    Amount · Date Paid/Cleared · Form of Payment · Status · Remarks. */}
+                <th className="px-3 py-2 font-medium">Date</th>
+                <th className="px-3 py-2 font-medium">Company</th>
+                <th className="px-3 py-2 font-medium">Purchase Order Number</th>
                 <th className="px-3 py-2 font-medium">Check No.</th>
-                <th className="px-3 py-2 font-medium">Supplier</th>
-                <th className="px-3 py-2 font-medium">PO</th>
                 <th className="px-3 py-2 text-right font-medium">Amount</th>
+                <th className="px-3 py-2 font-medium">Date Paid/Cleared</th>
+                <th className="px-3 py-2 font-medium">Form of Payment</th>
                 <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Remarks</th>
                 {admin && <th className="px-3 py-2 text-right font-medium">Actions</th>}
               </tr>
             </thead>
@@ -140,27 +146,33 @@ export function CheckMonitor({
                 const openForm_ = form?.key === key ? form : null;
                 return (
                   <tr key={key} className="border-b align-top last:border-0">
-                    <td className="px-3 py-2">
-                      <div className="font-medium tabular-nums">{r.clearingYMD ? formatDate(r.clearingYMD) : "—"}</div>
-                      <div className="text-xs text-muted-foreground">{whenText(r)}</div>
-                      {r.originalYMD && (
-                        <div className="mt-0.5 text-xs text-amber-700" title={r.lastMoveReason ?? undefined}>
-                          moved from {formatDate(r.originalYMD)}
-                          {r.moves > 1 ? ` · ${r.moves} times` : ""}
-                          {r.lastMoveReason ? ` · ${r.lastMoveReason}` : ""}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 font-medium tabular-nums">{r.checkNo ?? <span className="text-muted-foreground">not read</span>}</td>
+                    <td className="px-3 py-2 tabular-nums text-muted-foreground">{r.poDate ? formatDate(r.poDate) : "—"}</td>
                     <td className="px-3 py-2">{r.supplier || "—"}</td>
                     <td className="px-3 py-2">
                       <Link href={`/purchasing?req=${r.prId}`} className="text-primary underline-offset-2 hover:underline">
                         {r.poNumber}
                       </Link>
                     </td>
+                    <td className="px-3 py-2 font-medium tabular-nums">{r.checkNo ?? <span className="text-muted-foreground">not read</span>}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.amount != null ? formatCurrency(r.amount, "PHP") : "—"}</td>
                     <td className="px-3 py-2">
-                      <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${TONE[r.state]}`}>
+                      <div className="font-medium tabular-nums">{r.clearingYMD ? formatDate(r.clearingYMD) : "—"}</div>
+                      {/* How far off it is, which is the whole point of watching it. */}
+                      <div className={`text-xs ${needsAttention(r.state) ? "font-medium text-amber-700" : "text-muted-foreground"}`}>{whenText(r)}</div>
+                      {r.originalYMD && (
+                        <div className="mt-0.5 text-xs text-amber-700">
+                          moved from {formatDate(r.originalYMD)}
+                          {r.moves > 1 ? ` · ${r.moves} times` : ""}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.form}</td>
+                    <td className="px-3 py-2">
+                      {/* The register's word for it, with the urgency that word
+                          doesn't carry — "Check Clearing" is true of a check due
+                          next month and of one three days overdue. */}
+                      <div className="font-medium">{r.statusLabel}</div>
+                      <span className={`mt-0.5 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${TONE[r.state]}`}>
                         {needsAttention(r.state) && <AlertTriangle className="h-3.5 w-3.5" />}
                         {r.state === "cleared" && <CheckCircle2 className="h-3.5 w-3.5" />}
                         {CHECK_STATE_LABEL[r.state]}
@@ -169,6 +181,7 @@ export function CheckMonitor({
                         <div className="mt-0.5 text-xs text-muted-foreground">by {r.clearedByName}</div>
                       )}
                     </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{r.remarks ?? ""}</td>
                     {admin && (
                       <td className="px-3 py-2">
                         {openForm_ ? (
