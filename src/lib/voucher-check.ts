@@ -24,25 +24,110 @@
 import type { PRStatus } from "@/lib/purchasing";
 import { prMainIndex } from "@/lib/purchasing";
 
-/** One uploaded check photo. `SaleDoc` plus who attached it. */
+/**
+ * What the AI reads off the face of the check. The owner's field map, in their
+ * words, from the practice check:
+ *
+ * > *a. Account No. is 003718007033 · b. Account name is Aerovent Fans and
+ * > Blowers Manufacturing · c. Check No. is 0000486722 · d. Pay to the order of
+ * > is the supplier's name · e. Date 10-17-2026 is the date of check clearing ·
+ * > f. Pesos sign is the amount in number · g. Pesos line is the amount in
+ * > words.*
+ *
+ * Every field is nullable: a photo with glare over the date is still worth
+ * keeping for the check number, and a half-read check must never be dressed up
+ * as a whole one.
+ */
+export interface CheckRead {
+  accountNo: string | null; // (a) OUR account the check is drawn on
+  accountName: string | null; // (b) our company name printed on the check
+  checkNo: string | null; // (c) the pre-printed check number
+  payee: string | null; // (d) "Pay to the order of" — the supplier
+  clearingYMD: string | null; // (e) the DATE box — when the check clears, not when it was written
+  amount: number | null; // (f) the figure in the peso box
+  amountWords: string | null; // (g) the amount spelled out on the PESOS line
+  bank: string | null;
+  confidence: number | null; // 0..1 — how sure of the exact digits
+  warnings: string[];
+  /**
+   * What disagreed with the PO when the check was read (see `checkIssues`).
+   * Stored rather than recomputed on every render: the duplicate-check-number
+   * test needs every other PO's numbers, and the moment that matters is the
+   * moment of reading — a check that duplicates one recorded LATER is not the
+   * one at fault.
+   */
+  issues: CheckIssue[];
+  readByName: string;
+  readAt: string; // ISO
+}
+
+/** One uploaded check photo. The file, who attached it, and what the AI read. */
 export interface CheckDoc {
   path: string; // storage path under `purchases/<prId>/…`
   name: string; // original file name
   uploadedAt: string; // ISO
   uploadedByName: string;
+  /** Absent until the AI has read it (or if the read failed). */
+  read?: CheckRead;
+}
+
+function coerceRead(v: unknown): CheckRead | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" && o[k] ? (o[k] as string) : null);
+  return {
+    accountNo: str("accountNo"),
+    accountName: str("accountName"),
+    checkNo: str("checkNo"),
+    payee: str("payee"),
+    clearingYMD: str("clearingYMD"),
+    amount: typeof o.amount === "number" && Number.isFinite(o.amount) ? o.amount : null,
+    amountWords: str("amountWords"),
+    bank: str("bank"),
+    confidence: typeof o.confidence === "number" ? o.confidence : null,
+    warnings: Array.isArray(o.warnings) ? o.warnings.filter((w): w is string => typeof w === "string") : [],
+    issues: Array.isArray(o.issues)
+      ? (o.issues as unknown[]).flatMap((i) => {
+          if (!i || typeof i !== "object") return [];
+          const io = i as Record<string, unknown>;
+          return typeof io.message === "string" ? [{ key: (io.key as CheckIssue["key"]) ?? "unread", message: io.message }] : [];
+        })
+      : [],
+    readByName: typeof o.readByName === "string" ? o.readByName : "",
+    readAt: typeof o.readAt === "string" ? o.readAt : "",
+  };
 }
 
 export function coerceCheckDoc(v: unknown): CheckDoc | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
   if (typeof o.path !== "string" || !o.path) return null;
+  const read = coerceRead(o.read);
   return {
     path: o.path,
     name: typeof o.name === "string" && o.name ? o.name : "check",
     uploadedAt: typeof o.uploadedAt === "string" ? o.uploadedAt : "",
     uploadedByName: typeof o.uploadedByName === "string" ? o.uploadedByName : "",
+    ...(read ? { read } : {}),
   };
 }
+
+/** Every check number read off this PO's photos, in upload order. */
+export function checkNumbers(docs: CheckDoc[]): string[] {
+  return docs.map((d) => d.read?.checkNo).filter((n): n is string => !!n);
+}
+
+/**
+ * A check number reduced to what actually identifies it: digits only, leading
+ * zeros dropped.
+ *
+ * The zeros are padding in a fixed-width printed field, not part of the number —
+ * "0000486722" and "486722" are the same check, and for a duplicate WARNING it
+ * is far better to ask about two that turn out to be different than to miss two
+ * that are the same. The number is still displayed and searched exactly as
+ * printed; only the comparison is loosened.
+ */
+export const normalizeCheckNo = (no: string): string => no.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
 
 export function coerceCheckDocs(v: unknown): CheckDoc[] {
   if (!Array.isArray(v)) return [];
@@ -84,4 +169,105 @@ export function checkExpected(opts: { supplierGivesTerms: boolean; status: PRSta
 /** Expected, and not there — the condition the amber badge and the notification key on. */
 export function checkMissing(opts: { supplierGivesTerms: boolean; status: PRStatus; docs: CheckDoc[] }): boolean {
   return checkExpected(opts) && opts.docs.length === 0;
+}
+
+// --- Checking the read against what we already know --------------------------
+//
+// The AI is a reader, not an authority. Everything it returns is cross-examined
+// against something the system already holds — our own account name, the PO's
+// supplier, the PO's net amount, the amount spelled out on the check itself, and
+// every check number already recorded. A mismatch is REPORTED, never enforced:
+// the owner's rule is that the check is required but is not a gate, and a
+// misread photo must not be able to stop a payment.
+
+/**
+ * Loose company-name match: case, punctuation, spacing and the legal-form suffix
+ * ignored.
+ *
+ * `&` becomes `AND` BEFORE punctuation is stripped — our own name is
+ * *"AEROVENT FANS & BLOWERS MANUFACTURING"* and the bank prints
+ * *"AEROVENT FANS AND BLOWERS MANUFACTURING"*, so without this every one of our
+ * own checks would be reported as drawn on someone else's account.
+ *
+ * Only the legal form is dropped (INC / CORP / CO / LTD and their long forms) —
+ * NOT words like "TRADING" or "ENTERPRISES", which are part of what tells two
+ * suppliers apart. Containment counts as a match only for names long enough for
+ * it to mean something.
+ */
+export function sameCompany(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string) =>
+    s
+      .toUpperCase()
+      .replace(/&/g, " AND ")
+      .replace(/\b(INCORPORATED|CORPORATION|COMPANY|INC|CORP|CO|LTD)\b/g, " ")
+      .replace(/[^A-Z0-9]/g, "");
+  if (!a || !b) return false;
+  const [x, y] = [norm(a), norm(b)];
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.length >= 6 && long.includes(short);
+}
+
+/** Words as written on a check: case, hyphens, spacing and "PESOS"/"ONLY" ignored. */
+const normWords = (s: string) => s.toUpperCase().replace(/\bPESOS?\b|\bONLY\b/g, " ").replace(/[^A-Z0-9]/g, "");
+
+/** Do the amount in figures and the amount in words agree? */
+export function amountMatchesWords(amount: number | null, words: string | null, inWords: (n: number) => string): boolean {
+  if (amount == null || !words) return false;
+  return normWords(inWords(amount)) === normWords(words);
+}
+
+export interface CheckIssue {
+  key: "payee" | "amount" | "words" | "account" | "duplicate" | "unread" | "confidence";
+  message: string;
+}
+
+/**
+ * Everything wrong with a check photo, given what the PO says it should be.
+ * An empty list means the read agrees with the PO on every point we can test.
+ */
+export function checkIssues(opts: {
+  read: CheckRead | undefined;
+  supplierCompany: string;
+  /** The PO's NET amount — what the check is actually written for (gross less EWT). */
+  netAmount: number;
+  /** Our own company name, from config. */
+  ourCompany: string;
+  /** Check numbers already recorded on OTHER purchase orders. */
+  usedCheckNos?: string[];
+  inWords: (n: number) => string;
+}): CheckIssue[] {
+  const r = opts.read;
+  if (!r) return [{ key: "unread", message: "The check hasn't been read yet." }];
+  const issues: CheckIssue[] = [];
+
+  if (typeof r.confidence === "number" && r.confidence < 0.7) {
+    issues.push({ key: "confidence", message: "The photo is unclear — check the figures against the check itself." });
+  }
+  // (b) The account name is OURS. A check drawn on someone else's account
+  // attached to our PO is either the wrong photo or something worse.
+  if (r.accountName && !sameCompany(r.accountName, opts.ourCompany)) {
+    issues.push({ key: "account", message: `Account name reads "${r.accountName}" — not ${opts.ourCompany}.` });
+  }
+  // (d) Pay to the order of = this PO's supplier.
+  if (r.payee && !sameCompany(r.payee, opts.supplierCompany)) {
+    issues.push({ key: "payee", message: `Paid to "${r.payee}" but this PO is to ${opts.supplierCompany}.` });
+  }
+  // (f) The figure against the PO's net.
+  if (r.amount != null && opts.netAmount > 0 && Math.abs(r.amount - opts.netAmount) > 0.01) {
+    issues.push({ key: "amount", message: `Check is for ${r.amount.toFixed(2)} but the PO's net is ${opts.netAmount.toFixed(2)}.` });
+  }
+  // (g) The check's own self-check: figures against words.
+  if (r.amount != null && r.amountWords && !amountMatchesWords(r.amount, r.amountWords, opts.inWords)) {
+    issues.push({ key: "words", message: `The amount in words doesn't match the figure — "${r.amountWords}".` });
+  }
+  // (c) The same check number must not already be recorded elsewhere.
+  if (r.checkNo) {
+    const mine = normalizeCheckNo(r.checkNo);
+    if (mine && (opts.usedCheckNos ?? []).some((n) => normalizeCheckNo(n) === mine)) {
+      issues.push({ key: "duplicate", message: `Check No. ${r.checkNo} is already recorded on another purchase order.` });
+    }
+  }
+  return issues;
 }

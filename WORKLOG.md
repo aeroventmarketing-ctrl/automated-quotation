@@ -1,3 +1,69 @@
+## 2026-09-03 · The AI reads the check, and the check number finds the PO
+
+Owner, with a photo of a real check to practise on:
+
+> *"1. show check number below attach check button and make the number searchable using search bar.
+> 2. This is a check reading practice, train the AI reading feature to read the uploaded check —
+> a. Account No. is 003718007033 · b. Account name is Aerovent Fans and Blowers Manufacturing ·
+> c. Check No. is 0000486722 · d. Pay to the order of is the supplier's name · e. Date 10-17-2026 is the date
+> of check clearing · f. Pesos sign is the amount in number · g. Pesos line is the amount in words."*
+
+Pass 2, on the photos pass 1 started collecting. **"Train" here means prompt, not fine-tune** — the seven
+rulings above ARE the training, written into `src/app/api/ai/read-check/route.ts` field by field, and pinned
+in `voucher-check.test.ts` against that exact check.
+
+### Two of the seven rulings carry real weight
+
+**(e) The DATE box is the CLEARING date, not the issue date.** Terms suppliers here are paid by PDC, so the
+date printed on the check is weeks or months ahead. Read as an issue date it would put every payment in the
+wrong month — so the prompt says so twice, and says a future date is normal and must be read as printed.
+
+**(f) and (g) are read INDEPENDENTLY and never reconciled by the model.** A check carries its own cross-check
+on its face: the figure in the peso box and the words on the PESOS line say the same thing twice. If the model
+is allowed to make one agree with the other, that check is destroyed and a misread digit comes back as a
+confident wrong answer. The prompt forbids it; the system compares the two itself with our own
+`pesoAmountInWords`, so a disagreement surfaces as a warning instead of a silent error.
+
+### The read is cross-examined, not trusted
+
+`checkIssues()` — pure, whole-table test — takes what the AI returned and argues with it:
+
+| | |
+| --- | --- |
+| **(b) account name** | must be **us**. A check drawn on someone else's account attached to our PO is the wrong photo, or worse |
+| **(d) payee** | must be this PO's supplier |
+| **(f) amount** | must be the PO's **net** (gross less EWT) — what the check is actually written for |
+| **(g) words** | must spell the figure |
+| **(c) check number** | must not already be recorded on another PO |
+| confidence | below 0.7 says so rather than pretending |
+
+Every finding is **reported, never enforced** — the same ruling as pass 1: required, but not a gate. A misread
+photo must not be able to stop a supplier being paid.
+
+Two normalisation bugs the practice check found on its own:
+
+- `sameCompany` compared **"AEROVENT FANS & BLOWERS MANUFACTURING"** (config) against **"AEROVENT FANS AND
+  BLOWERS MANUFACTURING"** (the bank's print) and said *not us* — so **every one of our own checks** would
+  have been flagged as drawn on a stranger's account. `&` now becomes `AND` before punctuation is stripped.
+  While there: only the legal form (INC / CORP / CO / LTD) is dropped, not "TRADING" or "ENTERPRISES", which
+  are what tell two suppliers apart.
+- Our speller hyphenates — `TWENTY-SEVEN` — and the check does not. Without ignoring that, a correct check
+  reads as a mismatch.
+
+### Where the number shows, and how it is found
+
+The check number now sits **under the Attach check button**, with the payee, the amount and the clearing date
+beneath it, and any disagreement in amber under that. It is **searchable in the Purchasing search box**
+alongside the PO number, in every section — combined POs, order groups, department requisitions,
+replenishments and the Completed list. `textMatch` already ignores separators, so typing `486722` finds
+`0000486722`; the duplicate test goes further and drops leading zeros, because the padding is a printed field
+width, not part of the number.
+
+Uploading runs the read immediately — a number nobody has to type is the entire point — but the file is
+**attached first and read second**, so a failed read (no API key, no credit, a bad photo) leaves the photo in
+place with a *Read check* button rather than losing it. `AI_CHECK_READ_LIMIT = 3` per PO, with the Admin and
+the **Payment Approver** exempt: they authorise the money, so they are never locked out of looking at it.
+
 ## 2026-09-03 · A photo of the check, on the PO it paid for
 
 Owner: *"I would like accounting role to attach or upload picture of check in this location (right side of Print

@@ -25,3 +25,12 @@ export const AI_DEPOSIT_SLIP_READ_LIMIT = 3;
  * shared budget) — they are the override for this rule.
  */
 export const AI_SALE_DOC_READ_LIMIT = 3;
+
+/**
+ * How many times the AI check reader may be run against a single purchase order,
+ * for users other than an Admin or the Payment Approver. Persisted on the PO's
+ * check docs. Once reached, the figures must be checked against the check by
+ * hand; an Admin / Payment Approver has no limit (and their reads don't consume
+ * the shared budget) — they are the override for this rule.
+ */
+export const AI_CHECK_READ_LIMIT = 3;
