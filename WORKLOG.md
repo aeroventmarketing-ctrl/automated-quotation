@@ -1,3 +1,46 @@
+## 2026-09-03 · The check register fits on the screen, and the check number opens its photo
+
+Owner: *"Fit the details in the table. To be able to view all detail I have to scroll left and right. Make the
+check number clickable. Once clicked it will show the image of the check."*
+
+### The number opens the photo
+
+The check number is now a link to `/api/purchase-uploads/view` for the photo it was read from — the quickest way
+to check the system against the paper. **Linked even when the number could not be read**, where the row says
+*not read*: that is precisely the moment someone wants to look at the image.
+
+### Why ten columns would not fit, and what actually fixed it
+
+`min-w-[1240px]` was the wrong tool. The table was `auto`-layout, so the columns took whatever their content
+wanted and pushed past the container regardless of the minimum — the Actions column alone could not go below its
+two buttons.
+
+Now it is `table-fixed` with an explicit `<colgroup>`: **every column is a fixed pixel width except Company**,
+which absorbs whatever is left. The supplier name is the only genuinely variable value, so it is the one that
+should flex; everything else has a knowable floor (a date, a peso amount, two buttons).
+
+Getting there took three passes, each measured rather than eyeballed:
+
+| | |
+| --- | --- |
+| percentages | Actions squeezed below its buttons → still 8px over |
+| fixed px, generous | fixed columns summed to 990 of a 1086px container, leaving Company 96px, which broke *POWERLIN / K MERCHAN / DISE* mid-word |
+| fixed px, trimmed to 862 | Company gets ~224px and wraps at word boundaries |
+
+The action buttons stack vertically and the inline date/reason form fills the column rather than assuming a wide
+one.
+
+Measured at three viewports with the real screenshot data — 1920, 1536 and 1280 — **0px of horizontal overflow
+at each**, with the page itself never scrolling sideways either. `overflow-x-auto` stays as the graceful
+fallback for a phone.
+
+### A harness habit worth writing down
+
+The first two measurements were identical (8px) no matter the viewport, which is what tipped me off: the harness
+**tar-copies the working tree at boot**, so edits made afterwards are not in the running copy. Every width change
+needs a reboot before it can be measured, and a constant that refuses to move across viewports means you are
+measuring the previous build.
+
 ## 2026-09-03 · No more advance notice — only a check that failed to clear
 
 Owner, asked whether "disregard the 3 day notice" meant dropping the feature or just my explanation:
