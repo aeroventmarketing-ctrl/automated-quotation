@@ -8,6 +8,8 @@ import { coerceLiquidation, isLiquidated, liquidationVariance } from "@/lib/cash
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { payableTotal, round2 } from "@/lib/quote";
 import { getPrintedVouchers } from "@/lib/purchase-voucher";
+import { buildCheckWatch, checkWatchSummary } from "@/lib/check-monitor";
+import { coerceCheckDocs } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
@@ -565,6 +567,20 @@ export default async function ManagementPage() {
   const csMonthTotal = Number(counterMonth?._sum.total ?? 0);
   const csMonthCount = counterMonth?._count ?? 0;
 
+  // Check monitoring — every issued check by the day it clears. Kept beside the
+  // commission tile because both are money leaving on a date, not on an event.
+  const checkPrs = await prisma.purchaseRequest
+    .findMany({ select: { id: true, quotationId: true, po: true, voucherCheckDocs: true } })
+    .catch(() => []);
+  const checkRows = buildCheckWatch(checkPrs, phToday, {
+    coerceDocs: coerceCheckDocs,
+    poOf: (v) => {
+      const po = coercePurchaseOrder(v);
+      return po ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null } : null;
+    },
+  });
+  const checks = checkWatchSummary(checkRows);
+
   const tiles = [
     { label: "Open orders", value: String(openOrders), caption: `${orderCount} confirmed`, href: "/orders", icon: ClipboardList, color: "#2a78d6" },
     { label: "Counter sales (mo.)", value: formatCurrency(csMonthTotal, CURRENCY), caption: `${csMonthCount} this month`, href: "/counter-sales", icon: Store, color: "#7c3aed" },
@@ -573,6 +589,23 @@ export default async function ManagementPage() {
     // A release date that has already passed reads as a future promise unless it
     // is called overdue — and the earliest pending release usually IS past.
     { label: "Unpaid commissions", value: formatCurrency(unpaidCommission, CURRENCY), caption: nextCommissionPayout ? `${payableCommissions.length} approved · ${nextCommissionPayout < phToday ? "due since" : "release"} ${fmtDue(nextCommissionPayout)}` : `${payableCommissions.length} pending`, href: "/commissions", icon: Percent, color: "#4a3aa7" },
+    // The caption leads with whatever needs doing: something overdue outranks
+    // something merely due soon, and "3 to clear" is the quiet state.
+    {
+      label: "Check monitoring",
+      value: String(checks.open),
+      caption:
+        checks.overdue > 0
+          ? `${checks.overdue} overdue · ${formatCurrency(checks.openAmount, CURRENCY)}`
+          : checks.attention > 0
+            ? `${checks.attention} clearing soon${checks.nextYMD ? ` · ${fmtDue(checks.nextYMD)}` : ""}`
+            : checks.nextYMD
+              ? `next ${fmtDue(checks.nextYMD)} · ${formatCurrency(checks.openAmount, CURRENCY)}`
+              : `${checks.cleared} cleared`,
+      href: "/checks",
+      icon: CalendarClock,
+      color: checks.overdue > 0 ? "#d03b3b" : checks.attention > 0 ? "#c2711a" : "#0f766e",
+    },
   ];
 
   return (

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, ListChecks, Store, Megaphone, MailQuestion } from "lucide-react";
+import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, CalendarClock, ListChecks, Store, Megaphone, MailQuestion } from "lucide-react";
 import type { Role } from "@prisma/client";
 import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
 
@@ -43,6 +43,9 @@ export const NAV = [
   { href: "/purchasing", label: "Purchasing", icon: ShoppingCart, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/cash-requests", label: "Cash Requests", icon: Wallet, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/commissions", label: "Commissions", icon: Percent, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
+  // Check monitoring is a finance screen: admin by base role, plus the two
+  // workflow roles that handle checks (see the `show` overrides below).
+  { href: "/checks", label: "Check Monitoring", icon: CalendarClock, roles: ["ADMIN"] },
   { href: "/tools", label: "HVAC Tools", icon: Wrench, roles: ["SALES", "ENGINEER", "ADMIN"] },
   { href: "/admin", label: "Admin", icon: Settings, roles: ["ADMIN"] },
 ] as const;
@@ -78,8 +81,9 @@ const QC_DEAD_END_TABS = ["/inventory", "/products", "/requisitions"];
 
 export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }> = {
   // Accounting sees Inventory (read-only, like the Plant Manager) and the Sales
-  // Dashboard; Products stays hidden. Keeps Commissions (payouts).
-  accounting: { hide: ["/products"], show: ["/requisitions", "/dashboard"] },
+  // Dashboard; Products stays hidden. Keeps Commissions (payouts). Also sees the
+  // check clearing schedule — they attach and read the checks.
+  accounting: { hide: ["/products"], show: ["/requisitions", "/dashboard", "/checks"] },
   // Consolidated-dashboard roles (except Accounting): hide the standalone Sales
   // Dashboard and the Commissions tab — sales-rep payout data none of them need
   // (only Accounting, who pays them, and Sales / Engineer / Admin keep it). Also
@@ -101,6 +105,10 @@ export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }>
   // the Sales-side 2nd QC, and that QC role was hiding the page his own payout
   // lives on. A `show` beats any other role's `hide`.
   sales_head: { show: ["/commissions"] },
+  // The Payment Approver attaches and reads checks too, so they see the clearing
+  // schedule. Only an admin can clear one or move its date — the page enforces
+  // that itself, so this `show` grants sight, not power.
+  payment_approver: { show: ["/checks"] },
 };
 
 /** The nav items visible to a user given their base role + workflow roles. */

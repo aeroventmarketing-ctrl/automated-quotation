@@ -4,7 +4,7 @@ import { PR_MAIN_ORDER, prMainIndex, statusBucket } from "./purchasing";
 import { pesoAmountInWords } from "./amount-words";
 import {
   canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
-  checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo,
+  checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
   type CheckRead,
 } from "./voucher-check";
 
@@ -281,6 +281,38 @@ describe("check numbers", () => {
       { ...doc, path: "b" },
       { ...doc, path: "c", read: { ...PRACTICE, checkNo: null } },
     ])).toEqual(["0000486722"]);
+  });
+
+  /**
+   * The owner's ruling: *"In the file I sent you is 6 digit check number with
+   * 0000 before the first number. We will be using the 10 digit check number
+   * from now on."* Their hand-kept register abbreviates to the six significant
+   * digits; the check itself reads ten.
+   */
+  it("shows the canonical 10-digit form, whichever form was read", () => {
+    expect(CHECK_NO_DIGITS).toBe(10);
+    expect(formatCheckNo("486625")).toBe("0000486625");      // the register's short form
+    expect(formatCheckNo("0000486625")).toBe("0000486625");  // already canonical
+    expect(formatCheckNo("1")).toBe("0000000001");
+  });
+
+  it("leaves alone anything that isn't a plain run of fewer than ten digits", () => {
+    // A number that doesn't fit the pattern is likelier a misread than something
+    // to pad into looking correct.
+    expect(formatCheckNo("00004866251")).toBe("00004866251"); // longer — untouched
+    expect(formatCheckNo("486-625")).toBe("486-625");         // punctuation — untouched
+    expect(formatCheckNo("01053-313-0")).toBe("01053-313-0"); // a BRSTN, not a check no.
+    expect(formatCheckNo("")).toBeNull();
+    expect(formatCheckNo(null)).toBeNull();
+  });
+
+  it("makes both forms findable in the Purchasing search box", () => {
+    // Whoever is holding the printed check types ten digits; whoever is reading
+    // the register types six. Both must find the same PO.
+    const nums = checkNumbers([{ ...doc, read: { ...PRACTICE, checkNo: "486625" } }]);
+    expect(nums).toEqual(["486625", "0000486625"]);
+    // Already canonical — no pointless duplicate.
+    expect(checkNumbers([{ ...doc, read: PRACTICE }])).toEqual(["0000486722"]);
   });
 
   it("compares on the digits that identify the check, not the printed padding", () => {

@@ -61,6 +61,32 @@ export interface CheckRead {
   readAt: string; // ISO
 }
 
+/**
+ * The check's clearing date was moved — the owner's rule: *"If in case the check
+ * cannot be cleared because of lack of funds, admin has the option to move the
+ * check date to other date."*
+ *
+ * Kept as a LIST, not a single overwritten date. A check moved three times is a
+ * supplier being put off three times, and that is exactly the thing worth being
+ * able to see later. The original date read off the check is never touched — it
+ * is what the check itself says.
+ */
+export interface CheckReschedule {
+  from: string; // the clearing date it was moved off (YMD)
+  to: string; // the new clearing date (YMD)
+  reason: string;
+  byName: string;
+  at: string; // ISO
+}
+
+/** The bank cleared it. Recorded by a person, because only the bank knows. */
+export interface CheckCleared {
+  on: string; // YMD it actually cleared
+  byName: string;
+  at: string; // ISO
+  note?: string;
+}
+
 /** One uploaded check photo. The file, who attached it, and what the AI read. */
 export interface CheckDoc {
   path: string; // storage path under `purchases/<prId>/…`
@@ -69,6 +95,23 @@ export interface CheckDoc {
   uploadedByName: string;
   /** Absent until the AI has read it (or if the read failed). */
   read?: CheckRead;
+  /** Every time the clearing date was moved, oldest first. */
+  reschedules?: CheckReschedule[];
+  /** Set once the bank has cleared it — moves the check to the Cleared tab. */
+  cleared?: CheckCleared;
+}
+
+/**
+ * The date this check is expected to clear: the latest rescheduled date if it has
+ * been moved, otherwise the date printed on the check itself.
+ *
+ * Null when the check was never read, or the read couldn't make out the date —
+ * an undated check can't be monitored, and saying so is better than assuming a
+ * date nobody wrote down.
+ */
+export function effectiveClearingYMD(doc: CheckDoc): string | null {
+  const moved = doc.reschedules?.length ? doc.reschedules[doc.reschedules.length - 1].to : null;
+  return moved ?? doc.read?.clearingYMD ?? null;
 }
 
 function coerceRead(v: unknown): CheckRead | undefined {
@@ -98,23 +141,88 @@ function coerceRead(v: unknown): CheckRead | undefined {
   };
 }
 
+function coerceReschedules(v: unknown): CheckReschedule[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((x) => {
+    if (!x || typeof x !== "object") return [];
+    const o = x as Record<string, unknown>;
+    const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+    if (!str("to")) return []; // a reschedule with no new date says nothing
+    return [{ from: str("from"), to: str("to"), reason: str("reason"), byName: str("byName"), at: str("at") }];
+  });
+}
+
+function coerceCleared(v: unknown): CheckCleared | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  if (!str("on")) return undefined;
+  return { on: str("on"), byName: str("byName"), at: str("at"), ...(str("note") ? { note: str("note") } : {}) };
+}
+
 export function coerceCheckDoc(v: unknown): CheckDoc | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
   if (typeof o.path !== "string" || !o.path) return null;
   const read = coerceRead(o.read);
+  const reschedules = coerceReschedules(o.reschedules);
+  const cleared = coerceCleared(o.cleared);
   return {
     path: o.path,
     name: typeof o.name === "string" && o.name ? o.name : "check",
     uploadedAt: typeof o.uploadedAt === "string" ? o.uploadedAt : "",
     uploadedByName: typeof o.uploadedByName === "string" ? o.uploadedByName : "",
     ...(read ? { read } : {}),
+    ...(reschedules.length ? { reschedules } : {}),
+    ...(cleared ? { cleared } : {}),
   };
 }
 
-/** Every check number read off this PO's photos, in upload order. */
+/**
+ * Every check number read off this PO's photos, in upload order — each in BOTH
+ * the form it was read and the canonical 10-digit form.
+ *
+ * Both, because this feeds the Purchasing search box: someone reading the
+ * printed check types `0000486625`, someone reading the register types `486625`,
+ * and each has to find the same PO.
+ */
 export function checkNumbers(docs: CheckDoc[]): string[] {
-  return docs.map((d) => d.read?.checkNo).filter((n): n is string => !!n);
+  const out: string[] = [];
+  for (const d of docs) {
+    const raw = d.read?.checkNo;
+    if (!raw) continue;
+    out.push(raw);
+    const canonical = formatCheckNo(raw);
+    if (canonical && canonical !== raw) out.push(canonical);
+  }
+  return out;
+}
+
+/**
+ * How many digits a check number carries on our bank's checks, leading zeros
+ * included — the owner's rule: *"In the file I sent you is 6 digit check number
+ * with 0000 before the first number. We will be using the 10 digit check number
+ * from now on."*
+ *
+ * Their hand-kept register abbreviates to the six significant digits (486625);
+ * the check itself reads 0000486625. Ten is the canonical form.
+ */
+export const CHECK_NO_DIGITS = 10;
+
+/**
+ * A check number as it should be SHOWN: the canonical 10-digit form.
+ *
+ * Padding is applied only to a plain run of digits shorter than ten — the case
+ * where the printed zeros were dropped, by the reader or by a person typing the
+ * short form. Anything longer, or carrying non-digits, is left exactly as it
+ * came: a number that doesn't fit the pattern is more likely a misread than
+ * something to pad into looking correct.
+ */
+export function formatCheckNo(no: string | null | undefined): string | null {
+  if (!no) return null;
+  const trimmed = no.trim();
+  if (!/^\d+$/.test(trimmed)) return trimmed;
+  return trimmed.length >= CHECK_NO_DIGITS ? trimmed : trimmed.padStart(CHECK_NO_DIGITS, "0");
 }
 
 /**
@@ -336,7 +444,7 @@ export function checkIssues(opts: {
   if (r.checkNo) {
     const mine = normalizeCheckNo(r.checkNo);
     if (mine && (opts.usedCheckNos ?? []).some((n) => normalizeCheckNo(n) === mine)) {
-      issues.push({ key: "duplicate", message: `Check No. ${r.checkNo} is already recorded on another purchase order.` });
+      issues.push({ key: "duplicate", message: `Check No. ${formatCheckNo(r.checkNo)} is already recorded on another purchase order.` });
     }
   }
   return issues;

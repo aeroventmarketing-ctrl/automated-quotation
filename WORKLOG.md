@@ -1,3 +1,255 @@
+## 2026-09-03 · No more advance notice — only a check that failed to clear
+
+Owner, asked whether "disregard the 3 day notice" meant dropping the feature or just my explanation:
+*"What I mean is do not notify the admin for checks that will soon clear."*
+
+So the **notification** goes; the **on-screen states stay**. That split a distinction the code had been
+conflating — one function was deciding both what to colour amber and who to poke.
+
+| | |
+| --- | --- |
+| `needsAttention(state)` | a **display** rule: overdue, today, or within 3 days draw amber |
+| `notifiesAdmin(state)` | a **notification** rule: **overdue only** |
+
+A check that is merely approaching — today's included — is already on the register and inside First Priority on
+the cash panel, which is where the owner is looking anyway. A check that *should* have cleared and did not is
+the exception worth interrupting someone for, and it is the only one that now raises a My Dashboard task
+(*"Check has not cleared — confirm it, or move the date"*).
+
+`CHECK_NOTICE_DAYS = 3` survives, but purely as the *Clearing soon* badge threshold, and its comment now says so
+— it began as the owner's notification rule and outlived it.
+
+A test pins the two apart permanently: whatever `notifiesAdmin` covers must be a **strict subset** of what
+`needsAttention` colours. Amber is a glance; a task is a poke, and the two must not drift back together.
+
+Verified in the harness with four checks — one overdue, one clearing today, one in two days, one far off. My
+Dashboard raised **exactly one** notice, naming the overdue check; the today and two-day checks appear nowhere
+on it. The register still shows all three states.
+
+## 2026-09-03 · The cash position under the check register
+
+The owner's eight rules, given with a screenshot of the sheet they keep them on:
+
+> *1. Total First Priority is the total check amount for clearing based on the current date, if not cleared it
+> will stay in this row · 2. COB is Cash on Bank, I will manually input the detail · 3. Remaining COB is COB −
+> Total First Priority · 4. COH is Cash on Hand, Collectibles, Cash/Gcash/Checking, I will manually input the
+> detail · 5. Remaining Cash is the total of Remaining COB, COH, Collectibles, Cash/Gcash/Checking · 6.
+> Dispensable Cash is same as Remaining Cash · 7. Total Payables is the total amount of checks issued · 8.
+> Deficit is Total payables − Dispensable cash.*
+
+A panel under the register on `/checks`, laid out as their ten rows. **Four figures are typed in** (rules 2 and
+4) because nothing in the system knows a bank balance. **The other six are derived**, and the two that come from
+the checks — First Priority and Total Payables — are the register's own totals, so the panel cannot disagree
+with the table it sits under.
+
+### The two rules that needed a decision
+
+**Rule 1 — "based on the current date".** First Priority counts every uncleared check whose clearing date has
+**arrived**: today or earlier. Deliberately NOT the same set as the 3-day notice — that warns ahead of time,
+this is money the bank can take today. And *"if not cleared it will stay in this row"* is exactly right: an
+overdue check is more urgent, not less, so it keeps counting until someone confirms the bank took it.
+
+**Rule 7 — "the total amount of checks issued".** Read as checks issued **and not yet cleared**. A cleared check
+is no longer payable, and counting it would put money that has already left the account into a deficit meant to
+show what is still owed. Stated here because it is an interpretation, not a quotation.
+
+### Verified on the owner's own numbers
+
+Seeded four checks totalling their figures exactly, then typed their COB into the panel:
+
+| | |
+| --- | --- |
+| TOTAL FIRST PRIORITY | ₱22,538.94 |
+| COB | ₱121,658.12 |
+| **Remaining COB** | **₱99,119.18** |
+| COH · Collectibles · Cash/Gcash/Checking | ₱0.00 |
+| Remaining Cash · Dispensable Cash | ₱99,119.18 |
+| Total Payables | ₱1,712,027.87 |
+| **Deficit** | **₱1,612,908.69** |
+
+Every line matches their sheet. `cash-position.test.ts` pins the same figures, plus the cases the screenshot
+cannot show: a negative Remaining COB when the bank cannot cover what clears today, a surplus reported as a
+negative deficit rather than hidden, and the three cash lines actually reaching Remaining Cash.
+
+Editing is **admin only**, like clearing a check — these decide whether the company is reported as short, and
+nothing can check them against a bank. Accounting and the Payment Approver see the panel read-only.
+
+## 2026-09-03 · Ten digits is the check number
+
+Owner: *"In the training we have done. I trained the AI to read 10 digit check number. In the file I sent you is
+6 digit check number with 0000 before the first number. We will be using the 10 digit check number from now on."*
+
+Their hand-kept register abbreviates to the six significant digits (`486625`); the check itself reads
+`0000486625`. The system was storing and showing **whatever the reader returned**, so a dropped-zeros read would
+have sat in the column next to a full one and looked like two different formats — or worse, like two different
+checks.
+
+### Canonical on the way out, tolerant on the way in
+
+`formatCheckNo()` pads a plain run of fewer than ten digits to ten. Every place the number is shown now goes
+through it: the monitoring table, the PO row, the "Read check No. …" confirmation, the duplicate warning, and
+the My Dashboard notice.
+
+Padding applies **only** to a plain run of digits shorter than ten. Anything longer, or carrying punctuation, is
+left exactly as it came — `01053-313-0` is a BRSTN, not a check number, and padding an ill-fitting value into
+looking correct is how a misread stops looking like one.
+
+The raw read is **not** rewritten in storage. What the AI returned stays as the record of what it saw; the
+canonical form is a display concern. The duplicate test was already immune either way — `normalizeCheckNo`
+drops leading zeros before comparing, so `486625` and `0000486625` have always been the same check to it.
+
+`checkNumbers()` now feeds the Purchasing search box **both** forms, because whoever is holding the printed
+check types ten digits and whoever is reading the register types six, and both have to find the same PO.
+
+The reader's prompt now states the count outright — *"It is TEN DIGITS INCLUDING LEADING ZEROS … six
+significant digits padded with zeros. Return all ten"* — rather than only showing an example and hoping.
+
+Verified in the harness with one check stored short and one stored canonical: both render `0000486625` /
+`0000486624`, and each PO is found by either form typed into the search box, with no cross-matching.
+
+### An environment trap worth recording
+
+The harness came up with **every cell in every grid `false`** — its own "the server, not the policy" signal. The
+cause was not the code: a `next build` had left a `.next/` in the working tree, the harness tar-copies that
+tree, and the copied build was missing `routes-manifest.json`, so every page 500'd. `rm -rf .next` before
+booting the harness, not just `rm -rf /var/tmp/aq-role-harness`.
+
+## 2026-09-03 · The check screen takes the owner's own register columns
+
+The sample workbook arrived encrypted; with the password it opened as **two different files**. The first,
+`AFBM Sales and Expenses_AeroERP.xlsx`, is the 2023–2025 sales & expenses ledger — eleven sheets of P&L by
+business line, and **no check data at all** (its only "check" matches are the words *"for double checking"* in
+a remarks column). The second, `…2026 for AeroERP2.xlsx`, is the real one: a single **Purchase Orders** sheet,
+108 rows, which is the check register kept by hand today.
+
+### The table now reads like the register
+
+| the register | the screen |
+| --- | --- |
+| Date · Company · Purchase Order Number · Check No. · Amount · Date Paid/Cleared · Form of Payment · Status · Remarks | the same nine, in the same order |
+
+Three columns were added to match it: the **PO date** (which the screen had not shown at all), **Form of
+Payment**, and **Remarks**. Form of Payment is *derived*, not assumed — `clearingYMD > poDate` means **PDC**.
+All 42 rows of the register read PDC, so assuming it would have been right today and silently wrong the first
+time a current-dated check was issued. Remarks carries what the system actually knows: why a date was moved, or
+the note left when it cleared.
+
+### Their status words, kept — with the urgency they don't carry
+
+The register's legend defines four: `Pending · For Payment · Check Clearing · Finished`. The Status column now
+shows **Check Clearing** / **Finished** in their wording, with the urgency badge underneath, because *"Check
+Clearing"* is equally true of a check due next month and one three days overdue — and the whole point of the
+tile is telling those apart.
+
+### A gap the register revealed, left open deliberately
+
+Of the register's 44 data rows, **13 are `For Payment` and carry no check number**: a PO that is due to be paid
+where no check has been written yet. This screen cannot show them — a row exists here *because a check exists*.
+That is a payables question rather than a check one, and inventing an answer to it was not the ask. Raised with
+the owner rather than guessed at.
+
+Verified against the register's own Powerlink rows: PO-AFBM2026000473 / check 486625 / ₱263,081.89 / Aug 22
+reads *"Check Clearing · Overdue — not cleared · 12 days ago"*; a check moved from Sep 1 to Oct 9 shows *"moved
+from Sep 1, 2026"* with **insufficient funds** in Remarks; the cleared one shows *"Finished · by Admin Ana"* on
+the Cleared tab.
+
+## 2026-09-03 · Check monitoring — every issued check, watched to the day it clears
+
+Owner: *"In admin Management Dashboard at the right side and in row with Unpaid Commissions, add a tile named
+'Check Monitoring'. Purpose … is to monitor the checks clearing date, notify the admin at least 3 days before
+clearing. Move the cleared check to a separate tab once check is cleared. If in case the check cannot be
+cleared because of lack of funds, admin has the option to move the check date to other date."*
+
+Built on the clearing date the AI already reads off the face of each check (`read.clearingYMD`), so nothing new
+has to be typed for a check to start being watched.
+
+### Three decisions worth stating
+
+**"Cleared" is recorded by a person, never inferred from the date.** A due date passing proves nothing — only
+the bank knows whether a check cleared. So a check does not move itself to the Cleared tab on its due date; it
+sits in **Overdue — not cleared** until someone says otherwise. That is the state that most deserves to be
+visible.
+
+**A moved date is appended, not overwritten.** `reschedules[]` keeps every move with its reason and who made
+it, and the date printed on the check is never touched. A check put off three times is a supplier put off three
+times, and that is exactly the thing worth being able to see later. The row shows *"moved from Sep 1, 2026 ·
+insufficient funds"* under the new date.
+
+**An undated check is called undated.** A photo with glare over the date box yields no clearing date, and
+inventing one would put a real payment on a day nobody agreed to. Those rows sort last and say *"No clearing
+date read"* rather than pretending.
+
+### Who sees it, and who may act — different on purpose
+
+| | see the schedule | clear / move a date |
+| --- | --- | --- |
+| Admin | ✓ | **✓** |
+| Accounting, Payment Approver | ✓ | ✗ |
+| everyone else | ✗ | ✗ |
+
+**Admin only** for both actions, the owner's answer when asked directly. Deliberately NOT the attach audience:
+attaching a photo records what happened, while clearing a check and moving its date are decisions about money
+leaving the bank. Accounting and the Payment Approver still see the schedule, because they are the ones who
+attach and read the checks.
+
+Also deliberately **not** gated on `checkAttachableAt`. A check clears long after its PO is finished — usually
+when the PO is already COMPLETED — so the window that governs attaching a photo would have made it impossible
+to ever clear one.
+
+### A duplicate key TypeScript caught, and CLAUDE.md predicted
+
+Adding the nav entry, I wrote `accounting: { show: ["/checks"] }` as a new key in `NAV_OVERRIDES` — where
+`accounting` **already had** `{ hide: ["/products"], show: ["/requisitions", "/dashboard"] }`. A second key
+silently replaces the first, so Accounting would have got the Checks tab and quietly lost Requisitions, the
+Sales Dashboard, and the hiding of Products. `TS1117` caught it only because both keys sat in the same object
+literal; in two spreads it would have shipped. Merged into the existing entry instead.
+
+### Verified in the harness, seven checks seeded
+
+Tile reads **"CHECK MONITORING · 20 · 1 overdue · ₱338,755.81"**, sixth in a four-column grid — the row below,
+immediately right of Unpaid Commissions, as asked. Rows render **Sep 1 / 2 days ago** (overdue), **Sep 3 /
+today**, **Sep 6 / in 3 days** (the notice boundary — three days out is *inside* it, per *"at least 3 days"*).
+Moving the overdue one to 5 Oct took it to *Scheduled* with its reason on the row; marking one cleared moved it
+Upcoming 20 → 19, Cleared 1 → 2, showing *"cleared Sep 3, 2026 · by Admin Ana"*; undoing it put it back. My
+Dashboard raised exactly three notices for the admin (overdue, today, in 3 days) and **none** for the Payment
+Approver — an alert nobody can act on is not an alert.
+
+**Still outstanding:** the owner's sample layout, `AFBM Sales and Expenses_AeroERP.xlsx`, is password-protected
+(`CDFV2 Encrypted`) and could not be read — they are re-uploading it unprotected. The table's columns are a
+sensible default until then and may need reshaping to match it.
+## 2026-09-03 · The "blank" supplier rows were not blank — I misread a scrolled table
+
+Owner: *"clear them out"* — acting on my own observation that the supplier directory held blank rows.
+
+**There was nothing to clear, and the observation was wrong.** Recorded here because acting on it would have
+deleted live data.
+
+The screenshot I read it from was **scrolled horizontally**: its leftmost visible column was *Address*, not
+*Company Name*. Company, Contact Person, Contact Number and Email were off-screen to the left. What I called
+"blank rows" were rows blank from Address onward — with names I could not see.
+
+Two things then confirmed it, both by reading the code rather than the picture:
+
+- **`coerceOne` returns `null` for a blank company.** A nameless row never reaches the UI, the PO supplier
+  picker, or `getSuppliers()` at all — so it cannot be one of the rows on screen. (Nor can one be created:
+  the import skips a row with no company, the add form's button stays disabled, `saveSupplier` validates it,
+  and `rememberSupplier` returns early on a blank. Any left in storage are inert and are dropped from the JSON
+  by the next supplier save.)
+- **`rememberSupplier` writes exactly that shape.** Every time a purchaser issues a PO to a new supplier it
+  creates a record with the company name (plus attention/address if the PO carried them) and *nothing else*.
+  Dashes across Address, TIN, ZIP, Bank, Account and Remarks is the normal, expected look of a supplier the
+  system learned from a PO.
+
+So those rows are the suppliers real POs were issued to. Deleting them would have taken the directory with it.
+
+A cleanup was written and **reverted** — `isNamelessSupplier` / `isUnusableSupplierName` extending
+`removeInvalidSuppliers`. It was dead code by construction: `removeInvalidSuppliers` reads through
+`getSuppliers()`, which coerces, so a nameless row is never in the list it filters.
+
+What survives is the test: a supplier with a name and nothing else must round-trip intact, a nameless row is
+dropped on read, and `isPricedSupplierName` flags only genuine import junk. It exists so the next person to
+look at a sideways-scrolled table and see dashes does not do what I nearly did.
+
 ## 2026-09-03 · A check can only be attached while the PO is Budgeted
 
 Owner: *"attaching check must be active only on purchasing budgeted tab. Hide or disable check uploading in

@@ -6,7 +6,7 @@ import { Banknote, AlertTriangle, ScanLine, CheckCircle2 } from "lucide-react";
 import { UploadLink } from "@/components/upload-link";
 import { uploadDocument } from "@/lib/client-upload";
 import { formatDate } from "@/lib/utils";
-import { checkMissing, type CheckDoc } from "@/lib/voucher-check";
+import { checkMissing, formatCheckNo, type CheckDoc } from "@/lib/voucher-check";
 import type { PRStatus } from "@/lib/purchasing";
 import { attachVoucherCheck, removeVoucherCheck } from "../orders/actions";
 
@@ -77,7 +77,7 @@ export function VoucherCheckControl({
     });
     const data = (await res.json().catch(() => null)) as { error?: string; read?: { checkNo?: string | null } } | null;
     if (!res.ok) return data?.error ?? "The check was attached but couldn't be read.";
-    setNote(data?.read?.checkNo ? `Read check No. ${data.read.checkNo}.` : "The check was read.");
+    setNote(data?.read?.checkNo ? `Read check No. ${formatCheckNo(data.read.checkNo)}.` : "The check was read.");
     return null;
   }
 
@@ -180,7 +180,7 @@ export function VoucherCheckControl({
             <span className="inline-flex flex-wrap items-center gap-2">
               {r?.checkNo ? (
                 <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-foreground" title="Check number — searchable in the box above">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Check No. {r.checkNo}
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Check No. {formatCheckNo(r.checkNo)}
                 </span>
               ) : (
                 <span className="text-muted-foreground">Check number not read</span>

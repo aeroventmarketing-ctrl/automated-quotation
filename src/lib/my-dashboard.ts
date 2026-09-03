@@ -23,7 +23,8 @@ import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, 
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
-import { coerceCheckDocs, checkMissing, checkAttachableAt } from "@/lib/voucher-check";
+import { coerceCheckDocs, checkMissing, checkAttachableAt, formatCheckNo } from "@/lib/voucher-check";
+import { buildCheckWatch, notifiesAdmin } from "@/lib/check-monitor";
 import { getSuppliers } from "@/lib/suppliers";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
@@ -468,6 +469,44 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             since: (pr.voucherAt ?? pr.createdAt).toISOString(),
           });
         }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 2d) A check that should have cleared and did not.
+  //
+  //      NOT an advance warning: the owner withdrew that — *"do not notify the
+  //      admin for checks that will soon clear."* A check that is merely
+  //      approaching sits on the register and in First Priority, where they are
+  //      already looking. Only the exception is pushed at anyone.
+  //
+  //      Admin only, matching who may act on it: clearing a check and moving its
+  //      date are admin-only decisions, so telling anyone else would be an alert
+  //      they cannot answer.
+  if (isAdmin(user)) {
+    try {
+      const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const checkPrs = await prisma.purchaseRequest.findMany({
+        select: { id: true, quotationId: true, po: true, voucherCheckDocs: true },
+      });
+      const watch = buildCheckWatch(checkPrs, todayYMD, {
+        coerceDocs: coerceCheckDocs,
+        poOf: (v) => {
+          const po = coercePurchaseOrder(v);
+          return po ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null } : null;
+        },
+      });
+      for (const row of watch) {
+        if (!notifiesAdmin(row.state)) continue;
+        tasks.push({
+          key: `check-clearing:${row.prId}:${row.path}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
+          title: `${row.supplier || "Supplier"}${row.checkNo ? ` · Check No. ${formatCheckNo(row.checkNo)}` : ""}`,
+          action: "Check has not cleared — confirm it, or move the date",
+          client: null, amount: row.amount, currency: "PHP",
+          href: "/checks",
+          ref: row.poNumber || undefined,
+          since: row.clearingYMD ?? undefined,
+        });
       }
     } catch { /* ignore */ }
   }
