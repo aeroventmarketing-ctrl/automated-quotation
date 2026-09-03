@@ -17,6 +17,7 @@ describe("the cash position, on the owner's own numbers", () => {
   const pos = computeCashPosition(input({ cob: 121658.12 }), {
     firstPriority: 22538.94,
     totalPayables: 1712027.87,
+    receivables: 0,
   });
 
   it("rule 3 — Remaining COB is COB less Total First Priority", () => {
@@ -32,23 +33,37 @@ describe("the cash position, on the owner's own numbers", () => {
     expect(pos.deficit).toBe(1612908.69);
   });
 
-  it("adds the three hand-entered cash lines into Remaining Cash", () => {
+  it("adds Cash on Hand, the linked Receivables and Cash/Gcash into Available Cash Balance", () => {
     const withCash = computeCashPosition(
-      input({ cob: 121658.12, coh: 5000, collectibles: 2500.5, cashGcashChecking: 1000.25 }),
-      { firstPriority: 22538.94, totalPayables: 1712027.87 },
+      input({ cob: 121658.12, coh: 5000, cashGcashChecking: 1000.25 }),
+      { firstPriority: 22538.94, totalPayables: 1712027.87, receivables: 2500.5 },
     );
     expect(withCash.remainingCash).toBe(107619.93); // 99,119.18 + 8,500.75
     expect(withCash.deficit).toBe(1604407.94);
   });
 
+  /**
+   * *"Collectibles change to Receivables, link and show the amount from
+   * Receivables in Management dashboard."* The figure comes from the dashboard
+   * now, so a stale hand-typed `collectibles` must not be counted as well.
+   */
+  it("ignores the old hand-typed Collectibles and uses the linked figure", () => {
+    const stale = computeCashPosition(
+      input({ cob: 100000, collectibles: 999999 }),
+      { firstPriority: 0, totalPayables: 0, receivables: 2343701.47 },
+    );
+    expect(stale.receivables).toBe(2343701.47);
+    expect(stale.remainingCash).toBe(2443701.47); // 100,000 + receivables — the 999,999 is gone
+  });
+
   it("lets Remaining COB go negative — the bank cannot cover what clears today", () => {
-    const short = computeCashPosition(input({ cob: 10000 }), { firstPriority: 22538.94, totalPayables: 0 });
+    const short = computeCashPosition(input({ cob: 10000 }), { firstPriority: 22538.94, totalPayables: 0, receivables: 0 });
     expect(short.remainingCob).toBe(-12538.94);
     expect(short.dispensableCash).toBe(-12538.94);
   });
 
   it("reports a surplus as a negative deficit rather than hiding it", () => {
-    const flush = computeCashPosition(input({ cob: 500000 }), { firstPriority: 0, totalPayables: 100000 });
+    const flush = computeCashPosition(input({ cob: 500000 }), { firstPriority: 0, totalPayables: 100000, receivables: 0 });
     expect(flush.deficit).toBe(-400000);
   });
 });
@@ -106,6 +121,7 @@ describe("the two figures the register supplies", () => {
     const pos = computeCashPosition(input({ cob: 50000 }), {
       firstPriority: s.firstPriorityAmount,
       totalPayables: s.openAmount,
+      receivables: 0,
     });
     expect(pos.firstPriority).toBe(23000);
     expect(pos.remainingCob).toBe(27000);

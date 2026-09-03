@@ -26,10 +26,19 @@ export const CASH_POSITION_KEY = "cash_position";
 
 /** The four figures only a person can know. Rules 2 and 4. */
 export interface CashPositionInput {
-  /** Cash on Bank. */
+  /** **Cash in Bank** (the sheet's COB). */
   cob: number;
-  /** Cash on Hand. */
+  /** **Cash on Hand** (COH). */
   coh: number;
+  /**
+   * NO LONGER TYPED IN. The owner's rule: *"Collectibles change to Receivables,
+   * link and show the amount from Receivables in Management dashboard."* The
+   * figure is now computed by `getReceivablesOutstanding()`; this field survives
+   * only so a previously saved value can be read back and ignored rather than
+   * crashing the panel.
+   *
+   * @deprecated superseded by the linked Receivables figure.
+   */
   collectibles: number;
   /** Cash / Gcash / Checking. */
   cashGcashChecking: number;
@@ -41,6 +50,25 @@ export const EMPTY_CASH_POSITION: CashPositionInput = {
   cob: 0, coh: 0, collectibles: 0, cashGcashChecking: 0, updatedByName: "", updatedAt: "",
 };
 
+/**
+ * The panel's figures, under the names the owner gave them:
+ *
+ * | was | is |
+ * | --- | --- |
+ * | Total First Priority | **Outstanding Check** |
+ * | COB | **Cash in Bank** |
+ * | Remaining COB | **Available Cash Balance** |
+ * | COH | **Cash on Hand** |
+ * | Collectibles | **Receivables** (now linked, not typed) |
+ * | Remaining Cash | **Available Cash Balance** |
+ * | Dispensable Cash | **Available Funds** |
+ * | Total Payables | **Accounts Payable** |
+ * | Deficit | **Funding Shortfall** |
+ *
+ * Two rows carry the name *Available Cash Balance* — the bank-only line and the
+ * all-in line. The owner was asked about the collision and answered *"Change the
+ * name only"*, so both keep it and no row was removed.
+ */
 export interface CashPosition extends CashPositionInput {
   /**
    * Rule 1 — the checks whose clearing date has ARRIVED (today or earlier) and
@@ -51,7 +79,9 @@ export interface CashPosition extends CashPositionInput {
   firstPriority: number;
   /** Rule 3 — COB − Total First Priority. May go negative; that is the point. */
   remainingCob: number;
-  /** Rule 5 — Remaining COB + COH + Collectibles + Cash/Gcash/Checking. */
+  /** Receivables — linked from the Management Dashboard, not typed in. */
+  receivables: number;
+  /** Rule 5 — Available Cash Balance + Cash on Hand + Receivables + Cash/Gcash/Checking. */
   remainingCash: number;
   /** Rule 6 — the same figure, under the name the owner uses for it. */
   dispensableCash: number;
@@ -70,13 +100,17 @@ export interface CashPosition extends CashPositionInput {
  */
 export function computeCashPosition(
   input: CashPositionInput,
-  totals: { firstPriority: number; totalPayables: number },
+  totals: { firstPriority: number; totalPayables: number; receivables: number },
 ): CashPosition {
   const remainingCob = round2(input.cob - totals.firstPriority);
-  const remainingCash = round2(remainingCob + input.coh + input.collectibles + input.cashGcashChecking);
+  // Receivables comes from the Management Dashboard now, not from the stored
+  // `collectibles`, which is why the old field is ignored here.
+  const receivables = round2(totals.receivables);
+  const remainingCash = round2(remainingCob + input.coh + receivables + input.cashGcashChecking);
   return {
     ...input,
     firstPriority: round2(totals.firstPriority),
+    receivables,
     remainingCob,
     remainingCash,
     // Rule 6 says these are the same figure. Kept as two named fields rather

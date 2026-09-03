@@ -29,6 +29,7 @@ import { PayrollEditor } from "./payroll-editor";
 import { canManagePayroll, getPayrollMonth } from "./payroll-actions";
 import type { DeptSplit } from "@/lib/department-pnl";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
+import { countsAsReceivable, receivableOf, RECEIVABLE_EPSILON } from "@/lib/receivables";
 import { FanCogsEditor } from "./fan-cogs-editor";
 import { CashVouchersCard, type CashVoucherView } from "./cash-vouchers-card";
 import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
@@ -336,11 +337,10 @@ export default async function ManagementPage() {
   for (const q of wonQuotes) {
     const sale = saleFromClassification(q.classification);
     if (!sale || !isSaleConfirmed(sale)) continue;
-    // Go-live gate on → skip orders recognised (paid / PO-dated) before launch day.
-    if (goLiveFloorYMD) {
-      const recAt = saleRecognitionDate(sale);
-      if (!recAt || manilaYMD(recAt) < goLiveFloorYMD) continue;
-    }
+    // Go-live gate on → skip orders recognised (paid / PO-dated) before launch
+    // day. Shared with the Check Monitoring cash position, so the Receivables
+    // figure is identical on both screens.
+    if (!countsAsReceivable(sale, goLiveFloorYMD)) continue;
     orderCount++;
     const wf = readOrderWorkflow(q.classification);
     stageCount.set(wf.stage, (stageCount.get(wf.stage) ?? 0) + 1);
@@ -351,12 +351,11 @@ export default async function ManagementPage() {
     if (wf.materialRequests.some((m) => m.status === "requested" || m.status === "purchasing" || m.status === "partial")) materialsCount++;
     if (openPrQuoteIds.has(q.id)) purchasingCount++;
 
-    const value = round2(payableTotal(q));
-    const paid = round2(collectedTotal(sale));
+    // The same rule the cash position uses — one definition, two screens.
+    const { value, paid, balance } = receivableOf(q, sale);
     billed = round2(billed + value);
     collected = round2(collected + paid);
-    const balance = round2(value - paid);
-    if (balance > 0.005) {
+    if (balance > RECEIVABLE_EPSILON) {
       outstanding = round2(outstanding + balance);
       unbalanced.push({
         orderId: q.id,
