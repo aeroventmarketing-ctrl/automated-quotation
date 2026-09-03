@@ -40,7 +40,11 @@ export interface CashPositionInput {
    * @deprecated superseded by the linked Receivables figure.
    */
   collectibles: number;
-  /** Cash / Gcash / Checking. */
+  /**
+   * **Expected Collections** (the sheet's original Cash / Gcash / Checking).
+   * The stored key keeps its old name so saved figures are not orphaned; only
+   * the label the owner reads has changed.
+   */
   cashGcashChecking: number;
   updatedByName: string;
   updatedAt: string; // ISO
@@ -63,6 +67,7 @@ export const EMPTY_CASH_POSITION: CashPositionInput = {
  * | Remaining Cash | **Available Cash Balance** |
  * | Dispensable Cash | **Available Funds** |
  * | Total Payables | **Accounts Payable** |
+ * | Cash / Gcash / Checking | **Expected Collections** |
  * | Deficit | **Funding Shortfall** |
  *
  * The bank-only and all-in lines first both landed on *Available Cash Balance*;
@@ -81,7 +86,7 @@ export interface CashPosition extends CashPositionInput {
   remainingCob: number;
   /** Receivables — linked from the Management Dashboard, not typed in. */
   receivables: number;
-  /** Rule 5 — Available Bank Balance + Cash on Hand + Receivables + Cash/Gcash/Checking. */
+  /** Rule 5 — Available Bank Balance + Cash on Hand + Receivables + Expected Collections. */
   remainingCash: number;
   /** Rule 6 — the same figure, under the name the owner uses for it. */
   dispensableCash: number;

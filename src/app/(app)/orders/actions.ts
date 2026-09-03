@@ -2682,7 +2682,7 @@ export async function rescheduleCheck(
 
 /**
  * The cash figures under the check register that only a person can know — Cash in
- * Bank, Cash on Hand, Cash/Gcash/Checking. *"I will manually input the detail."*
+ * Bank, Cash on Hand, Expected Collections. *"I will manually input the detail."*
  * Receivables used to be among them and is now linked to the Management
  * Dashboard's figure instead.
  *

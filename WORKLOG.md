@@ -1,3 +1,15 @@
+## 2026-09-04 · Cash / Gcash / Checking becomes Expected Collections
+
+Owner: *"Rename Cash/Gcash/Checking to Expected Collections."*
+
+A label change only — in the read view, the edit form and the footer note. The **stored key stays
+`cashGcashChecking`**, so figures already saved are not orphaned by the rename; a comment on the field says so,
+because a key that no longer matches its label is exactly the sort of thing that looks like a bug later.
+
+The panel now reads: Outstanding Check · Cash in Bank · Available Bank Balance · Cash on Hand · Receivables ·
+**Expected Collections** · Available Cash Balance · Available Funds · Accounts Payable · Funding Shortfall.
+Verified on screen, with the old wording gone from the page entirely.
+
 ## 2026-09-04 · The duplicate row name is resolved
 
 Owner: *"Rename 4. Available Cash Balance to Available Bank Balance."*

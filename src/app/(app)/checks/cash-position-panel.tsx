@@ -13,11 +13,11 @@ import { saveCashPositionAction } from "../orders/actions";
 /**
  * The cash position under the register, under the owner's own names:
  * Outstanding Check · Cash in Bank · Available Bank Balance · Cash on Hand ·
- * Receivables · Cash/Gcash/Checking · Available Cash Balance · Available Funds ·
+ * Receivables · Expected Collections · Available Cash Balance · Available Funds ·
  * Accounts Payable · Funding Shortfall.
  *
- * **Three** rows are typed in — Cash in Bank, Cash on Hand and
- * Cash/Gcash/Checking. Receivables used to be one of them and is now linked to
+ * **Three** rows are typed in — Cash in Bank, Cash on Hand and Expected
+ * Collections. Receivables used to be one of them and is now linked to
  * the Management Dashboard's Receivables tile, so the two always agree. The rest
  * are derived from those and from the checks in the table above.
  *
@@ -100,7 +100,7 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
             {/* Receivables is linked, not typed — shown here so the running
                 total the owner is editing against still adds up. */}
             <Row label="Receivables" value={pos.receivables} indent />
-            <Field label="Cash / Gcash / Checking" k="cashGcashChecking" />
+            <Field label="Expected Collections" k="cashGcashChecking" />
             {err && <p className="px-2 text-xs text-destructive">{err}</p>}
             <div className="flex justify-end gap-1.5 px-2 pt-2">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditing(false); setErr(null); }}>Cancel</Button>
@@ -114,7 +114,7 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
             <Row label="Available Bank Balance" value={pos.remainingCob} tone="bg-orange-100 text-orange-900" strong />
             <Row label="Cash on Hand" value={pos.coh} />
             <Row label="Receivables" value={pos.receivables} />
-            <Row label="Cash / Gcash / Checking" value={pos.cashGcashChecking} />
+            <Row label="Expected Collections" value={pos.cashGcashChecking} />
             {/* Rules 5 and 6 — the same figure under two of the owner's names. */}
             <Row label="Available Cash Balance" value={pos.remainingCash} />
             <Row label="Available Funds" value={pos.dispensableCash} strong />
@@ -132,7 +132,7 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
       {!editing && (
         <div className="px-6 pb-3 text-xs text-muted-foreground">
           Outstanding Check and Accounts Payable come from the checks above, and Receivables from the
-          Management Dashboard. Cash in Bank, Cash on Hand and Cash/Gcash/Checking are entered by hand
+          Management Dashboard. Cash in Bank, Cash on Hand and Expected Collections are entered by hand
           {pos.updatedAt ? ` — last by ${pos.updatedByName || "an admin"} on ${formatDateTime(new Date(pos.updatedAt))}` : " and have not been set yet"}.
         </div>
       )}
