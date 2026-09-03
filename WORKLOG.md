@@ -1,3 +1,15 @@
+## 2026-09-04 · The duplicate row name is resolved
+
+Owner: *"Rename 4. Available Cash Balance to Available Bank Balance."*
+
+Two rows had briefly shared the name *Available Cash Balance* — the bank-only line (Cash in Bank − Outstanding
+Check) and the all-in line — after the owner's earlier *"Change the name only"*. The bank-only one is now
+**Available Bank Balance**, which is also what it measures.
+
+The panel reads, top to bottom: Outstanding Check · Cash in Bank · **Available Bank Balance** · Cash on Hand ·
+Receivables · Cash/Gcash/Checking · **Available Cash Balance** · Available Funds · Accounts Payable · Funding
+Shortfall. Verified on screen — exactly **one** row now carries each name.
+
 ## 2026-09-04 · The cash position takes the owner's accounting names, and Receivables becomes a link
 
 Ten changes, given as a numbered list against a screenshot.

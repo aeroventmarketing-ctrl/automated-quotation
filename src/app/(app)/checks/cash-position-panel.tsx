@@ -12,7 +12,7 @@ import { saveCashPositionAction } from "../orders/actions";
 
 /**
  * The cash position under the register, under the owner's own names:
- * Outstanding Check · Cash in Bank · Available Cash Balance · Cash on Hand ·
+ * Outstanding Check · Cash in Bank · Available Bank Balance · Cash on Hand ·
  * Receivables · Cash/Gcash/Checking · Available Cash Balance · Available Funds ·
  * Accounts Payable · Funding Shortfall.
  *
@@ -21,9 +21,9 @@ import { saveCashPositionAction } from "../orders/actions";
  * the Management Dashboard's Receivables tile, so the two always agree. The rest
  * are derived from those and from the checks in the table above.
  *
- * Two rows read *Available Cash Balance*: the bank-only line and the all-in one.
- * That is the owner's own naming, kept on their instruction (*"Change the name
- * only"*) rather than tidied into something they did not ask for.
+ * The bank-only line and the all-in line briefly shared the name *Available Cash
+ * Balance*; the owner resolved it — the bank-only one is **Available Bank
+ * Balance**, which is also what it measures: Cash in Bank less what clears now.
  */
 export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: boolean }) {
   const router = useRouter();
@@ -95,7 +95,7 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
         {editing ? (
           <>
             <Field label="Cash in Bank" k="cob" />
-            <Row label="Available Cash Balance" value={Number(f.cob) - pos.firstPriority} tone="bg-orange-100 text-orange-900" strong />
+            <Row label="Available Bank Balance" value={Number(f.cob) - pos.firstPriority} tone="bg-orange-100 text-orange-900" strong />
             <Field label="Cash on Hand" k="coh" />
             {/* Receivables is linked, not typed — shown here so the running
                 total the owner is editing against still adds up. */}
@@ -111,7 +111,7 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
           <>
             <Row label="Cash in Bank" value={pos.cob} />
             {/* Rule 3 — Cash in Bank less what clears now. */}
-            <Row label="Available Cash Balance" value={pos.remainingCob} tone="bg-orange-100 text-orange-900" strong />
+            <Row label="Available Bank Balance" value={pos.remainingCob} tone="bg-orange-100 text-orange-900" strong />
             <Row label="Cash on Hand" value={pos.coh} />
             <Row label="Receivables" value={pos.receivables} />
             <Row label="Cash / Gcash / Checking" value={pos.cashGcashChecking} />

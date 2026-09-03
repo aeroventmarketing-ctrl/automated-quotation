@@ -57,7 +57,7 @@ export const EMPTY_CASH_POSITION: CashPositionInput = {
  * | --- | --- |
  * | Total First Priority | **Outstanding Check** |
  * | COB | **Cash in Bank** |
- * | Remaining COB | **Available Cash Balance** |
+ * | Remaining COB | **Available Bank Balance** |
  * | COH | **Cash on Hand** |
  * | Collectibles | **Receivables** (now linked, not typed) |
  * | Remaining Cash | **Available Cash Balance** |
@@ -65,9 +65,9 @@ export const EMPTY_CASH_POSITION: CashPositionInput = {
  * | Total Payables | **Accounts Payable** |
  * | Deficit | **Funding Shortfall** |
  *
- * Two rows carry the name *Available Cash Balance* — the bank-only line and the
- * all-in line. The owner was asked about the collision and answered *"Change the
- * name only"*, so both keep it and no row was removed.
+ * The bank-only and all-in lines first both landed on *Available Cash Balance*;
+ * the owner resolved the collision by renaming the bank-only one to **Available
+ * Bank Balance**. No row was removed.
  */
 export interface CashPosition extends CashPositionInput {
   /**
@@ -81,7 +81,7 @@ export interface CashPosition extends CashPositionInput {
   remainingCob: number;
   /** Receivables — linked from the Management Dashboard, not typed in. */
   receivables: number;
-  /** Rule 5 — Available Cash Balance + Cash on Hand + Receivables + Cash/Gcash/Checking. */
+  /** Rule 5 — Available Bank Balance + Cash on Hand + Receivables + Cash/Gcash/Checking. */
   remainingCash: number;
   /** Rule 6 — the same figure, under the name the owner uses for it. */
   dispensableCash: number;
