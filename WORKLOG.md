@@ -1,3 +1,49 @@
+## 2026-09-03 · A check can only be attached while the PO is Budgeted
+
+Owner: *"attaching check must be active only on purchasing budgeted tab. Hide or disable check uploading in
+pending, approved, cancelled and rejected. Checks can always be viewed in completed department PO but uploading
+is disabled."*
+
+### Why this is a rule about STATUS, not about tabs
+
+Two of the owner's clauses can't both be satisfied by a tab-based rule:
+
+- **Budgeted** is `statusBucket === "approved" && status >= VOUCHER_SIGNED` — and **COMPLETED is in it.** The PO
+  in the owner's screenshot was a completed one showing *Add check* and *Re-read*.
+- The **Completed department PO** section is not a tab at all, so no tab rule reaches it.
+- And the **All** tab shows every status at once, so a tab rule has no answer there either.
+
+So `checkAttachableAt(status, ctx)` is a window on the PO's own status — the Budgeted bucket **less COMPLETED**:
+
+| where the PO is | attach / re-read / remove | view the check |
+| --- | --- | --- |
+| Pending, Approved *(before the check is signed)* | ✗ | — |
+| Rejected, Cancelled | ✗ | — |
+| **VOUCHER_SIGNED → PLANT_APPROVED** *(Budgeted)* | **✓** | ✓ |
+| COMPLETED — Budgeted tab, All, or the Completed section | ✗ | ✓ |
+
+The tabs are a filter over statuses, so a status rule reproduces the owner's list exactly and stays right in the
+two places a tab rule couldn't reach. The test asserts it against a **copy of the workspace's own
+`displayBucket`**, walking every status in `PR_MAIN_ORDER` plus REJECTED and CANCELLED, so the rule and the tab
+it is named after cannot drift apart.
+
+### Hidden AND refused
+
+The controls disappear; the check, its number, the payee/amount/clearing line and any amber mismatch all stay —
+*"checks can always be viewed"*. But the button being gone is not the rule. `attachVoucherCheck`,
+`removeVoucherCheck` and `/api/ai/read-check` each re-check the window server-side and answer in words
+(*"This purchase order is completed — its check can be viewed but no longer changed."*). A rule enforced only by
+hiding a button is precisely the failure CLAUDE.md's capability-grid note was written about: *"left allowed by
+the server to upload a catalogue file with no button to do it."*
+
+Re-reading is gated with attaching, not with viewing, because a read WRITES its result onto the PO.
+
+### One judgement call, stated
+
+A completed PO that never got its check **keeps its amber badge** — the gap is real and belongs on the record —
+but it no longer raises the *Attach the check photo* task on My Dashboard. A task nobody can clear is how a
+"Pending Your Action" list stops being read. (An admin who genuinely needs to add one can roll the PO back.)
+
 ## 2026-09-03 · "ONLY" is how our checks close the line
 
 Owner: *"per 00/100 we use the words 'only' in check."*

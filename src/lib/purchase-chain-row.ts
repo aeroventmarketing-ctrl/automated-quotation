@@ -16,7 +16,7 @@ import {
   type ReturnStage,
 } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, checkAttachableAt, type CheckDoc } from "@/lib/voucher-check";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { requisitionDeptLabel } from "@/lib/order-workflow";
@@ -425,7 +425,10 @@ export function buildPurchaseChainRow(
     canApproveReconcile,
     checkDocs: coerceCheckDocs(pr.voucherCheckDocs),
     supplierGivesTerms: ctx.givesTerms?.(coercePurchaseOrder(pr.po)?.supplier.company) ?? false,
-    canAttachCheck: ctx.canAttachCheck ?? false,
+    // The role may attach one AND this PO is in the window where a check can be
+    // attached (Budgeted, not yet completed) — see `checkAttachableAt`. Applied
+    // here so every screen that renders a chain row inherits the same answer.
+    canAttachCheck: (ctx.canAttachCheck ?? false) && checkAttachableAt(status, { isDept, poApproved }),
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,

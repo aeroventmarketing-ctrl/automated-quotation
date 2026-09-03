@@ -45,7 +45,11 @@ export function VoucherCheckControl({
   status: PRStatus;
   /** The PO's supplier gives us payment terms — so a check exists to photograph. */
   supplierGivesTerms: boolean;
-  /** Accounting / Payment Approver / admin. */
+  /**
+   * Accounting / Payment Approver / admin, AND the PO is in the window where a
+   * check may be attached (`checkAttachableAt` — Budgeted, not yet completed).
+   * When false the check is still shown; only the controls go.
+   */
   canAttach: boolean;
   /** The viewer may see the supplier + PO document at all. */
   canView: boolean;
@@ -60,6 +64,9 @@ export function VoucherCheckControl({
   // Nothing attached and nothing expected — say nothing.
   if (docs.length === 0 && !missing && !canAttach) return null;
   if (!canView && !canAttach) return null;
+  // Read-only: the check, its number and its details still show — the owner's
+  // *"checks can always be viewed"* — but nothing here can change them.
+  const readOnly = !canAttach;
 
   /** Read one attached photo. Never throws away the file on failure. */
   async function read(path: string): Promise<string | null> {
@@ -131,7 +138,11 @@ export function VoucherCheckControl({
         {missing && (
           <span
             className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700"
-            title="This supplier gives us terms, so the PO is paid by check. Attach a photo of the check for future reference."
+            title={
+              readOnly
+                ? "This supplier gives us terms, so the PO was paid by check — but no photo of it was ever attached. It can only be attached while the PO is in Budgeted."
+                : "This supplier gives us terms, so the PO is paid by check. Attach a photo of the check for future reference."
+            }
           >
             <AlertTriangle className="h-3.5 w-3.5" /> Check not attached
           </span>
