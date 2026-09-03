@@ -96,6 +96,11 @@ export const NAV_OVERRIDES: Record<string, { hide?: string[]; show?: string[] }>
   // hidden surface as the 2nd QI — Sales Dashboard, Commissions, Purchasing and
   // the dead-end Inventory / Products / Requisitions tabs.
   quality_inspector: { hide: ["/dashboard", "/commissions", "/purchasing", ...QC_DEAD_END_TABS] },
+  // The Sales Head EARNS a commission (the 0.25% override), so the tab must
+  // survive whatever else they hold — JayR Basal is an Engineer who also runs
+  // the Sales-side 2nd QC, and that QC role was hiding the page his own payout
+  // lives on. A `show` beats any other role's `hide`.
+  sales_head: { show: ["/commissions"] },
 };
 
 /** The nav items visible to a user given their base role + workflow roles. */

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { CheckCircle2, Clock, TrendingDown } from "lucide-react";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getSalesPersonnelIds } from "@/lib/sales-personnel";
+import { commissionAccess } from "@/lib/commission-access";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -39,15 +41,20 @@ const basisLabel: Record<CommissionDeal["basis"], string> = {
 };
 
 export default async function CommissionsPage() {
-  const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
-  const canManage = isAdmin(viewer) || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "accounting"));
-  // Accounting/admin manage (mark paid); the Payment Approver sees all. Sales may
-  // view — but only their OWN commissions.
-  const canSeeAll = canManage || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver"));
-  const isSales = viewer?.role === "SALES";
-  const canView = canSeeAll || isSales;
+  const [viewer, assignments, salesPersonnelIds] = await Promise.all([
+    getCurrentUser(), getWorkflowRoles(), getSalesPersonnelIds().catch(() => [] as string[]),
+  ]);
+  // One rule, in `lib/commission-access`: Accounting/admin manage, the Payment
+  // Approver sees all, and anyone who can EARN a commission — a SALES user, an
+  // Engineer credited as a salesperson, or the Sales Head — sees their own.
+  const { canView, canSeeAll, canManage } = commissionAccess({
+    admin: isAdmin(viewer),
+    baseRole: viewer?.role ?? "",
+    workflowRoles: WORKFLOW_ROLE_KEYS.filter((k) => viewer != null && userHasWorkflowRole(assignments, viewer.id, k as WorkflowRoleKey)),
+    salesPersonnel: viewer != null && salesPersonnelIds.includes(viewer.id),
+  });
 
-  if (!canView) {
+  if (!viewer || !canView) {
     return (
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Commissions</h1>

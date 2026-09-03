@@ -1,3 +1,65 @@
+## 2026-09-03 · JayR Basal could not see his own commission — three gates, one wrong assumption
+
+Owner: *"show commissions tile at the right side of orders tile for JayR Basal, it should be same as other sales
+role."*
+
+JayR is an **ENGINEER** who holds *Sales Head* and *2nd Quality Inspector* and is ticked *Credit as salesperson*.
+He earns the 0.25% override. Every gate between him and it was keyed on `role === "SALES"`:
+
+| | |
+| --- | --- |
+| the **nav** | his 2nd-QC role hides `/commissions`, so the tab was gone |
+| the **page** | `canView = canSeeAll \|\| role === "SALES"` → *"You don't have access to sales commissions"* |
+| the **tile** | `seesCommissions = … \|\| role === "SALES"` → never rendered |
+
+Three separate inline gates, each individually reasonable, all making the same wrong assumption: **that earning a
+commission and having the SALES base role are the same thing.** They aren't — that is the entire point of the
+*Credit as salesperson* flag and of the Sales Head role, which earns an override without selling anything.
+
+### The rule now lives in one place, with a grid
+
+`src/lib/commission-access.ts` — `earnsCommission()` and `commissionAccess()`, pure functions over
+(admin, base role, workflow roles, salesPersonnel). Exactly the shape `catalogue-access.ts` took after the same
+class of bug, and for the same reason: inline gates are what made the blast radius invisible.
+
+`commission-access.test.ts` asserts every role at once, JayR's exact combination included — Engineer + Sales Head
++ 2nd QC + credited — alongside the people who must stay out (a plain Engineer, a Warehouseman, a 2nd QC on its
+own). Two invariants ride along: someone who only *earns* never gains `canSeeAll`, and **holding a hiding role
+never removes access someone has earned**.
+
+The nav gets one override, `sales_head: { show: ["/commissions"] }`, because a role's `show` beats another role's
+`hide` — the Sales Head keeps the page their own payout lives on whatever else they hold.
+
+### A real bug the harness turned up on the way
+
+Standing a harness Engineer up in JayR's shape, the tile read **₱0.00** — and it should not have. The override's
+payout record was being matched by **deal alone**, not by who is owed:
+
+```ts
+const rec = payout.get(`q:${d.refId}:override`);   // whose override?
+```
+
+So when the Sales Head seat changed hands, the new head inherited the previous head's *paid* marks and was shown
+zero for money they were genuinely owed. Now the record must also match `salespersonId`. With the fix the same
+viewer reads **₱11,160.73 · 7 approved**.
+
+That would not have surfaced from the owner's request at all — it needed a second Sales Head to exist, which only
+happened because the harness had one already.
+
+**A limitation left standing, deliberately:** `Commission` is unique on `(quotationId, kind)`, so only ONE
+override payout row can exist per order. If a head changes seats *and* the new head is then paid, that upsert
+overwrites the record that the previous head was paid. Fixing it properly means `(quotationId, kind,
+salespersonId)` and another migration; with one Sales Head at a time it cannot bite, so it is written down rather
+than shipped unasked.
+
+### Checked as JayR's exact shape
+
+Nav shows Commissions · tile reads **₱11,160.73 · 7 approved · release Sep 15** · the page opens and shows **only
+his own two override cards** (₱4,464.29 + ₱6,696.44 = the tile) · no payout panel · the cash-voucher URL **404s**
+for him, because a salesperson must not print their own voucher.
+
+The role harness reports the same capability table as before.
+
 ## 2026-09-02 · One cash voucher per salesperson, not one per order
 
 Owner: *"voucher creation for release of commission is per sales personnel. Total every approved inquiry and make a
