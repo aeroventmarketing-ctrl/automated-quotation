@@ -189,6 +189,16 @@ export interface CheckWatchSummary {
   undated: number;
   /** Total peso value still to clear (checks with a readable amount). */
   openAmount: number;
+  /**
+   * The owner's **Total First Priority**: every uncleared check whose clearing
+   * date has ARRIVED — today or earlier.
+   *
+   * *"if not cleared it will stay in this row"* — a check whose date has passed
+   * is more urgent, not less, so it keeps counting until someone confirms the
+   * bank took it. Deliberately NOT the same set as the 3-day notice: that warns
+   * ahead of time, this is money the bank can take today.
+   */
+  firstPriorityAmount: number;
   /** The next clearing date among the open checks. */
   nextYMD: string | null;
 }
@@ -203,6 +213,9 @@ export function checkWatchSummary(rows: CheckWatchRow[]): CheckWatchSummary {
     cleared: rows.length - open.length,
     undated: open.filter((r) => r.state === "undated").length,
     openAmount: open.reduce((s, r) => s + (r.amount ?? 0), 0),
+    firstPriorityAmount: open
+      .filter((r) => r.state === "due" || r.state === "overdue")
+      .reduce((s, r) => s + (r.amount ?? 0), 0),
     nextYMD: dated[0]?.clearingYMD ?? null,
   };
 }

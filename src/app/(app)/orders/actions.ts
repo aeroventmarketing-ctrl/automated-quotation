@@ -55,6 +55,7 @@ import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDep
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { coerceCheckDocs, canAttachCheck, checkAttachableAt, effectiveClearingYMD, type CheckDoc } from "@/lib/voucher-check";
+import { saveCashPosition } from "@/lib/cash-position";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
@@ -2677,6 +2678,36 @@ export async function rescheduleCheck(
       reschedules: [...(d.reschedules ?? []), { from, to: input.to, reason, byName: user?.name ?? "", at: new Date().toISOString() }],
     };
   });
+}
+
+/**
+ * The four cash figures under the check register — Cash on Bank, Cash on Hand,
+ * Collectibles, Cash/Gcash/Checking. *"I will manually input the detail."*
+ *
+ * Admin only, the same as clearing a check: these decide whether the company is
+ * reported as short, and nothing in the system can check them against a bank.
+ */
+export async function saveCashPositionAction(input: {
+  cob: number; coh: number; collectibles: number; cashGcashChecking: number;
+}): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckAdmin();
+  if (denied) return { error: denied };
+  const user = await getCurrentUser();
+  const bad = (["cob", "coh", "collectibles", "cashGcashChecking"] as const).find(
+    (k) => !Number.isFinite(Number(input?.[k])),
+  );
+  if (bad) return { error: "Every figure must be a number." };
+  await saveCashPosition({
+    cob: Number(input.cob),
+    coh: Number(input.coh),
+    collectibles: Number(input.collectibles),
+    cashGcashChecking: Number(input.cashGcashChecking),
+    updatedByName: user?.name ?? "",
+    updatedAt: new Date().toISOString(),
+  });
+  revalidatePath("/checks");
+  revalidatePath("/management");
+  return { ok: true };
 }
 
 // --- Voucher reconciliation -------------------------------------------------

@@ -1,3 +1,51 @@
+## 2026-09-03 · The cash position under the check register
+
+The owner's eight rules, given with a screenshot of the sheet they keep them on:
+
+> *1. Total First Priority is the total check amount for clearing based on the current date, if not cleared it
+> will stay in this row · 2. COB is Cash on Bank, I will manually input the detail · 3. Remaining COB is COB −
+> Total First Priority · 4. COH is Cash on Hand, Collectibles, Cash/Gcash/Checking, I will manually input the
+> detail · 5. Remaining Cash is the total of Remaining COB, COH, Collectibles, Cash/Gcash/Checking · 6.
+> Dispensable Cash is same as Remaining Cash · 7. Total Payables is the total amount of checks issued · 8.
+> Deficit is Total payables − Dispensable cash.*
+
+A panel under the register on `/checks`, laid out as their ten rows. **Four figures are typed in** (rules 2 and
+4) because nothing in the system knows a bank balance. **The other six are derived**, and the two that come from
+the checks — First Priority and Total Payables — are the register's own totals, so the panel cannot disagree
+with the table it sits under.
+
+### The two rules that needed a decision
+
+**Rule 1 — "based on the current date".** First Priority counts every uncleared check whose clearing date has
+**arrived**: today or earlier. Deliberately NOT the same set as the 3-day notice — that warns ahead of time,
+this is money the bank can take today. And *"if not cleared it will stay in this row"* is exactly right: an
+overdue check is more urgent, not less, so it keeps counting until someone confirms the bank took it.
+
+**Rule 7 — "the total amount of checks issued".** Read as checks issued **and not yet cleared**. A cleared check
+is no longer payable, and counting it would put money that has already left the account into a deficit meant to
+show what is still owed. Stated here because it is an interpretation, not a quotation.
+
+### Verified on the owner's own numbers
+
+Seeded four checks totalling their figures exactly, then typed their COB into the panel:
+
+| | |
+| --- | --- |
+| TOTAL FIRST PRIORITY | ₱22,538.94 |
+| COB | ₱121,658.12 |
+| **Remaining COB** | **₱99,119.18** |
+| COH · Collectibles · Cash/Gcash/Checking | ₱0.00 |
+| Remaining Cash · Dispensable Cash | ₱99,119.18 |
+| Total Payables | ₱1,712,027.87 |
+| **Deficit** | **₱1,612,908.69** |
+
+Every line matches their sheet. `cash-position.test.ts` pins the same figures, plus the cases the screenshot
+cannot show: a negative Remaining COB when the bank cannot cover what clears today, a surplus reported as a
+negative deficit rather than hidden, and the three cash lines actually reaching Remaining Cash.
+
+Editing is **admin only**, like clearing a check — these decide whether the company is reported as short, and
+nothing can check them against a bank. Accounting and the Payment Approver see the panel read-only.
+
 ## 2026-09-03 · Ten digits is the check number
 
 Owner: *"In the training we have done. I trained the AI to read 10 digit check number. In the file I sent you is

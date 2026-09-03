@@ -7,7 +7,9 @@ import { coerceCheckDocs, canAttachCheck } from "@/lib/voucher-check";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { buildCheckWatch, checkWatchSummary, CHECK_NOTICE_DAYS } from "@/lib/check-monitor";
 import { PH_TIME_ZONE } from "@/lib/utils";
+import { getCashPosition, computeCashPosition, EMPTY_CASH_POSITION } from "@/lib/cash-position";
 import { CheckMonitor } from "./check-monitor-table";
+import { CashPositionPanel } from "./cash-position-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,12 @@ export default async function ChecksPage() {
     },
   });
   const summary = checkWatchSummary(rows);
+  // The cash position sits under the register and is driven by it: First
+  // Priority and Total Payables are the register's own totals, never re-derived.
+  const cash = computeCashPosition(await getCashPosition().catch(() => EMPTY_CASH_POSITION), {
+    firstPriority: summary.firstPriorityAmount,
+    totalPayables: summary.openAmount,
+  });
 
   return (
     <div className="space-y-4">
@@ -74,7 +82,10 @@ export default async function ChecksPage() {
           </CardContent>
         </Card>
       ) : (
-        <CheckMonitor rows={rows} summary={summary} admin={admin} todayYMD={todayYMD} />
+        <>
+          <CheckMonitor rows={rows} summary={summary} admin={admin} todayYMD={todayYMD} />
+          <CashPositionPanel pos={cash} admin={admin} />
+        </>
       )}
     </div>
   );
