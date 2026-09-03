@@ -124,13 +124,23 @@ describe("the practice check", () => {
     // written in. Every round-amount check would otherwise read as a mismatch.
     expect(pesoAmountInWords(2180)).toBe("TWO THOUSAND ONE HUNDRED EIGHTY");
     for (const words of [
+      // The owner's house style — *"per 00/100 we use the words 'only' in
+      // check"* — in every form a hand or a printer produces it.
+      "TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY",
+      "TWO THOUSAND ONE HUNDRED EIGHTY ONLY",
+      "Two Thousand One Hundred Eighty Pesos Only",
+      "TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY.",
+      "** TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY **",
+      // …and the fraction forms other banks and check printers use.
       "TWO THOUSAND ONE HUNDRED EIGHTY AND 00/100",
       "TWO THOUSAND ONE HUNDRED EIGHTY AND NO/100",
-      "TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY",
       "Two Thousand One Hundred Eighty",
     ]) {
       expect(amountMatchesWords(2180, words, pesoAmountInWords), words).toBe(true);
     }
+    // "ONLY" closes the line; it never excuses centavos that are actually there.
+    expect(amountMatchesWords(2160.54, "TWO THOUSAND ONE HUNDRED SIXTY PESOS ONLY", pesoAmountInWords)).toBe(false);
+    expect(amountMatchesWords(2160.54, "TWO THOUSAND ONE HUNDRED SIXTY AND 54/100 ONLY", pesoAmountInWords)).toBe(true);
     // A real centavo tail is still part of the amount, and still has to agree.
     expect(amountMatchesWords(2160.54, "TWO THOUSAND ONE HUNDRED SIXTY AND 54/100", pesoAmountInWords)).toBe(true);
     expect(amountMatchesWords(2160.54, "TWO THOUSAND ONE HUNDRED SIXTY AND 45/100", pesoAmountInWords)).toBe(false);
