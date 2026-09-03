@@ -114,7 +114,9 @@ export function formOfPayment(poDate: string | null, clearingYMD: string | null)
 /** One check, as the monitoring screen and the tile see it. */
 export interface CheckWatchRow {
   prId: string;
-  path: string; // identifies the check within its PO
+  path: string; // identifies the check within its PO — and is its storage path
+  /** The photo's original file name, for the view link. */
+  fileName: string;
   /** The date on the PO itself — the register's leading column. */
   poDate: string | null;
   poNumber: string;
@@ -170,6 +172,7 @@ export function buildCheckWatch(
       rows.push({
         prId: pr.id,
         path: doc.path,
+        fileName: doc.name,
         poDate,
         poNumber: po?.poNumber ?? "—",
         supplier: po?.supplierCompany ?? "",

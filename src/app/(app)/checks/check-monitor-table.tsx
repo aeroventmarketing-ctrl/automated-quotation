@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, CheckCircle2, Undo2 } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, Image as ImageIcon, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -123,22 +123,45 @@ export function CheckMonitor({
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[1240px] border-collapse text-sm">
+          {/* `table-fixed` with explicit widths, so the ten register columns
+              share the space they have instead of pushing the table wider than
+              the screen and making everything scroll sideways. Long values wrap
+              inside their cell; nothing is cut off. */}
+          <table className="w-full table-fixed border-collapse text-sm">
+            {/* The columns whose content has a floor — dates, money, the two
+                action buttons — take fixed pixels; the three free-text ones share
+                whatever is left. Percentages alone squeezed Actions below its own
+                buttons, which pushed the table wider than the screen again. */}
+            <colgroup>
+              {/* Every column except Company is fixed, so the supplier name —
+                  the only genuinely variable value — absorbs whatever is left
+                  instead of being squeezed until it breaks mid-word. */}
+              {/* Date */}<col className="w-[70px]" />
+              {/* Company */}<col />
+              {/* PO number */}<col className="w-[128px]" />
+              {/* Check no. */}<col className="w-[110px]" />
+              {/* Amount */}<col className="w-[100px]" />
+              {/* Date paid/cleared */}<col className="w-[104px]" />
+              {/* Form of payment */}<col className="w-[50px]" />
+              {/* Status */}<col className="w-[104px]" />
+              {/* Remarks */}<col className="w-[96px]" />
+              {admin && <col className="w-[100px]" />}
+            </colgroup>
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                 {/* The owner's own register columns, in their order and their
                     wording: Date · Company · Purchase Order Number · Check No. ·
                     Amount · Date Paid/Cleared · Form of Payment · Status · Remarks. */}
-                <th className="px-3 py-2 font-medium">Date</th>
-                <th className="px-3 py-2 font-medium">Company</th>
-                <th className="px-3 py-2 font-medium">Purchase Order Number</th>
-                <th className="px-3 py-2 font-medium">Check No.</th>
-                <th className="px-3 py-2 text-right font-medium">Amount</th>
-                <th className="px-3 py-2 font-medium">Date Paid/Cleared</th>
-                <th className="px-3 py-2 font-medium">Form of Payment</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Remarks</th>
-                {admin && <th className="px-3 py-2 text-right font-medium">Actions</th>}
+                <th className="px-2 py-2 font-medium">Date</th>
+                <th className="px-2 py-2 font-medium">Company</th>
+                <th className="px-2 py-2 font-medium">Purchase Order Number</th>
+                <th className="px-2 py-2 font-medium">Check No.</th>
+                <th className="px-2 py-2 text-right font-medium">Amount</th>
+                <th className="px-2 py-2 font-medium">Date Paid/Cleared</th>
+                <th className="px-2 py-2 font-medium">Form of Payment</th>
+                <th className="px-2 py-2 font-medium">Status</th>
+                <th className="px-2 py-2 font-medium">Remarks</th>
+                {admin && <th className="px-2 py-2 text-right font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -147,16 +170,31 @@ export function CheckMonitor({
                 const openForm_ = form?.key === key ? form : null;
                 return (
                   <tr key={key} className="border-b align-top last:border-0">
-                    <td className="px-3 py-2 tabular-nums text-muted-foreground">{r.poDate ? formatDate(r.poDate) : "—"}</td>
-                    <td className="px-3 py-2">{r.supplier || "—"}</td>
-                    <td className="px-3 py-2">
-                      <Link href={`/purchasing?req=${r.prId}`} className="text-primary underline-offset-2 hover:underline">
+                    <td className="px-2 py-2 tabular-nums text-muted-foreground">{r.poDate ? formatDate(r.poDate) : "—"}</td>
+                    <td className="px-2 py-2 break-words">{r.supplier || "—"}</td>
+                    <td className="px-2 py-2">
+                      <Link href={`/purchasing?req=${r.prId}`} className="break-words text-primary underline-offset-2 hover:underline">
                         {r.poNumber}
                       </Link>
                     </td>
-                    <td className="px-3 py-2 font-medium tabular-nums">{formatCheckNo(r.checkNo) ?? <span className="text-muted-foreground">not read</span>}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{r.amount != null ? formatCurrency(r.amount, "PHP") : "—"}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-2 font-medium tabular-nums">
+                      {/* The number opens the photo it was read from — the
+                          quickest way to check the system against the paper.
+                          Linked even when the number could not be read, because
+                          that is exactly when someone wants to look. */}
+                      <a
+                        href={`/api/purchase-uploads/view?path=${encodeURIComponent(r.path)}&name=${encodeURIComponent(r.fileName)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open the photo of this check"
+                        className="inline-flex items-center gap-1 break-words text-primary underline-offset-2 hover:underline"
+                      >
+                        <ImageIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                        {formatCheckNo(r.checkNo) ?? <span className="italic">not read</span>}
+                      </a>
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums">{r.amount != null ? formatCurrency(r.amount, "PHP") : "—"}</td>
+                    <td className="px-2 py-2">
                       <div className="font-medium tabular-nums">{r.clearingYMD ? formatDate(r.clearingYMD) : "—"}</div>
                       {/* How far off it is, which is the whole point of watching it. */}
                       <div className={`text-xs ${needsAttention(r.state) ? "font-medium text-amber-700" : "text-muted-foreground"}`}>{whenText(r)}</div>
@@ -167,8 +205,8 @@ export function CheckMonitor({
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.form}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-2 text-muted-foreground">{r.form}</td>
+                    <td className="px-2 py-2">
                       {/* The register's word for it, with the urgency that word
                           doesn't carry — "Check Clearing" is true of a check due
                           next month and of one three days overdue. */}
@@ -182,28 +220,28 @@ export function CheckMonitor({
                         <div className="mt-0.5 text-xs text-muted-foreground">by {r.clearedByName}</div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{r.remarks ?? ""}</td>
+                    <td className="px-2 py-2 text-xs text-muted-foreground">{r.remarks ?? ""}</td>
                     {admin && (
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2">
                         {openForm_ ? (
-                          <div className="ml-auto w-64 space-y-1.5 rounded-md border bg-background p-2 text-left">
+                          <div className="w-full space-y-1.5 rounded-md border bg-background p-2 text-left">
                             <div className="text-xs font-medium">
                               {openForm_.kind === "clear" ? "Date the check cleared" : "New clearing date"}
                             </div>
-                            <Input type="date" className="h-8" value={dateVal} onChange={(e) => setDateVal(e.target.value)} />
+                            <Input type="date" className="h-8 w-full px-1 text-xs" value={dateVal} onChange={(e) => setDateVal(e.target.value)} />
                             {openForm_.kind === "move" && (
                               <Input
-                                className="h-8"
-                                placeholder="Why — e.g. insufficient funds"
+                                className="h-8 w-full px-1 text-xs"
+                                placeholder="Why?"
                                 value={reason}
                                 onChange={(e) => setReason(e.target.value)}
                               />
                             )}
-                            <div className="flex justify-end gap-1.5">
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setForm(null)}>Cancel</Button>
+                            <div className="flex flex-col items-stretch gap-1.5">
+                              <Button size="sm" variant="outline" className="h-7 px-1 text-xs" onClick={() => setForm(null)}>Cancel</Button>
                               <Button
                                 size="sm"
-                                className="h-7 text-xs"
+                                className="h-7 px-1 text-xs"
                                 disabled={busy === key || (openForm_.kind === "move" && !reason.trim())}
                                 onClick={() =>
                                   run(key, () =>
@@ -218,12 +256,12 @@ export function CheckMonitor({
                             </div>
                           </div>
                         ) : (
-                          <div className="flex justify-end gap-1.5">
+                          <div className="flex flex-col items-stretch gap-1.5">
                             {r.state === "cleared" ? (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 text-xs"
+                                className="h-7 w-full justify-center px-1 text-xs"
                                 disabled={busy === key}
                                 onClick={() => run(key, () => unclearCheck(r.prId, r.path))}
                                 title="Put this check back on the watch list"
@@ -232,13 +270,13 @@ export function CheckMonitor({
                               </Button>
                             ) : (
                               <>
-                                <Button size="sm" className="h-7 text-xs" onClick={() => openForm(r, "clear")}>
+                                <Button size="sm" className="h-7 w-full justify-center px-1 text-xs" onClick={() => openForm(r, "clear")}>
                                   <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Cleared
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 text-xs"
+                                  className="h-7 w-full justify-center px-1 text-xs"
                                   onClick={() => openForm(r, "move")}
                                   title="Move the clearing date — e.g. the account can't fund it yet"
                                 >
