@@ -62,6 +62,38 @@ Approver — an alert nobody can act on is not an alert.
 **Still outstanding:** the owner's sample layout, `AFBM Sales and Expenses_AeroERP.xlsx`, is password-protected
 (`CDFV2 Encrypted`) and could not be read — they are re-uploading it unprotected. The table's columns are a
 sensible default until then and may need reshaping to match it.
+## 2026-09-03 · The "blank" supplier rows were not blank — I misread a scrolled table
+
+Owner: *"clear them out"* — acting on my own observation that the supplier directory held blank rows.
+
+**There was nothing to clear, and the observation was wrong.** Recorded here because acting on it would have
+deleted live data.
+
+The screenshot I read it from was **scrolled horizontally**: its leftmost visible column was *Address*, not
+*Company Name*. Company, Contact Person, Contact Number and Email were off-screen to the left. What I called
+"blank rows" were rows blank from Address onward — with names I could not see.
+
+Two things then confirmed it, both by reading the code rather than the picture:
+
+- **`coerceOne` returns `null` for a blank company.** A nameless row never reaches the UI, the PO supplier
+  picker, or `getSuppliers()` at all — so it cannot be one of the rows on screen. (Nor can one be created:
+  the import skips a row with no company, the add form's button stays disabled, `saveSupplier` validates it,
+  and `rememberSupplier` returns early on a blank. Any left in storage are inert and are dropped from the JSON
+  by the next supplier save.)
+- **`rememberSupplier` writes exactly that shape.** Every time a purchaser issues a PO to a new supplier it
+  creates a record with the company name (plus attention/address if the PO carried them) and *nothing else*.
+  Dashes across Address, TIN, ZIP, Bank, Account and Remarks is the normal, expected look of a supplier the
+  system learned from a PO.
+
+So those rows are the suppliers real POs were issued to. Deleting them would have taken the directory with it.
+
+A cleanup was written and **reverted** — `isNamelessSupplier` / `isUnusableSupplierName` extending
+`removeInvalidSuppliers`. It was dead code by construction: `removeInvalidSuppliers` reads through
+`getSuppliers()`, which coerces, so a nameless row is never in the list it filters.
+
+What survives is the test: a supplier with a name and nothing else must round-trip intact, a nameless row is
+dropped on read, and `isPricedSupplierName` flags only genuine import junk. It exists so the next person to
+look at a sideways-scrolled table and see dashes does not do what I nearly did.
 
 ## 2026-09-03 · A check can only be attached while the PO is Budgeted
 

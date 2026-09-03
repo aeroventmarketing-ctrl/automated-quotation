@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SUPPLIER_COLUMNS, mapSupplierHeaders, parseYesNo, coerceSuppliers } from "./suppliers";
+import { SUPPLIER_COLUMNS, mapSupplierHeaders, parseYesNo, coerceSuppliers, isPricedSupplierName } from "./suppliers";
 
 /**
  * The supplier import's header matcher, and the one trap in it.
@@ -71,5 +71,42 @@ describe("coerceSuppliers", () => {
   it("keeps a stored terms flag", () => {
     const [s] = coerceSuppliers({ list: [{ id: "a", company: "ACME", terms: true }] });
     expect(s.terms).toBe(true);
+  });
+});
+
+/**
+ * Which rows are junk, and — more importantly — which only LOOK like junk.
+ *
+ * A supplier row showing nothing but dashes across Address, TIN, ZIP, Bank,
+ * Account and Remarks is **not** an empty row. `rememberSupplier` creates
+ * exactly that shape every time a purchaser issues a PO to a new supplier: the
+ * company name is filled in and nothing else is known yet. Those rows are the
+ * suppliers real POs were issued to, and deleting them would take the directory
+ * with it. The sparse ones are pinned here because a wide table scrolled
+ * sideways hides the Company column and makes them look blank.
+ */
+describe("supplier rows that only look empty", () => {
+  it("keeps a supplier that has a name and nothing else", () => {
+    // The shape `rememberSupplier` writes when a PO is issued to a new supplier.
+    const [s] = coerceSuppliers({ list: [{ id: "a", company: "NAME ONLY SUPPLIER" }] });
+    expect(s.company).toBe("NAME ONLY SUPPLIER");
+    expect([s.address, s.tin, s.zip, s.bankName, s.accountNumber, s.remarks]).toEqual(["", "", "", "", "", ""]);
+    expect(isPricedSupplierName(s.company)).toBe(false);
+  });
+
+  it("drops a row with no company name at all, on read", () => {
+    // The name is the supplier's identity, so a nameless row is unreachable —
+    // and never reaches the UI, the PO picker, or getSuppliers() to begin with.
+    expect(coerceSuppliers({ list: [{ id: "a", company: "" }, { id: "b", company: "   " }] })).toEqual([]);
+  });
+
+  it("flags only genuine import junk as invalid", () => {
+    // A product export's "Suppliers" cell imported as a company name.
+    expect(isPricedSupplierName("RITE PRODUCTS INC. \u20b18078.02")).toBe(true);
+    expect(isPricedSupplierName("A \u20b11; B \u20b12")).toBe(true);
+    // …and never a real company, however sparse its record.
+    for (const name of ["NAME ONLY SUPPLIER", "TOZEN PHILIPPINES INC.", "J & J HARDWARE", "3M"]) {
+      expect(isPricedSupplierName(name), name).toBe(false);
+    }
   });
 });
