@@ -54,7 +54,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, canAttachCheck, checkAttachableAt, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, canAttachCheck, checkAttachableAt, effectiveClearingYMD, type CheckDoc } from "@/lib/voucher-check";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
@@ -2582,6 +2582,101 @@ export async function removeVoucherCheck(purchaseRequestId: string, path: string
   const cur = coerceCheckDocs(pr.voucherCheckDocs);
   await writeCheckDocs(purchaseRequestId, cur.filter((d) => d.path !== path));
   return { ok: true };
+}
+
+// --- Check monitoring: clearing and rescheduling -----------------------------
+//
+// **Admin only**, by the owner's explicit choice when asked — every check passes
+// through them. Deliberately NOT the attach audience (Accounting / Payment
+// Approver / admin): attaching a photo records what happened, while clearing a
+// check and moving its date are decisions about money leaving the bank.
+//
+// Also deliberately NOT gated on `checkAttachableAt`. A check clears long after
+// its PO is finished — usually when the PO is already COMPLETED — so the window
+// that governs attaching would make it impossible to ever clear one.
+
+async function assertCheckAdmin(): Promise<string | null> {
+  const user = await getCurrentUser();
+  if (!user) return "Unauthorized";
+  if (!isAdmin(user)) return "Only an admin can clear a check or move its clearing date.";
+  return null;
+}
+
+/** YYYY-MM-DD, or null. Guards against a bad value reaching the monitoring sort. */
+const isYMD = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
+
+async function updateCheckDoc(
+  purchaseRequestId: string,
+  path: string,
+  change: (d: CheckDoc) => CheckDoc,
+): Promise<{ ok?: true; error?: string }> {
+  const pr = await prisma.purchaseRequest.findUnique({
+    where: { id: purchaseRequestId },
+    select: { id: true, quotationId: true, voucherCheckDocs: true },
+  });
+  if (!pr) return { error: "Purchase order not found." };
+  const cur = coerceCheckDocs(pr.voucherCheckDocs);
+  if (!cur.some((d) => d.path === path)) return { error: "That check isn't attached to this purchase order." };
+  const next = cur.map((d) => (d.path === path ? change(d) : d));
+  await prisma.purchaseRequest.update({
+    where: { id: purchaseRequestId },
+    data: { voucherCheckDocs: next as unknown as Prisma.InputJsonValue },
+  });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/checks");
+  revalidatePath("/management");
+  revalidatePath("/my-dashboard");
+  return { ok: true };
+}
+
+/** The bank cleared it — moves the check to the Cleared tab. */
+export async function markCheckCleared(
+  purchaseRequestId: string,
+  path: string,
+  input: { on: string; note?: string },
+): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckAdmin();
+  if (denied) return { error: denied };
+  const user = await getCurrentUser();
+  if (!isYMD(input?.on)) return { error: "Give the date the check cleared." };
+  return updateCheckDoc(purchaseRequestId, path, (d) => ({
+    ...d,
+    cleared: { on: input.on, byName: user?.name ?? "", at: new Date().toISOString(), ...(input.note?.trim() ? { note: input.note.trim() } : {}) },
+  }));
+}
+
+/** Undo a clearing recorded by mistake — back onto the watch list. */
+export async function unclearCheck(purchaseRequestId: string, path: string): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckAdmin();
+  if (denied) return { error: denied };
+  return updateCheckDoc(purchaseRequestId, path, ({ cleared: _drop, ...rest }) => rest);
+}
+
+/**
+ * Move the clearing date — *"if in case the check cannot be cleared because of
+ * lack of funds"*. Appends to the history rather than overwriting: a check put
+ * off three times is a supplier put off three times, and that is worth seeing.
+ */
+export async function rescheduleCheck(
+  purchaseRequestId: string,
+  path: string,
+  input: { to: string; reason: string },
+): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckAdmin();
+  if (denied) return { error: denied };
+  const user = await getCurrentUser();
+  if (!isYMD(input?.to)) return { error: "Give the new clearing date." };
+  const reason = (input.reason ?? "").trim();
+  if (!reason) return { error: "Say why the date is being moved — it goes on the record." };
+  return updateCheckDoc(purchaseRequestId, path, (d) => {
+    const from = effectiveClearingYMD(d) ?? "";
+    if (from === input.to) return d; // nothing moved
+    return {
+      ...d,
+      reschedules: [...(d.reschedules ?? []), { from, to: input.to, reason, byName: user?.name ?? "", at: new Date().toISOString() }],
+    };
+  });
 }
 
 // --- Voucher reconciliation -------------------------------------------------

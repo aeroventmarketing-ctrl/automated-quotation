@@ -1,3 +1,68 @@
+## 2026-09-03 · Check monitoring — every issued check, watched to the day it clears
+
+Owner: *"In admin Management Dashboard at the right side and in row with Unpaid Commissions, add a tile named
+'Check Monitoring'. Purpose … is to monitor the checks clearing date, notify the admin at least 3 days before
+clearing. Move the cleared check to a separate tab once check is cleared. If in case the check cannot be
+cleared because of lack of funds, admin has the option to move the check date to other date."*
+
+Built on the clearing date the AI already reads off the face of each check (`read.clearingYMD`), so nothing new
+has to be typed for a check to start being watched.
+
+### Three decisions worth stating
+
+**"Cleared" is recorded by a person, never inferred from the date.** A due date passing proves nothing — only
+the bank knows whether a check cleared. So a check does not move itself to the Cleared tab on its due date; it
+sits in **Overdue — not cleared** until someone says otherwise. That is the state that most deserves to be
+visible.
+
+**A moved date is appended, not overwritten.** `reschedules[]` keeps every move with its reason and who made
+it, and the date printed on the check is never touched. A check put off three times is a supplier put off three
+times, and that is exactly the thing worth being able to see later. The row shows *"moved from Sep 1, 2026 ·
+insufficient funds"* under the new date.
+
+**An undated check is called undated.** A photo with glare over the date box yields no clearing date, and
+inventing one would put a real payment on a day nobody agreed to. Those rows sort last and say *"No clearing
+date read"* rather than pretending.
+
+### Who sees it, and who may act — different on purpose
+
+| | see the schedule | clear / move a date |
+| --- | --- | --- |
+| Admin | ✓ | **✓** |
+| Accounting, Payment Approver | ✓ | ✗ |
+| everyone else | ✗ | ✗ |
+
+**Admin only** for both actions, the owner's answer when asked directly. Deliberately NOT the attach audience:
+attaching a photo records what happened, while clearing a check and moving its date are decisions about money
+leaving the bank. Accounting and the Payment Approver still see the schedule, because they are the ones who
+attach and read the checks.
+
+Also deliberately **not** gated on `checkAttachableAt`. A check clears long after its PO is finished — usually
+when the PO is already COMPLETED — so the window that governs attaching a photo would have made it impossible
+to ever clear one.
+
+### A duplicate key TypeScript caught, and CLAUDE.md predicted
+
+Adding the nav entry, I wrote `accounting: { show: ["/checks"] }` as a new key in `NAV_OVERRIDES` — where
+`accounting` **already had** `{ hide: ["/products"], show: ["/requisitions", "/dashboard"] }`. A second key
+silently replaces the first, so Accounting would have got the Checks tab and quietly lost Requisitions, the
+Sales Dashboard, and the hiding of Products. `TS1117` caught it only because both keys sat in the same object
+literal; in two spreads it would have shipped. Merged into the existing entry instead.
+
+### Verified in the harness, seven checks seeded
+
+Tile reads **"CHECK MONITORING · 20 · 1 overdue · ₱338,755.81"**, sixth in a four-column grid — the row below,
+immediately right of Unpaid Commissions, as asked. Rows render **Sep 1 / 2 days ago** (overdue), **Sep 3 /
+today**, **Sep 6 / in 3 days** (the notice boundary — three days out is *inside* it, per *"at least 3 days"*).
+Moving the overdue one to 5 Oct took it to *Scheduled* with its reason on the row; marking one cleared moved it
+Upcoming 20 → 19, Cleared 1 → 2, showing *"cleared Sep 3, 2026 · by Admin Ana"*; undoing it put it back. My
+Dashboard raised exactly three notices for the admin (overdue, today, in 3 days) and **none** for the Payment
+Approver — an alert nobody can act on is not an alert.
+
+**Still outstanding:** the owner's sample layout, `AFBM Sales and Expenses_AeroERP.xlsx`, is password-protected
+(`CDFV2 Encrypted`) and could not be read — they are re-uploading it unprotected. The table's columns are a
+sensible default until then and may need reshaping to match it.
+
 ## 2026-09-03 · A check can only be attached while the PO is Budgeted
 
 Owner: *"attaching check must be active only on purchasing budgeted tab. Hide or disable check uploading in

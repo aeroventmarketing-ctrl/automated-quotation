@@ -61,6 +61,32 @@ export interface CheckRead {
   readAt: string; // ISO
 }
 
+/**
+ * The check's clearing date was moved — the owner's rule: *"If in case the check
+ * cannot be cleared because of lack of funds, admin has the option to move the
+ * check date to other date."*
+ *
+ * Kept as a LIST, not a single overwritten date. A check moved three times is a
+ * supplier being put off three times, and that is exactly the thing worth being
+ * able to see later. The original date read off the check is never touched — it
+ * is what the check itself says.
+ */
+export interface CheckReschedule {
+  from: string; // the clearing date it was moved off (YMD)
+  to: string; // the new clearing date (YMD)
+  reason: string;
+  byName: string;
+  at: string; // ISO
+}
+
+/** The bank cleared it. Recorded by a person, because only the bank knows. */
+export interface CheckCleared {
+  on: string; // YMD it actually cleared
+  byName: string;
+  at: string; // ISO
+  note?: string;
+}
+
 /** One uploaded check photo. The file, who attached it, and what the AI read. */
 export interface CheckDoc {
   path: string; // storage path under `purchases/<prId>/…`
@@ -69,6 +95,23 @@ export interface CheckDoc {
   uploadedByName: string;
   /** Absent until the AI has read it (or if the read failed). */
   read?: CheckRead;
+  /** Every time the clearing date was moved, oldest first. */
+  reschedules?: CheckReschedule[];
+  /** Set once the bank has cleared it — moves the check to the Cleared tab. */
+  cleared?: CheckCleared;
+}
+
+/**
+ * The date this check is expected to clear: the latest rescheduled date if it has
+ * been moved, otherwise the date printed on the check itself.
+ *
+ * Null when the check was never read, or the read couldn't make out the date —
+ * an undated check can't be monitored, and saying so is better than assuming a
+ * date nobody wrote down.
+ */
+export function effectiveClearingYMD(doc: CheckDoc): string | null {
+  const moved = doc.reschedules?.length ? doc.reschedules[doc.reschedules.length - 1].to : null;
+  return moved ?? doc.read?.clearingYMD ?? null;
 }
 
 function coerceRead(v: unknown): CheckRead | undefined {
@@ -98,17 +141,40 @@ function coerceRead(v: unknown): CheckRead | undefined {
   };
 }
 
+function coerceReschedules(v: unknown): CheckReschedule[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((x) => {
+    if (!x || typeof x !== "object") return [];
+    const o = x as Record<string, unknown>;
+    const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+    if (!str("to")) return []; // a reschedule with no new date says nothing
+    return [{ from: str("from"), to: str("to"), reason: str("reason"), byName: str("byName"), at: str("at") }];
+  });
+}
+
+function coerceCleared(v: unknown): CheckCleared | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  if (!str("on")) return undefined;
+  return { on: str("on"), byName: str("byName"), at: str("at"), ...(str("note") ? { note: str("note") } : {}) };
+}
+
 export function coerceCheckDoc(v: unknown): CheckDoc | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
   if (typeof o.path !== "string" || !o.path) return null;
   const read = coerceRead(o.read);
+  const reschedules = coerceReschedules(o.reschedules);
+  const cleared = coerceCleared(o.cleared);
   return {
     path: o.path,
     name: typeof o.name === "string" && o.name ? o.name : "check",
     uploadedAt: typeof o.uploadedAt === "string" ? o.uploadedAt : "",
     uploadedByName: typeof o.uploadedByName === "string" ? o.uploadedByName : "",
     ...(read ? { read } : {}),
+    ...(reschedules.length ? { reschedules } : {}),
+    ...(cleared ? { cleared } : {}),
   };
 }
 
