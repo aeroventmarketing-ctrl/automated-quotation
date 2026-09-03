@@ -524,8 +524,8 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
       .catch(() => [] as never[]),
     // The payout record. Missing table (pre-migration) must not blank the page.
     prisma.commission
-      .findMany({ select: { id: true, quotationId: true, counterSaleId: true, kind: true, paid: true, paidAt: true, paidByName: true } })
-      .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; kind: string; paid: boolean; paidAt: Date | null; paidByName: string | null }[]),
+      .findMany({ select: { id: true, quotationId: true, counterSaleId: true, kind: true, salespersonId: true, paid: true, paidAt: true, paidByName: true } })
+      .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; kind: string; salespersonId: string; paid: boolean; paidAt: Date | null; paidByName: string | null }[]),
   ]);
 
   // Keyed by (sale, payee kind): one order can carry both the rep's 1.5% payout
@@ -633,10 +633,15 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
   for (const d of withOverride) {
     if (d.payeeKind !== "override") continue;
     const rec = payout.get(`${d.kind === "order" ? "q" : "c"}:${d.refId}:override`);
-    d.paid = rec?.paid ?? false;
-    d.paidAt = rec?.paidAt ? rec.paidAt.toISOString() : null;
-    d.paidByName = rec?.paidByName ?? null;
-    d.commissionId = rec?.id ?? null;
+    // The record must belong to THIS payee. An override row names the Sales Head
+    // it was paid to, and the seat can change hands — without this check a new
+    // head inherits the previous head's "paid" marks and is shown ₱0.00 for money
+    // they are genuinely owed. (Caught in the harness by swapping the head.)
+    const mine = rec && rec.salespersonId === d.salespersonId ? rec : undefined;
+    d.paid = mine?.paid ?? false;
+    d.paidAt = mine?.paidAt ? mine.paidAt.toISOString() : null;
+    d.paidByName = mine?.paidByName ?? null;
+    d.commissionId = mine?.id ?? null;
   }
 
   let months = groupByPersonMonth(withOverride);

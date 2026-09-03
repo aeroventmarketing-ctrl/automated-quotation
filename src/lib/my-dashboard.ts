@@ -28,6 +28,8 @@ import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
 import { STOCK_ACTION_LABEL, nextStockActionSlot } from "@/lib/stock-action";
 import { listActivityForActor, type ActivityView } from "@/lib/activity-log";
 import { buildCommissions, allDeals, isPayable } from "@/lib/sales-commission";
+import { commissionAccess } from "@/lib/commission-access";
+import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 
 export type TaskArea = "order" | "purchase" | "cash" | "schedule" | "commission" | "quotation" | "inventory";
 
@@ -604,8 +606,15 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // than filtering a full list afterwards (nothing else is ever loaded).
   // Accounting / the Payment Approver / admins already manage payouts and see
   // the whole figure — the same number as the Management Dashboard's tile.
-  const seesAllCommissions = isAdmin(user) || has("accounting") || has("payment_approver");
-  const seesCommissions = seesAllCommissions || user.role === "SALES";
+  // Same rule as the Commissions page (`lib/commission-access`) — NOT a second
+  // copy keyed on `role === "SALES"`, which is what hid the tile from an Engineer
+  // who holds Sales Head and earns the override.
+  const { canView: seesCommissions, canSeeAll: seesAllCommissions } = commissionAccess({
+    admin: isAdmin(user),
+    baseRole: user.role,
+    workflowRoles: WORKFLOW_ROLE_KEYS.filter((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey)),
+    salesPersonnel: (await getSalesPersonnelIds().catch(() => [] as string[])).includes(user.id),
+  });
   let commissions: CommissionSummary | null = null;
   if (seesCommissions) {
     try {

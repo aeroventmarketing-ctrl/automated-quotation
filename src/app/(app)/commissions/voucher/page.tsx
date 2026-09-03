@@ -5,7 +5,8 @@ import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { formatDate } from "@/lib/utils";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { commissionAccess } from "@/lib/commission-access";
 import { getSignatureMap } from "@/lib/signature";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { round2 } from "@/lib/quote";
@@ -41,10 +42,15 @@ export default async function CommissionVoucherPage({
   const user = await getCurrentUser();
   if (!user) notFound();
   const assignments = await getWorkflowRoles();
-  const allowed =
-    isAdmin(user) ||
-    (["accounting", "payment_approver"] as WorkflowRoleKey[]).some((r) => userHasWorkflowRole(assignments, user.id, r));
-  if (!allowed) notFound();
+  // The same rule the Commissions page uses. Deliberately `canSeeAll`, not
+  // `canView`: a salesperson must not be able to print their own cash voucher.
+  const { canSeeAll } = commissionAccess({
+    admin: isAdmin(user),
+    baseRole: user.role,
+    workflowRoles: WORKFLOW_ROLE_KEYS.filter((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey)),
+    salesPersonnel: false, // irrelevant to canSeeAll; the voucher is a finance screen
+  });
+  if (!canSeeAll) notFound();
   if (!salesperson) notFound();
 
   // Everything this person has earned and not been paid — across every month,
