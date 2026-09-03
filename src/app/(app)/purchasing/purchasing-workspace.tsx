@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { statusBucket, prMainIndex, type PRBucket, type PRStatus } from "@/lib/purchasing";
 import { poTotals } from "@/lib/purchase-order";
+import { checkNumbers } from "@/lib/voucher-check";
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
@@ -259,11 +260,14 @@ export function PurchasingWorkspace({
   const [sort, setSort] = useState<SortKey>("default");
   const [group, setGroup] = useState<GroupKey>("none");
 
+  // The check number is searchable alongside the PO number: the owner's ask —
+  // a supplier or the bank queries a CHECK, and the PO has to be findable from
+  // it. `textMatch` ignores separators, so "486722" finds "0000486722".
   const batchText = (b: BatchCard) =>
-    [b.poNumber, b.supplierCompany, ...b.members.flatMap((m) => [m.orderLabel, m.deptLabel, m.mrfNo ?? "", ...m.items])].join("  ");
+    [b.poNumber, b.supplierCompany, ...checkNumbers(b.checkDocs), ...b.members.flatMap((m) => [m.orderLabel, m.deptLabel, m.mrfNo ?? "", ...m.items])].join("  ");
   const batchAmount = (b: BatchCard) => poTotals({ lines: b.lines, ewtPct: b.ewtPct, ewtMode: b.ewtMode, ewtAmount: b.ewtAmount }).total;
   const groupText = (g: OrderGroup) =>
-    [g.title, g.subtitle, ...g.rows.flatMap((r) => [r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""])].join("  ");
+    [g.title, g.subtitle, ...g.rows.flatMap((r) => [r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? "", ...checkNumbers(r.checkDocs)])].join("  ");
   const groupAmount = (g: OrderGroup) => g.rows.reduce((s, r) => s + (r.po ? poTotals(r.po).total : 0), 0);
   const groupBucket = (g: OrderGroup): DisplayBucket =>
     (["pending", "approved", "budgeted", "rejected", "cancelled"] as DisplayBucket[])[
@@ -309,10 +313,10 @@ export function PurchasingWorkspace({
   // below can count exactly what's on screen).
   const shownDeptRows = deptRows
     .filter((r) => inTab(rowBucket(r)))
-    .filter((r) => textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
+    .filter((r) => textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? "", ...checkNumbers(r.checkDocs)].join("  "), query));
   const shownReplenRows = replenRows
     .filter((r) => inTab(rowBucket(r)))
-    .filter((r) => textMatch([...r.items, r.note ?? "", r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query));
+    .filter((r) => textMatch([...r.items, r.note ?? "", r.po?.poNumber ?? "", r.po?.supplier.company ?? "", ...checkNumbers(r.checkDocs)].join("  "), query));
 
   // Bulk clean-up: on the Rejected / Cancelled tabs an admin can tick closed
   // requests and delete them together. Only those two tabs offer it, and the
@@ -568,7 +572,7 @@ export function PurchasingWorkspace({
           tab filter above, so a completed PO never just disappears from the tab. */}
       {completedDeptRows.length > 0 && (() => {
         const shown = completedDeptRows.filter((r) =>
-          textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? ""].join("  "), query),
+          textMatch([r.deptLabel, r.mrfNo ?? "", ...r.items, r.po?.poNumber ?? "", r.po?.supplier.company ?? "", ...checkNumbers(r.checkDocs)].join("  "), query),
         );
         return (
           <section className="space-y-3">

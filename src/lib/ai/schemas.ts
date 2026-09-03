@@ -106,3 +106,28 @@ export const saleDocReadSchema = z.object({
 });
 
 export type SaleDocRead = z.infer<typeof saleDocReadSchema>;
+
+// --- Check reading (the photo of the check issued for a PO's voucher) --------
+// The owner's field map, taken off a practice check: (a) Account No., (b) Account
+// name — always OURS, (c) Check No., (d) Pay to the order of — the supplier,
+// (e) Date — the clearing date, (f) the peso box — the amount in figures,
+// (g) the PESOS line — the amount in words.
+//
+// The amount is deliberately returned TWICE, in figures and in words, because a
+// check carries its own cross-check on its face: if the two disagree, the read
+// is wrong (or the check is), and the system can say so without a human noticing.
+export const checkReadSchema = z.object({
+  accountNo: z.string().nullable().default(null), // (a) the account the check is drawn on
+  accountName: z.string().nullable().default(null), // (b) the account holder — should be us
+  checkNo: z.string().nullable().default(null), // (c) pre-printed check number, leading zeros kept
+  payee: z.string().nullable().default(null), // (d) "Pay to the order of"
+  date: z.string().nullable().default(null), // (e) YYYY-MM-DD — the DATE box (the clearing date)
+  amount: z.number().nullable().default(null), // (f) the figure in the peso box
+  amountWords: z.string().nullable().default(null), // (g) the PESOS line, verbatim
+  bank: z.string().nullable().default(null),
+  isCheck: z.boolean().default(false), // the image really is a check, not some other document
+  confidence: z.number().nullable().default(null), // 0..1 — how sure the exact digits were read
+  warnings: z.array(z.string()).default([]),
+});
+
+export type CheckReadResult = z.infer<typeof checkReadSchema>;

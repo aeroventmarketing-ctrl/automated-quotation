@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import type { PRStatus } from "./purchasing";
 import { PR_MAIN_ORDER } from "./purchasing";
-import { canAttachCheck, checkExpected, checkMissing, coerceCheckDocs } from "./voucher-check";
+import { pesoAmountInWords } from "./amount-words";
+import {
+  canAttachCheck, checkExpected, checkMissing, coerceCheckDocs,
+  checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo,
+  type CheckRead,
+} from "./voucher-check";
 
 const doc = { path: "purchases/pr1/1.jpg", name: "check.jpg", uploadedAt: "", uploadedByName: "A" };
 
@@ -66,5 +71,126 @@ describe("coerceCheckDocs", () => {
     expect(coerceCheckDocs([{ path: "purchases/p/1.jpg" }])).toEqual([
       { path: "purchases/p/1.jpg", name: "check", uploadedAt: "", uploadedByName: "" },
     ]);
+  });
+});
+
+// --- Reading the check -------------------------------------------------------
+//
+// The fixture is the owner's own practice check, field for field:
+//   Account No. 003718007033 · AEROVENT FANS AND BLOWERS MANUFACTURING ·
+//   Check No. 0000486722 · pay to POWERLINK MERCHANDISE TRADING CORPORATION ·
+//   10-17-2026 · ₱20,827.37 · "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100"
+const PRACTICE: CheckRead = {
+  accountNo: "003718007033",
+  accountName: "AEROVENT FANS AND BLOWERS MANUFACTURING",
+  checkNo: "0000486722",
+  payee: "POWERLINK MERCHANDISE TRADING CORPORATION",
+  clearingYMD: "2026-10-17",
+  amount: 20827.37,
+  amountWords: "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100",
+  bank: "BDO",
+  confidence: 0.95,
+  warnings: [],
+  issues: [],
+  readByName: "Michelle Cotura",
+  readAt: "2026-09-03T01:00:00.000Z",
+};
+const OURS = "AEROVENT FANS & BLOWERS MANUFACTURING";
+const ok = (over: Partial<Parameters<typeof checkIssues>[0]> = {}) =>
+  checkIssues({
+    read: PRACTICE,
+    supplierCompany: "POWERLINK MERCHANDISE TRADING CORPORATION",
+    netAmount: 20827.37,
+    ourCompany: OURS,
+    inWords: pesoAmountInWords,
+    ...over,
+  });
+
+describe("the practice check", () => {
+  it("agrees with its PO on every point we can test", () => {
+    expect(ok()).toEqual([]);
+  });
+
+  it("matches its own words — the check's cross-check on its face", () => {
+    // Our speller hyphenates ("TWENTY-SEVEN"); the check does not. The comparison
+    // must ignore that, or every correct check would be reported as wrong.
+    expect(pesoAmountInWords(20827.37)).toBe("TWENTY THOUSAND EIGHT HUNDRED TWENTY-SEVEN AND 37/100");
+    expect(amountMatchesWords(20827.37, PRACTICE.amountWords, pesoAmountInWords)).toBe(true);
+  });
+
+  it("survives the company name being written our way or the bank's", () => {
+    // "&" vs "AND", and the suffixes suppliers drop at will.
+    expect(sameCompany("AEROVENT FANS AND BLOWERS MANUFACTURING", OURS)).toBe(true);
+    expect(sameCompany("Powerlink Merchandise Trading Corp.", "POWERLINK MERCHANDISE TRADING CORPORATION")).toBe(true);
+    expect(sameCompany("TOZEN PHILIPPINES INC.", "POWERLINK MERCHANDISE TRADING CORPORATION")).toBe(false);
+  });
+});
+
+describe("what the read is cross-examined against", () => {
+  it("flags a check made out to someone other than this PO's supplier", () => {
+    const issues = ok({ supplierCompany: "TOZEN PHILIPPINES INC." });
+    expect(issues.map((i) => i.key)).toContain("payee");
+  });
+
+  it("flags a check written for a different amount than the PO's net", () => {
+    expect(ok({ netAmount: 2160.54 }).map((i) => i.key)).toContain("amount");
+  });
+
+  it("flags figures and words that disagree — a digit misread, or a bad check", () => {
+    const read = { ...PRACTICE, amountWords: "TWENTY THOUSAND EIGHT HUNDRED TWENTY SIX AND 37/100" };
+    expect(ok({ read }).map((i) => i.key)).toContain("words");
+  });
+
+  it("flags a check drawn on an account that isn't ours", () => {
+    const read = { ...PRACTICE, accountName: "SOME OTHER COMPANY INC." };
+    expect(ok({ read }).map((i) => i.key)).toContain("account");
+  });
+
+  it("flags a check number already recorded on another PO", () => {
+    // Leading zeros and any formatting are ignored on both sides.
+    expect(ok({ usedCheckNos: ["486722"] }).map((i) => i.key)).toContain("duplicate");
+    expect(ok({ usedCheckNos: ["0000486723"] })).toEqual([]);
+  });
+
+  it("flags a photo the model wasn't sure of", () => {
+    expect(ok({ read: { ...PRACTICE, confidence: 0.4 } }).map((i) => i.key)).toContain("confidence");
+  });
+
+  it("says so when the check hasn't been read at all", () => {
+    expect(ok({ read: undefined }).map((i) => i.key)).toEqual(["unread"]);
+  });
+
+  it("stays quiet about fields the read couldn't make out", () => {
+    // A photo with glare over the date is still worth keeping for the number —
+    // it must not be reported as a mismatch on the fields it left null.
+    const read = { ...PRACTICE, payee: null, amount: null, amountWords: null, accountName: null };
+    expect(ok({ read })).toEqual([]);
+  });
+});
+
+describe("check numbers", () => {
+  it("collects the ones that were read, ignoring the ones that weren't", () => {
+    expect(checkNumbers([
+      { ...doc, path: "a", read: PRACTICE },
+      { ...doc, path: "b" },
+      { ...doc, path: "c", read: { ...PRACTICE, checkNo: null } },
+    ])).toEqual(["0000486722"]);
+  });
+
+  it("compares on the digits that identify the check, not the printed padding", () => {
+    expect(normalizeCheckNo("486-722")).toBe("486722");
+    expect(normalizeCheckNo("No. 0000486722")).toBe("486722");
+    expect(normalizeCheckNo("0")).toBe("0"); // never eat the number entirely
+  });
+
+  it("round-trips a read through the column", () => {
+    const [back] = coerceCheckDocs([{ ...doc, read: PRACTICE }]);
+    expect(back.read).toEqual(PRACTICE);
+  });
+
+  it("keeps a doc whose stored read is junk, without the read", () => {
+    const [back] = coerceCheckDocs([{ ...doc, read: "not an object" }]);
+    expect(back.path).toBe(doc.path);
+    expect(back.read).toBeUndefined();
   });
 });
