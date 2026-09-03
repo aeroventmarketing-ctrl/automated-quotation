@@ -23,7 +23,7 @@ import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, 
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
-import { coerceCheckDocs, checkMissing } from "@/lib/voucher-check";
+import { coerceCheckDocs, checkMissing, checkAttachableAt } from "@/lib/voucher-check";
 import { getSuppliers } from "@/lib/suppliers";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
 import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
@@ -452,6 +452,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           if (!po) continue;
           if (!termsCompanies.has(po.supplier.company.trim().toLowerCase())) continue;
           if (!checkMissing({ supplierGivesTerms: true, status: pr.status as PRStatus, docs: coerceCheckDocs(pr.voucherCheckDocs) })) continue;
+          // Only chase a PO the check can still be attached to. Once it is
+          // COMPLETED the screen offers no way to add one, and a task nobody can
+          // clear is how a "Pending Your Action" list stops being read. The PO
+          // still shows its amber badge, so the gap is on record either way.
+          if (!checkAttachableAt(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) })) continue;
           tasks.push({
             key: `pr-check:${pr.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
             title: po.supplier.company || (pr.quotation?.quoteNumber ?? "Purchase order"),

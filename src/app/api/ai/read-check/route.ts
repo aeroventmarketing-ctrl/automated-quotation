@@ -9,8 +9,9 @@ import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { checkReadSchema } from "@/lib/ai/schemas";
 import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canAttachCheck, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
+import { canAttachCheck, checkAttachableAt, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { COMPANY } from "@/lib/config";
 
@@ -100,9 +101,18 @@ export async function POST(req: NextRequest) {
 
   const pr = await prisma.purchaseRequest.findUnique({
     where: { id: body.purchaseRequestId },
-    select: { id: true, po: true, quotationId: true, voucherCheckDocs: true },
+    select: { id: true, po: true, quotationId: true, voucherCheckDocs: true, status: true, chainLog: true, kind: true, mrfId: true },
   });
   if (!pr) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
+  // Reading writes the result onto the PO, so it lives in the same window as
+  // attaching: Budgeted, and not once the PO is completed.
+  if (!checkAttachableAt(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) })) {
+    return NextResponse.json({
+      error: pr.status === "COMPLETED"
+        ? "This purchase order is completed — its check can be viewed but no longer changed."
+        : "A check can only be read once the voucher & check are signed (the Budgeted tab).",
+    }, { status: 409 });
+  }
 
   const docs = coerceCheckDocs(pr.voucherCheckDocs);
   const target = docs.find((d) => d.path === body.path);

@@ -54,7 +54,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, canAttachCheck, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, canAttachCheck, checkAttachableAt, type CheckDoc } from "@/lib/voucher-check";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
@@ -2512,6 +2512,22 @@ async function assertCanAttachCheck(): Promise<string | null> {
   return null;
 }
 
+/**
+ * …and the PO must still be in the window where a check may be attached. Checked
+ * on the SERVER, not only by hiding the button: a rule enforced by the UI alone
+ * is the exact shape of bug CLAUDE.md's capability-grid note was written about.
+ */
+function checkWindowError(pr: { status: string; chainLog: unknown; kind?: string | null; mrfId?: string | null }): string | null {
+  const attachable = checkAttachableAt(pr.status as PRStatus, {
+    isDept: isDeptRequisition(pr as Parameters<typeof isDeptRequisition>[0]),
+    poApproved: isPoApproved(pr.chainLog),
+  });
+  if (attachable) return null;
+  return pr.status === "COMPLETED"
+    ? "This purchase order is completed — its check can be viewed but no longer changed."
+    : "A check can only be attached once the voucher & check are signed (the Budgeted tab).";
+}
+
 async function writeCheckDocs(purchaseRequestId: string, next: CheckDoc[]): Promise<void> {
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { quotationId: true } });
   await prisma.purchaseRequest.update({
@@ -2533,8 +2549,13 @@ export async function attachVoucherCheck(
   const user = await getCurrentUser();
   if (!doc || typeof doc.path !== "string" || !doc.path) return { error: "Invalid file." };
 
-  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { id: true, voucherCheckDocs: true } });
+  const pr = await prisma.purchaseRequest.findUnique({
+    where: { id: purchaseRequestId },
+    select: { id: true, voucherCheckDocs: true, status: true, chainLog: true, kind: true, mrfId: true },
+  });
   if (!pr) return { error: "Purchase order not found." };
+  const closed = checkWindowError(pr);
+  if (closed) return { error: closed };
 
   const clean: CheckDoc = {
     path: doc.path,
@@ -2551,8 +2572,13 @@ export async function attachVoucherCheck(
 export async function removeVoucherCheck(purchaseRequestId: string, path: string): Promise<{ ok?: true; error?: string }> {
   const denied = await assertCanAttachCheck();
   if (denied) return { error: denied };
-  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { id: true, voucherCheckDocs: true } });
+  const pr = await prisma.purchaseRequest.findUnique({
+    where: { id: purchaseRequestId },
+    select: { id: true, voucherCheckDocs: true, status: true, chainLog: true, kind: true, mrfId: true },
+  });
   if (!pr) return { error: "Purchase order not found." };
+  const closed = checkWindowError(pr);
+  if (closed) return { error: closed };
   const cur = coerceCheckDocs(pr.voucherCheckDocs);
   await writeCheckDocs(purchaseRequestId, cur.filter((d) => d.path !== path));
   return { ok: true };

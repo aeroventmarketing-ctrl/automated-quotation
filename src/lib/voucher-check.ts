@@ -22,7 +22,7 @@
  * request.
  */
 import type { PRStatus } from "@/lib/purchasing";
-import { prMainIndex } from "@/lib/purchasing";
+import { prMainIndex, statusBucket } from "@/lib/purchasing";
 
 /**
  * What the AI reads off the face of the check. The owner's field map, in their
@@ -164,6 +164,41 @@ export function checkExpected(opts: { supplierGivesTerms: boolean; status: PRSta
   if (!opts.supplierGivesTerms) return false;
   if (opts.status === "CANCELLED" || opts.status === "REJECTED") return false;
   return prMainIndex(opts.status) >= prMainIndex(CHECK_EXPECTED_FROM);
+}
+
+/**
+ * May a check be attached, replaced, removed or re-read on this PO *right now*?
+ *
+ * The owner's rule: *"attaching check must be active only on purchasing budgeted
+ * tab. Hide or disable check uploading in pending, approved, cancelled and
+ * rejected. Checks can always be viewed in completed department PO but uploading
+ * is disabled."*
+ *
+ * Expressed here as a window on the PO's own STATUS rather than on which tab it
+ * is being rendered in, for two reasons. The **All** tab shows every status at
+ * once and a tab-based rule has no answer there; and the Completed department
+ * section is not a tab at all, so a tab-based rule could not cover it either. The
+ * tabs are a filter over statuses, so a status rule reproduces the owner's list
+ * exactly and stays right everywhere a PO appears.
+ *
+ * The window is the *Budgeted* bucket **minus COMPLETED**:
+ *
+ * | | |
+ * | --- | --- |
+ * | Pending, Approved (before the check is signed) | ✗ — there is no check yet |
+ * | Rejected, Cancelled | ✗ — no money moved |
+ * | **VOUCHER_SIGNED → PLANT_APPROVED** (Budgeted) | **✓** |
+ * | COMPLETED | ✗ — view only, wherever it shows: the Budgeted tab, All, or the Completed department section |
+ *
+ * COMPLETED sits in the Budgeted bucket, so "only on the budgeted tab" and
+ * "completed is view-only" would contradict each other unless COMPLETED is
+ * excluded — which is what the owner asked for, and the PO they were looking at
+ * when they asked was a completed one.
+ */
+export function checkAttachableAt(status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }): boolean {
+  if (status === "COMPLETED") return false;
+  if (statusBucket(status, ctx) !== "approved") return false;
+  return prMainIndex(status) >= prMainIndex(CHECK_EXPECTED_FROM);
 }
 
 /** Expected, and not there — the condition the amber badge and the notification key on. */

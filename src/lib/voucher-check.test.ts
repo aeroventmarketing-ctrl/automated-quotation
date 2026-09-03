@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import type { PRStatus } from "./purchasing";
-import { PR_MAIN_ORDER } from "./purchasing";
+import { PR_MAIN_ORDER, prMainIndex, statusBucket } from "./purchasing";
 import { pesoAmountInWords } from "./amount-words";
 import {
-  canAttachCheck, checkExpected, checkMissing, coerceCheckDocs,
+  canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo,
   type CheckRead,
 } from "./voucher-check";
@@ -46,6 +46,64 @@ describe("when a check is expected", () => {
     for (const status of ["CANCELLED", "REJECTED"] as PRStatus[]) {
       expect(checkExpected({ supplierGivesTerms: true, status })).toBe(false);
     }
+  });
+});
+
+/**
+ * The owner's rule: *"attaching check must be active only on purchasing budgeted
+ * tab. Hide or disable check uploading in pending, approved, cancelled and
+ * rejected. Checks can always be viewed in completed department PO but uploading
+ * is disabled."*
+ *
+ * Asserted against the workspace's OWN tab function rather than a hand-written
+ * list, so the two can't drift: whatever `displayBucket` calls "budgeted" is what
+ * this must allow — minus COMPLETED, which sits in that bucket and which the
+ * owner singled out as view-only.
+ */
+describe("when a check may be attached", () => {
+  // A copy of the workspace's displayBucket (purchasing-workspace.tsx), which is
+  // local to that client component.
+  const tabOf = (status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }) => {
+    const b = statusBucket(status, ctx);
+    return b === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED") ? "budgeted" : b;
+  };
+
+  it("is exactly the Budgeted tab, less COMPLETED", () => {
+    for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
+      const expected = tabOf(status) === "budgeted" && status !== "COMPLETED";
+      expect(checkAttachableAt(status), `${status} (tab: ${tabOf(status)})`).toBe(expected);
+    }
+  });
+
+  it("names the tabs the owner listed", () => {
+    // Pending and Approved — no check has been signed yet.
+    expect(checkAttachableAt("PENDING_APPROVAL")).toBe(false);
+    expect(checkAttachableAt("APPROVED")).toBe(false);
+    expect(checkAttachableAt("VOUCHER_READY")).toBe(false);
+    // Rejected and Cancelled — no money moved.
+    expect(checkAttachableAt("REJECTED")).toBe(false);
+    expect(checkAttachableAt("CANCELLED")).toBe(false);
+    // Budgeted — the whole live span of the PO.
+    for (const s of ["VOUCHER_SIGNED", "CASH_RELEASED", "PURCHASED", "RECEIVED", "PLANT_APPROVED"] as PRStatus[]) {
+      expect(checkAttachableAt(s), s).toBe(true);
+    }
+    // Completed — view only, wherever it renders.
+    expect(checkAttachableAt("COMPLETED")).toBe(false);
+  });
+
+  it("keeps a department requisition out until the Approver has approved its PO", () => {
+    // A dept MRF at APPROVED is only Plant-Manager-approved; it still reads as
+    // "pending" until `poApproved`, and it has no check either way.
+    expect(checkAttachableAt("APPROVED", { isDept: true, poApproved: false })).toBe(false);
+    expect(checkAttachableAt("APPROVED", { isDept: true, poApproved: true })).toBe(false);
+  });
+
+  it("does not change whether a check is EXPECTED — only whether it can be attached", () => {
+    // A completed PO with no check is still a gap on the record; the amber badge
+    // stays, it just can't be cleared from that screen any more.
+    expect(checkExpected({ supplierGivesTerms: true, status: "COMPLETED" })).toBe(true);
+    expect(checkMissing({ supplierGivesTerms: true, status: "COMPLETED", docs: [] })).toBe(true);
+    expect(checkAttachableAt("COMPLETED")).toBe(false);
   });
 });
 
