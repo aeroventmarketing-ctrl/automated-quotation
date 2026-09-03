@@ -209,14 +209,32 @@ export function sameCompany(a: string | null | undefined, b: string | null | und
   return short.length >= 6 && long.includes(short);
 }
 
-/** Words as written on a check: case, hyphens, spacing and "PESOS"/"ONLY" ignored. */
-const normWords = (s: string) => s.toUpperCase().replace(/\bPESOS?\b|\bONLY\b/g, " ").replace(/[^A-Z0-9]/g, "");
+/**
+ * Words as written on a check, reduced to what they actually say: case, hyphens
+ * and spacing ignored, along with "PESOS" / "ONLY" and a ZERO-centavo tail.
+ *
+ * That last one matters. Our speller writes a whole amount as
+ * "TWO THOUSAND ONE HUNDRED EIGHTY" with no tail, but a check ALWAYS carries one
+ * — "AND 00/100", "AND NO/100" — because a blank there is where a fraud gets
+ * written in. Without dropping it, every check for a round peso amount would be
+ * reported as disagreeing with its own figure. A non-zero tail is kept: "AND
+ * 54/100" is part of the amount.
+ */
+const normWords = (s: string) =>
+  s
+    .toUpperCase()
+    .replace(/\bAND\s*(?:NO|0+)\s*\/\s*100\b/g, " ")
+    .replace(/\bPESOS?\b|\bONLY\b/g, " ")
+    .replace(/[^A-Z0-9]/g, "");
 
 /** Do the amount in figures and the amount in words agree? */
 export function amountMatchesWords(amount: number | null, words: string | null, inWords: (n: number) => string): boolean {
   if (amount == null || !words) return false;
   return normWords(inWords(amount)) === normWords(words);
 }
+
+/** Pesos as a person reads them, for a warning line they are meant to act on. */
+const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export interface CheckIssue {
   key: "payee" | "amount" | "words" | "account" | "duplicate" | "unread" | "confidence";
@@ -230,7 +248,19 @@ export interface CheckIssue {
 export function checkIssues(opts: {
   read: CheckRead | undefined;
   supplierCompany: string;
-  /** The PO's NET amount — what the check is actually written for (gross less EWT). */
+  /**
+   * The PO's NET amount — what the check is actually written for.
+   *
+   * NET, not the gross total: where the supplier is EWT-capable we withhold the
+   * EWT and remit it to the BIR ourselves, so the check is written for the
+   * remainder and the supplier gets a BIR 2307 for the difference. The owner
+   * confirmed this directly — on a PO reading "₱2,180.00 · Net ₱2,160.54" the
+   * check is for ₱2,160.54. Where a supplier is not EWT-capable the two figures
+   * are identical, so this is the correct comparison either way.
+   *
+   * It is the same `poTotals(po).net` the PO card prints, so the number the
+   * check is judged against is always the number on screen beside it.
+   */
   netAmount: number;
   /** Our own company name, from config. */
   ourCompany: string;
@@ -256,7 +286,7 @@ export function checkIssues(opts: {
   }
   // (f) The figure against the PO's net.
   if (r.amount != null && opts.netAmount > 0 && Math.abs(r.amount - opts.netAmount) > 0.01) {
-    issues.push({ key: "amount", message: `Check is for ${r.amount.toFixed(2)} but the PO's net is ${opts.netAmount.toFixed(2)}.` });
+    issues.push({ key: "amount", message: `Check is for ${peso(r.amount)} but this PO's net is ${peso(opts.netAmount)}.` });
   }
   // (g) The check's own self-check: figures against words.
   if (r.amount != null && r.amountWords && !amountMatchesWords(r.amount, r.amountWords, opts.inWords)) {
