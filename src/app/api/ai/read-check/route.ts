@@ -120,10 +120,14 @@ export async function POST(req: NextRequest) {
   // Reading follows the ATTACH window for everyone except an admin, who may
   // re-read at any stage — reading fills in what the photo says and moves no
   // money. See `checkReadableAt`.
-  if (!checkReadableAt(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }, { admin })) {
+  if (!checkReadableAt(
+    pr.status as PRStatus,
+    { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) },
+    { admin, paymentApprover: roles.includes("payment_approver") },
+  )) {
     return NextResponse.json({
       error: pr.status === "COMPLETED"
-        ? "This purchase order is completed — only an admin can re-read its check now."
+        ? "This purchase order is completed — only an admin or the Payment Approver can re-read its check now."
         : "A check can only be read once the voucher & check are signed (the Budgeted tab).",
     }, { status: 409 });
   }

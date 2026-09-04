@@ -151,8 +151,9 @@ describe("when a check may be attached", () => {
    * says — it moves no money and advances no step — so it is the one thing that
    * outlives the attach window.
    *
-   * ATTACHING is not widened — the owner's ruling that uploading stops at
-   * Budgeted still stands — and the grid below says so for every status at once.
+   * Attaching later followed, for two people only — *"allow admin and payment
+   * approver to attach copy of check"* — and the grid below holds all three
+   * powers against all three actors at every status.
    */
   it("lets an admin re-read at any stage, and nobody else past Budgeted", () => {
     for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
@@ -187,13 +188,58 @@ describe("when a check may be attached", () => {
     expect(checkRemovableAt("COMPLETED", undefined, { admin: false })).toBe(false);
   });
 
-  it("does not let deleting drag ATTACHING open with it", () => {
-    // Deleting a wrong photo and uploading a new one are different powers. The
-    // owner's ruling on uploading — Budgeted only — is unchanged.
+  /**
+   * The owner, after deleting a wrongly-read photo off a completed PO and
+   * finding no way to put the right one back: *"allow admin and payment
+   * approver to attach copy of check."*
+   *
+   * The whole policy, for every status and every actor, in one table — so a
+   * later change to any one cell has to be looked at against the rest.
+   */
+  it("is the whole attach/read/delete policy, for every status", () => {
+    const ACTORS: Array<[string, { admin?: boolean; paymentApprover?: boolean } | undefined]> = [
+      ["Accounting", undefined],
+      ["Payment Approver", { paymentApprover: true }],
+      ["admin", { admin: true }],
+    ];
+
     for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
-      expect(checkAttachableAt(status), status).toBe(
-        statusBucket(status) === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED") && status !== "COMPLETED",
-      );
+      const signed = statusBucket(status) === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED");
+      for (const [who, actor] of ACTORS) {
+        const reach = !!actor; // Payment Approver or admin
+        const where = `${who} @ ${status}`;
+
+        // ATTACH — the signed span; COMPLETED only for the two who reach it.
+        expect(checkAttachableAt(status, undefined, actor), `attach ${where}`)
+          .toBe(signed && (status !== "COMPLETED" || reach));
+
+        // DELETE follows attach, except an admin reaches everywhere.
+        expect(checkRemovableAt(status, undefined, actor), `delete ${where}`)
+          .toBe(actor?.admin ? true : signed && (status !== "COMPLETED" || reach));
+
+        // READ, likewise.
+        expect(checkReadableAt(status, undefined, actor), `read ${where}`)
+          .toBe(actor?.admin ? true : signed && (status !== "COMPLETED" || reach));
+      }
+    }
+  });
+
+  it("does not move the EARLY end for anyone", () => {
+    // No check has been signed yet, or ever will be. A button there could only
+    // record a payment that does not exist.
+    for (const status of ["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY", "REJECTED", "CANCELLED"] as PRStatus[]) {
+      expect(checkAttachableAt(status, undefined, { admin: true }), status).toBe(false);
+      expect(checkAttachableAt(status, undefined, { paymentApprover: true }), status).toBe(false);
+    }
+  });
+
+  it("leaves Accounting exactly where the owner first put them", () => {
+    // *"attaching check must be active only on purchasing budgeted tab… Checks
+    // can always be viewed in completed department PO but uploading is
+    // disabled."* Unchanged by any of the widenings above.
+    for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
+      const tabOf = statusBucket(status) === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED");
+      expect(checkAttachableAt(status), status).toBe(tabOf && status !== "COMPLETED");
     }
   });
 

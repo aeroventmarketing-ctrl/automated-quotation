@@ -366,11 +366,17 @@ export function buildPurchaseChainRow(
     voucherNo?: string | null;
     /** Accounting / Payment Approver / admin — may attach the check photo. */
     canAttachCheck?: boolean;
+    /**
+     * The viewer is the Payment Approver. With `admin`, this is the pair whose
+     * reach over a check outlives the Budgeted window — see `CheckActor`.
+     */
+    paymentApprover?: boolean;
     /** Does this PO's supplier give us terms? Looked up by company name. */
     givesTerms?: (company: string | undefined) => boolean;
   },
 ): PurchaseChainRow {
   const status = pr.status as PRStatus;
+  const checkActor = { admin: ctx.admin, paymentApprover: ctx.paymentApprover };
   const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
   const trail = buildPurchaseTrail(pr);
   const returns = buildReturnViews(pr);
@@ -436,9 +442,9 @@ export function buildPurchaseChainRow(
     // The role may attach one AND this PO is in the window where a check can be
     // attached (Budgeted, not yet completed) — see `checkAttachableAt`. Applied
     // here so every screen that renders a chain row inherits the same answer.
-    canAttachCheck: (ctx.canAttachCheck ?? false) && checkAttachableAt(status, { isDept, poApproved }),
-    canReadCheck: (ctx.canAttachCheck ?? false) && checkReadableAt(status, { isDept, poApproved }, { admin: ctx.admin }),
-    canRemoveCheck: (ctx.canAttachCheck ?? false) && checkRemovableAt(status, { isDept, poApproved }, { admin: ctx.admin }),
+    canAttachCheck: (ctx.canAttachCheck ?? false) && checkAttachableAt(status, { isDept, poApproved }, checkActor),
+    canReadCheck: (ctx.canAttachCheck ?? false) && checkReadableAt(status, { isDept, poApproved }, checkActor),
+    canRemoveCheck: (ctx.canAttachCheck ?? false) && checkRemovableAt(status, { isDept, poApproved }, checkActor),
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,
