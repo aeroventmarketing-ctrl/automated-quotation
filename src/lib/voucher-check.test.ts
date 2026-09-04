@@ -5,8 +5,55 @@ import { pesoAmountInWords } from "./amount-words";
 import {
   canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
+  clearingFromDateBoxes,
   type CheckRead,
 } from "./voucher-check";
+
+/**
+ * The owner, on a check whose date came back a month and a half early:
+ * *"date error in check reading. When reading check date, 10-04-2026 means
+ * October 4, 2026."*
+ *
+ * The boxes on the check are labelled `M M  D D  Y Y Y Y`, so month is always
+ * first. The model is no longer asked to work the date out — it transcribes the
+ * eight digits and the order is applied here.
+ */
+describe("the DATE boxes, read MM DD YYYY", () => {
+  it("reads the owner's own check as October, not April", () => {
+    expect(clearingFromDateBoxes("10042026")).toBe("2026-10-04");
+  });
+
+  it("reads every ambiguous pair by POSITION, never by which number looks like a day", () => {
+    expect(clearingFromDateBoxes("03112026")).toBe("2026-03-11"); // 11 March, not 3 November
+    expect(clearingFromDateBoxes("01122026")).toBe("2026-01-12"); // 12 January, not 1 December
+    expect(clearingFromDateBoxes("12012026")).toBe("2026-12-01");
+  });
+
+  it("still reads the unambiguous one the same way", () => {
+    expect(clearingFromDateBoxes("10172026")).toBe("2026-10-17");
+  });
+
+  it("accepts the digits however they arrive from the boxes", () => {
+    expect(clearingFromDateBoxes("10 04 2026")).toBe("2026-10-04");
+    expect(clearingFromDateBoxes("10-04-2026")).toBe("2026-10-04");
+  });
+
+  it("refuses a date nobody can defend, rather than inventing one", () => {
+    expect(clearingFromDateBoxes("13042026")).toBeNull(); // no 13th month
+    expect(clearingFromDateBoxes("02312026")).toBeNull(); // no 31 February
+    expect(clearingFromDateBoxes("00042026")).toBeNull();
+    expect(clearingFromDateBoxes("1042026")).toBeNull(); // seven digits — a box was missed
+    expect(clearingFromDateBoxes("100420261")).toBeNull();
+    expect(clearingFromDateBoxes("10041926")).toBeNull(); // a company check, not an heirloom
+    expect(clearingFromDateBoxes("")).toBeNull();
+    expect(clearingFromDateBoxes(null)).toBeNull();
+  });
+
+  it("leaves a leap day alone", () => {
+    expect(clearingFromDateBoxes("02292028")).toBe("2028-02-29");
+    expect(clearingFromDateBoxes("02292026")).toBeNull(); // 2026 is not a leap year
+  });
+});
 
 const doc = { path: "purchases/pr1/1.jpg", name: "check.jpg", uploadedAt: "", uploadedByName: "A" };
 
@@ -144,6 +191,7 @@ const PRACTICE: CheckRead = {
   checkNo: "0000486722",
   payee: "POWERLINK MERCHANDISE TRADING CORPORATION",
   clearingYMD: "2026-10-17",
+  dateBoxes: "10172026",
   amount: 20827.37,
   amountWords: "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100",
   bank: "BDO",
