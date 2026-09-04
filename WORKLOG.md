@@ -1,3 +1,41 @@
+## 2026-09-04 · The role harness gains Accounting, and a check probe
+
+Owner: *"accounting role cannot upload check. Check other allowed role if same error shows."*
+
+The cast had no **Accounting** user — admin, Warehouse, Purchaser, Payment Approver, Sales and Engineer, but
+not the role that attaches the check, prepares the voucher and reconciles it. Every check screen was a blind
+spot, and the question could not be answered by the tool built to answer exactly this.
+
+Michelle Cotura joins the cast, and a `check` probe seeds a terms supplier with two POs — one Budgeted, one
+COMPLETED — and reads the controls **anchored to each PO number**. Page-wide, "is there an Attach button
+anywhere" cannot tell *blocked on the completed one* from *blocked everywhere*, and those are different bugs.
+
+| on a COMPLETED PO | sees badge | can attach |
+| --- | --- | --- |
+| Admin Ana | ✓ | **✓** |
+| Rey Gil (Payment Approver) | ✓ | **✓** |
+| Michelle Cotura (Accounting) | ✓ | ✗ |
+| Allan Ramos (Purchaser) | ✓ | ✗ |
+| Willy Ho (Warehouse) | ✗ | ✗ |
+
+So the answer to *"check other allowed role"* is **no** — the other two allowed roles can attach. Accounting is
+stopped by the owner's own first ruling (*"uploading is disabled"* on completed), not by a fault.
+
+### Two seeding traps, written down
+
+Both produced tables of falses that read as permission bugs and were not:
+
+- A **replenishment** PR renders in its own list, which carries no check control at all. The PO has to be a
+  department requisition (or order-linked) to reach `PurchasingChain`.
+- The PO-approved stamp is **`approve_po`**, not `po_approved`. Without it a department requisition sits in the
+  *pending* bucket whatever its status, and every check control vanishes.
+
+The Budgeted PO's row lives behind a client-rendered TAB, so a scraper never sees it; probing it would print a
+column of falses that mean nothing. It is seeded anyway, for clicking through with `--keep`, and the omission
+is written down rather than left to be rediscovered.
+
+335 tests unchanged — this commit adds no product code.
+
 ## 2026-09-04 · An admin or the Payment Approver can attach a check to a completed PO
 
 Owner: *"allow admin and payment approver to attach copy of check."* Asked after deleting a wrongly-read photo

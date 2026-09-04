@@ -36,6 +36,11 @@ const CAST = [
   { email: "harness-wh@test", name: "Willy Ho", base: "OTHER", roles: ["warehouse"] },
   { email: "harness-pu@test", name: "Allan Ramos", base: "OTHER", roles: ["purchaser"] },
   { email: "harness-pa@test", name: "Rey Gil", base: "OTHER", roles: ["payment_approver"] },
+  // Accounting attaches the check, prepares the voucher and reconciles it — real
+  // powers that nobody in the cast held, so every check screen was a blind spot.
+  // The owner reported "accounting role cannot upload check" against a cast that
+  // could not have caught it.
+  { email: "harness-acct@test", name: "Michelle Cotura", base: "OTHER", roles: ["accounting"] },
   { email: "harness-sales@test", name: "Sam Sales", base: "SALES", roles: [] },
   // An ENGINEER holds no workflow role, so every rule that keys off one misses
   // them — which is exactly how the nav came to offer them Products while the
@@ -77,6 +82,29 @@ const PROBES = [
     open: (t) => !t.includes("have access to raise department requisitions"),
     form: (t) => t.includes("New department requisition"),
   } },
+  // The check controls on a PO row. Attaching stops at COMPLETED for Accounting
+  // but not for an admin or the Payment Approver, and "the button is missing"
+  // is indistinguishable from "the rule says no" unless both POs are on screen.
+  /**
+   * The check controls on a COMPLETED PO — who may attach, and who only sees the
+   * badge. Every widening of this rule has been about that one status, and the
+   * owner reported each of them from a completed PO.
+   *
+   * Anchored to the PO number, not page-wide: "is there an Attach button
+   * anywhere" cannot tell *blocked on the completed one* from *blocked
+   * everywhere*, and those are different bugs.
+   *
+   * The seed also creates a live (Budgeted) PO — `HARNESS-LIVE` — but its row
+   * lives behind the workspace's Budgeted TAB, which is client-rendered, so a
+   * scraper never sees it. Probing it would print a column of falses that look
+   * like a permission bug and are not. Click it by hand with `--keep`.
+   */
+  { path: "/purchasing", label: "check", checks: {
+    open: (t) => !t.includes("don't have access"),
+    doneRow: (t) => t.includes("HARNESS-DONE"),
+    doneAttach: (t) => near(t, "HARNESS-DONE", /Attach check|Add check/),
+    doneBadge: (t) => near(t, "HARNESS-DONE", /Check not attached/),
+  } },
   { path: "/products", label: "prod", checks: {
     open: (t) => !t.includes("don't have access to the product list"),
     price: (t) => t.includes("₱"),
@@ -84,6 +112,12 @@ const PROBES = [
     add: (t) => t.includes("+ Add product"),
   } },
 ];
+
+/** Does `re` appear in the text just AFTER `marker` — i.e. on that PO's own row? */
+const near = (t, marker, re, span = 1200) => {
+  const i = t.indexOf(marker);
+  return i >= 0 && re.test(t.slice(i, i + span));
+};
 
 const sh = (cmd, opts = {}) => execSync(cmd, { stdio: "pipe", encoding: "utf8", ...opts });
 const strip = (html) => html.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;|&#\d+;/g, " ").replace(/\s+/g, " ");
@@ -167,6 +201,36 @@ async function seed() {
     approverByName: "Rey Gil", approverAt: new Date(Date.now() - 1800e3),
     appliedAt: new Date(Date.now() - 1800e3),
   } });
+  // --- Checks: a supplier who gives us terms, and two POs to them ------------
+  //
+  // One LIVE (Budgeted) and one COMPLETED, because the whole question is which
+  // of the two still offers the upload control, and to whom.
+  const suppliers = { list: [{ id: "s-harness", company: "HARNESS STEEL CORP", terms: true }] };
+  await p.appSetting.upsert({ where: { key: "suppliers" }, update: { value: suppliers }, create: { key: "suppliers", value: suppliers } });
+
+  await p.purchaseRequest.deleteMany({ where: { note: { startsWith: "HARNESS-" } } });
+  const poFor = (n) => ({
+    poNumber: n, date: "2026-09-01",
+    supplier: { company: "HARNESS STEEL CORP" },
+    lines: [{ description: "GI SHEET 24GA", qty: 10, unitPrice: 850 }],
+    ewtPct: 1,
+  });
+  for (const [status, poNo] of [["CASH_RELEASED", "HARNESS-LIVE"], ["COMPLETED", "HARNESS-DONE"]]) {
+    await p.purchaseRequest.create({ data: {
+      // A DEPARTMENT requisition, not a replenishment: replenishment rows render
+      // in their own list, which carries no check control — seeding one produced
+      // an all-false table that looked like a permission bug and was not.
+      kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+      note: `HARNESS-${status}`, status,
+      po: poFor(poNo),
+      // `approve_po`, not `po_approved`: without it a DEPARTMENT requisition sits
+      // in the "pending" bucket whatever its status, and every check control
+      // disappears — which reads exactly like a permission bug.
+      chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+      createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+    } });
+  }
+
   await p.$disconnect();
 }
 
