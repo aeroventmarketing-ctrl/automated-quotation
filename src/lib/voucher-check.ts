@@ -367,17 +367,36 @@ export function checkExpected(opts: { supplierGivesTerms: boolean; status: PRSta
  * | Pending, Approved (before the check is signed) | ✗ — there is no check yet |
  * | Rejected, Cancelled | ✗ — no money moved |
  * | **VOUCHER_SIGNED → PLANT_APPROVED** (Budgeted) | **✓** |
- * | COMPLETED | ✗ — view only, wherever it shows: the Budgeted tab, All, or the Completed department section |
+ * | COMPLETED | ✗ for Accounting · **✓ for an admin or the Payment Approver** |
  *
  * COMPLETED sits in the Budgeted bucket, so "only on the budgeted tab" and
  * "completed is view-only" would contradict each other unless COMPLETED is
  * excluded — which is what the owner asked for, and the PO they were looking at
  * when they asked was a completed one.
+ *
+ * They later reopened that one corner, for two people only: *"allow admin and
+ * payment approver to attach copy of check."* They had just deleted a wrongly
+ * read photo off a completed PO and found no way to put the right one back.
  */
+/**
+ * The two people whose reach over a check outlives the Budgeted window.
+ *
+ * The owner opened this one step at a time, each time on a completed PO where
+ * the control they needed had gone: *"Admin may re-read anytime"*, then *"add an
+ * option to delete the uploaded file"*, then *"allow admin and payment approver
+ * to attach copy of check."*
+ */
+export interface CheckActor {
+  admin?: boolean;
+  paymentApprover?: boolean;
+}
+
+const elevated = (a?: CheckActor): boolean => !!a?.admin || !!a?.paymentApprover;
+
 export function checkReadableAt(
   status: PRStatus,
   ctx?: { isDept?: boolean; poApproved?: boolean },
-  opts?: { admin?: boolean },
+  opts?: CheckActor,
 ): boolean {
   // An admin, at any stage. Reading a check moves no money and advances no
   // step — it fills in what the photo already says. Sharing the ATTACH window
@@ -389,7 +408,7 @@ export function checkReadableAt(
   // on the same grounds, deleting (see `checkRemovableAt`). ATTACHING is the one
   // that stays shut: their ruling was that uploading stops at Budgeted.
   if (opts?.admin) return true;
-  return checkAttachableAt(status, ctx);
+  return checkAttachableAt(status, ctx, opts);
 }
 
 /**
@@ -409,16 +428,29 @@ export function checkReadableAt(
 export function checkRemovableAt(
   status: PRStatus,
   ctx?: { isDept?: boolean; poApproved?: boolean },
-  opts?: { admin?: boolean },
+  opts?: CheckActor,
 ): boolean {
   if (opts?.admin) return true;
-  return checkAttachableAt(status, ctx);
+  return checkAttachableAt(status, ctx, opts);
 }
 
-export function checkAttachableAt(status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }): boolean {
-  if (status === "COMPLETED") return false;
+export function checkAttachableAt(
+  status: PRStatus,
+  ctx?: { isDept?: boolean; poApproved?: boolean },
+  actor?: CheckActor,
+): boolean {
   if (statusBucket(status, ctx) !== "approved") return false;
-  return prMainIndex(status) >= prMainIndex(CHECK_EXPECTED_FROM);
+  if (prMainIndex(status) < prMainIndex(CHECK_EXPECTED_FROM)) return false;
+  // COMPLETED is the one the owner reopened, and only for two people:
+  // *"allow admin and payment approver to attach copy of check."* For everyone
+  // else a finished PO stays view-only, exactly as ruled before.
+  //
+  // The EARLIER end does not move for anyone. Pending, Approved, Rejected and
+  // Cancelled are excluded by the two lines above because no check has been
+  // signed yet (or ever will be) — a button there could only create a record of
+  // a payment that does not exist.
+  if (status === "COMPLETED") return elevated(actor);
+  return true;
 }
 
 /** Expected, and not there — the condition the amber badge and the notification key on. */

@@ -163,7 +163,7 @@ export function VoucherCheckControl({
             className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700"
             title={
               readOnly
-                ? "This supplier gives us terms, so the PO was paid by check — but no photo of it was ever attached. It can only be attached while the PO is in Budgeted."
+                ? "This supplier gives us terms, so the PO was paid by check — but no photo of it was ever attached. On a completed PO only an admin or the Payment Approver can attach one now."
                 : "This supplier gives us terms, so the PO is paid by check. Attach a photo of the check for future reference."
             }
           >
@@ -212,7 +212,7 @@ export function VoucherCheckControl({
               {!r && !mayRead && (
                 // No read, and no button to run one — say so, rather than
                 // leaving a permanent "not read" nobody here can act on.
-                <span className="text-muted-foreground">· not readable here — ask an admin to re-read it</span>
+                <span className="text-muted-foreground">· not readable here — ask an admin or the Payment Approver</span>
               )}
               <UploadLink
                 doc={d}

@@ -26,13 +26,14 @@ const pr = (status: PRStatus): PurchaseRequestLike => ({
   plantApprovedByName: null, plantApprovedAt: null,
 });
 
-const row = (status: PRStatus, opts: { admin: boolean; canAttachCheck: boolean }) =>
+const row = (status: PRStatus, opts: { admin: boolean; canAttachCheck: boolean; paymentApprover?: boolean }) =>
   buildPurchaseChainRow(pr(status), {
     canManagePO: false,
     namesForRole: () => [],
     canAct: () => false,
     admin: opts.admin,
     canAttachCheck: opts.canAttachCheck,
+    paymentApprover: opts.paymentApprover,
     givesTerms: () => true,
   });
 
@@ -42,20 +43,23 @@ describe("the check flags the row hands to the screen", () => {
    * COMPLETED POs, unread, with no Re-read button — because reading shared the
    * attach window. Their answer: *"Admin may re-read anytime."*
    */
-  it("gives an admin Re-read and Delete on a completed PO, and nobody else", () => {
-    const admin = row("COMPLETED", { admin: true, canAttachCheck: true });
-    expect(admin.canReadCheck).toBe(true);
-    // *"add an option to delete the uploaded file"* — a wrong photo on a
-    // finished PO was otherwise permanent.
-    expect(admin.canRemoveCheck).toBe(true);
-    // …without giving them ATTACHING back: replacing a photo on a completed PO
-    // is a different power, and the owner's Budgeted-only rule still holds.
-    expect(admin.canAttachCheck).toBe(false);
+  it("hands an admin and the Payment Approver all three controls on a completed PO", () => {
+    // *"allow admin and payment approver to attach copy of check"* — asked after
+    // a wrongly-read photo was deleted off a completed PO with no way to put
+    // the right one back.
+    for (const opts of [{ admin: true, canAttachCheck: true }, { admin: false, paymentApprover: true, canAttachCheck: true }]) {
+      const r = row("COMPLETED", opts);
+      expect(r.canAttachCheck, JSON.stringify(opts)).toBe(true);
+      expect(r.canReadCheck, JSON.stringify(opts)).toBe(true);
+      expect(r.canRemoveCheck, JSON.stringify(opts)).toBe(true);
+    }
+  });
 
+  it("leaves Accounting with nothing on a completed PO, as first ruled", () => {
     const accounting = row("COMPLETED", { admin: false, canAttachCheck: true });
+    expect(accounting.canAttachCheck).toBe(false);
     expect(accounting.canReadCheck).toBe(false);
     expect(accounting.canRemoveCheck).toBe(false);
-    expect(accounting.canAttachCheck).toBe(false);
   });
 
   it("still gives both to the people who could always attach, while the PO is live", () => {

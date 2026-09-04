@@ -1,3 +1,38 @@
+## 2026-09-04 · An admin or the Payment Approver can attach a check to a completed PO
+
+Owner: *"allow admin and payment approver to attach copy of check."* Asked after deleting a wrongly-read photo
+off a completed PO and finding no way to put the right one back.
+
+That closes the loop opened over the last hour — the same PO, one control at a time:
+
+| | attach | re-read | delete |
+| --- | --- | --- | --- |
+| **Accounting**, PO live (Budgeted) | ✓ | ✓ | ✓ |
+| **Accounting**, PO completed | ✗ | ✗ | ✗ |
+| **Payment Approver**, PO completed | **✓** | **✓** | **✓** |
+| **admin**, PO completed | **✓** | ✓ | ✓ |
+
+Accounting is exactly where the owner first put them: *"attaching check must be active only on purchasing
+budgeted tab… uploading is disabled [on completed]."* A test asserts that whole sentence still holds.
+
+### The early end does not move, for anyone
+
+Pending, Approved, Rejected and Cancelled stay shut even for an admin — no check has been signed yet, or ever
+will be, so a button there could only record a payment that does not exist. Asserted separately, because it is
+the kind of thing a "let the admin do everything" reading would quietly take with it.
+
+### One table instead of three rules
+
+The three powers had grown three near-identical gates, each widened on a different day. They now share a
+`CheckActor` ({ admin, paymentApprover }), and one test walks **three powers × three actors × every status** in
+a single loop. Any future change to one cell has to be read against the rest — which is the whole point of the
+capability-grid rule in CLAUDE.md.
+
+Enforced on the SERVER: `attachVoucherCheck` resolves the actor itself rather than trusting the button's
+absence.
+
+Three new tests, 335 pass. Role harness run over every screen: no permission moved.
+
 ## 2026-09-04 · An admin can delete a check photo
 
 Owner, on a completed PO whose check had been read wrongly: *"add an option to delete the uploaded file."*

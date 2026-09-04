@@ -54,7 +54,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
 import { saveCashPosition } from "@/lib/cash-position";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
@@ -2518,14 +2518,22 @@ async function assertCanAttachCheck(): Promise<string | null> {
  * on the SERVER, not only by hiding the button: a rule enforced by the UI alone
  * is the exact shape of bug CLAUDE.md's capability-grid note was written about.
  */
-function checkWindowError(pr: { status: string; chainLog: unknown; kind?: string | null; mrfId?: string | null }): string | null {
-  const attachable = checkAttachableAt(pr.status as PRStatus, {
-    isDept: isDeptRequisition(pr as Parameters<typeof isDeptRequisition>[0]),
-    poApproved: isPoApproved(pr.chainLog),
-  });
+async function checkActor(): Promise<CheckActor> {
+  const user = await getCurrentUser();
+  if (!user) return {};
+  const assignments = await getWorkflowRoles();
+  return { admin: isAdmin(user), paymentApprover: userHasWorkflowRole(assignments, user.id, "payment_approver") };
+}
+
+async function checkWindowError(pr: { status: string; chainLog: unknown; kind?: string | null; mrfId?: string | null }): Promise<string | null> {
+  const attachable = checkAttachableAt(
+    pr.status as PRStatus,
+    { isDept: isDeptRequisition(pr as Parameters<typeof isDeptRequisition>[0]), poApproved: isPoApproved(pr.chainLog) },
+    await checkActor(),
+  );
   if (attachable) return null;
   return pr.status === "COMPLETED"
-    ? "This purchase order is completed — its check can be viewed but no longer changed."
+    ? "This purchase order is completed — only an admin or the Payment Approver can attach its check now."
     : "A check can only be attached once the voucher & check are signed (the Budgeted tab).";
 }
 
@@ -2534,11 +2542,10 @@ function checkWindowError(pr: { status: string; chainLog: unknown; kind?: string
  * `checkRemovableAt`. A wrong photo on a completed PO used to be permanent.
  */
 async function checkRemoveWindowError(pr: { status: string; chainLog: unknown; kind?: string | null; mrfId?: string | null }): Promise<string | null> {
-  const user = await getCurrentUser();
   const removable = checkRemovableAt(
     pr.status as PRStatus,
     { isDept: isDeptRequisition(pr as Parameters<typeof isDeptRequisition>[0]), poApproved: isPoApproved(pr.chainLog) },
-    { admin: !!user && isAdmin(user) },
+    await checkActor(),
   );
   if (removable) return null;
   return pr.status === "COMPLETED"
@@ -2572,7 +2579,7 @@ export async function attachVoucherCheck(
     select: { id: true, voucherCheckDocs: true, status: true, chainLog: true, kind: true, mrfId: true },
   });
   if (!pr) return { error: "Purchase order not found." };
-  const closed = checkWindowError(pr);
+  const closed = await checkWindowError(pr);
   if (closed) return { error: closed };
 
   const clean: CheckDoc = {
