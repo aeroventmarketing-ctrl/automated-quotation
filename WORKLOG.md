@@ -1,3 +1,56 @@
+## 2026-09-04 · /orders was 2.1 TB a month
+
+Measured on the owner's own database, after a $512 Supabase egress bill and an outage that took every page down
+at once:
+
+| page | refresh | rows | per refresh | GB/month |
+| --- | --- | --- | --- | --- |
+| **`/orders`** | **8s** | **1,142** | **3,177 kB** | **2,108** |
+| `/purchasing` | 8s | 58 | 92 kB | 61 |
+| `/purchasing` (dept) | 8s | 56 | 42 kB | 28 |
+| `/management` register | 30s | 605 | 82 kB | 15 |
+| `/checks` register | 60s | 605 | 82 kB | 7 |
+
+`AutoRefresh` defaults to **8 seconds** — 450 full server renders an hour, per open tab, each re-running the
+page's queries. Nine pages took that default, including the two heaviest. `/orders` alone accounted for 95% of
+the projection, and the figure is understated: `pg_column_size` counted only the Quotation rows, while the page
+also joined in each one's inquiry, customer, preparer and items.
+
+At six tabs over eight hours that is ~2.2 TB a month, against a bill implying ~5.7 TB — the right order of
+magnitude once more tabs, longer hours and the uncounted joins are allowed for. **The estimate and the invoice
+agree**, and the same query rate against Micro compute is what took the app down.
+
+### The interval is a bill
+
+The list pages come off the default; the two DETAIL pages keep it. That line is deliberate: an order or a
+quotation being built is a single-record read where someone is genuinely waiting on a colleague's button, while
+a list page re-reads a whole table to show numbers that change a few times a day.
+
+`/orders` 120s · `/purchasing` 120s · `/my-dashboard`, `/requisitions`, `/cash-requests`, `/management`,
+`/checks` 60s · `/calendar` 300s. The component already refreshes the instant a tab regains focus and pauses
+while it is hidden, so nothing feels staler than it did.
+
+`/orders` alone: **2,108 GB → ~140 GB** a month.
+
+### …and so is a SELECT
+
+`/orders` has no `WHERE` clause because "is this a confirmed sale" lives inside the `classification` JSON, so
+every quotation is read and filtered in memory. That is survivable. Reading every COLUMN of every one is not.
+
+It now selects only what the list renders — dropping `terms` and `notes` (long per-quotation text),
+`headerUnits`, the template/approver keys, and the whole `User` and `Customer` rows behind `preparedBy` and
+`customer`, of which the page uses one field each. `classification` stays; it carries the sale record and the
+order workflow the list is built from.
+
+**Proved identical**: the rendered list before and after is byte-for-byte the same — 17 orders, ₱11,822,358.40
+value, ₱11,460,000.00 collected, ₱362,358.40 outstanding.
+
+The remaining, larger win is left alone deliberately: filtering confirmed sales in SQL rather than in memory
+would cut 1,142 rows to the few dozen that are orders, but it decides WHICH orders the list shows, and that is
+Phase 1. It needs the owner's word.
+
+356 tests pass; the role harness reports no permission moved.
+
 ## 2026-09-04 · A failing page stops being a white screen
 
 Owner, on production `/checks`: *"error in aeroerp"* — Next's bare fallback, *"Application error: a server-side

@@ -53,10 +53,32 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     // revision reopens the inquiry (status leaves WON), so a WON filter would
     // drop confirmed orders from the list. isSaleConfirmed below is the real
     // gate, exactly as the departmental P&L does it. (Owner-approved edit.)
+    /**
+     * SELECT, not include.
+     *
+     * This page has no WHERE clause — whether a quotation is a confirmed sale
+     * lives inside its `classification` JSON, so every quotation is read and
+     * filtered in memory. That is survivable; reading every COLUMN of every one
+     * is not. At 1,142 quotations the row data alone was 3.2 MB, pulled every
+     * eight seconds per open tab — about 2.1 TB of Supabase egress a month, and
+     * enough query load on Micro compute to take the whole app down with it.
+     *
+     * So: only the fields the list actually renders. `terms` and `notes` (long
+     * per-quotation text), `headerUnits`, the template and approver keys, and
+     * the whole User and Customer rows behind `preparedBy` and `customer` — all
+     * dropped. Nothing the page shows comes from any of them.
+     *
+     * `classification` stays, and is the bulk of what remains: it carries both
+     * the sale record and the order workflow this list is built from.
+     */
     prisma.quotation.findMany({
-      include: {
-        inquiry: { include: { customer: true } },
-        preparedBy: true,
+      select: {
+        id: true, quoteNumber: true, currency: true, projectName: true, createdAt: true,
+        // What `payableTotal` needs, and no more.
+        total: true, discountPct: true, vatMode: true,
+        classification: true,
+        inquiry: { select: { projectName: true, customer: { select: { id: true, company: true } } } },
+        preparedBy: { select: { name: true } },
         items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -173,7 +195,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="space-y-6">
-      <AutoRefresh />
+      <AutoRefresh seconds={120} />
       <div>
         <h1 className="text-2xl font-bold">Orders</h1>
         <p className="text-sm text-muted-foreground">Confirmed sales — order value, collected, and outstanding balance.</p>

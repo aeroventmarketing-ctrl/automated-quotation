@@ -64,7 +64,7 @@ export default async function CashRequestsPage({ searchParams }: { searchParams?
 
   return (
     <div className="space-y-6">
-      <AutoRefresh />
+      <AutoRefresh seconds={60} />
       <div>
         <h1 className="text-2xl font-bold">Cash requests</h1>
         <p className="text-sm text-muted-foreground">
