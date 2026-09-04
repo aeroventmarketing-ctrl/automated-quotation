@@ -9,7 +9,7 @@ import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { checkReadSchema } from "@/lib/ai/schemas";
 import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canAttachCheck, checkAttachableAt, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
+import { canAttachCheck, checkAttachableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { pesoAmountInWords } from "@/lib/amount-words";
@@ -48,11 +48,17 @@ The fields on the check, and exactly what each one means:
 - ACCOUNT NAME — the account holder. On our checks this is our own company, "AEROVENT FANS AND BLOWERS MANUFACTURING". Read what is printed, even if it is not us.
 - CHECK NO. — the pre-printed check number (top-right, usually beside a BRSTN number). It is TEN DIGITS INCLUDING LEADING ZEROS, e.g. "0000486722" — six significant digits padded with zeros. Return all ten; do NOT strip the leading zeros and do not return only the significant digits. Do NOT return the BRSTN / routing number (the one with dashes, e.g. "01053-313-0") as the check number.
 - PAY TO THE ORDER OF — the payee, i.e. the supplier being paid. Return the company name as printed.
-- DATE — the boxed date, usually as MM-DD-YYYY in separate character boxes (e.g. 1 0 - 1 7 - 2 0 2 6 = 17 October 2026). THIS IS THE DATE THE CHECK CLEARS, not the date it was written — company checks here are commonly post-dated, so a date weeks or months in the future is normal and must be read as printed. Return it as YYYY-MM-DD.
+- DATE — eight digits in separate character boxes at the top right, with the order printed underneath them as "M M  D D  Y Y Y Y". READ THE POSITIONS, NOT THE VALUES: the first two digits are the MONTH, the next two are the DAY, the last four are the YEAR — ALWAYS, including when both could plausibly be either.
+  - "1 0 0 4 2 0 2 6" is 4 OCTOBER 2026 (month 10, day 04). It is NOT 10 April 2026.
+  - "0 3 1 1 2 0 2 6" is 11 MARCH 2026. It is NOT 3 November 2026.
+  - "1 0 1 7 2 0 2 6" is 17 OCTOBER 2026.
+  Return the eight digits themselves in "dateDigits", exactly as they sit in the boxes left to right and with their leading zeros (e.g. "10042026"), AND the same date as YYYY-MM-DD in "date". If the date is not in eight boxes (handwritten free-hand, or partly illegible), set dateDigits to null and fill in only what you are sure of.
+  THIS IS THE DATE THE CHECK CLEARS, not the date it was written — company checks here are commonly post-dated, so a date weeks or months in the future is normal and must be read as printed.
 - AMOUNT IN FIGURES — the number in the box beside the "P" peso sign, e.g. "20,827.37".
 - AMOUNT IN WORDS — the line above "PESOS", spelled out, e.g. "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100". Return it VERBATIM as printed, including however the line is closed. On these checks a whole-peso amount ends with the word "ONLY" ("TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY") where other checks would write "AND 00/100" — do NOT convert one into the other, and do not drop a trailing "ONLY", asterisks or filler characters. Copy the line.
 
 CRITICAL RULES:
+- NEVER swap the month and the day. A Philippine company check is MONTH first. If you find yourself reasoning about which number "looks more like a day", stop: the box order decides, and the digits you put in "dateDigits" are what will be used.
 - Read the amount in figures and the amount in words INDEPENDENTLY. Do NOT correct one to match the other, and do NOT compute either from the other. If they disagree, return both exactly as printed and add a warning — the disagreement is the useful signal.
 - The MICR line along the bottom (the machine-readable digits between symbols) repeats the check number, the routing number and the account number. Use it to CONFIRM the check number and account number you read from the printed fields; if the two disagree, trust the printed field and add a warning.
 - IGNORE anything handwritten in the margins, any paper clip, stamp, staple or annotation lying on top of the check, and any other document visible behind or beside it.
@@ -67,7 +73,8 @@ const USER_PROMPT = `From the attached photo of a check, return JSON with this e
   "accountName": string|null,   // Account Name as printed
   "checkNo": string|null,       // Check No. as printed — all 10 digits, leading zeros kept (NOT the BRSTN)
   "payee": string|null,         // Pay to the order of — the supplier
-  "date": string|null,          // YYYY-MM-DD from the DATE boxes (the clearing date; may be in the future)
+  "dateDigits": string|null,    // the 8 DATE-box digits as printed, left to right: MMDDYYYY, e.g. "10042026"
+  "date": string|null,          // the same date as YYYY-MM-DD (the clearing date; may be in the future)
   "amount": number|null,        // the figure in the peso box
   "amountWords": string|null,   // the PESOS line, verbatim
   "bank": string|null,          // the drawee bank if shown (e.g. "BDO")
@@ -160,17 +167,30 @@ export async function POST(req: NextRequest) {
   try {
     const r = await callClaudeJson({ system: SYSTEM, content, schema: checkReadSchema, maxTokens: 1200 });
 
+    // The DATE boxes are labelled M M D D Y Y Y Y, so the clearing date is
+    // ASSEMBLED HERE from the digits the model transcribed rather than taken
+    // from the date it wrote out. Asking for a date is what let 10-04-2026 come
+    // back as 10 April; transcribing eight digits has no such judgement in it.
+    const boxes = r.dateDigits ?? null;
+    const fromBoxes = clearingFromDateBoxes(boxes);
+    const modelDate = r.date ?? null;
+    const dateWarnings = fromBoxes && modelDate && modelDate !== fromBoxes
+      ? [`Date boxes read ${boxes} = ${fromBoxes} (MM DD YYYY); the model wrote ${modelDate}. Using the boxes.`]
+      : [];
+
     const read: CheckRead = {
       accountNo: r.accountNo ?? null,
       accountName: r.accountName ?? null,
       checkNo: r.checkNo ?? null,
       payee: r.payee ?? null,
-      clearingYMD: r.date ?? null,
+      // Boxes win; the model's own date only stands when there were no boxes to read.
+      clearingYMD: fromBoxes ?? modelDate,
+      dateBoxes: boxes,
       amount: r.amount ?? null,
       amountWords: r.amountWords ?? null,
       bank: r.bank ?? null,
       confidence: typeof r.confidence === "number" ? r.confidence : null,
-      warnings: [...(r.warnings ?? []), ...(r.isCheck ? [] : ["This image doesn't look like a check."])],
+      warnings: [...(r.warnings ?? []), ...dateWarnings, ...(r.isCheck ? [] : ["This image doesn't look like a check."])],
       issues: [], // filled in below, once the read is cross-examined
       readByName: user.name,
       readAt: new Date().toISOString(),

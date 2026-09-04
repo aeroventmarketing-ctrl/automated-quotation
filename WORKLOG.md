@@ -1,3 +1,40 @@
+## 2026-09-04 · 10-04-2026 is October 4th — the check date stops being a judgement call
+
+Owner: *"date error in check reading. When reading check date, 10-04-2026 means October 4, 2026. Update the AI
+check reading feature."*
+
+A check to TOZEN Philippines dated **10-04-2026** was read as **April 10, 2026** — five and a half months early.
+The register duly reported it *"Overdue — 147 days ago"*, which is how a quiet misread becomes a loud wrong
+answer.
+
+### The real fix is not a better prompt
+
+The prompt already said MM-DD-YYYY. Its only example was `1 0 - 1 7 - 2 0 2 6`, where 17 cannot be a month —
+so it never taught the case that actually matters. Asked for *a date*, a model will weigh which number "looks
+more like a day", and on `10 04` it has nothing to weigh.
+
+So the model is no longer asked for the date at all. It transcribes the **eight digits sitting in the boxes**
+(`dateDigits`), and `clearingFromDateBoxes` assembles the date here, where MM DD YYYY is a rule rather than a
+judgement. The check itself agrees: the guide letters `M M  D D  Y Y Y Y` are printed under the boxes.
+
+- `10042026` → **2026-10-04**, every time.
+- The boxes win. The model's own written-out date only stands if there were no boxes to read (a hand-written
+  date), and a disagreement between the two is recorded as a warning on the read.
+- A date nobody can defend returns null rather than a guess: month 13, the 31st of February, seven digits
+  where eight were expected, a year outside 2000–2100.
+
+### The prompt still got harder
+
+Three worked examples now, all ambiguous — `1 0 0 4 2 0 2 6` is 4 October, `0 3 1 1 2 0 2 6` is 11 March,
+`1 0 1 7 2 0 2 6` is 17 October — plus a rule that names the failure mode: *if you find yourself reasoning
+about which number looks more like a day, stop; the box order decides.*
+
+`dateBoxes` is stored on the read alongside the date, so a future disagreement can be settled by looking at
+what was actually transcribed. Older reads have it null and are untouched.
+
+Six new tests pin the order, the ambiguous pairs, leap days and every refusal. 301 pass. **The TOZEN check
+already on file still carries the old date — press Re-read on it once this deploys.**
+
 ## 2026-09-04 · Funding Shortfall changes direction, and signed figures get their colour
 
 Owner: *"Correct computation should be, Available funds less accounts payables = funding shortfall. Put a + or -

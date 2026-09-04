@@ -44,6 +44,14 @@ export interface CheckRead {
   checkNo: string | null; // (c) the pre-printed check number
   payee: string | null; // (d) "Pay to the order of" — the supplier
   clearingYMD: string | null; // (e) the DATE box — when the check clears, not when it was written
+  /**
+   * The eight digits sitting in the DATE boxes, left to right, exactly as read —
+   * "10042026". The date above is derived from these IN CODE, not by the model.
+   *
+   * Null on an older read (the field did not exist) or when the date is not in
+   * eight boxes.
+   */
+  dateBoxes?: string | null;
   amount: number | null; // (f) the figure in the peso box
   amountWords: string | null; // (g) the amount spelled out on the PESOS line
   bank: string | null;
@@ -109,6 +117,35 @@ export interface CheckDoc {
  * an undated check can't be monitored, and saying so is better than assuming a
  * date nobody wrote down.
  */
+/**
+ * The clearing date, read off the eight DATE boxes as **MM DD YYYY**.
+ *
+ * The owner: *"date error in check reading. When reading check date, 10-04-2026
+ * means October 4, 2026."* The check itself settles it — the guide letters
+ * `M M  D D  Y Y Y Y` are printed under the boxes — but a model asked for "the
+ * date" will happily read `10 04 2026` as the 10th of April, and did.
+ *
+ * So the model is no longer asked to work out the date at all: it transcribes
+ * the eight digits, and the order is applied here, where it is a rule rather
+ * than a judgement. `1 0 0 4 2 0 2 6` → `2026-10-04`, every time.
+ *
+ * Null if the digits aren't eight, or don't spell a real day (month 13, or the
+ * 31st of February) — a date nobody can defend is worse than no date.
+ */
+export function clearingFromDateBoxes(digits: string | null | undefined): string | null {
+  if (!digits) return null;
+  const d = digits.replace(/\D/g, "");
+  if (d.length !== 8) return null;
+  const [mm, dd, yyyy] = [d.slice(0, 2), d.slice(2, 4), d.slice(4)];
+  const [m, day, y] = [Number(mm), Number(dd), Number(yyyy)];
+  if (m < 1 || m > 12 || day < 1 || day > 31) return null;
+  if (y < 2000 || y > 2100) return null; // a company check, not an heirloom
+  // Rejects 02-31 and friends: round-tripping through a real date catches them.
+  const dt = new Date(Date.UTC(y, m - 1, day));
+  if (dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== day) return null;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export function effectiveClearingYMD(doc: CheckDoc): string | null {
   const moved = doc.reschedules?.length ? doc.reschedules[doc.reschedules.length - 1].to : null;
   return moved ?? doc.read?.clearingYMD ?? null;
@@ -124,6 +161,7 @@ function coerceRead(v: unknown): CheckRead | undefined {
     checkNo: str("checkNo"),
     payee: str("payee"),
     clearingYMD: str("clearingYMD"),
+    dateBoxes: str("dateBoxes"),
     amount: typeof o.amount === "number" && Number.isFinite(o.amount) ? o.amount : null,
     amountWords: str("amountWords"),
     bank: str("bank"),

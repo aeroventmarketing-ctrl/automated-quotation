@@ -122,6 +122,13 @@ export const checkReadSchema = z.object({
   checkNo: z.string().nullable().default(null), // (c) pre-printed check number, leading zeros kept
   payee: z.string().nullable().default(null), // (d) "Pay to the order of"
   date: z.string().nullable().default(null), // (e) YYYY-MM-DD — the DATE box (the clearing date)
+  /**
+   * (e) the eight DATE-box digits as printed, left to right — "10042026". The
+   * boxes are labelled M M D D Y Y Y Y on the check, and the clearing date is
+   * assembled from these IN CODE: asking the model for a date instead let
+   * 10-04-2026 come back as 10 April.
+   */
+  dateDigits: z.string().nullable().default(null),
   amount: z.number().nullable().default(null), // (f) the figure in the peso box
   amountWords: z.string().nullable().default(null), // (g) the PESOS line, verbatim
   bank: z.string().nullable().default(null),
