@@ -9,7 +9,7 @@ import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { checkReadSchema } from "@/lib/ai/schemas";
 import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canAttachCheck, checkAttachableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
+import { canAttachCheck, checkReadableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { pesoAmountInWords, pesoAmountFromWords } from "@/lib/amount-words";
@@ -117,12 +117,13 @@ export async function POST(req: NextRequest) {
     select: { id: true, po: true, quotationId: true, voucherCheckDocs: true, status: true, chainLog: true, kind: true, mrfId: true },
   });
   if (!pr) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
-  // Reading writes the result onto the PO, so it lives in the same window as
-  // attaching: Budgeted, and not once the PO is completed.
-  if (!checkAttachableAt(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) })) {
+  // Reading follows the ATTACH window for everyone except an admin, who may
+  // re-read at any stage — reading fills in what the photo says and moves no
+  // money. See `checkReadableAt`.
+  if (!checkReadableAt(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }, { admin })) {
     return NextResponse.json({
       error: pr.status === "COMPLETED"
-        ? "This purchase order is completed — its check can be viewed but no longer changed."
+        ? "This purchase order is completed — only an admin can re-read its check now."
         : "A check can only be read once the voucher & check are signed (the Budgeted tab).",
     }, { status: 409 });
   }
@@ -130,6 +131,26 @@ export async function POST(req: NextRequest) {
   const docs = coerceCheckDocs(pr.voucherCheckDocs);
   const target = docs.find((d) => d.path === body.path);
   if (!target) return NextResponse.json({ error: "That check isn't attached to this purchase order." }, { status: 404 });
+
+  /**
+   * Record WHY a read failed, on the check itself.
+   *
+   * Without this the error reached the browser and died there, leaving
+   * "Check number not read" to mean both *the AI couldn't* and *nobody tried* —
+   * and on a PO that has since completed, no way to tell which. Best-effort: a
+   * failure to record a failure must not replace the real error.
+   */
+  const recordFailure = async (message: string) => {
+    try {
+      const next: CheckDoc[] = docs.map((d) => (d.path === body.path
+        ? { ...d, readError: { message, at: new Date().toISOString(), byName: user.name } }
+        : d));
+      await prisma.purchaseRequest.update({
+        where: { id: pr.id },
+        data: { voucherCheckDocs: next as unknown as Prisma.InputJsonValue },
+      });
+    } catch { /* the error below is the one that matters */ }
+  };
 
   // The Payment Approver overrides the limit alongside the admin: they are the
   // one authorising the money, so they are never locked out of looking at it.
@@ -163,10 +184,14 @@ export async function POST(req: NextRequest) {
     } else if (contentType === "application/pdf" || body.path.toLowerCase().endsWith(".pdf")) {
       content.push({ type: "document", document: { base64 } });
     } else {
-      return NextResponse.json({ error: "Check reading supports photos (JPG, PNG) and PDFs only." }, { status: 422 });
+      const error = "Check reading supports photos (JPG, PNG) and PDFs only.";
+      await recordFailure(error);
+      return NextResponse.json({ error }, { status: 422 });
     }
   } catch {
-    return NextResponse.json({ error: "Couldn't open the uploaded file." }, { status: 502 });
+    const error = "Couldn't open the uploaded file.";
+    await recordFailure(error);
+    return NextResponse.json({ error }, { status: 502 });
   }
   content.push({ type: "text", text: USER_PROMPT });
 
@@ -240,7 +265,12 @@ export async function POST(req: NextRequest) {
     });
     read.issues = issues;
 
-    const next: CheckDoc[] = docs.map((d) => (d.path === body.path ? { ...d, read } : d));
+    // A read that worked erases the note about the one that didn't.
+    const next: CheckDoc[] = docs.map((d) => {
+      if (d.path !== body.path) return d;
+      const { readError: _cleared, ...rest } = d;
+      return { ...rest, read };
+    });
     await prisma.purchaseRequest.update({
       where: { id: pr.id },
       data: { voucherCheckDocs: next as unknown as Prisma.InputJsonValue },
@@ -267,6 +297,7 @@ export async function POST(req: NextRequest) {
     } else {
       error = `Could not read the check: ${detail}. The photo is still attached.`;
     }
+    await recordFailure(error);
     return NextResponse.json({ error }, { status: 502 });
   }
 }

@@ -38,6 +38,7 @@ export function VoucherCheckControl({
   status,
   supplierGivesTerms,
   canAttach,
+  canRead,
   canView,
   netAmount,
 }: {
@@ -52,6 +53,12 @@ export function VoucherCheckControl({
    * When false the check is still shown; only the controls go.
    */
   canAttach: boolean;
+  /**
+   * The viewer may run the AI read. Wider than `canAttach`: an admin may
+   * re-read at any stage, including a completed PO — reading fills in what the
+   * photo already says. Defaults to `canAttach` for callers that don't say.
+   */
+  canRead?: boolean;
   /** The viewer may see the supplier + PO document at all. */
   canView: boolean;
   /**
@@ -67,10 +74,11 @@ export function VoucherCheckControl({
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
+  const mayRead = canRead ?? canAttach;
   const missing = checkMissing({ supplierGivesTerms, status, docs });
   // Nothing attached and nothing expected — say nothing.
-  if (docs.length === 0 && !missing && !canAttach) return null;
-  if (!canView && !canAttach) return null;
+  if (docs.length === 0 && !missing && !canAttach && !mayRead) return null;
+  if (!canView && !canAttach && !mayRead) return null;
   // Read-only: the check, its number and its details still show — the owner's
   // *"checks can always be viewed"* — but nothing here can change them.
   const readOnly = !canAttach;
@@ -193,6 +201,11 @@ export function VoucherCheckControl({
               ) : (
                 <span className="text-muted-foreground">Check number not read</span>
               )}
+              {!r && !mayRead && (
+                // No read, and no button to run one — say so, rather than
+                // leaving a permanent "not read" nobody here can act on.
+                <span className="text-muted-foreground">· not readable here — ask an admin to re-read it</span>
+              )}
               <UploadLink
                 doc={d}
                 base="/api/purchase-uploads"
@@ -200,7 +213,7 @@ export function VoucherCheckControl({
                 busy={busy != null}
                 onRemove={canAttach ? () => remove(d.path, d.name) : undefined}
               />
-              {canAttach && (
+              {mayRead && (
                 <button
                   type="button"
                   disabled={busy != null}
@@ -227,6 +240,15 @@ export function VoucherCheckControl({
             ))}
             {/* …and, when the three figures agree, said out loud. Silence used to
                 mean both "they tally" and "nobody looked". */}
+            {/* Why the last read failed. Kept on the check itself, so it is still
+                here after the page moves on — and after the PO completes. */}
+            {!r && d.readError && (
+              <span className="inline-flex items-start gap-1 text-amber-700">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                Last read failed: {d.readError.message}
+                {d.readError.byName ? ` (tried by ${d.readError.byName})` : ""}
+              </span>
+            )}
             {agreed && (
               <span className="inline-flex items-start gap-1 text-emerald-700">
                 <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0" /> {agreed}
