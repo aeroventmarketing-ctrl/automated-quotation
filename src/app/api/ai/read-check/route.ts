@@ -131,6 +131,26 @@ export async function POST(req: NextRequest) {
   const target = docs.find((d) => d.path === body.path);
   if (!target) return NextResponse.json({ error: "That check isn't attached to this purchase order." }, { status: 404 });
 
+  /**
+   * Record WHY a read failed, on the check itself.
+   *
+   * Without this the error reached the browser and died there, leaving
+   * "Check number not read" to mean both *the AI couldn't* and *nobody tried* —
+   * and on a PO that has since completed, no way to tell which. Best-effort: a
+   * failure to record a failure must not replace the real error.
+   */
+  const recordFailure = async (message: string) => {
+    try {
+      const next: CheckDoc[] = docs.map((d) => (d.path === body.path
+        ? { ...d, readError: { message, at: new Date().toISOString(), byName: user.name } }
+        : d));
+      await prisma.purchaseRequest.update({
+        where: { id: pr.id },
+        data: { voucherCheckDocs: next as unknown as Prisma.InputJsonValue },
+      });
+    } catch { /* the error below is the one that matters */ }
+  };
+
   // The Payment Approver overrides the limit alongside the admin: they are the
   // one authorising the money, so they are never locked out of looking at it.
   const unlimited = admin || roles.includes("payment_approver");
@@ -163,10 +183,14 @@ export async function POST(req: NextRequest) {
     } else if (contentType === "application/pdf" || body.path.toLowerCase().endsWith(".pdf")) {
       content.push({ type: "document", document: { base64 } });
     } else {
-      return NextResponse.json({ error: "Check reading supports photos (JPG, PNG) and PDFs only." }, { status: 422 });
+      const error = "Check reading supports photos (JPG, PNG) and PDFs only.";
+      await recordFailure(error);
+      return NextResponse.json({ error }, { status: 422 });
     }
   } catch {
-    return NextResponse.json({ error: "Couldn't open the uploaded file." }, { status: 502 });
+    const error = "Couldn't open the uploaded file.";
+    await recordFailure(error);
+    return NextResponse.json({ error }, { status: 502 });
   }
   content.push({ type: "text", text: USER_PROMPT });
 
@@ -240,7 +264,12 @@ export async function POST(req: NextRequest) {
     });
     read.issues = issues;
 
-    const next: CheckDoc[] = docs.map((d) => (d.path === body.path ? { ...d, read } : d));
+    // A read that worked erases the note about the one that didn't.
+    const next: CheckDoc[] = docs.map((d) => {
+      if (d.path !== body.path) return d;
+      const { readError: _cleared, ...rest } = d;
+      return { ...rest, read };
+    });
     await prisma.purchaseRequest.update({
       where: { id: pr.id },
       data: { voucherCheckDocs: next as unknown as Prisma.InputJsonValue },
@@ -267,6 +296,7 @@ export async function POST(req: NextRequest) {
     } else {
       error = `Could not read the check: ${detail}. The photo is still attached.`;
     }
+    await recordFailure(error);
     return NextResponse.json({ error }, { status: 502 });
   }
 }

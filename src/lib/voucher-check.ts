@@ -114,6 +114,16 @@ export interface CheckDoc {
   uploadedByName: string;
   /** Absent until the AI has read it (or if the read failed). */
   read?: CheckRead;
+  /**
+   * Why the last read FAILED, when one was attempted and did not produce a
+   * `read`.
+   *
+   * A failed read used to leave nothing behind: the error was handed to the
+   * browser, and the moment the page moved on, "Check number not read" meant
+   * both *"the AI couldn't"* and *"nobody has pressed the button"*. Cleared on
+   * the next successful read.
+   */
+  readError?: { message: string; at: string; byName: string };
   /** Every time the clearing date was moved, oldest first. */
   reschedules?: CheckReschedule[];
   /** Set once the bank has cleared it — moves the check to the Cleared tab. */
@@ -211,6 +221,14 @@ function coerceCleared(v: unknown): CheckCleared | undefined {
   return { on: str("on"), byName: str("byName"), at: str("at"), ...(str("note") ? { note: str("note") } : {}) };
 }
 
+function coerceReadError(v: unknown): CheckDoc["readError"] | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  if (!str("message")) return undefined;
+  return { message: str("message"), at: str("at"), byName: str("byName") };
+}
+
 export function coerceCheckDoc(v: unknown): CheckDoc | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
@@ -218,12 +236,14 @@ export function coerceCheckDoc(v: unknown): CheckDoc | null {
   const read = coerceRead(o.read);
   const reschedules = coerceReschedules(o.reschedules);
   const cleared = coerceCleared(o.cleared);
+  const readError = coerceReadError(o.readError);
   return {
     path: o.path,
     name: typeof o.name === "string" && o.name ? o.name : "check",
     uploadedAt: typeof o.uploadedAt === "string" ? o.uploadedAt : "",
     uploadedByName: typeof o.uploadedByName === "string" ? o.uploadedByName : "",
     ...(read ? { read } : {}),
+    ...(readError ? { readError } : {}),
     ...(reschedules.length ? { reschedules } : {}),
     ...(cleared ? { cleared } : {}),
   };

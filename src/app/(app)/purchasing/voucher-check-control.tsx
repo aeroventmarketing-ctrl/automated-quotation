@@ -193,6 +193,11 @@ export function VoucherCheckControl({
               ) : (
                 <span className="text-muted-foreground">Check number not read</span>
               )}
+              {!r && !canAttach && (
+                // The read is gone with the button — say so, rather than leaving
+                // a permanent "not read" nobody on this screen can act on.
+                <span className="text-muted-foreground">· can no longer be read here (the PO is completed)</span>
+              )}
               <UploadLink
                 doc={d}
                 base="/api/purchase-uploads"
@@ -227,6 +232,15 @@ export function VoucherCheckControl({
             ))}
             {/* …and, when the three figures agree, said out loud. Silence used to
                 mean both "they tally" and "nobody looked". */}
+            {/* Why the last read failed. Kept on the check itself, so it is still
+                here after the page moves on — and after the PO completes. */}
+            {!r && d.readError && (
+              <span className="inline-flex items-start gap-1 text-amber-700">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                Last read failed: {d.readError.message}
+                {d.readError.byName ? ` (tried by ${d.readError.byName})` : ""}
+              </span>
+            )}
             {agreed && (
               <span className="inline-flex items-start gap-1 text-emerald-700">
                 <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0" /> {agreed}

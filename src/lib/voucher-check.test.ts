@@ -506,6 +506,22 @@ describe("check numbers", () => {
     expect(back.read).toEqual(PRACTICE);
   });
 
+  /**
+   * The owner: *"AI check reading not functioning please check."* Two checks sat
+   * on completed POs reading "Check number not read", with nothing to say
+   * whether the AI had failed or nobody had pressed the button.
+   */
+  it("keeps why a read failed, so 'not read' is never a mystery", () => {
+    const failed = { ...doc, readError: { message: "The AI key was rejected.", at: "2026-09-04T01:00:00.000Z", byName: "Admin Ana" } };
+    const [back] = coerceCheckDocs([failed]);
+    expect(back.readError?.message).toBe("The AI key was rejected.");
+    expect(back.readError?.byName).toBe("Admin Ana");
+    // A failure with nothing to say is not kept — it would only add noise.
+    expect(coerceCheckDocs([{ ...doc, readError: { at: "x" } }])[0].readError).toBeUndefined();
+    expect(coerceCheckDocs([{ ...doc, readError: "nope" }])[0].readError).toBeUndefined();
+    expect(coerceCheckDocs([doc])[0].readError).toBeUndefined();
+  });
+
   it("keeps a doc whose stored read is junk, without the read", () => {
     const [back] = coerceCheckDocs([{ ...doc, read: "not an object" }]);
     expect(back.path).toBe(doc.path);
