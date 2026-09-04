@@ -61,7 +61,7 @@ export default async function ChecksPage() {
 
   return (
     <div className="space-y-4">
-      <AutoRefresh seconds={60} />
+      <AutoRefresh seconds={8} watch="checks" />
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Check monitoring</h1>
         <p className="text-sm text-muted-foreground">

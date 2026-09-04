@@ -478,7 +478,7 @@ export default async function MyDashboardPage() {
   if (finance) {
     return (
       <div className="space-y-6">
-        <AutoRefresh seconds={60} />
+        <AutoRefresh seconds={8} watch="my-dashboard" />
         {header}
         {ordersGrid}
         {pendingCard}
@@ -498,7 +498,7 @@ export default async function MyDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <AutoRefresh seconds={60} />
+      <AutoRefresh seconds={8} watch="my-dashboard" />
       {header}
 
       {/* Admins / Sales see the Sales Dashboard first, above the production sections. */}

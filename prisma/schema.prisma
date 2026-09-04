@@ -226,6 +226,10 @@ model Quotation {
   notes          String?
   terms          String?
   createdAt      DateTime        @default(now())
+  /// Bumped on every write. Read by the change-token poll (`lib/change-token`)
+  /// so an auto-refreshing page can ask "has anything changed?" for ~100 bytes
+  /// instead of re-running its whole query every few seconds.
+  updatedAt      DateTime        @default(now()) @updatedAt
 
   inquiry          Inquiry           @relation(fields: [inquiryId], references: [id])
   template         QuotationTemplate @relation(fields: [templateId], references: [id])
@@ -238,6 +242,7 @@ model Quotation {
 
   @@index([status])
   @@index([inquiryId])
+  @@index([updatedAt])
 }
 
 model QuotationItem {
@@ -346,33 +351,33 @@ enum PurchaseRequestStatus {
 }
 
 model PurchaseRequest {
-  id             String                @id @default(cuid())
-  quotationId    String? // null for replenishment (stock top-up, not tied to an order)
-  kind           String                @default("order") // "order" | "replenishment"
-  stockItemId    String? // for replenishment: the stock item to receive into
-  mrfId          String? // the JSON material-request id it was escalated from
-  dept           String? // production department key (null for replenishment)
-  items          Json                  @default("[]") // ["GI sheet 24ga x 4", ...]
-  note           String?
-  status         PurchaseRequestStatus @default(PENDING_APPROVAL)
+  id               String                @id @default(cuid())
+  quotationId      String? // null for replenishment (stock top-up, not tied to an order)
+  kind             String                @default("order") // "order" | "replenishment"
+  stockItemId      String? // for replenishment: the stock item to receive into
+  mrfId            String? // the JSON material-request id it was escalated from
+  dept             String? // production department key (null for replenishment)
+  items            Json                  @default("[]") // ["GI sheet 24ga x 4", ...]
+  note             String?
+  status           PurchaseRequestStatus @default(PENDING_APPROVAL)
   // Sign-off log for the extended chain steps (sign / release cash / hand to
   // purchaser / assign tasks / deliver) — { stepKey: { byName, at } }.
-  chainLog       Json                  @default("{}")
+  chainLog         Json                  @default("{}")
   // Supplier returns: items disapproved on inspection and sent back for
   // replacement — [{ id, items, reason, raisedByName, raisedRole, raisedAt,
   // resolvedByName, resolvedRole, resolvedAt, resolutionNote }]. A PO can't be
   // received into stock while any return is unresolved.
-  returns        Json                  @default("[]")
+  returns          Json                  @default("[]")
   // Voucher reconciliation: actual cash spent vs the issued voucher (PO total),
   // receipts attached — { voucherAmount, actualSpent, receipts[], recordedByName,
   // recordedAt, settled? }. Auto-tallies so change/overspend is flagged.
-  reconciliation Json                  @default("{}")
+  reconciliation   Json                  @default("{}")
   // Photos of the CHECK issued for this PO's voucher — [{ path, name, uploadedAt,
   // uploadedByName }]. Attached by Accounting / the Payment Approver / an admin on
   // the PO row, for future reference when the check is queried. Expected (not
   // required) on a PO to a supplier who gives us terms; a missing one is flagged,
   // never blocked.
-  voucherCheckDocs Json                @default("[]")
+  voucherCheckDocs Json                  @default("[]")
 
   createdById   String
   createdByName String

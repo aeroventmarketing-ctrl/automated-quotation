@@ -195,7 +195,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="space-y-6">
-      <AutoRefresh seconds={120} />
+      <AutoRefresh seconds={8} watch="orders" />
       <div>
         <h1 className="text-2xl font-bold">Orders</h1>
         <p className="text-sm text-muted-foreground">Confirmed sales — order value, collected, and outstanding balance.</p>

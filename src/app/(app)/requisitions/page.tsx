@@ -119,7 +119,7 @@ export default async function RequisitionsPage() {
 
   return (
     <div className="space-y-6">
-      <AutoRefresh seconds={60} />
+      <AutoRefresh seconds={8} watch="requisitions" />
       <div>
         <h1 className="text-2xl font-bold">Requisitions</h1>
         <p className="text-sm text-muted-foreground">Department requests for production supplies, consumables and equipment. The purchaser processes them in Purchasing; received items go into stock.</p>
